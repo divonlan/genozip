@@ -124,7 +124,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer hapmat_one_array;            /* one line or column */ \
     \
     /* used by CODEC_GTSHARK */ \
-    Context *gtshark_gt, *gtshark_db, *gtshark_x_line, *gtshark_x_ht, *gtshark_x_allele; \
+    Context *gtshark_gt_ctx, *gtshark_db_ctx, *gtshark_ex_ctx; \
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS

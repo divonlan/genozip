@@ -80,11 +80,9 @@ void codec_gtshark_comp_init (VBlock *vb)
     vb->ht_matrix_ctx    = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT);
     vb->ht_matrix_ctx->lcodec = CODEC_GTSHARK; // this will trigger codec_gtshark_compress even though the section is not written to the file
     
-    vb->gtshark_db       = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_DB);
-    vb->gtshark_gt       = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
-    vb->gtshark_x_line   = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_X_LINE);
-    vb->gtshark_x_ht     = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_X_HT);
-    vb->gtshark_x_allele = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_X_ALLELE);
+    vb->gtshark_db_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_DB);
+    vb->gtshark_gt_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
+    vb->gtshark_ex_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_EX);
 }
 
 static void codec_gtshark_create_vcf_file (VBlock *vb, const char *gtshark_vcf_name)
@@ -104,16 +102,14 @@ static void codec_gtshark_create_vcf_file (VBlock *vb, const char *gtshark_vcf_n
         fprintf (file, "\t%u", i+1);
     fprintf (file, "\n");
 
-    // initialize allocation for exceptions
-    Buffer *x_line_buf   = &vb->gtshark_x_line->local;
-    Buffer *x_ht_buf     = &vb->gtshark_x_ht->local;
-    Buffer *x_allele_buf = &vb->gtshark_x_allele->local;
+    // exceptions - one byte per matrix byte, ASCII 0 matrix is '0' or '1', or the matrix value if not
+    buf_alloc (vb, &vb->gtshark_ex_ctx->local, vb->lines.len * vb->num_haplotypes_per_line, 1.1, "context->local", 0);
+    buf_zero (&vb->gtshark_ex_ctx->local);
+    vb->gtshark_ex_ctx->local.len = vb->lines.len * vb->num_haplotypes_per_line;
+    bool has_ex = false;
 
-    buf_alloc (vb, x_line_buf,   MAX (vb->lines.len/100, 100) * sizeof(uint32_t), 1, "context->local", 0);
-    buf_alloc (vb, x_ht_buf,     MAX (vb->lines.len/100, 100) * (vb->num_haplotypes_per_line / 3) * sizeof(uint16_t), 1, "context->local", 0);
-    buf_alloc (vb, x_allele_buf, MAX (vb->lines.len/100, 100) * (vb->num_haplotypes_per_line / 3), 1, "context->local", 0);
-    
     ARRAY (char, ht_matrix, vb->ht_matrix_ctx->local);
+    ARRAY (char, gtshark_ex, vb->gtshark_ex_ctx->local);
 
     for (unsigned vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
@@ -121,43 +117,27 @@ static void codec_gtshark_create_vcf_file (VBlock *vb, const char *gtshark_vcf_n
         #define GTSHARK_VCF_LINE_VARDATA GTSHARK_CHROM_ID "\t.\t.\t.\t.\t.\t.\t.\tGT"
 
         fprintf (file, GTSHARK_VCF_LINE_VARDATA);
-        unsigned num_exceptions_in_line = 0; 
-        uint16_t last_exception_ht_i = 0;
+
+        // create VCF with haplotypes transposed vs ht_matrix
         for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
-            char c = ht_matrix[ht_i * vb->lines.len + vb_line_i];
+            char c = ht_matrix[ht_i * vb->lines.len + vb_line_i]; 
             
             // case: gtshark can't handle alleles>2 (natively, it splits them to several lines).
-            // we put this allele in the exception list and change it to '0' for gtshark.
+            // we put this allele in the exception matrix and change it to '0' for gtshark.
             if (c < '0' || c > '2') {
-                if (!num_exceptions_in_line) { // first exception for this line 
-                    buf_alloc_more (vb, x_line_buf, 1, 1, uint32_t, 2);
-                    NEXTENT (uint32_t, *x_line_buf) = BGEN32 (vb_line_i);
-                }
-
-                buf_alloc_more (vb, x_ht_buf, 2, 2, uint16_t, 2); // room for terminator too
-                NEXTENT (uint16_t, *x_ht_buf) = BGEN16 (ht_i - last_exception_ht_i); // delta encoding
-                last_exception_ht_i = ht_i;
-                
-                buf_alloc_more (vb, x_allele_buf, 2, 2, char, 2);   // room for terminator too
-                NEXTENT (char, *x_allele_buf) = c;
-
-                num_exceptions_in_line++; 
-                fprintf (file, "\t0");    
+                gtshark_ex[ht_i * vb->lines.len + vb_line_i] = c;
+                c = '0';
+                has_ex = true;
             }
-            else 
-                fprintf (file, "\t%c", c);
+
+            fprintf (file, "\t%c", c);
         }
         fprintf (file, "\n");
-
-        if (num_exceptions_in_line) { // we have exceptions for this line - terminate the ht_i and allele arrays
-            NEXTENT (uint16_t, *x_ht_buf) = 0;
-            NEXTENT (char, *x_allele_buf) = 0;
-        }
     }
 
     FCLOSE (file, gtshark_vcf_name);
 
-    return;
+    if (!has_ex) buf_free (&vb->gtshark_ex_ctx->local); // no exceptions - no need to write an exceptions section
 }
 
 // ZIP
@@ -172,8 +152,8 @@ static void codec_gtshark_run_compress (VBlock *vb,
     codec_gtshark_run (vb->vblock_i, "compress-db", gtshark_vcf_name, gtshark_db_name);
 
     // read both gtshark output files
-    file_get_file ((VBlockP)vb, gtshark_db_db_name, &vb->gtshark_db->local, "context->local", vb->vblock_i, false);
-    file_get_file ((VBlockP)vb, gtshark_db_gt_name, &vb->gtshark_gt->local, "context->local", vb->vblock_i, false);
+    file_get_file ((VBlockP)vb, gtshark_db_db_name, &vb->gtshark_db_ctx->local, "context->local", vb->vblock_i, false);
+    file_get_file ((VBlockP)vb, gtshark_db_gt_name, &vb->gtshark_gt_ctx->local, "context->local", vb->vblock_i, false);
     
     file_remove (gtshark_vcf_name,   false);
     file_remove (gtshark_db_db_name, false);
@@ -204,26 +184,23 @@ bool codec_gtshark_compress (VBlock *vb,
 
     codec_gtshark_run_compress (vb, gtshark_vcf_name, gtshark_db_name, gtshark_db_db_name, gtshark_db_gt_name);
 
-    vb->gtshark_db      ->ltype  = LT_UINT8;
-    vb->gtshark_gt      ->ltype  = LT_UINT8;
-    vb->gtshark_x_line  ->ltype  = LT_UINT32;
-    vb->gtshark_x_ht    ->ltype  = LT_UINT16;
-    vb->gtshark_x_allele->ltype  = LT_UINT8;
+    vb->gtshark_db_ctx->ltype  = LT_UINT8;
+    vb->gtshark_gt_ctx->ltype  = LT_UINT8;
+    vb->gtshark_ex_ctx->ltype  = LT_UINT8;
 
-    vb->gtshark_db->lcodec = CODEC_NONE; // these are already compressed by gtshark and not further compressible
-    vb->gtshark_gt->lcodec = CODEC_NONE;
-    // note: codec of gtshark_x_* remains CODEC_UNKNOWN for automatic assignment
+    vb->gtshark_db_ctx->lcodec = CODEC_NONE; // these are already compressed by gtshark and not further compressible
+    vb->gtshark_gt_ctx->lcodec = CODEC_NONE;
+    vb->gtshark_ex_ctx->lcodec = CODEC_BZ2;  // a sparse matrix 
     
     // put a gtshark codec for uncompression on the last section to be written which would trigger codec_gtshark_uncompress
     // after all sections have been uncompressed with their main (simple) codec
-    if (vb->gtshark_x_allele->local.len) // if we have exceptions - this is the last sections
-        vb->gtshark_x_allele->lsubcodec_piz = CODEC_GTSHARK; 
+    if (vb->gtshark_ex_ctx->local.len) // if we have exceptions - this is the last sections
+        vb->gtshark_ex_ctx->lsubcodec_piz = CODEC_GTSHARK; 
+    else 
+        vb->gtshark_gt_ctx->lsubcodec_piz = CODEC_GTSHARK;
 
-    else // if we have no exceptions - this is the last section 
-        vb->gtshark_gt->lsubcodec_piz = CODEC_GTSHARK;
-
-    // note: we create the data in the 5 contexts gtshark_*, which will be compressed subsequently
-    // with simple codecs, but for this ht_matrix context - no section should be created for it in the file
+    // note: we created the data in the 3 contexts gtshark_*, which will be compressed subsequently.
+    // For this ht_matrix context - no section should be created for it in the file
     buf_free (&vb->ht_matrix_ctx->local); 
     *compressed_len = 0;
 
@@ -268,43 +245,6 @@ static void codec_gtshark_run_decompress (VBlock *vb)
     file_remove (gtshark_vcf_name, false);
 }    
 
-static void codec_gtshark_piz_apply_exceptions_to_ht_matrix (VBlock *vb, uint8_t *ht_matrix, uint32_t num_lines, uint32_t num_hts)
-{
-    const uint32_t *exceptions_line_i_data = FIRSTENT (uint32_t, vb->gtshark_x_line->local);
-    const uint16_t *next_ht_i_delta        = FIRSTENT (uint16_t, vb->gtshark_x_ht->local);
-    const uint16_t *after_ht_i_delta       = AFTERENT (uint16_t, vb->gtshark_x_ht->local);
-    const uint8_t  *next_allele            = FIRSTENT (uint8_t,  vb->gtshark_x_allele->local);
-    const uint8_t  *after_allele           = AFTERENT (uint8_t,  vb->gtshark_x_allele->local);
-    
-    uint32_t num_x_lines = vb->gtshark_x_line->local.len;
-    for (unsigned x_line_i=0; x_line_i < num_x_lines; x_line_i++) {
-
-        uint32_t vb_line_i = exceptions_line_i_data[x_line_i];
-        ASSERT (vb_line_i < num_lines, "Error in codec_gtshark_piz_apply_exceptions_to_ht_matrix: vb_i=%u: vb_line_i=%u is out of range (num_lines=%u)", 
-                vb->vblock_i, vb_line_i, num_lines);
-
-        uint16_t last_ht_i = 0;
-        
-        for (unsigned ex_ht_i=0 ; !ex_ht_i || *next_ht_i_delta; ex_ht_i++) { // the list of ht_i's for this line is terminated with a 0
-
-            ASSERT (next_ht_i_delta < after_ht_i_delta, "Error in codec_gtshark_piz_apply_exceptions_to_ht_matrix: vb_i=%u: next_ht_i_delta is out of range", vb->vblock_i);
-            ASSERT (next_allele < after_allele, "Error in codec_gtshark_piz_apply_exceptions_to_ht_matrix: vb_i=%u: next_allele is out of range", vb->vblock_i);
-
-            uint16_t delta = *(next_ht_i_delta++);
-            uint16_t ht_i = last_ht_i + delta; // decode delta encoding
-            ASSERT (ht_i < num_hts, "Error in codec_gtshark_piz_apply_exceptions_to_ht_matrix: vb_i=%u: ht_i=%u is out of range (num_hts=%u)", 
-                    vb->vblock_i, ht_i, num_hts);
-
-            ASSERT (*next_allele <= '0' + VCF_MAX_ALLELE_VALUE, "Error in codec_gtshark_piz_apply_exceptions_to_ht_matrix: vb_i=%u: allele is out of range (ascii(%u))", vb->vblock_i, (unsigned)*next_allele);
-            ht_matrix[ht_i * num_lines + vb_line_i] = *next_allele++; // transposed matrix
-            last_ht_i = ht_i;
-        }
-
-        next_ht_i_delta++; // end-of-line separator in both ht_i and allele arrays
-        next_allele++;
-    }
-}
-
 // PIZ: convert the vcf generated by gtshark when decompressing the db, into our haplotype matrix
 static void codec_gtshark_piz_reconstruct_ht_matrix (VBlock *vb)
 {
@@ -328,7 +268,6 @@ static void codec_gtshark_piz_reconstruct_ht_matrix (VBlock *vb)
 
     // build the transposed matrix from the vcf data - this will include alleles 0, 1 or 2 with higher
     // alleles showing as 0
-    
     const char *next = substr + 1; // point to the CHROM = '1'
     const unsigned prefix_len = strlen (GTSHARK_VCF_LINE_VARDATA) + 1; // +1 for the tab after GT
     
@@ -337,20 +276,25 @@ static void codec_gtshark_piz_reconstruct_ht_matrix (VBlock *vb)
         next += prefix_len; // skipping the line fields 1-9, arriving at the first haplotype
     
         for (uint32_t ht_i=0; ht_i < num_hts; ht_i++) {
-            ht_matrix[ht_i * num_lines + vb_line_i] = *next; // haplotype matrix is transposed
+            ht_matrix[ht_i * num_lines + vb_line_i] = *next; // haplotypes it gtshark vcf file are transposed vs ht_matrix
             next += 2; // skip past this ht and also the following \t or \n
         }
     }
 
-    // now enter the higher alleles from the exception list
-    if (vb->gtshark_x_line) // has exceptions
-        codec_gtshark_piz_apply_exceptions_to_ht_matrix (vb, ht_matrix, num_lines, num_hts);
+    // case: we have exceptions - update the ht_matrix with the "exceptional" alleles
+    if (vb->gtshark_ex_ctx) { // has exceptions
 
-    buf_free (&vb->compressed);
+        ARRAY (uint8_t, gtshark_ex, vb->gtshark_ex_ctx->local);
+
+        for (uint64_t i=0; i < num_lines * num_hts; i++)
+            if (gtshark_ex[i]) ht_matrix[i] = gtshark_ex[i];
+    }
+
+    buf_free (&vb->compressed); // free the gtshark-generated reconstructed vcf file data
 }
 
 // After all 5 contexts are uncompressed, this function is called, as CODEC_GTSHARK is set as the subcodec
-// of the last section (gtshark_x_allele)
+// of the last section (gtshark_ex_allele)
 void codec_gtshark_uncompress (VBlock *vb, Codec codec,
                                const char *compressed, uint32_t compressed_len,
                                Buffer *uncompressed_buf, uint64_t uncompressed_len,
@@ -360,14 +304,12 @@ void codec_gtshark_uncompress (VBlock *vb, Codec codec,
     vb->ht_matrix_ctx->lcodec = CODEC_GTSHARK;
     vb->ht_matrix_ctx->ltype  = LT_CODEC; // reconstruction will go to codec_gtshark_reconstruct as defined in codec_args for CODEC_GTSHARK
 
-    vb->gtshark_db       = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_DB);
-    vb->gtshark_gt       = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
-    vb->gtshark_x_line   = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_X_LINE); // note: gtshark_x_* data exists only if there are exceptions
-    vb->gtshark_x_ht     = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_X_HT);
-    vb->gtshark_x_allele = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_X_ALLELE);
+    vb->gtshark_db_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_DB);
+    vb->gtshark_gt_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
+    vb->gtshark_ex_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_EX); // note: gtshark_ex_ctx will be set only if there was a gtshark_ex section
 
-    char *filename_db_db = codec_gtshark_write_db_file (vb->vblock_i, "db_db", &vb->gtshark_db->local);
-    char *filename_db_gt = codec_gtshark_write_db_file (vb->vblock_i, "db_gt", &vb->gtshark_gt->local);
+    char *filename_db_db = codec_gtshark_write_db_file (vb->vblock_i, "db_db", &vb->gtshark_db_ctx->local);
+    char *filename_db_gt = codec_gtshark_write_db_file (vb->vblock_i, "db_gt", &vb->gtshark_gt_ctx->local);
 
     codec_gtshark_run_decompress (vb);                            
 

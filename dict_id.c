@@ -20,8 +20,7 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 // VCF stuff
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
          dict_id_FORMAT_PS=0, dict_id_FORMAT_GT=0, dict_id_FORMAT_GT_HT=0, dict_id_FORMAT_GT_HT_INDEX=0,
-         dict_id_FORMAT_GT_SHARK_DB=0, dict_id_FORMAT_GT_SHARK_GT=0, dict_id_FORMAT_GT_SHARK_X_LINE=0, 
-         dict_id_FORMAT_GT_SHARK_X_HT=0, dict_id_FORMAT_GT_SHARK_X_ALLELE=0,  
+         dict_id_FORMAT_GT_SHARK_DB=0, dict_id_FORMAT_GT_SHARK_GT=0, dict_id_FORMAT_GT_SHARK_EX=0,
          dict_id_FORMAT_AD=0, dict_id_FORMAT_ADALL=0, dict_id_FORMAT_GQ=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0;
@@ -88,12 +87,10 @@ void dict_id_initialize (DataType data_type)
     case DT_VCF:
         dict_id_FORMAT_GT     = dict_id_vcf_format_sf (dict_id_make ("GT", 2)).num;
         dict_id_FORMAT_GT_HT  = dict_id_vcf_format_sf (dict_id_make ("@HT", 3)).num; // different first 2 letters than GT, for lookup table
-        dict_id_FORMAT_GT_HT_INDEX       = dict_id_vcf_format_sf (dict_id_make ("@INDEXHT", 8)).num; // different first 2 letters
-        dict_id_FORMAT_GT_SHARK_DB       = dict_id_vcf_format_sf (dict_id_make ("@1SHRKDB", 8)).num; // different first 2 letters, 
-        dict_id_FORMAT_GT_SHARK_GT       = dict_id_vcf_format_sf (dict_id_make ("@2SHRKGT", 8)).num;
-        dict_id_FORMAT_GT_SHARK_X_LINE   = dict_id_vcf_format_sf (dict_id_make ("@3SHRKXL", 8)).num; 
-        dict_id_FORMAT_GT_SHARK_X_HT     = dict_id_vcf_format_sf (dict_id_make ("@4SHRKXH", 8)).num; 
-        dict_id_FORMAT_GT_SHARK_X_ALLELE = dict_id_vcf_format_sf (dict_id_make ("@5SHRKXA", 8)).num;  
+        dict_id_FORMAT_GT_HT_INDEX = dict_id_vcf_format_sf (dict_id_make ("@INDEXHT", 8)).num; // different first 2 letters
+        dict_id_FORMAT_GT_SHARK_DB = dict_id_vcf_format_sf (dict_id_make ("@1SHRKDB", 8)).num; // different first 2 letters, 
+        dict_id_FORMAT_GT_SHARK_GT = dict_id_vcf_format_sf (dict_id_make ("@2SHRKGT", 8)).num;
+        dict_id_FORMAT_GT_SHARK_EX = dict_id_vcf_format_sf (dict_id_make ("@3SHRKEX", 8)).num;  
         dict_id_FORMAT_PL     = dict_id_vcf_format_sf (dict_id_make ("PL", 2)).num;
         dict_id_FORMAT_GP     = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
         dict_id_FORMAT_GL     = dict_id_vcf_format_sf (dict_id_make ("GL", 2)).num;

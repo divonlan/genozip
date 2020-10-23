@@ -38,7 +38,7 @@ void vb_release_vb (VBlock *vb)
     vb->chrom_name = NULL;
     vb->prev_range = NULL;
     vb->ht_matrix_ctx = NULL;
-    vb->gtshark_gt = vb->gtshark_db = vb->gtshark_x_line = vb->gtshark_x_ht = vb->gtshark_x_allele = NULL;
+    vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->md5_hash_so_far = MD5HASH_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
