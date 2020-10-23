@@ -310,6 +310,8 @@ void stats_compress (void)
 
     stats_consolidate_related (sbl, num_stats, "BD_BI",  3, "BD_BI", "BD:Z", "BI:Z");
 
+    stats_consolidate_related (sbl, num_stats, "GT",  6, "GT", "@HT", "@INDEXHT", "@1SHRKDB", "@2SHRKGT", "@3SHRKEX");
+
     // short form stats from --show-stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
     stats_output_stats (sbl, num_stats, all_txt_size, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
