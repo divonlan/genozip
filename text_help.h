@@ -131,7 +131,7 @@ static const char *help_genozip[] = {
     "",
 #ifndef _WIN32
     "VCF-specific options (ignored for other file types):",
-    "   --gtshark         Uses gtshark as the codec for compressing FORMAT/GT data.",
+    "   --gtshark         Uses gtshark as the codec for compressing FORMAT/GT data. This options provides better compression than both genozip without this option, and native gtshark, for files with a large number of samples. It works best when combined with -B128.",
     "                     Note: For this to work, gtshark needs to be installed - it is a separate software package that is not affiliated with genozip in any way. It can be found here: https://github.com/refresh-bio/GTShark",
     "                     Note: gtshark also needs to be installed for decompressing files that were compressed with this option. ",
     "",
