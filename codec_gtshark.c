@@ -87,6 +87,8 @@ void codec_gtshark_comp_init (VBlock *vb)
 
 static void codec_gtshark_create_vcf_file (VBlock *vb, const char *gtshark_vcf_name)
 {
+    const uint32_t num_hts = vb->num_haplotypes_per_line;
+
     FILE *file = fopen (gtshark_vcf_name, "wb");
     ASSERT (file, "Error: failed to create temporary file %s", gtshark_vcf_name);
 
@@ -95,17 +97,17 @@ static void codec_gtshark_create_vcf_file (VBlock *vb, const char *gtshark_vcf_n
     fprintf (file, "##FORMAT=<ID=GT>\n");
 
     #define GTSHARK_NUM_HT_PER_LINE "##num_haplotypes_per_line="
-    fprintf (file, GTSHARK_NUM_HT_PER_LINE "%u\n", vb->num_haplotypes_per_line);
+    fprintf (file, GTSHARK_NUM_HT_PER_LINE "%u\n", num_hts);
     fprintf (file, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
 
-    for (unsigned i=0; i < vb->num_haplotypes_per_line; i++)
+    for (unsigned i=0; i < num_hts; i++)
         fprintf (file, "\t%u", i+1);
     fprintf (file, "\n");
 
     // exceptions - one byte per matrix byte, ASCII 0 matrix is '0' or '1', or the matrix value if not
-    buf_alloc (vb, &vb->gtshark_ex_ctx->local, vb->lines.len * vb->num_haplotypes_per_line, 1.1, "context->local", 0);
+    buf_alloc (vb, &vb->gtshark_ex_ctx->local, vb->lines.len * num_hts, 1.1, "context->local", 0);
     buf_zero (&vb->gtshark_ex_ctx->local);
-    vb->gtshark_ex_ctx->local.len = vb->lines.len * vb->num_haplotypes_per_line;
+    vb->gtshark_ex_ctx->local.len = vb->lines.len * num_hts;
     bool has_ex = false;
 
     ARRAY (char, ht_matrix, vb->ht_matrix_ctx->local);
@@ -118,14 +120,13 @@ static void codec_gtshark_create_vcf_file (VBlock *vb, const char *gtshark_vcf_n
 
         fprintf (file, GTSHARK_VCF_LINE_VARDATA);
 
-        // create VCF with haplotypes transposed vs ht_matrix
-        for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
-            char c = ht_matrix[ht_i * vb->lines.len + vb_line_i]; 
+        for (unsigned ht_i=0; ht_i < num_hts; ht_i++) {
+            char c = ht_matrix[vb_line_i * num_hts + ht_i]; 
             
             // case: gtshark can't handle alleles>2 (natively, it splits them to several lines).
             // we put this allele in the exception matrix and change it to '0' for gtshark.
             if (c < '0' || c > '2') {
-                gtshark_ex[ht_i * vb->lines.len + vb_line_i] = c;
+                gtshark_ex[vb_line_i * num_hts + ht_i] = c;
                 c = '0';
                 has_ex = true;
             }
@@ -207,7 +208,10 @@ bool codec_gtshark_compress (VBlock *vb,
     return true;
 }
 
-// PIZ
+// ----------
+// PIZ side
+// ----------
+
 static char *codec_gtshark_write_db_file (uint32_t vb_i, const char *file_ext, const Buffer *buf)
 {
     char *filename = malloc (strlen (z_name) + 50);
@@ -224,9 +228,6 @@ static char *codec_gtshark_write_db_file (uint32_t vb_i, const char *file_ext, c
     return filename;
 }
 
-// ----------
-// PIZ side
-// ----------
 static void codec_gtshark_run_decompress (VBlock *vb)
 {
     char gtshark_db_name[strlen (z_name) + 50];
@@ -251,7 +252,7 @@ static void codec_gtshark_piz_reconstruct_ht_matrix (VBlock *vb)
     // get vb->num_haplotypes_per_line
     const char *substr = strstr (vb->compressed.data, GTSHARK_NUM_HT_PER_LINE);
     ASSERT (substr, "Error: cannot locate \"" GTSHARK_NUM_HT_PER_LINE "\" within gtshark-produced vcf data for vb_i=%u", vb->vblock_i);
-    uint32_t num_hts   = vb->num_haplotypes_per_line = atoi (substr + strlen (GTSHARK_NUM_HT_PER_LINE));
+    uint32_t num_hts = vb->num_haplotypes_per_line = atoi (substr + strlen (GTSHARK_NUM_HT_PER_LINE));
 
     uint32_t num_lines = vb->lines.len;
 
@@ -276,7 +277,7 @@ static void codec_gtshark_piz_reconstruct_ht_matrix (VBlock *vb)
         next += prefix_len; // skipping the line fields 1-9, arriving at the first haplotype
     
         for (uint32_t ht_i=0; ht_i < num_hts; ht_i++) {
-            ht_matrix[ht_i * num_lines + vb_line_i] = *next; // haplotypes it gtshark vcf file are transposed vs ht_matrix
+            ht_matrix[vb_line_i * num_hts + ht_i] = *next; // haplotypes it gtshark vcf file are transposed vs ht_matrix
             next += 2; // skip past this ht and also the following \t or \n
         }
     }
