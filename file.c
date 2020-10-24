@@ -348,7 +348,7 @@ bool file_open_txt (File *file)
 
     // open the file, based on the codec
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, file->mode);
-
+    
     switch (file->codec) { 
         case CODEC_NONE:
             // don't actually open the output file if we're just testing in genounzip or PIZing a reference file
@@ -358,6 +358,7 @@ bool file_open_txt (File *file)
             break;
 
         case CODEC_GZ:
+        case CODEC_BGZ:
             if (file->mode == READ) {
                 if (file->is_remote) { 
                     FILE *url_fp = url_open (NULL, file->name);
@@ -810,7 +811,7 @@ bool file_seek (File *file, int64_t offset,
 
 uint64_t file_tell (File *file)
 {
-    if (command == ZIP && file == txt_file && file->codec == CODEC_GZ)
+    if (command == ZIP && file == txt_file && (file->codec == CODEC_GZ || file->codec == CODEC_BGZ))
         return gzconsumed64 ((gzFile)txt_file->file); 
     
     if (command == ZIP && file == txt_file && file->codec == CODEC_BZ2)

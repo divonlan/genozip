@@ -29,7 +29,7 @@ static uint32_t total_bound_txt_headers_len = 0;
 
 uint32_t txtfile_get_bound_headers_len(void) { return total_bound_txt_headers_len; }
 
-static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
+void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
 {
     if (flag_md5) {
         if (flag_bind && !is_2ndplus_txt_header)
@@ -40,7 +40,7 @@ static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_
 }
 
 // peformms a single I/O read operation - returns number of bytes read 
-static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
+uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
 {
     START_TIMER;
 
@@ -77,7 +77,7 @@ static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
         }
 #endif
     }
-    else if (txt_file->codec == CODEC_GZ) {
+    else if (txt_file->codec == CODEC_GZ || txt_file->codec == CODEC_BGZ) {
         bytes_read = gzfread (data, 1, max_bytes, (gzFile)txt_file->file);
         
         if (bytes_read)
@@ -520,7 +520,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
     if (DTPT(txt_header_required) == HDR_MUST || DTPT(txt_header_required) == HDR_OK)
-        header_md5 = txtfile_read_header (is_first_txt, DTPT(txt_header_required) == HDR_MUST, DTPT(txt_header_1st_char)); // reads into evb->txt_data and evb->lines.len
+        header_md5 = (DTPT(read_txt_header) ? DTPT(read_txt_header) : txtfile_read_header) (is_first_txt, DTPT(txt_header_required) == HDR_MUST, DTPT(txt_header_1st_char)); // reads into evb->txt_data and evb->lines.len
     
     *txt_line_i += (uint32_t)evb->lines.len;
 

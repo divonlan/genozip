@@ -28,6 +28,9 @@ extern bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 extern void sam_piz_reconstruct_vb ();
 extern void sam_piz_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
 
+// BAM Stuff
+extern Md5Hash bam_read_txt_header (bool is_first_txt, bool header_required_unused, char first_char_unused);
+
 // VB stuff
 extern void sam_vb_release_vb();
 extern void sam_vb_destroy_vb();
@@ -59,6 +62,17 @@ SPECIAL (SAM, 4, MD,    sam_piz_special_MD);
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS  \
     { DT_SAM,   &dict_id_OPTION_BD_BI,      sam_zip_bd_bi }, \
-    { DT_SAM,   &dict_id_fields[SAM_QUAL], sam_zip_qual  }, 
+    { DT_SAM,   &dict_id_fields[SAM_QUAL],  sam_zip_qual  }, 
+
+#define BAM_DICT_ID_ALIASES \
+    /*         alias                        maps to this ctx          */       \
+    { DT_BAM,  &dict_id_OPTION_MC,          &dict_id_fields[SAM_CIGAR]  },     \
+    { DT_BAM,  &dict_id_OPTION_OC,          &dict_id_fields[SAM_CIGAR]  },     \
+    { DT_BAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_SEQ_BITMAP] }, \
+    { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_QUAL]   },
+
+#define BAM_LOCAL_GET_LINE_CALLBACKS  \
+    { DT_BAM,   &dict_id_OPTION_BD_BI,      sam_zip_bd_bi }, \
+    { DT_BAM,   &dict_id_fields[SAM_QUAL],  sam_zip_qual  }, 
 
 #endif

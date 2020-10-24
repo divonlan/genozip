@@ -36,9 +36,12 @@
 #define SAM_BGZ_       ".sam.bgz"
 #define SAM_BZ2_       ".sam.bz2"
 #define SAM_XZ_        ".sam.xz"
-#define BAM_           ".bam"
 #define CRAM_          ".cram"
 #define SAM_GENOZIP_   ".sam" GENOZIP_EXT
+
+// BAM
+#define BAM_           ".bam" // can be bgzip-compressed or not
+#define BAM_GENOZIP_   ".bam.genozip" 
 
 // FASTQ file variations
 #define FASTQ_         ".fastq"
@@ -108,7 +111,7 @@ typedef enum {TXT_FILE, Z_FILE} FileSupertype;
 typedef enum      { UNKNOWN_FILE_TYPE, 
                     REF_GENOZIP,
                     VCF, VCF_GZ, VCF_BGZ, VCF_BZ2, VCF_XZ, BCF, BCF_GZ, BCF_BGZ, VCF_GENOZIP,  
-                    SAM, SAM_GZ, SAM_BGZ, SAM_BZ2, SAM_XZ, BAM, CRAM,                SAM_GENOZIP,
+                    SAM, SAM_GZ, SAM_BGZ, SAM_BZ2, SAM_XZ, CRAM, SAM_GENOZIP,
                     FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ, FASTQ_GENOZIP,
                     FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,    FQ_GENOZIP,
                     FASTA, FASTA_GZ, FASTA_BZ2, FASTA_XZ, FASTA_GENOZIP,
@@ -120,12 +123,13 @@ typedef enum      { UNKNOWN_FILE_TYPE,
 //                    GFF3,  GFF3_GZ,  GFF3_BZ2,  GFF3_XZ,  GFF3_GENOZIP,
                     GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,   GVF_GENOZIP,
                     ME23,  ME23_ZIP,                      ME23_GENOZIP, 
+                    BAM, BAM_GENOZIP,
                     AFTER_LAST_FILE_TYPE } FileType;
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    REF_GENOZIP_, \
                    VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, \
-                   SAM_, SAM_GZ_, SAM_BGZ_, SAM_BZ2_, SAM_XZ_, BAM_, CRAM_,             SAM_GENOZIP_, \
+                   SAM_, SAM_GZ_, SAM_BGZ_, SAM_BZ2_, SAM_XZ_, CRAM_, SAM_GENOZIP_, \
                    FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FASTQ_GENOZIP_, \
                    FQ_,    FQ_GZ_,    FQ_BZ2_,    FQ_XZ_,    FQ_GENOZIP_, \
                    FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FASTA_GENOZIP_,\
@@ -137,6 +141,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    /*GFF3_,  GFF3_GZ_,  GFF3_BZ2_,  GFF3_XZ_,  GFF3_GENOZIP_,*/ \
                    GVF_,   GVF_GZ_,   GVF_BZ2_,   GVF_XZ_,   GVF_GENOZIP_, \
                    ME23_,  ME23_ZIP_,                        ME23_GENOZIP_,\
+                   BAM_, BAM_GENOZIP_,\
                    "stdin", "stdout" }
 extern const char *file_exts[];
 
@@ -151,7 +156,7 @@ extern const char *file_exts[];
                              { BCF,       CODEC_BCF,  VCF_GENOZIP   }, { BCF_GZ,   CODEC_BCF, VCF_GENOZIP   }, { BCF_BGZ, CODEC_BCF, VCF_GENOZIP }, {0, 0, 0} },\
                            { { SAM,       CODEC_NONE, SAM_GENOZIP   }, { SAM_GZ,   CODEC_GZ,  SAM_GENOZIP   }, { SAM_BGZ, CODEC_GZ,  SAM_GENOZIP },\
                              { SAM_BZ2,   CODEC_BZ2,  SAM_GENOZIP   }, { SAM_XZ,   CODEC_XZ,  SAM_GENOZIP   },\
-                             { BAM,       CODEC_BAM,  SAM_GENOZIP   }, { CRAM,     CODEC_CRAM,SAM_GENOZIP   }, { 0, 0, 0 }, },\
+                             { CRAM,      CODEC_CRAM, SAM_GENOZIP   }, { 0, 0, 0 }, },\
                            { { FASTQ,     CODEC_NONE, FASTQ_GENOZIP }, { FASTQ_GZ, CODEC_GZ,  FASTQ_GENOZIP },\
                              { FASTQ_BZ2, CODEC_BZ2,  FASTQ_GENOZIP }, { FASTQ_XZ, CODEC_XZ,  FASTQ_GENOZIP },\
                              { FQ,        CODEC_NONE, FQ_GENOZIP    }, { FQ_GZ,    CODEC_GZ,  FQ_GENOZIP    },\
@@ -172,7 +177,8 @@ extern const char *file_exts[];
                              { GFF3_BZ2,  CODEC_BZ2,  GFF3_GENOZIP  }, { GFF3_XZ,  CODEC_XZ,  GFF3_GENOZIP  },*/ \
                              { GVF,       CODEC_NONE, GVF_GENOZIP   }, { GVF_GZ,   CODEC_GZ,  GVF_GENOZIP   },\
                              { GVF_BZ2,   CODEC_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   CODEC_XZ,  GVF_GENOZIP   }, { 0, 0, 0 } },\
-                           { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { 0, 0, 0 } } }
+                           { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { 0, 0, 0 } },\
+                           { { BAM,       CODEC_BGZ,  BAM_GENOZIP   }, { 0, 0, 0 } } }
 
 // Supported output formats for genounzip
 // plain file MUST appear first on the list - this will be the default output when redirecting
@@ -183,7 +189,8 @@ extern const char *file_exts[];
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 }, \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
                            { GVF, GVF_GZ, /*GFF3, GFF3_GZ,*/ 0 }, \
-                           { ME23, ME23_ZIP, 0 } }                        
+                           { ME23, ME23_ZIP, 0 }, \
+                           { BAM, 0 } }                        
 
 #define Z_FT_BY_DT { { REF_GENOZIP, 0  },               \
                      { VCF_GENOZIP, 0  },               \
@@ -191,7 +198,8 @@ extern const char *file_exts[];
                      { FASTQ_GENOZIP, FQ_GENOZIP, 0 },  \
                      { FASTA_GENOZIP, FA_GENOZIP, FAA_GENOZIP, FFN_GENOZIP, FNN_GENOZIP, FNA_GENOZIP, 0 }, \
                      { GVF_GENOZIP,/* GFF3_GENOZIP,*/ 0  },               \
-                     { ME23_GENOZIP, 0 } } 
+                     { ME23_GENOZIP, 0 },               \
+                     { BAM_GENOZIP, 0  } } 
 
 typedef const char *FileMode;
 extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
@@ -201,7 +209,7 @@ extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings -
 // ---------------------------
 
 #define file_is_read_via_ext_decompressor(file) \
-  (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_BAM || file->codec == CODEC_CRAM)
+  (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_CRAM)
 
 #define file_is_read_via_int_decompressor(file) \
   (file->codec == CODEC_GZ || file->codec == CODEC_BGZ || file->codec == CODEC_BZ2)

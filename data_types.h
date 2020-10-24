@@ -21,7 +21,7 @@
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
 typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF3=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
-               NUM_DATATYPES 
+               DT_BAM=7, NUM_DATATYPES 
              } DataType; 
 
 typedef void (*PizSpecialCtxHandler)(VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len);
@@ -37,6 +37,7 @@ typedef struct DataTypeProperties {
     char txt_header_1st_char;  // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
 
     // ZIP callbacks
+    Md5Hash (*read_txt_header) (bool, bool, char);
     bool (*zip_inspect_txt_header) (BufferP txt_header); // called by I/O thread to verify the txt header. returns false if this txt file should be skipped
     void (*zip_initialize)(void);      // called by I/O thread when after the txt header is read
     void (*zip_read_one_vb)(VBlockP);  // called by I/O thread after reading txt of one vb into vb->txt_data
@@ -65,16 +66,25 @@ typedef struct DataTypeProperties {
     const char *stat_dict_types[3]; // the dictionary type displayed in --show-stats
 } DataTypeProperties;
 
+#define bam_piz_reconstruct_seq sam_piz_reconstruct_seq
+#define bam_zip_initialize sam_zip_initialize
+#define bam_seg_initialize sam_seg_initialize
+#define bam_seg_finalize sam_seg_finalize
+#define bam_seg_txt_line sam_seg_txt_line
+#define bam_piz_is_skip_section sam_piz_is_skip_section
+#define bam_inspect_txt_header sam_inspect_txt_header
+
 #define usz(type) ((unsigned)sizeof(type))
 #define DATA_TYPE_PROPERTIES { \
-/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  zip_inspect_txt_header, zip_initialize        zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            structured_filter num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
-    { "REFERENCE", RA,  1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                   ref_make_ref_init,    NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               ref_make_create_range,    NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
-    { "VCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', vcf_inspect_txt_header, NULL,                 NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,   NUM_VCF_SPECIAL,   VCF_SPECIAL,   vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
-    { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', sam_inspect_txt_header, sam_zip_initialize,   NULL,                  sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  NULL,                  sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
-    { "FASTQ",   NO_RA, 4, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                   fastq_zip_initialize, fastq_zip_read_one_vb, fastq_seg_initialize, fastq_seg_txt_line, fastq_seg_finalize, NULL,                     NULL,                  fastq_piz_read_one_vb, fastq_piz_is_skip_section, fastq_piz_reconstruct_seq, fastq_piz_filter, 0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Entries",         { "FIELD", "DESC",   "ERROR!" } }, \
-    { "FASTA",   RA,    1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                   NULL,                 NULL,                  fasta_seg_initialize, fasta_seg_txt_line, fasta_seg_finalize, NULL,                     fasta_piz_initialize,  fasta_piz_read_one_vb, fasta_piz_is_skip_section, NULL,                      NULL,             NUM_FASTA_SPECIAL, FASTA_SPECIAL, fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
-    { "GVF",     RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                   NULL,                 NULL,                  gff3_seg_initialize,  gff3_seg_txt_line,  gff3_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "Sequences",       { "FIELD", "ATTRS",  "ITEMS"  } }, \
-    { "23ANDME", RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                   NULL,                 NULL,                  me23_seg_initialize,  me23_seg_txt_line,  me23_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }  \
+/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  read_txt_header,     zip_inspect_txt_header, zip_initialize        zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            structured_filter num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
+    { "REFERENCE", RA,  1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                NULL,                   ref_make_ref_init,    NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               ref_make_create_range,    NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
+    { "VCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', NULL,                vcf_inspect_txt_header, NULL,                 NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,   NUM_VCF_SPECIAL,   VCF_SPECIAL,   vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
+    { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', NULL,                sam_inspect_txt_header, sam_zip_initialize,   NULL,                  sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  NULL,                  sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
+    { "FASTQ",   NO_RA, 4, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                NULL,                   fastq_zip_initialize, fastq_zip_read_one_vb, fastq_seg_initialize, fastq_seg_txt_line, fastq_seg_finalize, NULL,                     NULL,                  fastq_piz_read_one_vb, fastq_piz_is_skip_section, fastq_piz_reconstruct_seq, fastq_piz_filter, 0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Entries",         { "FIELD", "DESC",   "ERROR!" } }, \
+    { "FASTA",   RA,    1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                NULL,                   NULL,                 NULL,                  fasta_seg_initialize, fasta_seg_txt_line, fasta_seg_finalize, NULL,                     fasta_piz_initialize,  fasta_piz_read_one_vb, fasta_piz_is_skip_section, NULL,                      NULL,             NUM_FASTA_SPECIAL, FASTA_SPECIAL, fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
+    { "GVF",     RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                NULL,                   NULL,                 NULL,                  gff3_seg_initialize,  gff3_seg_txt_line,  gff3_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "Sequences",       { "FIELD", "ATTRS",  "ITEMS"  } }, \
+    { "23ANDME", RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                NULL,                   NULL,                 NULL,                  me23_seg_initialize,  me23_seg_txt_line,  me23_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }, \
+    { "BAM",     RA,    0, sam_vb_size,  sam_vb_zip_dl_size,  HDR_MUST, -1,  bam_read_txt_header, NULL,                   bam_zip_initialize,   NULL,                  bam_seg_initialize,   bam_seg_txt_line,   bam_seg_finalize,   NULL,                     NULL,                  NULL,                  bam_piz_is_skip_section,   bam_piz_reconstruct_seq,   NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
 }  
 extern DataTypeProperties dt_props[NUM_DATATYPES];
 #define DTP(prop)  (dt_props[(vb)->    data_type].prop)
@@ -85,6 +95,7 @@ extern DataTypeProperties dt_props[NUM_DATATYPES];
 typedef enum { REF_CONTIG, NUM_REF_FIELDS } RefFields;
 typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_SAMPLES, VCF_EOL, VCF_TOPLEVEL, NUM_VCF_FIELDS } VcfFields;
 typedef enum { SAM_RNAME, SAM_QNAME, SAM_FLAG, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, SAM_SEQ_BITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, SAM_QUAL, SAM_DOMQRUNS, SAM_EOL, SAM_TOPLEVEL, NUM_SAM_FIELDS } SamFields;
+typedef enum { BAM_BIN=NUM_SAM_FIELDS, NUM_BAM_FIELDS } BamFields; // adding fields on top of SAM
 typedef enum { FASTQ_CONTIG /* copied from reference */, FASTQ_DESC, FASTQ_E1L, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_E2L, FASTQ_QUAL, FASTQ_DOMQRUNS, FASTQ_TOPLEVEL, NUM_FASTQ_FIELDS } FastqFields;
 typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_DESC, FASTA_COMMENT, FASTA_SQBITMAP, FASTA_NONREF, FASTA_NONREF_X, FASTA_GPOS, FASTA_STRAND, FASTA_TOPLEVEL, NUM_FASTA_FIELDS } FastaFields;
 typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, NUM_GFF3_FIELDS } Gff3Fields;
@@ -93,10 +104,11 @@ typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPL
 #define MAX_NUM_FIELDS_PER_DATA_TYPE MAX ((int) NUM_REF_FIELDS,    \
                                      MAX ((int) NUM_VCF_FIELDS,    \
                                      MAX ((int) NUM_SAM_FIELDS,    \
+                                     MAX ((int) NUM_BAM_FIELDS,    \
                                      MAX ((int) NUM_FASTQ_FIELDS,  \
                                      MAX ((int) NUM_FASTA_FIELDS,  \
                                      MAX ((int) NUM_GFF3_FIELDS,   \
-                                          (int) NUM_ME23_FIELDS     ))))))
+                                          (int) NUM_ME23_FIELDS     )))))))
 
 #define MAX_DICTS (MAX_SUBFIELDS*2 + MAX_NUM_FIELDS_PER_DATA_TYPE)  
 //#if MAX_DICTS > 253 // 254 is for future use and 255 is DID_I_NONE
@@ -122,6 +134,7 @@ typedef struct DataTypeFields {
   {NUM_FASTA_FIELDS, -1,         -1,         FASTA_NONREF, -1,         FASTA_EOL, { "CONTIG", "LINEMETA", "EOL", "DESC", "COMMENT", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", TOPLEVEL } }, \
   {NUM_GFF3_FIELDS,  GFF3_START, GFF3_ATTRS, -1,           -1,         GFF3_EOL,  { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "EOL", TOPLEVEL } }, \
   {NUM_ME23_FIELDS,  ME23_POS,   -1,         -1,           -1,         ME23_EOL,  { "CHROM", "POS", "ID", "GENOTYPE", "EOL", TOPLEVEL } }, \
+  {NUM_BAM_FIELDS,   SAM_POS,    -1,         SAM_NONREF,   SAM_QUAL,   -1,        { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "QUAL", "DOMQRUNS", "EOL" /* not used */, TOPLEVEL, "BIN" } }, \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)
@@ -132,6 +145,7 @@ extern DataTypeFields dt_fields[NUM_DATATYPES];
     VCF_LOCAL_GET_LINE_CALLBACKS    \
     GFF3_LOCAL_GET_LINE_CALLBACKS   \
     SAM_LOCAL_GET_LINE_CALLBACKS    \
+    BAM_LOCAL_GET_LINE_CALLBACKS    \
     FASTQ_LOCAL_GET_LINE_CALLBACKS  \
     FASTA_LOCAL_GET_LINE_CALLBACKS  \
 }
@@ -141,6 +155,7 @@ extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DICT_ID_ALIASES { \
     VCF_DICT_ID_ALIASES   \
     SAM_DICT_ID_ALIASES   \
+    BAM_DICT_ID_ALIASES   \
     FASTQ_DICT_ID_ALIASES \
     FASTA_DICT_ID_ALIASES \
     GFF3_DICT_ID_ALIASES  \

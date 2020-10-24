@@ -20,7 +20,7 @@
             //"args": ["ALL.chr22.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.genozip"],
             //"args": ["GFX0241869.hs37d5.sam.genozip","--show-headers"],
             //"args": ["minimal.vcf.genozip", "-t"],
-            "args": ["td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf", "-fobug.genozip"],
+            "args": ["minimal.bam", "-f"],
 
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
