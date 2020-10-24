@@ -53,15 +53,12 @@ mac/scripts/*
 !test-file.gvf
 !minimal.vcf
 !minimal.sam
+!minimal.bam
 !minimal.fa
 !minimal.fq
 !minimal.gvf
-!genome_*Full*
-!minimal.vcf
-!minimal.sam
-!minimal.fa
-!minimal.fq
 !minimal.23andme
+!genome_*Full*
 *stackdump
 .altool_app_specifc_password
 mac/.mac_username
