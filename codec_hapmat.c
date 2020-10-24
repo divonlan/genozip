@@ -100,6 +100,26 @@ static void codec_hapmat_compress_one_array (VBlockP vb, uint32_t ht_i,
         printf ("Col %-2u : %.*s\n", orig_col_i, (int)vb->hapmat_one_array.len, column);
 }
 
+// build the reverse index that will allow access by the original index to the sorted array, to be included in the genozip file
+static void codec_hapmap_compress_build_index (VBlock *vb, HaploTypeSortHelperIndex *helper_index)
+{
+    for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
+        helper_index[ht_i].index_in_sorted_line = ht_i;
+
+    // sort array back to its original order
+    qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_original_index_comparator);
+
+    // create a permutation index for the vblock
+    // we populate the hapmat_hapmat_index_ctx local, and it will be written after us, as the context is create after the hapmat_ctx 
+    buf_alloc (vb, &vb->hapmat_index_ctx->local, vb->num_haplotypes_per_line * sizeof(uint32_t), 
+               0, "context->local", vb->hapmat_index_ctx->did_i);
+    vb->hapmat_index_ctx->local.len = vb->num_haplotypes_per_line;
+    
+    ARRAY (uint32_t, hp_index, vb->hapmat_index_ctx->local);
+    for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
+        hp_index[ht_i] = BGEN32 (helper_index[ht_i].index_in_sorted_line);    
+}
+
 // sort haplogroups by alt allele count within the variant group, create an index for it, and split
 // it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
@@ -134,32 +154,15 @@ bool codec_hapmat_compress (VBlock *vb,
     CodecCompress *compress = codec_args[sub_codec].compress;
 
     PAUSE_TIMER; //  don't include sub-codec compressor - it accounts for itself
-
-    bool success = compress (vb, header, 0, uncompressed_len, codec_hapmat_compress_one_array, compressed, compressed_len, soft_fail);
-    
+    bool success = compress (vb, header, 0, uncompressed_len, codec_hapmat_compress_one_array, compressed, compressed_len, soft_fail);    
     RESUME_TIMER (compressor_hapmat);
+
+    // build data in hapmat_index_ctx 
+    codec_hapmap_compress_build_index (vb, helper_index);
 
     vb->lines.len = save_lines_len;
 
     if (!success) return false; // soft fail (if it was hard fail, compress() already failed)
-
-    // final step - build the reverse index that will allow access by the original index to the sorted array
-    // this will be included in the genozip file
-    for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
-        helper_index[ht_i].index_in_sorted_line = ht_i;
-
-    // sort array back to its original order
-    qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_original_index_comparator);
-
-    // create a permutation index for the vblock
-    // we populate the hapmat_hapmat_index_ctx local, and it will be written after us, as the context is create after the hapmat_ctx 
-    buf_alloc (vb, &vb->hapmat_index_ctx->local, vb->num_haplotypes_per_line * sizeof(uint32_t), 
-               0, "context->local", vb->hapmat_index_ctx->did_i);
-    vb->hapmat_index_ctx->local.len = vb->num_haplotypes_per_line;
-    
-    ARRAY (uint32_t, hp_index, vb->hapmat_index_ctx->local);
-    for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
-        hp_index[ht_i] = BGEN32 (helper_index[ht_i].index_in_sorted_line);
 
     COPY_TIMER (compressor_hapmat);
 

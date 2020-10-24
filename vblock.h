@@ -118,10 +118,10 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* used by CODEC_HAPM (for VCF haplotype matrix) */ \
     Context *hapmat_index_ctx; \
-    Buffer hapmat_helper_index_buf; /* used by codec_hapmat_count_alt_alleles */ \
+    Buffer hapmat_helper_index_buf; /* ZIP: used by codec_hapmat_count_alt_alleles */ \
     Buffer hapmat_columns_data;     /* used by codec_hapmat_piz_get_one_line */ \
     Buffer hapmat_column_of_zeros;  /* used by codec_hapmat_piz_calculate_columns */  \
-    Buffer hapmat_one_array;            /* one line or column */ \
+    Buffer hapmat_one_array;        /* one line or column */ \
     \
     /* used by CODEC_GTSHARK */ \
     Context *gtshark_gt_ctx, *gtshark_db_ctx, *gtshark_ex_ctx; \
