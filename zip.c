@@ -299,7 +299,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
             zip_generate_b250_section (vb, ctx, 0);
 
             if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
-                mtf_dump_local (ctx, false);
+                mtf_dump_binary (vb, ctx, false);
 
             zfile_compress_b250_data (vb, ctx);
         }
@@ -307,7 +307,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
         if (ctx->local.len || ctx->ltype == LT_BITMAP) { // bitmaps are always written, even if empty
 
             if (dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) 
-                mtf_dump_local (ctx, true);
+                mtf_dump_binary (vb, ctx, true);
 
             if (ctx->ltype == LT_BITMAP) 
                 LTEN_bit_array (buf_get_bitarray (&ctx->local));

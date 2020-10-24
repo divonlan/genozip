@@ -531,10 +531,10 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
                                       header->h.section_type); 
 
             if (!is_pair_section && is_local && dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) 
-                mtf_dump_local (ctx, true);
+                mtf_dump_binary (vb, ctx, true);
 
             if (!is_pair_section && !is_local && dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
-                mtf_dump_local (ctx, false);
+                mtf_dump_binary (vb, ctx, false);
 
 #           define adjust_lens(buf) { \
                 buf.len /= lt_desc[ctx->ltype].width; \

@@ -258,7 +258,6 @@ extern const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Bu
 
 extern void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
 
-extern void mtf_initialize_binary_dump (const char *field, DictId *dict_id, const char *filename_ext);
-extern void mtf_dump_local (ContextP ctx, bool local);
+extern void mtf_dump_binary (VBlockP vb, ContextP ctx, bool local);
 
 #endif

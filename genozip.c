@@ -792,8 +792,8 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
             case 'g' : flag_grep        = optarg   ; break;
             case '~' : flag_show_is_set = optarg   ; break;
             case '\2' : dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
-            case '\5' : mtf_initialize_binary_dump (optarg, &dump_one_b250_dict_id,  "b250");  break;
-            case '\6' : mtf_initialize_binary_dump (optarg, &dump_one_local_dict_id, "local"); break;
+            case '\5' : dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg)); break;
+            case '\6' : dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg)); break;
             case '\3' : dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : vb_set_global_max_memory_per_vb (optarg); 
                        flag_vblock = true;
