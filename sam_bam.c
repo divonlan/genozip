@@ -141,13 +141,15 @@ void bam_read_vblock (VBlock *vb)
 {
     START_TIMER;
 
-    uint64_t pos_before = file_tell (txt_file);
+    int64_t pos_before = file_tell (txt_file);
 
     buf_alloc (vb, &vb->txt_data, global_max_memory_per_vb, 1, "txt_data", vb->vblock_i);    
     
     uint32_t block_size = txt_file->unconsumed_txt.param; // maybe passed from previous VB
-    if (block_size)
-        NEXTENT (uint32_t, vb->txt_data) = LTEN32 (block_size);
+    if (block_size) {
+        *FIRSTENT (uint32_t, vb->txt_data) = LTEN32 (block_size); // encode back in its original Little Endian
+        vb->txt_data.len += sizeof (uint32_t);
+    }
 
     txt_file->unconsumed_txt.param = 0; // nothing yet to pass to the next_field VB
     
@@ -200,7 +202,7 @@ void bam_read_vblock (VBlock *vb)
     txt_file->txt_data_so_far_single += vb->txt_data.len;
     vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
     
-    vb->vb_data_read_size = file_tell (txt_file) - pos_before; // bgz compressed bytes read
+    vb->vb_data_read_size = file_tell (txt_file) - pos_before; // apporx. bgz compressed bytes read (measuring bytes uncompressed by zlib, but might still reside in zlib's output buffer)
 
     COPY_TIMER (txtfile_read_vblock); // use same profiler id as standard
 }

@@ -196,7 +196,8 @@ void sam_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE, ""   },
                        { (DictId)dict_id_fields[SAM_EOL],      DID_I_NONE, ""   } }
     };
-    seg_container_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL_BIN], &top_level_bin, 0, 0, 0);
+    seg_container_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL_BIN], &top_level_bin, 0, 0, 
+                          IS_BAM ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
 }
 
 // TLEN - 3 cases: 

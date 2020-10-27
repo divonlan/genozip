@@ -515,9 +515,8 @@ uLongLong ZEXPORT gzconsumed64(file)
     state = (gz_statep)file;
     if (state->mode != GZ_READ && state->mode != GZ_WRITE)
         return -1;
-//fprintf(stderr, "state->strm.total_ever_in=%"PRIu64 "\n", state->strm.total_ever_in); // DEBUG
-    return state->strm.total_ever_in - 
-           (uLongLong)state->strm.avail_in /* don't count buffered input */;
+//fprintf(stderr, "state->strm.total_ever_in=%"PRIu64 " state->strm.avail_in=%u avail_out=%u\n", state->strm.total_ever_in, state->strm.avail_in, state->strm.avail_out); // DEBUG
+    return state->strm.total_ever_in; // note: this is data uncompressed, some of it is still in the output buffer not read yet (see gz_read() )
 }
 
 /* -- see zlib.h -- */

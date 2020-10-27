@@ -81,7 +81,7 @@ uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
         bytes_read = gzfread (data, 1, max_bytes, (gzFile)txt_file->file);
         
         if (bytes_read)
-            txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); 
+            txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); // this is actually all the data uncompressed so far, some of it not yet read by us and still waiting in zlib's output buffer
     }
     else if (txt_file->codec == CODEC_BZ2) { 
         bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, data, max_bytes);

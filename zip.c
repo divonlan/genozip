@@ -58,9 +58,13 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
     else 
         ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
-    // when making a reference, we don't care abou the compression
+    // when making a reference, we don't care about the compression
     if (flag_make_reference)
         progress_finalize_component_time ("Done", md5);
+
+    // when compressing BAM report only ratio2 (compresstion against bgzipped BAM - we don't care about the underlying non-bgzipped BAM)
+    else if (z_file->data_type == DT_BAM) 
+            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio2, md5);
 
     else if (ratio2 >= 0) {
         if (txt_file->codec == CODEC_NONE || ratio2 < 1.05)  // source file was plain txt or ratio2 is low (nothing to brag about)
