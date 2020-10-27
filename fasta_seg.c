@@ -40,11 +40,20 @@ void fasta_seg_initialize (VBlockFAST *vb)
         
         codec_acgt_comp_init ((VBlockP)vb);
 
-        if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE)
+        if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
             vb->contexts[FASTA_NONREF].inst |= CTX_INST_NO_CALLBACK; // override callback if we are segmenting to a reference
-    }
 
-    vb->contexts[FASTA_CONTIG].inst = CTX_INST_NO_STONS; // needs b250 node_index for reference
+            // in --stats, consolidate stats into SQBITMAP
+            vb->contexts[FASTA_GPOS].st_did_i = vb->contexts[FASTA_STRAND].st_did_i =
+            vb->contexts[FASTA_NONREF].st_did_i = vb->contexts[FASTA_NONREF_X].st_did_i = FASTA_SQBITMAP;
+        }
+    }
+    else { // make-reference
+        vb->contexts[FASTA_CONTIG].inst |= CTX_INST_NO_VB1_SORT; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference
+    }
+    
+
+    vb->contexts[FASTA_CONTIG].inst |= CTX_INST_NO_STONS; // needs b250 node_index for reference
 }
 
 void fasta_seg_finalize (VBlockP vb)

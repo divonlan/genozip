@@ -252,7 +252,7 @@ void txtfile_read_vblock (VBlock *vb)
         buf_alloc (evb, &block_start_buf, sizeof (char *)     * MAX (100, block_md5_buf.len+1), 2, "block_start_buf", 0); 
         buf_alloc (evb, &block_len_buf,   sizeof (uint32_t)   * MAX (100, block_md5_buf.len+1), 2, "block_len_buf",   0); 
 
-        char *start = &vb->txt_data.data[vb->txt_data.len];
+        char *start = AFTERENT (char, vb->txt_data);
         uint32_t len = txtfile_read_block (start, MIN (READ_BUFFER_SIZE, max_memory_per_vb - vb->txt_data.len));
 
         if (!len) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
@@ -361,7 +361,7 @@ void txtfile_read_vblock (VBlock *vb)
     if (file_is_read_via_int_decompressor (txt_file))
         vb->vb_data_read_size = file_tell (txt_file) - pos_before; // gz/bz2 compressed bytes read
 
-    if (DTPZ(zip_read_one_vb)) DTPZ(zip_read_one_vb)(vb);
+    if (DTPT(zip_read_one_vb)) DTPT(zip_read_one_vb)(vb);
         
     buf_free (&block_md5_buf);
     buf_free (&block_start_buf);
@@ -410,20 +410,14 @@ done:
 }
 
 // PIZ
-static void txtfile_write_to_disk (const Buffer *buf)
+static void txtfile_write_to_disk (Buffer *buf)
 {
-    uint64_t len = buf->len;
-    char *next = buf->data;
-
-    if (!flag_test) {
-        while (len) {
-            uint64_t bytes_written = file_write (txt_file, next, len);
-            len  -= bytes_written;
-            next += bytes_written;
-        }
-    }
-
     if (flag_md5) md5_update (&txt_file->md5_ctx_bound, buf->data, buf->len);
+
+    // if this is SAM/BAM make sure the output header is SAM or BAM according to flag_reconstruct_binary, and regardless of the source file
+    if (z_file->data_type == DT_SAM) bam_prepare_txt_header (buf); 
+
+    if (!flag_test) file_write (txt_file, buf->data, buf->len);
 
     txt_file->txt_data_so_far_single += buf->len;
     txt_file->disk_so_far            += buf->len;
@@ -478,6 +472,7 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
     switch (txt_file->codec) {
         // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
         case CODEC_GZ:
+        case CODEC_BGZ:
         case CODEC_BZ2:  ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size; break;
 
         // for compressed files for which we don't have their size (eg streaming from an http server) - we use
@@ -498,7 +493,7 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
         case CODEC_NONE: ratio = 1; break;
 
-        default: ABORT ("Error in txtfile_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
+        default: ABORT ("Error in txtfile_estimate_txt_data_size: unspecified txt_file->codec=%s (%u)", codec_name (txt_file->codec), txt_file->codec);
     }
 
     txt_file->txt_data_size_single = disk_size * ratio;
@@ -609,7 +604,7 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
 
     if (is_vcf && flag_header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
 
-    // write vcf header if not in bound mode, or, in bound mode, we write the vcf header, only for the first genozip file
+    // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
     if ((is_first_txt || flag_unbind) && !flag_no_header && !flag_reading_reference && !flag_show_headers) {
         txtfile_write_to_disk (&header_buf);
 

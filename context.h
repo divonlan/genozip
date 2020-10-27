@@ -50,10 +50,10 @@
 #define STRUCTURED_MAX_PREFIXES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
 
 typedef struct StructuredItem {
-        DictId dict_id;  
-        DidIType did_i;    // Used only in PIZ, must remain DID_I_NONE in ZIP
-        char seperator[2];
-        uint8_t ffu;
+    DictId dict_id;  
+    DidIType did_i;    // Used only in PIZ, must remain DID_I_NONE in ZIP
+    char seperator[2];
+    StructuredItemTransform transform; // instructions how to transform this item, if this Structured is reconstructed in transform mode
 } StructuredItem;
 
 typedef struct Structured {
@@ -80,6 +80,8 @@ typedef struct MiniStructured {
 #define DID_I_NONE   255
 #endif
 
+#define DECLARE_SNIP const char *snip=NULL; uint32_t snip_len=0
+
 typedef struct MtfNode {
     CharIndex char_index; // character index into dictionary array
     uint32_t snip_len;    // not including SNIP_SEP terminator present in dictionary array
@@ -104,6 +106,7 @@ typedef struct { // initialize with mtf_init_iterator()
 #define CTX_INST_STOP_PAIRING 0x08 // this is the 2nd file of a pair - don't use SNIP_PAIR_LOOKUP/DELTA anymore until the end of this VB
 #define CTX_INST_NO_CALLBACK  0x10 // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
 #define CTX_INST_LOCAL_PARAM  0x20 // copy local.param to SectionHeaderCtx
+#define CTX_INST_NO_VB1_SORT  0x40 // don't sort the dictionary in mtf_sort_dictionaries_vb_1
 
 // SIGNED NUMBERS ARE NOT UNTEST YET! NOT USE YET BY ANY SEG
 // for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
@@ -124,6 +127,7 @@ typedef struct Context {
     // ----------------------------
     const char name[DICT_ID_LEN+1]; // null-terminated printable dict_id
     DidIType did_i;            // the index of this ctx within the array vb->contexts
+    DidIType st_did_i;         // in --stats, consolidate this context into st_did_i
     LocalType ltype;           // LT_* - type of local data - included in the section header
     int8_t flags;              // CTX_FL_* - flags to be included in section header (8 bits)
     DictId dict_id;            // which dict_id is this MTF dealing with

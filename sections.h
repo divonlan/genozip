@@ -186,6 +186,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 #define CTX_FL_PAIRED       ((uint8_t)0x04) // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
 #define CTX_FL_STRUCTURED   ((uint8_t)0x08) // snips may contain Structured
 #define CTX_FL_COPY_PARAM   ((uint8_t)0x10) // copy ctx.b250/local.param from SectionHeaderCtx.param
+
 #define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
 
 typedef struct {

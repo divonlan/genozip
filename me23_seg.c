@@ -52,7 +52,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
     seg_chrom_field (vb, field_start, field_len);
 
     GET_NEXT_ITEM ("POS");
-    seg_pos_field (vb, ME23_POS, ME23_POS, false, field_start, field_len, true);
+    seg_pos_field (vb, ME23_POS, ME23_POS, false, field_start, field_len, 0, field_len+1);
     random_access_update_pos (vb, ME23_POS);
 
     // Genotype (a combination of one or two bases or "--")

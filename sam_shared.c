@@ -35,11 +35,17 @@ void sam_vb_release_vb (VBlockSAM *vb)
     vb->last_cigar = NULL;
     vb->ref_consumed = vb->ref_and_seq_consumed = 0;
     buf_free (&vb->bd_bi_line);
+    buf_free (&vb->textual_cigar);
+    buf_free (&vb->textual_seq);
+    buf_free (&vb->textual_opt);
 }
 
 void sam_vb_destroy_vb (VBlockSAM *vb)
 {
     buf_destroy (&vb->bd_bi_line);
+    buf_destroy (&vb->textual_cigar);
+    buf_destroy (&vb->textual_seq);
+    buf_destroy (&vb->textual_opt);
 }
 
 // calculate the expected length of SEQ and QUAL from the CIGAR string

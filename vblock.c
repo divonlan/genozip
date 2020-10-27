@@ -159,10 +159,12 @@ VBlock *vb_get_vb (unsigned vblock_i)
         }
         
         if (!pool->vb[vb_i]) { // VB is not allocated - allocate it
-            unsigned sizeof_vb = z_file && DTPZ(sizeof_vb) ? DTPZ(sizeof_vb)() : sizeof (VBlock);
+            unsigned sizeof_vb = command==ZIP ? (txt_file && DTPT(sizeof_vb) ? DTPT(sizeof_vb)() : sizeof (VBlock))
+                                              : (z_file   && DTPZ(sizeof_vb) ? DTPZ(sizeof_vb)() : sizeof (VBlock));
             pool->vb[vb_i] = CALLOC (sizeof_vb); 
             pool->num_allocated_vbs++;
-            pool->vb[vb_i]->data_type = z_file ? z_file->data_type : DT_NONE;
+            pool->vb[vb_i]->data_type = command==ZIP ? (txt_file ? txt_file->data_type : DT_NONE)
+                                                     : (z_file   ? z_file->data_type   : DT_NONE);
         }
 
         if (!pool->vb[vb_i]->in_use) break;

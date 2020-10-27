@@ -227,7 +227,7 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
 
     // POS and END share the same delta stream - the next POS will be a delta vs this END)
     else if (dict_id.num == dict_id_INFO_END) {
-        seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, *this_value, *this_value_len, false); // END is an alias of POS
+        seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, *this_value, *this_value_len, 0, *this_value_len); // END is an alias of POS
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -628,7 +628,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     seg_chrom_field (vb_, field_start, field_len);
 
     GET_NEXT_ITEM ("POS");
-    seg_pos_field (vb_, VCF_POS, VCF_POS, false, field_start, field_len, true);
+    seg_pos_field (vb_, VCF_POS, VCF_POS, false, field_start, field_len, 0, field_len+1);
     
     // POS <= 0 not expected in a VCF file
     ASSERTW (vb->contexts[VCF_POS].last_value.i > 0, "Warning: invalid POS=%"PRId64" value in vb_i=%u vb_line_i=%u: line will be compressed, but not indexed", 

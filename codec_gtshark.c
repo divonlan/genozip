@@ -113,12 +113,16 @@ static void *codec_gtshark_read_gtshark_output_file (void *arg)
 
 void codec_gtshark_comp_init (VBlock *vb)
 {
-    vb->ht_matrix_ctx    = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT);
+    vb->ht_matrix_ctx  = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT);
     vb->ht_matrix_ctx->lcodec = CODEC_GTSHARK; // this will trigger codec_gtshark_compress even though the section is not written to the file
     
     vb->gtshark_db_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_DB);
     vb->gtshark_gt_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
     vb->gtshark_ex_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_EX);
+
+    // in --stats, consolidate stats into GT
+    vb->gtshark_db_ctx->st_did_i = vb->gtshark_gt_ctx->st_did_i = vb->gtshark_ex_ctx->st_did_i =
+    vb->ht_matrix_ctx->st_did_i = mtf_get_ctx (vb, dict_id_FORMAT_GT)->did_i;
 }
 
 typedef struct { VBlockP vb; const char *fifo; } VcfThreadArg;

@@ -89,6 +89,10 @@ void fastq_seg_initialize (VBlockFAST *vb)
 
     if (flag_optimize_DESC) 
         fastq_get_optimized_desc_read_name (vb);
+
+    // in --stats, consolidate stats into SQBITMAP
+    vb->contexts[FASTQ_GPOS].st_did_i = vb->contexts[FASTQ_STRAND].st_did_i =
+    vb->contexts[FASTQ_NONREF].st_did_i = vb->contexts[FASTQ_NONREF_X].st_did_i = FASTQ_SQBITMAP;
 }
 
 void fastq_seg_finalize (VBlockP vb)

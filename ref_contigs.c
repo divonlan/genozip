@@ -65,6 +65,8 @@ void ref_contigs_compress (void)
 {
     static Buffer created_contigs = EMPTY_BUFFER;  
 
+    if (!buf_is_allocated (&z_file->contexts[CHROM].mtf)) return; // no contigs
+
     // the number of contigs is at most the number of chroms - but could be less if some chroms have no sequence
     buf_alloc (evb, &created_contigs, sizeof (RefContig) * z_file->contexts[CHROM].mtf.len, 1, "created_contigs", 0);
 
@@ -206,6 +208,11 @@ void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs)
     if (out_contigs) *out_contigs = &loaded_contigs;
 }
 
+uint32_t ref_num_loaded_contigs (void)
+{
+    return (uint32_t)loaded_contigs.len;
+}
+
 // binary search for this chrom in loaded_contigs_sorted_index. we count on gcc tail recursion optimization to keep this fast.
 static WordIndex ref_contigs_get_word_index_do (const char *chrom_name, unsigned chrom_name_len, GetWordIndexType wi_type, 
                                                 WordIndex first_sorted_index, WordIndex last_sorted_index)
@@ -298,7 +305,9 @@ void ref_contigs_generate_data_if_denovo (void)
 }
 
 // ZIP SAM: verify that we have the specified chrom (name & last_pos) loaded from the reference. called by sam_inspect_txt_header
-void ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos)
+// returns the chrom_index of the chrom
+WordIndex ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos,
+                                              WordIndex must_be_chrom_index) // provided if chrom must appear with this index or WORD_INDEX_NONE                                    
 {
     WordIndex chrom_index = ref_contigs_get_word_index (chrom_name, chrom_name_len, WI_REF_CONTIG, true);
 
@@ -306,8 +315,14 @@ void ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_
     if (chrom_index == WORD_INDEX_NONE)
         chrom_index = ref_alt_chroms_zip_get_alt_index (chrom_name, chrom_name_len, WI_REF_CONTIG, WORD_INDEX_NONE);
 
+    ASSERT (chrom_index != WORD_INDEX_NONE || must_be_chrom_index == WORD_INDEX_NONE, "Error: contig %s appears in file header, but is absent from the reference file %s",
+            chrom_name, ref_filename);
+
+    ASSERT (chrom_index == must_be_chrom_index || must_be_chrom_index == WORD_INDEX_NONE, "Error: contig %s appears in the file header at index %d, but appears at index %d in the reference file %s",
+            chrom_name, must_be_chrom_index, chrom_index, ref_filename);
+
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
-    RETURNW (chrom_index != WORD_INDEX_NONE,, "Warning: header of %s lists contig '%.*s', which is absent from %s. This might result in sub-optimal compression (but no harm otherwise).",
+    RETURNW (chrom_index != WORD_INDEX_NONE, chrom_index, "Warning: header of %s lists contig '%.*s', which is absent from %s. This might result in sub-optimal compression (but no harm otherwise).",
              txt_file->basename, chrom_name_len, chrom_name, ref_filename);
 
     // get info as it appears in reference
@@ -317,6 +332,8 @@ void ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_
 
     ASSERT (last_pos == ref_last_pos, "Error: wrong reference file: file %s has a @SQ header field specifying contig '%.*s' with LN=%"PRId64", however in reference %s the last position of '%s' is %"PRId64,
             txt_name, chrom_name_len, chrom_name, last_pos, ref_filename, ref_chrom_name, ref_last_pos);
+
+    return chrom_index;
 }
 
 // get contig by chrom_index, by binary searching for it

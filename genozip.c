@@ -61,7 +61,7 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_optimize=0, flag_b
     flag_show_b250=0, flag_show_stats=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_best=0, flag_list_chroms=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
-    flag_show_vblocks=0, flag_vblock=0, flag_gt_only=0, flag_sequential=0, 
+    flag_show_vblocks=0, flag_vblock=0, flag_gt_only=0, flag_sequential=0, flag_reconstruct_binary=0,
     flag_debug_memory=0, flag_debug_progress=0, flag_test_seg=0,
     flag_show_hash, flag_register=0, flag_genocat_info_only=0,
     flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, 
@@ -329,6 +329,9 @@ static void main_genounzip (const char *z_filename,
         }
     }
 
+    // set reconstruction to binary or textual based file type on executable
+    flag_reconstruct_binary = (exe_type == EXE_GENOUNZIP) && (z_file->type == BAM_GENOZIP || flag_bam);
+
     // get output FILE 
     if (txt_filename) {
         ASSERT0 (!txt_file || flag_bind, "Error: txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
@@ -417,7 +420,7 @@ static void main_genozip (const char *txt_filename,
     if (txt_filename) {
         
         if (!txt_file) // open the file - possibly already open from main_load_reference
-            txt_file = file_open (txt_filename, READ, TXT_FILE, 0); 
+            txt_file = file_open (txt_filename, READ, TXT_FILE, DT_NONE); 
 
         // skip this file if its size is 0
         RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
@@ -433,6 +436,8 @@ static void main_genozip (const char *txt_filename,
     stats_add_txt_name (txt_name);
 
     ASSERT0 (flag_bind || !z_file, "Error: expecting z_file to be NULL in non-bound mode");
+
+    DataType z_data_type = txt_file->data_type;
 
     // get output FILE
     if (!flag_stdout) {
@@ -459,7 +464,7 @@ static void main_genozip (const char *txt_filename,
                 FREE (basename);
             }
 
-            z_file = file_open (z_filename, flag_pair ? WRITEREAD : WRITE, Z_FILE, txt_file->data_type);
+            z_file = file_open (z_filename, flag_pair ? WRITEREAD : WRITE, Z_FILE, z_data_type);
         }
     }
     else if (flag_stdout) { // stdout
@@ -469,12 +474,12 @@ static void main_genozip (const char *txt_filename,
 #endif
         ASSINP (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
 
-        z_file = file_open_redirect (WRITE, Z_FILE, txt_file->data_type);
+        z_file = file_open_redirect (WRITE, Z_FILE, z_data_type);
     } 
     else ABORT0 ("Error: No output channel");
     
     txt_file->basename = file_basename (txt_filename, false, FILENAME_STDIN, NULL, 0);
-    zip_dispatcher (txt_file->basename, is_last_file);
+    zip_one_file (txt_file->basename, is_last_file);
 
     if (flag_show_stats && (!flag_bind || is_last_file)) stats_display();
 

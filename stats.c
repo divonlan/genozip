@@ -92,6 +92,7 @@ static void stats_show_file_metadata (Buffer *buf)
 }
 
 typedef struct {
+    DidIType my_did_i, st_did_i;
     int64_t txt_size, z_size;
     const char *name;
     char did_i[20], type[20], words[20], hash[20], uncomp_dict[20], comp_dict[20],
@@ -104,31 +105,25 @@ static int stats_sort_by_z_size(const void *a, const void *b)
     return (((StatsByLine*)b)->z_size > ((StatsByLine*)a)->z_size) ? 1 : -1; // use comparison (>) and not minus (-) as the retun value is only 32 bit
 }
 
-static void stats_consolidate_compound (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, const char *field)
+static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
 {
-    unsigned field_len = strlen (field);
+    for (unsigned parent=0; parent < num_stats; parent++) 
 
-    StatsByLine *survivor = NULL;    
-    for (uint32_t i=0; i < num_stats; i++)
-        if (sbl[i].name && !strcmp (sbl[i].name, field)) {
-            survivor = &sbl[i];
-            survivor->name = consolidated_name;
+        // case: we might consolidate to this context
+        if (sbl[parent].my_did_i != DID_I_NONE && sbl[parent].st_did_i == DID_I_NONE)  {
+
+            for (unsigned child=0; child < num_stats; child++) {
+                if (sbl[parent].my_did_i  == sbl[child].st_did_i) {
+                    sbl[parent].txt_size  += sbl[child].txt_size;
+                    sbl[parent].z_size    += sbl[child].z_size;  
+                    sbl[parent].pc_of_txt += sbl[child].pc_of_txt;
+                    sbl[parent].pc_of_z   += sbl[child].pc_of_z;  
+                    sbl[child] = (StatsByLine){ .my_did_i = DID_I_NONE, .st_did_i = DID_I_NONE };
+                }
+            }
+
+            if (!strcmp (sbl[parent].name, "SQBITMAP")) sbl[parent].name = "SEQ"; // rename
         }
-
-    if (!survivor) return; // this data type doesn't have this compound field
-
-    for (unsigned i=0; i < num_stats; i++) {
-        
-        // check for eg DESC -> D1ESC
-        if (sbl[i].name && (field_len+1 == strlen (sbl[i].name)) && (field[0] == sbl[i].name[0]) && !strcmp (&field[1], &sbl[i].name[2])) {
-            survivor->txt_size  += sbl[i].txt_size;
-            survivor->z_size    += sbl[i].z_size;  
-            survivor->pc_of_txt += sbl[i].pc_of_txt;
-            survivor->pc_of_z   += sbl[i].pc_of_z;  
-
-            sbl[i] = (StatsByLine){};
-        }
-    }
 }
 
 static void stats_consolidate_related (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, unsigned num_deps, ...)
@@ -257,6 +252,8 @@ void stats_compress (void)
         /* Type           */ strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
 
         if (ctx) {
+                             s->my_did_i = ctx->did_i;
+                             s->st_did_i = ctx->st_did_i;
         /* did_i          */ str_uint_commas ((uint64_t)ctx->did_i, s->did_i); 
         /* #Words in file */ str_uint_commas (ctx->mtf_i.len, s->words);
         /* % dict         */ s->pc_dict              = !ctx->mtf_i.len         ? 0 : 100.0 * (double)ctx->mtf.len / (double)ctx->mtf_i.len;
@@ -267,9 +264,11 @@ void stats_compress (void)
         /* uncomp dict    */ str_size (ctx->dict.len, s->uncomp_dict);
         /* comp dict      */ str_size (dict_compressed_size, s->comp_dict);
         }
-        else 
+        else {
+            s->my_did_i = s->st_did_i = DID_I_NONE;
             s->did_i[0] = s->words[0] = s->hash[0] = s->uncomp_dict[0] = '-';
-        
+        }
+
         if (ctx)
         /* comp dict      */ str_size (dict_compressed_size, s->comp_dict);
         else 
@@ -292,14 +291,8 @@ void stats_compress (void)
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
     stats_output_STATS (sbl, num_stats, all_txt_size, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_data, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
     
-    // consolidates stats of related lines into one - for SEQ, QUAL, DESC and QNAME
-    stats_consolidate_compound (sbl, num_stats, "Description", "DESC");
-    
-    stats_consolidate_compound (sbl, num_stats, "QNAME", "QNAME");
-
-    stats_consolidate_related (sbl, num_stats, "Sequence", 5, "SQBITMAP", "GPOS", "NONREF", "NONREF_X", "STRAND");
-    
-    stats_consolidate_related (sbl, num_stats, "Quality",  2, "QUAL", "DOMQRUNS");
+    // consolidates stats of child contexts into the parent one
+    stats_consolidate_ctxs (sbl, num_stats);
     
     stats_consolidate_related (sbl, num_stats, "Reference", 5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS));
@@ -308,9 +301,7 @@ void stats_compress (void)
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER));
 
-    stats_consolidate_related (sbl, num_stats, "BD_BI",  3, "BD_BI", "BD:Z", "BI:Z");
-
-    stats_consolidate_related (sbl, num_stats, "GT",  6, "GT", "@HT", "@INDEXHT", "@1SHRKDB", "@2SHRKGT", "@3SHRKEX");
+    // consolidate SAM arrays
 
     // short form stats from --show-stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation

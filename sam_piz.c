@@ -29,7 +29,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
 #define ROUNDUP_TO_NEAREST_4(x) ((uint32_t)(x) + 3) & ~((uint32_t)0x3)
 
     VBlockSAMP vb = (VBlockSAMP)vb_;
-    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == SAM_SEQ_BITMAP, "Error in sam_piz_reconstruct_seq: context is not SAM_SEQ_BITMAP");
+    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == SAM_SQBITMAP, "Error in sam_piz_reconstruct_seq: context is not SAM_SQBITMAP");
 
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 

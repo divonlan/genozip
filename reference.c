@@ -1034,7 +1034,8 @@ void ref_compress_ref (void)
 {
     if (!buf_is_allocated (&ranges)) return;
 
-    if (ranges.param == RT_DENOVO)
+    if ((ranges.param == RT_DENOVO) &&
+        buf_is_allocated (&z_file->contexts[CHROM].dict)) // did we have an aligned lines? (to do: this test is not enough)
         ref_finalize_denovo_ranges(); // assignes chroms; sorts ranges by chrom, pos; gets rid of unused ranges
 
     if (ranges.param != RT_MAKE_REF) {

@@ -52,7 +52,7 @@ void ref_make_create_range (VBlockP vb)
 }
 
 // in make_ref, each VB gets it own range indexed by vb->vblock_i - so they can work on them in parallel without
-// worrying about byte overlap. called from zip_dispatcher as zip_initialize
+// worrying about byte overlap. called from zip_one_file as zip_initialize
 void ref_make_ref_init (void)
 {
     ASSERT0 (flag_make_reference, "Expecting flag_make_reference=true");

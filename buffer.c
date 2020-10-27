@@ -707,6 +707,11 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
         fprintf (stderr, "Memory freed by free(): %s %s:%u\n", str_pointer (p, s), func, code_line);
     }
 
+    if (p == BUFFER_BEING_MODIFIED) {
+        fprintf (stderr, "Warning in buf_low_level_free: corrupt pointer = 0x777 while attempting free()\n");
+        return; // this can happen if there are memory overflow issues
+    }
+
     free (p);
 }
 

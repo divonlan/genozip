@@ -102,7 +102,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (codec_hapmat_piz_get_one_line, 2);
     }
     else { // compress
-        fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");
+        fprintf (stderr, "GENOZIP I/O thread (zip_one_file):\n");
         PRINT (txtfile_read_header, 1);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);

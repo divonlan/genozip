@@ -36,7 +36,7 @@ void random_access_alloc_ra_buf (VBlock *vb, int32_t chrom_node_index)
     }
 }
 
-// ZIP only: called from vcf_seg_chrom_field when the CHROM changed - this might be a new chrom, or
+// ZIP only: called from Seg when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom (for example, in an unsorted SAM or VCF). we maitain one ra field per chrom per vb
 void random_access_update_chrom (VBlock *vb, WordIndex chrom_node_index, const char *chrom_name, unsigned chrom_name_len)
 {

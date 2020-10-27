@@ -46,6 +46,7 @@ static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 // get data type by file type
 DataType file_get_data_type (FileType ft, bool is_input)
 {
+    // note: if make-reference, we scan the array from dt=0 (DT_REF), otherwise we ignore DT_REF
     for (DataType dt=!flag_make_reference; dt < NUM_DATATYPES; dt++) 
         for (unsigned i=0; (is_input ? txt_in_ft_by_dt[dt][i].in : txt_out_ft_by_dt[dt][i]); i++)
             if ((is_input ? txt_in_ft_by_dt[dt][i].in : txt_out_ft_by_dt[dt][i]) == ft) return dt;
@@ -440,7 +441,7 @@ bool file_open_txt (File *file)
         default:
             if (file->mode == WRITE && file->data_type == DT_NONE) {
                 // user is trying to genounzip a .genozip file that is not a recognized extension -
-                // that's ok - we will discover its type after reading the genozip header in zip_dispatcher
+                // that's ok - we will discover its type after reading the genozip header in zip_one_file
                 return true; // let's call this a success anyway
             }
             else {
@@ -590,7 +591,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         file->type = file_get_type (file->name, true);
 
     if (file->mode == WRITE || file->mode == WRITEREAD) 
-        file->data_type = data_type; // for WRITE, data_type is set by file_open_*
+        file->data_type = data_type; // for READ, data_type is set by file_open_*
 
     bool success=false;
     switch (supertype) {
@@ -690,7 +691,7 @@ void file_close (File **file_p,
     }
 }
 
-size_t file_write (File *file, const void *data, unsigned len)
+void file_write (File *file, const void *data, unsigned len)
 {
     if (!len) return 0; // nothing to do
 
@@ -701,9 +702,8 @@ size_t file_write (File *file, const void *data, unsigned len)
     // .genozip file will be corrupted
     if (!file->name && command != ZIP && errno == EINVAL) exit(0);
 
-    ASSERT (bytes_written, "Error: failed to write %u bytes to %s: %s", 
+    ASSERT (bytes_written == len, "Error: failed to write %u bytes to %s: %s", 
             len, file->name ? file->name : FILENAME_STDOUT, strerror(errno));
-    return bytes_written;
 }
 
 void file_remove (const char *filename, bool fail_quietly)

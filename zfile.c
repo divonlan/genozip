@@ -725,6 +725,9 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
 
     uint32_t num_sections = z_file->section_list_buf.len;
 
+    // BAM txt files result in SAM genozip files 
+    DataType z_data_type =  (z_file->data_type == DT_BAM ? DT_SAM : z_file->data_type);
+
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
@@ -732,7 +735,7 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.h.flags                 = ((flag_reference == REF_INTERNAL ? GENOZIP_FL_REF_INTERNAL : 0) |
                                       (flag_ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0) );
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
-    header.data_type               = BGEN16 ((uint16_t)z_file->data_type);
+    header.data_type               = BGEN16 ((uint16_t)z_data_type);
     header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
     header.uncompressed_data_size  = BGEN64 (z_file->txt_data_so_far_bind);
     header.num_items_bound         = BGEN64 (z_file->num_lines);
@@ -878,7 +881,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool i
     header.txt_filename[strlen(header.txt_filename)- (strlen(file_exts[txt_file->type])-4)] = '\0'; // remove the .gz/.bgz/.bz2
     
     static Buffer txt_header_buf = EMPTY_BUFFER;
-
+buf_test_overflows_all_vbs ("xxx");
     buf_alloc (evb, &txt_header_buf, sizeof (SectionHeaderTxtHeader) + txt_header_text->len / 3, // generous guess of compressed size
             1, "txt_header_buf", 0); 
 

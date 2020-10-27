@@ -113,6 +113,7 @@ void dict_id_initialize (DataType data_type)
         break;
 
     case DT_SAM:
+    case DT_BAM:
         dict_id_OPTION_AM = sam_dict_id_optnl_sf (dict_id_make ("AM:i", 4)).num;
         dict_id_OPTION_AS = sam_dict_id_optnl_sf (dict_id_make ("AS:i", 4)).num;
         dict_id_OPTION_CC = sam_dict_id_optnl_sf (dict_id_make ("CC:Z", 4)).num;

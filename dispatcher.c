@@ -193,6 +193,8 @@ static void *dispatcher_thread_entry (void *thread_)
 {
     Thread *th = (Thread *)thread_;
 
+    ASSERT0 (th->vb->vblock_i, "Error in dispatcher_thread_entry: vb_i=0");
+
     th->func (th->vb);
     
     return NULL;
@@ -222,8 +224,10 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP))
 
     if (flag_show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->vblock_i);
 
+    ASSERT0 (dd->next_vb->vblock_i, "Error in dispatcher_compute: vb_i=0");
+
     if (dd->max_threads > 1) {
-        unsigned err = pthread_create(&th->thread_id, NULL, dispatcher_thread_entry, th);
+        unsigned err = pthread_create (&th->thread_id, NULL, dispatcher_thread_entry, th);
         ASSERT (!err, "Error: failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->vblock_i, err);
 
         dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % dd->max_threads;

@@ -417,7 +417,7 @@ static void zip_compress_one_vb (VBlock *vb)
     buf_alloc (vb, &vb->z_data, vb->vb_data_size / 5, 1.2, "z_data", 0);
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
-    if (flag_pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_dispatcher
+    if (flag_pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
         mtf_clone_ctx (vb);
 
     // split each line in this variant block to its components
@@ -475,7 +475,7 @@ static void zip_compress_one_vb (VBlock *vb)
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_dispatcher (const char *txt_basename, bool is_last_file)
+void zip_one_file (const char *txt_basename, bool is_last_file)
 {
     static DataType last_data_type = DT_NONE;
     static uint32_t prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
@@ -503,7 +503,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
     bool success = txtfile_header_to_genozip (&txt_line_i);
     if (!success) goto finish; // 2nd+ VCF file cannot bind, because of different sample names
 
-    if (DTPZ(zip_initialize)) DTPZ(zip_initialize)();
+    if (DTPT(zip_initialize)) DTPT(zip_initialize)();
 
     mtf_initialize_for_zip();
 
@@ -567,7 +567,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
 
             if (read_txt) {
                 if (flag_show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);            
-                txtfile_read_vblock (next_vb);
+                (DTPT(read_vblock) ? DTPT(read_vblock) : txtfile_read_vblock) (next_vb);
                 if (flag_show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
             }
 
@@ -576,7 +576,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
             
             else {
                 // error if stdin is empty - can happen only when redirecting eg "cat empty-file|./genozip -" (we test for empty regular files in main_genozip)
-                ASSERT0 (next_vb->vblock_i > 1 || evb->lines.len /* txt header data */, "Error: Cannot compress stdin data because its size is 0");
+                ASSERT0 (next_vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, "Error: Cannot compress stdin data because its size is 0");
 
                 // this vb has no data
                 dispatcher_input_exhausted (dispatcher);

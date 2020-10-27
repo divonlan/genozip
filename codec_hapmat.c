@@ -32,6 +32,9 @@ void codec_hapmat_comp_init (VBlock *vb)
 
     vb->hapmat_index_ctx         = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
     vb->hapmat_index_ctx->ltype  = LT_UINT32;
+
+    // in --stats, consolidate stats into GT
+    vb->ht_matrix_ctx->st_did_i = vb->hapmat_index_ctx->st_did_i = mtf_get_ctx (vb, dict_id_FORMAT_GT)->did_i;
 }
 
 static int sort_by_alt_allele_comparator(const void *p, const void *q)  

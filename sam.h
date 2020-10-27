@@ -30,6 +30,10 @@ extern void sam_piz_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unuse
 
 // BAM Stuff
 extern Md5Hash bam_read_txt_header (bool is_first_txt, bool header_required_unused, char first_char_unused);
+extern void bam_prepare_txt_header (BufferP txt);
+extern void bam_read_vblock (VBlockP vb);
+extern void bam_seg_initialize (VBlockP vb);
+extern const char *bam_seg_txt_line (VBlockP vb_, const char *field_start_line, bool *has_special_eol);
 
 // VB stuff
 extern void sam_vb_release_vb();
@@ -37,13 +41,15 @@ extern void sam_vb_destroy_vb();
 extern unsigned sam_vb_size (void);
 extern unsigned sam_vb_zip_dl_size (void);
 
+// Special - used for SAM & BAM
 #define SAM_SPECIAL { sam_piz_special_CIGAR, sam_piz_special_TLEN, sam_piz_special_BD_BI, sam_piz_special_AS, sam_piz_special_MD }
 SPECIAL (SAM, 0, CIGAR, sam_piz_special_CIGAR);
 SPECIAL (SAM, 1, TLEN,  sam_piz_special_TLEN);
 SPECIAL (SAM, 2, BDBI,  sam_piz_special_BD_BI);
 SPECIAL (SAM, 3, AS,    sam_piz_special_AS);
 SPECIAL (SAM, 4, MD,    sam_piz_special_MD);
-#define NUM_SAM_SPECIAL 5
+SPECIAL (SAM, 5, FLOAT, bam_piz_special_FLOAT); // used in BAM to represent float optional values
+#define NUM_SAM_SPECIAL 6
 
 // SAM field types 
 #define sam_dict_id_is_qname_sf  dict_id_is_type_1
@@ -57,7 +63,7 @@ SPECIAL (SAM, 4, MD,    sam_piz_special_MD);
     /*         alias                        maps to this ctx          */       \
     { DT_SAM,  &dict_id_OPTION_MC,          &dict_id_fields[SAM_CIGAR]  },     \
     { DT_SAM,  &dict_id_OPTION_OC,          &dict_id_fields[SAM_CIGAR]  },     \
-    { DT_SAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_SEQ_BITMAP] }, \
+    { DT_SAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_SQBITMAP] }, \
     { DT_SAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_QUAL]   },
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS  \
@@ -68,7 +74,7 @@ SPECIAL (SAM, 4, MD,    sam_piz_special_MD);
     /*         alias                        maps to this ctx          */       \
     { DT_BAM,  &dict_id_OPTION_MC,          &dict_id_fields[SAM_CIGAR]  },     \
     { DT_BAM,  &dict_id_OPTION_OC,          &dict_id_fields[SAM_CIGAR]  },     \
-    { DT_BAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_SEQ_BITMAP] }, \
+    { DT_BAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_SQBITMAP] }, \
     { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_QUAL]   },
 
 #define BAM_LOCAL_GET_LINE_CALLBACKS  \

@@ -32,8 +32,6 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, 
 
 extern void piz_reconstruct_structured_do (VBlockP vb, DictId dict_id, ConstStructuredP st, const char *prefixes, uint32_t prefixes_len);
 
-#define DECLARE_SNIP const char *snip=NULL; uint32_t snip_len=0
-
 // gets snip, snip_len from b250 data
 #define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->contexts[(did_i)], NULL, &snip, &snip_len); 
 
@@ -49,6 +47,11 @@ extern void piz_reconstruct_structured_do (VBlockP vb, DictId dict_id, ConstStru
     LOAD_SNIP (did_i);\
     RECONSTRUCT (snip, snip_len);\
     if (add_tab) RECONSTRUCT1 ('\t');
+
+// binary reconstructions
+#define RECONSTRUCT_BIN8(n)  RECONSTRUCT (&n, 1)
+#define RECONSTRUCT_BIN16(n) { uint16_t lten = LTEN16((uint16_t)(n)); RECONSTRUCT (&lten, sizeof (uint16_t)); }
+#define RECONSTRUCT_BIN32(n) { uint32_t lten = LTEN32((uint32_t)(n)); RECONSTRUCT (&lten, sizeof (uint32_t)); }
 
 #endif
 

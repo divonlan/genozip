@@ -76,7 +76,8 @@ extern void ref_generate_reverse_complement_genome (void);
 
 // contigs stuff
 extern void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs);
-extern void ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos);
+extern uint32_t ref_num_loaded_contigs (void);
+extern WordIndex ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, WordIndex must_be_chrom_index);
 extern void ref_contigs_sort_chroms (void);
 extern void ref_contigs_load_contigs (void);
 

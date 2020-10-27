@@ -432,7 +432,7 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
 
     uint64_t start = vb->txt_data.len;
 
-    // case: we have dictionary data
+    // case: we have b250 data
     if (ctx->b250.len) {         
         DECLARE_SNIP;
         uint32_t word_index = LOAD_SNIP(ctx->did_i); 

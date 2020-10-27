@@ -100,6 +100,7 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
         break;
 
     case DT_SAM:
+    case DT_BAM:
         // typically small - use minimal hash table ~ 500
         if (vb_ctx->dict_id.num == dict_id_fields[SAM_FLAG]      ||
             vb_ctx->dict_id.num == dict_id_fields[SAM_MAPQ]      ||

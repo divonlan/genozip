@@ -148,9 +148,10 @@ PosType seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool
 PosType seg_pos_field (VBlock *vb, 
                        DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
                        DidIType base_did_i,    // mandatory: base for delta
-                       bool allow_non_number, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
-                       const char *pos_str, unsigned pos_len, 
-                       bool account_for_separator)
+                       bool allow_non_number,  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+                       const char *pos_str, unsigned pos_len, // option 1
+                       uint32_t this_pos,      // option 2
+                       unsigned add_bytes)
 {
     Context *snip_ctx = &vb->contexts[snip_did_i];
     Context *base_ctx = &vb->contexts[base_did_i];
@@ -160,7 +161,8 @@ PosType seg_pos_field (VBlock *vb,
 
     base_ctx->inst  |= CTX_INST_NO_STONS;
 
-    PosType this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
+    if (pos_str)
+        this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
 
     // < 0  -  caller allows a non-valid-number and this is indeed a non-valid-number, just store the string
     // == 0 - 
@@ -168,9 +170,13 @@ PosType seg_pos_field (VBlock *vb,
     //     for non-primary - e.g. "not available" in SAM_PNEXT - we store "0" verbatim with SNIP_DONT_STORE
     // In both cases, we store as SNIP_DONT_STORE so that piz doesn't update last_value after reading this value
     if (this_pos < 0 || (this_pos==0 && !(snip_ctx == base_ctx && base_did_i == DTF(pos)))) { 
-        SAFE_ASSIGN (1, pos_str-1, SNIP_DONT_STORE);
-        seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, pos_len + account_for_separator, NULL); 
-        SAFE_RESTORE (1);
+        char snip[15] = { SNIP_DONT_STORE };
+        unsigned snip_len = 1 + str_int (this_pos, &snip[1]);
+        seg_by_ctx (vb, snip, snip_len, snip_ctx, add_bytes, NULL); 
+
+        //SAFE_ASSIGN (1, pos_str-1, SNIP_DONT_STORE);
+        //seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, pos_len + account_for_separator, NULL); 
+        //SAFE_RESTORE (1);
 
         snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
         return 0; // invalid pos
@@ -189,7 +195,7 @@ PosType seg_pos_field (VBlock *vb,
         // store the value in store it in local - uint32
         buf_alloc (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, snip_ctx->name, snip_ctx->did_i);
         NEXTENT (uint32_t, snip_ctx->local) = BGEN32 (this_pos);
-        snip_ctx->txt_len += pos_len + account_for_separator;
+        snip_ctx->txt_len += add_bytes;
 
         snip_ctx->ltype  = LT_UINT32;
 
@@ -224,12 +230,12 @@ PosType seg_pos_field (VBlock *vb,
         unsigned delta_len = str_int (pos_delta, &pos_delta_str[total_len]);
         total_len += delta_len;
 
-        seg_by_ctx (vb, pos_delta_str, total_len, snip_ctx, pos_len + account_for_separator, NULL);
+        seg_by_ctx (vb, pos_delta_str, total_len, snip_ctx, add_bytes, NULL);
     }
     // case: the delta is the negative of the previous delta - add a SNIP_SELF_DELTA with no payload - meaning negated delta
     else {
         char negated_delta = SNIP_SELF_DELTA; // no delta means negate the previous delta
-        seg_by_did_i (vb, &negated_delta, 1, snip_did_i, pos_len + account_for_separator);
+        seg_by_did_i (vb, &negated_delta, 1, snip_did_i, add_bytes);
         snip_ctx->last_delta = 0; // no negated delta next time
     }
 
@@ -490,6 +496,8 @@ void seg_compound_field (VBlock *vb,
             Context *sf_ctx = mtf_get_ctx (vb, st.items[st.num_items].dict_id);
             ASSERT (sf_ctx, "Error in seg_compound_field: sf_ctx for %s is NULL", err_dict_id (st.items[st.num_items].dict_id));
 
+            sf_ctx->st_did_i = field_ctx->did_i;
+
             // allocate memory if needed
             buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->lines.len, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
                        CTX_GROWTH, "contexts->mtf_i", sf_ctx->did_i);
@@ -580,20 +588,25 @@ void seg_compound_field (VBlock *vb,
 }
 
 // an array - all elements go into a single item context, multiple repeats
-WordIndex seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len, 
-                           SegOptimize optimize) // optional optimization function
+uint32_t seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len, 
+                          bool add_bytes_by_textual, // add bytes according to textual length inc. separator
+                          StructuredItemTransform transform, // instructions on how to transform array items if reconstructing as BAM or TRS_NONE
+                          SegOptimize optimize) // optional optimization function
 {   
     const char *str = value; 
     int str_len = (int)value_len; // must be int, not unsigned, for the for loop
     
-    MiniStructured st = { .num_items = 1, .flags = STRUCTURED_DROP_FINAL_ITEM_SEP, 
-                          .repsep = {0,0}, .items = { { .seperator = {','}, .did_i = DID_I_NONE } } };
-    DictId arr_dict_id = dict_id_make ("XX_ARRAY", 8);
-    arr_dict_id.id[0]      = FLIP_CASE (dict_id.id[0]);
-    arr_dict_id.id[1]      = FLIP_CASE (dict_id.id[1]);
-    st.items[0].dict_id    = sam_dict_id_optnl_sf (arr_dict_id);
-    
-    Context *arr_ctx = mtf_get_ctx (vb, st.items[0].dict_id);
+    MiniStructured st     = { .num_items = 1, .flags = STRUCTURED_DROP_FINAL_ITEM_SEP, 
+                              .repsep = {0,0}, .items = { { .seperator = {','}, .did_i = DID_I_NONE } } };
+    DictId arr_dict_id    = dict_id_make ("XX_ARRAY", 8);
+    arr_dict_id.id[0]     = FLIP_CASE (dict_id.id[0]);
+    arr_dict_id.id[1]     = FLIP_CASE (dict_id.id[1]);
+    st.items[0].dict_id   = sam_dict_id_optnl_sf (arr_dict_id);
+    st.items[0].transform = transform;
+
+    Context *parent_ctx   = mtf_get_ctx (vb, dict_id);
+    Context *arr_ctx      = mtf_get_ctx (vb, st.items[0].dict_id);
+    arr_ctx->st_did_i     = parent_ctx->did_i;
 
     for (st.repeats=0; st.repeats < STRUCTURED_MAX_REPEATS && str_len > 0; st.repeats++) { // str_len will be -1 after last number
 
@@ -611,13 +624,15 @@ WordIndex seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsign
         if (optimize && st.repeats < STRUCTURED_MAX_REPEATS-1 && snip_len < 25)
             optimize (&snip, &snip_len, new_number_str);
 
-        seg_by_ctx (vb, snip, snip_len, arr_ctx, number_len+1, NULL);
+        seg_by_ctx (vb, snip, snip_len, arr_ctx, add_bytes_by_textual ? number_len+1 : 0, NULL);
         
         str_len--; // skip comma
         str++;
     }
 
-    return seg_structured_by_dict_id (vb, dict_id, (Structured *)&st, 0);
+    seg_structured_by_ctx (vb, parent_ctx, (Structured *)&st, 0, 0, 0);
+
+    return st.repeats;
 }
 
 // an comma-separated array - each element goes into its own item context, single repeat (somewhat similar to compound, but 
@@ -737,8 +752,11 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 
     len /= NUM_LINES_IN_TEST; // average length of a line
 
+    ASSERT (vb->txt_data.len, "Error in seg_estimate_num_lines for vb=%u: txt_data is empty", vb->vblock_i); 
+
     char s[30];
-    ASSSEG (newlines==newlines_per_dt_line || len < vb->txt_data.len, vb->txt_data.data, "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
+    ASSSEG (newlines==newlines_per_dt_line || len < vb->txt_data.len, vb->txt_data.data, 
+            "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
             str_uint_commas (global_max_memory_per_vb, s));
 
     return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
@@ -796,9 +814,14 @@ void seg_all_data_lines (VBlock *vb)
     if (!sizeof_line) sizeof_line=1; // we waste a little bit of memory to avoid making exceptions throughout the code logic
  
     // allocate lines
-    buf_alloc (vb, &vb->lines, seg_estimate_num_lines(vb) * sizeof_line, 1.2, "lines", vb->vblock_i);
+    if (vb->lines.len) { // counted by txt vblock reader - for example: bam
+        buf_alloc (vb, &vb->lines, vb->lines.len * sizeof_line, 1.2, "lines", vb->vblock_i);
+    }
+    else {
+        buf_alloc (vb, &vb->lines, seg_estimate_num_lines(vb) * sizeof_line, 1.2, "lines", vb->vblock_i);
+        vb->lines.len = vb->lines.size / sizeof_line;
+    }
     buf_zero (&vb->lines);
-    vb->lines.len = vb->lines.size / sizeof_line;
 
     // allocate the mtf_i for the fields which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 

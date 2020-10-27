@@ -123,7 +123,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
 //                    GFF3,  GFF3_GZ,  GFF3_BZ2,  GFF3_XZ,  GFF3_GENOZIP,
                     GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,   GVF_GENOZIP,
                     ME23,  ME23_ZIP,                      ME23_GENOZIP, 
-                    BAM, BAM_GENOZIP,
+                    BAM,                                  BAM_GENOZIP,
                     AFTER_LAST_FILE_TYPE } FileType;
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
@@ -141,7 +141,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    /*GFF3_,  GFF3_GZ_,  GFF3_BZ2_,  GFF3_XZ_,  GFF3_GENOZIP_,*/ \
                    GVF_,   GVF_GZ_,   GVF_BZ2_,   GVF_XZ_,   GVF_GENOZIP_, \
                    ME23_,  ME23_ZIP_,                        ME23_GENOZIP_,\
-                   BAM_, BAM_GENOZIP_,\
+                   BAM_,                                     BAM_GENOZIP_,\
                    "stdin", "stdout" }
 extern const char *file_exts[];
 
@@ -183,23 +183,25 @@ extern const char *file_exts[];
 // Supported output formats for genounzip
 // plain file MUST appear first on the list - this will be the default output when redirecting
 // GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz
-#define TXT_OUT_FT_BY_DT { { }, /* a reference file cannot be uncompressed */  \
+#define TXT_OUT_FT_BY_DT { { 0 }, /* a reference file cannot be uncompressed */  \
                            { VCF, VCF_GZ, VCF_BGZ, BCF, 0 },  \
                            { SAM, SAM_GZ, BAM, 0 },     \
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 }, \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
                            { GVF, GVF_GZ, /*GFF3, GFF3_GZ,*/ 0 }, \
                            { ME23, ME23_ZIP, 0 }, \
-                           { BAM, 0 } }                        
+                           { 0 } /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
+                         }                        
 
-#define Z_FT_BY_DT { { REF_GENOZIP, 0  },               \
-                     { VCF_GENOZIP, 0  },               \
-                     { SAM_GENOZIP, 0  },               \
-                     { FASTQ_GENOZIP, FQ_GENOZIP, 0 },  \
+#define Z_FT_BY_DT { { REF_GENOZIP, 0  },                   \
+                     { VCF_GENOZIP, 0  },                   \
+                     { SAM_GENOZIP, BAM_GENOZIP, 0 },       \
+                     { FASTQ_GENOZIP, FQ_GENOZIP, 0 },      \
                      { FASTA_GENOZIP, FA_GENOZIP, FAA_GENOZIP, FFN_GENOZIP, FNN_GENOZIP, FNA_GENOZIP, 0 }, \
-                     { GVF_GENOZIP,/* GFF3_GENOZIP,*/ 0  },               \
-                     { ME23_GENOZIP, 0 },               \
-                     { BAM_GENOZIP, 0  } } 
+                     { GVF_GENOZIP,/* GFF3_GENOZIP,*/ 0  }, \
+                     { ME23_GENOZIP, 0 },                   \
+                     { 0 }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
+                   } 
 
 typedef const char *FileMode;
 extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
@@ -306,7 +308,7 @@ extern File *file_open (const char *filename, FileMode mode, FileSupertype super
 extern File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type);
 extern bool file_open_txt (File *file);
 extern void file_close (FileP *file_p, bool cleanup_memory /* optional */);
-extern size_t file_write (FileP file, const void *data, unsigned len);
+extern void file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, bool soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern uint64_t file_tell (File *file);
 extern uint64_t file_get_size (const char *filename);

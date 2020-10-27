@@ -75,8 +75,9 @@ bool codec_domq_comp_init (VBlock *vb, LocalGetLineCB callback)
             qual_ctx->ltype   = LT_CODEC;
             qual_ctx->lcodec  = CODEC_DOMQ;
 
-            Context *domqruns_ctx = qual_ctx + 1;
-            domqruns_ctx->ltype   = LT_UINT8;
+            Context *domqruns_ctx  = qual_ctx + 1;
+            domqruns_ctx->ltype    = LT_UINT8;
+            domqruns_ctx->st_did_i = qual_ctx->did_i;
             return true;
         }
 

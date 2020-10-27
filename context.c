@@ -380,11 +380,12 @@ void mtf_clone_ctx (VBlock *vb)
             vb_ctx->num_new_entries_prev_merged_vb = zf_ctx->num_new_entries_prev_merged_vb;
         }
 
-        vb_ctx->did_i   = did_i;
-        vb_ctx->dict_id = zf_ctx->dict_id;
-        vb_ctx->flags   = zf_ctx->flags;
-        vb_ctx->ltype   = zf_ctx->ltype;
-        vb_ctx->inst    = zf_ctx->inst;
+        vb_ctx->did_i    = did_i;
+        vb_ctx->st_did_i = zf_ctx->st_did_i;
+        vb_ctx->dict_id  = zf_ctx->dict_id;
+        vb_ctx->flags    = zf_ctx->flags;
+        vb_ctx->ltype    = zf_ctx->ltype;
+        vb_ctx->inst     = zf_ctx->inst;
         // note: lcodec is NOT inherited here, only merge (see comment in zip_assign_best_codec)
 
         memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
@@ -403,8 +404,9 @@ void mtf_clone_ctx (VBlock *vb)
 
 static void mtf_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictId dict_id, DidIType *dict_id_to_did_i_map)
 {
-    ctx->did_i   = did_i;
-    ctx->dict_id = dict_id;
+    ctx->did_i    = did_i;
+    ctx->st_did_i = DID_I_NONE;
+    ctx->dict_id  = dict_id;
     
     memcpy ((char*)ctx->name, dict_id_printable (dict_id).id, DICT_ID_LEN);
     ((char*)ctx->name)[DICT_ID_LEN] = 0;
@@ -509,11 +511,12 @@ static Context *mtf_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
 
     mutex_initialize (zf_ctx->mutex);
 
-    zf_ctx->did_i   = z_file->num_contexts; 
-    zf_ctx->dict_id = vb_ctx->dict_id;
-    zf_ctx->flags   = vb_ctx->flags;
-    zf_ctx->inst    = vb_ctx->inst;
-    zf_ctx->ltype   = vb_ctx->ltype;
+    zf_ctx->did_i    = z_file->num_contexts; 
+    zf_ctx->st_did_i = vb_ctx->st_did_i;
+    zf_ctx->dict_id  = vb_ctx->dict_id;
+    zf_ctx->flags    = vb_ctx->flags;
+    zf_ctx->inst     = vb_ctx->inst;
+    zf_ctx->ltype    = vb_ctx->ltype;
     memcpy ((char*)zf_ctx->name, vb_ctx->name, sizeof(zf_ctx->name));
     // note: lcodec is NOT copied here, see comment in zip_assign_best_codec
 
@@ -842,9 +845,10 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
 
         if (buf_is_allocated (&zf_ctx->dict) && buf_is_allocated (&zf_ctx->word_list)) { 
             
-            vb_ctx->did_i   = did_i;
-            vb_ctx->dict_id = zf_ctx->dict_id;
-            vb_ctx->flags   = zf_ctx->flags;
+            vb_ctx->did_i    = did_i;
+            vb_ctx->st_did_i = zf_ctx->st_did_i;
+            vb_ctx->dict_id  = zf_ctx->dict_id;
+            vb_ctx->flags    = zf_ctx->flags;
             memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
 
             if (vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] == DID_I_NONE)
@@ -871,7 +875,7 @@ MtfNode *mtf_get_node_by_word_index (Context *ctx, WordIndex word_index)
     return NULL; // never reaches here
 }
 
-// get snip by normal word index (doesn't support WORD_INDEX_*)
+// PIZ: get snip by normal word index (doesn't support WORD_INDEX_*)
 const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, WordIndex word_index, 
                                         const char **snip, uint32_t *snip_len)
 {
@@ -898,6 +902,8 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
 
         Context *ctx = &vb->contexts[did_i];
 
+        if (ctx->inst & CTX_INST_NO_VB1_SORT) continue;
+        
         // prepare sorter array containing indices into ctx->mtf. We are going to sort it rather than sort mtf directly
         // as the b250 data contains node indices into ctx->mtf.
         static Buffer sorter = EMPTY_BUFFER;
