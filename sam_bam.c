@@ -34,7 +34,7 @@ static uint32_t header_n_ref=0;
 static char **header_ref_contigs = NULL;
 static uint32_t *header_ref_contigs_len = NULL;
 
-
+// note: usually a BAM header fits into a single 512KB READ BUFFER, so this function is called only twice (without and then with data)
 static inline uint32_t bam_read_txt_header_is_done (void)
 {
     uint32_t next=0;
@@ -289,10 +289,14 @@ static inline void bam_rewrite_seq (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 }
 
 // Rewrite the QUAL field - add +33 to Phred scores to make them ASCII
-static inline void bam_rewrite_qual (char *qual, uint32_t qual_len)
+static inline bool bam_rewrite_qual (uint8_t *qual, uint32_t qual_len)
 {
+    if (qual[0] == 0xff) return false; // in case SEQ is present but QUAL is omitted, all qual is 0xFF
+
     for (uint32_t i=0; i < qual_len; i++)
         qual[i] += 33;
+
+    return true;
 }
 
 static inline const char *bam_rewrite_one_optional_number (VBlockSAM *vb, const char *next_field, uint8_t type)
@@ -305,7 +309,7 @@ static inline const char *bam_rewrite_one_optional_number (VBlockSAM *vb, const 
         case 's': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int ((int16_t)n, AFTERENT (char, vb->textual_opt)); break; }
         case 'S': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
         case 'i': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int ((int32_t)n, AFTERENT (char, vb->textual_opt)); break; }
-        case 'F': buf_add (&vb->textual_opt, special_float, 2); // add this prefix and then fall through - the float casted to uint32
+        case 'f': buf_add (&vb->textual_opt, special_float, 2); // add this prefix and then fall through - the float casted to uint32
         case 'I': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
         default: ABORT ("Error in bam_rewrite_one_optional_number: enrecognized Optional field type '%c' (ASCII %u) in vb=%u", 
                         type, type, vb->vblock_i);
@@ -425,13 +429,16 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     next_field += (dl->seq_len+1)/2; 
 
     // QUAL
-    if (dl->seq_len) {
-        bam_rewrite_qual ((char*)next_field, dl->seq_len); // add 33 to Phred scores to make them ASCII
+    bool has_qual=false;
+    if (dl->seq_len)
+        has_qual = bam_rewrite_qual ((uint8_t *)next_field, dl->seq_len); // add 33 to Phred scores to make them ASCII
+    
+    if (has_qual) // case we have both SEQ and QUAL
         sam_seg_qual_field (vb, dl, next_field, dl->seq_len, dl->seq_len /* account for qual field */ );
-    }
-    else {
+
+    else { // cases 1. were both SEQ and QUAL are '*' (seq_len=0) and 2. SEQ exists, QUAL not (bam_rewrite_qual returns false)
         *(char *)alignment = '*'; // overwrite as we need it somewhere in txt_data
-        sam_seg_qual_field (vb, dl, alignment, 1, 0);
+        sam_seg_qual_field (vb, dl, alignment, 1, dl->seq_len /* 0 or not */);
     }
     next_field += dl->seq_len; 
 

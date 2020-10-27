@@ -722,7 +722,7 @@ static inline unsigned sam_seg_optional_add_bytes (char type, unsigned value_len
         switch (type) {
             case 'c': case 'C': case 'A': return 1;
             case 's': case 'S':           return 2;
-            case 'i': case 'I': case 'F': return 4;
+            case 'i': case 'I': case 'f': return 4;
             case 'Z': case 'H':           return value_len + 1; // +1 for \0
             default : return 0;
         }
@@ -906,7 +906,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         ASSSEG (con.num_items <= MAX_SUBFIELDS, value, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
 
         // in the optional field prefix (unlike array type), all integer types become 'i'.
-        char prefix_type = (type=='c' || type=='C' || type=='s' || type=='S' || type=='i') ? 'i' : type;
+        char prefix_type = (type=='c' || type=='C' || type=='s' || type=='S' || type=='I') ? 'i' : type;
 
         char prefix[6] = { tag[0], tag[1], ':', prefix_type, ':', SNIP_CONTAINER}; 
         memcpy (&prefixes[prefixes_len], prefix, 6);

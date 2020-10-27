@@ -748,7 +748,7 @@ static bool piz_read_one_vb (VBlock *vb)
 }
 
 // returns true is successfully outputted a txt file
-bool piz_dispatcher (bool is_first_component, bool is_last_file)
+bool piz_one_file (bool is_first_component, bool is_last_file)
 {
     // static dispatcher - with flag_unbind, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
@@ -838,7 +838,7 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
                 case SEC_NONE: 
                     break; 
                 
-                default: ABORT ("Error in piz_dispatcher: unexpected section_type=%s", st_name (header_type));
+                default: ABORT ("Error in piz_one_file: unexpected section_type=%s", st_name (header_type));
             }
             
             if (still_more_data) {

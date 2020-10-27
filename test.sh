@@ -205,6 +205,19 @@ for file in ${files[@]}; do
     $genozip unix-nl.$file -ft -o $output || exit 1
 done
 
+# Test SAM reconstruction of BAM files
+files=(td/test.NA12878.chr22.1x.bam td/test.m64136_200621_234916.ccs.10k.bam)
+for file in ${files[@]}; do
+    if [ ! -f $file ] ; then echo "$file: File not found"; exit 1; fi
+
+    test_header "$file - genocat bam.genozip and compare to original SAM"
+
+    $genozip -f bug.bam -o $output
+    $genocat $output > copy.sam 
+    cmp_2_files $file copy.sam
+    rm -f $copy.sam $output
+done
+
 # Test binding SAM files with lots of contigs (no reference)
 test_header "binding SAM files with lots of contigs (no reference)"
 file=td/test.transfly-unsorted.sam

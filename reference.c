@@ -498,7 +498,7 @@ static void ref_read_one_range (VBlockP vb)
 }
 
 // PIZ: loading a reference stored in the genozip file - this could have been originally stored as REF_INTERNAL or REF_EXT_STORE
-// or this could be a .ref.genozip file (called from load_external->piz_dispatcher)
+// or this could be a .ref.genozip file (called from load_external->piz_one_file)
 void ref_load_stored_reference (void)
 {
     ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
@@ -1232,7 +1232,7 @@ void ref_load_external_reference (bool display, bool is_last_file)
     RESET_FLAG (flag_list_chroms);
     TEMP_FLAG (command, PIZ);
 
-    bool piz_successful = piz_dispatcher (true, false);
+    bool piz_successful = piz_one_file (true, false);
     ASSERT (piz_successful, "Error: failed to uncompress reference file %s", ref_filename);
 
     // recover globals

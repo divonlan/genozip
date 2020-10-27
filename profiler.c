@@ -90,7 +90,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
 
     if (command != ZIP) { // this is a uncompress operation
 
-        fprintf (stderr, "GENOUNZIP I/O thread (piz_dispatcher):\n");
+        fprintf (stderr, "GENOUNZIP I/O thread (piz_one_file):\n");
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
         PRINT (mtf_integrate_dictionary_fragment, 2);

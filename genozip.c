@@ -358,13 +358,13 @@ static void main_genounzip (const char *z_filename,
     bool piz_successful;
     unsigned num_components=0;
     do {
-        piz_successful = piz_dispatcher (num_components==0, is_last_file);
+        piz_successful = piz_one_file (num_components==0, is_last_file);
         if (piz_successful) num_components++;
     } while (flag_unbind && piz_successful); 
 
     if (!flag_bind && !flag_stdout && !flag_unbind) 
         // don't close the bound file - it will close with the process exits
-        // don't close in unbind mode - piz_dispatcher() opens and closes each component
+        // don't close in unbind mode - piz_one_file() opens and closes each component
         // don't close stdout - in bound mode, we might still need it for the next file
         file_close (&txt_file, false); 
 
