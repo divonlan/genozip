@@ -26,9 +26,9 @@ void gff3_seg_initialize (VBlock *vb)
 void gff3_seg_finalize (VBlockP vb)
 {
     // top level snip
-    Structured top_level = { 
+    Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = STRUCTURED_TOPLEVEL,
+        .flags     = CONTAINER_TOPLEVEL,
         .num_items = 10,
         .items     = { { (DictId)dict_id_fields[GFF3_SEQID],  DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[GFF3_SOURCE], DID_I_NONE, "\t" },
@@ -42,7 +42,7 @@ void gff3_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[GFF3_EOL],    DID_I_NONE, ""   } }
     };
 
-    seg_structured_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], &top_level, 0, 0, 0);
+    seg_container_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], &top_level, 0, 0, 0);
 }
 
 
@@ -69,19 +69,19 @@ static unsigned gff3_seg_get_aofs_item_len (const char *str, unsigned len, bool 
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
 static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx, 
-                                      Structured st, 
+                                      Container con, 
                                       const char *snip, unsigned snip_len)
 {
     bool is_last_entry = false;
 
     // get ctx's
     Context *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->contexts)
-    for (unsigned i=0; i < st.num_items; i++) 
-        ctxs[i] = mtf_get_ctx (vb, st.items[i].dict_id); 
+    for (unsigned i=0; i < con.num_items; i++) 
+        ctxs[i] = mtf_get_ctx (vb, con.items[i].dict_id); 
 
     // set roll back point
     uint64_t saved_mtf_i_len[MAX_ENST_ITEMS], saved_local_len[MAX_ENST_ITEMS], saved_txt_len[MAX_ENST_ITEMS];
-    for (unsigned item_i=0; item_i < st.num_items; item_i++) {
+    for (unsigned item_i=0; item_i < con.num_items; item_i++) {
         saved_mtf_i_len[item_i] = ctxs[item_i]->mtf_i.len;
         saved_local_len[item_i] = ctxs[item_i]->local.len;
         saved_txt_len  [item_i] = ctxs[item_i]->txt_len;
@@ -89,17 +89,17 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
     const char *saved_snip = snip;
     unsigned saved_snip_len = snip_len;
 
-    st.repeats = 0;
+    con.repeats = 0;
 
     while (snip_len) {
         
-        for (unsigned item_i=0; item_i < st.num_items; item_i++) {
-            bool is_last_item = (item_i == st.num_items-1);
+        for (unsigned item_i=0; item_i < con.num_items; item_i++) {
+            bool is_last_item = (item_i == con.num_items-1);
             unsigned item_len = gff3_seg_get_aofs_item_len (snip, snip_len, is_last_item);
             if (!item_len) goto badly_formatted;
 
             if (!is_last_item)
-                seg_by_dict_id (vb, snip, item_len, ctxs[item_i]->dict_id, item_len + (st.items[item_i].seperator[0] != 0) + (st.items[item_i].seperator[1] != 0));
+                seg_by_dict_id (vb, snip, item_len, ctxs[item_i]->dict_id, item_len + (con.items[item_i].seperator[0] != 0) + (con.items[item_i].seperator[1] != 0));
             else {
                 is_last_entry = (snip_len - item_len == 0);
                 seg_id_field ((VBlockP)vb, (DictId)dict_id_ENSTid, snip, item_len, !is_last_entry);
@@ -111,20 +111,20 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
 
         if (!is_last_entry && snip[-1]!=',') goto badly_formatted; // expecting a , after the end of all items in this entry
         
-        st.repeats++;
+        con.repeats++;
 
-        ASSSEG (st.repeats <= STRUCTURED_MAX_REPEATS, snip, "Error in gff3_seg_array_of_struct - exceeded maximum repeats allowed (%lu) while parsing %s",
-                STRUCTURED_MAX_REPEATS, subfield_ctx->name);
+        ASSSEG (con.repeats <= CONTAINER_MAX_REPEATS, snip, "Error in gff3_seg_array_of_struct - exceeded maximum repeats allowed (%lu) while parsing %s",
+                CONTAINER_MAX_REPEATS, subfield_ctx->name);
     }
 
-    // finally, the "structured" snip itself
-    seg_structured_by_ctx ((VBlockP)vb, subfield_ctx, &st, NULL, 0, 0);
+    // finally, the Container snip itself
+    seg_container_by_ctx ((VBlockP)vb, subfield_ctx, &con, NULL, 0, 0);
 
     return;
 
 badly_formatted:
     // roll back all the changed data
-    for (unsigned item_i=0; item_i < st.num_items ; item_i++) {
+    for (unsigned item_i=0; item_i < con.num_items ; item_i++) {
         ctxs[item_i]->mtf_i.len = saved_mtf_i_len[item_i];
         ctxs[item_i]->local.len = saved_local_len[item_i];
         ctxs[item_i]->txt_len   = saved_txt_len[item_i];
@@ -153,9 +153,9 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     // subfields that are arrays of structs, for example:
     // "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
     if (dict_id.num == dict_id_ATTR_Variant_effect) {
-        static const Structured Variant_effect = {
+        static const Container Variant_effect = {
             .num_items   = 4, 
-            .flags       = STRUCTURED_DROP_FINAL_ITEM_SEP,
+            .flags       = CONTAINER_DROP_FINAL_ITEM_SEP,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="V0arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="V1arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -167,9 +167,9 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     }
 
     if (dict_id.num == dict_id_ATTR_sift_prediction) {
-        static const Structured sift_prediction = {
+        static const Container sift_prediction = {
             .num_items   = 4, 
-            .flags       = STRUCTURED_DROP_FINAL_ITEM_SEP,
+            .flags       = CONTAINER_DROP_FINAL_ITEM_SEP,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="S0iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="S1iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -181,9 +181,9 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     }
 
     if (dict_id.num == dict_id_ATTR_polyphen_prediction) {
-        static const Structured polyphen_prediction = {
+        static const Container polyphen_prediction = {
             .num_items   = 4, 
-            .flags       = STRUCTURED_DROP_FINAL_ITEM_SEP,
+            .flags       = CONTAINER_DROP_FINAL_ITEM_SEP,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="P1olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -195,9 +195,9 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     }
 
     if (dict_id.num == dict_id_ATTR_variant_peptide) {
-        static const Structured variant_peptide = {
+        static const Container variant_peptide = {
             .num_items   = 3, 
-            .flags       = STRUCTURED_DROP_FINAL_ITEM_SEP,
+            .flags       = CONTAINER_DROP_FINAL_ITEM_SEP,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="v0arPep" }, .seperator = {' '}, .did_i = DID_I_NONE }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
                              { .dict_id={.id="v1arPep" }, .seperator = {' '}, .did_i = DID_I_NONE },

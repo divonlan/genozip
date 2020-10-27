@@ -23,9 +23,9 @@ void me23_seg_initialize (VBlock *vb)
 void me23_seg_finalize (VBlockP vb)
 {
     // top level snip
-    Structured top_level = { 
+    Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = STRUCTURED_TOPLEVEL,
+        .flags     = CONTAINER_TOPLEVEL,
         .num_items = 5,
         .items     = { { (DictId)dict_id_fields[ME23_ID],       DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[ME23_CHROM],    DID_I_NONE, "\t" },
@@ -34,7 +34,7 @@ void me23_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[ME23_EOL],      DID_I_NONE, ""   } }
     };
 
-    seg_structured_by_ctx (vb, &vb->contexts[ME23_TOPLEVEL], &top_level, 0, 0, 0);
+    seg_container_by_ctx (vb, &vb->contexts[ME23_TOPLEVEL], &top_level, 0, 0, 0);
 }
 
 const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts

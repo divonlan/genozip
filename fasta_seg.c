@@ -59,15 +59,15 @@ void fasta_seg_initialize (VBlockFAST *vb)
 void fasta_seg_finalize (VBlockP vb)
 {
     // top level snip
-    Structured top_level = { 
+    Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = STRUCTURED_TOPLEVEL,
+        .flags     = CONTAINER_TOPLEVEL,
         .num_items = 2,
         .items     = { { (DictId)dict_id_fields[FASTA_LINEMETA], DID_I_NONE, ""   },
                        { (DictId)dict_id_fields[FASTA_EOL],      DID_I_NONE, ""   } }
     };
 
-    seg_structured_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], &top_level, 0, 0, 0);
+    seg_container_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], &top_level, 0, 0, 0);
 }
 
 
@@ -92,7 +92,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
     unsigned special_snip_len;
 
     // case: description line - we segment it to its components
-    // note: we store the DESC structured in its own ctx rather than just directly in LINEMETA, to make it easier to grep
+    // note: we store the DESC container in its own ctx rather than just directly in LINEMETA, to make it easier to grep
     if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
 
         // we store the contig name in a dictionary only (no b250), to be used if this fasta is used as a reference

@@ -29,7 +29,7 @@
 #include "stats.h"
 #include "codec.h"
 
-// Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
+// Compute threads: decode the delta-encoded value of the POS field, and returns the new lacon_pos
 // Special values:
 // "-" - negated previous value
 // ""  - negated previous delta
@@ -133,53 +133,53 @@ static void piz_reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const
     ctx->next_local += len;
 }
 
-static inline void piz_reconstruct_structured_prefix (VBlockP vb, const char **prefixes, uint32_t *prefixes_len)
+static inline void piz_reconstruct_container_prefix (VBlockP vb, const char **prefixes, uint32_t *prefixes_len)
 {
     if (! (*prefixes_len)) return; // nothing to do
     
     const char *start = *prefixes;
-    while (**prefixes != SNIP_STRUCTURED) (*prefixes)++; // prefixes are terminated by SNIP_STRUCTURED
+    while (**prefixes != SNIP_CONTAINER) (*prefixes)++; // prefixes are terminated by SNIP_CONTAINER
     uint32_t len = (unsigned)((*prefixes) - start);
 
     RECONSTRUCT (start, len);
 
-    (*prefixes)++; // skip SNIP_STRUCTURED seperator
+    (*prefixes)++; // skip SNIP_CONTAINER seperator
     (*prefixes_len) -= len + 1;
 }
 
-void piz_reconstruct_structured_do (VBlock *vb, DictId dict_id, const Structured *st, const char *prefixes, uint32_t prefixes_len)
+void piz_reconstruct_container_do (VBlock *vb, DictId dict_id, const Container *con, const char *prefixes, uint32_t prefixes_len)
 {
     TimeSpecType profiler_timer={0}; 
-    if (flag_show_time && (st->flags & STRUCTURED_TOPLEVEL)) 
+    if (flag_show_time && (con->flags & CONTAINER_TOPLEVEL)) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
-    // structured wide prefix - it will be missing if Structured has no prefixes, or empty if it has only items prefixes
-    piz_reconstruct_structured_prefix (vb, &prefixes, &prefixes_len); // item prefix (we will have one per item or none at all)
+    // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
+    piz_reconstruct_container_prefix (vb, &prefixes, &prefixes_len); // item prefix (we will have one per item or none at all)
 
-    ASSERT (DTP (structured_filter) || !(st->flags & STRUCTURED_FILTER_REPEATS) || !(st->flags & STRUCTURED_FILTER_ITEMS), 
-            "Error: data_type=%s doesn't support structured_filter", dt_name (vb->data_type));
+    ASSERT (DTP (container_filter) || !(con->flags & CONTAINER_FILTER_REPEATS) || !(con->flags & CONTAINER_FILTER_ITEMS), 
+            "Error: data_type=%s doesn't support container_filter", dt_name (vb->data_type));
 
-    for (uint32_t rep_i=0; rep_i < st->repeats; rep_i++) {
+    for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip
-        if (st->flags & STRUCTURED_TOPLEVEL) {
+        if (con->flags & CONTAINER_TOPLEVEL) {
             vb->line_i = vb->first_line + rep_i;
             vb->line_start = vb->txt_data.len;
             vb->dont_show_curr_line = false; 
         }
     
-        if ((st->flags & STRUCTURED_FILTER_REPEATS) && !DTP (structured_filter) (vb, dict_id, st, rep_i, -1)) continue; // repeat is filtered out
+        if ((con->flags & CONTAINER_FILTER_REPEATS) && !DTP (container_filter) (vb, dict_id, con, rep_i, -1)) continue; // repeat is filtered out
 
         const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
         uint32_t item_prefixes_len = prefixes_len;
 
-        for (unsigned i=0; i < st->num_items; i++) {
+        for (unsigned i=0; i < con->num_items; i++) {
 
-            if ((st->flags & STRUCTURED_FILTER_ITEMS) && !DTP (structured_filter) (vb, dict_id, st, rep_i, i)) continue; // item is filtered out
+            if ((con->flags & CONTAINER_FILTER_ITEMS) && !DTP (container_filter) (vb, dict_id, con, rep_i, i)) continue; // item is filtered out
 
-            piz_reconstruct_structured_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix
+            piz_reconstruct_container_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix
 
-            const StructuredItem *item = &st->items[i];
+            const ContainerItem *item = &con->items[i];
             int32_t reconstructed_len=0;
             if (item->dict_id.num)  // not a prefix-only item
                 reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, 0);
@@ -192,67 +192,67 @@ void piz_reconstruct_structured_do (VBlock *vb, DictId dict_id, const Structured
             if (item->seperator[1]) RECONSTRUCT1 (item->seperator[1]);
         }
 
-        if (rep_i+1 < st->repeats || !(st->flags & STRUCTURED_DROP_FINAL_REPEAT_SEP)) {
-            if (st->repsep[0]) RECONSTRUCT1 (st->repsep[0]);
-            if (st->repsep[1]) RECONSTRUCT1 (st->repsep[1]);
+        if (rep_i+1 < con->repeats || !(con->flags & CONTAINER_DROP_FINAL_REPEAT_SEP)) {
+            if (con->repsep[0]) RECONSTRUCT1 (con->repsep[0]);
+            if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
         }
 
         // in top level: after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
-        if ((st->flags & STRUCTURED_TOPLEVEL) && vb->dont_show_curr_line) 
+        if ((con->flags & CONTAINER_TOPLEVEL) && vb->dont_show_curr_line) 
             vb->txt_data.len = vb->line_start; 
     }
 
-    if (st->flags & STRUCTURED_DROP_FINAL_ITEM_SEP)
-        vb->txt_data.len -= (st->items[st->num_items-1].seperator[0] != 0) + 
-                            (st->items[st->num_items-1].seperator[1] != 0);
+    if (con->flags & CONTAINER_DROP_FINAL_ITEM_SEP)
+        vb->txt_data.len -= (con->items[con->num_items-1].seperator[0] != 0) + 
+                            (con->items[con->num_items-1].seperator[1] != 0);
 
-    if (st->flags & STRUCTURED_TOPLEVEL)   
+    if (con->flags & CONTAINER_TOPLEVEL)   
         COPY_TIMER (piz_reconstruct_vb);
 }
 
-static void piz_reconstruct_structured (VBlock *vb, Context *ctx, WordIndex word_index, const char *snip, unsigned snip_len)
+static void piz_reconstruct_container (VBlock *vb, Context *ctx, WordIndex word_index, const char *snip, unsigned snip_len)
 {
-    ASSERT (snip_len <= base64_sizeof(Structured), "Error in piz_reconstruct_structured: snip_len=%u exceed base64_sizeof(Structured)=%u",
-            snip_len, base64_sizeof(Structured));
+    ASSERT (snip_len <= base64_sizeof(Container), "Error in piz_reconstruct_container: snip_len=%u exceed base64_sizeof(Container)=%u",
+            snip_len, base64_sizeof(Container));
 
-    Structured st, *st_p=NULL;
+    Container con, *con_p=NULL;
     const char *prefixes;
     uint32_t prefixes_len;
 
-    bool cache_exists = buf_is_allocated (&ctx->struct_cache);
+    bool cache_exists = buf_is_allocated (&ctx->con_cache);
     uint16_t cache_item_len;
 
-    // if this structured exists in the cache - use the cached one
-    if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *ENT (uint16_t, ctx->struct_len, word_index)))) {
-        st_p = (Structured *)ENT (char, ctx->struct_cache, *ENT (uint32_t, ctx->struct_index, word_index));
+    // if this container exists in the cache - use the cached one
+    if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *ENT (uint16_t, ctx->con_len, word_index)))) {
+        con_p = (Container *)ENT (char, ctx->con_cache, *ENT (uint32_t, ctx->con_index, word_index));
         
-        unsigned st_size = sizeof_structured (*st_p);
-        prefixes = (char *)st_p + st_size; // prefixes are stored after the Structured
+        unsigned st_size = sizeof_container (*con_p);
+        prefixes = (char *)con_p + st_size; // prefixes are stored after the Container
         prefixes_len = cache_item_len - st_size;
     }
 
     // case: not cached - decode it and optionally cache it
-    if (!st_p) {
+    if (!con_p) {
         // decode
         unsigned b64_len = snip_len;
-        base64_decode (snip, &b64_len, (uint8_t*)&st);
-        st.repeats = BGEN32 (st.repeats);
+        base64_decode (snip, &b64_len, (uint8_t*)&con);
+        con.repeats = BGEN32 (con.repeats);
 
         // get the did_i for each dict_id
-        for (uint8_t item_i=0; item_i < st.num_items; item_i++)
-            if (st.items[item_i].dict_id.num)  // not a prefix-only item
-                st.items[item_i].did_i = mtf_get_existing_did_i (vb, st.items[item_i].dict_id);
+        for (uint8_t item_i=0; item_i < con.num_items; item_i++)
+            if (con.items[item_i].dict_id.num)  // not a prefix-only item
+                con.items[item_i].did_i = mtf_get_existing_did_i (vb, con.items[item_i].dict_id);
 
         // get prefixes
-        unsigned st_size = sizeof_structured (st);
-        st_p         = &st;
+        unsigned st_size = sizeof_container (con);
+        con_p         = &con;
         prefixes     = (b64_len < snip_len) ? &snip[b64_len+1]       : NULL;
         prefixes_len = (b64_len < snip_len) ? snip_len - (b64_len+1) : 0;
 
-        ASSERT (prefixes_len <= STRUCTURED_MAX_PREFIXES_LEN, "Error in piz_reconstruct_structured: prefixes_len=%u longer than STRUCTURED_MAX_PREFIXES_LEN=%u", 
-                prefixes_len, STRUCTURED_MAX_PREFIXES_LEN);
+        ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "Error in piz_reconstruct_container: prefixes_len=%u longer than CONTAINER_MAX_PREFIXES_LEN=%u", 
+                prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
 
-        ASSERT (!prefixes_len || prefixes[prefixes_len-1] == SNIP_STRUCTURED, "Error in piz_reconstruct_structured: prefixes array does end with a SNIP_STRUCTURED: %.*s",
+        ASSERT (!prefixes_len || prefixes[prefixes_len-1] == SNIP_CONTAINER, "Error in piz_reconstruct_container: prefixes array does end with a SNIP_CONTAINER: %.*s",
                 prefixes_len, prefixes);
 
         // cache it if it is cacheable 
@@ -260,24 +260,24 @@ static void piz_reconstruct_structured (VBlock *vb, Context *ctx, WordIndex word
 
             ASSERT (st_size + prefixes_len <= 65535, "st_size=%u + prefixes_len=%u too large", st_size, prefixes_len);
 
-            // first encounter with Structured for this context - allocate the cache
+            // first encounter with Container for this context - allocate the cache
             if (!cache_exists) {
-                buf_alloc (vb, &ctx->struct_index, ctx->word_list.len * sizeof (uint32_t), 1, "context->struct_index", ctx->did_i);
-                buf_alloc (vb, &ctx->struct_len,   ctx->word_list.len * sizeof (uint16_t),  1, "context->struct_len",   ctx->did_i);
-                buf_zero (&ctx->struct_len);
+                buf_alloc (vb, &ctx->con_index, ctx->word_list.len * sizeof (uint32_t), 1, "context->con_index", ctx->did_i);
+                buf_alloc (vb, &ctx->con_len,   ctx->word_list.len * sizeof (uint16_t),  1, "context->con_len",   ctx->did_i);
+                buf_zero (&ctx->con_len);
             }
 
-            // place Structured followed by prefix in the cache
-            *ENT (uint32_t, ctx->struct_index, word_index) = (uint32_t)ctx->struct_cache.len;
-            *ENT (uint16_t, ctx->struct_len,   word_index) = (uint16_t)(st_size + prefixes_len);
+            // place Container followed by prefix in the cache
+            *ENT (uint32_t, ctx->con_index, word_index) = (uint32_t)ctx->con_cache.len;
+            *ENT (uint16_t, ctx->con_len,   word_index) = (uint16_t)(st_size + prefixes_len);
 
-            buf_alloc (vb, &ctx->struct_cache, ctx->struct_cache.len + st_size + prefixes_len, 2, "context->struct_cache", ctx->did_i);
-            buf_add (&ctx->struct_cache, st_p, st_size);
-            if (prefixes_len) buf_add (&ctx->struct_cache, prefixes, prefixes_len);
+            buf_alloc (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len, 2, "context->con_cache", ctx->did_i);
+            buf_add (&ctx->con_cache, con_p, st_size);
+            if (prefixes_len) buf_add (&ctx->con_cache, prefixes, prefixes_len);
         }
     }
 
-    piz_reconstruct_structured_do (vb, ctx->dict_id, st_p, prefixes, prefixes_len); 
+    piz_reconstruct_container_do (vb, ctx->dict_id, con_p, prefixes, prefixes_len); 
 }
 
 static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
@@ -298,7 +298,7 @@ static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsi
 }
 
 void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, 
-                               WordIndex word_index, // WORD_INDEX_NONE if not used. Needed only if this snip might be a Structured that needs to be cached
+                               WordIndex word_index, // WORD_INDEX_NONE if not used. Needed only if this snip might be a Container that needs to be cached
                                const char *snip, unsigned snip_len)
 {
     if (!snip_len) return; // nothing to do
@@ -369,8 +369,8 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     }
 
-    case SNIP_STRUCTURED:
-        piz_reconstruct_structured (vb, snip_ctx, word_index, snip+1, snip_len-1);
+    case SNIP_CONTAINER:
+        piz_reconstruct_container (vb, snip_ctx, word_index, snip+1, snip_len-1);
         break;
 
     case SNIP_SPECIAL:
@@ -601,7 +601,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
         fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
                     vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
 
     piz_uncompress_all_ctxs (vb, 0);
 

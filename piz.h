@@ -30,7 +30,7 @@ extern void piz_reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_i
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
 
-extern void piz_reconstruct_structured_do (VBlockP vb, DictId dict_id, ConstStructuredP st, const char *prefixes, uint32_t prefixes_len);
+extern void piz_reconstruct_container_do (VBlockP vb, DictId dict_id, ConstContainerP con, const char *prefixes, uint32_t prefixes_len);
 
 // gets snip, snip_len from b250 data
 #define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->contexts[(did_i)], NULL, &snip, &snip_len); 

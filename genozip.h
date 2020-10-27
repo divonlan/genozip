@@ -31,7 +31,7 @@
 #define TXT_DATA_PER_VB_FAST    "16" // MB with --fast
 extern void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str);
 
-#define MAX_SUBFIELDS 64   // Maximum number of items in a Structured (for example: VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc). This value can be increased subject to MAX_DICTS<=253.
+#define MAX_SUBFIELDS 64   // Maximum number of items in a Container (for example: VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc). This value can be increased subject to MAX_DICTS<=253.
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
@@ -44,8 +44,8 @@ typedef struct File *FileP;
 typedef const struct File *ConstFileP;
 typedef struct Buffer *BufferP;
 typedef const struct Buffer *ConstBufferP;
-typedef struct Structured *StructuredP;
-typedef const struct Structured *ConstStructuredP;
+typedef struct Container *ContainerP;
+typedef const struct Container *ConstContainerP;
 typedef struct Context *ContextP;
 typedef const struct Context *ConstContextP;
 typedef struct MtfNode *MtfNodeP;

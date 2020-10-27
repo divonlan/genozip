@@ -188,7 +188,7 @@ WordIndex mtf_get_next_snip (VBlock *vb, Context *ctx,
             
     WordIndex word_index = base250_decode (&iterator->next_b250);  // if this line has no non-GT subfields, it will not have a ctx 
 
-    // case: a Structured item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
+    // case: a Container item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
     if (word_index == WORD_INDEX_MISSING_SF) {
         if (snip) {
             *snip = NULL; // ignore this dict_id - don't even output a separator
@@ -978,9 +978,9 @@ void mtf_free_context (Context *ctx)
     buf_free (&ctx->mtf_i);
     buf_free (&ctx->b250);
     buf_free (&ctx->local);
-    buf_free (&ctx->struct_cache);
-    buf_free (&ctx->struct_index);
-    buf_free (&ctx->struct_len);
+    buf_free (&ctx->con_cache);
+    buf_free (&ctx->con_index);
+    buf_free (&ctx->con_len);
     buf_free (&ctx->pair);
     
     ctx->mtf_i.len = 0; // VCF stores FORMAT length in here for stats, even if mtf_i is not allocated (and therefore buf_free will not cleanup)
@@ -1015,9 +1015,9 @@ void mtf_destroy_context (Context *ctx)
     buf_destroy (&ctx->global_hash);
     buf_destroy (&ctx->mtf_i);
     buf_destroy (&ctx->b250);
-    buf_destroy (&ctx->struct_cache);
-    buf_destroy (&ctx->struct_index);
-    buf_destroy (&ctx->struct_len);
+    buf_destroy (&ctx->con_cache);
+    buf_destroy (&ctx->con_index);
+    buf_destroy (&ctx->con_len);
 
     mutex_destroy (ctx->mutex);
 }

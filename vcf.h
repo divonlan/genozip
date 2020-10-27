@@ -27,7 +27,7 @@ extern void vcf_seg_finalize (VBlockP vb_);
 
 // PIZ stuff
 extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
-extern bool vcf_piz_filter (VBlockP vb, DictId dict_id, ConstStructuredP st, unsigned rep, int item);
+extern bool vcf_piz_filter (VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item);
 
 // VCF Header stuff
 extern void vcf_header_initialize (void);

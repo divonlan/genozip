@@ -52,7 +52,7 @@ typedef struct DataTypeProperties {
     bool (*piz_read_one_vb)(VBlockP, SectionListEntryP);
     bool (*is_skip_secetion)(VBlockP, SectionType, DictId);
     void (*reconstruct_seq)(VBlockP, ContextP, const char *, unsigned);
-    bool (*structured_filter)(VBlockP, DictId, ConstStructuredP, unsigned rep, int item); // returns true if rep, item should be reconstructed. if item=-1, this applies to the entire rep  
+    bool (*container_filter)(VBlockP, DictId, ConstContainerP, unsigned rep, int item); // returns true if rep, item should be reconstructed. if item=-1, this applies to the entire rep  
 
     unsigned num_special;
     PizSpecialCtxHandler special[10];
@@ -69,7 +69,7 @@ typedef struct DataTypeProperties {
 
 #define usz(type) ((unsigned)sizeof(type))
 #define DATA_TYPE_PROPERTIES { \
-/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  read_txt_header      read_vblock      zip_inspect_txt_header, zip_initialize        zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            structured_filter num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
+/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  read_txt_header      read_vblock      zip_inspect_txt_header, zip_initialize        zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            container_filter num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
     { "REFERENCE", RA,  1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                NULL,            NULL,                   ref_make_ref_init,    NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               ref_make_create_range,    NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
     { "VCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', NULL,                NULL,            vcf_inspect_txt_header, NULL,                 NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,   NUM_VCF_SPECIAL,   VCF_SPECIAL,   vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
     { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', NULL,                NULL,            sam_inspect_txt_header, sam_zip_initialize,   NULL,                  sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  NULL,                  sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
@@ -153,7 +153,7 @@ extern DataTypeFields dt_fields[NUM_DATATYPES];
     ME23_DICT_ID_ALIASES  \
 }
 
-// possible transformations on Structured items in case Structured is reconstructed
+// possible transformations on Container items in case Container is reconstructed
 // with "transform" (eg for binary files)
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     TRS_NONE=0,  // keep as is
@@ -166,9 +166,9 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     TRS_SAM_POS      =11, // textual 1-based POS to Little Endian U32 0-based POS. 
     TRS_SAM_SEQ      =12, // textual SEQ to BAM-format SEQ
     TRS_SAM_QUAL     =13, // textual QUAL to BAM-format QUAL
-    TRS_SAM_OPTIONAL =14, // transform prefixes in Optional Structured from SAM to BAM format
+    TRS_SAM_OPTIONAL =14, // transform prefixes in Optional Container from SAM to BAM format
     TRS_SAM_FLOAT    =15, // SAM_SPECIAL_FLOAT snip to Little Endian 32bit float
-} StructuredItemTransform;
+} ContainerItemTransform;
 
 extern const char *dt_name (DataType data_type);
 

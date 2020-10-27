@@ -693,7 +693,7 @@ void file_close (File **file_p,
 
 void file_write (File *file, const void *data, unsigned len)
 {
-    if (!len) return 0; // nothing to do
+    if (!len) return; // nothing to do
 
     size_t bytes_written = fwrite (data, 1, len, (FILE *)file->file); // use fwrite - let libc manage write buffers for us
 

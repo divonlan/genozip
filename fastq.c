@@ -104,9 +104,9 @@ void fastq_seg_finalize (VBlockP vb)
     }
 
     // top level snip
-    Structured top_level = { 
+    Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = STRUCTURED_TOPLEVEL | STRUCTURED_FILTER_ITEMS | STRUCTURED_FILTER_REPEATS,
+        .flags     = CONTAINER_TOPLEVEL | CONTAINER_FILTER_ITEMS | CONTAINER_FILTER_REPEATS,
         .num_items = 7,
         .items     = { { (DictId)dict_id_fields[FASTQ_DESC],     DID_I_NONE, ""  },
                        { (DictId)dict_id_fields[FASTQ_E1L],      DID_I_NONE, ""  }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
@@ -117,7 +117,7 @@ void fastq_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  } }
     };
 
-    seg_structured_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
+    seg_container_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
 }
 
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
@@ -275,7 +275,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
 
     SEG_EOL (FASTQ_E2L, true);
 
-    // PLUS - next line is expected to be a "+" (note: we don't seg the +, it is recorded a separator in the top level Structured)
+    // PLUS - next line is expected to be a "+" (note: we don't seg the +, it is recorded a separator in the top level Container)
     GET_LAST_ITEM ("+");
     ASSSEG (*field_start=='+' && field_len==1, field_start, "%s: Invalid FASTQ file format: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\"",
             global_cmd, field_len, field_start);
@@ -343,8 +343,8 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     return false;
 }
 
-// filtering during reconstruction: called by piz_reconstruct_structured_do for each fastq record (repeat) and each toplevel item
-bool fastq_piz_filter (VBlock *vb, DictId dict_id, const Structured *st, unsigned fastq_record_i, int item_i)
+// filtering during reconstruction: called by piz_reconstruct_container_do for each fastq record (repeat) and each toplevel item
+bool fastq_piz_filter (VBlock *vb, DictId dict_id, const Container *con, unsigned fastq_record_i, int item_i)
 {
     if (dict_id.num == dict_id_fields[FASTQ_TOPLEVEL]) {
         if (item_i < 0)   // filter for repeat (FASTQ record)
@@ -356,7 +356,7 @@ bool fastq_piz_filter (VBlock *vb, DictId dict_id, const Structured *st, unsigne
             if (flag_grep && item_i == 2 /* first EOL */) {
                 *AFTERENT (char, vb->txt_data) = 0; // for strstr
                 if (!strstr (ENT (char, vb->txt_data, vb->line_start), flag_grep))
-                    vb->dont_show_curr_line = true; // piz_reconstruct_structured_do will rollback the line
+                    vb->dont_show_curr_line = true; // piz_reconstruct_container_do will rollback the line
             }
 
             // case: --header-one or --header-only: dont show items 2+. note that piz_read_global_area rewrites --header-only as flag_header_one

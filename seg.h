@@ -41,8 +41,8 @@ extern void seg_id_field (VBlockP vb, DictId dict_id, const char *id_snip, unsig
 
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip);
 
-extern WordIndex seg_structured_by_ctx (VBlockP vb, ContextP ctx, StructuredP st, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
-#define seg_structured_by_dict_id(vb,dict_id,st,add_bytes) seg_structured_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), st, NULL, 0, add_bytes)
+extern WordIndex seg_container_by_ctx (VBlockP vb, ContextP ctx, ContainerP con, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
+#define seg_container_by_dict_id(vb,dict_id,con,add_bytes) seg_container_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
 
 extern void seg_info_field (VBlockP vb, SegSpecialInfoSubfields seg_special_subfields, const char *info_str, unsigned info_len);
 
@@ -59,7 +59,7 @@ extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *fiel
                                 bool ws_is_sep, unsigned nonoptimized_len, unsigned add_for_eol);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
-extern uint32_t seg_array_field (VBlockP vb, DictId dict_id, const char *value, unsigned value_len, bool add_bytes_by_textual, StructuredItemTransform transform, SegOptimize optimize);
+extern uint32_t seg_array_field (VBlockP vb, DictId dict_id, const char *value, unsigned value_len, bool add_bytes_by_textual, ContainerItemTransform transform, SegOptimize optimize);
 extern WordIndex seg_hetero_array_field (VBlockP vb, DictId dict_id, const char *value, int value_len);
 
 extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 

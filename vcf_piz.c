@@ -32,14 +32,14 @@ bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     return false;
 }
 
-bool vcf_piz_filter (VBlockP vb, DictId dict_id, const Structured *st, unsigned rep, int item)
+bool vcf_piz_filter (VBlockP vb, DictId dict_id, const Container *con, unsigned rep, int item)
 {
     if (dict_id.num == dict_id_fields[VCF_SAMPLES]) {
         if (item < 0)  // filter for repeat
             return samples_am_i_included (rep); 
 
         else // filter for item
-            if (flag_gt_only) return st->items[item].dict_id.num == dict_id_FORMAT_GT;
+            if (flag_gt_only) return con->items[item].dict_id.num == dict_id_FORMAT_GT;
     }
 
     return true;    

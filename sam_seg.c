@@ -136,7 +136,7 @@ void sam_seg_initialize (VBlock *vb)
     vb->contexts[SAM_RNAME].inst     = CTX_INST_NO_STONS; // needs b250 node_index for random access
     vb->contexts[SAM_SQBITMAP].ltype = LT_BITMAP;
     vb->contexts[SAM_TLEN].flags     = CTX_FL_STORE_INT;
-    vb->contexts[SAM_OPTIONAL].flags = CTX_FL_STRUCTURED;
+    vb->contexts[SAM_OPTIONAL].flags = CTX_FL_CONTAINER;
     vb->contexts[SAM_STRAND].ltype   = LT_BITMAP;
     vb->contexts[SAM_GPOS].ltype     = LT_UINT32;
     vb->contexts[SAM_GPOS].flags     = CTX_FL_STORE_INT;
@@ -157,9 +157,9 @@ void sam_seg_finalize (VBlockP vb)
     }
 
     // top level snip - reconstruction as SAM
-    Structured top_level = { 
+    Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = STRUCTURED_TOPLEVEL,
+        .flags     = CONTAINER_TOPLEVEL,
         .num_items = 13,
         .items     = { { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, "\t" },
@@ -175,12 +175,12 @@ void sam_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE, ""   },
                        { (DictId)dict_id_fields[SAM_EOL],      DID_I_NONE, ""   } }
     };
-    seg_structured_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], &top_level, 0, 0, 0);
+    seg_container_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], &top_level, 0, 0, 0);
 
     // top level snip - reconstruction as BAM
-    Structured top_level_bin = { 
+    Container top_level_bin = { 
         .repeats   = vb->lines.len,
-        .flags     = STRUCTURED_TOPLEVEL,
+        .flags     = CONTAINER_TOPLEVEL,
         .num_items = 13,
         .items     = { { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, "\t" },
@@ -196,7 +196,7 @@ void sam_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE, ""   },
                        { (DictId)dict_id_fields[SAM_EOL],      DID_I_NONE, ""   } }
     };
-    seg_structured_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL_BIN], &top_level_bin, 0, 0, 0);
+    seg_container_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL_BIN], &top_level_bin, 0, 0, 0);
 }
 
 // TLEN - 3 cases: 
@@ -488,7 +488,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
     // Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
     // See: https://samtools.github.io/hts-specs/SAMtags.pdf
-    static const Structured structured_SA_OA = {
+    static const Container container_SA_OA = {
         .repeats     = 0, 
         .num_items   = 6, 
         .flags       = 0,
@@ -503,12 +503,12 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
 
     DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(strand); DEC_SSF(cigar); DEC_SSF(mapq); DEC_SSF(nm); 
 
-    Structured sa_oa = structured_SA_OA;
+    Container sa_oa = container_SA_OA;
 
     for (uint32_t i=0; i < field_len; sa_oa.repeats++) {
 
-        ASSSEG (sa_oa.repeats <= STRUCTURED_MAX_REPEATS, field, "Error in sam_seg_SA_or_OA_field - exceeded maximum repeats allowed (%lu) while parsing %s",
-                STRUCTURED_MAX_REPEATS, err_dict_id (subfield_dict_id));
+        ASSSEG (sa_oa.repeats <= CONTAINER_MAX_REPEATS, field, "Error in sam_seg_SA_or_OA_field - exceeded maximum repeats allowed (%lu) while parsing %s",
+                CONTAINER_MAX_REPEATS, err_dict_id (subfield_dict_id));
 
         DO_SSF (rname,  ','); // these also do sanity checks
         DO_SSF (pos,    ','); 
@@ -523,18 +523,18 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, pos, pos_len, true);
         if (pos_value < 0) goto error;
 
-        seg_by_dict_id (vb, rname,  rname_len,  structured_SA_OA.items[0].dict_id, 1 + rname_len);
-        seg_by_dict_id (vb, strand, strand_len, structured_SA_OA.items[2].dict_id, 1 + strand_len);
-        seg_by_dict_id (vb, cigar,  cigar_len,  structured_SA_OA.items[3].dict_id, 1 + cigar_len);
-        seg_by_dict_id (vb, mapq,   mapq_len,   structured_SA_OA.items[4].dict_id, 1 + mapq_len);
-        seg_by_dict_id (vb, nm,     nm_len,     structured_SA_OA.items[5].dict_id, 1 + nm_len);
+        seg_by_dict_id (vb, rname,  rname_len,  container_SA_OA.items[0].dict_id, 1 + rname_len);
+        seg_by_dict_id (vb, strand, strand_len, container_SA_OA.items[2].dict_id, 1 + strand_len);
+        seg_by_dict_id (vb, cigar,  cigar_len,  container_SA_OA.items[3].dict_id, 1 + cigar_len);
+        seg_by_dict_id (vb, mapq,   mapq_len,   container_SA_OA.items[4].dict_id, 1 + mapq_len);
+        seg_by_dict_id (vb, nm,     nm_len,     container_SA_OA.items[5].dict_id, 1 + nm_len);
         
-        Context *pos_ctx = mtf_get_ctx (vb, structured_SA_OA.items[1].dict_id);
+        Context *pos_ctx = mtf_get_ctx (vb, container_SA_OA.items[1].dict_id);
         pos_ctx->ltype   = LT_UINT32;
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
     }
 
-    seg_structured_by_dict_id (vb, subfield_dict_id, &sa_oa, 1 /* 1 for \t in SAM and \0 in BAM */);
+    seg_container_by_dict_id (vb, subfield_dict_id, &sa_oa, 1 /* 1 for \t in SAM and \0 in BAM */);
     
     return;
 
@@ -553,7 +553,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
     // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
     // Example XA:Z:chr9,-60942781,150M,0;chr9,-42212061,150M,0;chr9,-61218415,150M,0;chr9,+66963977,150M,1;
     // See: http://bio-bwa.sourceforge.net/bwa.shtml
-    static const Structured structured_XA = {
+    static const Container container_XA = {
         .repeats     = 0, 
         .num_items   = 5, 
         .flags       = 0,
@@ -565,14 +565,14 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
                          { .dict_id = {.id="NM:i"    }, .seperator = {';'}, .did_i = DID_I_NONE } }     
     };
 
-    Structured xa = structured_XA;
+    Container xa = container_XA;
 
     DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(cigar); DEC_SSF(nm); 
 
     for (uint32_t i=0; i < field_len; xa.repeats++) {
 
-        ASSSEG (xa.repeats <= STRUCTURED_MAX_REPEATS, field, "Error in sam_seg_XA_field - exceeded maximum repeats allowed (%lu) while parsing XA",
-                STRUCTURED_MAX_REPEATS);
+        ASSSEG (xa.repeats <= CONTAINER_MAX_REPEATS, field, "Error in sam_seg_XA_field - exceeded maximum repeats allowed (%lu) while parsing XA",
+                CONTAINER_MAX_REPEATS);
 
         DO_SSF (rname,  ','); 
         DO_SSF (pos,    ','); 
@@ -585,18 +585,18 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, &pos[1], pos_len-1, true);
         if (pos_value < 0) goto error;
 
-        seg_by_dict_id (vb, rname,  rname_len, structured_XA.items[0].dict_id, 1 + rname_len);
-        seg_by_dict_id (vb, pos,    1,         structured_XA.items[1].dict_id, 1); // strand is first character of pos
-        seg_by_dict_id (vb, cigar,  cigar_len, structured_XA.items[3].dict_id, 1 + cigar_len);
-        seg_by_dict_id (vb, nm,     nm_len,    structured_XA.items[4].dict_id, 1 + nm_len);
+        seg_by_dict_id (vb, rname,  rname_len, container_XA.items[0].dict_id, 1 + rname_len);
+        seg_by_dict_id (vb, pos,    1,         container_XA.items[1].dict_id, 1); // strand is first character of pos
+        seg_by_dict_id (vb, cigar,  cigar_len, container_XA.items[3].dict_id, 1 + cigar_len);
+        seg_by_dict_id (vb, nm,     nm_len,    container_XA.items[4].dict_id, 1 + nm_len);
         
-        Context *pos_ctx = mtf_get_ctx (vb, structured_XA.items[2].dict_id);
+        Context *pos_ctx = mtf_get_ctx (vb, container_XA.items[2].dict_id);
         pos_ctx->ltype  = LT_UINT32;
 
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
     }
 
-    seg_structured_by_dict_id (vb, dict_id_OPTION_XA, &xa, 1 /* 1 for \t in SAM and \0 in BAM */);
+    seg_container_by_dict_id (vb, dict_id_OPTION_XA, &xa, 1 /* 1 for \t in SAM and \0 in BAM */);
     return;
 
 error:
@@ -701,7 +701,7 @@ static void sam_optimize_ZM (const char **snip, unsigned *snip_len, char *new_st
     }    
 }
 
-static inline StructuredItemTransform sam_seg_optional_transform (char type)
+static inline ContainerItemTransform sam_seg_optional_transform (char type)
 {
     switch (type) {
         case 'c': return TRS_LTEN_I8;
@@ -834,7 +834,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
         if (flag_optimize_ZM && dict_id.num == dict_id_OPTION_ZM && value_len > 3 && value[0] == 's')  // XM:B:s,
             optimize = sam_optimize_ZM;
 
-        StructuredItemTransform transform = sam_seg_optional_transform (value[0]); // instructions on how to transform array items if reconstructing as BAM (value[0] is the subtype of the array)
+        ContainerItemTransform transform = sam_seg_optional_transform (value[0]); // instructions on how to transform array items if reconstructing as BAM (value[0] is the subtype of the array)
 
         uint32_t repeats = seg_array_field ((VBlockP)vb, dict_id, value, value_len, !IS_BAM, transform, optimize);
 
@@ -881,9 +881,9 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
                                   const char *after_field) // bam only 
 {
     const bool is_bam = IS_BAM;
-    Structured st = { .repeats=1 };
-    char prefixes[MAX_SUBFIELDS * 6 + 2]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by SNIP_STRUCTURED ; +2 for the initial SNIP_STRUCTURED
-    prefixes[0] = prefixes[1] = SNIP_STRUCTURED; // initial SNIP_STRUCTURED follow by seperator of empty Structured-wide prefix
+    Container con = { .repeats=1 };
+    char prefixes[MAX_SUBFIELDS * 6 + 2]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by SNIP_CONTAINER ; +2 for the initial SNIP_CONTAINER
+    prefixes[0] = prefixes[1] = SNIP_CONTAINER; // initial SNIP_CONTAINER follow by seperator of empty Container-wide prefix
     unsigned prefixes_len=2;
     const char *value, *tag;
     char type;
@@ -894,7 +894,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         next_field = is_bam ? bam_get_one_optional (vb, next_field,                          &tag, &type, &value, &value_len)
                             : sam_get_one_optional (vb, next_field, len, &separator, has_13, &tag, &type, &value, &value_len);
 
-        st.items[st.num_items++] = (StructuredItem) {
+        con.items[con.num_items++] = (ContainerItem) {
             .dict_id      = sam_seg_optional_field (vb, dl, is_bam, tag, type, value, value_len),
             .transform    = sam_seg_optional_transform (type), // how to transform the field if reconstructing to BAM
             .seperator[0] = '\t',
@@ -902,24 +902,24 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
             .did_i        = DID_I_NONE, // seg always puts NONE, PIZ changes it
         };
 
-        ASSSEG (st.num_items <= MAX_SUBFIELDS, value, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
+        ASSSEG (con.num_items <= MAX_SUBFIELDS, value, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
 
         // in the optional field prefix (unlike array type), all integer types become 'i'.
         char prefix_type = (type=='c' || type=='C' || type=='s' || type=='S' || type=='i') ? 'i' : type;
 
-        char prefix[6] = { tag[0], tag[1], ':', prefix_type, ':', SNIP_STRUCTURED}; 
+        char prefix[6] = { tag[0], tag[1], ':', prefix_type, ':', SNIP_CONTAINER}; 
         memcpy (&prefixes[prefixes_len], prefix, 6);
         prefixes_len += 6;
 
         if (is_bam) buf_free (&vb->textual_opt);
     }
 
-    if (st.num_items) {
-        st.items[st.num_items-1].seperator[0] = 0; // last Optional field has no tab
-        seg_structured_by_ctx ((VBlockP)vb, &vb->contexts[SAM_OPTIONAL], &st, prefixes, prefixes_len, (is_bam ? 3 : 5) * st.num_items); // account for : SAM: "MX:i:" BAM: "MXi"
+    if (con.num_items) {
+        con.items[con.num_items-1].seperator[0] = 0; // last Optional field has no tab
+        seg_container_by_ctx ((VBlockP)vb, &vb->contexts[SAM_OPTIONAL], &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * con.num_items); // account for : SAM: "MX:i:" BAM: "MXi"
     }
     else
-        seg_by_did_i (vb, NULL, 0, SAM_OPTIONAL, 0); // NULL means MISSING Structured item - will cause deletion of previous separator (\t)
+        seg_by_did_i (vb, NULL, 0, SAM_OPTIONAL, 0); // NULL means MISSING Container item - will cause deletion of previous separator (\t)
 
     return next_field;        
 }

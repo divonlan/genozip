@@ -297,7 +297,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
     const int info_field   = DTF(info);
     const char *field_name = DTF(names)[info_field];
 
-    Structured st = { .repeats=1, .num_items=0, .repsep={0,0}, .flags=STRUCTURED_DROP_FINAL_ITEM_SEP };
+    Container con = { .repeats=1, .num_items=0, .repsep={0,0}, .flags=CONTAINER_DROP_FINAL_ITEM_SEP };
 
     const char *this_name = info_str, *this_value = NULL;
     int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
@@ -322,7 +322,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
                             "Error: %s field contains a name %.*s starting with an illegal character '%c' (ASCII %u)", 
                             field_name, this_name_len, this_name, this_name[0], this_name[0]);
 
-                    InfoItem *ii = &info_items[st.num_items];
+                    InfoItem *ii = &info_items[con.num_items];
                     ii->start    = this_name; 
                     ii->len      = this_name_len + valueful; // include the '=' if there is one 
                     ii->dict_id  = valueful ? dict_id_type_1 (dict_id_make (this_name, this_name_len)) 
@@ -340,7 +340,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
 
             if (c == ';') { // end of value
                 // If its a valueful item, seg it (either special or regular)
-                DictId dict_id = info_items[st.num_items].dict_id;
+                DictId dict_id = info_items[con.num_items].dict_id;
                 if (dict_id.num) { 
                     char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
                     bool not_yet_segged = seg_special_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len, optimized_snip);
@@ -351,9 +351,9 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
                 reading_name = true;  // end of value - move to the next item
                 this_name = &info_str[i+1]; // move to next field in info string
                 this_name_len = 0;
-                st.num_items++;
+                con.num_items++;
 
-                ASSSEG (st.num_items <= MAX_SUBFIELDS, info_str, "A line has too many subfields (tags) in the %s field - the maximum supported is %u",
+                ASSSEG (con.num_items <= MAX_SUBFIELDS, info_str, "A line has too many subfields (tags) in the %s field - the maximum supported is %u",
                         field_name, MAX_SUBFIELDS);
             }
             else this_value_len++;
@@ -365,57 +365,57 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
 
     // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
     // thereby both improving compression and improving --regions speed. 
-    if (flag_optimize_sort && st.num_items > 1) 
-        qsort (info_items, st.num_items, sizeof(InfoItem), sort_by_subfield_name);
+    if (flag_optimize_sort && con.num_items > 1) 
+        qsort (info_items, con.num_items, sizeof(InfoItem), sort_by_subfield_name);
 
-    char prefixes[STRUCTURED_MAX_PREFIXES_LEN]; // these are the Structured prefixes
-    prefixes[0] = prefixes[1] = SNIP_STRUCTURED; // initial SNIP_STRUCTURED follow by seperator of empty Structured-wide prefix
+    char prefixes[CONTAINER_MAX_PREFIXES_LEN]; // these are the Container prefixes
+    prefixes[0] = prefixes[1] = SNIP_CONTAINER; // initial SNIP_CONTAINER follow by seperator of empty Container-wide prefix
     unsigned prefixes_len = 2;
 
-    // Populate the Structured 
+    // Populate the Container 
     uint32_t total_names_len=0;
-    for (unsigned i=0; i < st.num_items; i++) {
-        // Set the Structured item and find (or create) a context for this name
+    for (unsigned i=0; i < con.num_items; i++) {
+        // Set the Container item and find (or create) a context for this name
         InfoItem *ii = &info_items[i];
-        st.items[i] = (StructuredItem){ .dict_id   = ii->dict_id,
+        con.items[i] = (ContainerItem){ .dict_id   = ii->dict_id,
                                         .seperator = { ';', 0 },
                                         .did_i     = DID_I_NONE }; // this must be NONE, it is used only by PIZ
         // add to the prefixes
-        ASSSEG (prefixes_len + ii->len + 1 <= STRUCTURED_MAX_PREFIXES_LEN, info_str, 
-                "%s contains tag names that, combined (including the '='), exceed the maximum of %u characters", field_name, STRUCTURED_MAX_PREFIXES_LEN);
+        ASSSEG (prefixes_len + ii->len + 1 <= CONTAINER_MAX_PREFIXES_LEN, info_str, 
+                "%s contains tag names that, combined (including the '='), exceed the maximum of %u characters", field_name, CONTAINER_MAX_PREFIXES_LEN);
 
         memcpy (&prefixes[prefixes_len], ii->start, ii->len);
         prefixes_len += ii->len;
-        prefixes[prefixes_len++] = SNIP_STRUCTURED;
+        prefixes[prefixes_len++] = SNIP_CONTAINER;
 
         total_names_len += ii->len;
     }
 
-    seg_structured_by_ctx (vb, &vb->contexts[info_field], &st, prefixes, prefixes_len, 
-                            total_names_len /* names inc. = */ + (st.num_items-1) /* the ;s */ + 1 /* \t or \n */);
+    seg_container_by_ctx (vb, &vb->contexts[info_field], &con, prefixes, prefixes_len, 
+                            total_names_len /* names inc. = */ + (con.num_items-1) /* the ;s */ + 1 /* \t or \n */);
 }
 
-WordIndex seg_structured_by_ctx (VBlock *vb, Context *ctx, Structured *st, 
+WordIndex seg_container_by_ctx (VBlock *vb, Context *ctx, Container *con, 
                                  // prefixes can be one of 3 options:
                                  // 1. NULL
-                                 // 2. a "structured-wide prefix" that will be reconstructed once, at the beginning of the Structured
-                                 // 3. a "structured-wide prefix" followed by exactly one prefix per item. the per-item prefixes will be
-                                 //    displayed once per repeat, before their respective items. in this case, the structured-wide prefix
+                                 // 2. a "container-wide prefix" that will be reconstructed once, at the beginning of the Container
+                                 // 3. a "container-wide prefix" followed by exactly one prefix per item. the per-item prefixes will be
+                                 //    displayed once per repeat, before their respective items. in this case, the container-wide prefix
                                  //    may be empty. 
-                                 // Each prefix is terminated by a SNIP_STRUCTURED character
+                                 // Each prefix is terminated by a SNIP_CONTAINER character
                                  const char *prefixes, unsigned prefixes_len, 
                                  unsigned add_bytes)
 {
-    st->repeats = BGEN32 (st->repeats);
-    char snip[1 + base64_sizeof(Structured) + STRUCTURED_MAX_PREFIXES_LEN]; // maximal size
-    snip[0] = SNIP_STRUCTURED;
-    unsigned b64_len = base64_encode ((uint8_t*)st, sizeof_structured (*st), &snip[1]);
-    st->repeats = BGEN32 (st->repeats); // restore
+    con->repeats = BGEN32 (con->repeats);
+    char snip[1 + base64_sizeof(Container) + CONTAINER_MAX_PREFIXES_LEN]; // maximal size
+    snip[0] = SNIP_CONTAINER;
+    unsigned b64_len = base64_encode ((uint8_t*)con, sizeof_container (*con), &snip[1]);
+    con->repeats = BGEN32 (con->repeats); // restore
 
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
     uint32_t snip_len = 1 + b64_len + prefixes_len;
 
-    ctx->flags |= CTX_FL_STRUCTURED;
+    ctx->flags |= CTX_FL_CONTAINER;
 
     // store in struct cache
     return seg_by_ctx (vb, snip, snip_len, ctx, add_bytes, NULL); 
@@ -447,21 +447,21 @@ fallback:
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
-static inline Structured seg_initialize_structured_array (VBlockP vb, DictId dict_id, bool type_1_items)
+static inline Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_1_items)
 {
-    Structured st = (Structured){ .repeats = 1 };
+    Container con = (Container){ .repeats = 1 };
 
     for (unsigned i=0; i < MAX_COMPOUND_COMPONENTS; i++) {
         const uint8_t *id = dict_id.id;
         uint8_t char2 = (i < 10) ? ('0' + i) : ('a' + (i-10));
         
-        st.items[i].did_i   = DID_I_NONE;
-        st.items[i].dict_id = (DictId){ .id = { id[0], char2, id[1], id[2], id[3], id[4], id[5], id[6] }};
+        con.items[i].did_i   = DID_I_NONE;
+        con.items[i].dict_id = (DictId){ .id = { id[0], char2, id[1], id[2], id[3], id[4], id[5], id[6] }};
         
-        if (type_1_items) st.items[i].dict_id = dict_id_type_1 (st.items[i].dict_id);
+        if (type_1_items) con.items[i].dict_id = dict_id_type_1 (con.items[i].dict_id);
     }
 
-    return st;
+    return con;
 }
 
 // We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
@@ -482,7 +482,7 @@ void seg_compound_field (VBlock *vb,
     unsigned snip_len = 0;
     unsigned num_double_sep = 0;
 
-    Structured st = seg_initialize_structured_array ((VBlockP)vb, field_ctx->dict_id, true); 
+    Container con = seg_initialize_container_array ((VBlockP)vb, field_ctx->dict_id, true); 
 
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
@@ -490,11 +490,11 @@ void seg_compound_field (VBlock *vb,
         char sep = (i==field_len) ? 0 : field[i];
 
         if (!sep || 
-            ((st.num_items < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || sep=='.' || (ws_is_sep && (sep==' ' || sep=='\t' || sep==1))))) {
+            ((con.num_items < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || sep=='.' || (ws_is_sep && (sep==' ' || sep=='\t' || sep==1))))) {
         
             // process the subfield that just ended
-            Context *sf_ctx = mtf_get_ctx (vb, st.items[st.num_items].dict_id);
-            ASSERT (sf_ctx, "Error in seg_compound_field: sf_ctx for %s is NULL", err_dict_id (st.items[st.num_items].dict_id));
+            Context *sf_ctx = mtf_get_ctx (vb, con.items[con.num_items].dict_id);
+            ASSERT (sf_ctx, "Error in seg_compound_field: sf_ctx for %s is NULL", err_dict_id (con.items[con.num_items].dict_id));
 
             sf_ctx->st_did_i = field_ctx->did_i;
 
@@ -574,54 +574,54 @@ void seg_compound_field (VBlock *vb,
 
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
-                st.items[st.num_items].seperator[0] = sep;
-                st.items[st.num_items].seperator[1] = double_sep ? sep : 0;
+                con.items[con.num_items].seperator[0] = sep;
+                con.items[con.num_items].seperator[1] = double_sep ? sep : 0;
                 snip = &field[i+1];
                 snip_len = 0;
             }
-            st.num_items++;
+            con.num_items++;
         }
         else snip_len++;
     }
 
-    seg_structured_by_ctx (vb, field_ctx, &st, NULL, 0, (nonoptimized_len ? nonoptimized_len : st.num_items + num_double_sep - 1) + add_for_eol);
+    seg_container_by_ctx (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con.num_items + num_double_sep - 1) + add_for_eol);
 }
 
 // an array - all elements go into a single item context, multiple repeats
 uint32_t seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len, 
                           bool add_bytes_by_textual, // add bytes according to textual length inc. separator
-                          StructuredItemTransform transform, // instructions on how to transform array items if reconstructing as BAM or TRS_NONE
+                          ContainerItemTransform transform, // instructions on how to transform array items if reconstructing as BAM or TRS_NONE
                           SegOptimize optimize) // optional optimization function
 {   
     const char *str = value; 
     int str_len = (int)value_len; // must be int, not unsigned, for the for loop
     
-    MiniStructured st     = { .num_items = 1, .flags = STRUCTURED_DROP_FINAL_ITEM_SEP, 
+    MiniContainer con     = { .num_items = 1, .flags = CONTAINER_DROP_FINAL_ITEM_SEP, 
                               .repsep = {0,0}, .items = { { .seperator = {','}, .did_i = DID_I_NONE } } };
     DictId arr_dict_id    = dict_id_make ("XX_ARRAY", 8);
     arr_dict_id.id[0]     = FLIP_CASE (dict_id.id[0]);
     arr_dict_id.id[1]     = FLIP_CASE (dict_id.id[1]);
-    st.items[0].dict_id   = sam_dict_id_optnl_sf (arr_dict_id);
-    st.items[0].transform = transform;
+    con.items[0].dict_id   = sam_dict_id_optnl_sf (arr_dict_id);
+    con.items[0].transform = transform;
 
     Context *parent_ctx   = mtf_get_ctx (vb, dict_id);
-    Context *arr_ctx      = mtf_get_ctx (vb, st.items[0].dict_id);
+    Context *arr_ctx      = mtf_get_ctx (vb, con.items[0].dict_id);
     arr_ctx->st_did_i     = parent_ctx->did_i;
 
-    for (st.repeats=0; st.repeats < STRUCTURED_MAX_REPEATS && str_len > 0; st.repeats++) { // str_len will be -1 after last number
+    for (con.repeats=0; con.repeats < CONTAINER_MAX_REPEATS && str_len > 0; con.repeats++) { // str_len will be -1 after last number
 
         const char *snip = str;
         for (; str_len && *str != ','; str++, str_len--) {};
 
         unsigned number_len = (unsigned)(str - snip);
 
-        if (st.repeats == STRUCTURED_MAX_REPEATS-1) // final permitted repeat - take entire remaining string
+        if (con.repeats == CONTAINER_MAX_REPEATS-1) // final permitted repeat - take entire remaining string
             number_len += str_len;
 
         unsigned snip_len = number_len; 
              
         char new_number_str[30];
-        if (optimize && st.repeats < STRUCTURED_MAX_REPEATS-1 && snip_len < 25)
+        if (optimize && con.repeats < CONTAINER_MAX_REPEATS-1 && snip_len < 25)
             optimize (&snip, &snip_len, new_number_str);
 
         seg_by_ctx (vb, snip, snip_len, arr_ctx, add_bytes_by_textual ? number_len+1 : 0, NULL);
@@ -630,35 +630,35 @@ uint32_t seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigne
         str++;
     }
 
-    seg_structured_by_ctx (vb, parent_ctx, (Structured *)&st, 0, 0, 0);
+    seg_container_by_ctx (vb, parent_ctx, (Container *)&con, 0, 0, 0);
 
-    return st.repeats;
+    return con.repeats;
 }
 
 // an comma-separated array - each element goes into its own item context, single repeat (somewhat similar to compound, but 
 // intended for simple arrays - just comma separators, no delta between lines or optimizations)
 WordIndex seg_hetero_array_field (VBlock *vb, DictId dict_id, const char *value, int value_len)
 {   
-    Structured st = seg_initialize_structured_array (vb, dict_id, false);    
+    Container con = seg_initialize_container_array (vb, dict_id, false);    
 
-    for (st.num_items=0; st.num_items < MAX_COMPOUND_COMPONENTS && value_len > 0; st.num_items++) { // value_len will be -1 after last number
+    for (con.num_items=0; con.num_items < MAX_COMPOUND_COMPONENTS && value_len > 0; con.num_items++) { // value_len will be -1 after last number
 
         const char *snip = value;
         for (; value_len && *value != ','; value++, value_len--) {};
 
         unsigned number_len = (unsigned)(value - snip);
 
-        if (st.num_items == MAX_COMPOUND_COMPONENTS-1) // final permitted repeat - take entire remaining string
+        if (con.num_items == MAX_COMPOUND_COMPONENTS-1) // final permitted repeat - take entire remaining string
             number_len += value_len;
 
-        if (value_len > 0) st.items[st.num_items].seperator[0] = ','; 
-        seg_by_dict_id (vb, snip, number_len, st.items[st.num_items].dict_id, number_len + (value_len>0 /* has comma */));
+        if (value_len > 0) con.items[con.num_items].seperator[0] = ','; 
+        seg_by_dict_id (vb, snip, number_len, con.items[con.num_items].dict_id, number_len + (value_len>0 /* has comma */));
         
         value_len--; // skip comma
         value++;
     }
 
-    return seg_structured_by_dict_id (vb, dict_id, (Structured *)&st, 0);
+    return seg_container_by_dict_id (vb, dict_id, (Container *)&con, 0);
 }
 
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 

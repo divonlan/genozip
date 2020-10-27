@@ -11,7 +11,7 @@
 // the number is stored as a 4-byte Big Endian (MSB first), unless it is one of the below, in which case 
 // only 1 byte is used
 #define BASE250_EMPTY_SF   250 // empty string
-#define BASE250_MISSING_SF 251 // structured item missing, remove preceding separator
+#define BASE250_MISSING_SF 251 // container item missing, remove preceding separator
 #define BASE250_ONE_UP     252 // value is one higher than previous value. used in B250_ENC_8
 #define BASE250_MOST_FREQ0 253 // this translates to 0,1,2 representing the most frequent values (according to vb_i=1 sorting). used in B250_ENC_16
 #define BASE250_MOST_FREQ1 254

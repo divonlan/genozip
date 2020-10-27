@@ -31,7 +31,7 @@ void vcf_seg_initialize (VBlock *vb_)
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_mtf.len;
-    buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Structured), 1.2, "format_mapper_buf", 0);
+    buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf", 0);
     buf_zero (&vb->format_mapper_buf);
 
     if (flag_gtshark) codec_gtshark_comp_init (vb_);
@@ -47,9 +47,9 @@ void vcf_seg_finalize (VBlockP vb_)
         vcf_seg_complete_missing_lines (vb);
 
     // top level snip
-    Structured top_level = { 
+    Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = STRUCTURED_TOPLEVEL,
+        .flags     = CONTAINER_TOPLEVEL,
         .num_items = 10,
         .items     = { { (DictId)dict_id_fields[VCF_CHROM],   DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[VCF_POS],     DID_I_NONE, "\t" },
@@ -63,7 +63,7 @@ void vcf_seg_finalize (VBlockP vb_)
                        { (DictId)dict_id_fields[VCF_EOL],     DID_I_NONE, ""   } }
     };
     
-    seg_structured_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
+    seg_container_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
 
     if (flag_show_alleles && vb->ht_matrix_ctx) {
         printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_matrix_ctx->local.len);
@@ -152,8 +152,8 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
     ASSSEG0 (field_len >= 2, field_start, "Error: missing or invalid FORMAT field");
 
-    Structured format_mapper = (Structured){ 
-        .flags     = STRUCTURED_DROP_FINAL_REPEAT_SEP | STRUCTURED_FILTER_ITEMS | STRUCTURED_FILTER_REPEATS,
+    Container format_mapper = (Container){ 
+        .flags     = CONTAINER_DROP_FINAL_REPEAT_SEP | CONTAINER_FILTER_ITEMS | CONTAINER_FILTER_REPEATS,
         .repsep    = "\t"
     };
 
@@ -168,7 +168,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         DictId dict_id = vcf_seg_get_format_subfield (&str, (unsigned *)&len);
         last_item = (str[-1] == '\t' || str[-1] == '\n');
 
-        format_mapper.items[format_mapper.num_items++] = (StructuredItem) {
+        format_mapper.items[format_mapper.num_items++] = (ContainerItem) {
             .dict_id   = dict_id,
             .seperator = { last_item ? 0 : ':' },
             .did_i     = DID_I_NONE, // seg always puts NONE, PIZ changes it
@@ -193,12 +193,12 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         ASSERT (node_index == vb->format_mapper_buf.len, 
                 "Error: node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
-        buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Structured), 2, "format_mapper_buf", 0);
+        buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf", 0);
     }    
 
-    Structured *st = ENT (Structured, vb->format_mapper_buf, node_index);
-    if (is_new || !st->num_items) // assign if not already assigned. 
-        *st = format_mapper; 
+    Container *con = ENT (Container, vb->format_mapper_buf, node_index);
+    if (is_new || !con->num_items) // assign if not already assigned. 
+        *con = format_mapper; 
 }
 
 static inline bool vcf_seg_test_svlen (VBlockVCF *vb, const char *svlen_str, unsigned svlen_str_len)
@@ -346,10 +346,10 @@ static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigne
 
 static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataLineVCF *dl, const char *cell, unsigned cell_len, unsigned sample_i)
 {
-    // the GT field is represented as a Structured, with a single item repeating as required by poidy, and the seperator 
+    // the GT field is represented as a Container, with a single item repeating as required by poidy, and the seperator 
     // determined by the phase
-    MiniStructured gt = { .repeats=1, .num_items=1, .flags=STRUCTURED_DROP_FINAL_REPEAT_SEP };
-    gt.items[0] = (StructuredItem){ .dict_id = (DictId)dict_id_FORMAT_GT_HT, .did_i = DID_I_NONE };
+    MiniContainer gt = { .repeats=1, .num_items=1, .flags=CONTAINER_DROP_FINAL_REPEAT_SEP };
+    gt.items[0] = (ContainerItem){ .dict_id = (DictId)dict_id_FORMAT_GT_HT, .did_i = DID_I_NONE };
     unsigned save_cell_len = cell_len;
 
     // update repeats according to ploidy, and separator according to phase
@@ -443,7 +443,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     else {
         vb->gt_prev_ploidy = gt.repeats;
         vb->gt_prev_phase  = gt.repsep[0];
-        return seg_structured_by_ctx ((VBlockP)vb, ctx, (Structured *)&gt, 0, 0, save_cell_len); 
+        return seg_container_by_ctx ((VBlockP)vb, ctx, (Container *)&gt, 0, 0, save_cell_len); 
     }
 }
 
@@ -457,7 +457,7 @@ static inline unsigned seg_snip_len_tnc (const char *snip, bool *has_13)
     return s - snip - *has_13;
 }
 
-static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Structured *samples, uint32_t sample_i,
+static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Container *samples, uint32_t sample_i,
                                 const char *cell, // beginning of sample, also beginning of first "cell" (subfield)
                                 unsigned sample_len,  // not including the \t or \n 
                                 bool is_vcf_string,
@@ -546,11 +546,11 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Structured *s
 static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, const char *next_field, 
                                     bool *has_13)
 {
-    // Structured for samples - we have:
+    // Container for samples - we have:
     // - repeats as the number of samples in the line (<= vcf_num_samples)
     // - num_items as the number of FORMAT subfields (inc. GT)
 
-    Structured samples = *ENT (Structured, vb->format_mapper_buf, dl->format_mtf_i); // make a copy of the template
+    Container samples = *ENT (Container, vb->format_mapper_buf, dl->format_mtf_i); // make a copy of the template
 
     const char *field_start;
     unsigned field_len=0, num_colons=0;
@@ -581,7 +581,7 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
         }
     }
     
-    seg_structured_by_ctx ((VBlockP)vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
+    seg_container_by_ctx ((VBlockP)vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
 
     if (vb->ht_matrix_ctx)
         vb->ht_matrix_ctx->local.len = (vb->line_i+1) * vb->num_haplotypes_per_line;
@@ -609,7 +609,7 @@ static void vcf_seg_complete_missing_lines (VBlockVCF *vb)
 
 /* segment a VCF line into its fields:
    fields CHROM->FORMAT are normal contexts
-   all samples go into the SAMPLES context, which is a Structured
+   all samples go into the SAMPLES context, which is a Container
    Haplotype and phase data are stored in a separate buffers + a SNIP_SPECIAL in the GT context 
 */
 const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts

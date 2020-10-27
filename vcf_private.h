@@ -36,7 +36,7 @@ typedef struct VBlockVCF {
     char gt_prev_phase;
 
     // dictionaries stuff 
-    Buffer format_mapper_buf;         // ZIP only: an array of type Structured - one entry per entry in vb->contexts[VCF_FORMAT].mtf   
+    Buffer format_mapper_buf;         // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].mtf   
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;
