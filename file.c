@@ -39,7 +39,7 @@ const char *WRITEREAD = "wb+";
 
 const char *file_exts[] = FILE_EXTS;
 
-static const struct { FileType in; Codec codec; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][30] = TXT_IN_FT_BY_DT;
+static const struct { FileType in; Codec codec, binarizer; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][30] = TXT_IN_FT_BY_DT;
 static const FileType txt_out_ft_by_dt[NUM_DATATYPES][20] = TXT_OUT_FT_BY_DT;
 static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 
@@ -69,12 +69,17 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 }
 
 // get codec by txt file type
-Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode)
+static void file_get_codecs_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode, Codec *codec, Codec *binarizer)
 {
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
-        if (txt_in_ft_by_dt[dt][i].in == txt_ft) return txt_in_ft_by_dt[dt][i].codec;
+        if (txt_in_ft_by_dt[dt][i].in == txt_ft) {
+            if (codec) *codec         = txt_in_ft_by_dt[dt][i].codec;
+            if (binarizer) *binarizer = txt_in_ft_by_dt[dt][i].binarizer;
+            return;
+        }
 
-    return (mode == WRITE ? CODEC_NONE : CODEC_UNKNOWN);
+    if (*codec) *codec = (mode == WRITE ? CODEC_NONE : CODEC_UNKNOWN);
+    if (*binarizer) *binarizer = CODEC_UNKNOWN;
 }
 
 DataType file_get_dt_by_z_ft (FileType z_ft)
@@ -348,7 +353,7 @@ bool file_open_txt (File *file)
     }
 
     // open the file, based on the codec
-    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, file->mode);
+    file_get_codecs_by_txt_ft (file->data_type, file->type, file->mode, &file->codec, &file->binarizer);
     
     switch (file->codec) { 
         case CODEC_NONE:

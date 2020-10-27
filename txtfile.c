@@ -115,7 +115,7 @@ Md5Hash txtfile_read_header (bool is_first_txt, bool header_required,
         if (!evb->txt_data.data || evb->txt_data.size - evb->txt_data.len < READ_BUFFER_SIZE) 
             buf_alloc (evb, &evb->txt_data, evb->txt_data.size + READ_BUFFER_SIZE + 1 /* for \0 */, 1.2, "txt_data", 0);    
 
-        // case: first batch of data was already read in txtfile_read_header_and_100_lines(), use it
+        // case: first batch of data was already read in txtfile_test_data(), use it
         if (first_block && evb->txt_data.len) {
             bytes_read = (int32_t)evb->txt_data.len;
             evb->txt_data.len = 0;
@@ -176,58 +176,24 @@ finish:
     return header_md5;
 }
 
-// returns true if txt_data[txt_i] is the end of a FASTQ line (= block of 4 lines in the file)
-static inline bool txtfile_fastq_is_end_of_line (VBlock *vb, 
-                                                 int32_t txt_i) // index of a \n in txt_data
+// default "unconsumed" function file formats where we need to read whole \n-ending lines
+uint32_t txtfile_unconsumed (VBlockP vb)
 {
-#   define IS_NL_BEFORE_QUAL_LINE(i) \
-        ((i > 3) && ((txt[i-2] == '\n' && txt[i-1] == '+') || /* \n line ending case */ \
-                     (txt[i-3] == '\n' && txt[i-2] == '+' && txt[i-1] == '\r'))) /* \r\n line ending case */
-    
-    ARRAY (char, txt, vb->txt_data);
+    for (int32_t i=vb->txt_data.len-1; i >= 0; i--) 
+        if (vb->txt_data.data[i] == '\n') 
+            return vb->txt_data.len-1 - i;
 
-    // if we're not at the end of the data - we can just look at the next character
-    // if it is a @ then that @ is a new record EXCEPT if the previous character is + and then
-    // @ is actually a quality value... (we check two previous characters, as the previous one might be \r)
-    if (txt_i < vb->txt_data.len-1)
-        return txt[txt_i+1] == '@' && !IS_NL_BEFORE_QUAL_LINE(txt_i);
-
-    // if we're at the end of the line, we scan back to the previous \n and check if it is at the +
-    for (int32_t i=txt_i-1; i >= 0; i--) 
-        if (txt[i] == '\n') 
-            return IS_NL_BEFORE_QUAL_LINE(i);
-
-    // we can't find a complete FASTQ block in the entire vb data
-    ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);
-    return 0; // squash compiler warning ; never reaches here
-}
-
-// returns true if txt_data[txt_i] is the end of a FASTA read (= next char is > or end-of-file)
-static inline bool txtfile_fasta_is_end_of_line (VBlock *vb, 
-                                                 int32_t txt_i) // index of a \n in txt_data
-{
-    ARRAY (char, txt, vb->txt_data);
-
-    // if we're not at the end of the data - we can just look at the next character
-    // if it is a @ then that @ is a new record EXCEPT if the previous character is + and then
-    // @ is actually a quality value... (we check two previous characters, as the previous one might be \r)
-    if (txt_i < vb->txt_data.len-1)
-        return txt[txt_i+1] == '>';
-
-    // if we're at the end of the line, we scan back to the previous \n and check if it NOT the >
-    for (int32_t i=txt_i-1; i >= 0; i--) 
-        if (txt[i] == '\n') 
-            return txt[txt_i+1] != '>'; // this row is a sequence row, not a description row
-
-    // we can't find a complete FASTQ block in the entire vb data
-    ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);
-    return 0; // squash compiler warning ; never reaches here
+    ABORT ("Error in txtfile_unconsumed: vb=%u has only %u bytes, not enough for even the first line", 
+           vb->vblock_i, (int)vb->txt_data.len);
+    return 0; // quieten compiler warning
 }
 
 // ZIP I/O threads
 void txtfile_read_vblock (VBlock *vb)
 {
     START_TIMER;
+
+    ASSERT (DTPT(unconsumed), "Error: \"unconsumed\" callback not defined for data_type=%s", dt_name (txt_file->data_type));
 
     static Buffer block_md5_buf = EMPTY_BUFFER, block_start_buf = EMPTY_BUFFER, block_len_buf = EMPTY_BUFFER;
 
@@ -256,7 +222,7 @@ void txtfile_read_vblock (VBlock *vb)
         uint32_t len = txtfile_read_block (start, MIN (READ_BUFFER_SIZE, max_memory_per_vb - vb->txt_data.len));
 
         if (!len) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
-            ASSERT (!vb->txt_data.len || vb->txt_data.data[vb->txt_data.len-1] == '\n', "Error: invalid input file %s - expecting it to end with a newline", txt_name);
+            ASSERT (!vb->txt_data.len || !DTPT(unconsumed)(vb), "Error: invalid input file %s - cannot read entire VB vb=%u", txt_name, vb->vblock_i);
             break;
         }
             
@@ -282,44 +248,8 @@ void txtfile_read_vblock (VBlock *vb)
         }
     }
     
-    // case: FASTA reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
-    if (flag_make_reference) {
-        bool data_found = false;
-        ARRAY (char, txt, vb->txt_data);
-        for (unsigned i=0; i < vb->txt_data.len; i++) {
-            // just don't allow now-obsolete ';' rather than trying to disentangle comments from descriptions
-            ASSERT (txt[i] != ';', "Error: %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
-        
-            // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
-            // everything following to the next VB
-            if (data_found && txt[i]=='>' && txt[i-1]=='\n') {
-                unconsumed_len = vb->txt_data.len - i;
-                break;
-            }                
-
-            if (!data_found && (txt[i] != '\n' && txt[i] != '\r')) data_found = true; // anything, except for empty lines, is considered data
-        }
-    }
-
-    // we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
-    if (!unconsumed_len) {
-        for (int32_t i=vb->txt_data.len-1; i >= 0; i--) {
-
-            if (vb->txt_data.data[i] == '\n') {
-
-                // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
-                if (txt_file->data_type == DT_FASTQ && !txtfile_fastq_is_end_of_line (vb, i)) continue;
-
-                // when compressing FASTA with a reference - an "end of line" is one that the next character is >, or it is the end of the file
-                // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), line cannot be too long - they 
-                // must fit in a VB
-                if (txt_file->data_type == DT_FASTA && (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && !txtfile_fasta_is_end_of_line (vb, i)) continue;
-
-                unconsumed_len = vb->txt_data.len-1 - i;
-                break;
-            }
-        }
-    }
+    // case: we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
+    if (!unconsumed_len && vb->txt_data.len) unconsumed_len = DTPT(unconsumed)(vb);
 
     // if we have some unconsumed data, pass it to the next vb
     if (unconsumed_len) {
@@ -519,8 +449,8 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     
     *txt_line_i += (uint32_t)evb->lines.len;
 
-    // for vcf, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
-    // for sam, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
+    // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
+    // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
     bool txt_file_ok = (DTPT (zip_inspect_txt_header) ? DTPT (zip_inspect_txt_header) (&evb->txt_data) : true);
     if (!txt_file_ok) { 
         // this is the second+ file in a bind list, but its samples are incompatible
@@ -579,6 +509,7 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
     txt_file->codec                = header->compression_type;
+    txt_file->binarizer            = header->binarizer;
     
     if (is_first_txt || flag_unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);

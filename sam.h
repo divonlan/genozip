@@ -30,6 +30,7 @@ extern void sam_piz_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unuse
 
 // BAM Stuff
 extern Md5Hash bam_read_txt_header (bool is_first_txt, bool header_required_unused, char first_char_unused);
+extern uint32_t bam_unconsumed (VBlockP vb);
 extern void bam_prepare_txt_header (BufferP txt);
 extern void bam_read_vblock (VBlockP vb);
 extern void bam_seg_initialize (VBlockP vb);

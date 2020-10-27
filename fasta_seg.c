@@ -14,6 +14,72 @@
 #include "regions.h"
 #include "codec.h"
 
+// returns true if txt_data[txt_i] is the end of a FASTA read (= next char is > or end-of-file)
+static inline bool fasta_is_end_of_line (VBlock *vb, 
+                                                 int32_t txt_i) // index of a \n in txt_data
+{
+    ARRAY (char, txt, vb->txt_data);
+
+    // if we're not at the end of the data - we can just look at the next character
+    // if it is a @ then that @ is a new record EXCEPT if the previous character is + and then
+    // @ is actually a quality value... (we check two previous characters, as the previous one might be \r)
+    if (txt_i < vb->txt_data.len-1)
+        return txt[txt_i+1] == '>';
+
+    // if we're at the end of the line, we scan back to the previous \n and check if it NOT the >
+    for (int32_t i=txt_i-1; i >= 0; i--) 
+        if (txt[i] == '\n') 
+            return txt[txt_i+1] != '>'; // this row is a sequence row, not a description row
+
+    // we can't find a complete FASTQ block in the entire vb data
+    ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);
+    return 0; // squash compiler warning ; never reaches here
+}
+
+// returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
+uint32_t fasta_unconsumed (VBlockP vb)
+{
+    uint32_t unconsumed_len=0;
+
+    // case: reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
+    if (flag_make_reference) {
+        bool data_found = false;
+        ARRAY (char, txt, vb->txt_data);
+        for (uint32_t i=0; i < vb->txt_data.len; i++) {
+            // just don't allow now-obsolete ';' rather than trying to disentangle comments from descriptions
+            ASSERT (txt[i] != ';', "Error: %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
+        
+            // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
+            // everything following to the next VB
+            if (data_found && txt[i]=='>' && txt[i-1]=='\n') {
+                unconsumed_len = vb->txt_data.len - i;
+                break;
+            }                
+
+            if (!data_found && (txt[i] != '\n' && txt[i] != '\r')) data_found = true; // anything, except for empty lines, is considered data
+        }
+    }
+
+    // we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
+    if (!unconsumed_len) {
+        for (int32_t i=vb->txt_data.len-1; i >= 0; i--) {
+
+            if (vb->txt_data.data[i] == '\n') {
+
+                // when compressing FASTA with a reference - an "end of line" is one that the next character is >, or it is the end of the file
+                // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), line cannot be too long - they 
+                // must fit in a VB
+                if ((flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && !fasta_is_end_of_line (vb, i)) 
+                    continue;
+
+                unconsumed_len = vb->txt_data.len-1 - i;
+                break;
+            }
+        }
+    }
+    return unconsumed_len;
+}
+
 // callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
 void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i, 
                     char **line_seq_data, uint32_t *line_seq_len,  // out 

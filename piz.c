@@ -601,7 +601,11 @@ static void piz_uncompress_one_vb (VBlock *vb)
         fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
                     vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
+    // if we're reconstructing to a different format that the original txt file, take into account in allocation
+    float factor = 1;
+    if (txt_file->binarizer == CODEC_BAM && !flag_reconstruct_binary) factor = 2.5; // BAM stores sequences in 2x and numbers in 1-3x
+
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size * factor + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
 
     piz_uncompress_all_ctxs (vb, 0);
 

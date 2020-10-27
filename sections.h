@@ -110,7 +110,8 @@ typedef struct {
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     Codec    compression_type; // compression type of original file
-    uint8_t  unused[3];
+    Codec    binarizer;        // IF this file is binary (eg BAM) - the codec that was used (eg CODEC_BAM)
+    uint8_t  unused[2];
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
     Md5Hash  md5_header;       // MD5 of header
 #define TXT_FILENAME_LEN 256

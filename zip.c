@@ -416,9 +416,9 @@ static void zip_compress_one_vb (VBlock *vb)
     // to wait for our merge. that is because our dictionaries are sorted 
     if (vb->vblock_i == 1) mtf_vb_1_lock(vb); 
 
-    // allocate memory for the final compressed data of this vb. allocate 20% of the
+    // allocate memory for the final compressed data of this vb. allocate 33% of the
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
-    buf_alloc (vb, &vb->z_data, vb->vb_data_size / 5, 1.2, "z_data", 0);
+    buf_alloc (vb, &vb->z_data, vb->vb_data_size / 3, 1.2, "z_data", 0);
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
     if (flag_pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
@@ -571,7 +571,7 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 
             if (read_txt) {
                 if (flag_show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);            
-                (DTPT(read_vblock) ? DTPT(read_vblock) : txtfile_read_vblock) (next_vb);
+                txtfile_read_vblock (next_vb);
                 if (flag_show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
             }
 

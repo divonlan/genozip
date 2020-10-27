@@ -645,7 +645,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
                   uint64_t bytes_per_entry, // how many bytes are counted by a unit of .len
                   uint64_t src_start_entry, uint64_t max_entries,  // if 0 copies the entire buffer 
                   const char *func, unsigned code_line,
-                  const char *name, int64_t param)
+                  const char *name, int64_t param) // dst buffer settings, or take from src if 0
 {
     ASSERT (src->data, "Error in buf_copy call from %s:%u: src->data is NULL", func, code_line);
     

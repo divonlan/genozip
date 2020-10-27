@@ -874,7 +874,8 @@ void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool i
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderTxtHeader));
     header.h.codec                 = CODEC_BZ2;
     header.num_lines               = NUM_LINES_UNKNOWN; 
-    header.compression_type        = (uint8_t)txt_file->codec; 
+    header.compression_type        = txt_file->codec; 
+    header.binarizer               = txt_file->binarizer;
     header.md5_header              = header_md5;
     
     file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);

@@ -25,7 +25,7 @@ uint32_t txtfile_get_bound_headers_len(void); // for stats
 
 extern uint32_t txtfile_read_block (char *data, uint32_t max_bytes);
 
-// low level functions for use of alternative header readers
+extern uint32_t txtfile_unconsumed (VBlockP vb);
 extern void txtfile_read_vblock (VBlockP vb);
 extern void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header);
 

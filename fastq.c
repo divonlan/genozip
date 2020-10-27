@@ -19,6 +19,66 @@
 #include "codec.h"
 #include "aligner.h"
 
+// returns true if txt_data[txt_i] is the end of a FASTQ line (= block of 4 lines in the file)
+static inline bool fastq_is_end_of_line (VBlock *vb, int32_t txt_i) // index of a \n in txt_data
+{
+#   define IS_NL_BEFORE_QUAL_LINE(i) \
+        ((i > 3) && ((txt[i-2] == '\n' && txt[i-1] == '+') || /* \n line ending case */ \
+                     (txt[i-3] == '\n' && txt[i-2] == '+' && txt[i-1] == '\r'))) /* \r\n line ending case */
+    
+    ARRAY (char, txt, vb->txt_data);
+
+    // if we're not at the end of the data - we can just look at the next character
+    // if it is a @ then that @ is a new record EXCEPT if the previous character is + and then
+    // @ is actually a quality value... (we check two previous characters, as the previous one might be \r)
+    if (txt_i < vb->txt_data.len-1)
+        return txt[txt_i+1] == '@' && !IS_NL_BEFORE_QUAL_LINE(txt_i);
+
+    // if we're at the end of the line, we scan back to the previous \n and check if it is at the +
+    for (int32_t i=txt_i-1; i >= 0; i--) 
+        if (txt[i] == '\n') 
+            return IS_NL_BEFORE_QUAL_LINE(i);
+
+    // we can't find a complete FASTQ block in the entire vb data
+    ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);
+    return 0; // squash compiler warning ; never reaches here
+}
+
+// returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
+uint32_t fastq_unconsumed (VBlockP vb)
+{    
+    for (int32_t i=vb->txt_data.len-1; i >= 0; i--) {
+        // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
+        if (vb->txt_data.data[i] == '\n' && fastq_is_end_of_line (vb, i)) 
+            return vb->txt_data.len-1 - i;
+    }
+
+    ABORT ("Error in fastq_unconsumed: no new line was found in vb=%u", vb->vblock_i);
+    return 0; // quiet compiler warning
+}
+
+// called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
+// comparing to the number of lines in the first file of the pair
+// returns true if we have at least as much as needed, and sets unconsumed_len to the amount of excess characters read
+// returns false is we don't yet have pair_1_num_lines lines - we need to read more
+bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len)
+{
+    VBlockFAST *vb = (VBlockFAST *)vb_;
+
+    const char *next  = FIRSTENT (const char, vb->txt_data);
+    const char *after = AFTERENT (const char, vb->txt_data);
+
+    for (uint32_t line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
+        while (*next != '\n' && next < after) next++; // note: next[-1] in the first iteration an underflow byte of the buffer, so no issue
+        if (next >= after) 
+            return false;
+        next++; // skip newline
+    }
+
+    *unconsumed_len = after - next;
+    return true;
+}
+
 // used in case of flag_optimize_DESC to count the number of lines, as we need it for the description
 static void fastq_txtfile_count_lines (VBlockP vb)
 {
@@ -120,27 +180,6 @@ void fastq_seg_finalize (VBlockP vb)
     seg_container_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
 }
 
-// called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
-// comparing to the number of lines in the first file of the pair
-// returns true if we have at least as much as needed, and sets unconsumed_len to the amount of excess characters read
-// returns false is we don't yet have pair_1_num_lines lines - we need to read more
-bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len)
-{
-    VBlockFAST *vb = (VBlockFAST *)vb_;
-
-    const char *next  = FIRSTENT (const char, vb->txt_data);
-    const char *after = AFTERENT (const char, vb->txt_data);
-
-    for (uint32_t line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
-        while (*next != '\n' && next < after) next++; // note: next[-1] in the first iteration an underflow byte of the buffer, so no issue
-        if (next >= after) 
-            return false;
-        next++; // skip newline
-    }
-
-    *unconsumed_len = after - next;
-    return true;
-}
 
 // called from I/O thread ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
 // returns true if successful, false if there isn't a vb with vb_i in the previous file

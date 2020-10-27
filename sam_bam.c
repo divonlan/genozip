@@ -27,10 +27,6 @@
 #define NEXT_UINT16 GET_UINT16 (next_field); next_field += sizeof (uint16_t);
 #define NEXT_UINT32 GET_UINT32 (next_field); next_field += sizeof (uint32_t);
 
-#define READ_UINT32(vb,u) \
-    const char *u##_ = bam_read_exact(vb, 4, false); \
-    uint32_t u = GET_UINT32 (u##_);
-
 #define BAM_MAGIC "BAM\1" // first 4 characters of a BAM file
 
 // copy header ref data during reading header
@@ -38,84 +34,100 @@ static uint32_t header_n_ref=0;
 static char **header_ref_contigs = NULL;
 static uint32_t *header_ref_contigs_len = NULL;
 
-// read exactly num_bytes from the txt file, append txt_data
-static char *bam_read_exact (VBlockP vb, uint32_t num_bytes, bool allow_eof)
+
+static inline uint32_t bam_read_txt_header_is_done (void)
 {
-    buf_alloc (vb, &vb->txt_data, vb->txt_data.len + num_bytes, 2, "txt_data", 0); // increase size if needed
-    char *start = AFTERENT (char, vb->txt_data);
+    uint32_t next=0;
+    #define HDRLEN evb->txt_data.len
+    #define HDRSKIP(n) if (HDRLEN < next + n) return 0; next += n
+    #define HDR32 (next + 4 <= HDRLEN ? GET_UINT32 (&evb->txt_data.data[next]) : 0) ; if (HDRLEN < next + 4) return 0; next += 4;
 
-    int32_t bytes_read = txtfile_read_block (start, num_bytes);
-    
-    if (!bytes_read && allow_eof) return NULL;
+    HDRSKIP(4); // magic
+    ASSERT (!memcmp (evb->txt_data.data, BAM_MAGIC, 4), // magic
+            "Error in bam_read_txt_header: %s doesn't have a BAM magic - it doesn't seem to be a BAM file", txt_name);
 
-    ASSERT (bytes_read == (int32_t)num_bytes, "Error in bam_read_exact: needed to read %u bytes, but read only %d",
-            num_bytes, bytes_read);
+    uint32_t l_text = HDR32;
+    HDRSKIP(l_text);
 
-    vb->txt_data.len += bytes_read;
-    return start;
-}
+    header_n_ref = HDR32;
+
+    if (!header_ref_contigs) {
+        header_ref_contigs     = MALLOC (header_n_ref * sizeof (char *));
+        header_ref_contigs_len = MALLOC (header_n_ref * sizeof (uint32_t));
+    }
+
+    for (uint32_t ref_i=0; ref_i < header_n_ref; ref_i++) {
+        header_ref_contigs_len[ref_i] = HDR32;
+        header_ref_contigs[ref_i] = ENT (char, evb->txt_data, next);
+
+        HDRSKIP(header_ref_contigs_len[ref_i]);
+        header_ref_contigs_len[ref_i]--;
+
+        HDRSKIP(4); // l_ref
+    }
+
+    return next; // return header length
+}   
 
 // ZIP I/O thread: returns the hash of the header
 Md5Hash bam_read_txt_header (bool is_first_txt, bool header_required_unused, char first_char_unused)
 {
     START_TIMER;
 
-    const bool has_ref = (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE);
+    uint32_t header_len, bytes_read=1 /* non-zero */;
 
-    buf_alloc (evb, &evb->txt_data, 100000, 1, "txt_data", 0); // usally, this is more than enough, but bam_read_exact will enlarge if needed
+    // read data from the file until either 1. EOF is reached 2. end of txt header is reached
+    while (!(header_len = bam_read_txt_header_is_done())) {
 
-    // interpret the BAM header by the spec on page 15 here: https://samtools.github.io/hts-specs/SAMv1.pdf  
-    ASSERT (!memcmp (bam_read_exact (evb, 4, false), BAM_MAGIC, 4), // magic
-            "Error in bam_read_txt_header: %s doesn't have a BAM magic - it doesn't seem to be a BAM file", txt_name);
+        // if we have no header yet, but read 0 bytes in the recent read - we unexpected reached EOF
+        ASSERT (bytes_read, "Error in bam_read_txt_header: %s: file too short - unexpected end-of-file", txt_name);
 
-    // read sam header (text) and count the lines
-    READ_UINT32 (evb, l_text); 
-    const char *text = bam_read_exact (evb, l_text, false); 
+        buf_alloc (evb, &evb->txt_data, evb->txt_data.len + READ_BUFFER_SIZE, 1.2, "txt_data", 0);    
+        uint32_t bytes_read = txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
 
-    for (int i=0; i < l_text; i++) 
-        if (text[i] == '\n') evb->lines.len++;   
-
-    READ_UINT32 (evb, n_ref);
-
-    ASSERT (!has_ref || n_ref == ref_num_loaded_contigs(), "Error: contig mismatch: file %s has %u contigs in its header, but reference file %s has %u contigs",
-            txt_name, n_ref, ref_filename, ref_num_loaded_contigs());
-    
-    // free allocation from previous file
-    if (header_ref_contigs) {
-        for (unsigned i=0; i < header_n_ref; i++) 
-            FREE (header_ref_contigs[i]);    
-        FREE (header_ref_contigs);
-        FREE (header_ref_contigs_len);
-    }
-    // allocate storage for contigs for use in seg
-    header_n_ref = n_ref;
-    header_ref_contigs = MALLOC (n_ref * sizeof (char *));
-    header_ref_contigs_len = MALLOC (n_ref * sizeof (uint32_t));
-
-    for (uint32_t i=0; i < n_ref; i++) {
-        READ_UINT32 (evb, l_name);
-        const char *chrom_name = bam_read_exact (evb, l_name, false);
-        READ_UINT32 (evb, l_ref);
-
-        // check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
-        if (has_ref) 
-            ref_contigs_verify_identical_chrom (chrom_name, l_name-1, l_ref, i);
-         
-        // case: store contigs for use in seg. for vb_1 to enter into context
-        header_ref_contigs[i] = MALLOC (l_name);
-        header_ref_contigs_len[i] = l_name-1;
-        memcpy (header_ref_contigs[i], chrom_name, l_name);
+        evb->txt_data.len += bytes_read; 
     }
     
-    txt_file->txt_data_so_far_single = evb->txt_data.len;
+    // the excess data is for the next vb to read 
+    buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, header_len, 0, "txt_file->unconsumed_txt", 0);
+
+    txt_file->txt_data_so_far_single += header_len; 
+    evb->txt_data.len = header_len; // trim
 
     // md5 header - with logic related to is_first
     txtfile_update_md5 (evb->txt_data.data, evb->txt_data.len, !is_first_txt);
     Md5Hash header_md5 = md5_snapshot (&z_file->md5_ctx_single);
 
-    COPY_TIMER_VB (evb, txtfile_read_header); // use same profiler id as standard
+    // md5 unconsumed_txt - always
+    txtfile_update_md5 (txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len, false);
+
+    COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
 
     return header_md5;
+}
+
+// returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
+uint32_t bam_unconsumed (VBlockP vb)
+{
+    uint32_t next=0, vblock_len;
+    #define VBLEN vb->txt_data.len
+    #define VBSKIP(n) if (VBLEN < next + n) goto done; next += n
+    #define VB32 (next + 4 <= VBLEN ? GET_UINT32 (ENT (char, vb->txt_data, next)) : 0) ; if (VBLEN < next + 4) goto done; next += 4;
+
+    while (1) {
+        vblock_len = next;
+        
+        uint32_t block_size = VB32;
+        ASSERT (block_size, "Error in bam_unconsumed: found block_size=0 in vb=%u", vb->vblock_i);
+
+        VBSKIP (block_size);
+    }
+
+done:
+    ASSERT (vblock_len, "Error in bam_unconsumed: vb=%u has only %u bytes, not enough for even the first alignment line", 
+            vb->vblock_i, (int)vb->txt_data.len);
+
+    return vb->txt_data.len - vblock_len;
 }
 
 // PIZ I/O thread: make the txt header either SAM or BAM according to flag_reconstruct_binary, and regardless of the source file
@@ -134,77 +146,6 @@ void bam_prepare_txt_header (Buffer *txt)
     else if (!is_bam_header && flag_reconstruct_binary) {
 
     }
-}
-
-// read vblock (instead of txtfile_read_vblock, since BAM is a binary file)
-void bam_read_vblock (VBlock *vb)
-{
-    START_TIMER;
-
-    int64_t pos_before = file_tell (txt_file);
-
-    buf_alloc (vb, &vb->txt_data, global_max_memory_per_vb, 1, "txt_data", vb->vblock_i);    
-    
-    uint32_t block_size = txt_file->unconsumed_txt.param; // maybe passed from previous VB
-    if (block_size) {
-        *FIRSTENT (uint32_t, vb->txt_data) = LTEN32 (block_size); // encode back in its original Little Endian
-        vb->txt_data.len += sizeof (uint32_t);
-    }
-
-    txt_file->unconsumed_txt.param = 0; // nothing yet to pass to the next_field VB
-    
-    while (vb->txt_data.len < global_max_memory_per_vb - sizeof (uint32_t) /* for block_size */) {  
-
-        char *start = AFTERENT (char, vb->txt_data);
-
-        bool block_size_is_read = false;
-        if (!block_size) { // block size not already read in previous VB - read it now
-            const uint8_t *p = (const uint8_t *)bam_read_exact(vb, 4, true); 
-            if (!p) break; // EOF
-
-            block_size = GET_UINT32 (p); // little endian, unaligned word
-            block_size_is_read = true;
-
-            ASSERT0 (block_size, "Error in bam_read_vblock: found block_size=0");
-        }
-
-        // case: we don't have enough space for this block - pass block_size to next_field VB
-        if (global_max_memory_per_vb - vb->txt_data.len < block_size) {
-            txt_file->unconsumed_txt.param = block_size; // pass on to next_field VB
-            vb->txt_data.len -= sizeof (uint32_t);
-            
-            if (flag_md5) // snapshot at end of this VB's data - before adding the block_size
-                vb->md5_hash_so_far = md5_snapshot (flag_bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
-
-            if (block_size_is_read) // add MD5 of little endian (i.e. as in the file) block_size
-                txtfile_update_md5 (start, sizeof (uint32_t), false);
-
-            break; 
-        }
-
-        (void)!bam_read_exact (vb, block_size, false);
-            
-        // note: we md_udpate after every block, rather on the complete data (vb or txt header) when its done
-        // because this way the OS read buffers / disk cache get pre-filled in parallel to our md5
-        // include the block_size itself if we read it in this VB, but not if it was passed from previous VB
-        txtfile_update_md5 (start, AFTERENT (char, vb->txt_data) - start, false);
-
-        block_size=0;
-        vb->lines.len++;
-    }
-
-    // case: we completed full blocks are are not passing on a block_size to the next_field VB - we take the snapshot now
-    if (!txt_file->unconsumed_txt.param && flag_md5) 
-        vb->md5_hash_so_far = md5_snapshot (flag_bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
-
-    vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
-
-    txt_file->txt_data_so_far_single += vb->txt_data.len;
-    vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
-    
-    vb->vb_data_read_size = file_tell (txt_file) - pos_before; // apporx. bgz compressed bytes read (measuring bytes uncompressed by zlib, but might still reside in zlib's output buffer)
-
-    COPY_TIMER (txtfile_read_vblock); // use same profiler id as standard
 }
 
 void bam_seg_initialize (VBlock *vb)

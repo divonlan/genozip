@@ -8,6 +8,9 @@
 
 #include "genozip.h"
 
+// Txtfile stuff
+extern uint32_t fasta_unconsumed (VBlockP vb);
+
 // ZIP Stuff
 COMPRESSOR_CALLBACK(fasta_zip_seq)
 extern void ref_make_create_range (VBlockP vb);
