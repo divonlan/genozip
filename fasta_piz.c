@@ -54,7 +54,7 @@ static inline void fasta_piz_remove_trailing_newlines (VBlockFAST *vb)
 
 // this is used for end-of-lines of a sequence line, that are not the last line of the sequence. we skip reconstructing
 // the newline if the user selected --sequential
-void fasta_piz_special_SEQ (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
+bool fasta_piz_special_SEQ (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
@@ -80,9 +80,11 @@ void fasta_piz_special_SEQ (VBlock *vb_, Context *ctx, const char *snip, unsigne
           !vb->dont_show_curr_line && 
           random_access_does_last_chrom_continue_in_next_vb (vb->vblock_i)) // and this sequence continues in the next VB 
         fasta_piz_remove_trailing_newlines (vb); // then: delete final newline if this VB ends with a 
+
+    return false; // no new value
 }
 
-void fasta_piz_special_COMMENT (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
+bool fasta_piz_special_COMMENT (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
@@ -94,6 +96,8 @@ void fasta_piz_special_COMMENT (VBlock *vb_, Context *ctx, const char *snip, uns
         vb->dont_show_curr_line = true;     
     else 
         piz_reconstruct_one_snip (vb_, ctx, WORD_INDEX_NONE, snip, snip_len);    
+
+    return false; // no new value
 }
 
 // this is called by fast_piz_test_grep - it is called sequentially for all VBs by the I/O thread
@@ -133,7 +137,7 @@ bool fasta_piz_is_grepped_out_due_to_regions (VBlockFAST *vb, const char *line_s
     return !regions_is_site_included (chrom_index, 1); // we check for POS 1 to include (or not) the whole contig
 }
 
-void fasta_piz_special_DESC (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
+bool fasta_piz_special_DESC (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
     vb->contig_grepped_out = false;
@@ -153,6 +157,8 @@ void fasta_piz_special_DESC (VBlock *vb_, Context *ctx, const char *snip, unsign
     // note: this logic allows the to grep contigs even if --no-header 
     if (vb->contig_grepped_out || flag_no_header)
         vb->dont_show_curr_line = true;     
+
+    return false; // no new value
 }
 
 bool fasta_piz_read_one_vb (VBlock *vb, SectionListEntry *sl)

@@ -309,8 +309,11 @@ static inline const char *bam_rewrite_one_optional_number (VBlockSAM *vb, const 
         case 's': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int ((int16_t)n, AFTERENT (char, vb->textual_opt)); break; }
         case 'S': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
         case 'i': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int ((int32_t)n, AFTERENT (char, vb->textual_opt)); break; }
-        case 'f': buf_add (&vb->textual_opt, special_float, 2); // add this prefix and then fall through - the float casted to uint32
         case 'I': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
+        case 'f': { buf_add (&vb->textual_opt, special_float, 2); 
+                    uint32_t n = NEXT_UINT32; // n is the 4 bytes of the little endian float, construct and int, and switch to machine endianity 
+                    n = LTEN32 (n);           // switch back to Little Endian as it was in the BAM file
+                    /* integer as text */     vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
         default: ABORT ("Error in bam_rewrite_one_optional_number: enrecognized Optional field type '%c' (ASCII %u) in vb=%u", 
                         type, type, vb->vblock_i);
     }    

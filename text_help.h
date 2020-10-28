@@ -195,6 +195,8 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-aliases    See contents of SEC_DICT_ID_ALIASES section",
     "",
+    "    UC  --show-containers Show flow of container reconstruction",
+    "",
     "   Z    --test-seg        Debug segmenting - runs the segmenter, but doesn't compress and doesn't write the output",
     "",
     "   ZUCL --debug-memory    Buffer allocations and destructions",

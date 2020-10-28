@@ -211,6 +211,7 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Fix bug in genocat --show-headers
 - Add back gtshark as a codec for VCF allele data, --gtshark option
 
-8.0.4
+8.1
 - 10X improvement in --gtshark speed by moving to in-memory comms using fifo
 - --dump-one-local and --dump-one-b250 now output a file per VB
+- New flag: --show-containers for genounzip/genocat - show flow of container reconstruction

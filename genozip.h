@@ -58,6 +58,7 @@ typedef struct BitArray *BitArrayP;
 typedef const struct BitArray *ConstBitArrayP;
 typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
+typedef union LastValueType *LastValueTypeP;
 
 typedef void BgEnBufFunc (BufferP buf);
 typedef BgEnBufFunc (*BgEnBuf);
@@ -116,7 +117,7 @@ extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_show_alleles, flag_
            flag_show_vblocks, flag_sblock, flag_vblock, flag_gt_only, flag_gtshark,
            flag_header_one, flag_fast, flag_multiple_files, flag_sequential, flag_register, flag_show_ref_seq,
            flag_show_reference, flag_show_ref_hash, flag_show_ref_index, flag_show_ref_alts, flag_pair, flag_genocat_info_only, 
-           flag_test_seg, flag_debug_progress, flag_show_hash, flag_debug_memory, flag_show_codec_test,
+           flag_test_seg, flag_debug_progress, flag_show_hash, flag_debug_memory, flag_show_codec_test, flag_show_containers,
            flag_make_reference, flag_reading_reference, flag_reconstruct_binary,
 
            flag_optimize, flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
@@ -156,7 +157,7 @@ typedef _Bool bool;
 #define false 0
 
 #define SPECIAL(dt,num,name,func) \
-    extern void func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len); \
+    extern bool func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value); \
     static const int dt##_SPECIAL_##name = (num + 32); /* +32 to make it printable ASCII that can go into a snip */
 
 // IMPORTANT: This is part of the genozip file format. 

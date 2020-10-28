@@ -43,7 +43,8 @@ extern unsigned sam_vb_size (void);
 extern unsigned sam_vb_zip_dl_size (void);
 
 // Special - used for SAM & BAM
-#define SAM_SPECIAL { sam_piz_special_CIGAR, sam_piz_special_TLEN, sam_piz_special_BD_BI, sam_piz_special_AS, sam_piz_special_MD }
+#define SAM_SPECIAL { sam_piz_special_CIGAR, sam_piz_special_TLEN, sam_piz_special_BD_BI, sam_piz_special_AS, \
+                      sam_piz_special_MD, bam_piz_special_FLOAT }
 SPECIAL (SAM, 0, CIGAR, sam_piz_special_CIGAR);
 SPECIAL (SAM, 1, TLEN,  sam_piz_special_TLEN);
 SPECIAL (SAM, 2, BDBI,  sam_piz_special_BD_BI);

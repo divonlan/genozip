@@ -3,6 +3,7 @@
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include <math.h>
 #include "sam_private.h"
 #include "seg.h"
 #include "context.h"
@@ -115,7 +116,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
 }
 
 // CIGAR - calculate vb->seq_len from the CIGAR string, and if original CIGAR was "*" - recover it
-void sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
+bool sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
@@ -135,9 +136,11 @@ void sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigne
     if (flag_regions && vb->chrom_node_index != WORD_INDEX_NONE && vb->contexts[SAM_POS].last_value.i && 
         !regions_is_range_included (vb->chrom_node_index, vb->contexts[SAM_POS].last_value.i, vb->contexts[SAM_POS].last_value.i + vb->ref_consumed - 1, true))
         vb->dont_show_curr_line = true;
+
+    return false; // no new value
 }   
 
-void sam_piz_special_TLEN (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
+bool sam_piz_special_TLEN (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
 {
     ASSERT0 (snip_len, "Error in sam_piz_special_TLEN: snip_len=0");
 
@@ -147,27 +150,33 @@ void sam_piz_special_TLEN (VBlock *vb, Context *ctx, const char *snip, unsigned 
     ctx->last_value.i = tlen_val;
 
     RECONSTRUCT_INT (tlen_val);
+
+    return false; // no new value
 }
 
-void sam_piz_special_AS (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
+bool sam_piz_special_AS (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
 {
     RECONSTRUCT_INT (vb->seq_len - atoi (snip));
+    
+    return false; // no new value
 }
 
 // logic: snip is eg "119C" (possibly also "") - we reconstruct the original, eg "119C31" 
 // by concating a number which is (seq_len - partial_seq_len_by_md_field)
-void sam_piz_special_MD (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
+bool sam_piz_special_MD (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
 {
     if (snip_len) RECONSTRUCT (snip, snip_len);
 
     unsigned partial_seq_len_by_md_field = sam_seg_get_seq_len_by_MD_field (snip, snip_len);
     RECONSTRUCT_INT (vb->seq_len - partial_seq_len_by_md_field);
+
+    return false; // no new value
 }
 
 // BD and BI - reconstruct from BD_BI context which contains interlaced BD and BI data. 
-void sam_piz_special_BD_BI (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
+bool sam_piz_special_BD_BI (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
 {
-    if (!vb->seq_len) return;
+    if (!vb->seq_len) goto done;
 
     Context *bdbi_ctx = mtf_get_existing_ctx (vb, dict_id_OPTION_BD_BI);
 
@@ -186,4 +195,58 @@ void sam_piz_special_BD_BI (VBlock *vb, Context *ctx, const char *snip, unsigned
     
     vb->txt_data.len += vb->seq_len;    
     ctx->next_local  += vb->seq_len;
+
+done:
+    return false; // no new value
+}
+
+// if this file is a compression of a BAM file, we store floats in binary form to avoid losing precision
+// see bam_rewrite_one_optional_number()
+bool bam_piz_special_FLOAT (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+{
+    // get Little Endian n
+    int64_t n;
+    ASSERT (str_get_int (snip, snip_len, &n), "Error in bam_piz_special_FLOAT: failed to read integer in %s", ctx->name);
+
+    uint32_t lten_n = (uint32_t)n;         // n is now little endian, uint32 
+    uint32_t machine_n = LTEN32 (lten_n);  // n is now in machine endianity
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+    float machine_f = *(float*)&machine_n; // float in machine endianity
+#pragma GCC diagnostic pop
+
+    // binary reconstruction - BAM format
+    if (flag_reconstruct_binary)
+        RECONSTRUCT (&lten_n, sizeof (uint32_t))
+    
+    // textual reconstruction - SAM format 
+    else { 
+        #define NUM_SIGNIFICANT_DIGITS 6 // 6 significant digits, as samtools does
+        
+        // calculate digits before and after the decimal point
+        double log_f = log10 (machine_f >= 0 ? machine_f : -machine_f);
+        unsigned int_digits = (log_f >= 0) + (unsigned)log_f;
+        unsigned dec_digits = MAX (0, NUM_SIGNIFICANT_DIGITS - int_digits);
+        
+        // reconstruct number with exactly NUM_SIGNIFICANT_DIGITS digits
+        sprintf (AFTERENT (char, vb->txt_data), "%.*f", dec_digits, machine_f); 
+        unsigned len = strlen (AFTERENT (char, vb->txt_data)); 
+        vb->txt_data.len += len;
+
+        // remove trailing decimal zeros:  "5.500"->"5.5" ; "5.0000"->"5" ; "50"->"50"
+        if (dec_digits) {
+            unsigned trailing_zeros=0;
+            for (int i=vb->txt_data.len-1; i >= vb->txt_data.len-dec_digits; i--)
+                if (*ENT (char, vb->txt_data, i) == '0') 
+                    trailing_zeros++;
+                else
+                    break;
+            
+            vb->txt_data.len -= (dec_digits==trailing_zeros) ? dec_digits+1 : trailing_zeros;
+        }
+    }
+
+    new_value->d = (double)machine_f;
+    return true; // have new value
 }

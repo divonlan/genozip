@@ -116,7 +116,7 @@ typedef struct { // initialize with mtf_init_iterator()
 #define INTERLACE(type,n) ((((type)n) < 0) ? ((SAFE_NEGATE(type,n) << 1) - 1) : (((u##type)n) << 1))
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
-typedef union {
+typedef union LastValueType {
     int64_t i;
     double d;
 } LastValueType;

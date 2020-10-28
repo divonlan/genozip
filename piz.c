@@ -181,9 +181,13 @@ void piz_reconstruct_container_do (VBlock *vb, DictId dict_id, const Container *
 
             const ContainerItem *item = &con->items[i];
             int32_t reconstructed_len=0;
-            if (item->dict_id.num)  // not a prefix-only item
+            if (item->dict_id.num) {  // not a prefix-only item
+
+                if (flag_show_containers) // show container reconstruction 
+                    fprintf (stderr, "Line=%u Repeat=%u %.*s->%s\n", vb->line_i, rep_i, DICT_ID_LEN, dict_id_printable(dict_id).id, vb->contexts[item->did_i].name);
+                
                 reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, 0);
-            
+            }            
             if (reconstructed_len == -1 && i > 0)  // not WORD_INDEX_MISSING_SF - delete previous item's separator
                 vb->txt_data.len -= ((item-1)->seperator[0] != 0) + ((item-1)->seperator[1] != 0);
 
@@ -377,7 +381,8 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         ASSERT (snip_len >= 2, "Error: SNIP_SPECIAL expects snip_len >= 2. ctx=%s", snip_ctx->name);
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
         ASSERT (special < DTP (num_special), "Error: file requires special handler %u which doesn't exist in this version of genounzip - please upgrade to the latest version", special);
-        DTP(special)[special](vb, snip_ctx, snip+2, snip_len-2);  
+        ASSERT (DTP(special)[special], "Error: callback function for Special #%u is NULL", special);
+        have_new_value = DTP(special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value);  
         break;
 
     case SNIP_REDIRECTION: 
@@ -603,7 +608,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
 
     // if we're reconstructing to a different format that the original txt file, take into account in allocation
     float factor = 1;
-    if (txt_file->binarizer == CODEC_BAM && !flag_reconstruct_binary) factor = 2.5; // BAM stores sequences in 2x and numbers in 1-3x
+    if (txt_file->binarizer == CODEC_BAM && !flag_reconstruct_binary) factor = 4; // BAM stores sequences in 2x and numbers in 1-3x
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size * factor + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
 

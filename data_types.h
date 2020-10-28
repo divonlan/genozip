@@ -25,7 +25,7 @@ typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_BAM=7, NUM_DATATYPES 
              } DataType; 
 
-typedef void (*PizSpecialCtxHandler)(VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len);
+typedef bool (*PizSpecialCtxHandler)(VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value);
 
 typedef struct DataTypeProperties {
     // ZIP properties and functions
@@ -70,7 +70,7 @@ typedef struct DataTypeProperties {
 
 #define usz(type) ((unsigned)sizeof(type))
 #define DATA_TYPE_PROPERTIES { \
-/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  read_txt_header      vblock_len       zip_inspect_txt_header, zip_initialize        zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            container_filter num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
+/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  read_txt_header      vblock_len          zip_inspect_txt_header, zip_initialize        zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            container_filter num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
     { "REFERENCE", RA,  1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                NULL,               NULL,                   ref_make_ref_init,    NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               ref_make_create_range,    NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
     { "VCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', NULL,                txtfile_unconsumed, vcf_inspect_txt_header, NULL,                 NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,   NUM_VCF_SPECIAL,   VCF_SPECIAL,   vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
     { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', NULL,                txtfile_unconsumed, sam_inspect_txt_header, sam_zip_initialize,   NULL,                  sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  NULL,                  sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
