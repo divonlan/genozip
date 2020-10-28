@@ -730,12 +730,17 @@ static inline unsigned sam_seg_optional_add_bytes (char type, unsigned value_len
         return value_len + 1; // +1 for \t
 }
 
+static inline char sam_seg_bam_type_to_sam_type (char type)
+{
+    return (type=='c' || type=='C' || type=='s' || type=='S' || type=='I') ? 'i' : type;
+}
+
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
 static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, 
                                       const char *tag, char type, const char *value, unsigned value_len)
 {
-    char dict_name[4] = { tag[0], tag[1], ':', type };
+    char dict_name[4] = { tag[0], tag[1], ':', sam_seg_bam_type_to_sam_type (type) };
     DictId dict_id = sam_dict_id_optnl_sf (dict_id_make (dict_name, 4));
 
     unsigned add_bytes = sam_seg_optional_add_bytes (type, value_len, is_bam);
@@ -906,7 +911,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         ASSSEG (con.num_items <= MAX_SUBFIELDS, value, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
 
         // in the optional field prefix (unlike array type), all integer types become 'i'.
-        char prefix_type = (type=='c' || type=='C' || type=='s' || type=='S' || type=='I') ? 'i' : type;
+        char prefix_type = sam_seg_bam_type_to_sam_type (type);
 
         char prefix[6] = { tag[0], tag[1], ':', prefix_type, ':', SNIP_CONTAINER}; 
         memcpy (&prefixes[prefixes_len], prefix, 6);

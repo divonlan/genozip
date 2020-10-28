@@ -11,6 +11,8 @@
 #include "genozip.h"
 #include "data_types.h"
 
+#define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
+
 typedef bool CodecCompress (VBlockP vb, 
                             SectionHeader *header,       // in / out
                             const char *uncompressed,   // option 1 - compress contiguous data
@@ -92,6 +94,9 @@ extern const char *codec_name (Codec codec);
 extern void *codec_alloc (VBlockP vb, int size, double grow_at_least_factor);
 extern void codec_free (VBlockP vb, void *addr);
 extern void codec_free_all (VBlockP vb);
+
+#define CODEC_ASSIGN_SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
+extern void codec_assign_best_codec (VBlockP vb, ContextP ctx, bool is_local, uint32_t len);
 
 // ACGT stuff
 extern const uint8_t acgt_encode[256];

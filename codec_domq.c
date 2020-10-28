@@ -108,17 +108,18 @@ bool codec_domq_compress (VBlock *vb,
     ASSERT0 (!uncompressed && callback, "Error in codec_domq_compress: only callback option is supported");
 
     Context *qual_ctx = &vb->contexts[DTF(qual)];
+    Context *qdomruns_ctx = qual_ctx + 1;
 
     const char dom = qual_ctx->local.param;
     ASSERT0 (dom, "Error in codec_domq_compress: dom is not set");
 
     Buffer *qual_buf     = &qual_ctx->local;
-    Buffer *qdomruns_buf = &(qual_ctx+1)->local;
+    Buffer *qdomruns_buf = &qdomruns_ctx->local;
 
     // this is usually enough, but might not be in some edge cases
     // note: qual_buf->len is the total length of all qual lines
     buf_alloc (vb, qual_buf, qual_buf->len / 5, 1, "context->local", dom); // dom goes into param, and eventually into SectionHeaderCtx.local_param
-    buf_alloc (vb, qdomruns_buf, qual_buf->len / 10, 1, "context->local", (qual_ctx+1)->did_i);
+    buf_alloc (vb, qdomruns_buf, qual_buf->len / 10, 1, "context->local", qdomruns_ctx->did_i);
 
     qual_buf->len = 0; 
     uint32_t runlen = 0;
@@ -174,6 +175,11 @@ bool codec_domq_compress (VBlock *vb,
 
     // case: all good - compress the QUAL context; the DOMQRUNS will be compressed after us, as its the subsequent context.
     if (*compressed_len >= min_required_compressed_len) {
+
+        // since codecs were already assigned to contexts before compression of all contexts begun, but
+        // we just created this context now, we assign a codec manually
+        codec_assign_best_codec (vb, qdomruns_ctx, true, qdomruns_ctx->local.len);
+
         *uncompressed_len = (uint32_t)qual_buf->len;
         return compress (vb, header, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);
     }

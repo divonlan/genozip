@@ -164,6 +164,10 @@ bool codec_hapmat_compress (VBlock *vb,
     for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
         hp_index[ht_i] = BGEN32 (helper_index[ht_i].index_in_sorted_line);
 
+    // since codecs were already assigned to contexts before compression of all contexts begun, but
+    // we just created this context now, we assign a codec manually
+    codec_assign_best_codec (vb, vb->hapmat_index_ctx, true, vb->num_haplotypes_per_line * sizeof(uint32_t));
+
     COPY_TIMER (compressor_hapmat);
 
     return true;

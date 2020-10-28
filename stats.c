@@ -297,7 +297,7 @@ void stats_compress (void)
     stats_consolidate_related (sbl, num_stats, "Reference", 5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS));
 
-    stats_consolidate_related (sbl, num_stats, "Other", 12, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", "TOPLEVEL", "LINEMETA", "CONTIG",
+    stats_consolidate_related (sbl, num_stats, "Other", 12, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", "TOPLEVEL", "TOPLVBIN", "LINEMETA", "CONTIG",
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER));
 

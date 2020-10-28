@@ -146,82 +146,6 @@ static void zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
     }
 }
 
-typedef struct {
-    Codec codec;
-    double size;
-    double clock;
-} CodecTest;
-
-static int zip_codec_test_sorter (const CodecTest *t1, const CodecTest *t2)
-{
-    // case: select for significant difference in size (more than 2%)
-    if (t1->size  < t2->size  * 0.98) return -1; // t1 has significantly better size
-    if (t2->size  < t1->size  * 0.98) return  1; // t2 has significantly better size
-
-    // case: size is similar, select for significant difference in time (more than 30%)
-    if (t1->clock < t2->clock * 0.50) return -1; // t1 has significantly better time
-    if (t2->clock < t1->clock * 0.50) return  1; // t2 has significantly better time
-
-    // case: size and time are quite similar, check 2nd level 
-
-    // case: select for smaller difference in size (more than 1%)
-    if (t1->size  < t2->size  * 0.99) return -1; // t1 has significantly better size
-    if (t2->size  < t1->size  * 0.99) return  1; // t2 has significantly better size
-
-    // case: select for smaller difference in time (more than 15%)
-    if (t1->clock < t2->clock * 0.75) return -1; // t1 has significantly better time
-    if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
-
-    // time and size are very similar (within %1 and 15% respectively) - select for smaller size
-    return t1->size - t2->size;
-}
-
-static void zip_assign_best_codec_test_one (VBlockP vb, ContextP ctx, bool is_local, uint32_t len)
-{
-    CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA } };
-    const unsigned num_tests = flag_fast ? 2 : 4; // don't consider BSC or LZMA if --fast as they are slow
-
-    Codec *selected_codec = is_local ? &ctx->lcodec : &ctx->bcodec;
-
-    if (len < MIN_LEN_FOR_COMPRESSION || *selected_codec != CODEC_UNKNOWN) return;
-
-    // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
-    // it doesn't prevent double testing 100% of time, but that's good enough) 
-    Codec zf_codec = is_local ? z_file->contexts[ctx->did_i].lcodec :  // read without locking (1 byte)
-                                z_file->contexts[ctx->did_i].bcodec;
-    
-    if (zf_codec != CODEC_UNKNOWN) {
-        *selected_codec = zf_codec;
-        return;
-    }
-
-    // measure the compressed size and duration for a small sample of of the local data, for each codec
-    for (unsigned t=0; t < num_tests; t++) {
-        *selected_codec = tests[t].codec;
-
-        clock_t start_time = clock();
-        tests[t].size  = (*selected_codec == CODEC_NONE) ? len : 
-                                                           is_local ? zfile_compress_local_data (vb, ctx, len)
-                                                                    : zfile_compress_b250_data (vb, ctx);
-        tests[t].clock = (clock() - start_time);
-    }
-
-    // sort codec by our selection criteria
-    qsort (tests, num_tests, sizeof (CodecTest), (int (*)(const void *, const void*))zip_codec_test_sorter);
-
-    if (flag_show_codec_test)
-        fprintf (stderr, "vb_i=%u %-8s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
-                vb->vblock_i, ctx->name, is_local ? "LOCAL" : "B250",
-                codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
-                codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
-                codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,
-                codec_name (tests[3].codec), (int)tests[3].size, tests[3].clock);
-
-    // assign the best codec - the first one in the sorted array - and commit it to zf_ctx
-    *selected_codec = tests[0].codec;
-    mtf_commit_codec_to_zf_ctx (vb, ctx, is_local);
-}
-
 // Codecs may be assigned in 3 stages:
 // 1. During Seg (a must for all complex codecs - eg HT, DOMQ, ACGT...)
 // 2. At merge - inherit from z_file->context if not set in Seg
@@ -231,33 +155,28 @@ static void zip_assign_best_codec_test_one (VBlockP vb, ContextP ctx, bool is_lo
 // contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
 static void zip_assign_best_codec (VBlock *vb)
 {
-//    #define NUM_TESTS (sizeof (tests) / sizeof (tests[0]))
-    
-    #define SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
-
     RESET_FLAG (flag_show_headers);
     uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
     uint64_t save_z_data       = vb->z_data.len;
 
     if (flag_show_codec_test && vb->vblock_i == 1)
         fprintf (stderr, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
-                 "Results in the format [codec size clock] are in order of quality - the first was selected.\n", SAMPLE_SIZE);
+                 "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
 
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = &vb->contexts[did_i];
        
         // local
-        uint32_t len = MIN (SAMPLE_SIZE, ctx->local.len * lt_desc[ctx->ltype].width);
-        zip_assign_best_codec_test_one (vb, ctx, true, len);
+        codec_assign_best_codec (vb, ctx, true, ctx->local.len * lt_desc[ctx->ltype].width);
 
         // b250
         if (ctx->mtf_i.len * sizeof (uint32_t) < MIN_LEN_FOR_COMPRESSION)
             continue; // case: size is too small even before shrinking during generation
 
         // generate a sample of ctx.b250 data from ctx.mtf_i data
-        zip_generate_b250_section (vb, ctx, SAMPLE_SIZE);
+        zip_generate_b250_section (vb, ctx, CODEC_ASSIGN_SAMPLE_SIZE);
 
-        zip_assign_best_codec_test_one (vb, ctx, false, ctx->b250.len);
+        codec_assign_best_codec (vb, ctx, false, ctx->b250.len);
         
         // roll back
         ctx->b250.len = 0; 

@@ -247,14 +247,18 @@ bool codec_gtshark_compress (VBlock *vb,
 
     vb->gtshark_db_ctx->lcodec = CODEC_NONE; // these are already compressed by gtshark and not further compressible
     vb->gtshark_gt_ctx->lcodec = CODEC_NONE;
-    vb->gtshark_ex_ctx->lcodec = CODEC_BZ2;  // a sparse matrix 
-    
+
     // put a gtshark codec for uncompression on the last section to be written which would trigger codec_gtshark_uncompress
     // after all sections have been uncompressed with their main (simple) codec
-    if (vb->gtshark_ex_ctx->local.len) // if we have exceptions - this is the last sections
-        vb->gtshark_ex_ctx->lsubcodec_piz = CODEC_GTSHARK; 
+    if (vb->gtshark_ex_ctx->local.len) {
+        // since codecs were already assigned to contexts before compression of all contexts begun, but
+        // we just created this context now, we assign a codec manually
+        codec_assign_best_codec (vb, vb->gtshark_ex_ctx, true, vb->gtshark_ex_ctx->local.len);
+
+        vb->gtshark_ex_ctx->lsubcodec_piz = CODEC_GTSHARK; // we have exceptions - EX is the last section
+    }
     else 
-        vb->gtshark_gt_ctx->lsubcodec_piz = CODEC_GTSHARK;
+        vb->gtshark_gt_ctx->lsubcodec_piz = CODEC_GTSHARK; // no exceptions - GT is the last section
 
     // note: we created the data in the 3 contexts gtshark_*, which will be compressed subsequently.
     // For this ht_matrix context - no section should be created for it in the file

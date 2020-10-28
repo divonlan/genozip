@@ -209,12 +209,11 @@ bool bam_piz_special_FLOAT (VBlock *vb, Context *ctx, const char *snip, unsigned
     ASSERT (str_get_int (snip, snip_len, &n), "Error in bam_piz_special_FLOAT: failed to read integer in %s", ctx->name);
 
     uint32_t lten_n = (uint32_t)n;         // n is now little endian, uint32 
-    uint32_t machine_n = LTEN32 (lten_n);  // n is now in machine endianity
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
-    float machine_f = *(float*)&machine_n; // float in machine endianity
-#pragma GCC diagnostic pop
+    
+    union { // n and f in machine endianity (4 bytes)
+        uint32_t n;
+        float f;
+    } machine_en = { .n = LTEN32 (lten_n) };
 
     // binary reconstruction - BAM format
     if (flag_reconstruct_binary)
@@ -225,12 +224,12 @@ bool bam_piz_special_FLOAT (VBlock *vb, Context *ctx, const char *snip, unsigned
         #define NUM_SIGNIFICANT_DIGITS 6 // 6 significant digits, as samtools does
         
         // calculate digits before and after the decimal point
-        double log_f = log10 (machine_f >= 0 ? machine_f : -machine_f);
+        double log_f = log10 (machine_en.f >= 0 ? machine_en.f : -machine_en.f);
         unsigned int_digits = (log_f >= 0) + (unsigned)log_f;
         unsigned dec_digits = MAX (0, NUM_SIGNIFICANT_DIGITS - int_digits);
         
         // reconstruct number with exactly NUM_SIGNIFICANT_DIGITS digits
-        sprintf (AFTERENT (char, vb->txt_data), "%.*f", dec_digits, machine_f); 
+        sprintf (AFTERENT (char, vb->txt_data), "%.*f", dec_digits, machine_en.f); 
         unsigned len = strlen (AFTERENT (char, vb->txt_data)); 
         vb->txt_data.len += len;
 
@@ -247,6 +246,6 @@ bool bam_piz_special_FLOAT (VBlock *vb, Context *ctx, const char *snip, unsigned
         }
     }
 
-    new_value->d = (double)machine_f;
+    new_value->d = (double)machine_en.f;
     return true; // have new value
 }
