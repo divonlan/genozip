@@ -12,6 +12,8 @@
 #include "strings.h"
 
 DataTypeProperties dt_props [NUM_DATATYPES] = DATA_TYPE_PROPERTIES;
+DataTypeProperties dt_props_def = DATA_TYPE_FUNCTIONS_DEFAULT;
+
 DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 
 const char *dt_name (DataType dt)

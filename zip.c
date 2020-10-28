@@ -155,10 +155,6 @@ static void zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
 // contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
 static void zip_assign_best_codec (VBlock *vb)
 {
-    RESET_FLAG (flag_show_headers);
-    uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
-    uint64_t save_z_data       = vb->z_data.len;
-
     if (flag_show_codec_test && vb->vblock_i == 1)
         fprintf (stderr, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
                  "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
@@ -177,14 +173,9 @@ static void zip_assign_best_codec (VBlock *vb)
         zip_generate_b250_section (vb, ctx, CODEC_ASSIGN_SAMPLE_SIZE);
 
         codec_assign_best_codec (vb, ctx, false, ctx->b250.len);
-        
-        // roll back
-        ctx->b250.len = 0; 
-        vb->z_data.len = save_z_data;
-    }
 
-    RESTORE_FLAG (flag_show_headers);
-    vb->section_list_buf.len = save_section_list; // roll back
+        ctx->b250.len = 0; // roll back
+    }
 }
 
 // after segging - if any context appears to contain only singleton snips (eg a unique ID),
@@ -384,7 +375,7 @@ static void zip_compress_one_vb (VBlock *vb)
         zip_generate_and_compress_ctxs (vb);
 
     // compress data-type specific sections
-    if (DTP(compress)) DTP(compress)(vb);
+    DT_FUNC (vb, compress)(vb);
 
     // tell dispatcher this thread is done and can be joined.
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
@@ -426,7 +417,7 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
     bool success = txtfile_header_to_genozip (&txt_line_i);
     if (!success) goto finish; // 2nd+ VCF file cannot bind, because of different sample names
 
-    if (DTPT(zip_initialize)) DTPT(zip_initialize)();
+    DT_FUNC (txt_file, zip_initialize)();
 
     mtf_initialize_for_zip();
 

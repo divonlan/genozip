@@ -99,69 +99,58 @@ finish:
     return bytes_read;
 }
 
-// ZIP: returns the hash of the header
-Md5Hash txtfile_read_header (bool is_first_txt, bool header_required,
-                             char first_char)  // first character in every header line
+// default callback from DataTypeProperties.is_header_done: 
+// returns header length if header read is complete + sets lines.len, 0 if complete but not existant, -1 not complete yet 
+int32_t def_is_header_done (void)
+{
+    ARRAY (char, header, evb->txt_data);
+    evb->lines.len = 0; // reset in case we've called this function a number of times (in case of a very large header)
+    char prev_char = '\n';
+
+    // check stop condition - a line not beginning with a 'first_char'
+    for (int i=0; i < evb->txt_data.len; i++) { // start from 1 back just in case it is a newline, and end 1 char before bc our test is 2 chars
+        if (header[i] == '\n') 
+            evb->lines.len++;   
+
+        if (prev_char == '\n' && header[i] != DTPT (txt_header_1st_char)) {
+            // if we have no header, its an error if we require one
+            ASSERT (i || DTPT (txt_header_required) != HDR_MUST, "Error: %s is missing a %s header", txt_name, dt_name (txt_file->data_type));
+            return i; // return header length
+        }
+        prev_char = header[i];
+    }
+
+    return -1; // not end of header yet
+}
+
+// ZIP I/O thread: returns the hash of the header
+static Md5Hash txtfile_read_header (bool is_first_txt)
 {
     START_TIMER;
 
-    int32_t bytes_read;
-    char prev_char='\n';
+    ASSERT_DT_FUNC (txt_file, is_header_done);
+
+    int32_t header_len;
+    uint32_t bytes_read=1 /* non-zero */;
 
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
-    for (bool first_block=true;; first_block=false) { 
+    while ((header_len = (DT_FUNC (txt_file, is_header_done)())) < 0) {
 
-        // enlarge if needed        
-        if (!evb->txt_data.data || evb->txt_data.size - evb->txt_data.len < READ_BUFFER_SIZE) 
-            buf_alloc (evb, &evb->txt_data, evb->txt_data.size + READ_BUFFER_SIZE + 1 /* for \0 */, 1.2, "txt_data", 0);    
+        ASSERT (bytes_read, "Error in txtfile_read_header: %s: %s file too short - unexpected end-of-file", txt_name, dt_name(txt_file->data_type));
 
-        // case: first batch of data was already read in txtfile_test_data(), use it
-        if (first_block && evb->txt_data.len) {
-            bytes_read = (int32_t)evb->txt_data.len;
-            evb->txt_data.len = 0;
-        }
-        else
-            bytes_read = txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
+        buf_alloc (evb, &evb->txt_data, evb->txt_data.len + READ_BUFFER_SIZE, 1.2, "txt_data", 0);    
+        uint32_t bytes_read = txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
 
-        if (!bytes_read) { // EOF
-            ASSERT (!evb->txt_data.len || evb->txt_data.data[evb->txt_data.len-1] == '\n', 
-                    "Error: invalid %s header in %s - expecting it to end with a newline", dt_name (txt_file->data_type), txt_name);
-            goto finish;
-        }
-
-        const char *this_read = &evb->txt_data.data[evb->txt_data.len];
-
-        ASSERT (!header_required || evb->txt_data.len || this_read[0] == first_char,
-                "Error: %s is missing a %s header - expecting first character in file to be %c", 
-                txt_name, dt_name (txt_file->data_type), first_char);
-
-        // check stop condition - a line not beginning with a 'first_char'
-        for (int i=0; i < bytes_read; i++) { // start from 1 back just in case it is a newline, and end 1 char before bc our test is 2 chars
-            if (this_read[i] == '\n') 
-                evb->lines.len++;   
-
-            if (prev_char == '\n' && this_read[i] != first_char) {  
-
-                uint32_t txt_header_len = evb->txt_data.len + i;
-                evb->txt_data.len += bytes_read; // increase all the way - just for buf_copy
-
-                // the excess data is for the next vb to read 
-                buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, txt_header_len,
-                          bytes_read - i, "txt_file->unconsumed_txt", 0);
-
-                txt_file->txt_data_so_far_single += i; 
-                evb->txt_data.len = txt_header_len;
-
-                goto finish;
-            }
-            prev_char = this_read[i];
-        }
-
-        evb->txt_data.len += bytes_read;
-        txt_file->txt_data_so_far_single += bytes_read;
+        evb->txt_data.len += bytes_read; 
     }
 
-finish:        
+    if (header_len == -1) header_len = 0; // case: no header at all
+
+    // the excess data is for the next vb to read 
+    buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, header_len, 0, "txt_file->unconsumed_txt", 0);
+
+    txt_file->txt_data_so_far_single = evb->txt_data.len = header_len; // trim
+
     // md5 header - with logic related to is_first
     txtfile_update_md5 (evb->txt_data.data, evb->txt_data.len, !is_first_txt);
     Md5Hash header_md5 = md5_snapshot (&z_file->md5_ctx_single);
@@ -169,21 +158,19 @@ finish:
     // md5 unconsumed_txt - always
     txtfile_update_md5 (txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len, false);
 
-    *AFTERENT (char, evb->txt_data) = 0; // null-terminate
-
-    COPY_TIMER_VB (evb, txtfile_read_header);
+    COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
 
     return header_md5;
 }
 
-// default "unconsumed" function file formats where we need to read whole \n-ending lines
-uint32_t txtfile_unconsumed (VBlockP vb)
+// default "unconsumed" function file formats where we need to read whole \n-ending lines. returns the unconsumed data length
+uint32_t def_unconsumed (VBlockP vb)
 {
     for (int32_t i=vb->txt_data.len-1; i >= 0; i--) 
         if (vb->txt_data.data[i] == '\n') 
             return vb->txt_data.len-1 - i;
 
-    ABORT ("Error in txtfile_unconsumed: vb=%u has only %u bytes, not enough for even the first line", 
+    ABORT ("Error in def_unconsumed: vb=%u has only %u bytes, not enough for even the first line", 
            vb->vblock_i, (int)vb->txt_data.len);
     return 0; // quieten compiler warning
 }
@@ -193,7 +180,7 @@ void txtfile_read_vblock (VBlock *vb)
 {
     START_TIMER;
 
-    ASSERT (DTPT(unconsumed), "Error: \"unconsumed\" callback not defined for data_type=%s", dt_name (txt_file->data_type));
+    ASSERT_DT_FUNC (txt_file, unconsumed);
 
     static Buffer block_md5_buf = EMPTY_BUFFER, block_start_buf = EMPTY_BUFFER, block_len_buf = EMPTY_BUFFER;
 
@@ -222,7 +209,8 @@ void txtfile_read_vblock (VBlock *vb)
         uint32_t len = txtfile_read_block (start, MIN (READ_BUFFER_SIZE, max_memory_per_vb - vb->txt_data.len));
 
         if (!len) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
-            ASSERT (!vb->txt_data.len || !DTPT(unconsumed)(vb), "Error: invalid input file %s - cannot read entire VB vb=%u", txt_name, vb->vblock_i);
+            ASSERT (!vb->txt_data.len || !(DT_FUNC (txt_file, unconsumed)(vb)) || txt_file->data_type == DT_REF, /* REF terminates VBs after every contig */
+                    "Error: input file %s ends abruptly - cannot read entire VB vb=%u", txt_name, vb->vblock_i);
             break;
         }
             
@@ -249,7 +237,7 @@ void txtfile_read_vblock (VBlock *vb)
     }
     
     // case: we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
-    if (!unconsumed_len && vb->txt_data.len) unconsumed_len = DTPT(unconsumed)(vb);
+    if (!unconsumed_len && vb->txt_data.len) unconsumed_len = DT_FUNC(txt_file, unconsumed)(vb);
 
     // if we have some unconsumed data, pass it to the next vb
     if (unconsumed_len) {
@@ -302,9 +290,9 @@ void txtfile_read_vblock (VBlock *vb)
 
 // read num_lines of the txtfile (after the header), and call test_func for each line. true iff the proportion of lines
 // that past the test is at least success_threashold
-bool txtfile_test_data (char first_char,    // first character in every header line
+bool txtfile_test_data (char first_char,            // first character in every header line
                         unsigned num_lines_to_test, // number of lines to test
-                        double success_threashold, // proportion of lines that need to pass the test, for this function to return true
+                        double success_threashold,  // proportion of lines that need to pass the test, for this function to return true
                         TxtFileTestFunc test_func)
 {
     uint32_t line_start_i = 0;
@@ -444,15 +432,14 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
-    if (DTPT(txt_header_required) == HDR_MUST || DTPT(txt_header_required) == HDR_OK)
-        header_md5 = (DTPT(read_txt_header) ? DTPT(read_txt_header) : txtfile_read_header) (is_first_txt, DTPT(txt_header_required) == HDR_MUST, DTPT(txt_header_1st_char)); // reads into evb->txt_data and evb->lines.len
+    if (DTPT(txt_header_required) == HDR_MUST || DTPT (txt_header_required) == HDR_OK)
+        header_md5 = txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
     
     *txt_line_i += (uint32_t)evb->lines.len;
 
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
     // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
-    bool txt_file_ok = (DTPT (zip_inspect_txt_header) ? DTPT (zip_inspect_txt_header) (&evb->txt_data) : true);
-    if (!txt_file_ok) { 
+    if (!(DT_FUNC_OPTIONAL (txt_file, zip_inspect_txt_header, true)(&evb->txt_data))) { 
         // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
         return false;

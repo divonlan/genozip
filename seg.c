@@ -17,6 +17,7 @@
 #include "base64.h"
 #include "piz.h"
 #include "zfile.h"
+#include "data_types.h"
 
 WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                      bool *is_new) // optional out
@@ -150,7 +151,7 @@ PosType seg_pos_field (VBlock *vb,
                        DidIType base_did_i,    // mandatory: base for delta
                        bool allow_non_number,  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
                        const char *pos_str, unsigned pos_len, // option 1
-                       uint32_t this_pos,      // option 2
+                       PosType this_pos,       // option 2
                        unsigned add_bytes)
 {
     Context *snip_ctx = &vb->contexts[snip_did_i];
@@ -170,13 +171,17 @@ PosType seg_pos_field (VBlock *vb,
     //     for non-primary - e.g. "not available" in SAM_PNEXT - we store "0" verbatim with SNIP_DONT_STORE
     // In both cases, we store as SNIP_DONT_STORE so that piz doesn't update last_value after reading this value
     if (this_pos < 0 || (this_pos==0 && !(snip_ctx == base_ctx && base_did_i == DTF(pos)))) { 
-        char snip[15] = { SNIP_DONT_STORE };
-        unsigned snip_len = 1 + str_int (this_pos, &snip[1]);
-        seg_by_ctx (vb, snip, snip_len, snip_ctx, add_bytes, NULL); 
 
-        //SAFE_ASSIGN (1, pos_str-1, SNIP_DONT_STORE);
-        //seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, pos_len + account_for_separator, NULL); 
-        //SAFE_RESTORE (1);
+        if (pos_str) { // option 1
+            SAFE_ASSIGN (1, pos_str-1, SNIP_DONT_STORE);
+            seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, add_bytes, NULL); 
+            SAFE_RESTORE (1);
+        }
+        else { // option 2 
+            char snip[15] = { SNIP_DONT_STORE };
+            unsigned snip_len = 1 + str_int (this_pos, &snip[1]);
+            seg_by_ctx (vb, snip, snip_len, snip_ctx, add_bytes, NULL); 
+        }
 
         snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
         return 0; // invalid pos
@@ -805,13 +810,13 @@ void seg_all_data_lines (VBlock *vb)
 {
     START_TIMER;
 
+    ASSERT_DT_FUNC (vb, seg_txt_line);
+
     mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
 
     mtf_verify_field_ctxs (vb);
     
-    uint32_t sizeof_line = DTP(sizeof_zip_dataline) ? DTP(sizeof_zip_dataline)() : 0;
-
-    if (!sizeof_line) sizeof_line=1; // we waste a little bit of memory to avoid making exceptions throughout the code logic
+    uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
  
     // allocate lines
     if (vb->lines.len) { // counted by txt vblock reader - for example: bam
@@ -827,7 +832,7 @@ void seg_all_data_lines (VBlock *vb)
     for (int f=0; f < DTF(num_fields); f++) 
         buf_alloc (vb, &vb->contexts[f].mtf_i, vb->lines.len * sizeof (uint32_t), 1, "contexts->mtf_i", f);
     
-    if (DTP(seg_initialize)) DTP(seg_initialize) (vb); // data-type specific initialization
+    DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
@@ -841,7 +846,7 @@ void seg_all_data_lines (VBlock *vb)
 
         //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
         bool has_13 = false;
-        const char *next_field = DTP(seg_txt_line) (vb, field_start, &has_13);
+        const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, &has_13);
         if (has_13) does_any_line_have_13 = true;
 
         vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
@@ -873,7 +878,7 @@ void seg_all_data_lines (VBlock *vb)
         buf_free (&eol_ctx->local);
     }
 
-    if (DTP(seg_finalize)) DTP(seg_finalize) (vb); // data-type specific finalization
+    DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
     if (!flag_make_reference) seg_verify_file_size (vb);
 

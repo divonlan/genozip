@@ -166,7 +166,9 @@ bool codec_hapmat_compress (VBlock *vb,
 
     // since codecs were already assigned to contexts before compression of all contexts begun, but
     // we just created this context now, we assign a codec manually
-    codec_assign_best_codec (vb, vb->hapmat_index_ctx, true, vb->num_haplotypes_per_line * sizeof(uint32_t));
+    // BUG: I can't this to work... reconstruction failed. no idea why. bug 215.
+    //codec_assign_best_codec (vb, vb->hapmat_index_ctx, true, vb->num_haplotypes_per_line * sizeof(uint32_t));
+    vb->hapmat_index_ctx->lcodec = CODEC_BSC; // in the mean time, until bug 215 is fixed
 
     COPY_TIMER (compressor_hapmat);
 
@@ -273,15 +275,20 @@ void codec_hapmat_reconstruct (VBlock *vb, Codec codec, Context *ctx)
     while (ht == '*' && vb->hapmat_one_array.len < vb->num_haplotypes_per_line)
         ht = *ENT(uint8_t, vb->hapmat_one_array, vb->hapmat_one_array.len++);
 
-    if (ht == '.' || IS_DIGIT(ht)) 
-        RECONSTRUCT1 (ht);
-    
-    else if (ht == '*') 
-        ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u)", 
-               vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len)
-    
-    else { // allele 10 to 99 (ascii 58 to 147)
-        RECONSTRUCT_INT (ht - '0');
+    switch (ht) {
+        case '.': case '0' ... '9':
+            RECONSTRUCT1 (ht); break;
+
+        case 58 ... 147: { // allele 10 to 99 (ascii 58 to 147)
+            RECONSTRUCT_INT (ht - '0'); break;
+        }
+        case '*':
+            ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: unexpected end of hapmat_one_array (len=%u) data in %s (ctx->local.len=%u)", 
+                vb->line_i, vb->vblock_i, (unsigned)vb->hapmat_one_array.len, ctx->name, (uint32_t)ctx->local.len);
+
+        default: 
+            ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: Invalid character found in decompressed HT array: '%c' (ASCII %u)", 
+                   vb->line_i, vb->vblock_i, ht, ht);
     }
 }
 

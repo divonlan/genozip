@@ -34,7 +34,7 @@ extern PosType seg_pos_field (VBlockP vb,
                               DidIType base_did_i,    // mandatory: base for delta
                               bool allow_non_number,      // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
                               const char *pos_str, unsigned pos_len, 
-                              uint32_t this_pos,
+                              PosType this_pos,
                               unsigned add_bytes);
 
 extern void seg_id_field (VBlockP vb, DictId dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator);

@@ -28,19 +28,22 @@ typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
 typedef bool (*PizSpecialCtxHandler)(VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value);
 
 typedef struct DataTypeProperties {
+    
     // ZIP properties and functions
     const char *name;
     enum {NO_RA, RA} has_random_access;
     unsigned line_height; // how many actual txt file lines are in one seg line (seg lines are counted in lines.len)
     unsigned (*sizeof_vb)(void);
     unsigned (*sizeof_zip_dataline)(void);
+
+    // TXT file properties
     enum {HDR_NONE, HDR_OK, HDR_MUST} txt_header_required;
     char txt_header_1st_char;  // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
+    int32_t (*is_header_done) (void);  // header length if header read is complete, 0 if not complete yet + sets lines.len
+    uint32_t (*unconsumed) (VBlockP);  // called by I/O thread called by txtfile_read_vblock to get the length of uncosumed txt beyond the vblock txt
+    bool (*zip_inspect_txt_header) (BufferP txt_header); // called by I/O thread to verify the txt header. returns false if this txt file should be skipped
 
     // ZIP callbacks
-    Md5Hash (*read_txt_header) (bool, bool, char); // override default txtfile_read_header
-    uint32_t (*unconsumed) (VBlockP);      // called by I/O thread called by txtfile_read_vblock to get the length of uncosumed txt beyond the vblock txt
-    bool (*zip_inspect_txt_header) (BufferP txt_header); // called by I/O thread to verify the txt header. returns false if this txt file should be skipped
     void (*zip_initialize)(void);      // called by I/O thread when after the txt header is read
     void (*zip_read_one_vb)(VBlockP);  // called by I/O thread after reading txt of one vb into vb->txt_data
     void (*seg_initialize)(VBlockP);   // called by Compute thread at the beginning of Seg
@@ -70,20 +73,36 @@ typedef struct DataTypeProperties {
 
 #define usz(type) ((unsigned)sizeof(type))
 #define DATA_TYPE_PROPERTIES { \
-/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  read_txt_header      vblock_len          zip_inspect_txt_header, zip_initialize        zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            container_filter num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
-    { "REFERENCE", RA,  1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                NULL,               NULL,                   ref_make_ref_init,    NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               ref_make_create_range,    NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
-    { "VCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', NULL,                txtfile_unconsumed, vcf_inspect_txt_header, NULL,                 NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,   NUM_VCF_SPECIAL,   VCF_SPECIAL,   vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
-    { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', NULL,                txtfile_unconsumed, sam_inspect_txt_header, sam_zip_initialize,   NULL,                  sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  NULL,                  sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
-    { "FASTQ",   NO_RA, 4, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                fastq_unconsumed,   NULL,                   fastq_zip_initialize, fastq_zip_read_one_vb, fastq_seg_initialize, fastq_seg_txt_line, fastq_seg_finalize, NULL,                     NULL,                  fastq_piz_read_one_vb, fastq_piz_is_skip_section, fastq_piz_reconstruct_seq, fastq_piz_filter, 0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Entries",         { "FIELD", "DESC",   "ERROR!" } }, \
-    { "FASTA",   RA,    1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                fasta_unconsumed,   NULL,                   NULL,                 NULL,                  fasta_seg_initialize, fasta_seg_txt_line, fasta_seg_finalize, NULL,                     fasta_piz_initialize,  fasta_piz_read_one_vb, fasta_piz_is_skip_section, NULL,                      NULL,             NUM_FASTA_SPECIAL, FASTA_SPECIAL, fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
-    { "GVF",     RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                txtfile_unconsumed, NULL,                   NULL,                 NULL,                  gff3_seg_initialize,  gff3_seg_txt_line,  gff3_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "Sequences",       { "FIELD", "ATTRS",  "ITEMS"  } }, \
-    { "23ANDME", RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                txtfile_unconsumed, NULL,                   NULL,                 NULL,                  me23_seg_initialize,  me23_seg_txt_line,  me23_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }, \
-    { "BAM",     RA,    0, sam_vb_size,  sam_vb_zip_dl_size,  HDR_MUST, -1,  bam_read_txt_header, bam_unconsumed,     NULL,                   sam_zip_initialize,   NULL,                  bam_seg_initialize,   bam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
+/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  is_header_done       unconsumed        zip_inspect_txt_header, zip_initialize        zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            container_filter num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
+    { "REFERENCE", RA,  1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                fasta_unconsumed, NULL,                   ref_make_ref_init,    NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               ref_make_create_range,    NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
+    { "VCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', NULL,                NULL,             vcf_inspect_txt_header, NULL,                 NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,   NUM_VCF_SPECIAL,   VCF_SPECIAL,   vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
+    { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', NULL,                NULL,             sam_inspect_txt_header, sam_zip_initialize,   NULL,                  sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  NULL,                  sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
+    { "FASTQ",   NO_RA, 4, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                fastq_unconsumed, NULL,                   fastq_zip_initialize, fastq_zip_read_one_vb, fastq_seg_initialize, fastq_seg_txt_line, fastq_seg_finalize, NULL,                     NULL,                  fastq_piz_read_one_vb, fastq_piz_is_skip_section, fastq_piz_reconstruct_seq, fastq_piz_filter, 0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Entries",         { "FIELD", "DESC",   "ERROR!" } }, \
+    { "FASTA",   RA,    1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                fasta_unconsumed, NULL,                   NULL,                 NULL,                  fasta_seg_initialize, fasta_seg_txt_line, fasta_seg_finalize, NULL,                     fasta_piz_initialize,  fasta_piz_read_one_vb, fasta_piz_is_skip_section, NULL,                      NULL,             NUM_FASTA_SPECIAL, FASTA_SPECIAL, fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
+    { "GVF",     RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                NULL,             NULL,                   NULL,                 NULL,                  gff3_seg_initialize,  gff3_seg_txt_line,  gff3_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "Sequences",       { "FIELD", "ATTRS",  "ITEMS"  } }, \
+    { "23ANDME", RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                NULL,             NULL,                   NULL,                 NULL,                  me23_seg_initialize,  me23_seg_txt_line,  me23_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }, \
+    { "BAM",     RA,    0, sam_vb_size,  sam_vb_zip_dl_size,  HDR_MUST, -1,  bam_is_header_done,  bam_unconsumed,   NULL,                   sam_zip_initialize,   NULL,                  bam_seg_initialize,   bam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
 }  
-extern DataTypeProperties dt_props[NUM_DATATYPES];
-#define DTP(prop)  (dt_props[(vb)->    data_type].prop)
-#define DTPZ(prop) (dt_props[z_file->  data_type].prop)
-#define DTPT(prop) (dt_props[txt_file->data_type].prop)
+#define DATA_TYPE_FUNCTIONS_DEFAULT /* only applicable to (some) functions */ \
+    { "DEFAULT", 0,     0, 0,            0,                   0,        0,   def_is_header_done,  def_unconsumed,   0,                      0,                    0,                     0,                    0,                  0,                  0,                        0,                     0,                     0,                         0,                         0,                0,                 {},            0,                  0,                   0,                      "",                { }                             }
+
+extern DataTypeProperties dt_props[NUM_DATATYPES], dt_props_def;
+
+#define DT_(src,prop) (dt_props[src->data_type].prop)
+#define DTP(prop)  DT_((vb),prop)
+#define DTPZ(prop) DT_(z_file,prop) 
+#define DTPT(prop) DT_(txt_file,prop)
+
+#define ASSERT_DT_FUNC(src,prop) /* use this to assert the a function exists if it is mandatory */ \
+    ASSERT (DT_(src,prop) || dt_props_def.prop, "Error in %s:%u: undefined callback function " #src "->" #prop " for %s", \
+            __FUNCTION__, __LINE__, dt_name(src->data_type))
+
+// expession evaluates to def_value if neither the src nor the default function exists
+#define DT_FUNC_OPTIONAL(src,prop,def_value) (!DT_(src,prop) && !dt_props_def.prop) ? def_value : (DT_(src,prop) ? DT_(src,prop) : dt_props_def.prop) // caller adds function arguments here
+
+// expession evaluates to 0 if neither the src nor the default function exists
+// !!WARNING!!: to use DT_FUNC in an expression it MUST be enclosed in parathesis: (DT_FUNC(vb,func)(args))
+#define DT_FUNC(src,prop) DT_FUNC_OPTIONAL (src, prop, 0)
 
 // Fields - the CHROM field MUST be the first field (because of mtf_copy_reference_contig_to_chrom_ctx)
 typedef enum { REF_CONTIG, NUM_REF_FIELDS } RefFields;

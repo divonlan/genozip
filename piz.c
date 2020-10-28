@@ -168,14 +168,14 @@ void piz_reconstruct_container_do (VBlock *vb, DictId dict_id, const Container *
             vb->dont_show_curr_line = false; 
         }
     
-        if ((con->flags & CONTAINER_FILTER_REPEATS) && !DTP (container_filter) (vb, dict_id, con, rep_i, -1)) continue; // repeat is filtered out
+        if ((con->flags & CONTAINER_FILTER_REPEATS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, -1))) continue; // repeat is filtered out
 
         const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
         uint32_t item_prefixes_len = prefixes_len;
 
         for (unsigned i=0; i < con->num_items; i++) {
 
-            if ((con->flags & CONTAINER_FILTER_ITEMS) && !DTP (container_filter) (vb, dict_id, con, rep_i, i)) continue; // item is filtered out
+            if ((con->flags & CONTAINER_FILTER_ITEMS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
 
             piz_reconstruct_container_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix
 
@@ -339,10 +339,9 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
             piz_reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
 
         else if (base_ctx->ltype == LT_BITMAP) {
-            ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
-            DTP (reconstruct_seq) (vb, base_ctx, snip, snip_len);
+            ASSERT_DT_FUNC (vb, reconstruct_seq);
+            DT_FUNC (vb, reconstruct_seq) (vb, base_ctx, snip, snip_len);
         }
-
         else piz_reconstruct_from_local_text (vb, base_ctx); // this will call us back recursively with the snip retrieved
                 
         break;
@@ -380,9 +379,11 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     case SNIP_SPECIAL:
         ASSERT (snip_len >= 2, "Error: SNIP_SPECIAL expects snip_len >= 2. ctx=%s", snip_ctx->name);
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
+
         ASSERT (special < DTP (num_special), "Error: file requires special handler %u which doesn't exist in this version of genounzip - please upgrade to the latest version", special);
-        ASSERT (DTP(special)[special], "Error: callback function for Special #%u is NULL", special);
-        have_new_value = DTP(special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value);  
+        ASSERT_DT_FUNC (vb, special);
+
+        have_new_value = DT_FUNC(vb, special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value);  
         break;
 
     case SNIP_REDIRECTION: 
@@ -425,7 +426,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 // returns reconstructed length or -1 if snip is missing and item's operator should not be emitted
 int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
 {
-    ASSERT (did_i < vb->num_contexts, "Error in piz_reconstruct_from_ctx_do: did_i=%u out of range: vb->num_contexts=%u", did_i, vb->num_contexts);
+    ASSERT (did_i < vb->num_contexts, ";Error in piz_reconstruct_from_ctx_do: did_i=%u out of range: vb->num_contexts=%u", did_i, vb->num_contexts);
 
     Context *ctx = &vb->contexts[did_i];
 
@@ -469,8 +470,8 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
             piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
                 
         else if (ctx->ltype == LT_BITMAP) {
-            ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
-            DTP (reconstruct_seq) (vb, ctx, NULL, 0);
+            ASSERT_DT_FUNC (vb, reconstruct_seq);
+            DT_FUNC (vb, reconstruct_seq) (vb, ctx, NULL, 0);
         }
         
         else if (ctx->ltype == LT_TEXT)
@@ -481,8 +482,8 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
 
     // in case of LT_BITMAP, it is it is ok if the bitmap is empty and all the data is in NONREF (e.g. unaligned SAM)
     else if (ctx->ltype == LT_BITMAP && (ctx+1)->local.len) {
-        ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
-        DTP (reconstruct_seq) (vb, ctx, NULL, 0);
+        ASSERT_DT_FUNC (vb, reconstruct_seq);
+        DT_FUNC (vb, reconstruct_seq) (vb, ctx, NULL, 0);
     }
 
     // case: the entire VB was just \n - so seg dropped the ctx

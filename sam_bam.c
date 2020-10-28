@@ -34,19 +34,23 @@ static uint32_t header_n_ref=0;
 static char **header_ref_contigs = NULL;
 static uint32_t *header_ref_contigs_len = NULL;
 
-// note: usually a BAM header fits into a single 512KB READ BUFFER, so this function is called only twice (without and then with data)
-static inline uint32_t bam_read_txt_header_is_done (void)
+// returns header length if header read is complete + sets lines.len, -1 not complete yet 
+// note: usually a BAM header fits into a single 512KB READ BUFFER, so this function is called only twice (without and then with data).
+// callback from DataTypeProperties.is_header_done
+int32_t bam_is_header_done (void)
 {
     uint32_t next=0;
     #define HDRLEN evb->txt_data.len
-    #define HDRSKIP(n) if (HDRLEN < next + n) return 0; next += n
-    #define HDR32 (next + 4 <= HDRLEN ? GET_UINT32 (&evb->txt_data.data[next]) : 0) ; if (HDRLEN < next + 4) return 0; next += 4;
+    #define HDRSKIP(n) if (HDRLEN < next + n) return -1; next += n
+    #define HDR32 (next + 4 <= HDRLEN ? GET_UINT32 (&evb->txt_data.data[next]) : 0) ; if (HDRLEN < next + 4) return -1; next += 4;
 
     HDRSKIP(4); // magic
     ASSERT (!memcmp (evb->txt_data.data, BAM_MAGIC, 4), // magic
             "Error in bam_read_txt_header: %s doesn't have a BAM magic - it doesn't seem to be a BAM file", txt_name);
 
+    // sam header text
     uint32_t l_text = HDR32;
+    const char *text = ENT (const char, evb->txt_data, next);
     HDRSKIP(l_text);
 
     header_n_ref = HDR32;
@@ -66,45 +70,13 @@ static inline uint32_t bam_read_txt_header_is_done (void)
         HDRSKIP(4); // l_ref
     }
 
-    return next; // return header length
+    // we have the entire header - count the text lines in the SAM header
+    evb->lines.len = 0;
+    for (unsigned i=0; i < l_text; i++)
+        if (text[i] == '\n') evb->lines.len++;
+
+    return next; // return BAM header length
 }   
-
-// ZIP I/O thread: returns the hash of the header
-Md5Hash bam_read_txt_header (bool is_first_txt, bool header_required_unused, char first_char_unused)
-{
-    START_TIMER;
-
-    uint32_t header_len, bytes_read=1 /* non-zero */;
-
-    // read data from the file until either 1. EOF is reached 2. end of txt header is reached
-    while (!(header_len = bam_read_txt_header_is_done())) {
-
-        // if we have no header yet, but read 0 bytes in the recent read - we unexpected reached EOF
-        ASSERT (bytes_read, "Error in bam_read_txt_header: %s: file too short - unexpected end-of-file", txt_name);
-
-        buf_alloc (evb, &evb->txt_data, evb->txt_data.len + READ_BUFFER_SIZE, 1.2, "txt_data", 0);    
-        uint32_t bytes_read = txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
-
-        evb->txt_data.len += bytes_read; 
-    }
-    
-    // the excess data is for the next vb to read 
-    buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, header_len, 0, "txt_file->unconsumed_txt", 0);
-
-    txt_file->txt_data_so_far_single += header_len; 
-    evb->txt_data.len = header_len; // trim
-
-    // md5 header - with logic related to is_first
-    txtfile_update_md5 (evb->txt_data.data, evb->txt_data.len, !is_first_txt);
-    Md5Hash header_md5 = md5_snapshot (&z_file->md5_ctx_single);
-
-    // md5 unconsumed_txt - always
-    txtfile_update_md5 (txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len, false);
-
-    COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
-
-    return header_md5;
-}
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 uint32_t bam_unconsumed (VBlockP vb)

@@ -73,8 +73,8 @@ void vb_release_vb (VBlock *vb)
     vb->in_use = false; // released the VB back into the pool - it may now be reused
 
     // release data_type -specific fields
-    if (vb->data_type != DT_NONE && DTP(release_vb)) 
-        DTP(release_vb)(vb);
+    if (vb->data_type != DT_NONE) 
+        DT_FUNC (vb, release_vb)(vb);
 
     // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
     // vb->num_lines_alloced
@@ -113,8 +113,8 @@ void vb_destroy_vb (VBlockP *vb_p)
         buf_destroy (&vb->codec_bufs[i]);
 
     // destory data_type -specific buffers
-    if (vb->data_type != DT_NONE && DTP(destroy_vb))
-        DTP(destroy_vb)(vb);
+    if (vb->data_type != DT_NONE)
+        DT_FUNC(vb, destroy_vb)(vb);
 
     FREE (*vb_p);
 }

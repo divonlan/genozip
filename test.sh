@@ -206,7 +206,7 @@ for file in ${files[@]}; do
 done
 
 # Test SAM reconstruction of BAM files
-files=(td/test.NA12878.chr22.1x.bam td/test.m64136_200621_234916.ccs.10k.bam)
+#files=(td/test.NA12878.chr22.1x.bam td/test.m64136_200621_234916.ccs.10k.bam)
 for file in ${files[@]}; do
     if [ ! -f $file ] ; then echo "$file: File not found"; exit 1; fi
 
@@ -268,7 +268,7 @@ rm -f copy.$file
 
 test_header "subsets (~3 VBs) or real world files"
 rm -f td/*.genozip
-$genozip -ft td/* || exit 1
+$genozip -ft td/*.sam* td/*.vcf* td/*.f* td/*gvf* td/*genome* || exit 1
 
 test_header "--make-reference"
 file=test-file-ref.fa 

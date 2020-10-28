@@ -188,6 +188,8 @@ void ref_contigs_load_contigs (void)
     loaded_contigs.len /= sizeof (RefContig);
     BGEN_ref_contigs (&loaded_contigs);
 
+    ASSERT0 (z_file->contexts[CHROM].dict.len, "Error in ref_contigs_load_contigs: CHROM dictionary is empty");
+
     buf_copy (evb, &loaded_contig_dict, &z_file->contexts[CHROM].dict, 1, 0, 0, "contig_dict", 0);
 
     ref_contigs_create_sorted_index();
