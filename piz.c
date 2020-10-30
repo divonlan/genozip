@@ -37,7 +37,8 @@
 static int64_t piz_reconstruct_from_delta (VBlock *vb, 
                                            Context *my_ctx,   // use and store last_delta
                                            Context *base_ctx, // get last_value
-                                           const char *delta_snip, unsigned delta_snip_len) 
+                                           const char *delta_snip, unsigned delta_snip_len,
+                                           bool reconstruct) 
 {
     ASSERT (delta_snip, "Error in piz_reconstruct_from_delta: delta_snip is NULL. vb_i=%u", vb->vblock_i);
     ASSERT (ctx_store_flag (base_ctx->flags) == CTX_FL_STORE_INT, "Error in piz_reconstruct_from_delta: attempting calculate delta from a base of \"%s\", but this context doesn't have CTX_FL_STORE_INT",
@@ -53,7 +54,7 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
         my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
 
     int64_t new_value = base_ctx->last_value.i + my_ctx->last_delta;  
-    RECONSTRUCT_INT (new_value);
+    if (reconstruct) { RECONSTRUCT_INT (new_value) };
 
     return new_value;
 }
@@ -63,7 +64,7 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
             "Error in %s:%u reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s)", \
             __FUNCTION__, __LINE__, vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len, lt_desc[ctx->ltype].name, codec_name (ctx->lcodec));
 
-static uint32_t piz_reconstruct_from_local_text (VBlock *vb, Context *ctx)
+static uint32_t piz_reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reconstruct)
 {
     uint32_t start = ctx->next_local; 
     ARRAY (char, data, ctx->local);
@@ -75,12 +76,12 @@ static uint32_t piz_reconstruct_from_local_text (VBlock *vb, Context *ctx)
     uint32_t snip_len = ctx->next_local - start; 
     ctx->next_local++; /* skip the tab */ 
 
-    piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len);
+    piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, reconstruct);
 
     return snip_len;
 }
 
-static int64_t piz_reconstruct_from_local_int (VBlock *vb, Context *ctx, char seperator /* 0 if none */)
+static int64_t piz_reconstruct_from_local_int (VBlock *vb, Context *ctx, char seperator /* 0 if none */, bool reconstruct)
 {
 #   define GETNUMBER(signedtype) { \
         u ## signedtype unum = NEXTLOCAL (u ## signedtype, ctx); \
@@ -99,8 +100,10 @@ static int64_t piz_reconstruct_from_local_int (VBlock *vb, Context *ctx, char se
     }
 
     // TO DO: RECONSTRUCT_INT won't reconstruct large uint64_t correctly
-    RECONSTRUCT_INT (num);
-    if (seperator) RECONSTRUCT1 (seperator);
+    if (reconstruct) { 
+        RECONSTRUCT_INT (num);
+        if (seperator) RECONSTRUCT1 (seperator);
+    }
 
     return num;
 }
@@ -134,165 +137,6 @@ static void piz_reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const
     ctx->next_local += len;
 }
 
-static inline void piz_reconstruct_container_prefix (VBlockP vb, const char **prefixes, uint32_t *prefixes_len)
-{
-    if (! (*prefixes_len)) return; // nothing to do
-    
-    const char *start = *prefixes;
-    while (**prefixes != SNIP_CONTAINER) (*prefixes)++; // prefixes are terminated by SNIP_CONTAINER
-    uint32_t len = (unsigned)((*prefixes) - start);
-
-    RECONSTRUCT (start, len);
-
-    (*prefixes)++; // skip SNIP_CONTAINER seperator
-    (*prefixes_len) -= len + 1;
-}
-
-void piz_reconstruct_container_do (VBlock *vb, DictId dict_id, const Container *con, const char *prefixes, uint32_t prefixes_len)
-{
-    TimeSpecType profiler_timer={0}; 
-    if (flag_show_time && (con->flags & CONTAINER_TOPLEVEL)) 
-        clock_gettime (CLOCK_REALTIME, &profiler_timer);
-
-    // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
-    piz_reconstruct_container_prefix (vb, &prefixes, &prefixes_len); 
-
-    ASSERT (DTP (container_filter) || !(con->flags & CONTAINER_FILTER_REPEATS) || !(con->flags & CONTAINER_FILTER_ITEMS), 
-            "Error: data_type=%s doesn't support container_filter", dt_name (vb->data_type));
-
-    for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
-
-        // case this is the top-level snip
-        if (con->flags & CONTAINER_TOPLEVEL) {
-            vb->line_i = vb->first_line + rep_i;
-            vb->line_start = vb->txt_data.len;
-            vb->dont_show_curr_line = false; 
-        }
-    
-        if ((con->flags & CONTAINER_FILTER_REPEATS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, -1))) continue; // repeat is filtered out
-
-        const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
-        uint32_t item_prefixes_len = prefixes_len;
-
-        for (unsigned i=0; i < con->num_items; i++) {
-
-            if ((con->flags & CONTAINER_FILTER_ITEMS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
-
-            piz_reconstruct_container_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix (we will have one per item or none at all)
-
-            const ContainerItem *item = &con->items[i];
-            int32_t reconstructed_len=0;
-            if (item->dict_id.num) {  // not a prefix-only item
-
-                if (flag_show_containers) // show container reconstruction 
-                    fprintf (stderr, "Line=%u Repeat=%u %.*s->%s\n", vb->line_i, rep_i, DICT_ID_LEN, dict_id_printable(dict_id).id, vb->contexts[item->did_i].name);
-                
-                reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, 0);
-            }            
-            if (reconstructed_len == -1 && i > 0)  // not WORD_INDEX_MISSING_SF - delete previous item's separator
-                vb->txt_data.len -= ((item-1)->seperator[0] != 0) + ((item-1)->seperator[1] != 0);
-
-            // seperator determines what to do after the item
-            switch ((int8_t)item->seperator[0]) {
-                case CI_MOVE:
-                    vb->txt_data.len += (int8_t)item->seperator[1]; break;
-                case CI_NUL_TERMINATE:
-                    RECONSTRUCT1 (0); break;
-                default: 
-                    // note: we emit this item's separator even if this item is missing - next item will delete it if also missing (last item in Samples doesn't have a seperator)
-                    if (item->seperator[0]) RECONSTRUCT1 (item->seperator[0]);
-                    if (item->seperator[1]) RECONSTRUCT1 (item->seperator[1]);
-            }
-        }
-
-        if (rep_i+1 < con->repeats || !(con->flags & CONTAINER_DROP_FINAL_REPEAT_SEP)) {
-            if (con->repsep[0]) RECONSTRUCT1 (con->repsep[0]);
-            if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
-        }
-
-        // in top level: after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
-        if ((con->flags & CONTAINER_TOPLEVEL) && vb->dont_show_curr_line) 
-            vb->txt_data.len = vb->line_start; 
-    }
-
-    if (con->flags & CONTAINER_DROP_FINAL_ITEM_SEP)
-        vb->txt_data.len -= (con->items[con->num_items-1].seperator[0] != 0) + 
-                            (con->items[con->num_items-1].seperator[1] != 0);
-
-    if (con->flags & CONTAINER_TOPLEVEL)   
-        COPY_TIMER (piz_reconstruct_vb);
-}
-
-static void piz_reconstruct_container (VBlock *vb, Context *ctx, WordIndex word_index, const char *snip, unsigned snip_len)
-{
-    ASSERT (snip_len <= base64_sizeof(Container), "Error in piz_reconstruct_container: snip_len=%u exceed base64_sizeof(Container)=%u",
-            snip_len, base64_sizeof(Container));
-
-    Container con, *con_p=NULL;
-    const char *prefixes;
-    uint32_t prefixes_len;
-
-    bool cache_exists = buf_is_allocated (&ctx->con_cache);
-    uint16_t cache_item_len;
-
-    // if this container exists in the cache - use the cached one
-    if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *ENT (uint16_t, ctx->con_len, word_index)))) {
-        con_p = (Container *)ENT (char, ctx->con_cache, *ENT (uint32_t, ctx->con_index, word_index));
-        
-        unsigned st_size = sizeof_container (*con_p);
-        prefixes = (char *)con_p + st_size; // prefixes are stored after the Container
-        prefixes_len = cache_item_len - st_size;
-    }
-
-    // case: not cached - decode it and optionally cache it
-    if (!con_p) {
-        // decode
-        unsigned b64_len = snip_len;
-        base64_decode (snip, &b64_len, (uint8_t*)&con);
-        con.repeats = BGEN32 (con.repeats);
-
-        // get the did_i for each dict_id
-        for (uint8_t item_i=0; item_i < con.num_items; item_i++)
-            if (con.items[item_i].dict_id.num)  // not a prefix-only item
-                con.items[item_i].did_i = mtf_get_existing_did_i (vb, con.items[item_i].dict_id);
-
-        // get prefixes
-        unsigned st_size = sizeof_container (con);
-        con_p         = &con;
-        prefixes     = (b64_len < snip_len) ? &snip[b64_len+1]       : NULL;
-        prefixes_len = (b64_len < snip_len) ? snip_len - (b64_len+1) : 0;
-
-        ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "Error in piz_reconstruct_container: prefixes_len=%u longer than CONTAINER_MAX_PREFIXES_LEN=%u", 
-                prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
-
-        ASSERT (!prefixes_len || prefixes[prefixes_len-1] == SNIP_CONTAINER, "Error in piz_reconstruct_container: prefixes array does end with a SNIP_CONTAINER: %.*s",
-                prefixes_len, prefixes);
-
-        // cache it if it is cacheable 
-        if (word_index != WORD_INDEX_NONE) {
-
-            ASSERT (st_size + prefixes_len <= 65535, "st_size=%u + prefixes_len=%u too large", st_size, prefixes_len);
-
-            // first encounter with Container for this context - allocate the cache
-            if (!cache_exists) {
-                buf_alloc (vb, &ctx->con_index, ctx->word_list.len * sizeof (uint32_t), 1, "context->con_index", ctx->did_i);
-                buf_alloc (vb, &ctx->con_len,   ctx->word_list.len * sizeof (uint16_t),  1, "context->con_len",   ctx->did_i);
-                buf_zero (&ctx->con_len);
-            }
-
-            // place Container followed by prefix in the cache
-            *ENT (uint32_t, ctx->con_index, word_index) = (uint32_t)ctx->con_cache.len;
-            *ENT (uint16_t, ctx->con_len,   word_index) = (uint16_t)(st_size + prefixes_len);
-
-            buf_alloc (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len, 2, "context->con_cache", ctx->did_i);
-            buf_add (&ctx->con_cache, con_p, st_size);
-            if (prefixes_len) buf_add (&ctx->con_cache, prefixes, prefixes_len);
-        }
-    }
-
-    piz_reconstruct_container_do (vb, ctx->dict_id, con_p, prefixes, prefixes_len); 
-}
-
 static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
 {
     unsigned b64_len = base64_sizeof (DictId);
@@ -312,7 +156,8 @@ static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsi
 
 void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, 
                                WordIndex word_index, // WORD_INDEX_NONE if not used.
-                               const char *snip, unsigned snip_len)
+                               const char *snip, unsigned snip_len,
+                               bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
 {
     if (!snip_len) return; // nothing to do
     
@@ -335,10 +180,10 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 
         // case: LOCAL is not LT_SEQUENCE/LT_BITMAP - we reconstruct this snip before adding the looked up data
         if (snip_len && base_ctx->ltype != LT_SEQUENCE && base_ctx->ltype != LT_BITMAP) 
-            RECONSTRUCT (snip, snip_len);
+            if (reconstruct) RECONSTRUCT (snip, snip_len);
         
         if (base_ctx->ltype >= LT_INT8 && base_ctx->ltype <= LT_UINT64) {
-            new_value.i = piz_reconstruct_from_local_int (vb, base_ctx, 0);
+            new_value.i = piz_reconstruct_from_local_int (vb, base_ctx, 0, reconstruct);
             have_new_value = true;
         }
 
@@ -350,23 +195,23 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
             ASSERT_DT_FUNC (vb, reconstruct_seq);
             DT_FUNC (vb, reconstruct_seq) (vb, base_ctx, snip, snip_len);
         }
-        else piz_reconstruct_from_local_text (vb, base_ctx); // this will call us back recursively with the snip retrieved
+        else piz_reconstruct_from_local_text (vb, base_ctx, reconstruct); // this will call us back recursively with the snip retrieved
                 
         break;
     }
     case SNIP_PAIR_LOOKUP:
         mtf_get_next_snip (vb, snip_ctx, &snip_ctx->pair_b250_iter, &snip, &snip_len);
-        piz_reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
+        piz_reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len, reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
         break;
 
     case SNIP_SELF_DELTA:
-        new_value.i = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip+1, snip_len-1);
+        new_value.i = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip+1, snip_len-1, reconstruct);
         have_new_value = true;
         break;
 
     case SNIP_OTHER_DELTA: 
         base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
-        new_value.i = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip, snip_len); 
+        new_value.i = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip, snip_len, reconstruct); 
         have_new_value = true;
         break;
 
@@ -375,13 +220,13 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         int64_t pair_value = (int64_t) *ENT (uint32_t, snip_ctx->pair, fastq_line_i);  
         int64_t delta = (int64_t)strtoull (snip+1, NULL, 10 /* base 10 */); 
         new_value.i = pair_value + delta;
-        RECONSTRUCT_INT (new_value.i);
+        if (reconstruct) { RECONSTRUCT_INT (new_value.i); }
         have_new_value = true;
         break;
     }
 
     case SNIP_CONTAINER:
-        piz_reconstruct_container (vb, snip_ctx, word_index, snip+1, snip_len-1);
+        container_reconstruct (vb, snip_ctx, word_index, snip+1, snip_len-1);
         break;
 
     case SNIP_SPECIAL:
@@ -391,12 +236,12 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         ASSERT (special < DTP (num_special), "Error: file requires special handler %u which doesn't exist in this version of genounzip - please upgrade to the latest version", special);
         ASSERT_DT_FUNC (vb, special);
 
-        have_new_value = DT_FUNC(vb, special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value);  
+        have_new_value = DT_FUNC(vb, special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
         break;
 
     case SNIP_REDIRECTION: 
         base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
-        piz_reconstruct_from_ctx (vb, base_ctx->did_i, 0);
+        piz_reconstruct_from_ctx (vb, base_ctx->did_i, 0, reconstruct);
         break;
     
     case SNIP_DONT_STORE:
@@ -404,7 +249,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         snip++; snip_len--;
         
     default: {
-        RECONSTRUCT (snip, snip_len); // simple reconstruction
+        if (reconstruct) RECONSTRUCT (snip, snip_len); // simple reconstruction
 
         switch (store_type) {
             case CTX_FL_STORE_INT: 
@@ -441,7 +286,9 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 }
 
 // returns reconstructed length or -1 if snip is missing and item's operator should not be emitted
-int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
+int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, 
+                                     bool reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
+                                     char sep) // if non-zero, outputs after the reconstructino
 {
     ASSERT (did_i < vb->num_contexts, ";Error in piz_reconstruct_from_ctx_do: did_i=%u out of range: vb->num_contexts=%u", did_i, vb->num_contexts);
 
@@ -462,7 +309,7 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
 
         if (!snip) return -1; // WORD_INDEX_MISSING_SF - remove preceding separator
         
-        piz_reconstruct_one_snip (vb, ctx, word_index, snip, snip_len);        
+        piz_reconstruct_one_snip (vb, ctx, word_index, snip, snip_len, reconstruct);        
 
         // handle chrom and pos to determine whether this line should be grepped-out in case of --regions
         if (did_i == CHROM) { // NOTE: CHROM cannot have aliases, because looking up the did_i by dict_id will lead to CHROM, and this code will be executed for a non-CHROM field
@@ -478,7 +325,7 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
     // case: all data is only in local
     else if (ctx->local.len) {
         if (ctx->ltype >= LT_INT8 && ctx->ltype <= LT_UINT64)
-            piz_reconstruct_from_local_int(vb, ctx, 0);
+            piz_reconstruct_from_local_int(vb, ctx, 0, reconstruct);
         
         else if (ctx->ltype == LT_CODEC)
             codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx);
@@ -492,7 +339,7 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
         }
         
         else if (ctx->ltype == LT_TEXT)
-            piz_reconstruct_from_local_text (vb, ctx);
+            piz_reconstruct_from_local_text (vb, ctx, reconstruct);
 
         else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%u", ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
     }
@@ -504,13 +351,14 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
     }
 
     // case: the entire VB was just \n - so seg dropped the ctx
-    else if (ctx->did_i == DTF(eol))
-        RECONSTRUCT1('\n');
+    else if (ctx->did_i == DTF(eol)) {
+        if (reconstruct) { RECONSTRUCT1('\n'); }
+    }
 
     else ABORT("Error in piz_reconstruct_from_ctx_do: ctx %s has no data (b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
                 ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, err_dict_id (ctx->dict_id));
 
-    if (sep) RECONSTRUCT1 (sep); 
+    if (sep && reconstruct) RECONSTRUCT1 (sep); 
 
     return (int32_t)(vb->txt_data.len - start);
 }
@@ -666,7 +514,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     if (flag_show_b250 && exe_type == EXE_GENOCAT) goto done;
 
     // reconstruct from top level snip
-    piz_reconstruct_from_ctx (vb, toplevel, 0);
+    piz_reconstruct_from_ctx (vb, toplevel, 0, true);
 
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 

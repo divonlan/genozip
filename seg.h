@@ -41,10 +41,6 @@ extern PosType seg_pos_field (VBlockP vb,
 extern void seg_id_field (VBlockP vb, DictId dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator);
 
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip);
-
-extern WordIndex seg_container_by_ctx (VBlockP vb, ContextP ctx, ContainerP con, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
-#define seg_container_by_dict_id(vb,dict_id,con,add_bytes) seg_container_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
-
 extern void seg_info_field (VBlockP vb, SegSpecialInfoSubfields seg_special_subfields, const char *info_str, unsigned info_len);
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);

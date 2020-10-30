@@ -31,11 +31,11 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 
 typedef struct ContainerItem {
     DictId dict_id;  
-    DidIType did_i;              // Used only in PIZ, must remain DID_I_NONE in ZIP
+    DidIType did_i;                 // Used only in PIZ, must remain DID_I_NONE in ZIP
 
     #define CI_MOVE             -1  // txt_data.len is moved seperator[1] bytes (-127->127)
     #define CI_NUL_TERMINATE    -2  // seperator is a \0
-    #define CI_DONT_RECONSTRUCT -3  // don't reconstruct number, just store it in last_value (if applicable)
+    #define CI_DONT_RECONSTRUCT -3  // don't reconstruct number, just store it in last_value (not implemented for LT_SEQUENCE, LT_BITMAP, Containers, Sequences)
     char seperator[2]; // 2 byte seperator reconstructed after the item. special case: if separator[0] = CI_*
     ContainerItemTransform transform; // instructions how to transform this item, if this Container is reconstructed in transform mode
 } ContainerItem;
@@ -59,5 +59,10 @@ typedef struct MiniContainer {
 
 #pragma pack()
 #define sizeof_container(con) (sizeof(con) - sizeof((con).items) + (con).num_items * sizeof((con).items[0]))
+
+extern WordIndex container_seg_by_ctx (VBlockP vb, ContextP ctx, ContainerP con, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
+#define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
+
+extern void container_reconstruct (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len);
 
 #endif

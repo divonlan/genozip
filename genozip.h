@@ -156,8 +156,9 @@ typedef _Bool bool;
 #define true 1
 #define false 0
 
+#define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value, bool reconstruct)
 #define SPECIAL(dt,num,name,func) \
-    extern bool func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value); \
+    extern SPECIAL_RECONSTRUCTOR(func); \
     static const int dt##_SPECIAL_##name = (num + 32); /* +32 to make it printable ASCII that can go into a snip */
 
 // IMPORTANT: This is part of the genozip file format. 

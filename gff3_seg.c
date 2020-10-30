@@ -42,7 +42,7 @@ void gff3_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[GFF3_EOL],    DID_I_NONE, ""   } }
     };
 
-    seg_container_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], &top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], &top_level, 0, 0, 0);
 }
 
 
@@ -118,7 +118,7 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
     }
 
     // finally, the Container snip itself
-    seg_container_by_ctx ((VBlockP)vb, subfield_ctx, &con, NULL, 0, 0);
+    container_seg_by_ctx ((VBlockP)vb, subfield_ctx, &con, NULL, 0, 0);
 
     return;
 

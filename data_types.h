@@ -25,7 +25,7 @@ typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_BAM=7, DT_BCF=8, NUM_DATATYPES 
              } DataType; 
 
-typedef bool (*PizSpecialCtxHandler)(VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value);
+typedef SPECIAL_RECONSTRUCTOR ((*PizSpecialCtxHandler));
 
 typedef struct DataTypeProperties {
     

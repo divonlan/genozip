@@ -23,14 +23,12 @@ extern uint32_t piz_uncompress_all_ctxs (VBlockP vb, uint32_t pair_vb_i);
 // utilities for use by piz_*_reconstruct_vb
 // ----------------------------------------------
 
-extern int32_t piz_reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep);
-#define piz_reconstruct_from_ctx(vb,did_i,sep) piz_reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep))
+extern int32_t piz_reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, bool reconstruct, char sep);
+#define piz_reconstruct_from_ctx(vb,did_i,reconstruct,sep) piz_reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(reconstruct),(sep))
 
-extern void piz_reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len);
+extern void piz_reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len, bool reconstruct);
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
-
-extern void piz_reconstruct_container_do (VBlockP vb, DictId dict_id, ConstContainerP con, const char *prefixes, uint32_t prefixes_len);
 
 // gets snip, snip_len from b250 data
 #define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->contexts[(did_i)], NULL, &snip, &snip_len); 

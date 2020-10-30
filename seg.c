@@ -397,34 +397,8 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
         total_names_len += ii->len;
     }
 
-    seg_container_by_ctx (vb, &vb->contexts[info_field], &con, prefixes, prefixes_len, 
+    container_seg_by_ctx (vb, &vb->contexts[info_field], &con, prefixes, prefixes_len, 
                             total_names_len /* names inc. = */ + (con.num_items-1) /* the ;s */ + 1 /* \t or \n */);
-}
-
-WordIndex seg_container_by_ctx (VBlock *vb, Context *ctx, Container *con, 
-                                 // prefixes can be one of 3 options:
-                                 // 1. NULL
-                                 // 2. a "container-wide prefix" that will be reconstructed once, at the beginning of the Container
-                                 // 3. a "container-wide prefix" followed by exactly one prefix per item. the per-item prefixes will be
-                                 //    displayed once per repeat, before their respective items. in this case, the container-wide prefix
-                                 //    may be empty. 
-                                 // Each prefix is terminated by a SNIP_CONTAINER character
-                                 const char *prefixes, unsigned prefixes_len, // a container-wide prefix (may be empty), followed (or not) by one prefix per item. Each prefixes is terminated by SNIP_CONTAINER.
-                                 unsigned add_bytes)
-{
-    con->repeats = BGEN32 (con->repeats);
-    char snip[1 + base64_sizeof(Container) + CONTAINER_MAX_PREFIXES_LEN]; // maximal size
-    snip[0] = SNIP_CONTAINER;
-    unsigned b64_len = base64_encode ((uint8_t*)con, sizeof_container (*con), &snip[1]);
-    con->repeats = BGEN32 (con->repeats); // restore
-
-    if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
-    uint32_t snip_len = 1 + b64_len + prefixes_len;
-
-    ctx->flags |= CTX_FL_CONTAINER;
-
-    // store in struct cache
-    return seg_by_ctx (vb, snip, snip_len, ctx, add_bytes, NULL); 
 }
 
 WordIndex vcf_seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len,
@@ -590,7 +564,7 @@ void seg_compound_field (VBlock *vb,
         else snip_len++;
     }
 
-    seg_container_by_ctx (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con.num_items + num_double_sep - 1) + add_for_eol);
+    container_seg_by_ctx (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con.num_items + num_double_sep - 1) + add_for_eol);
 }
 
 // an array - all elements go into a single item context, multiple repeats
@@ -636,7 +610,7 @@ uint32_t seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigne
         str++;
     }
 
-    seg_container_by_ctx (vb, parent_ctx, (Container *)&con, 0, 0, 0);
+    container_seg_by_ctx (vb, parent_ctx, (Container *)&con, 0, 0, 0);
 
     return con.repeats;
 }
@@ -664,7 +638,7 @@ WordIndex seg_hetero_array_field (VBlock *vb, DictId dict_id, const char *value,
         value++;
     }
 
-    return seg_container_by_dict_id (vb, dict_id, (Container *)&con, 0);
+    return container_seg_by_dict_id (vb, dict_id, (Container *)&con, 0);
 }
 
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 

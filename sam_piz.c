@@ -116,31 +116,33 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
 }
 
 // CIGAR - calculate vb->seq_len from the CIGAR string, and if original CIGAR was "*" - recover it
-bool sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
 {
-    VBlockSAMP vb = (VBlockSAMP)vb_;
+    VBlockSAMP vb_sam = (VBlockSAMP)vb;
 
-    sam_analyze_cigar (snip, snip_len, &vb->seq_len, &vb->ref_consumed, NULL);
+    sam_analyze_cigar (snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL);
 
-    if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
-        RECONSTRUCT1 ('*');
-    
-    else if (snip[0] == '-') // eg "-151M" or "-151*" - zip added the "-" to indicate a '*' SEQ field - we don't reconstruct it
-        RECONSTRUCT (snip + 1, snip_len - 1)
+    if (reconstruct) {
+        if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
+            RECONSTRUCT1 ('*');
+        
+        else if (snip[0] == '-') // eg "-151M" or "-151*" - zip added the "-" to indicate a '*' SEQ field - we don't reconstruct it
+            RECONSTRUCT (snip + 1, snip_len - 1)
 
-    else
-        RECONSTRUCT (snip, snip_len);    
+        else
+            RECONSTRUCT (snip, snip_len);    
+    }
 
-    vb->last_cigar = snip;
+    vb_sam->last_cigar = snip;
 
     if (flag_regions && vb->chrom_node_index != WORD_INDEX_NONE && vb->contexts[SAM_POS].last_value.i && 
-        !regions_is_range_included (vb->chrom_node_index, vb->contexts[SAM_POS].last_value.i, vb->contexts[SAM_POS].last_value.i + vb->ref_consumed - 1, true))
+        !regions_is_range_included (vb->chrom_node_index, vb->contexts[SAM_POS].last_value.i, vb->contexts[SAM_POS].last_value.i + vb_sam->ref_consumed - 1, true))
         vb->dont_show_curr_line = true;
 
     return false; // no new value
 }   
 
-bool sam_piz_special_TLEN (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
 {
     ASSERT0 (snip_len, "Error in sam_piz_special_TLEN: snip_len=0");
 
@@ -149,22 +151,24 @@ bool sam_piz_special_TLEN (VBlock *vb, Context *ctx, const char *snip, unsigned 
 
     ctx->last_value.i = tlen_val;
 
-    RECONSTRUCT_INT (tlen_val);
+    if (reconstruct) { RECONSTRUCT_INT (tlen_val); }
 
     return false; // no new value
 }
 
-bool sam_piz_special_AS (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_AS)
 {
-    RECONSTRUCT_INT (vb->seq_len - atoi (snip));
+    if (reconstruct) { RECONSTRUCT_INT (vb->seq_len - atoi (snip)) };
     
     return false; // no new value
 }
 
 // logic: snip is eg "119C" (possibly also "") - we reconstruct the original, eg "119C31" 
 // by concating a number which is (seq_len - partial_seq_len_by_md_field)
-bool sam_piz_special_MD (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
 {
+    if (!reconstruct) return false;
+    
     if (snip_len) RECONSTRUCT (snip, snip_len);
 
     unsigned partial_seq_len_by_md_field = sam_seg_get_seq_len_by_MD_field (snip, snip_len);
@@ -174,9 +178,9 @@ bool sam_piz_special_MD (VBlock *vb, Context *ctx, const char *snip, unsigned sn
 }
 
 // BD and BI - reconstruct from BD_BI context which contains interlaced BD and BI data. 
-bool sam_piz_special_BD_BI (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
 {
-    if (!vb->seq_len) goto done;
+    if (!vb->seq_len || !reconstruct) goto done;
 
     Context *bdbi_ctx = mtf_get_existing_ctx (vb, dict_id_OPTION_BD_BI);
 
@@ -202,7 +206,7 @@ done:
 
 // if this file is a compression of a BAM file, we store floats in binary form to avoid losing precision
 // see bam_rewrite_one_optional_number()
-bool bam_piz_special_FLOAT (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 {
     // get Little Endian n
     int64_t n;
@@ -214,6 +218,8 @@ bool bam_piz_special_FLOAT (VBlock *vb, Context *ctx, const char *snip, unsigned
         uint32_t n;
         float f;
     } machine_en = { .n = LTEN32 (lten_n) };
+
+    if (!reconstruct) goto finish;
 
     // binary reconstruction - BAM format
     if (flag_out_dt == DT_BAM)
@@ -246,6 +252,7 @@ bool bam_piz_special_FLOAT (VBlock *vb, Context *ctx, const char *snip, unsigned
         }
     }
 
+finish:
     new_value->d = (double)machine_en.f;
     return true; // have new value
 }

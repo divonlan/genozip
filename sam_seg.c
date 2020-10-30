@@ -180,7 +180,7 @@ void sam_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE       },
                        { (DictId)dict_id_fields[SAM_EOL],      DID_I_NONE       } }
     };
-    seg_container_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], &top_level_sam, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], &top_level_sam, 0, 0, 0);
 
     // top level snip - reconstruction as BAM
     // strategy: we start by reconstructing the variable-length fields first (after a prefix that sets them in place) 
@@ -208,7 +208,7 @@ void sam_seg_finalize (VBlockP vb)
     // 36 characters (of 0) will be written first, before the QNAME. We will override them after.
     static const char bam_line_prefix[37] = { [36] = SNIP_CONTAINER }; 
 
-    seg_container_by_ctx (vb, &vb->contexts[SAM_TOP2BAM], &top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
+    container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2BAM], &top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
                           IS_BAM ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
 
     // top level snip - reconstruction as FASTQ
@@ -225,7 +225,7 @@ void sam_seg_finalize (VBlockP vb)
     // use a prefix to at the + line    
     static const char fastq_line_prefix[6] = { SNIP_CONTAINER, SNIP_CONTAINER, SNIP_CONTAINER, '+', '\n', SNIP_CONTAINER };
 
-    seg_container_by_ctx (vb, &vb->contexts[SAM_TOP2FQ], &top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
+    container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2FQ], &top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 }
 
 // TLEN - 3 cases: 
@@ -563,7 +563,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
     }
 
-    seg_container_by_dict_id (vb, subfield_dict_id, &sa_oa, 1 /* 1 for \t in SAM and \0 in BAM */);
+    container_seg_by_dict_id (vb, subfield_dict_id, &sa_oa, 1 /* 1 for \t in SAM and \0 in BAM */);
     
     return;
 
@@ -625,7 +625,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
     }
 
-    seg_container_by_dict_id (vb, dict_id_OPTION_XA, &xa, 1 /* 1 for \t in SAM and \0 in BAM */);
+    container_seg_by_dict_id (vb, dict_id_OPTION_XA, &xa, 1 /* 1 for \t in SAM and \0 in BAM */);
     return;
 
 error:
@@ -950,7 +950,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
 
     if (con.num_items) {
         con.items[con.num_items-1].seperator[0] = 0; // last Optional field has no tab
-        seg_container_by_ctx ((VBlockP)vb, &vb->contexts[SAM_OPTIONAL], &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * con.num_items); // account for : SAM: "MX:i:" BAM: "MXi"
+        container_seg_by_ctx ((VBlockP)vb, &vb->contexts[SAM_OPTIONAL], &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * con.num_items); // account for : SAM: "MX:i:" BAM: "MXi"
     }
     else
         seg_by_did_i (vb, NULL, 0, SAM_OPTIONAL, 0); // NULL means MISSING Container item - will cause deletion of previous separator (\t)

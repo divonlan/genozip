@@ -133,7 +133,7 @@ void fasta_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[FASTA_EOL],      DID_I_NONE, ""   } }
     };
 
-    seg_container_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], &top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], &top_level, 0, 0, 0);
 }
 
 

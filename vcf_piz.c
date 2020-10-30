@@ -46,18 +46,20 @@ bool vcf_piz_filter (VBlockP vb, DictId dict_id, const Container *con, unsigned 
 }
 
 // FORMAT - obey GT-only and drop-genotypes ; load haplotype line
-bool vcf_piz_special_FORMAT (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
 {
     if (flag_drop_genotypes) goto done;
 
     bool has_GT = (snip_len>=2 && snip[0]=='G' && snip[1] == 'T' && (snip_len==2 || snip[2] == ':'));
     
-    if (flag_gt_only) {
-        if (has_GT)
-            RECONSTRUCT ("GT\t", 3)
+    if (reconstruct) {
+        if (flag_gt_only) {
+            if (has_GT)
+                RECONSTRUCT ("GT\t", 3)
+        }
+        else 
+            RECONSTRUCT (snip, snip_len);
     }
-    else 
-        RECONSTRUCT (snip, snip_len);
 
     // initialize haplotype stuff
     if (has_GT && !vb->ht_matrix_ctx) {
@@ -75,8 +77,10 @@ done:
 }
 
 // REFALT - reconstruct from reference and/or common SNPs
-bool vcf_piz_special_REFALT (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_REFALT)
 {
+    if (!reconstruct) goto done;
+
     ASSERT (snip_len==2, "Error in vcf_piz_special_REFALT: expecting snip_len=2 but seeing %u", snip_len);
 
     // snip is 3 characters - REF, \t, ALT
@@ -115,11 +119,14 @@ bool vcf_piz_special_REFALT (VBlock *vb, Context *ctx, const char *snip, unsigne
 
     RECONSTRUCT (ref_alt, sizeof (ref_alt));
 
+done:
     return false; // no new value
 }   
 
-bool vcf_piz_special_AC (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_AC)
 {
+    if (!reconstruct) goto done;
+    
     bool is_an_before_ac = (bool)(snip[0] - '0');
     bool is_af_before_ac = (bool)(snip[1] - '0');
 
@@ -134,17 +141,21 @@ bool vcf_piz_special_AC (VBlock *vb, Context *ctx, const char *snip, unsigned sn
 
     RECONSTRUCT (ac_str, ac_str_len);
 
+done:
     return false; // no new value
 }
 
 // the case where SVLEN is minus the delta between END and POS
-bool vcf_piz_special_SVLEN (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVLEN)
 {
+    if (!reconstruct) goto done;
+
     int64_t value = -vb->contexts[VCF_POS].last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
     char str[30];
     unsigned str_len = str_int (value, str);
     RECONSTRUCT (str, str_len);
 
+done:
     return false; // no new value
 }
 

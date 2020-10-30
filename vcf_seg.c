@@ -63,7 +63,7 @@ void vcf_seg_finalize (VBlockP vb_)
                        { (DictId)dict_id_fields[VCF_EOL],     DID_I_NONE, ""   } }
     };
     
-    seg_container_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
+    container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
 
     if (flag_show_alleles && vb->ht_matrix_ctx) {
         printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_matrix_ctx->local.len);
@@ -443,7 +443,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     else {
         vb->gt_prev_ploidy = gt.repeats;
         vb->gt_prev_phase  = gt.repsep[0];
-        return seg_container_by_ctx ((VBlockP)vb, ctx, (Container *)&gt, 0, 0, save_cell_len); 
+        return container_seg_by_ctx ((VBlockP)vb, ctx, (Container *)&gt, 0, 0, save_cell_len); 
     }
 }
 
@@ -581,7 +581,7 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
         }
     }
     
-    seg_container_by_ctx ((VBlockP)vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
+    container_seg_by_ctx ((VBlockP)vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
 
     if (vb->ht_matrix_ctx)
         vb->ht_matrix_ctx->local.len = (vb->line_i+1) * vb->num_haplotypes_per_line;

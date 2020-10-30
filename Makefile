@@ -29,7 +29,7 @@ endif
 
 SRC_DIRS = zlib bzlib lzma bsc compatibility
 
-MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
+MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
           zip.c piz.c seg.c zfile.c aligner.c \
 		  reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c  \
 		  vcf_piz.c vcf_seg.c vcf_shared.c vcf_samples.c vcf_header.c \

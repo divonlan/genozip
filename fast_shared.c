@@ -62,7 +62,7 @@ bool fast_piz_test_grep (VBlockFAST *vb)
 
     while (desc_ctx->iterator.next_b250 < AFTERENT (uint8_t, desc_ctx->b250) ||
            desc_ctx->next_local < desc_ctx->local.len) {
-        piz_reconstruct_from_ctx (vb, desc_ctx->did_i, 0);
+        piz_reconstruct_from_ctx (vb, desc_ctx->did_i, 0, true);
 
         *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string
 

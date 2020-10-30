@@ -177,7 +177,7 @@ void fastq_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  } }
     };
 
-    seg_container_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
+    container_seg_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
 }
 
 
@@ -382,7 +382,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     return false;
 }
 
-// filtering during reconstruction: called by piz_reconstruct_container_do for each fastq record (repeat) and each toplevel item
+// filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat) and each toplevel item
 bool fastq_piz_filter (VBlock *vb, DictId dict_id, const Container *con, unsigned fastq_record_i, int item_i)
 {
     if (dict_id.num == dict_id_fields[FASTQ_TOPLEVEL]) {
@@ -395,7 +395,7 @@ bool fastq_piz_filter (VBlock *vb, DictId dict_id, const Container *con, unsigne
             if (flag_grep && item_i == 2 /* first EOL */) {
                 *AFTERENT (char, vb->txt_data) = 0; // for strstr
                 if (!strstr (ENT (char, vb->txt_data, vb->line_start), flag_grep))
-                    vb->dont_show_curr_line = true; // piz_reconstruct_container_do will rollback the line
+                    vb->dont_show_curr_line = true; // container_reconstruct_do will rollback the line
             }
 
             // case: --header-one or --header-only: dont show items 2+. note that piz_read_global_area rewrites --header-only as flag_header_one
