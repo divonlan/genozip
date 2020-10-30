@@ -56,12 +56,12 @@ uint32_t global_max_threads = DEFAULT_MAX_THREADS;
 uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file data
 
 // the flags - representing command line options - available globally
-int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
+int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_optimize=0, flag_bgzip=0, 
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_multiple_files=0,
     flag_show_b250=0, flag_show_stats=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_best=0, flag_list_chroms=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
-    flag_show_vblocks=0, flag_vblock=0, flag_gt_only=0, flag_sequential=0, flag_reconstruct_binary=0,
+    flag_show_vblocks=0, flag_vblock=0, flag_gt_only=0, flag_sequential=0, 
     flag_debug_memory=0, flag_debug_progress=0, flag_test_seg=0, flag_show_containers=0,
     flag_show_hash, flag_register=0, flag_genocat_info_only=0,
     flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, 
@@ -69,7 +69,8 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_optimize=0, flag_b
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
     flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0, flag_optimize_DESC=0,
     flag_show_ref_contigs=0, flag_show_ref_alts=0, flag_show_ref_seq=0,
-    flag_pair=NOT_PAIRED_END;
+    flag_pair=NOT_PAIRED_END, 
+    flag_out_dt=DT_NONE; // must be in despited containing DataType
 
 ReferenceType flag_reference = REF_NONE;
 uint64_t flag_stdin_size = 0;
@@ -297,25 +298,13 @@ static void main_genounzip (const char *z_filename,
     // skip this file if its size is 0
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
-    if (!txt_filename && (!flag_stdout || flag_bgzip || flag_bcf || flag_bam) && !flag_unbind) {
-        txt_filename = (char *)MALLOC(fn_len + 10);
-
-        // .vcf.genozip -> .vcf or .vcf.gz or .bcf ; .sam.genozip -> .sam or .bam or .sam.gz ; fastq.genozip -> .fastq or .fastq.gz
-        int genozip_ext_len = strlen (GENOZIP_EXT);
-        sprintf ((char *)txt_filename, "%.*s%s", 
-                 (int)(fn_len - genozip_ext_len) - 
-                    ((flag_bam && strcmp (&txt_filename[fn_len-genozip_ext_len-4], ".sam")) ? 4 : 0) - // remove .sam if .sam.genozip->.bam
-                    ((flag_bcf && strcmp (&txt_filename[fn_len-genozip_ext_len-4], ".vcf")) ? 4 : 0),  // remove .vcf if .vcf.genozip->.bcf                    
-                 z_filename,
-                 flag_bgzip ? ".gz" : flag_bam ? ".bam" : flag_bcf ? ".bcf" : "");    
-    }
-
     z_file = file_open (z_filename, READ, Z_FILE, DT_NONE);    
-    
+    #define zdt z_file->data_type // for code readability
+
     // cases we pre-read the genozip header:
     // 1) if we can't get the data type by the extension - get it from the genozip header
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
-    if (z_file->data_type == DT_NONE || flag_reference != REF_EXTERNAL) 
+    if (zdt == DT_NONE || flag_reference != REF_EXTERNAL) 
         zfile_read_genozip_header (NULL);
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
@@ -329,18 +318,47 @@ static void main_genounzip (const char *z_filename,
         }
     }
 
-    // set reconstruction to binary or textual based file type on executable
-    flag_reconstruct_binary = (exe_type == EXE_GENOUNZIP) && (z_file->type == BAM_GENOZIP || flag_bam);
+    // note on BCF and CRAM: we used bcftools/samtools as an external compressor, so that genozip sees the text,
+    // not binary, data of these files - the same as if the file were compressed with eg bz2
+    if (exe_type == EXE_GENOUNZIP && flag_out_dt == DT_NONE && (z_file->flags & GENOZIP_FL_TXT_IS_BIN)) {
+        if (z_file->data_type == DT_SAM) 
+            // genounzip of a SAM genozip file with is_binary outputs BAM unless the user overrides with --sam or --fastq
+            flag_out_dt = DT_BAM;
+        // future binary data types here
+    }
+    
+    if (flag_out_dt == DT_NONE) 
+        flag_out_dt = z_file->data_type;
+
+    // set txt_filename if translating (eg ".sam" to ".bam") or adding .gz
+    if (!txt_filename && (!flag_stdout || flag_bgzip || flag_out_dt != zdt) && !flag_unbind) {
+        txt_filename = (char *)MALLOC(fn_len + 10);
+
+        #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
+            ((zdt==(from) && flag_out_dt==(to) && strcmp (&txt_filename[fn_len-strlen (GENOZIP_EXT)-strlen(ext)], (ext))) ? (int)strlen(ext) : 0) 
+
+        // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
+        int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM, DT_BAM,   ".sam") +
+                                  EXT2_MATCHES_TRANSLATE (DT_SAM, DT_SAM,   ".bam") +
+                                  EXT2_MATCHES_TRANSLATE (DT_SAM, DT_FASTQ, ".sam") +
+                                  EXT2_MATCHES_TRANSLATE (DT_SAM, DT_FASTQ, ".bam") +
+                                  EXT2_MATCHES_TRANSLATE (DT_VCF, DT_BCF,   ".vcf");
+
+        sprintf ((char *)txt_filename, "%.*s%s%s", 
+                 fn_len - (int)strlen (GENOZIP_EXT) - old_ext_removed_len, z_filename,
+                 old_ext_removed_len ? file_plain_ext_by_dt (flag_out_dt) : "", // add translated extension if needed
+                 flag_bgzip ? ".gz" : "");     // add .gz if needed
+    }
 
     // get output FILE 
     if (txt_filename) {
         ASSERT0 (!txt_file || flag_bind, "Error: txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
 
         if (!txt_file)  // in bound mode, for second file onwards, txt_file is already open
-            txt_file = file_open (txt_filename, WRITE, TXT_FILE, z_file->data_type);
+            txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag_out_dt);
     }
     else if (flag_stdout) { // stdout
-        txt_file = file_open_redirect (WRITE, TXT_FILE, z_file->data_type); // STDOUT
+        txt_file = file_open_redirect (WRITE, TXT_FILE, flag_out_dt); // STDOUT
     }
     else if (flag_unbind) {
         // do nothing - the component files will be opened by txtfile_genozip_to_txt_header()
@@ -348,6 +366,8 @@ static void main_genounzip (const char *z_filename,
     else {
         ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
+
+    if (flag_out_dt == DT_BAM) z_file->flags |= GENOZIP_FL_TXT_IS_BIN; // reconstructed file is in binary form
     
     z_file->basename = file_basename (z_filename, false, FILENAME_STDIN, NULL, 0); // memory freed in file_close
     
@@ -465,6 +485,10 @@ static void main_genozip (const char *txt_filename,
             }
 
             z_file = file_open (z_filename, flag_pair ? WRITEREAD : WRITE, Z_FILE, z_data_type);
+
+            // note on BCF and CRAM: we used bcftools/samtools as an external compressor, so that genozip sees the text,
+            // not binary, data of these files - the same as if the file were compressed with eg bz2
+            if (z_file->data_type == DT_BAM) z_file->flags |= GENOZIP_FL_TXT_IS_BIN; // compressed file is stored in binary form, and sizes are of the binary file
         }
     }
     else if (flag_stdout) { // stdout
@@ -664,9 +688,15 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _DL {"replace",       no_argument,       &flag_replace,          1 }
         #define _V  {"version",       no_argument,       &command, VERSION         }
         #define _z  {"bgzip",         no_argument,       &flag_bgzip,            1 }
-        #define _zb {"bam",           no_argument,       &flag_bam,              1 }
-        #define _zB {"BAM",           no_argument,       &flag_bam,              1 }
-        #define _zc {"bcf",           no_argument,       &flag_bcf,              1 }
+        #define _zb {"bam",           no_argument,       &flag_out_dt,           DT_BAM }
+        #define _zB {"BAM",           no_argument,       &flag_out_dt,           DT_BAM }
+        #define _zs {"sam",           no_argument,       &flag_out_dt,           DT_SAM }
+        #define _zS {"SAM",           no_argument,       &flag_out_dt,           DT_SAM }
+        #define _zq {"fastq",         no_argument,       &flag_out_dt,           DT_FASTQ }
+        #define _zQ {"FASTQ",         no_argument,       &flag_out_dt,           DT_FASTQ }
+        #define _zf {"fq",            no_argument,       &flag_out_dt,           DT_FASTQ }
+        #define _zF {"FQ",            no_argument,       &flag_out_dt,           DT_FASTQ }
+        #define _zc {"bcf",           no_argument,       &flag_out_dt,           DT_BCF }
         #define _m  {"md5",           no_argument,       &flag_md5,              1 }
         #define _t  {"test",          no_argument,       &flag_test,             1 }
         #define _fa {"fast",          no_argument,       &flag_fast,             1 }
@@ -741,10 +771,10 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sc, _sI, _gt,      _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zc, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _rA, _rS,           _sA,      _sI,      _cn, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                        _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _rA, _rS,           _sA,      _sI,      _cn, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                     _p, _e,                                                                                                                    _st, _sm,                                   _dm,                                                                                                                                                        _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sc, _sI, _gt,      _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _rA, _rS,           _sA,      _sI,      _cn, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,     _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc,     _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _rA, _rS,           _sA,      _sI,      _cn, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                                                   _p, _e,                                                                                                                    _st, _sm,                                   _dm,                                                                                                                                                        _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -863,13 +893,16 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
 
     // some genozip flags are allowed only in combination with --decompress 
     if (exe_type == EXE_GENOZIP && command == ZIP) {
+        char s[20]; 
         ASSINP (!flag_bgzip,        "%s: option %s can only be used if --decompress is used too", global_cmd, OT("bgzip", "z"));
-        ASSINP (!flag_bam,          "%s: option --flag_bam can only be used if --decompress is used too", global_cmd);
-        ASSINP (!flag_bcf,          "%s: option --flag_bcf can only be used if --decompress is used too", global_cmd);
+        ASSINP (flag_out_dt == DT_NONE, "%s: option --%s can only be used if --decompress is used too", global_cmd, str_tolower (dt_name (flag_out_dt), s));
         ASSINP (!flag_unbind,       "%s: option %s can only be used if --decompress is used too", global_cmd, OT("unbind", "u"));
-        ASSINP (!flag_show_aliases, "%s: option --flag_show_aliases can only be used if --decompress is used too", global_cmd);
-        ASSINP (!flag_show_is_set,  "%s: option --flag_show_is_set can only be used if --decompress is used too", global_cmd);
+        ASSINP (!flag_show_aliases, "%s: option --show_aliases can only be used if --decompress is used too", global_cmd);
+        ASSINP (!flag_show_is_set,  "%s: option --show_is_set can only be used if --decompress is used too", global_cmd);
     }
+
+    // .bcf and .bam are already bgzipped, ignore --bgzip flag as we don't need an additional bgzip step
+    if (flag_out_dt == DT_BCF || flag_out_dt == DT_BAM) flag_bgzip=0;
 
     // --paired_end: verify an even number of fastq files, --output, and --reference/--REFERENCE
     if (flag_pair) {
@@ -963,7 +996,7 @@ int main (int argc, char **argv)
 
 #ifdef _WIN32
     // lowercase argv[0] to allow case-insensitive comparison in Windows
-    str_to_lowercase (argv[0]);
+    str_tolower (argv[0], argv[0]);
 #else
     signal (SIGSEGV, main_sigsegv_handler);   // segmentation fault handler
 #endif

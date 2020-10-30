@@ -9,13 +9,16 @@
 #include <sys/ioctl.h>
 #endif
 
-void str_to_lowercase (char *s)
+char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */)
 {
-    // lowercase argv[0] to allow case-insensitive comparison in Windows
-    for (; *s; s++) 
-        if (IS_CLETTER (*s))
-            *s += 'a' - 'A';
+    char *startout = out;
+
+    for (; *in; in++, out++) 
+        *out = (*in >= 'A' && *in <= 'Z') ? *in + 32 : *in;
+    
+    return startout;
 }
+
 
 char *str_size (uint64_t size, char *str /* out */)
 {

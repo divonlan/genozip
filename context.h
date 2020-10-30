@@ -3,8 +3,8 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#ifndef MOVE_TO_FRONT_INCLUDED
-#define MOVE_TO_FRONT_INCLUDED
+#ifndef CONTEXT_INCLUDED
+#define CONTEXT_INCLUDED
 
 #include <pthread.h>
 #include "genozip.h"
@@ -30,51 +30,13 @@
 #define SNIP_LOOKUP              '\x1'   // Lookup from local (optionally followed by a snip - interpreted differently by local type, see piz_reconstruct_one_snip)
 #define SNIP_OTHER_LOOKUP        '\x2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
 #define SNIP_PAIR_LOOKUP         '\x3'   // Lookup from paired file (when using --pair)  
-#define SNIP_CONTAINER          '\x4'   // Appears as first character in the SNIP, followed by a specification of a container field
+#define SNIP_CONTAINER           '\x4'   // Appears as first character in the SNIP, followed by a specification of a container field
 #define SNIP_SELF_DELTA          '\x5'   // The value is a uint32_t which is a result of the last value + the positive or negative textual int32_t value following this character
 #define SNIP_OTHER_DELTA         '\x6'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictId dict_id, int32_t delta, bool update_other} in base64)
 #define SNIP_PAIR_DELTA          '\x7'   // The value is a uint32_t which is a result of the equivalent value in the paired file + the delta value (when using --pair)
 #define SNIP_SPECIAL             '\x8'   // Special algorithm followed by ID of the algorithm 
 #define SNIP_REDIRECTION         '\xB'   // Get the data from another dict_id (can be in b250, local...)
 #define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding CTX_FL_STORE_INT)
-
-// container snip: it starts with SNIP_CONTAINER, following by a base64 of a big endian Container
-#pragma pack(1)
-#define CONTAINER_DROP_FINAL_ITEM_SEP   0x01
-#define CONTAINER_DROP_FINAL_REPEAT_SEP 0x02
-#define CONTAINER_FILTER_REPEATS        0x04
-#define CONTAINER_FILTER_ITEMS          0x08
-#define CONTAINER_TOPLEVEL              0x10
-
-#define CONTAINER_MAX_REPEATS 4294967294UL // one less than maxuint32 to make it easier to loop with con.repeats without overflow 
-#define CONTAINER_MAX_PREFIXES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
-
-typedef struct ContainerItem {
-    DictId dict_id;  
-    DidIType did_i;    // Used only in PIZ, must remain DID_I_NONE in ZIP
-    char seperator[2];
-    ContainerItemTransform transform; // instructions how to transform this item, if this Container is reconstructed in transform mode
-} ContainerItem;
-
-typedef struct Container {
-    uint32_t repeats;     // number of "repeats" (array elements)
-    uint8_t num_items;    // 1 to MAX_CONTAINER_ITEMS
-    uint8_t flags;
-    char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
-    ContainerItem items[MAX_SUBFIELDS];
-} Container;
-
-// identical to Container, but with only one item
-typedef struct MiniContainer {
-    uint32_t repeats;     // number of "repeats" (array elements)
-    uint8_t num_items;    // must be 1
-    uint8_t flags;
-    char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
-    ContainerItem items[1];
-} MiniContainer;
-
-#pragma pack()
-#define sizeof_container(con) (sizeof(con) - sizeof((con).items) + (con).num_items * sizeof((con).items[0]))
 
 #ifndef DID_I_NONE // also defined in vblock.h
 #define DID_I_NONE   255

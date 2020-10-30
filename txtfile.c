@@ -210,7 +210,8 @@ void txtfile_read_vblock (VBlock *vb)
 
         if (!len) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
             ASSERT (!vb->txt_data.len || !(DT_FUNC (txt_file, unconsumed)(vb)) || txt_file->data_type == DT_REF, /* REF terminates VBs after every contig */
-                    "Error: input file %s ends abruptly - cannot read entire VB vb=%u", txt_name, vb->vblock_i);
+                    "Error: input file %s ends abruptly after reading %" PRIu64 " bytes in vb=%u", 
+                    txt_name, vb->txt_data.len, vb->vblock_i);
             break;
         }
             
@@ -332,9 +333,6 @@ static void txtfile_write_to_disk (Buffer *buf)
 {
     if (flag_md5) md5_update (&txt_file->md5_ctx_bound, buf->data, buf->len);
 
-    // if this is SAM/BAM make sure the output header is SAM or BAM according to flag_reconstruct_binary, and regardless of the source file
-    if (z_file->data_type == DT_SAM) bam_prepare_txt_header (buf); 
-
     if (!flag_test) file_write (txt_file, buf->data, buf->len);
 
     txt_file->txt_data_so_far_single += buf->len;
@@ -350,7 +348,9 @@ void txtfile_write_one_vblock (VBlockP vb)
     // warn if VB is bad, but don't exit, so that we can continue and reconstruct the rest of the file for better debugging
 
     char s1[20], s2[20];
-    ASSERTW (vb->txt_data.len == vb->vb_data_size || exe_type == EXE_GENOCAT, 
+    ASSERTW ((vb->txt_data.len == vb->vb_data_size) || // files are the same size, expected
+             (exe_type == EXE_GENOCAT) ||              // many genocat flags modify the output file, so don't compare
+             ((z_file->flags & GENOZIP_FL_TXT_IS_BIN) != (txt_file->flags & GENOZIP_FL_TXT_IS_BIN)), // we are reconstructing a BAM into a SAM or vice-versa - the SAM and BAM files have different sizes
             "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
             vb->vblock_i, (uint32_t)vb->lines.len, vb->first_line,
             str_uint_commas (vb->vb_data_size, s1), dt_name (txt_file->data_type), str_uint_commas (vb->txt_data.len, s2), 
@@ -496,7 +496,6 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
     txt_file->codec                = header->compression_type;
-    txt_file->binarizer            = header->binarizer;
     
     if (is_first_txt || flag_unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);
@@ -521,6 +520,9 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     if (is_vcf && flag_drop_genotypes) vcf_header_trim_header_line (&header_buf); // drop FORMAT and sample names
 
     if (is_vcf && flag_header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
+
+    // if this is SAM/BAM make sure the output header is SAM or BAM according to flag_out_dt, and regardless of the source file
+    if (z_file->data_type == DT_SAM) bam_prepare_txt_header (&header_buf); 
 
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
     if ((is_first_txt || flag_unbind) && !flag_no_header && !flag_reading_reference && !flag_show_headers) {

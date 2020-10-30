@@ -1450,6 +1450,16 @@ const char *ref_get_cram_ref (void)
 
     ASSINP (ref_filename, "%s: when compressing a CRAM file, --reference or --REFERENCE must be specified", global_cmd);
 
+    // if we're attempting to open a cram file, just to check whether it is aligned (in main_load_reference),
+    // then we haven't loaded the reference file yet, and hence we don't know ref_fasta_name.
+    // in that case, we will just load the reference file's header
+    z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
+    flag_reading_reference=true;
+    zfile_read_genozip_header (NULL);
+    flag_reading_reference=false;
+    file_close (&z_file, true);
+
+
     ASSINP (ref_fasta_name, "%s: cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",
             global_cmd, ref_filename, REF_FILENAME_LEN-1);
 

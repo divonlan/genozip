@@ -18,6 +18,7 @@
 #include "piz.h"
 #include "zfile.h"
 #include "data_types.h"
+#include "container.h"
 
 WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                      bool *is_new) // optional out
@@ -408,7 +409,7 @@ WordIndex seg_container_by_ctx (VBlock *vb, Context *ctx, Container *con,
                                  //    displayed once per repeat, before their respective items. in this case, the container-wide prefix
                                  //    may be empty. 
                                  // Each prefix is terminated by a SNIP_CONTAINER character
-                                 const char *prefixes, unsigned prefixes_len, 
+                                 const char *prefixes, unsigned prefixes_len, // a container-wide prefix (may be empty), followed (or not) by one prefix per item. Each prefixes is terminated by SNIP_CONTAINER.
                                  unsigned add_bytes)
 {
     con->repeats = BGEN32 (con->repeats);

@@ -32,7 +32,8 @@
 			"zlib.h": "c",
 			"istream": "c",
 			"ostream": "c",
-			"tuple": "c"
+			"tuple": "c",
+			"*.tcc": "c"
 		},
 		"files.autoSave": "onFocusChange",
 		"files.exclude": {

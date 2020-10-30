@@ -16,7 +16,7 @@
 #define IS_VALID_URL_CHAR(c) (IS_LETTER(c) || IS_DIGIT(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
 #define FLIP_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
 
-extern void str_to_lowercase (char *s);
+extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 
 extern char *str_size (uint64_t size, char *str /* out */);
 extern char *str_uint_commas (int64_t n, char *str /* out */);

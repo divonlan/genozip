@@ -76,6 +76,7 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
     else switch (segging_vb->data_type) {
     
     case DT_VCF:
+    case DT_BCF:
         // if typically small - use minimal hash table
         if (vb_ctx->dict_id.num == dict_id_fields[VCF_CHROM]  ||
             vb_ctx->dict_id.num == dict_id_fields[VCF_FORMAT] ||

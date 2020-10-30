@@ -39,7 +39,7 @@ const char *WRITEREAD = "wb+";
 
 const char *file_exts[] = FILE_EXTS;
 
-static const struct { FileType in; Codec codec, binarizer; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][30] = TXT_IN_FT_BY_DT;
+static const struct { FileType in; Codec codec; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][30] = TXT_IN_FT_BY_DT;
 static const FileType txt_out_ft_by_dt[NUM_DATATYPES][20] = TXT_OUT_FT_BY_DT;
 static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 
@@ -69,17 +69,15 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 }
 
 // get codec by txt file type
-static void file_get_codecs_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode, Codec *codec, Codec *binarizer)
+static void file_get_codecs_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode, Codec *codec)
 {
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
         if (txt_in_ft_by_dt[dt][i].in == txt_ft) {
             if (codec) *codec         = txt_in_ft_by_dt[dt][i].codec;
-            if (binarizer) *binarizer = txt_in_ft_by_dt[dt][i].binarizer;
             return;
         }
 
     if (*codec) *codec = (mode == WRITE ? CODEC_NONE : CODEC_UNKNOWN);
-    if (*binarizer) *binarizer = CODEC_UNKNOWN;
 }
 
 DataType file_get_dt_by_z_ft (FileType z_ft)
@@ -167,7 +165,7 @@ void file_set_input_type (const char *type_str)
     char ext[strlen (type_str) + 2]; // +1 for . +1 for \0
     sprintf (ext, ".%s", type_str);
 
-    str_to_lowercase (ext); // lower-case to allow case-insensitive --input argument (eg vcf or VCF)
+    str_tolower (ext, ext); // lower-case to allow case-insensitive --input argument (eg vcf or VCF)
 
     stdin_type = file_get_type (ext, false); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
 
@@ -241,7 +239,7 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
         // Tested on samtools 1.11: The normal way to see help is "samtools help view" however it fails if stdin is not the terminal. 
         // Instead, we use samtools view with an invalid option "--junk". This *sometimes* shows the help, and sometimes
         // just shows one line "samtools view:". We overcome this by repeating if the response is not long enough.
-        StreamP samtools = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, "To read/write BAM files",
+        StreamP samtools = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, "To read/write CRAM files",
                                           "samtools", "view", "--junk", NULL);
         usleep (50000 * i); // wait for samtools
 
@@ -308,52 +306,10 @@ bool file_open_txt (File *file)
                     file->type = txt_out_ft_by_dt[file->data_type][0]; 
             }
         }
-
-        // if we don't know our type based on our own name, consult z_file (this happens when opening 
-        // from piz_dispacher)
-        else if (file->data_type == DT_NONE && z_file && z_file->data_type != DT_NONE) {
-            file->data_type = z_file->data_type;
-
-            #define FORBID_THIS_FLAG(flag,dt) ASSINP (!flag_##flag, "%s: the --" #flag " flag cannot be used with files containing %s data like %s", global_cmd, dt, z_name);
-            
-            switch (file->data_type) {
-                case DT_VCF : 
-                    FORBID_THIS_FLAG (bam, "VCF");
-                    file->type = (flag_bgzip ? VCF_GZ : (flag_bcf ? BCF : VCF)); 
-                    break;
-                
-                case DT_SAM : 
-                    FORBID_THIS_FLAG (bcf, "SAM");
-                    FORBID_THIS_FLAG (bgzip, "SAM");
-                    file->type = (flag_bam ? BAM : SAM); 
-                    break;
-                
-                case DT_FASTQ : 
-                    FORBID_THIS_FLAG (bcf, "FASTQ");
-                    FORBID_THIS_FLAG (bam, "FASTQ");
-                    file->type = (flag_bgzip ? FASTQ_GZ : FASTQ); 
-                    break;
-                
-                case DT_FASTA : 
-                    FORBID_THIS_FLAG (bcf, "FASTA");
-                    FORBID_THIS_FLAG (bam, "FASTA");
-                    file->type = (flag_bgzip ? FASTA_GZ : FASTA); 
-                    break;
-                
-                case DT_ME23 : 
-                    FORBID_THIS_FLAG (bcf, "23andMe");
-                    FORBID_THIS_FLAG (bam, "23andMe");
-                    FORBID_THIS_FLAG (bgzip, "23andMe");
-                    file->type = (flag_bgzip ? FASTA_GZ : FASTA); 
-                    break;
-                
-                default: ABORT ("Error in file_open_txt: unknown data_type=%s", dt_name (file->data_type));
-            }
-        }
     }
-
+    
     // open the file, based on the codec
-    file_get_codecs_by_txt_ft (file->data_type, file->type, file->mode, &file->codec, &file->binarizer);
+    file_get_codecs_by_txt_ft (file->data_type, file->type, file->mode, &file->codec);
     
     switch (file->codec) { 
         case CODEC_NONE:

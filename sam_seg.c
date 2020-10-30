@@ -16,6 +16,7 @@
 #include "dict_id.h"
 #include "codec.h"
 #include "aligner.h"
+#include "container.h"
 
 #define IS_BAM (txt_file->data_type==DT_BAM)
 
@@ -141,6 +142,10 @@ void sam_seg_initialize (VBlock *vb)
     vb->contexts[SAM_GPOS].ltype     = LT_UINT32;
     vb->contexts[SAM_GPOS].flags     = CTX_FL_STORE_INT;
 
+    // when reconstructing BAM, we output the word_index instead of the string
+    vb->contexts[SAM_RNAME].flags    = CTX_FL_STORE_INDEX;
+    vb->contexts[SAM_RNEXT].flags    = CTX_FL_STORE_INDEX;
+
     // in --stats, consolidate stats into SQBITMAP
     vb->contexts[SAM_GPOS].st_did_i = vb->contexts[SAM_STRAND].st_did_i =
     vb->contexts[SAM_NONREF].st_did_i = vb->contexts[SAM_NONREF_X].st_did_i = SAM_SQBITMAP;
@@ -157,7 +162,7 @@ void sam_seg_finalize (VBlockP vb)
     }
 
     // top level snip - reconstruction as SAM
-    Container top_level = { 
+    Container top_level_sam = { 
         .repeats   = vb->lines.len,
         .flags     = CONTAINER_TOPLEVEL,
         .num_items = 13,
@@ -172,32 +177,55 @@ void sam_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[SAM_TLEN],     DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[SAM_SQBITMAP], DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[SAM_QUAL],     DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE, ""   },
-                       { (DictId)dict_id_fields[SAM_EOL],      DID_I_NONE, ""   } }
+                       { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE       },
+                       { (DictId)dict_id_fields[SAM_EOL],      DID_I_NONE       } }
     };
-    seg_container_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], &top_level, 0, 0, 0);
+    seg_container_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], &top_level_sam, 0, 0, 0);
 
     // top level snip - reconstruction as BAM
-    Container top_level_bin = { 
+    // strategy: we start by reconstructing the variable-length fields first (after a prefix that sets them in place) 
+    // - read_name, cigar, seq and qual - and then go back and fill in the fixed-location fields
+    // Translation (a feature of Container): items reconstruct their data and then call a translation function to translate it to the desired format
+    Container top_level_bam = { 
         .repeats   = vb->lines.len,
         .flags     = CONTAINER_TOPLEVEL,
         .num_items = 13,
-        .items     = { { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_RNAME],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_POS],      DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_MAPQ],     DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_CIGAR],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_RNEXT],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_PNEXT],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_TLEN],     DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_SQBITMAP], DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_QUAL],     DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE, ""   },
-                       { (DictId)dict_id_fields[SAM_EOL],      DID_I_NONE, ""   } }
+        .items     = { { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, { CI_NUL_TERMINATE } }, // Translate - move QNAME forward in txt_data to its correct place + nul-terminate
+                       { (DictId)dict_id_fields[SAM_CIGAR],    DID_I_NONE, "", TRS_SAM2BAM_CIGAR    }, // Translate - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq, block_size
+                       { (DictId)dict_id_fields[SAM_SQBITMAP], DID_I_NONE, "", TRS_SAM2BAM_SEQ      }, // Translate - textual format to BAM format
+                       { (DictId)dict_id_fields[SAM_QUAL],     DID_I_NONE, "", TRS_SAM2BAM_QUAL     }, // Translate - textual format to BAM format, save txt_data.len, and move it back to the position of ref_id
+                       { (DictId)dict_id_fields[SAM_RNAME],    DID_I_NONE, { CI_DONT_RECONSTRUCT }, TRS_SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+                       { (DictId)dict_id_fields[SAM_POS],      DID_I_NONE, { CI_DONT_RECONSTRUCT }, TRS_SAM2BAM_POS      }, // Translate - output little endian POS-1
+                       { (DictId)dict_id_fields[SAM_MAPQ],     DID_I_NONE, { CI_DONT_RECONSTRUCT }, TRS_U8               }, // Translate - textual to binary number
+                       { (DictId)dict_id_fields[SAM_BAM_BIN],  DID_I_NONE, { CI_DONT_RECONSTRUCT }, TRS_LTEN_U16         }, // Translate - textual to binary number
+                       { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, { CI_DONT_RECONSTRUCT }, TRS_LTEN_U16         }, // Translate - textual to binary number
+                       { (DictId)dict_id_fields[SAM_RNEXT],    DID_I_NONE, { CI_DONT_RECONSTRUCT }, TRS_SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+                       { (DictId)dict_id_fields[SAM_PNEXT],    DID_I_NONE, { CI_DONT_RECONSTRUCT }, TRS_SAM2BAM_POS      }, // Translate - output little endian POS-1
+                       { (DictId)dict_id_fields[SAM_TLEN],     DID_I_NONE, { CI_DONT_RECONSTRUCT }, TRS_LTEN_I32         }, // Translate - textual to binary number
+                       { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE, { CI_DONT_RECONSTRUCT }, TRS_SAM2BAM_OPTIONAL } } // transforms prefixes MX:i->MXC and moves txt_data.len forward to after qual
     };
-    seg_container_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL_BIN], &top_level_bin, 0, 0, 
+
+    // 36 characters (of 0) will be written first, before the QNAME. We will override them after.
+    static const char bam_line_prefix[37] = { [36] = SNIP_CONTAINER }; 
+
+    seg_container_by_ctx (vb, &vb->contexts[SAM_TOP2BAM], &top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
                           IS_BAM ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
+
+    // top level snip - reconstruction as FASTQ
+    Container top_level_fastq = { 
+        .repeats   = vb->lines.len,
+        .flags     = CONTAINER_TOPLEVEL | CONTAINER_FILTER_REPEATS, // filter - drop non-primary chimeric reads and reads without QUAL data
+        .num_items = 3,
+        .items     = { { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, "\n" },
+                       { (DictId)dict_id_fields[SAM_SQBITMAP], DID_I_NONE, "\n", TRS_SAM2FASTQ_SEQ  }, // Translate - reverse complement if FLAGS & 0x10
+                       { (DictId)dict_id_fields[SAM_QUAL],     DID_I_NONE, "\n" } // Translate - textual format to BAM format, save txt_data.len, and move it back to the position of ref_id
+                     }
+    };
+
+    // use a prefix to at the + line    
+    static const char fastq_line_prefix[6] = { SNIP_CONTAINER, SNIP_CONTAINER, SNIP_CONTAINER, '+', '\n', SNIP_CONTAINER };
+
+    seg_container_by_ctx (vb, &vb->contexts[SAM_TOP2FQ], &top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 }
 
 // TLEN - 3 cases: 
@@ -705,13 +733,13 @@ static void sam_optimize_ZM (const char **snip, unsigned *snip_len, char *new_st
 static inline ContainerItemTransform sam_seg_optional_transform (char type)
 {
     switch (type) {
-        case 'c': return TRS_LTEN_I8;
-        case 'C': return TRS_LTEN_U8;
+        case 'c': return TRS_I8;
+        case 'C': return TRS_U8;
         case 's': return TRS_LTEN_I16;
         case 'S': return TRS_LTEN_U16;
         case 'i': return TRS_LTEN_I32;
         case 'I': return TRS_LTEN_U32;
-        case 'f': return TRS_SAM_FLOAT;
+        case 'f': return TRS_SAM2BAM_FLOAT;
         default : return TRS_NONE;
     }
 }

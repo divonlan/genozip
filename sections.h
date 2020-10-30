@@ -77,6 +77,7 @@ typedef struct SectionHeader {
 // flags written to SectionHeaderGenozipHeader.h.flags allowing Seg to communicate instructions to Piz
 #define GENOZIP_FL_REF_INTERNAL 0x01  // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
 #define GENOZIP_FL_ALIGNER      0x02  // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
+#define GENOZIP_FL_TXT_IS_BIN   0x04  // Source file is binary (BAM or BCF)
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
@@ -110,8 +111,7 @@ typedef struct {
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     Codec    compression_type; // compression type of original file
-    Codec    binarizer;        // IF this file is binary (eg BAM) - the codec that was used (eg CODEC_BAM)
-    uint8_t  unused[2];
+    uint8_t  unused[3];
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
     Md5Hash  md5_header;       // MD5 of header
 #define TXT_FILENAME_LEN 256
@@ -184,11 +184,12 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 // flags written to SectionHeaderCtx.h.flags allowing Seg to communicate instructions to Piz
 #define CTX_FL_STORE_INT    ((uint8_t)0x01) // after reconstruction of a snip, store it in ctx.last_value as int64_t (eg because they are a basis for a delta calculation)
 #define CTX_FL_STORE_FLOAT  ((uint8_t)0x02) // after reconstruction of a snip, store it in ctx.last_value as double
+#define CTX_FL_STORE_INDEX  ((uint8_t)0x03) // after reconstruction of a snip, the b250 word_index in ctx.last_value
 #define CTX_FL_PAIRED       ((uint8_t)0x04) // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-#define CTX_FL_CONTAINER   ((uint8_t)0x08) // snips may contain Container
+#define CTX_FL_CONTAINER    ((uint8_t)0x08) // snips may contain Container
 #define CTX_FL_COPY_PARAM   ((uint8_t)0x10) // copy ctx.b250/local.param from SectionHeaderCtx.param
 
-#define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
+#define ctx_store_flag(flags) ((flags) & 0x3)
 
 typedef struct {
     SectionHeader h;

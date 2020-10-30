@@ -102,21 +102,35 @@ done:
     return vb->txt_data.len - vblock_len;
 }
 
-// PIZ I/O thread: make the txt header either SAM or BAM according to flag_reconstruct_binary, and regardless of the source file
+// PIZ I/O thread: make the txt header either SAM or BAM according to flag_out_dt, and regardless of the source file
 void bam_prepare_txt_header (Buffer *txt)
 {
     bool is_bam_header = (txt->len >= 4) && !memcmp (txt->data, BAM_MAGIC, 4);
 
-    // case: we need to convert a BAM header to a SAM header
-    if (is_bam_header && !flag_reconstruct_binary) {
-        uint32_t l_text = GET_UINT32 (ENT (char, *txt, 4));
-        memcpy (txt->data, ENT (char, *txt, 8), l_text);
-        txt->len = l_text;
-    }
+    switch (flag_out_dt) {
 
-    // case: we need to convert a SAM header to a BAM header
-    else if (!is_bam_header && flag_reconstruct_binary) {
+        case DT_SAM:
+            // case: we need to convert a BAM header to a SAM header
+            if (is_bam_header) {
+                uint32_t l_text = GET_UINT32 (ENT (char, *txt, 4));
+                memcpy (txt->data, ENT (char, *txt, 8), l_text);
+                txt->len = l_text;
+            }
+            break;
 
+        case DT_BAM:
+            // case: we need to convert a SAM header to a BAM header
+            if (!is_bam_header) {
+
+            }
+            break;
+
+        case DT_FASTQ:
+            txt->len = 0; // no header
+            break;
+
+        default: 
+            ABORT ("Error in bam_prepare_txt_header: Invalid flag_out_dt=%s", dt_name (flag_out_dt)); 
     }
 }
 
@@ -136,7 +150,7 @@ void bam_seg_initialize (VBlock *vb)
 
 static inline void bam_seg_bin (VBlock *vb, uint16_t bin)
 {
-    Context *ctx = &vb->contexts[BAM_BIN];
+    Context *ctx = &vb->contexts[SAM_BAM_BIN];
     char snip[20] = { SNIP_SELF_DELTA };
 
     PosType delta = (int64_t)bin - ctx->last_value.i;

@@ -28,6 +28,7 @@
 #include "profiler.h"
 #include "stats.h"
 #include "codec.h"
+#include "container.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new lacon_pos
 // Special values:
@@ -39,7 +40,7 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
                                            const char *delta_snip, unsigned delta_snip_len) 
 {
     ASSERT (delta_snip, "Error in piz_reconstruct_from_delta: delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    ASSERT (ctx_is_store (base_ctx, CTX_FL_STORE_INT), "Error in piz_reconstruct_from_delta: attempting calculate delta from a base of \"%s\", but this context doesn't have CTX_FL_STORE_INT",
+    ASSERT (ctx_store_flag (base_ctx->flags) == CTX_FL_STORE_INT, "Error in piz_reconstruct_from_delta: attempting calculate delta from a base of \"%s\", but this context doesn't have CTX_FL_STORE_INT",
             base_ctx->name);
 
     if (delta_snip_len == 1 && delta_snip[0] == '-')
@@ -154,7 +155,7 @@ void piz_reconstruct_container_do (VBlock *vb, DictId dict_id, const Container *
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
-    piz_reconstruct_container_prefix (vb, &prefixes, &prefixes_len); // item prefix (we will have one per item or none at all)
+    piz_reconstruct_container_prefix (vb, &prefixes, &prefixes_len); 
 
     ASSERT (DTP (container_filter) || !(con->flags & CONTAINER_FILTER_REPEATS) || !(con->flags & CONTAINER_FILTER_ITEMS), 
             "Error: data_type=%s doesn't support container_filter", dt_name (vb->data_type));
@@ -177,7 +178,7 @@ void piz_reconstruct_container_do (VBlock *vb, DictId dict_id, const Container *
 
             if ((con->flags & CONTAINER_FILTER_ITEMS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
 
-            piz_reconstruct_container_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix
+            piz_reconstruct_container_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix (we will have one per item or none at all)
 
             const ContainerItem *item = &con->items[i];
             int32_t reconstructed_len=0;
@@ -191,9 +192,17 @@ void piz_reconstruct_container_do (VBlock *vb, DictId dict_id, const Container *
             if (reconstructed_len == -1 && i > 0)  // not WORD_INDEX_MISSING_SF - delete previous item's separator
                 vb->txt_data.len -= ((item-1)->seperator[0] != 0) + ((item-1)->seperator[1] != 0);
 
-            // emit this item's separator even if this item is missing - next item will delete it if also missing (last item in Samples doesn't have a seperator)
-            if (item->seperator[0]) RECONSTRUCT1 (item->seperator[0]);
-            if (item->seperator[1]) RECONSTRUCT1 (item->seperator[1]);
+            // seperator determines what to do after the item
+            switch ((int8_t)item->seperator[0]) {
+                case CI_MOVE:
+                    vb->txt_data.len += (int8_t)item->seperator[1]; break;
+                case CI_NUL_TERMINATE:
+                    RECONSTRUCT1 (0); break;
+                default: 
+                    // note: we emit this item's separator even if this item is missing - next item will delete it if also missing (last item in Samples doesn't have a seperator)
+                    if (item->seperator[0]) RECONSTRUCT1 (item->seperator[0]);
+                    if (item->seperator[1]) RECONSTRUCT1 (item->seperator[1]);
+            }
         }
 
         if (rep_i+1 < con->repeats || !(con->flags & CONTAINER_DROP_FINAL_REPEAT_SEP)) {
@@ -302,7 +311,7 @@ static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsi
 }
 
 void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, 
-                               WordIndex word_index, // WORD_INDEX_NONE if not used. Needed only if this snip might be a Container that needs to be cached
+                               WordIndex word_index, // WORD_INDEX_NONE if not used.
                                const char *snip, unsigned snip_len)
 {
     if (!snip_len) return; // nothing to do
@@ -310,8 +319,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     LastValueType new_value = {0};
     bool have_new_value = false;
     Context *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
-    bool store_uint  = ctx_is_store (snip_ctx, CTX_FL_STORE_INT);
-    bool store_float = ctx_is_store (snip_ctx, CTX_FL_STORE_FLOAT);
+    uint8_t store_type = ctx_store_flag (snip_ctx->flags);
 
     switch (snip[0]) {
 
@@ -392,24 +400,33 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     
     case SNIP_DONT_STORE:
-        store_uint = store_float = false; // override CTX_FL_STORE_* and fall through
+        store_type = 0; // override CTX_FL_STORE_* and fall through
         snip++; snip_len--;
         
     default: {
         RECONSTRUCT (snip, snip_len); // simple reconstruction
 
-        if (store_uint) 
-            // store the value only if the snip in its entirety is a reconstructable integer (eg NOT "21A", "-0", "012" etc)
-            have_new_value = str_get_int (snip, snip_len, &new_value.i);
+        switch (store_type) {
+            case CTX_FL_STORE_INT: 
+                // store the value only if the snip in its entirety is a reconstructable integer (eg NOT "21A", "-0", "012" etc)
+                have_new_value = str_get_int (snip, snip_len, &new_value.i);
+                break;
 
-        else if (store_float) {
-            char *after;
-            new_value.d = strtod (snip, &after); // allows negative values
+            case CTX_FL_STORE_FLOAT: {
+                char *after;
+                new_value.d = strtod (snip, &after); // allows negative values
 
-            // if the snip in its entirety is not a valid integer, don't store the value.
-            // this can happen for example when seg_pos_field stores a "nonsense" snip.
-            have_new_value = (after == snip + snip_len);
-            
+                // if the snip in its entirety is not a valid number, don't store the value.
+                // this can happen for example when seg_pos_field stores a "nonsense" snip.
+                have_new_value = (after == snip + snip_len);
+                break;
+            }
+            case CTX_FL_STORE_INDEX:
+                new_value.i = word_index;
+                have_new_value = (word_index != WORD_INDEX_NONE);
+                break;
+
+            default: {} // do nothing
         }
 
         snip_ctx->last_delta = 0; // delta is 0 since we didn't calculate delta
@@ -417,7 +434,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     }
 
     // update last_value if needed
-    if (have_new_value && (store_uint || store_float)) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
+    if (have_new_value && store_type) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
         snip_ctx->last_value = new_value;
 
     snip_ctx->last_line_i = vb->line_i;
@@ -583,6 +600,30 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
     return section_i;
 }
 
+static inline void piz_get_toplevel_and_factor (DidIType *toplevel, float *factor) //  outs
+{
+    struct { DataType src_z_non_bin_dt; 
+             uint8_t src_z_is_binary;  // same type as z_file.flags
+             DataType dst_txt_dt;
+             DidIType toplevel;
+             float factor; } translations[] = TRANSLATIONS;
+    
+    const static unsigned num_factors = sizeof (translations) / sizeof (translations[0]);
+
+    for (unsigned i=0; i < num_factors; i++)
+        if (translations[i].src_z_non_bin_dt == z_file->data_type &&
+            translations[i].src_z_is_binary  == !!(z_file->flags & GENOZIP_FL_TXT_IS_BIN) &&
+            translations[i].dst_txt_dt       == flag_out_dt) {
+                *factor   = translations[i].factor;
+                *toplevel = translations[i].toplevel;
+                return;
+            }
+            
+    // not a translation
+    *factor   = 1;
+    *toplevel = DTFZ(toplevel);
+}
+
 static void piz_uncompress_one_vb (VBlock *vb)
 {
     START_TIMER;
@@ -607,9 +648,15 @@ static void piz_uncompress_one_vb (VBlock *vb)
         fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
                     vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
+    DidIType toplevel;
+    float factor;
+    piz_get_toplevel_and_factor (&toplevel, &factor);
+
     // if we're reconstructing to a different format that the original txt file, take into account in allocation
-    float factor = 1;
-    if (txt_file->binarizer == CODEC_BAM && !flag_reconstruct_binary) factor = 4; // BAM stores sequences in 2x and numbers in 1-3x
+    bool is_binary = (z_file->flags & GENOZIP_FL_TXT_IS_BIN);
+    
+    if (z_file->data_type == DT_SAM && is_binary && toplevel == SAM_TOPLEVEL) factor = 3; // BAM stores sequences in 2x and numbers in 1-2.5x
+    if (z_file->data_type == DT_SAM && is_binary && toplevel == SAM_TOP2FQ  ) factor = 2; // BAM stores sequences in 2x and QUAL, QNAME 1x
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size * factor + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
 
@@ -619,8 +666,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     if (flag_show_b250 && exe_type == EXE_GENOCAT) goto done;
 
     // reconstruct from top level snip
-    DidIType toplevel_did_i = mtf_get_existing_did_i (vb, dict_id_field (dict_id_make (TOPLEVEL, strlen(TOPLEVEL))));
-    piz_reconstruct_from_ctx (vb, toplevel_did_i, 0);
+    piz_reconstruct_from_ctx (vb, toplevel, 0);
 
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
@@ -782,9 +828,6 @@ bool piz_one_file (bool is_first_component, bool is_last_file)
 
     if (!dispatcher) 
         dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_file->basename, PROGRESS_PERCENT, 0);
-
-    // case: we couldn't open the file because we didn't know what type it is - open it now
-    if (!flag_unbind && !flag_reading_reference && !txt_file->file) file_open_txt (txt_file);
 
     // read and write txt header. in unbind mode this also opens txt_file
     piz_successful = txtfile_genozip_to_txt_header (NULL, &original_file_digest);

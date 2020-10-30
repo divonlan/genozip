@@ -62,25 +62,38 @@ SPECIAL (SAM, 5, FLOAT, bam_piz_special_FLOAT); // used in BAM to represent floa
 
 // note: we can't alias RNEXT to RNAME, because we can't alias to CHROM - see comment in piz_reconstruct_from_ctx_do 
 #define SAM_DICT_ID_ALIASES \
-    /*         alias                        maps to this ctx          */       \
-    { DT_SAM,  &dict_id_OPTION_MC,          &dict_id_fields[SAM_CIGAR]  },     \
-    { DT_SAM,  &dict_id_OPTION_OC,          &dict_id_fields[SAM_CIGAR]  },     \
+    /*         alias                        maps to this ctx          */     \
+    { DT_SAM,  &dict_id_OPTION_MC,          &dict_id_fields[SAM_CIGAR]    }, \
+    { DT_SAM,  &dict_id_OPTION_OC,          &dict_id_fields[SAM_CIGAR]    }, \
     { DT_SAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_SQBITMAP] }, \
-    { DT_SAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_QUAL]   },
+    { DT_SAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_QUAL]     },
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS  \
     { DT_SAM,   &dict_id_OPTION_BD_BI,      sam_zip_bd_bi }, \
     { DT_SAM,   &dict_id_fields[SAM_QUAL],  sam_zip_qual  }, 
 
 #define BAM_DICT_ID_ALIASES \
-    /*         alias                        maps to this ctx          */       \
-    { DT_BAM,  &dict_id_OPTION_MC,          &dict_id_fields[SAM_CIGAR]  },     \
-    { DT_BAM,  &dict_id_OPTION_OC,          &dict_id_fields[SAM_CIGAR]  },     \
+    /*         alias                        maps to this ctx          */     \
+    { DT_BAM,  &dict_id_OPTION_MC,          &dict_id_fields[SAM_CIGAR]    }, \
+    { DT_BAM,  &dict_id_OPTION_OC,          &dict_id_fields[SAM_CIGAR]    }, \
     { DT_BAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_SQBITMAP] }, \
-    { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_QUAL]   },
+    { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_QUAL]     },
 
 #define BAM_LOCAL_GET_LINE_CALLBACKS  \
     { DT_BAM,   &dict_id_OPTION_BD_BI,      sam_zip_bd_bi }, \
     { DT_BAM,   &dict_id_fields[SAM_QUAL],  sam_zip_qual  }, 
+
+// Translators for translating SAM data into BAM and FASTQ
+// IMPORTANT: the order of these is part of the file format and CANNOT BE CHANGED (it goes into TOPLEVEL snips)
+#define SAM_DATA_TRANSLATORS \
+    TRS_SAM2BAM_QNAME,    /* moves it to its correct location in txt_data, saves txt_data.len and advances it */ \
+    TRS_SAM2BAM_RNAME,    /* reconstructs the b250 index or -1 if "*"                                         */ \
+    TRS_SAM2BAM_POS,      /* textual 1-based POS to Little Endian U32 0-based POS.                            */ \
+    TRS_SAM2BAM_CIGAR,    /* textual CIGAR to BAM-format CIGAR                                                */ \
+    TRS_SAM2BAM_SEQ,      /* textual SEQ to BAM-format SEQ                                                    */ \
+    TRS_SAM2BAM_QUAL,     /* textual QUAL to BAM-format QUAL                                                  */ \
+    TRS_SAM2BAM_OPTIONAL, /* transform prefixes in Optional Container from SAM to BAM format                  */ \
+    TRS_SAM2BAM_FLOAT,    /* SAM_SPECIAL_FLOAT snip to Little Endian 32bit float                              */ \
+    TRS_SAM2FASTQ_SEQ,    /* reverse complement sequence if FLAGS & 0x10 */
 
 #endif

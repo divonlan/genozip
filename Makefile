@@ -59,7 +59,7 @@ CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
 CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h \
-             buffer.h file.h context.h seg.h text_license.h version.h compressor.h codec.h stats.h \
+             buffer.h file.h context.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h \
 			 reference.h ref_private.h refhash.h aligner.h mutex.h \
 			 arch.h license.h data_types.h base64.h \

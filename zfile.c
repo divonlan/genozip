@@ -732,8 +732,9 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
     header.h.codec                 = CODEC_BZ2;
-    header.h.flags                 = ((flag_reference == REF_INTERNAL ? GENOZIP_FL_REF_INTERNAL : 0) |
-                                      (flag_ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0) );
+    header.h.flags                 = z_file->flags |
+                                     (flag_reference == REF_INTERNAL ? GENOZIP_FL_REF_INTERNAL : 0) |
+                                     (flag_ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0);
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)z_data_type);
     header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
@@ -875,7 +876,6 @@ void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool i
     header.h.codec                 = CODEC_BZ2;
     header.num_lines               = NUM_LINES_UNKNOWN; 
     header.compression_type        = txt_file->codec; 
-    header.binarizer               = txt_file->binarizer;
     header.md5_header              = header_md5;
     
     file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);

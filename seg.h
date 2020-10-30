@@ -10,6 +10,7 @@
 #include "genozip.h"
 #include "sections.h"
 #include "context.h"
+#include "container.h"
 
 extern void seg_all_data_lines (VBlockP vb); 
 

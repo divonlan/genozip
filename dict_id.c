@@ -85,6 +85,7 @@ void dict_id_initialize (DataType data_type)
 
     switch (data_type) { 
     case DT_VCF:
+    case DT_BCF:
         dict_id_FORMAT_GT     = dict_id_vcf_format_sf (dict_id_make ("GT", 2)).num;
         dict_id_FORMAT_GT_HT  = dict_id_vcf_format_sf (dict_id_make ("@HT", 3)).num; // different first 2 letters than GT, for lookup table
         dict_id_FORMAT_GT_HT_INDEX = dict_id_vcf_format_sf (dict_id_make ("@INDEXHT", 8)).num; // different first 2 letters

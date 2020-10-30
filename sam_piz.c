@@ -216,7 +216,7 @@ bool bam_piz_special_FLOAT (VBlock *vb, Context *ctx, const char *snip, unsigned
     } machine_en = { .n = LTEN32 (lten_n) };
 
     // binary reconstruction - BAM format
-    if (flag_reconstruct_binary)
+    if (flag_out_dt == DT_BAM)
         RECONSTRUCT (&lten_n, sizeof (uint32_t))
     
     // textual reconstruction - SAM format 
