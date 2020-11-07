@@ -24,7 +24,7 @@ void vb_release_vb (VBlock *vb)
 {
     if (!vb) return; // nothing to release
 
-    vb->first_line = vb->vblock_i = vb->txt_data_next_offset = vb->num_haplotypes_per_line = 0;
+    vb->first_line = vb->vblock_i = vb->num_haplotypes_per_line = 0;
     vb->vb_data_size = vb->vb_data_read_size = vb->longest_line_len = vb->line_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
@@ -50,7 +50,6 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->ra_buf);
     buf_free(&vb->compressed);
     buf_free(&vb->txt_data);
-    buf_free(&vb->txt_data_spillover);
     buf_free(&vb->z_data);
     buf_free(&vb->z_section_headers);
     buf_free(&vb->spiced_pw);
@@ -65,7 +64,7 @@ void vb_release_vb (VBlock *vb)
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
-            mtf_free_context (&vb->contexts[i]);
+            ctx_free_context (&vb->contexts[i]);
 
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++)
         buf_free (&vb->codec_bufs[i]);
@@ -92,7 +91,6 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->ra_buf);
     buf_destroy (&vb->compressed);
     buf_destroy (&vb->txt_data);
-    buf_destroy (&vb->txt_data_spillover);
     buf_destroy (&vb->z_data);
     buf_destroy (&vb->z_section_headers);
     buf_destroy (&vb->spiced_pw);
@@ -107,7 +105,7 @@ void vb_destroy_vb (VBlockP *vb_p)
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
-            mtf_destroy_context (&vb->contexts[i]);
+            ctx_destroy_context (&vb->contexts[i]);
 
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++)
         buf_destroy (&vb->codec_bufs[i]);

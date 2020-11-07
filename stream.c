@@ -70,8 +70,7 @@ static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip
     // lower pipe size requested to the maximum allowed system size (fcntl will return EPERM if size is larger than limit)
     FILE *pipe_max_size_file = fopen ("/proc/sys/fs/pipe-max-size", "rb");
     if (pipe_max_size_file) {
-        char max_pipe_size_str[30];
-        memset (max_pipe_size_str, 0, 30);
+        char max_pipe_size_str[30] = {};
         size_t bytes = fread (max_pipe_size_str, 1, 29, pipe_max_size_file);
         if (bytes) pipe_size = MIN (pipe_size, atoi (max_pipe_size_str));
         FCLOSE (pipe_max_size_file, "pipe_max_size_file");

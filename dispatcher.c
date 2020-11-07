@@ -128,7 +128,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
     buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
-    if (!flag_unbind && filename) // note: for flag_unbind (in main file), we print this in dispatcher_resume() 
+    if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
         progress_new_component (filename, 
                                 command == ZIP && txt_file->redirected ? "Compressing..." : "0\%", // we can't show % when compressing from stdin as we don't know the file size
                                 test_mode); 
@@ -163,13 +163,13 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     COPY_TIMER_VB (evb, wallclock);
 
-    if (flag_show_time) 
+    if (flag.show_time) 
         profiler_print_report (&evb->profile, 
                                dd->max_threads, dd->max_vb_id_so_far+1,
                                dd->filename, dd->next_vb_i + (command != ZIP)); // in ZIP, the last VB is empty
 
     // must be before vb_cleanup_memory() 
-    if (flag_show_memory) buf_display_memory_usage (false, dd->max_threads, dd->max_vb_id_so_far);    
+    if (flag.show_memory) buf_display_memory_usage (false, dd->max_threads, dd->max_vb_id_so_far);    
 
     buf_destroy (&dd->compute_threads_buf); // we need to destroy (not marely free) because we are about to free dd
 
@@ -179,7 +179,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being bound). don't bother freeing (=same time) if this is the last file, unless we're going to test and need the memory
-    if (!flag_bind && (!dd->is_last_file || flag_test)) {
+    if (!flag.bind && (!dd->is_last_file || flag.test)) {
         vb_cleanup_memory(); 
         vb_release_vb (evb);
     }
@@ -206,7 +206,7 @@ VBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
 
     dd->next_vb_i = vb_i ? vb_i : dd->next_vb_i+1;
 
-    if (flag_show_threads) dispatcher_show_time ("Generate vb", -1, dd->next_vb_i);
+    if (flag.show_threads) dispatcher_show_time ("Generate vb", -1, dd->next_vb_i);
 
     dd->next_vb = vb_get_vb (dd->next_vb_i);
     dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->next_vb->id);
@@ -222,7 +222,7 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP))
     th->vb = dd->next_vb;
     th->func = func;
 
-    if (flag_show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->vblock_i);
+    if (flag.show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->vblock_i);
 
     ASSERT0 (dd->next_vb->vblock_i, "Error in dispatcher_compute: vb_i=0");
 
@@ -262,13 +262,13 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
 
     Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
 
-    if (flag_show_threads) dispatcher_show_time ("Wait for thread", dd->next_thread_to_be_joined, th->vb->vblock_i);
+    if (flag.show_threads) dispatcher_show_time ("Wait for thread", dd->next_thread_to_be_joined, th->vb->vblock_i);
 
     if (dd->max_threads > 1) 
         // wait for thread to complete (possibly it completed already)
         pthread_join(th->thread_id, NULL);
 
-    if (flag_show_threads) dispatcher_show_time ("Join (end compute)", dd->next_thread_to_be_joined, th->vb->vblock_i);
+    if (flag.show_threads) dispatcher_show_time ("Join (end compute)", dd->next_thread_to_be_joined, th->vb->vblock_i);
 
     dd->processed_vb = th->vb;
     
@@ -299,7 +299,7 @@ void dispatcher_abandon_next_vb (Dispatcher dispatcher)
 
     buf_test_overflows(dd->next_vb, "dispatcher_abandon_next_vb"); 
 
-    if (flag_show_time) profiler_add (&evb->profile, &dd->next_vb->profile);
+    if (flag.show_time) profiler_add (&evb->profile, &dd->next_vb->profile);
 
     vb_release_vb (dd->next_vb); 
     dd->next_vb = NULL;
@@ -313,7 +313,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher)
 
         buf_test_overflows(dd->processed_vb, "dispatcher_finalize_one_vb"); // just to be safe, this isn't very expensive
 
-        if (flag_show_time) profiler_add (&evb->profile, &dd->processed_vb->profile);
+        if (flag.show_time) profiler_add (&evb->profile, &dd->processed_vb->profile);
 
         vb_release_vb (dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
         dd->processed_vb = NULL;

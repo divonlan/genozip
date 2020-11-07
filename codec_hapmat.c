@@ -26,15 +26,15 @@ typedef struct {
 
 void codec_hapmat_comp_init (VBlock *vb)
 {
-    vb->ht_matrix_ctx         = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT);
+    vb->ht_matrix_ctx         = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
     vb->ht_matrix_ctx->ltype  = LT_CODEC;
     vb->ht_matrix_ctx->lcodec = CODEC_HAPM;
 
-    vb->hapmat_index_ctx         = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
+    vb->hapmat_index_ctx         = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
     vb->hapmat_index_ctx->ltype  = LT_UINT32;
 
     // in --stats, consolidate stats into GT
-    vb->ht_matrix_ctx->st_did_i = vb->hapmat_index_ctx->st_did_i = mtf_get_ctx (vb, dict_id_FORMAT_GT)->did_i;
+    vb->ht_matrix_ctx->st_did_i = vb->hapmat_index_ctx->st_did_i = ctx_get_ctx (vb, dict_id_FORMAT_GT)->did_i;
 }
 
 static int sort_by_alt_allele_comparator(const void *p, const void *q)  
@@ -81,7 +81,6 @@ static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlock *vb)
 
 static void codec_hapmat_compress_one_array (VBlockP vb, uint32_t ht_i, 
                                              char **line_data_1, uint32_t *line_data_len_1,
-                                             char **line_data_2, uint32_t *line_data_len_2,
                                              uint32_t unused_maximum_len)
 {
     uint32_t orig_col_i = ENT (HaploTypeSortHelperIndex, vb->hapmat_helper_index_buf, ht_i)->index_in_original_line; 
@@ -96,10 +95,7 @@ static void codec_hapmat_compress_one_array (VBlockP vb, uint32_t ht_i,
     *line_data_1 = (char *)column;
     *line_data_len_1 = vb->hapmat_one_array.len;
 
-    *line_data_2 = NULL;
-    *line_data_len_2 = 0;
-
-    if (flag_show_alleles)
+    if (flag.show_alleles)
         printf ("Col %-2u : %.*s\n", orig_col_i, (int)vb->hapmat_one_array.len, column);
 }
 
@@ -126,7 +122,7 @@ bool codec_hapmat_compress (VBlock *vb,
     vb->hapmat_one_array.len = vb->lines.len;
     buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array", 0);
     
-    if (flag_show_alleles) 
+    if (flag.show_alleles) 
         printf ("\nAfter transpose and sorting:\n");
 
     // compress the matrix one column at a time, by the order of helper index
@@ -214,7 +210,7 @@ static inline void codec_hapmat_piz_get_one_line (VBlock *vb)
 {
     START_TIMER;
 
-    if (flag_samples) buf_zero (&vb->hapmat_one_array); // if we're not filling in all samples, initialize to 0;
+    if (flag.samples) buf_zero (&vb->hapmat_one_array); // if we're not filling in all samples, initialize to 0;
 
     ARRAY (const char *, hapmat_columns_data, vb->hapmat_columns_data); 
     uint32_t ht_i_after = vb->num_haplotypes_per_line; // automatic variable - faster
@@ -247,7 +243,7 @@ static inline void codec_hapmat_piz_get_one_line (VBlock *vb)
 #endif
     }
 
-    if (flag_show_alleles)
+    if (flag.show_alleles)
         printf ("Line %-2u : %.*s\n", vb_line_i, (int)vb->hapmat_one_array.len, vb->hapmat_one_array.data);
 
     COPY_TIMER (codec_hapmat_piz_get_one_line);

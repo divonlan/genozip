@@ -80,7 +80,7 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
     strm.bzfree  = codec_bz2_free;
     strm.opaque  = vb; // just passed to malloc/free
     
-    int init_ret = BZ2_bzCompressInit (&strm, flag_fast ? 1 : 9, 0, 30); // we optimize for size (normally) or speed (if user selected --fast)
+    int init_ret = BZ2_bzCompressInit (&strm, flag.fast ? 1 : 9, 0, 30); // we optimize for size (normally) or speed (if user selected --fast)
     ASSERT (init_ret == BZ_OK, "Error: BZ2_bzCompressInit failed: %s", BZ2_errstr(init_ret));
 
     strm.next_out  = compressed;
@@ -109,16 +109,16 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
             ASSERT (!strm.avail_in, "Error in codec_bz2_compress: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
 
             // initialize to 0
-            char *next_in_2=0;     strm.next_in=0;
-            uint32_t avail_in_2=0; strm.avail_in=0;
+            strm.next_in=0;
+            strm.avail_in=0;
 
-            callback (vb, line_i, &strm.next_in, &strm.avail_in, &next_in_2, &avail_in_2, *uncompressed_len - in_so_far);
-            in_so_far += strm.avail_in + avail_in_2;
+            callback (vb, line_i, &strm.next_in, &strm.avail_in, *uncompressed_len - in_so_far);
+            in_so_far += strm.avail_in;
 
             bool is_last_line = (line_i == vb->lines.len - 1);
-            if (!strm.avail_in && !avail_in_2 && !is_last_line) continue; // this line has no SEQ data - move to next line (this happens eg in FASTA)
+            if (!strm.avail_in && !is_last_line) continue; // this line has no SEQ data - move to next line (this happens eg in FASTA)
 
-            bool final = is_last_line && !avail_in_2;
+            bool final = is_last_line;
 
             ret = BZ2_bzCompress (&strm, final ? BZ_FINISH : BZ_RUN);
 
@@ -128,21 +128,6 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
             }
             else ASSERT (ret == (final ? BZ_STREAM_END : BZ_RUN_OK), 
                          "Error: BZ2_bzCompress failed: %s", BZ2_errstr (ret));
-
-            // now the second part, if there is one
-            if (avail_in_2) {
-                strm.next_in  = next_in_2;
-                strm.avail_in = avail_in_2;
-
-                ret = BZ2_bzCompress (&strm, is_last_line ? BZ_FINISH : BZ_RUN);
-
-                if (soft_fail && ret == BZ_FINISH_OK) { // TO DO - what is the condition for out of output space in BZ_RUN?
-                    success = false; // data_compressed_len too small
-                    break;
-                }
-                else ASSERT (ret == (is_last_line ? BZ_STREAM_END : BZ_RUN_OK), 
-                             "Error: BZ2_bzCompress failed: %s", BZ2_errstr (ret));
-            }
         }
     }
     else 

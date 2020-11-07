@@ -167,7 +167,7 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len)
 
     if (!len) return; // nothing to do
     
-    //printf ("%.*s", len, (char*)data);
+    //printf ("MD5 %u bytes: %.*s\n", len, len, (char*)data);
     
     if (!ctx->initialized) md5_initialize (ctx);
 

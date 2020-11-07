@@ -299,7 +299,7 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     }
 
     // add non-Buffer reference memory
-    if (flag_reference != REF_NONE) 
+    if (flag.reference != REF_NONE) 
         stats[num_stats++] = ref_memory_consumption();
 
     // sort stats by bytes
@@ -336,7 +336,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 
     ((Buffer **)bl->data)[bl->len++] = buf;
 
-    if (flag_debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER) {
+    if (flag.debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER) {
         char s[POINTER_STR_LEN];
         fprintf (stderr, "buf_add_to_buffer_list: %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
                  buf_desc(buf), buf->size, str_pointer(buf,s), vb->id, (uint32_t)vb->buffer_list.len-1);
@@ -359,14 +359,14 @@ static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_siz
     ASSERT (buf->name, "Error: buffer has no name. func=%s:%u", buf->func, buf->code_line);
 
     if (!memory) {
-        if (flag_show_memory)
+        if (flag.show_memory)
             buf_display_memory_usage (true, 0, 0);
 
         char s[30];
         ABORT ("%s: Out of memroy. %s%sDetails: %s:%u failed to allocate %s bytes. Buffer: %s", 
                global_cmd, 
                (command==ZIP ? "Try running with a lower vblock size using --vblock. " : ""), 
-               (!flag_show_memory ? "To see memory details - run again with --show-memory. " : ""), 
+               (!flag.show_memory ? "To see memory details - run again with --show-memory. " : ""), 
                func, code_line, str_uint_commas (size + overhead_size, s), buf_desc(buf));
     }
 
@@ -604,7 +604,7 @@ void buf_remove_from_buffer_list (Buffer *buf)
 
         if (buf_list[i] == buf) {
             
-            if (flag_debug_memory) {
+            if (flag.debug_memory) {
                 char s[POINTER_STR_LEN];
                 fprintf (stderr, "Destroy %s: buf_addr=%s buf->vb->id=%d buf_i=%u\n", buf_desc (buf), str_pointer(buf,s), buf->vb->id, i);
             }
@@ -684,7 +684,7 @@ void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
     buf_reset (src); // zero buffer except vb
 }
 
-void buf_add_string (VBlock *vb, Buffer *buf, const char *str) 
+void buf_add_string (VBlockP vb, Buffer *buf, const char *str) 
 { 
     unsigned len = strlen (str); 
     buf_alloc (vb, buf, MAX (1000, buf->len + len + 1), 2, "string_buf", 0);
@@ -702,7 +702,7 @@ void buf_print (Buffer *buf, bool add_newline)
 
 void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 {
-    if (flag_debug_memory) {
+    if (flag.debug_memory) {
         char s[POINTER_STR_LEN];
         fprintf (stderr, "Memory freed by free(): %s %s:%u\n", str_pointer (p, s), func, code_line);
     }
@@ -720,7 +720,7 @@ void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t co
     void *new = realloc (p, size);
     ASSERT (new, "Error in %s:%u: REALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
 
-    if (flag_debug_memory) {
+    if (flag.debug_memory) {
         char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN];
         fprintf (stderr, "realloc(): old=%s new=%s size=%"PRIu64" %s:%u\n", 
                  str_pointer (p, s1), str_pointer (new, s2), (uint64_t)size, func, code_line);
@@ -734,7 +734,7 @@ void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t c
     void *new = malloc (size);
     ASSERT (new, "Error in %s:%u: MALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
 
-    if (flag_debug_memory) {
+    if (flag.debug_memory) {
         char s[POINTER_STR_LEN];
         fprintf (stderr, "malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new, s), (uint64_t)size, func, code_line);
     }

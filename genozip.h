@@ -24,7 +24,7 @@
 // -----------------
 #define GENOZIP_EXT ".genozip"
 
-#define MAX_POS ((PosType)0xffffffff) // maximum allowed value for POS (constraint: fit into uint32 ctx.local)
+#define MAX_POS ((PosType)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
 
 // default max amount of txt data in each variant block. this is user-configurable with --vblock
 #define TXT_DATA_PER_VB_DEFAULT "16" // MB in default mode
@@ -65,6 +65,12 @@ typedef BgEnBufFunc (*BgEnBuf);
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPES } ExeType;
 
+// IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
+typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
+               DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF3=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
+               DT_BAM=7, DT_BCF=8, NUM_DATATYPES 
+             } DataType; 
+        
 #pragma pack(1) // structures that are part of the genozip format are packed.
 #define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/GFF3 specs don't limit the field name (tag) length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
 typedef union DictId {
@@ -75,6 +81,8 @@ typedef union DictId {
 #pragma pack()
 
 typedef uint8_t DidIType;   // index of a context in vb->contexts or z_file->contexts / a counter of contexts
+#define DID_I_NONE   255
+
 typedef uint64_t CharIndex; // index within dictionary
 typedef int32_t WordIndex;  // used for word and node indices
 typedef int64_t PosType;    // used for position coordinate within a genome
@@ -85,7 +93,7 @@ extern const char *global_cmd;            // set once in main()
 extern ExeType exe_type;
 
 // IMPORTANT: This is part of the genozip file format. Also update codec.h/codec_args
-// If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size
+// If making any changes, update arrays in 1. codec.h 2. txtfile_estimate_txt_data_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_UNKNOWN=0, 
     CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, // internal compressors
@@ -103,44 +111,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
 typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP='h', TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
-
-#define SAVE_FLAG(flag) typeof(flag) save_##flag = flag 
-#define TEMP_FLAG(flag,temp) typeof(flag) save_##flag = flag ; flag = (temp)
-#define RESET_FLAG(flag) SAVE_FLAG(flag) ; flag=(typeof(flag))(uint64_t)0
-#define RESTORE_FLAG(flag) flag = save_##flag
-
-// flags set by user's command line options
-extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_show_alleles, flag_show_time, flag_bgzip, flag_out_dt,
-           flag_show_memory, flag_show_dict, flag_show_b250, flag_show_stats, flag_show_headers, flag_show_aliases,
-           flag_show_index, flag_show_gheader, flag_show_ref_contigs, flag_stdout, flag_replace, flag_test, flag_regions,  
-           flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_list_chroms, 
-           flag_show_vblocks, flag_sblock, flag_vblock, flag_gt_only, flag_gtshark,
-           flag_header_one, flag_fast, flag_multiple_files, flag_sequential, flag_register, flag_show_ref_seq,
-           flag_show_reference, flag_show_ref_hash, flag_show_ref_index, flag_show_ref_alts, flag_pair, flag_genocat_info_only, 
-           flag_test_seg, flag_debug_progress, flag_show_hash, flag_debug_memory, flag_show_codec_test, flag_show_containers,
-           flag_make_reference, flag_reading_reference,
-
-           flag_optimize, flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
-           flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC,
-           flag_ref_use_aligner;
-
-extern char *flag_grep, *flag_show_is_set, *flag_unbind;
-extern uint64_t flag_stdin_size;
-
-// values of flag_reference
-typedef enum { REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference
-               REF_INTERNAL,  // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
-               REF_EXTERNAL,  // ZIP & PIZ: user specified --reference
-               REF_EXT_STORE, // ZIP: user specified --REFERENCE
-               REF_STORED     // PIZ: file contains REFERENCE sections (user cannot specify --reference)
-} ReferenceType;
-extern ReferenceType flag_reference;           
-
-// values of flag_pair
-#define NOT_PAIRED_END 0
-#define PAIR_READ_1    1
-#define PAIR_READ_2    2
-
+extern const char *command_line;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
 extern VBlockP evb;
@@ -156,10 +127,27 @@ typedef _Bool bool;
 #define true 1
 #define false 0
 
+#define SAVE_VALUE(flag) typeof(flag) save_##flag = flag 
+#define TEMP_VALUE(flag,temp) typeof(flag) save_##flag = flag ; flag = (temp)
+#define RESET_VALUE(flag) SAVE_VALUE(flag) ; flag=(typeof(flag))(uint64_t)0
+#define RESTORE_VALUE(flag) flag = save_##flag
+
 #define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value, bool reconstruct)
 #define SPECIAL(dt,num,name,func) \
     extern SPECIAL_RECONSTRUCTOR(func); \
-    static const int dt##_SPECIAL_##name = (num + 32); /* +32 to make it printable ASCII that can go into a snip */
+    enum { dt##_SPECIAL_##name = (num + 32) }; // define constant - +32 to make it printable ASCII that can go into a snip 
+
+// translations of Container items - when genounzipping one format translated to another
+typedef uint8_t TranslatorId;
+// note on return value: self-translators (translator only item[0] need to return the change in prefixes_len, the return value of other translators is ignored
+#define TRANSLATOR_FUNC(func) int32_t func(VBlockP vb, ContextP ctx, char *reconstructed, int32_t reconstructed_len)
+#define TRANSLATOR(src_dt,dst_dt,num,name,func)\
+    extern TRANSLATOR_FUNC(func); \
+    enum { src_dt##2##dst_dt##_##name = num }; // define constant
+
+#define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item)
+
+#define TXTHEADER_TRANSLATOR(func) void func (BufferP txt)
 
 // IMPORTANT: This is part of the genozip file format. 
 typedef enum __attribute__ ((__packed__)) { // 1 byte
@@ -172,8 +160,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 
 #define COMPRESSOR_CALLBACK(func) \
 void func (VBlockP vb, uint32_t vb_line_i, \
-           char **line_data_1, uint32_t *line_data_len_1,\
-           char **line_data_2, uint32_t *line_data_len_2,\
+           char **line_data, uint32_t *line_data_len,\
            uint32_t maximum_size); // might be less than the size available if we're sampling in zip_assign_best_codec()
 #define CALLBACK_NO_SIZE_LIMIT 0xffffffff // for maximum_size
 
@@ -191,10 +178,10 @@ extern void main_exit (bool show_stack, bool is_error);
 // check for a bug - prints stack
 #define ASSERT(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }}
 #define ASSERT0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s\n", string); exit_on_error(true); }}
-#define ASSERTW(condition, format, ...)      { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
-#define ASSERTW0(condition, string)          { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n%s\n", string); } }
-#define RETURNW(condition, ret, format, ...) { if (!(condition)) { if (!flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }}
-#define RETURNW0(condition, ret, string)     { if (!(condition)) { if (!flag_quiet) { fprintf (stderr, "\n%s\n", string); } return ret; } }
+#define ASSERTW(condition, format, ...)      { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
+#define ASSERTW0(condition, string)          { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n%s\n", string); } }
+#define RETURNW(condition, ret, format, ...) { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }}
+#define RETURNW0(condition, ret, string)     { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n%s\n", string); } return ret; } }
 #define ABORT(format, ...)                   { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);}
 #define ABORT0(string)                       { fprintf (stderr, "\n%s\n", string); exit_on_error(true);}
 #define WARN(format, ...)                    { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }

@@ -151,12 +151,14 @@ void str_print_null_seperated_data (const char *data, unsigned len, bool add_new
             continue; // skip character and following separator
         }
 
-        if      (data[i] >= 32)   fputc (data[i], stderr);
-        else if (data[i] == 0)    fputc (' ', stderr); // snip separator
-        else if (data[i] == '\t') fwrite ("\\t", 1, 2, stderr);
-        else if (data[i] == '\n') fwrite ("\\n", 1, 2, stderr);
-        else if (data[i] == '\r') fwrite ("\\r", 1, 2, stderr);
-        else                      fprintf (stderr, "\\x%x", data[i]);
+        switch (data[i]) {
+            case 32 ... 127 : fputc (data[i], stderr);      break;
+            case 0          : fputc (' ', stderr);          break; // snip separator
+            case '\t'       : fwrite ("\\t", 1, 2, stderr); break;
+            case '\n'       : fwrite ("\\n", 1, 2, stderr); break;
+            case '\r'       : fwrite ("\\r", 1, 2, stderr); break;
+            default         : fprintf (stderr, "\\x%x", data[i]);
+        }
     }
     
     if (add_newline) fputc ('\n', stderr);

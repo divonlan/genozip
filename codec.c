@@ -142,17 +142,18 @@ static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 //    the codec during cloning    
 void codec_assign_best_codec (VBlockP vb, ContextP ctx, bool is_local, uint32_t len)
 {
-    RESET_FLAG (flag_show_headers);
+    RESET_FLAG (show_headers);
     uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
     uint64_t save_z_data       = vb->z_data.len;
 
     CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA } };
-    const unsigned num_tests = flag_fast ? 2 : 4; // don't consider BSC or LZMA if --fast as they are slow
+    const unsigned num_tests = flag.fast ? 2 : 4; // don't consider BSC or LZMA if --fast as they are slow
 
     Codec *selected_codec = is_local ? &ctx->lcodec : &ctx->bcodec;
 
     len = MIN (len, CODEC_ASSIGN_SAMPLE_SIZE);
-    if (len < MIN_LEN_FOR_COMPRESSION || *selected_codec != CODEC_UNKNOWN) goto done;
+    if (len < MIN_LEN_FOR_COMPRESSION ||  // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
+        *selected_codec != CODEC_UNKNOWN) goto done; // if already selected - don't assign
 
     // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
     // it doesn't prevent double testing 100% of time, but that's good enough) 
@@ -161,7 +162,7 @@ void codec_assign_best_codec (VBlockP vb, ContextP ctx, bool is_local, uint32_t 
     
     if (zf_codec != CODEC_UNKNOWN) {
         *selected_codec = zf_codec;
-        return;
+        goto done;
     }
 
     // measure the compressed size and duration for a small sample of of the local data, for each codec
@@ -178,7 +179,7 @@ void codec_assign_best_codec (VBlockP vb, ContextP ctx, bool is_local, uint32_t 
     // sort codec by our selection criteria
     qsort (tests, num_tests, sizeof (CodecTest), (int (*)(const void *, const void*))codec_assign_sorter);
 
-    if (flag_show_codec_test)
+    if (flag.show_codec_test)
         fprintf (stderr, "vb_i=%u %-8s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
                 vb->vblock_i, ctx->name, is_local ? "LOCAL" : "B250",
                 codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
@@ -188,13 +189,13 @@ void codec_assign_best_codec (VBlockP vb, ContextP ctx, bool is_local, uint32_t 
 
     // assign the best codec - the first one in the sorted array - and commit it to zf_ctx
     *selected_codec = tests[0].codec;
-    mtf_commit_codec_to_zf_ctx (vb, ctx, is_local);
+    ctx_commit_codec_to_zf_ctx (vb, ctx, is_local);
 
 done:
     // roll back
     vb->z_data.len = save_z_data;
     vb->section_list_buf.len = save_section_list; 
-    RESTORE_FLAG (flag_show_headers);
+    RESTORE_FLAG (show_headers);
 }
 
 // needs to be after all the functions as it refers to them

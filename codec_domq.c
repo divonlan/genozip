@@ -41,22 +41,22 @@
 // This is typically with Illumina binning and "normal" samples where most scores are F
 // but might apply with other technologies too, including in combination with our optimize-QUAL
 // Returns the character that appears more than 50% of the sample lines tested, or -1 if there isn't one.
-bool codec_domq_comp_init (VBlock *vb, LocalGetLineCB callback)
+bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callback)
 {
 #   define DOMQUAL_THREADSHOLD_DOM_OF_TOTAL 0.5 // minimum % - doms of of total to trigger domqual
 #   define DOMQUAL_THREADSHOLD_NUM_CHARS 5      // not worth it if less than this (and will fail in SAM with 1)
 #   define DOMQUAL_LINE_SAMPLE_LEN 500          // we don't need more than this to find the dom (in case of long reads of 10s of thousands)
 #   define NUM_LINES_IN_SAMPLE 5
 
-    Context *qual_ctx = &vb->contexts[DTF(qual)];
+    Context *qual_ctx = &vb->contexts[qual_did_i];
     qual_ctx->lcodec = CODEC_UNKNOWN; // cancel possible inheritence from previous VB
 
     uint32_t char_counter[256] = { 0 };
     uint32_t total_len = 0;
     for (uint32_t line_i=0; line_i < MIN (NUM_LINES_IN_SAMPLE, vb->lines.len); line_i++) {   
-        char *qual_data, *unused;
-        uint32_t qual_data_len, unused_len;
-        callback (vb, line_i, &qual_data, &qual_data_len, &unused, &unused_len, CALLBACK_NO_SIZE_LIMIT);
+        char *qual_data;
+        uint32_t qual_data_len;
+        callback (vb, line_i, &qual_data, &qual_data_len, CALLBACK_NO_SIZE_LIMIT);
     
         if (qual_data_len > DOMQUAL_LINE_SAMPLE_LEN) qual_data_len = DOMQUAL_LINE_SAMPLE_LEN; 
     
@@ -107,7 +107,8 @@ bool codec_domq_compress (VBlock *vb,
 
     ASSERT0 (!uncompressed && callback, "Error in codec_domq_compress: only callback option is supported");
 
-    Context *qual_ctx = &vb->contexts[DTF(qual)];
+    SectionHeaderCtx *local_header = (SectionHeaderCtx *)header;
+    Context *qual_ctx = ctx_get_existing_ctx (vb, local_header->dict_id);
     Context *qdomruns_ctx = qual_ctx + 1;
 
     const char dom = qual_ctx->local.param;
@@ -125,36 +126,33 @@ bool codec_domq_compress (VBlock *vb,
     uint32_t runlen = 0;
     
     for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {   
-        char *qual[2] = {};
-        uint32_t qual_len[2] = {};
-        callback (vb, line_i, &qual[0], &qual_len[0], &qual[1], &qual_len[1], CALLBACK_NO_SIZE_LIMIT);
+        char *qual = 0;
+        uint32_t qual_len = 0;
+        callback (vb, line_i, &qual, &qual_len, CALLBACK_NO_SIZE_LIMIT);
 
         // grow if needed
-        buf_alloc_more (vb, qual_buf, 2 * (qual_len[0] + qual_len[1]), 0, char, 1.5); // theoretical worst case is 2 characters (added NO_DOMS) per each original character
-        buf_alloc_more (vb, qdomruns_buf, qual_len[0] + qual_len[1], 0, uint8_t, 1.5);
+        buf_alloc_more (vb, qual_buf, 2 * qual_len, 0, char, 1.5); // theoretical worst case is 2 characters (added NO_DOMS) per each original character
+        buf_alloc_more (vb, qdomruns_buf, qual_len, 0, uint8_t, 1.5);
 
-        for (uint32_t side=0; side < 2; side++) {
+        if (!qual) continue;
 
-            if (!qual[side]) continue;
-
-            for (uint32_t i=0; i < qual_len[side]; i++) {    
-                if (qual[side][i] == dom) 
-                    runlen++;
-                
-                else {
-                    // this non-dom value terminates a run of doms
-                    if (runlen) {
-                        codec_domq_add_runs (qdomruns_buf, runlen);
-                        runlen = 0;
-                    }
-
-                    // this non-dom does not terminate a run of doms - add NO_DOMs to indicate the missing dom run
-                    else 
-                        NEXTENT (char, *qual_buf) = NO_DOMS;
-
-                    // add the non-dom character
-                    NEXTENT (char, *qual_buf) = qual[side][i];
+        for (uint32_t i=0; i < qual_len; i++) {    
+            if (qual[i] == dom) 
+                runlen++;
+            
+            else {
+                // this non-dom value terminates a run of doms
+                if (runlen) {
+                    codec_domq_add_runs (qdomruns_buf, runlen);
+                    runlen = 0;
                 }
+
+                // this non-dom does not terminate a run of doms - add NO_DOMs to indicate the missing dom run
+                else 
+                    NEXTENT (char, *qual_buf) = NO_DOMS;
+
+                // add the non-dom character
+                NEXTENT (char, *qual_buf) = qual[i];
             }
         }
     }

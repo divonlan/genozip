@@ -77,6 +77,7 @@ extern void ref_generate_reverse_complement_genome (void);
 // contigs stuff
 extern void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs);
 extern uint32_t ref_num_loaded_contigs (void);
+extern PosType ref_contigs_get_contig_length (const char *chrom_name, unsigned chrom_name_len);
 extern WordIndex ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, WordIndex must_be_chrom_index);
 extern void ref_contigs_sort_chroms (void);
 extern void ref_contigs_load_contigs (void);
@@ -86,9 +87,9 @@ extern void ref_alt_chroms_load (void);
 extern void ref_alt_chroms_compress (void);
 
 #define ref_assert_nucleotide_available(range,pos) \
-    ASSERT (/* piz w stored ref */ (flag_reference == REF_STORED && ref_is_nucleotide_set ((range), pos2range_idx(pos))) ||  \
-            /* zip w ext ref    */ ((flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && ((pos) >= (range)->first_pos && (pos) <= (range)->last_pos)) || \
-            /* zip internal ref */ flag_reference == REF_INTERNAL, \
+    ASSERT (/* piz w stored ref */ (flag.reference == REF_STORED && ref_is_nucleotide_set ((range), pos2range_idx(pos))) ||  \
+            /* zip w ext ref    */ ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && ((pos) >= (range)->first_pos && (pos) <= (range)->last_pos)) || \
+            /* zip internal ref */ flag.reference == REF_INTERNAL, \
         "Error in %s:%u: reference is not set: chrom=%.*s pos=%"PRId64, __FUNCTION__, __LINE__, (range)->chrom_name_len, (range)->chrom_name, (pos))
 
 // note that the following work on idx and not pos! (idx is the index within the range)

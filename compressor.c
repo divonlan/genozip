@@ -25,7 +25,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     ASSERT0 (BGEN32 (header->magic) == GENOZIP_MAGIC, "Error in comp_compress: corrupt header - bad magic");
 
     // if the user requested --fast - we always use BZLIB, never LZMA or BSC
-    if (flag_fast && (header->codec == CODEC_LZMA || header->codec == CODEC_BSC))
+    if (flag.fast && (header->codec == CODEC_LZMA || header->codec == CODEC_BSC))
         header->codec = CODEC_BZ2;
 
     ASSERT (header->codec < NUM_CODECS, "Error in comp_compress: unsupported section compressor=%u", header->codec);
@@ -41,7 +41,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     unsigned encryption_padding_reserve = 0;
 
     if (header->section_type != SEC_GENOZIP_HEADER &&  // genozip header is never encrypted
-        !(header->section_type == SEC_REFERENCE && flag_reference == REF_EXT_STORE)) { // external reference copied over is never encrypted
+        !(header->section_type == SEC_REFERENCE && flag.reference == REF_EXT_STORE)) { // external reference copied over is never encrypted
         is_encrypted = crypt_get_encrypted_len (&compressed_offset, &header_padding); // set to 0 if no encryption
         encryption_padding_reserve = crypt_max_padding_len(); // padding for the body
     }
@@ -146,7 +146,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
     z_data->len += total_z_len;
 
-    if (flag_show_headers) 
+    if (flag.show_headers) 
         zfile_show_header (header, vb->vblock_i ? vb : NULL, offset, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
 
 done:

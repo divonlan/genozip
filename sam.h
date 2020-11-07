@@ -11,6 +11,7 @@
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(sam_zip_qual)
+COMPRESSOR_CALLBACK(sam_zip_u2)
 COMPRESSOR_CALLBACK(sam_zip_bd_bi)
 extern void sam_zip_initialize (void);
 extern bool sam_zip_is_unaligned_line (const char *line, int len);
@@ -31,10 +32,14 @@ extern void sam_piz_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unuse
 // BAM Stuff
 extern int32_t bam_is_header_done (void);
 extern uint32_t bam_unconsumed (VBlockP vb);
-extern void bam_prepare_txt_header (BufferP txt);
+extern void txtheader_bam2sam (BufferP txt);
 extern void bam_read_vblock (VBlockP vb);
 extern void bam_seg_initialize (VBlockP vb);
+extern void bam_zip_finalize (void);
 extern const char *bam_seg_txt_line (VBlockP vb_, const char *field_start_line, bool *has_special_eol);
+
+// SAM-to-FASTQ stuff
+CONTAINER_FILTER_FUNC (sam_piz_sam2fq_filter);
 
 // VB stuff
 extern void sam_vb_release_vb();
@@ -44,14 +49,15 @@ extern unsigned sam_vb_zip_dl_size (void);
 
 // Special - used for SAM & BAM
 #define SAM_SPECIAL { sam_piz_special_CIGAR, sam_piz_special_TLEN, sam_piz_special_BD_BI, sam_piz_special_AS, \
-                      sam_piz_special_MD, bam_piz_special_FLOAT }
+                      sam_piz_special_MD, bam_piz_special_FLOAT, bam_piz_special_BIN }
 SPECIAL (SAM, 0, CIGAR, sam_piz_special_CIGAR);
 SPECIAL (SAM, 1, TLEN,  sam_piz_special_TLEN);
 SPECIAL (SAM, 2, BDBI,  sam_piz_special_BD_BI);
 SPECIAL (SAM, 3, AS,    sam_piz_special_AS);
 SPECIAL (SAM, 4, MD,    sam_piz_special_MD);
 SPECIAL (SAM, 5, FLOAT, bam_piz_special_FLOAT); // used in BAM to represent float optional values
-#define NUM_SAM_SPECIAL 6
+SPECIAL (SAM, 6, BIN,   bam_piz_special_BIN);   
+#define NUM_SAM_SPECIAL 7
 
 // SAM field types 
 #define sam_dict_id_is_qname_sf  dict_id_is_type_1
@@ -63,37 +69,52 @@ SPECIAL (SAM, 5, FLOAT, bam_piz_special_FLOAT); // used in BAM to represent floa
 // note: we can't alias RNEXT to RNAME, because we can't alias to CHROM - see comment in piz_reconstruct_from_ctx_do 
 #define SAM_DICT_ID_ALIASES \
     /*         alias                        maps to this ctx          */     \
-    { DT_SAM,  &dict_id_OPTION_MC,          &dict_id_fields[SAM_CIGAR]    }, \
-    { DT_SAM,  &dict_id_OPTION_OC,          &dict_id_fields[SAM_CIGAR]    }, \
-    { DT_SAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_SQBITMAP] }, \
-    { DT_SAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_QUAL]     },
+    { DT_SAM,  &dict_id_OPTION_MC,          &dict_id_OPTION_CIGAR         }, \
+    { DT_SAM,  &dict_id_OPTION_OC,          &dict_id_OPTION_CIGAR         }, \
+    { DT_BAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_E2_Z]     }, \
+    { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_U2_Z]     },
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS  \
     { DT_SAM,   &dict_id_OPTION_BD_BI,      sam_zip_bd_bi }, \
     { DT_SAM,   &dict_id_fields[SAM_QUAL],  sam_zip_qual  }, 
 
 #define BAM_DICT_ID_ALIASES \
-    /*         alias                        maps to this ctx          */     \
-    { DT_BAM,  &dict_id_OPTION_MC,          &dict_id_fields[SAM_CIGAR]    }, \
-    { DT_BAM,  &dict_id_OPTION_OC,          &dict_id_fields[SAM_CIGAR]    }, \
-    { DT_BAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_SQBITMAP] }, \
-    { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_QUAL]     },
+    /*         alias                        maps to this ctx              */ \
+    { DT_SAM,  &dict_id_OPTION_MC,          &dict_id_OPTION_CIGAR         }, \
+    { DT_SAM,  &dict_id_OPTION_OC,          &dict_id_OPTION_CIGAR         }, \
+    { DT_BAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_E2_Z]     }, \
+    { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_U2_Z]     },
 
 #define BAM_LOCAL_GET_LINE_CALLBACKS  \
     { DT_BAM,   &dict_id_OPTION_BD_BI,      sam_zip_bd_bi }, \
     { DT_BAM,   &dict_id_fields[SAM_QUAL],  sam_zip_qual  }, 
 
-// Translators for translating SAM data into BAM and FASTQ
-// IMPORTANT: the order of these is part of the file format and CANNOT BE CHANGED (it goes into TOPLEVEL snips)
-#define SAM_DATA_TRANSLATORS \
-    TRS_SAM2BAM_QNAME,    /* moves it to its correct location in txt_data, saves txt_data.len and advances it */ \
-    TRS_SAM2BAM_RNAME,    /* reconstructs the b250 index or -1 if "*"                                         */ \
-    TRS_SAM2BAM_POS,      /* textual 1-based POS to Little Endian U32 0-based POS.                            */ \
-    TRS_SAM2BAM_CIGAR,    /* textual CIGAR to BAM-format CIGAR                                                */ \
-    TRS_SAM2BAM_SEQ,      /* textual SEQ to BAM-format SEQ                                                    */ \
-    TRS_SAM2BAM_QUAL,     /* textual QUAL to BAM-format QUAL                                                  */ \
-    TRS_SAM2BAM_OPTIONAL, /* transform prefixes in Optional Container from SAM to BAM format                  */ \
-    TRS_SAM2BAM_FLOAT,    /* SAM_SPECIAL_FLOAT snip to Little Endian 32bit float                              */ \
-    TRS_SAM2FASTQ_SEQ,    /* reverse complement sequence if FLAGS & 0x10 */
+
+// Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
+// (included in the TOP2BAM container)
+// translator numbers must start from 1 - 0 is reserved for "none"
+TRANSLATOR (SAM, BAM,   1,  I8,       container_translate_I8)   // reconstruct binary little endian functions
+TRANSLATOR (SAM, BAM,   2,  U8,       container_translate_U8)   // 
+TRANSLATOR (SAM, BAM,   3,  LTEN_I16, container_translate_LTEN_I16) 
+TRANSLATOR (SAM, BAM,   4,  LTEN_U16, container_translate_LTEN_U16) 
+TRANSLATOR (SAM, BAM,   5,  LTEN_I32, container_translate_LTEN_I32) 
+TRANSLATOR (SAM, BAM,   6,  LTEN_U32, container_translate_LTEN_U32) 
+TRANSLATOR (SAM, BAM,   7,  RNAME,    sam_piz_sam2bam_RNAME)    // reconstructs the b250 index or -1 if "*"
+TRANSLATOR (SAM, BAM,   8,  POS,      sam_piz_sam2bam_POS)      // reconstructs Little Endian U32 0-based POS. 
+TRANSLATOR (SAM, BAM,   9,  SEQ,      sam_piz_sam2bam_SEQ)      // textual SEQ to BAM-format SEQ 
+TRANSLATOR (SAM, BAM,   10, QUAL,     sam_piz_sam2bam_QUAL)     // textual QUAL to BAM-format QUAL 
+TRANSLATOR (SAM, BAM,   11, OPTIONAL, sam_piz_sam2bam_OPTIONAL) // set block_size after Optional reconstruction
+TRANSLATOR (SAM, BAM,   12, OPTIONAL_SELF, sam_piz_sam2bam_OPTIONAL_SELF) // transform prefixes in Optional Container from SAM to BAM format 
+TRANSLATOR (SAM, FASTQ, 13, SEQ,      sam_piz_sam2fastq_SEQ)    // reverse-complement the sequence if needed, and drop if "*"
+TRANSLATOR (SAM, FASTQ, 14, QUAL,     sam_piz_sam2fastq_QUAL)   // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
+#define NUM_SAM_TRANS 15 // including "none"
+#define SAM_TRANSLATORS { NULL /* none */, container_translate_I8, container_translate_U8, container_translate_LTEN_I16, \
+                          container_translate_LTEN_U16, container_translate_LTEN_I32, container_translate_LTEN_U32, \
+                          sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, sam_piz_sam2bam_QUAL, sam_piz_sam2bam_OPTIONAL, \
+                          sam_piz_sam2bam_OPTIONAL_SELF, sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL }
+
+TXTHEADER_TRANSLATOR (txtheader_bam2sam);
+TXTHEADER_TRANSLATOR (txtheader_sam2bam);
+TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
 #endif

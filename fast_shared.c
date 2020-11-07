@@ -42,7 +42,7 @@ bool fast_piz_test_grep (VBlockFAST *vb)
 
     // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every sam component
-    if (flag_unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
+    if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
     
     // we only need room for one line for now 
     buf_alloc (vb, &vb->txt_data, vb->longest_line_len, 1.1, "txt_data", vb->vblock_i);
@@ -52,7 +52,7 @@ bool fast_piz_test_grep (VBlockFAST *vb)
     piz_uncompress_all_ctxs ((VBlockP)vb, 0);
     vb->grep_stages = GS_UNCOMPRESS; // during uncompress in the compute thread, uncompress only what was not already uncompressed here
 
-    // reconstruct each description line and check for string matching with flag_grep
+    // reconstruct each description line and check for string matching with flag.grep
     bool found = false, match = false;
 
     Context *desc_ctx =  &vb->contexts[vb->data_type == DT_FASTQ ? FASTQ_DESC : FASTA_DESC];
@@ -66,9 +66,9 @@ bool fast_piz_test_grep (VBlockFAST *vb)
 
         *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string
 
-        match = flag_grep && !!strstr (vb->txt_data.data, flag_grep); // note: this function is also called due to --regions in FASTA
+        match = flag.grep && !!strstr (vb->txt_data.data, flag.grep); // note: this function is also called due to --regions in FASTA
 
-        if (!match && flag_regions && vb->data_type == DT_FASTA) 
+        if (!match && flag.regions && vb->data_type == DT_FASTA) 
             match = fasta_piz_is_grepped_out_due_to_regions (vb, vb->txt_data.data);
 
         vb->txt_data.len = 0; // reset
@@ -89,12 +89,12 @@ bool fast_piz_test_grep (VBlockFAST *vb)
         found = fasta_piz_initialize_contig_grepped_out (vb, desc_ctx->b250.len > 0, match) || found;
 
     // reset iterators - piz_fast*_reconstruct_vb will use them again 
-    mtf_init_iterator (desc_ctx);
+    ctx_init_iterator (desc_ctx);
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
         
         Context *ctx = &vb->contexts[did_i];
         if (dict_id_is_type_1 (ctx->dict_id)) {
-            mtf_init_iterator (ctx);
+            ctx_init_iterator (ctx);
             ctx->last_delta = ctx->last_value.d = 0;
         }
     }

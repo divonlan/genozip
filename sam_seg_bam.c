@@ -18,15 +18,6 @@
 #include "dict_id.h"
 #include "codec.h"
 
-// loading a Little Endian uint32_t from an unaligned buffer
-#define GET_UINT16(p) (((uint8_t*)p)[0] | (((uint8_t*)p)[1] << 8))
-#define GET_UINT32(p) (((uint8_t*)p)[0] | (((uint8_t*)p)[1] << 8) | (((uint8_t*)p)[2] << 16) | (((uint8_t*)p)[3] << 24))
-
-// getting integers from the BAM data
-#define NEXT_UINT8  *((const uint8_t *)next_field++)
-#define NEXT_UINT16 GET_UINT16 (next_field); next_field += sizeof (uint16_t);
-#define NEXT_UINT32 GET_UINT32 (next_field); next_field += sizeof (uint32_t);
-
 #define BAM_MAGIC "BAM\1" // first 4 characters of a BAM file
 
 // copy header ref data during reading header
@@ -102,63 +93,48 @@ done:
     return vb->txt_data.len - vblock_len;
 }
 
-// PIZ I/O thread: make the txt header either SAM or BAM according to flag_out_dt, and regardless of the source file
-void bam_prepare_txt_header (Buffer *txt)
-{
-    bool is_bam_header = (txt->len >= 4) && !memcmp (txt->data, BAM_MAGIC, 4);
-
-    switch (flag_out_dt) {
-
-        case DT_SAM:
-            // case: we need to convert a BAM header to a SAM header
-            if (is_bam_header) {
-                uint32_t l_text = GET_UINT32 (ENT (char, *txt, 4));
-                memcpy (txt->data, ENT (char, *txt, 8), l_text);
-                txt->len = l_text;
-            }
-            break;
-
-        case DT_BAM:
-            // case: we need to convert a SAM header to a BAM header
-            if (!is_bam_header) {
-
-            }
-            break;
-
-        case DT_FASTQ:
-            txt->len = 0; // no header
-            break;
-
-        default: 
-            ABORT ("Error in bam_prepare_txt_header: Invalid flag_out_dt=%s", dt_name (flag_out_dt)); 
-    }
-}
-
 void bam_seg_initialize (VBlock *vb)
 {
     sam_seg_initialize (vb);
 
-    // copy contigs from header in vb=1 for RNAME dictionary
+    // copy contigs from header in vb=1 for RNAME and RNEXT dictionaries
     if (vb->vblock_i == 1) {
-        for (unsigned i=0; i < header_n_ref; i++) 
-            mtf_evaluate_snip_seg (vb, &vb->contexts[SAM_RNAME], header_ref_contigs[i], header_ref_contigs_len[i], NULL);
+        for (unsigned i=0; i < header_n_ref; i++) {
+            ctx_evaluate_snip_seg (vb, &vb->contexts[SAM_RNAME], header_ref_contigs[i], header_ref_contigs_len[i], NULL);
+            ctx_evaluate_snip_seg (vb, &vb->contexts[SAM_RNEXT], header_ref_contigs[i], header_ref_contigs_len[i], NULL);
+        }
 
-        vb->contexts[SAM_RNAME].inst |= CTX_INST_NO_VB1_SORT; // keep the contigs in the order as in BAM header
+        // keep the contigs in the order as in BAM header as word_index of these also
+        // reference to ref_id in the reference list in the BAM header
+        vb->contexts[SAM_RNAME].inst |= CTX_INST_NO_VB1_SORT; 
+        vb->contexts[SAM_RNEXT].inst |= CTX_INST_NO_VB1_SORT;
     }
-
 }
 
-static inline void bam_seg_bin (VBlock *vb, uint16_t bin)
+void bam_zip_finalize (void)
 {
-    Context *ctx = &vb->contexts[SAM_BAM_BIN];
-    char snip[20] = { SNIP_SELF_DELTA };
+    FREE (header_ref_contigs);
+    FREE (header_ref_contigs_len);
+    header_n_ref = 0;
+}
 
-    PosType delta = (int64_t)bin - ctx->last_value.i;
-    unsigned snip_len = 1 + str_int (delta, &snip[1]);
-    ctx->flags |= CTX_FL_STORE_INT;
-    ctx->last_value.i = (int64_t)bin;
+void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t flag, PosType this_pos)
+{
+    bool segment_unmapped = (flag & 0x4);
+    bool is_bam = IS_BAM;
 
-    seg_by_ctx (vb, snip, snip_len, ctx, sizeof (uint16_t), NULL);
+    PosType last_pos = segment_unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
+    uint16_t reg2bin = bam_reg2bin (this_pos-1, last_pos-1);
+
+    if (!is_bam || (last_pos <= (PosType)0x7ffffff /* largest POS is SAM */ && reg2bin == bin))
+        seg_by_did_i (vb, ((char []){ SNIP_SPECIAL, SAM_SPECIAL_BIN }), 2, SAM_BAM_BIN, is_bam ? sizeof (uint16_t) : 0)
+    
+    else {
+        WARN ("FYI: bad bin value in vb=%u vb->line_i=%u: this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm.",
+              vb->vblock_i, vb->line_i, this_pos, vb->ref_consumed, flag, last_pos, bin, reg2bin);
+        seg_integer (vb, SAM_BAM_BIN, bin, is_bam);
+        vb->contexts[SAM_BAM_BIN].flags = CTX_FL_STORE_INT;
+    }
 }
 
 static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, int32_t compare_to_ref_i)
@@ -227,20 +203,22 @@ finish:
     vb->last_cigar = FIRSTENT (char, vb->textual_cigar);
 }
 
-static void bam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t n_cigar_op)
+static void bam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, uint32_t n_cigar_op)
 {
     char cigar_snip[vb->textual_cigar.len + 20];
     cigar_snip[0] = SNIP_SPECIAL;
     cigar_snip[1] = SAM_SPECIAL_CIGAR;
     unsigned cigar_snip_len=2;
 
-    // case: SEQ is "*" - we add a '-' to the CIGAR
-    if (!dl->seq_len) cigar_snip[cigar_snip_len++] = '-';
+    // case: we have no sequence - we add a '-' to the CIGAR
+    if (!l_seq) cigar_snip[cigar_snip_len++] = '-';
 
-    // case: CIGAR is "*" - we add the length to CIGAR eg "151*"
-    if (*vb->last_cigar == '*')  // CIGAR is not available
+    // case: CIGAR is "*" - we get the dl->seq_len directly from SEQ or QUAL, and add the length to CIGAR eg "151*"
+    if (!dl->seq_len) { // CIGAR is not available
+        dl->seq_len = l_seq;
         cigar_snip_len += str_int (MAX (dl->seq_len, 1), &cigar_snip[cigar_snip_len]); // if seq_len=0, then we add "1" because we have the * in seq and qual (and consistency with sam_seg_cigar_field)
-
+    }
+    
     memcpy (&cigar_snip[cigar_snip_len], vb->textual_cigar.data, vb->textual_cigar.len);
     cigar_snip_len += vb->textual_cigar.len;
 
@@ -248,18 +226,18 @@ static void bam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t n_c
                   n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */ );
 }
 
-static inline void bam_rewrite_seq (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field)
+static inline void bam_rewrite_seq (VBlockSAM *vb, uint32_t l_seq, const char *next_field)
 {
-    buf_alloc (vb, &vb->textual_seq, dl->seq_len+1 /* for last half-byte */, 1.5, "textual_seq", 0);
+    buf_alloc (vb, &vb->textual_seq, l_seq+1 /* +1 for last half-byte */, 1.5, "textual_seq", 0);
 
-    if (!dl->seq_len) {
+    if (!l_seq) {
         NEXTENT (char, vb->textual_seq) = '*';
         return;        
     }
 
     char *next = FIRSTENT (char, vb->textual_seq);
 
-    for (uint32_t i=0; i < (dl->seq_len+1) / 2; i++) {
+    for (uint32_t i=0; i < (l_seq+1) / 2; i++) {
         static const char base_codes[16] = "=ACMGRSVTWYHKDBN";
 
         *next++ = base_codes[*(uint8_t*)next_field >> 4];
@@ -267,19 +245,19 @@ static inline void bam_rewrite_seq (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
         next_field++;
     }
 
-    vb->textual_seq.len = dl->seq_len;
+    vb->textual_seq.len = l_seq;
 
-    ASSERTW (!(dl->seq_len % 2) || (*AFTERENT(char, vb->textual_seq)=='='), 
+    ASSERTW (!(l_seq % 2) || (*AFTERENT(char, vb->textual_seq)=='='), 
             "Warning in bam_rewrite_seq vb=%u: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect MD5",
-             vb->vblock_i, dl->seq_len);
+             vb->vblock_i, l_seq);
 }
 
 // Rewrite the QUAL field - add +33 to Phred scores to make them ASCII
-static inline bool bam_rewrite_qual (uint8_t *qual, uint32_t qual_len)
+static inline bool bam_rewrite_qual (uint8_t *qual, uint32_t l_seq)
 {
     if (qual[0] == 0xff) return false; // in case SEQ is present but QUAL is omitted, all qual is 0xFF
 
-    for (uint32_t i=0; i < qual_len; i++)
+    for (uint32_t i=0; i < l_seq; i++)
         qual[i] += 33;
 
     return true;
@@ -356,86 +334,77 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
     const char *next_field = alignment;
-    char snip[50];
-    unsigned snip_len;
 
-    uint32_t alignment_size = NEXT_UINT32;
-
-    // ref_id (RNAME)
-    int32_t ref_id = (int32_t)NEXT_UINT32; // corresponding to CHROMs in the BAM header
-    bam_seg_ref_id (vb_, SAM_RNAME, ref_id, -1);
-
-    // POS
-    PosType this_pos = 1 + NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown? 
-    seg_pos_field (vb_, SAM_POS, SAM_POS, false, 0, 0, this_pos, sizeof (uint32_t));
-    ASSERT (!(ref_id==-1 && this_pos), "Error in %s vb=%u: RNAME=\"*\" - expecting POS to be 0 but it is %"PRId64, txt_name, vb->vblock_i, this_pos);
-
-    uint8_t l_read_name = NEXT_UINT8; // QNAME length
-
-    // MAPQ
-    snip_len = str_int (NEXT_UINT8, snip);
-    seg_by_did_i (vb, snip, snip_len, SAM_MAPQ, 1);
-
-    // BIN
-    uint16_t bin = NEXT_UINT16;
-    bam_seg_bin (vb_, bin);
-
+    // *** ingest BAM alignment fixed-length fields ***
+    uint32_t block_size = NEXT_UINT32;
+    int32_t ref_id      = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
+    PosType this_pos    = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown 
+    uint8_t l_read_name = NEXT_UINT8;               // QNAME length
+    uint8_t mapq        = NEXT_UINT8;
+    uint16_t bin        = NEXT_UINT16;
     uint16_t n_cigar_op = NEXT_UINT16;
+    uint16_t flag       = NEXT_UINT16;
+    uint32_t l_seq      = NEXT_UINT32;              // note: we stick with the same logic as SAM for consistency - dl->seq_len is determined by CIGAR 
+    int32_t next_ref_id = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
+    PosType next_pos    = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown
+    int32_t tlen        = (int32_t)NEXT_UINT32;
 
-    // FLAG
-    uint16_t flag = NEXT_UINT16;
-    snip_len = str_int (flag, snip);
-    seg_by_did_i (vb, snip, snip_len, SAM_FLAG, 2);
+    // *** segment fixed-length fields ***
+
+    bam_seg_ref_id (vb_, SAM_RNAME, ref_id, -1); // ref_id (RNAME)
+
+    // note: pos can have a value even if ref_id=-1 (RNAME="*") - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
+    seg_pos_field (vb_, SAM_POS, SAM_POS, false, 0, 0, this_pos, sizeof (uint32_t)); // POS
+
+    seg_integer (vb, SAM_MAPQ, mapq, true); // MAPQ
+
+    seg_integer (vb, SAM_FLAG, flag, true); // FLAG
     
-    // l_seq (=seq_len)
-    dl->seq_len = NEXT_UINT32;
+    bam_seg_ref_id (vb_, SAM_RNEXT, next_ref_id, ref_id); // RNEXT
 
-    // next_ref_id (RNEXT)
-    int32_t next_ref_id = (int32_t)NEXT_UINT32; // corresponding to CHROMs in the BAM header
-    bam_seg_ref_id (vb_, SAM_RNEXT, next_ref_id, ref_id);
+    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, 0, 0, next_pos, sizeof (uint32_t)); // PNEXT
 
-    // PNEXT
-    PosType pnext = 1 + NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown? 
-    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, 0, 0, pnext, sizeof (uint32_t));
+    sam_seg_tlen_field (vb, 0, 0, (int64_t)tlen, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len); // TLEN
 
-    // TLEN
-    int32_t tlen_value = (int32_t)NEXT_UINT32;
-    sam_seg_tlen_field (vb, 0, 0, (int64_t)tlen_value, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len);
-
-    // QNAME
-    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], next_field, l_read_name-1, false, 0, 2 /* account for \0 and l_read_name */);
+    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], next_field, // QNAME
+                        l_read_name-1, false, 0, 2 /* account for \0 and l_read_name */); 
     next_field += l_read_name; // inc. \0
+
+    // *** ingest & segment variable-length fields ***
 
     // CIGAR
     bam_rewrite_cigar (vb, n_cigar_op, (uint32_t*)next_field); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
-    sam_analyze_cigar (vb->textual_cigar.data, vb->textual_cigar.len, NULL, &vb->ref_consumed, &vb->ref_and_seq_consumed);
+    sam_analyze_cigar (vb, vb->textual_cigar.data, vb->textual_cigar.len, &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed);
     next_field += n_cigar_op * sizeof (uint32_t);
 
-    // SEQ - calculate diff vs. reference (self or imported)
-    bam_rewrite_seq (vb, dl, next_field);
-    sam_seg_seq_field (vb, vb->textual_seq.data, vb->textual_seq.len, this_pos, vb->last_cigar, 0, vb->textual_seq.len, 
-                       vb->last_cigar, (dl->seq_len+1)/2 + sizeof (uint32_t) /* account for l_seq and seq fields */);
-    next_field += (dl->seq_len+1)/2; 
+    // Segment BIN after we've gathered bin, flags, pos and vb->ref_confumed (and before sam_seg_seq_field which ruins vb->ref_consumed)
+    bam_seg_bin (vb, bin, flag, this_pos);
+
+    // SEQ - calculate diff vs. reference (denovo or loaded)
+    bam_rewrite_seq (vb, l_seq, next_field);
+    sam_seg_seq_field (vb, SAM_SQBITMAP, vb->textual_seq.data, vb->textual_seq.len, this_pos, vb->last_cigar, 0, vb->textual_seq.len, 
+                       vb->last_cigar, (l_seq+1)/2 + sizeof (uint32_t) /* account for l_seq and seq fields */);
+    next_field += (l_seq+1)/2; 
 
     // QUAL
     bool has_qual=false;
-    if (dl->seq_len)
-        has_qual = bam_rewrite_qual ((uint8_t *)next_field, dl->seq_len); // add 33 to Phred scores to make them ASCII
+    if (l_seq)
+        has_qual = bam_rewrite_qual ((uint8_t *)next_field, l_seq); // add 33 to Phred scores to make them ASCII
     
     if (has_qual) // case we have both SEQ and QUAL
-        sam_seg_qual_field (vb, dl, next_field, dl->seq_len, dl->seq_len /* account for qual field */ );
+        sam_seg_qual_field (vb, dl, next_field, l_seq, l_seq /* account for qual field */ );
 
     else { // cases 1. were both SEQ and QUAL are '*' (seq_len=0) and 2. SEQ exists, QUAL not (bam_rewrite_qual returns false)
         *(char *)alignment = '*'; // overwrite as we need it somewhere in txt_data
-        sam_seg_qual_field (vb, dl, alignment, 1, dl->seq_len /* 0 or not */);
+        sam_seg_qual_field (vb, dl, alignment, 1, l_seq /* account of l_seq 0xff */);
     }
-    next_field += dl->seq_len; 
+    next_field += l_seq; 
 
-    // finally we can seg the textual CIGAR now (including if n_cigar_op=0)
-    bam_seg_cigar_field (vb, dl, n_cigar_op);
+    // finally we can segment the textual CIGAR now (including if n_cigar_op=0)
+    bam_seg_cigar_field (vb, dl, l_seq, n_cigar_op);
 
     // OPTIONAL fields - up to MAX_SUBFIELDS of them
-    next_field = sam_seg_optional_all (vb, dl, next_field, 0,0,0, alignment + alignment_size + sizeof (uint32_t));
+    next_field = sam_seg_optional_all (vb, dl, next_field, 0,0,0, alignment + block_size + sizeof (uint32_t));
     
     buf_free (&vb->textual_cigar);
     buf_free (&vb->textual_seq);

@@ -34,21 +34,21 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 
 // this data must be perfectly aligned with SectionType.
 #define SECTIONTYPE_ABOUT {    \
-    {"SEC_RANDOM_ACCESS"},     \
-    {"SEC_REFERENCE"},         \
-    {"SEC_REF_IS_SET"},        \
-    {"SEC_REF_HASH"},          \
-    {"SEC_REF_RAND_ACC"},      \
-    {"SEC_REF_CONTIGS"},       \
-    {"SEC_GENOZIP_HEADER"},    \
-    {"SEC_DICT_ID_ALIASES"},   \
-    {"SEC_TXT_HEADER"},        \
-    {"SEC_VB_HEADER"},         \
-    {"SEC_DICT"},              \
-    {"SEC_B250"},              \
-    {"SEC_LOCAL"},             \
-    {"SEC_REF_ALT_CHROMS"},    \
-    {"SEC_STATS"},             \
+    {"SEC_RANDOM_ACCESS",   sizeof (SectionHeader)              }, \
+    {"SEC_REFERENCE",       sizeof (SectionHeaderReference)     }, \
+    {"SEC_REF_IS_SET",      sizeof (SectionHeaderReference)     }, \
+    {"SEC_REF_HASH",        sizeof (SectionHeaderRefHash)       }, \
+    {"SEC_REF_RAND_ACC",    sizeof (SectionHeader)              }, \
+    {"SEC_REF_CONTIGS",     sizeof (SectionHeader)              }, \
+    {"SEC_GENOZIP_HEADER",  sizeof (SectionHeaderGenozipHeader) }, \
+    {"SEC_DICT_ID_ALIASES", sizeof (SectionHeader)              }, \
+    {"SEC_TXT_HEADER",      sizeof (SectionHeaderTxtHeader)     }, \
+    {"SEC_VB_HEADER",       sizeof (SectionHeaderVbHeader)      }, \
+    {"SEC_DICT",            sizeof (SectionHeaderDictionary)    }, \
+    {"SEC_B250",            sizeof (SectionHeaderCtx)           }, \
+    {"SEC_LOCAL",           sizeof (SectionHeaderCtx)           }, \
+    {"SEC_REF_ALT_CHROMS",  sizeof (SectionHeader)              }, \
+    {"SEC_STATS",           sizeof (SectionHeader)              }, \
 }
 
 // Section headers - big endian
@@ -90,7 +90,7 @@ typedef struct {
     Md5Hash  md5_hash_bound;          // md5 of original txt file, or 0s if no hash was calculated. if this is a binding - this is the md5 of the entire bound file.
     uint8_t  password_test[16];       // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
-    char created[FILE_METADATA_LEN];    
+    char created[FILE_METADATA_LEN];  // null-terminated metadata
     Md5Hash  license_hash;            // MD5(license_num)
 #define REF_FILENAME_LEN 256
     char ref_filename[REF_FILENAME_LEN]; // external reference filename, null-terimated. ref_filename[0]=0 if there is no external reference.
@@ -110,29 +110,29 @@ typedef struct {
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
-    Codec    compression_type; // compression type of original file
+    Codec    compression_type; // compression codec of original file
     uint8_t  unused[3];
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
     Md5Hash  md5_header;       // MD5 of header
 #define TXT_FILENAME_LEN 256
-    char txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always a .vcf or .sam, even if the original was eg .vcf.gz or .bam
+    char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always a .vcf or .sam, even if the original was eg .vcf.gz or .bam
 } SectionHeaderTxtHeader; 
 
 typedef struct {
     SectionHeader h;            
     uint32_t first_line;       // line (starting from 1) of this vblock in the single txt file 
-                               // if this value is 0, then this is the terminating section of the file. after it is either EOF or a TXT Header section of the next bound file 
+                               // if this value is 0, then this is the terminating section of the file. after it is either the global area or a TXT Header section of the next bound file 
     uint32_t num_lines;        // number of records in this vblock 
     uint32_t vb_data_size;     // size of vblock as it appears in the source file 
     uint32_t z_data_bytes;     // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len; // length of the longest line in this vblock 
-    Md5Hash md5_hash_so_far;   // partial calculation of MD5 up to and including this VB 
+    Md5Hash  md5_hash_so_far;   // partial calculation of MD5 up to and including this VB 
 } SectionHeaderVbHeader; 
 
 typedef struct {
     SectionHeader h;           
     uint32_t num_snips;        // number of items in dictionary
-    DictId dict_id;           
+    DictId   dict_id;           
 } SectionHeaderDictionary; 
 
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
@@ -186,8 +186,9 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 #define CTX_FL_STORE_FLOAT  ((uint8_t)0x02) // after reconstruction of a snip, store it in ctx.last_value as double
 #define CTX_FL_STORE_INDEX  ((uint8_t)0x03) // after reconstruction of a snip, the b250 word_index in ctx.last_value
 #define CTX_FL_PAIRED       ((uint8_t)0x04) // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-#define CTX_FL_CONTAINER    ((uint8_t)0x08) // snips may contain Container
+//#define CTX_FL_CONTAINER    ((uint8_t)0x08) // (canceled in 8.1 - files compressed with 8.0 will have alls containers have this flag)
 #define CTX_FL_COPY_PARAM   ((uint8_t)0x10) // copy ctx.b250/local.param from SectionHeaderCtx.param
+#define CTX_FL_ALL_THE_SAME ((uint8_t)0x20) // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
 
 #define ctx_store_flag(flags) ((flags) & 0x3)
 
@@ -236,7 +237,7 @@ typedef struct SectionListEntry {
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct RAEntry {
     uint32_t vblock_i;           // the vb_i in which this range appears
-    WordIndex chrom_index;       // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
+    WordIndex chrom_index;       // before merge: node index into chrom context nodes, after merge - word index in CHROM dictionary
     PosType min_pos, max_pos;    // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 
@@ -264,20 +265,17 @@ extern uint64_t sections_add_to_list (VBlockP vb, const SectionHeader *header);
 extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff
-extern SectionType sections_get_next_header_type (SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
-extern bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st1, SectionType st2);
-extern SectionType sections_peek (uint32_t cursor);
+extern const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail);
+extern bool sections_get_next_section_of_type (const SectionListEntry **sl_ent, SectionType st1, SectionType st2, bool must_be_next_section, bool seek);
 extern uint32_t sections_count_sections (SectionType st);
-
-extern bool sections_has_more_components(void);
-extern SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail);
-extern SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
-extern bool sections_seek_to (SectionType st, bool first);
+extern const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
 extern void sections_get_prev_file_vb_i (const SectionListEntry *sl, uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);
-extern void sections_show_gheader (SectionHeaderGenozipHeader *header);
+extern uint32_t st_header_size (SectionType sec_type);
+
+extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);
 
 extern bool sections_has_random_access(void);
 extern bool sections_has_reference(void);

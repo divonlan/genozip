@@ -113,16 +113,16 @@ static void *codec_gtshark_read_gtshark_output_file (void *arg)
 
 void codec_gtshark_comp_init (VBlock *vb)
 {
-    vb->ht_matrix_ctx  = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT);
+    vb->ht_matrix_ctx  = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
     vb->ht_matrix_ctx->lcodec = CODEC_GTSHARK; // this will trigger codec_gtshark_compress even though the section is not written to the file
     
-    vb->gtshark_db_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_DB);
-    vb->gtshark_gt_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
-    vb->gtshark_ex_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_SHARK_EX);
+    vb->gtshark_db_ctx = ctx_get_ctx (vb, dict_id_FORMAT_GT_SHARK_DB);
+    vb->gtshark_gt_ctx = ctx_get_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
+    vb->gtshark_ex_ctx = ctx_get_ctx (vb, dict_id_FORMAT_GT_SHARK_EX);
 
     // in --stats, consolidate stats into GT
     vb->gtshark_db_ctx->st_did_i = vb->gtshark_gt_ctx->st_did_i = vb->gtshark_ex_ctx->st_did_i =
-    vb->ht_matrix_ctx->st_did_i = mtf_get_ctx (vb, dict_id_FORMAT_GT)->did_i;
+    vb->ht_matrix_ctx->st_did_i = ctx_get_ctx (vb, dict_id_FORMAT_GT)->did_i;
 }
 
 typedef struct { VBlockP vb; const char *fifo; } VcfThreadArg;
@@ -348,13 +348,13 @@ void codec_gtshark_uncompress (VBlock *vb, Codec codec,
     pthread_t vcf_thread, db_thread, gt_thread;
     GET_FILENAMES_FIFOS (vb->vblock_i);
     
-    vb->ht_matrix_ctx    = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT); // create context, as it doesn't exist in the file
+    vb->ht_matrix_ctx    = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT); // create context, as it doesn't exist in the file
     vb->ht_matrix_ctx->lcodec = CODEC_GTSHARK;
     vb->ht_matrix_ctx->ltype  = LT_CODEC; // reconstruction will go to codec_gtshark_reconstruct as defined in codec_args for CODEC_GTSHARK
 
-    vb->gtshark_db_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_DB);
-    vb->gtshark_gt_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
-    vb->gtshark_ex_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_EX); // note: gtshark_ex_ctx will be set only if there was a gtshark_ex section
+    vb->gtshark_db_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_DB);
+    vb->gtshark_gt_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
+    vb->gtshark_ex_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_EX); // note: gtshark_ex_ctx will be set only if there was a gtshark_ex section
 
     ASSERT0 (vb->gtshark_db_ctx, "Error in codec_gtshark_uncompress: gtshark_db_ctx is NULL, perhaps the section is missing in the file?");
     ASSERT0 (vb->gtshark_gt_ctx, "Error in codec_gtshark_uncompress: gtshark_gt_ctx is NULL, perhaps the section is missing in the file?");

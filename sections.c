@@ -15,6 +15,8 @@
 #include "dict_id.h"
 #include "zfile.h"
 
+static const struct {const char *name; uint32_t header_size; } abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
+
 const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES] = LOCALTYPE_DESC;
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections. returns offset
@@ -29,7 +31,7 @@ uint64_t sections_add_to_list (VBlock *vb, const SectionHeader *header)
     // 1. if this is a vcf_header, random_access or genozip_header - it goes directly into the z_file by the I/O thread
     //    before or after all the compute threads are operational
     // 2. if this is a dictionary - it goes directly into z_file by the Compute thread while merge holds the mutex:
-    //    mtf_merge_in_vb_ctx_one_dict_id -> zfile_compress_dictionary_data
+    //    ctx_merge_in_vb_ctx_one_dict_id -> zfile_compress_dictionary_data
     // 3. if we this section is part of a VB (other than a dictionary), we store the entry within the VB and merge it to
     //    the z_file in the correct order of VBs by the I/O thread after the compute thread is finished.
     //
@@ -91,72 +93,39 @@ void sections_list_concat (VBlock *vb, BufferP section_list_buf)
     buf_free (section_list_buf);
 }
 
-// called by PIZ I/O to know if next up is a VB Header or VCF Header or EOF
-SectionType sections_get_next_header_type (SectionListEntry **sl_ent, 
-                                           bool *skipped_vb,   // out (VB only) - true if this vb should be skipped
-                                           Buffer *region_ra_intersection_matrix) // out (VB only) - a bytemap - rows are ra's of this VB, columns are regions, a cell is 1 if there's an intersection
+// section iterator. returns true if a section of this type was found.
+bool sections_get_next_section_of_type (const SectionListEntry **sl_ent, // optional in/out. if NULL - search entire list
+                                        SectionType st1, SectionType st2, 
+                                        bool must_be_next_section,       // check only next section, not entire remaining list
+                                        bool seek)                       // if true, seek if found
 {
-    // find the next VB or TXT header section
-    if (skipped_vb) *skipped_vb = false;
+    const SectionListEntry *sl = sl_ent ? *sl_ent : NULL; 
+    bool found = false;
 
-    while (z_file->sl_cursor < z_file->section_list_buf.len) {
-        *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_cursor++);
- 
-        SectionType sec_type = (*sl_ent)->section_type;
-        if (sec_type == SEC_TXT_HEADER) 
-            return sec_type;
+    // case: first time or we are allowed skip sections
+    if (!sl || !must_be_next_section) {
 
-        if (sec_type == SEC_VB_HEADER) {
-            if (random_access_is_vb_included ((*sl_ent)->vblock_i, region_ra_intersection_matrix))
-                return SEC_VB_HEADER;
-            
-            else if (skipped_vb) *skipped_vb = true;
+        while (sl < AFTERENT (const SectionListEntry, z_file->section_list_buf) - 1) {
+
+            sl = sl ? (sl + 1) : FIRSTENT (const SectionListEntry, z_file->section_list_buf); 
+
+            if (sl->section_type == st1 || sl->section_type == st2) {
+                found = true;
+                break;
+            }
         }
     }
-
-    return SEC_NONE; // no more headers
-}
-
-// section iterator. returns true if another section of this type was found.
-bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st1, SectionType st2) // if *sl_ent==NULL - initialize cursor
-{
-    // case: first time
-    if (! *sl_ent) {
-        *cursor = 0;
-        while (*cursor < (uint32_t)z_file->section_list_buf.len) {
-            *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, (*cursor)++);
-            if ((*sl_ent)->section_type == st1 || (*sl_ent)->section_type == st2) 
-                return true;
-        }
-    }
-        
-    if (*cursor == z_file->section_list_buf.len) return false; 
-
-    *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, (*cursor)++);
-    return (*sl_ent)->section_type == st1 || (*sl_ent)->section_type == st2;
-}
-
-// returns the next section's type without moving the cursor
-SectionType sections_peek (uint32_t cursor)
-{
-    if (cursor == z_file->section_list_buf.len) return SEC_NONE;
-
-    return ENT (SectionListEntry, z_file->section_list_buf, cursor)->section_type;
-}
-
-// seek to the first or last section of its type, starting from sl (or globally if sl is NULL)
-bool sections_seek_to (SectionType st, bool first)
-{
-    int len = (int)z_file->section_list_buf.len;
-    for (int i=0; i < len; i++) {
-        SectionListEntry *sl = ENT (SectionListEntry, z_file->section_list_buf, first ? i : len-1-i);
-        if (sl->section_type == st) {
-            file_seek (z_file, sl->offset, SEEK_SET, false);
-            return true; // section found
-        }
+    // case: we aren't allowed to skip sections - check if the next section is what we were after
+    else {
+        sl++;
+        found = sl->section_type == st1 || sl->section_type == st2;
     }
 
-    return false; // section not found
+    if (found && seek)
+        file_seek (z_file, sl->offset, SEEK_SET, false);
+
+    if (sl_ent) *sl_ent = sl;
+    return found;
 }
 
 // find the first and last vb_i of a the immediately previous bound file, start from an sl in this file
@@ -193,11 +162,11 @@ uint32_t sections_count_sections (SectionType st)
 }
 
 // called by PIZ I/O : vcf_zfile_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
-SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
+const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
 {
-    SectionListEntry *sl=NULL;
+    const SectionListEntry *sl=NULL;
     unsigned i=0; for (; i < z_file->section_list_buf.len; i++) {
-        sl = ENT (SectionListEntry, z_file->section_list_buf, i);
+        sl = ENT (const SectionListEntry, z_file->section_list_buf, i);
         if (sl->vblock_i == vb_i) break; // found!
     }
 
@@ -227,13 +196,13 @@ bool sections_has_random_access(void) { return sections_has_global_area_section 
 // I/O thread: called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
 void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits) // optional outs
 {
-    ASSERT0 (flag_reading_reference, "Error in sections_get_refhash_details: can only be called while reading reference");
+    ASSERT0 (flag.reading_reference, "Error in sections_get_refhash_details: can only be called while reading reference");
 
     for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the refhash sections are near the end
-        SectionListEntry *sl = ENT (SectionListEntry, z_file->section_list_buf, i);
+        const SectionListEntry *sl = ENT (const SectionListEntry, z_file->section_list_buf, i);
         if (sl->section_type == SEC_REF_HASH) {
 
-            SectionHeaderRefHash *header = zfile_read_section_header (evb, sl->offset, 0, sizeof (SectionHeaderRefHash), SEC_REF_HASH);
+            SectionHeaderRefHash *header = zfile_read_section_header (evb, sl->offset, 0, SEC_REF_HASH);
             if (num_layers) *num_layers = header->num_layers;
             if (base_layer_bits) *base_layer_bits = header->layer_bits + header->layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
 
@@ -247,14 +216,6 @@ void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bi
     ABORT ("Error in sections_get_refhash_details: can't find SEC_REF_HASH sections in %s", z_name);
 }
 
-
-// called by PIZ I/O when splitting a bound file - to know if there are any more VCF components remaining
-bool sections_has_more_components()
-{
-    return z_file->sl_cursor==0 || 
-           ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_cursor-1)->section_type == SEC_TXT_HEADER;
-}
-
 void BGEN_sections_list()
 {
     ARRAY (SectionListEntry, ent, z_file->section_list_buf);
@@ -265,9 +226,9 @@ void BGEN_sections_list()
     }
 }
 
-void sections_show_gheader (SectionHeaderGenozipHeader *header)
+void sections_show_gheader (const SectionHeaderGenozipHeader *header)
 {
-    if (flag_reading_reference) return; // don't show gheaders of reference file
+    if (flag.reading_reference) return; // don't show gheaders of reference file
     
     unsigned num_sections = BGEN32 (header->num_sections);
     char size_str[50];
@@ -288,7 +249,7 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
 
     fprintf (stderr, "  sections:\n");
 
-    ARRAY (SectionListEntry, ents, z_file->section_list_buf);
+    ARRAY (const SectionListEntry, ents, z_file->section_list_buf);
 
     for (unsigned i=0; i < num_sections; i++) {
      
@@ -308,19 +269,24 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     }
 }
 
-const char *st_name(SectionType sec_type)
+const char *st_name (SectionType sec_type)
 {
-    static const struct {const char *name; } abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
-    
-    if (sec_type == SEC_NONE) return "SEC_NONE";
-    
-    return type_name (sec_type, &abouts[sec_type].name , sizeof(abouts)/sizeof(abouts[0]));
+    ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "Error in st_name: sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
+
+    return (sec_type == SEC_NONE) ? "SEC_NONE" : type_name (sec_type, &abouts[sec_type].name , sizeof(abouts)/sizeof(abouts[0]));
+}
+
+uint32_t st_header_size (SectionType sec_type)
+{
+    ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "Error in st_header_size: sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
+
+    return (sec_type == SEC_NONE) ? 0 : abouts[sec_type].header_size;
 }
 
 // called by PIZ I/O
-SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail)
+const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail)
 {
-    ARRAY (SectionListEntry, sl, z_file->section_list_buf);
+    ARRAY (const SectionListEntry, sl, z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++)
         if (sl[i].section_type == st) return &sl[i];

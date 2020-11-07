@@ -234,7 +234,7 @@ Buffer *dict_id_create_aliases_buf (void)
             next++;
         }
 
-    if (flag_show_aliases) dict_id_show_aliases();
+    if (flag.show_aliases) dict_id_show_aliases();
 
     return &dict_id_aliases_buf;
 }
@@ -242,14 +242,13 @@ Buffer *dict_id_create_aliases_buf (void)
 // PIZ I/O thread: read all dict_id aliaeses, if there are any
 void dict_id_read_aliases (void) 
 { 
-    if (!sections_seek_to (SEC_DICT_ID_ALIASES, true)) return; // no aliases section
+    if (!sections_get_next_section_of_type (NULL, SEC_DICT_ID_ALIASES, SEC_NONE, false, true)) return; // no aliases section
 
     static Buffer compressed_aliases = EMPTY_BUFFER;
 
     buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
 
-    zfile_read_section (z_file, evb, 0, &compressed_aliases, "dict_id_aliases_buf", 
-                        sizeof(SectionHeader), SEC_DICT_ID_ALIASES, NULL);    
+    zfile_read_section (z_file, evb, 0, &compressed_aliases, "dict_id_aliases_buf", SEC_DICT_ID_ALIASES, NULL);    
 
     SectionHeader *header = (SectionHeader *)compressed_aliases.data;
     zfile_uncompress_section (evb, header, &dict_id_aliases_buf, "dict_id_aliases_buf", 0, SEC_DICT_ID_ALIASES);
@@ -263,7 +262,7 @@ void dict_id_read_aliases (void)
         ASSERT0 (dict_id_aliases[i].dst.id[0] && dict_id_aliases[i].alias.id[0], 
                  "Error in dict_id_read_aliases: corrupted aliases buffer")
     
-    if (flag_show_aliases) dict_id_show_aliases();
+    if (flag.show_aliases) dict_id_show_aliases();
 }
 
 // template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id

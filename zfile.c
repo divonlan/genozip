@@ -31,7 +31,7 @@ static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHi
 
 void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */, uint64_t offset, char rw)
 {
-    if (flag_reading_reference) return; // don't show headers of reference file
+    if (flag.reading_reference) return; // don't show headers of reference file
     
     DictId dict_id = {0};
     char flags[10] = "", param[10] = "";
@@ -86,7 +86,7 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
 
     SectionHeaderCtx *header = (SectionHeaderCtx *)section_header_p;
 
-    if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) return;
+    if (!flag.show_b250 && dict_id_printable (header->dict_id).num != flag.dict_id_show_one_b250.num) return;
 
     mutex_initialize (show_b250_mutex); // possible unlikely race condition on initializing - good enough for debugging purposes
     mutex_lock (show_b250_mutex);
@@ -97,7 +97,7 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
     const uint8_t *after = AFTERENT (const uint8_t, *b250_data);
 
     while (data < after) {
-        WordIndex word_index = base250_decode (&data);
+        WordIndex word_index = base250_decode (&data, true);
         switch (word_index) {
             case WORD_INDEX_ONE_UP     : fprintf (stderr, "ONE_UP "); break;
             case WORD_INDEX_EMPTY_SF   : fprintf (stderr, "EMPTY "); break;
@@ -108,6 +108,22 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
     fprintf (stderr, "\n");
 
     mutex_unlock (show_b250_mutex);
+}
+
+// Write uncompressed, unencrypted section to <section-type>.<vb>.<dict_id>.[header|body]. 
+// Note: header includes encryption padding if it was encrypted
+static void zfile_dump_section (Buffer *uncompressed_data, SectionHeader *section_header, unsigned section_header_len, DictId dict_id)
+{
+    char filename[100];
+    uint32_t vb_i = BGEN32 (section_header->vblock_i);
+
+    // header
+    sprintf (filename, "%s.%u.%s.header", st_name (section_header->section_type), vb_i, dict_id_print (dict_id));
+    file_put_data (filename, section_header, section_header_len);
+
+    // body
+    sprintf (filename, "%s.%u.%s.body", st_name (section_header->section_type), vb_i, dict_id_print (dict_id));
+    file_put_buffer (filename, uncompressed_data, 1);
 }
 
 // uncompressed a block and adds a \0 at its end. Returns the length of the uncompressed block, without the \0.
@@ -121,12 +137,10 @@ void zfile_uncompress_section (VBlock *vb,
 {
     START_TIMER;
 
-    DictId dict_id = {0};
-    if (expected_section_type      == SEC_DICT)
+    DictId dict_id = DICT_ID_NONE;
+    if (expected_section_type == SEC_DICT)
         dict_id = ((SectionHeaderDictionary *)section_header_p)->dict_id;
-    else if (expected_section_type == SEC_B250)
-        dict_id = ((SectionHeaderCtx *)section_header_p)->dict_id;
-    else if (expected_section_type == SEC_LOCAL)
+    else if (expected_section_type == SEC_B250 || expected_section_type == SEC_LOCAL)
         dict_id = ((SectionHeaderCtx *)section_header_p)->dict_id;
 
     if (piz_is_skip_section (vb, expected_section_type, dict_id)) return; // we skip some sections based on flags
@@ -142,8 +156,8 @@ void zfile_uncompress_section (VBlock *vb,
     ASSERT (section_header->section_type == expected_section_type, "Error in zfile_uncompress_section: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
     
     ASSERT (vblock_i == expected_vb_i || !expected_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
-             "Error in zfile_uncompress_section: bad vblock_i: vblock_i in file=%u but expecting it to be %u (section_type=%s)", 
-             vblock_i, expected_vb_i, st_name (expected_section_type));
+            "Error in zfile_uncompress_section: bad vblock_i: vblock_i in file=%u but expecting it to be %u (section_type=%s)", 
+            vblock_i, expected_vb_i, st_name (expected_section_type));
 
     // decrypt data (in-place) if needed
     if (data_encrypted_len) 
@@ -160,9 +174,12 @@ void zfile_uncompress_section (VBlock *vb,
                          uncompressed_data, data_uncompressed_len);
     }
  
-    if (flag_show_b250 && expected_section_type == SEC_B250) 
+    if (flag.show_b250 && expected_section_type == SEC_B250) 
         zfile_show_b250_section (section_header_p, uncompressed_data);
     
+    if (flag.dump_section && !strcmp (st_name (expected_section_type), flag.dump_section))
+        zfile_dump_section (uncompressed_data, section_header, compressed_offset, dict_id);
+
     if (vb) COPY_TIMER (zfile_uncompress_section);
 }
 
@@ -206,16 +223,16 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
         .dict_id                 = ctx->dict_id
     };
 
-    if (flag_show_dict) {
+    if (flag.show_dict) {
         fprintf (stderr, "%s (vb_i=%u, did=%u, num_snips=%u):\t", 
                  ctx->name, vb->vblock_i, ctx->did_i, num_words);
         str_print_null_seperated_data (data, num_chars, true, false);
     }
     
-    if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num)
+    if (dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_dict.num)
         str_print_null_seperated_data (data, num_chars, false, false);
 
-    if (flag_list_chroms && ctx->did_i == CHROM)
+    if (flag.list_chroms && ctx->did_i == CHROM)
         str_print_null_seperated_data (data, num_chars, false, vb->data_type == DT_SAM);
 
     z_file->dict_data.name  = "z_file->dict_data"; // comp_compress requires that it is set in advance
@@ -232,9 +249,9 @@ uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
         .h.section_type          = SEC_B250,
         .h.data_uncompressed_len = BGEN32 (ctx->b250.len),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
-        .h.codec                 = ctx->bcodec,
+        .h.codec                 = ctx->bcodec == CODEC_UNKNOWN ? CODEC_BZ2 : ctx->bcodec,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .h.flags                 = (uint8_t)(ctx->flags & 0xff) | ((ctx->inst & CTX_INST_PAIR_B250) ? CTX_FL_PAIRED : 0), // 8 bit
+        .h.flags                 = ctx->flags | ((ctx->inst & CTX_INST_PAIR_B250) ? CTX_FL_PAIRED : 0), 
         .dict_id                 = ctx->dict_id,
         .ltype                   = ctx->ltype
     };
@@ -370,12 +387,13 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
 
 // read section header - called from the I/O thread, but for a specific VB
 // returns offset of header within data, EOF if end of file
-int32_t zfile_read_section (File *file,
-                            VBlock *vb, 
-                            uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
-                            Buffer *data, const char *buf_name, // buffer to append 
-                            uint32_t header_size, SectionType expected_sec_type,
-                            const SectionListEntry *sl)   // NULL for no seeking
+int32_t zfile_read_section_do (File *file,
+                               VBlock *vb, 
+                               uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
+                               Buffer *data, const char *buf_name, // buffer to append 
+                               SectionType expected_sec_type,
+                               const SectionListEntry *sl,
+                               uint32_t header_size)   // NULL for no seeking
 {
     ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s. vb_i=%u",
             st_name (expected_sec_type), st_name(sl->section_type), vb->vblock_i);
@@ -422,14 +440,14 @@ int32_t zfile_read_section (File *file,
         is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC; // update after decryption
     }
 
-    if (flag_show_headers) {
+    if (flag.show_headers) {
         zfile_show_header (header, NULL, sl ? sl->offset : 0, 'R');
         if (exe_type == EXE_GENOCAT && (expected_sec_type == SEC_B250 || expected_sec_type == SEC_LOCAL || expected_sec_type == SEC_DICT))
              return header_offset; // in genocat --show-header - we only show headers, nothing else
     }
 
     ASSERT (is_magical, "Error in zfile_read_section: corrupt data (magic is wrong) when attempting to read section=%s dict_id=%s of vblock_i=%u component=%u in file %s", 
-            st_name (expected_sec_type), err_dict_id (sl->dict_id), vb->vblock_i, z_file->num_txt_components_so_far, z_name);
+            st_name (expected_sec_type), sl ? err_dict_id (sl->dict_id) : "(no sl)", vb->vblock_i, z_file->num_txt_components_so_far, z_name);
 
     uint32_t compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
@@ -470,8 +488,10 @@ int32_t zfile_read_section (File *file,
 // Read one section header - returns the header in vb->compressed - caller needs to free vb->compressed
 void *zfile_read_section_header (VBlockP vb, uint64_t offset, 
                                  uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
-                                 uint32_t header_size, SectionType expected_sec_type)
+                                 SectionType expected_sec_type)
 {
+    uint32_t header_size = st_header_size (expected_sec_type);
+
     // get the uncompressed size from one of the headers - they are all the same size, and the reference file is never encrypted
     file_seek (z_file, offset, SEEK_SET, false);
 
@@ -510,11 +530,10 @@ void *zfile_read_section_header (VBlockP vb, uint64_t offset,
 // PIZ
 void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom)
 {
-    SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_section_of_type() will reset cursor 
+    ctx_initialize_primary_field_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
 
-    mtf_initialize_primary_field_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
-
-    while (sections_get_next_section_of_type (&sl_ent, &z_file->sl_dir_cursor, SEC_DICT, SEC_NONE)) {
+    const SectionListEntry *sl_ent = NULL; 
+    while (sections_get_next_section_of_type (&sl_ent, SEC_DICT, SEC_NONE, true, false)) {
 
         if (last_vb_i && sl_ent->vblock_i > last_vb_i) break;
 
@@ -525,29 +544,29 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
         if (piz_is_skip_sectionz (sl_ent->section_type, sl_ent->dict_id)) continue;
         
-        zfile_read_section (z_file, evb, sl_ent->vblock_i, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), sl_ent->section_type, sl_ent);    
+        zfile_read_section (z_file, evb, sl_ent->vblock_i, &evb->z_data, "z_data", sl_ent->section_type, sl_ent);    
 
         // update dictionaries in z_file->contexts with dictionary data 
-        if (!(flag_show_headers && exe_type == EXE_GENOCAT))
-            mtf_integrate_dictionary_fragment (evb, evb->z_data.data);
+        if (!(flag.show_headers && exe_type == EXE_GENOCAT))
+            ctx_integrate_dictionary_fragment (evb, evb->z_data.data);
 
         buf_free (&evb->z_data);
     }
 
     // output the dictionaries if we're asked to
-    if (flag_show_dict || dict_id_show_one_dict.num || flag_list_chroms) {
+    if (flag.show_dict || flag.dict_id_show_one_dict.num || flag.list_chroms) {
         for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
             Context *ctx = &z_file->contexts[did_i];
 
 #define MAX_PRINTABLE_DICT_LEN 100000
 
-            if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num) 
+            if (dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_dict.num) 
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, false);
             
-            if (flag_list_chroms && ctx->did_i == CHROM)
+            if (flag.list_chroms && ctx->did_i == CHROM)
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, z_file->data_type == DT_SAM);
             
-            if (flag_show_dict) {
+            if (flag.show_dict) {
                 fprintf (stderr, "%s (did_i=%u, num_snips=%u):\t", ctx->name, did_i, (uint32_t)ctx->word_list.len);
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), true, false);
             }
@@ -558,13 +577,14 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
     }
 }
 
-// returns the file's data_type
-int16_t zfile_read_genozip_header (Md5Hash *digest) // out
+// returns false if file should be skipped
+bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64_t *num_items_bound, char *created) // optional outs
 {
-    DataType data_type = DT_NONE;
+    bool success=false;
 
     // read the footer from the end of the file
-    file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, false);
+    if (!file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, 2))
+        goto final; // likely an empty file 
 
     SectionFooterGenozipHeader footer;
     int ret = fread (&footer, sizeof (footer), 1, (FILE *)z_file->file);
@@ -574,7 +594,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     // case: there is no genozip header. this can happen if the file was truncated (eg because compression did not complete)
     // note: this can also happen if the file is genozip v1, but I don't think there are any real v1 files in the wild
     // so I will keep the error message simple and not mention it
-    ASSERT (BGEN32 (footer.magic) == GENOZIP_MAGIC, "Error: failed to read file %s - the file appears to be incomplete.", z_name);
+    ASSERTGOTO (BGEN32 (footer.magic) == GENOZIP_MAGIC, "Error: failed to read file %s - the file appears to be incomplete.", z_name);
 
     // read genozip header
     uint64_t footer_offset = BGEN64 (footer.genozip_header_offset);
@@ -588,7 +608,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     uint32_t sizeof_genozip_header = MIN (sizeof (SectionHeaderGenozipHeader),
                                           (uint32_t)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));
     
-    ret = zfile_read_section (z_file, evb, 0, &evb->z_data, "genozip_header", sizeof_genozip_header, SEC_GENOZIP_HEADER, &dummy_sl);
+    ret = zfile_read_section_do (z_file, evb, 0, &evb->z_data, "genozip_header", SEC_GENOZIP_HEADER, &dummy_sl, sizeof_genozip_header);
 
     ASSERT0 (ret != EOF, "Error: unexpected EOF when reading genozip header");
     
@@ -611,7 +631,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     ASSERT (header->genozip_version >= 8, "Error: %s was compressed with an version 7 of genozip - version %u.\nIt may be uncompressed with genozip versions 7",
             z_name, header->genozip_version);
 
-    data_type = (DataType)(BGEN16 (header->data_type)); 
+    DataType data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
 
     if (z_file->data_type == DT_NONE) {
@@ -623,7 +643,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
     if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --1d
-    
+        
     ASSERT (header->encryption_type != ENC_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
             "Error: password provided, but file %s is not encrypted", z_name);
 
@@ -643,22 +663,27 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     }
 
     z_file->num_components    = BGEN32 (header->num_components);
+    if (z_file->num_components < 2) flag.unbind = 0; // override user's --unbind if file has only 1 component
+
     z_file->genozip_version   = header->genozip_version;
     z_file->flags             = header->h.flags;
-    if (digest) *digest       = header->md5_hash_bound; 
-             
+    if (digest) *digest = header->md5_hash_bound; 
+    if (txt_data_size) *txt_data_size = BGEN64 (header->uncompressed_data_size);
+    if (num_items_bound) *num_items_bound = BGEN64 (header->num_items_bound); 
+    if (created) memcpy (created, header->created, FILE_METADATA_LEN);
+
     zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", 0, SEC_GENOZIP_HEADER);
     z_file->section_list_buf.len /= sizeof (SectionListEntry); // fix len
     BGEN_sections_list();
 
-    if (flag_show_gheader) {
+    if (flag.show_gheader) {
         sections_show_gheader (header);
         if (exe_type == EXE_GENOCAT) exit_ok; // in genocat, exit after showing the requested data
     }
 
     // case: we are reading a file expected to be the reference file itself
-    if (flag_reading_reference) {
-        ASSERT (header->data_type == DT_REF, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
+    if (flag.reading_reference) {
+        ASSERT (data_type == DT_REF, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
                 ref_filename);
 
         ref_set_ref_file_info (header->md5_hash_bound, header->ref_filename); // in the reference file itself, header->ref_filename is the original fasta used to create this reference
@@ -667,25 +692,21 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     // case: we are reading a file that is not expected to be a reference file
     else {
         // case: we are attempting to decompress a reference file - this is not supported
-        if (data_type == DT_REF && !(flag_genocat_info_only && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
+        if (data_type == DT_REF && !(flag.genocat_info_only && exe_type == EXE_GENOCAT) && exe_type != EXE_GENOLS) { // we will stop a bit later in this case
             WARN ("%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
-            data_type = DT_NONE;
             goto final;
         }
 
-        if (flag_show_reference && !md5_is_zero (header->ref_file_md5)) {
+        if (flag.show_reference && !md5_is_zero (header->ref_file_md5)) {
             fprintf (stderr, "%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
                      z_name, header->ref_filename, md5_display (header->ref_file_md5));
             if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
         }
 
-        if (!(flag_reference == REF_NONE || flag_reference == REF_INTERNAL || md5_is_equal (header->ref_file_md5, ref_md5))) {
+        if (!(flag.reference == REF_NONE || flag.reference == REF_INTERNAL || md5_is_equal (header->ref_file_md5, ref_md5))) {
     
-            // fail if user loaded an external reference, but file does not require one
-            ASSINP (!md5_is_zero (header->ref_file_md5), "Error: %s does not need --reference to decompress", txt_name);
-
             // just warn, don't fail - there are use cases where the user might do this on purpose
-            ASSERTW (false, 
+            ASSERTW (md5_is_zero (header->ref_file_md5), // its ok if file doesn't need a reference
                     "WARNING: The reference file has a different MD5 than the reference file used to compress %s\n"
                     "If these two files contain a different sequence in the genomic regions contained in the compressed file, then \n"
                     "THE UNCOMPRESSED FILE WILL BE DIFFERENT THAN ORIGINAL FILE\n"
@@ -698,16 +719,18 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
         // case: this file requires an external reference, but command line doesn't include --reference - attempt to use the
         // reference specified in the header. 
         // Note: this code will be executed when zfile_read_genozip_header is called from main_genounzip.
-        if (!md5_is_zero (header->ref_file_md5) && !ref_filename) {
-            ASSERTW (flag_genocat_info_only, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
+        if (!md5_is_zero (header->ref_file_md5) && !ref_filename && exe_type != EXE_GENOLS) {
+            ASSERTW (flag.genocat_info_only, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
             ref_set_reference (header->ref_filename);
-            flag_reference = REF_EXTERNAL;
+            flag.reference = REF_EXTERNAL;
         }
     }
+    success = true;
      
+error: // for ASSERTGOTO
 final:
     buf_free (&evb->z_data);
-    return data_type;
+    return success;
 }
 
 void zfile_compress_genozip_header (Md5Hash single_component_md5)
@@ -733,8 +756,8 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
     header.h.codec                 = CODEC_BZ2;
     header.h.flags                 = z_file->flags |
-                                     (flag_reference == REF_INTERNAL ? GENOZIP_FL_REF_INTERNAL : 0) |
-                                     (flag_ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0);
+                                     (flag.reference == REF_INTERNAL ? GENOZIP_FL_REF_INTERNAL : 0) |
+                                     (flag.ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0);
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)z_data_type);
     header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
@@ -744,14 +767,14 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
     
     // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
-    if (flag_reference == REF_EXTERNAL) {   
+    if (flag.reference == REF_EXTERNAL) {   
         strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
         header.ref_file_md5 = ref_md5;
     }
 
     // in --make-ref, we set header.ref_filename to the original fasta file, to be used later in ref_get_cram_ref
     // (unless the fasta is piped from stdin, or its name is too long)
-    else if (flag_make_reference && strcmp (txt_name, FILENAME_STDIN) && strlen (txt_name) <= REF_FILENAME_LEN-1) {
+    else if (flag.make_reference && strcmp (txt_name, FILENAME_STDIN) && strlen (txt_name) <= REF_FILENAME_LEN-1) {
 #ifndef WIN32
         char *ref_filename = realpath (txt_name, NULL); // allocates memory
         ASSERT (ref_filename, "Error in zfile_compress_genozip_header: realpath() failed: %s", strerror (errno));
@@ -766,8 +789,8 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     uint32_t license_num_bgen = BGEN32 (license_get());
     header.license_hash = md5_do (&license_num_bgen, sizeof (int32_t));
 
-    if (flag_md5) {
-        if (flag_bind) {
+    if (flag.md5) {
+        if (flag.bind) {
             // get the hash from a copy of the md5 context, because we still need it for displaying the compression ratio later
             Md5Context copy_md5_ctx_bound = z_file->md5_ctx_bound;
             header.md5_hash_bound = md5_finalize (&copy_md5_ctx_bound);
@@ -799,7 +822,7 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     z_file->section_list_buf.len /= sizeof (SectionListEntry); 
     BGEN_sections_list();
 
-    if (flag_show_gheader) sections_show_gheader (&header); 
+    if (flag.show_gheader) sections_show_gheader (&header); 
 
     // add a footer to this section - this footer appears AFTER the genozip header data, 
     // facilitating reading the genozip header in reverse from the end of the file
@@ -810,57 +833,6 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     buf_alloc (evb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data", 0);
     memcpy (&z_data->data[z_data->len], &footer, sizeof(SectionFooterGenozipHeader));
     z_data->len += sizeof(SectionFooterGenozipHeader);
-}
-
-// reads the the genozip header section's header from a GENOZIP file - used by main_list and main_is_fastq, returns true if successful
-bool zfile_get_genozip_header (File *file,
-                               DataType *dt,
-                               uint64_t *uncomp_data_size,
-                               uint64_t *num_items_bound,
-                               Md5Hash  *md5_hash_bound,
-                               char *created, unsigned created_len, // caller allocates space 
-                               Md5Hash  *license_hash,
-                               char *ref_file_name, unsigned ref_file_name_len,  // caller allocates space 
-                               Md5Hash *ref_file_md5)
-{
-    // read the footer from the end of the file
-    if (!file_seek (file, -sizeof(SectionFooterGenozipHeader), SEEK_END, true))
-        return false;
-
-    SectionFooterGenozipHeader footer;
-    int ret = fread (&footer, sizeof (footer), 1, (FILE *)file->file);
-    ASSERTW (ret == 1, "Skipping empty file %s", z_name);    
-    if (!ret) return false; // empty file / cannot read
-    
-    // case: this is not a valid genozip v2+ file
-    if (BGEN32 (footer.magic) != GENOZIP_MAGIC) return false;
-
-    // read genozip header
-    uint64_t genozip_header_offset = BGEN64 (footer.genozip_header_offset);
-    if (!file_seek (file, genozip_header_offset, SEEK_SET, true))
-        return false;
-
-    SectionHeaderGenozipHeader header;
-    int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)file->file);
-    if (bytes < sizeof(SectionHeaderGenozipHeader)) return false;
-
-    ASSERTW (BGEN32 (header.h.magic) == GENOZIP_MAGIC, "Error reading %s: corrupt data", z_name);
-    if (BGEN32 (header.h.magic) != GENOZIP_MAGIC) return false;
-
-    if (dt)               *dt               = (DataType)BGEN16 (header.data_type);
-    if (uncomp_data_size) *uncomp_data_size = BGEN64 (header.uncompressed_data_size);
-    if (num_items_bound)  *num_items_bound  = BGEN64 (header.num_items_bound);
-    if (md5_hash_bound)   *md5_hash_bound   = header.md5_hash_bound;
-    if (license_hash)     *license_hash     = header.license_hash;
-    if (ref_file_md5)     *ref_file_md5     = header.ref_file_md5;
-
-    memset (created, 0, created_len);
-    memcpy (created, header.created, MIN (FILE_METADATA_LEN, created_len));
-
-    memset (ref_file_name, 0, ref_file_name_len);
-    memcpy (ref_file_name, header.ref_filename, MIN (REF_FILENAME_LEN, ref_file_name_len));
-
-    return true;
 }
 
 // ZIP
@@ -879,12 +851,12 @@ void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool i
     header.md5_header              = header_md5;
     
     file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);
-    header.txt_filename[strlen(header.txt_filename)- (strlen(file_exts[txt_file->type])-4)] = '\0'; // remove the .gz/.bgz/.bz2
+    file_remove_codec_ext (header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
     
     static Buffer txt_header_buf = EMPTY_BUFFER;
-buf_test_overflows_all_vbs ("xxx");
+
     buf_alloc (evb, &txt_header_buf, sizeof (SectionHeaderTxtHeader) + txt_header_text->len / 3, // generous guess of compressed size
-            1, "txt_header_buf", 0); 
+               1, "txt_header_buf", 0); 
 
     comp_compress (evb, &txt_header_buf, true, (SectionHeader*)&header, 
                    txt_header_text->len ? txt_header_text->data : NULL, // actual header may be missing (eg in SAM it is permitted to not have a header)
@@ -894,7 +866,7 @@ buf_test_overflows_all_vbs ("xxx");
 
     z_file->disk_so_far            += txt_header_buf.len;   // length of GENOZIP data writen to disk
     z_file->txt_data_so_far_single += txt_header_text->len; // length of the original VCF header
-    z_file->txt_data_so_far_bind += txt_header_text->len;
+    z_file->txt_data_so_far_bind   += txt_header_text->len;
 
     buf_free (&txt_header_buf); 
 
@@ -922,7 +894,7 @@ bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header,
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
     curr_header->num_lines        = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
-    curr_header->md5_hash_single  = flag_md5 ? md5_finalize (&z_file->md5_ctx_single) : MD5HASH_NONE;
+    curr_header->md5_hash_single  = flag.md5 ? md5_finalize (&z_file->md5_ctx_single) : MD5HASH_NONE;
 
     *md5 = curr_header->md5_hash_single;
 
@@ -973,7 +945,7 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
     vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
     vb_header->first_line   = BGEN32 (txt_first_line_i);
 
-    if (flag_show_vblocks) 
+    if (flag.show_vblocks) 
         fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
                  vb->vblock_i, txt_first_line_i, BGEN32 (vb_header->num_lines), 
                  BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
@@ -983,5 +955,47 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
     if (crypt_have_password())  
         crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
                   BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
+}
+
+DataType zfile_get_file_dt (const char *filename)
+{
+    FileType ft = file_get_type (filename, false);
+    DataType dt = file_get_dt_by_z_ft (ft);
+
+    // case: we don't know yet what file type this is - we need to read the genozip header to determine
+    if (dt == DT_NONE && filename) {
+        File *file = file_open (filename, READ, Z_FILE, DT_NONE);
+
+        // read the footer from the end of the file
+        if (!file_seek (file, -sizeof(SectionFooterGenozipHeader), SEEK_END, true))
+            goto done;
+
+        SectionFooterGenozipHeader footer;
+        int ret = fread (&footer, sizeof (footer), 1, (FILE *)file->file);
+        ASSERTW (ret == 1, "Skipping empty file %s", z_name);    
+        if (!ret) goto done; // empty file / cannot read
+        
+        // case: this is not a valid genozip v2+ file
+        if (BGEN32 (footer.magic) != GENOZIP_MAGIC) goto done;
+
+        // read genozip header
+        uint64_t genozip_header_offset = BGEN64 (footer.genozip_header_offset);
+        if (!file_seek (file, genozip_header_offset, SEEK_SET, true))
+            goto done;
+
+        SectionHeaderGenozipHeader header;
+        int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)file->file);
+        if (bytes < sizeof(SectionHeaderGenozipHeader)) goto done;
+
+        ASSERTW (BGEN32 (header.h.magic) == GENOZIP_MAGIC, "Error reading %s: corrupt data", z_name);
+        if (BGEN32 (header.h.magic) != GENOZIP_MAGIC) goto done;
+
+        dt = (DataType)BGEN16 (header.data_type);
+
+        file_close (&file, false);
+    }
+
+done:
+    return dt;
 }
 

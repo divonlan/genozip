@@ -19,11 +19,12 @@
 #include "license.h"
 #include "version.h"
 #include "buffer.h"
+#include "flags.h"
 
 void license_display (void)
 {
     str_print_text (license, sizeof(license) / sizeof(char*), "", "\n\n", 
-                    flag_force ? 60 : 0); // --license --force means output license in Windows installer format (used by Makefile) - 60 is width of InstallForge license text field
+                    flag.force ? 60 : 0); // --license --force means output license in Windows installer format (used by Makefile) - 60 is width of InstallForge license text field
 }
 
 static uint32_t license_generate_num(void)
@@ -96,14 +97,14 @@ static uint32_t licence_retrieve_locally (void)
 
 static void license_submit (const char *institution, const char *name, const char *email, 
                             char commerical, char update, 
-                            const char *os, unsigned cores, const char *ip, const char *dist, uint32_t license_num)
+                            const char *os, unsigned cores, const char *endianity, const char *ip, const char *dist, uint32_t license_num)
 {
     // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396
 
     // FORM_ID is in the url when you preview your form
     #define PREFIX "https://docs.google.com/forms/d/e/1FAIpQLSc6pSBIOBsS5Pu-JNvfnLWV2Z1W7k-4f2pKRo5rTbiU_sCnIw/formResponse"
     
-    /* To get entry IDs: 1. go to preview of the form 2. right-click Inspect 3. go to "console" tab 4. run this code:
+    /* To get entry IDs - in Chrome browser: 1. open form 2. click on eye icon to Preview 2. right-click Inspect 3. go to "console" tab 4. run this code:
     function loop(e){
     if(e.children)
     for(let i=0;i<e.children.length;i++){
@@ -124,7 +125,8 @@ static void license_submit (const char *institution, const char *name, const cha
                        "&entry.1943454647=%s"
                        "&entry.1655649315=%u"
                        "&entry.186159495=%s"
-                       "&entry.1598028195=%s";
+                       "&entry.1598028195=%s"
+                       "&entry.1384715202=%s";
 
     char *institutionE = url_esc_non_valid_chars (institution);
     char *nameE        = url_esc_non_valid_chars (name);
@@ -132,7 +134,7 @@ static void license_submit (const char *institution, const char *name, const cha
     char *osE          = url_esc_non_valid_chars (os);
 
     char url[600];
-    sprintf (url, url_format, institutionE, nameE, emailE, commerical, update, osE, cores, ip, license_num, GENOZIP_CODE_VERSION, dist);
+    sprintf (url, url_format, institutionE, nameE, emailE, commerical, update, osE, cores, ip, license_num, GENOZIP_CODE_VERSION, dist, endianity);
 
     url_read_string (url, NULL, 0, "Failed to register the license");
 
@@ -171,7 +173,7 @@ static void license_exit_if_not_confirmed (const char *response)
 uint32_t license_get (void)
 {
     uint32_t license_num = licence_retrieve_locally();
-    if (license_num && !flag_register) return license_num; // license exists (and user didn't request --register) - we're done!
+    if (license_num && !flag.do_register) return license_num; // license exists (and user didn't request --register) - we're done!
 
     // UI flow to generate a new license for the user
 
@@ -210,6 +212,7 @@ uint32_t license_get (void)
     const char *ip = arch_get_ip_addr ("Failed to register the license");
     const char *dist = arch_get_distribution();
     unsigned cores = arch_get_num_cores();
+    const char *endianity = arch_get_endianity();
     license_num    = license_generate_num();
 
     fprintf (stderr, "\nThank you. To complete your license registration, genozip will now submit the following information to the genozip licensing server:\n\n");
@@ -218,14 +221,14 @@ uint32_t license_get (void)
     fprintf (stderr, "Licensee email address: %s\n", email);
     fprintf (stderr, "Commercial: %s\n", commercial[0]=='Y' ? "Yes" : "No");
     fprintf (stderr, "Send new feature updates: %s\n", update[0]=='Y' ? "Yes" : "No");
-    fprintf (stderr, "System info: OS=%s cores=%u IP=%s\n", os, cores, ip);
+    fprintf (stderr, "System info: OS=%s cores=%u endianity=%s IP=%s\n", os, cores, endianity, ip);
     fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
     fprintf (stderr, "genozip license number: %u\n\n", license_num);
 
     str_query_user ("Proceed with completing the registration? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
     license_exit_if_not_confirmed (confirm);
     
-    license_submit (institution, name, email, commercial[0], update[0], os, cores, ip, dist, license_num);
+    license_submit (institution, name, email, commercial[0], update[0], os, cores, endianity, ip, dist, license_num);
 
     license_store_locally (license_num);
 

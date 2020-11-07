@@ -13,6 +13,7 @@
 #include "strings.h"
 #include "regions.h"
 #include "codec.h"
+#include "stats.h"
 
 // returns true if txt_data[txt_i] is the end of a FASTA read (= next char is > or end-of-file)
 static inline bool fasta_is_end_of_line (VBlock *vb, 
@@ -42,7 +43,7 @@ uint32_t fasta_unconsumed (VBlockP vb)
     uint32_t unconsumed_len=0;
 
     // case: reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
-    if (flag_make_reference) {
+    if (flag.make_reference) {
         bool data_found = false;
         ARRAY (char, txt, vb->txt_data);
         for (uint32_t i=0; i < vb->txt_data.len; i++) {
@@ -69,7 +70,7 @@ uint32_t fasta_unconsumed (VBlockP vb)
                 // when compressing FASTA with a reference - an "end of line" is one that the next character is >, or it is the end of the file
                 // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), line cannot be too long - they 
                 // must fit in a VB
-                if ((flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && !fasta_is_end_of_line (vb, i)) 
+                if ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && !fasta_is_end_of_line (vb, i)) 
                     continue;
 
                 unconsumed_len = vb->txt_data.len-1 - i;
@@ -83,7 +84,6 @@ uint32_t fasta_unconsumed (VBlockP vb)
 // callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
 void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i, 
                     char **line_seq_data, uint32_t *line_seq_len,  // out 
-                    char **unused_data,  uint32_t *unused_len,
                     uint32_t maximum_len)
 {
     ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
@@ -100,18 +100,17 @@ void fasta_seg_initialize (VBlockFAST *vb)
     ASSERT (vb->vblock_i > 1 || *FIRSTENT (char, vb->txt_data) == '>' || *FIRSTENT (char, vb->txt_data) == ';',
             "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
 
-    if (!flag_make_reference) {
+    if (!flag.make_reference) {
 
         vb->contexts[FASTA_LINEMETA].inst = CTX_INST_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
         
         codec_acgt_comp_init ((VBlockP)vb);
 
-        if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
+        if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
             vb->contexts[FASTA_NONREF].inst |= CTX_INST_NO_CALLBACK; // override callback if we are segmenting to a reference
 
             // in --stats, consolidate stats into SQBITMAP
-            vb->contexts[FASTA_GPOS].st_did_i = vb->contexts[FASTA_STRAND].st_did_i =
-            vb->contexts[FASTA_NONREF].st_did_i = vb->contexts[FASTA_NONREF_X].st_did_i = FASTA_SQBITMAP;
+            stats_set_consolidation ((VBlockP)vb, FASTA_SQBITMAP, 4, FASTA_NONREF, FASTA_NONREF_X, FASTA_GPOS, FASTA_STRAND);
         }
     }
     else { // make-reference
@@ -165,7 +164,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         const char *chrom_name = line_start + 1;
         unsigned chrom_name_len = strcspn (line_start + 1, " \t\r\n");
 
-        if (!flag_make_reference) {
+        if (!flag.make_reference) {
             // we segment using / | : . and " " as separators. 
 
             seg_compound_field ((VBlockP)vb, &vb->contexts[FASTA_DESC], line_start, line_len, true, 0, 0);
@@ -180,12 +179,12 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         }
 
         bool is_new;
-        WordIndex chrom_node_index = mtf_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[FASTA_CONTIG], chrom_name, chrom_name_len, &is_new);
+        WordIndex chrom_node_index = ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[FASTA_CONTIG], chrom_name, chrom_name_len, &is_new);
         random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_name, chrom_name_len);
 
         ASSERT (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
-                flag_bind ? " (possibly in another FASTA being bound)" : 
-                (flag_reference==REF_EXTERNAL || flag_reference==REF_EXT_STORE) ? " (possibly the contig size exceeds vblock size, try enlarging with --vblock)" : "");
+                flag.bind ? " (possibly in another FASTA being bound)" : 
+                (flag.reference==REF_EXTERNAL || flag.reference==REF_EXT_STORE) ? " (possibly the contig size exceeds vblock size, try enlarging with --vblock)" : "");
             
         vb->last_line = FASTA_LINE_DESC;
     }
@@ -193,7 +192,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
     // case: comment line - stored in the comment buffer
     else if (*line_start == ';' || !line_len) {
         
-        if (!flag_make_reference) {
+        if (!flag.make_reference) {
             seg_add_to_local_text ((VBlockP)vb, &vb->contexts[FASTA_COMMENT], line_start, line_len, line_len); 
 
             seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_fields[FASTA_COMMENT], false, 0, &special_snip[2], &special_snip_len);
@@ -216,7 +215,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         Context *nonref_ctx = &vb->contexts[FASTA_NONREF];
         nonref_ctx->local.len += line_len;
 
-        if (!flag_make_reference) {
+        if (!flag.make_reference) {
 
             nonref_ctx->txt_len += line_len;
 
@@ -229,7 +228,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
 
             SEG_EOL (FASTA_EOL, true); 
 
-//            if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
+//            if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
 //                aligner_seg_seq (vb, line_start, line_len, FASTA_SQBITMAP);
 //                seq_ctx->local.len = 0; // we don't use FASTA_NONREF if segging to a reference
 //            }

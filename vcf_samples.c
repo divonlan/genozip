@@ -73,7 +73,7 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
 
         else if (vcf_header_buf->data[i] == '\n') { 
             bool header_matches_standard = !memcmp (&vcf_header_buf->data[i+1], standard, MIN (strlen (standard), vcf_header_buf->len-(i+1)));
-            if (!header_matches_standard) flag_samples = false;
+            if (!header_matches_standard) flag.samples = false;
             RETURNW0 (header_matches_standard,, "Warning: found non-standard VCF sample header line. Ingoring --samples");
 
             break;
@@ -117,7 +117,7 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
         ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", *ENT(char *, cmd_samples_buf, s));
 
     // if the user filtered out all samples, its equivalent of drop_genotypes
-    if (!vcf_num_displayed_samples) flag_drop_genotypes = true;
+    if (!vcf_num_displayed_samples) flag.drop_genotypes = true;
 
     //for (i=0; i<num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
 }

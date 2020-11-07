@@ -24,20 +24,20 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     if (!vb) return false; // we don't skip reading any SEC_DICT sections
 
-    if (flag_reading_reference) return false;  // doesn't apply when using FASTA as a reference
+    if (flag.reading_reference) return false;  // doesn't apply when using FASTA as a reference
 
-    // note that piz_read_global_area rewrites --header-only as flag_header_one
-    if (flag_header_one && 
+    // note that piz_read_global_area rewrites --header-only as flag.header_one
+    if (flag.header_one && 
         (dict_id.num == dict_id_fields[FASTA_NONREF] || dict_id.num == dict_id_fields[FASTA_NONREF_X] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
         return true;
 
     // when grepping by I/O thread - skipping all sections but DESC
-    if ((flag_grep || flag_regions) && (vb->grep_stages == GS_TEST) && 
+    if ((flag.grep || flag.regions) && (vb->grep_stages == GS_TEST) && 
         dict_id.num != dict_id_fields[FASTA_DESC] && !dict_id_is_fast_desc_sf (dict_id))
         return true;
 
     // if grepping, compute thread doesn't need to decompressed DESC again
-    if ((flag_grep || flag_regions) && (vb->grep_stages == GS_UNCOMPRESS) && 
+    if ((flag.grep || flag.regions) && (vb->grep_stages == GS_UNCOMPRESS) && 
         (dict_id.num == dict_id_fields[FASTA_DESC] || dict_id_is_fast_desc_sf (dict_id)))
         return true;
 
@@ -62,20 +62,20 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
 
     // --sequential - if this is NOT the first seq line in the contig, we delete the previous end-of-line
     // TO DO: this doesn't yet work across vblock boundaries
-    if (flag_sequential && !is_first_seq_line_in_this_contig) 
+    if (flag.sequential && !is_first_seq_line_in_this_contig) 
         fasta_piz_remove_trailing_newlines (fasta_vb);
 
     // skip showing line if this contig is grepped - but consume it anyway
     if (fasta_vb->contig_grepped_out) vb->dont_show_curr_line = true;
 
     // in case of not showing the SEQ in the entire file - we can skip consuming it
-    if (flag_header_one) // note that piz_read_global_area rewrites --header-only as flag_header_one
+    if (flag.header_one) // note that piz_read_global_area rewrites --header-only as flag.header_one
         vb->dont_show_curr_line = true;     
     else 
         piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, true);    
 
     // case: --sequencial, and this seq line is the line in the vb, and it continues in the next vb
-    if (  flag_sequential && // if we are asked for a sequential SEQ
+    if (  flag.sequential && // if we are asked for a sequential SEQ
           vb->line_i - vb->first_line == vb->lines.len-1 && // and this is the last line in this vb 
           !vb->dont_show_curr_line && 
           random_access_does_last_chrom_continue_in_next_vb (vb->vblock_i)) // and this sequence continues in the next VB 
@@ -92,7 +92,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_COMMENT)
     if (fasta_vb->contig_grepped_out) vb->dont_show_curr_line = true;
 
     // in case of not showing the COMMENT in the entire file (--header-only or this is a --reference) - we can skip consuming it
-    if (flag_header_one)  // note that piz_read_global_area rewrites --header-only as flag_header_one
+    if (flag.header_one)  // note that piz_read_global_area rewrites --header-only as flag.header_one
         vb->dont_show_curr_line = true;     
     else 
         piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
@@ -118,7 +118,7 @@ bool fasta_piz_initialize_contig_grepped_out (VBlockFAST *vb, bool does_vb_have_
 
     // we're continuing the contig in the previous VB - until DESC is encountered
     vb->contig_grepped_out = prev_vb_last_contig_grepped_out || // last contig of previous VB had last_desc_in_this_vb_matches_grep
-                             (prev_vb_i + 1 < vb->vblock_i);    // previous VB was skipped in sections_get_next_header_type due to --regions
+                             (prev_vb_i + 1 < vb->vblock_i);    // previous VB was skipped in piz_one_file due to random_access_is_vb_included
     
     // update for use of next VB, IF this VB contains any DESC line, otherwise just carry forward the current value
     if (does_vb_have_any_desc) 
@@ -133,7 +133,7 @@ bool fasta_piz_is_grepped_out_due_to_regions (VBlockFAST *vb, const char *line_s
 {
     const char *chrom_name = line_start + 1;
     unsigned chrom_name_len = strcspn (chrom_name, " \t\r\n");
-    WordIndex chrom_index = mtf_search_for_word_index (&vb->contexts[CHROM], chrom_name, chrom_name_len);
+    WordIndex chrom_index = ctx_search_for_word_index (&vb->contexts[CHROM], chrom_name, chrom_name_len);
     return !regions_is_site_included (chrom_index, 1); // we check for POS 1 to include (or not) the whole contig
 }
 
@@ -146,25 +146,25 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
     piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
 
     // if --grep: here we decide whether to show this contig or not
-    if (flag_grep) {
+    if (flag.grep) {
         *AFTERENT (char, vb->txt_data) = 0; // for strstr
-        fasta_vb->contig_grepped_out = !strstr (desc_start, flag_grep);
+        fasta_vb->contig_grepped_out = !strstr (desc_start, flag.grep);
     }
 
-    if (flag_regions && !fasta_vb->contig_grepped_out) 
+    if (flag.regions && !fasta_vb->contig_grepped_out) 
         fasta_vb->contig_grepped_out = fasta_piz_is_grepped_out_due_to_regions (fasta_vb, desc_start);
 
     // note: this logic allows the to grep contigs even if --no-header 
-    if (fasta_vb->contig_grepped_out || flag_no_header)
+    if (fasta_vb->contig_grepped_out || flag.no_header)
         fasta_vb->dont_show_curr_line = true;     
 
     return false; // no new value
 }
 
-bool fasta_piz_read_one_vb (VBlock *vb, SectionListEntry *sl)
+bool fasta_piz_read_one_vb (VBlock *vb, ConstSectionListEntryP sl)
 { 
     // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
-    if ((flag_grep || flag_regions) && !fast_piz_test_grep ((VBlockFAST *)vb)) return false; 
+    if ((flag.grep || flag.regions) && !fast_piz_test_grep ((VBlockFAST *)vb)) return false; 
 
     return true;
 }

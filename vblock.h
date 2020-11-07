@@ -13,11 +13,6 @@
 #include "context.h"
 #include "bit_array.h"
 #include "data_types.h"
-#ifndef DID_I_NONE // also defined in move_to_front.h
-#define DID_I_NONE   255
-#endif
-
-#define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != DID_I_NONE) ? &vb->contexts[(mapper)->did_i[(sf)]] : NULL)
 
 #define NUM_CODEC_BUFS 7   // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
 
@@ -38,7 +33,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* tracking lines */\
     Buffer lines;              /* An array of *DataLine* - the lines in this VB */\
-    uint32_t first_line;       /* PIZ only: line number in VCF file (counting from 1), of this variant block */\
+    uint32_t first_line;       /* PIZ only: line number in txt file (counting from 1), of this variant block */\
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
     \
     /* tracking execution */\
@@ -82,8 +77,6 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer z_data;                    /* all headers and section data as read from disk */\
     \
     Buffer txt_data;                  /* ZIP only: txt_data as read from disk - either the txt header (in evb) or the VB data lines */\
-    uint32_t txt_data_next_offset;    /* we re-use txt_data memory to overlay stuff in segregate */\
-    Buffer txt_data_spillover;        /* when re-using txt_data, if it is too small, we spill over to this buffer */\
     \
     int16_t z_next_header_i;          /* next header of this VB to be encrypted or decrypted */\
     \

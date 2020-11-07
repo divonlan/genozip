@@ -38,7 +38,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
     double ratio2    = -1;
 
     // in bind mode, we don't show compression ratio for files except for the last one
-    if (flag_bind) { 
+    if (flag.bind) { 
 
         static uint64_t txt_file_disk_size_bind = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
@@ -59,7 +59,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
         ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
     // when making a reference, we don't care about the compression
-    if (flag_make_reference)
+    if (flag.make_reference)
         progress_finalize_component_time ("Done", md5);
 
     // when compressing BAM report only ratio2 (compresstion against bgzipped BAM - we don't care about the underlying non-bgzipped BAM)
@@ -75,35 +75,41 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
     }
 }
 
-// here we translate the mtf_i indices creating during seg_* to their finally dictionary indices in base-250.
+// here we translate the node_i indices creating during seg_* to their finally dictionary indices in base-250.
 // Note that the dictionary indices have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
 // dictionary thanks to other threads working on other VBs ; 2. for the first VB, we sort the dictionary by frequency
-static void zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample_size)
+// returns true if section should be dropped
+static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample_size)
 {
-    ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->mtf_i is not empty. Dict=%s", ctx->name);
+    ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->node_i is not empty. Dict=%s", ctx->name);
 
-    buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
+    buf_alloc (vb, &ctx->b250, ctx->node_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
                1.1, "ctx->b250_buf", 0);
 
-    bool show = (flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num) && !sample_size;
+    bool show = (flag.show_b250 || dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_b250.num) && !sample_size;
 
     if (show) 
         bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
 
-    // calculate number of mtf_i words to be generated - normally all of them, except if we're just sampling in zip_assign_best_codec
-    uint32_t num_words = (uint32_t)ctx->mtf_i.len;
+    // calculate number of node_i words to be generated - normally all of them, except if we're just sampling in zip_assign_best_codec
+    uint32_t num_words = (uint32_t)ctx->node_i.len;
     if (sample_size && num_words > sample_size / sizeof (uint32_t))
         num_words = sample_size / sizeof (uint32_t);
+
+    WordIndex first_node_index = *ENT (WordIndex, ctx->node_i, 0);
+    bool all_the_same = true; // are all the node_index of this context the same in this VB
 
     WordIndex prev = WORD_INDEX_NONE; 
     for (uint32_t i=0; i < num_words; i++) {
 
-        WordIndex node_index = *ENT(WordIndex, ctx->mtf_i, i);
+        WordIndex node_index = *ENT(WordIndex, ctx->node_i, i);
+
+        if (node_index != first_node_index) all_the_same = false;
 
         if (node_index >= 0) { // normal index
 
-            MtfNode *node = mtf_node_vb (ctx, node_index, NULL, NULL);
+            MtfNode *node = ctx_node_vb (ctx, node_index, NULL, NULL);
 
             WordIndex n           = node->word_index.n;
             unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
@@ -139,11 +145,34 @@ static void zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
         else ABORT ("Error in zip_generate_b250_section: invalid node_index=%u", node_index);        
     }
 
+    // if all the node_index of this context are the same in this VB, we store just one, and set a flag
+    if (!sample_size) { // this logic is not to be applied if we're just sampling 
+        if (all_the_same) {
+
+            // if the entire section is word_index = 0 we can drop it, unless:
+            // 1) it has local (bc if no-b250/dict-from-prev-vb/no-local piz can't distiguish between seg_id-with-b250-all-the-same-word-index-0 vs all-singleton-pushed-to-local)
+            // 2) it has flags that need to be passed to piz (we can get rid of this limitation - bug 224), or
+            // 3) the one snip is SELF_DELTA
+            if (base250_decode ((const uint8_t **)&ctx->b250.data, false) == 0 && 
+                !ctx->local.len &&
+                !ctx->flags &&
+                *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) // word_index=0 is the first word in the dictionary
+                return true; 
+
+            ctx->b250.len = base250_len (ctx->b250.data);
+            ctx->flags |= CTX_FL_ALL_THE_SAME;  // set flag
+        }
+        else
+            ctx->flags &= ~CTX_FL_ALL_THE_SAME; // reset flag
+    }
+
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
         fprintf (stderr, "%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
+
+    return false; // don't drop this section
 }
 
 // Codecs may be assigned in 3 stages:
@@ -155,7 +184,7 @@ static void zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
 // contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
 static void zip_assign_best_codec (VBlock *vb)
 {
-    if (flag_show_codec_test && vb->vblock_i == 1)
+    if (flag.show_codec_test && vb->vblock_i == 1)
         fprintf (stderr, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
                  "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
 
@@ -166,10 +195,10 @@ static void zip_assign_best_codec (VBlock *vb)
         codec_assign_best_codec (vb, ctx, true, ctx->local.len * lt_desc[ctx->ltype].width);
 
         // b250
-        if (ctx->mtf_i.len * sizeof (uint32_t) < MIN_LEN_FOR_COMPRESSION)
+        if (ctx->node_i.len * sizeof (uint32_t) < MIN_LEN_FOR_COMPRESSION)
             continue; // case: size is too small even before shrinking during generation
 
-        // generate a sample of ctx.b250 data from ctx.mtf_i data
+        // generate a sample of ctx.b250 data from ctx.node_i data
         zip_generate_b250_section (vb, ctx, CODEC_ASSIGN_SAMPLE_SIZE);
 
         codec_assign_best_codec (vb, ctx, false, ctx->b250.len);
@@ -185,17 +214,17 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = &vb->contexts[did_i];
     
-        if (!ctx->mtf.len || ctx->mtf.len != ctx->mtf_i.len) continue; // check that all words are unique (and new to this vb)
+        if (!ctx->nodes.len || ctx->nodes.len != ctx->node_i.len) continue; // check that all words are unique (and new to this vb)
         if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
-        if (ctx->mtf.len < vb->lines.len / 5)   continue; // don't bother if this is a rare field less than 20% of the lines
+        if (ctx->nodes.len < vb->lines.len / 5)   continue; // don't bother if this is a rare field less than 20% of the lines
         if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
         // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
         if ((ctx->inst & CTX_INST_NO_STONS) || ctx->ltype != LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
 
         buf_move (vb, &ctx->local, vb, &ctx->dict);
-        buf_free (&ctx->mtf);
-        buf_free (&ctx->mtf_i);
+        buf_free (&ctx->nodes);
+        buf_free (&ctx->node_i);
     }
 }
 
@@ -208,20 +237,22 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = &vb->contexts[did_i];
 
-        if (ctx->mtf_i.len) {
+        if (ctx->node_i.len) {
             
-            zip_generate_b250_section (vb, ctx, 0);
+            bool drop_section = zip_generate_b250_section (vb, ctx, 0);
 
-            if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
-                mtf_dump_binary (vb, ctx, false);
+            if (!drop_section) {
+                if (dict_id_printable (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
+                    ctx_dump_binary (vb, ctx, false);
 
-            zfile_compress_b250_data (vb, ctx);
+                zfile_compress_b250_data (vb, ctx);
+            }
         }
 
-        if (ctx->local.len || ctx->ltype == LT_BITMAP) { // bitmaps are always written, even if empty
+        if (ctx->local.len || (ctx->inst & CTX_INST_LOCAL_ALWAYS)) { 
 
-            if (dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) 
-                mtf_dump_binary (vb, ctx, true);
+            if (dict_id_printable (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
+                ctx_dump_binary (vb, ctx, true);
 
             if (ctx->ltype == LT_BITMAP) 
                 LTEN_bit_array (buf_get_bitarray (&ctx->local));
@@ -235,8 +266,8 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
 
 static void zip_update_txt_counters (VBlock *vb, bool update_txt_file)
 {
-    // note: in case of an FASTQ with flag_optimize_DESC, we already updated this in fastq_txtfile_count_lines
-    if (update_txt_file && !(flag_optimize_DESC && vb->data_type == DT_FASTQ)) 
+    // note: in case of an FASTQ with flag.optimize_DESC, we already updated this in fastq_txtfile_count_lines
+    if (update_txt_file && !(flag.optimize_DESC && vb->data_type == DT_FASTQ)) 
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
         
     z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all bound files in this z_file
@@ -263,12 +294,12 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
 
     // this function holds the mutex and hence has a non-trival performance penalty. we call
     // it only if the user specifically requested --show-stats
-    if (flag_show_stats) mtf_update_stats (vb);
+    if (flag.show_stats) ctx_update_stats (vb);
 
-    if (flag_show_headers && buf_is_allocated (&vb->show_headers_buf))
+    if (flag.show_headers && buf_is_allocated (&vb->show_headers_buf))
         buf_print (&vb->show_headers_buf, false);
 
-    if (flag_show_threads) dispatcher_show_time ("Write genozip data done", -1, vb->vblock_i);
+    if (flag.show_threads) dispatcher_show_time ("Write genozip data done", -1, vb->vblock_i);
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
@@ -283,15 +314,15 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
         random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
-    if (flag_reference == REF_EXT_STORE || flag_reference == REF_EXTERNAL)
+    if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL)
         ref_alt_chroms_compress();
     
     // output reference, if needed
-    bool store_ref = flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE || flag_make_reference;
+    bool store_ref = flag.reference == REF_INTERNAL || flag.reference == REF_EXT_STORE || flag.make_reference;
     if (store_ref) 
         ref_compress_ref();
         
-    if (flag_make_reference)
+    if (flag.make_reference)
         refhash_compress_refhash();
 
     // add dict_id aliases list, if we have one
@@ -300,10 +331,10 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
 
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
     if (DTPZ(has_random_access)) 
-        random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, flag_show_index ? "Random-access index contents (result of --show-index)" : NULL);
+        random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, flag.show_index ? "Random-access index contents (result of --show-index)" : NULL);
 
     if (store_ref) 
-        random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, flag_show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
+        random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, flag.show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
 
     // flush to disk before stats
     zip_output_processed_vb (evb, NULL, false, PD_VBLOCK_DATA);  
@@ -324,15 +355,15 @@ static void zip_compress_one_vb (VBlock *vb)
 
     // if we're vb_i=1 lock, and unlock only when we're done merging. all other vbs need  
     // to wait for our merge. that is because our dictionaries are sorted 
-    if (vb->vblock_i == 1) mtf_vb_1_lock(vb); 
+    if (vb->vblock_i == 1) ctx_vb_1_lock(vb); 
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
     buf_alloc (vb, &vb->z_data, vb->vb_data_size / 3, 1.2, "z_data", 0);
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
-    if (flag_pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
-        mtf_clone_ctx (vb);
+    if (flag.pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
+        ctx_clone_ctx (vb);
 
     // split each line in this variant block to its components
     seg_all_data_lines (vb);
@@ -344,7 +375,7 @@ static void zip_compress_one_vb (VBlock *vb)
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely
     // beneficial to all vbs as they are likely to more-or-less have the same frequent entries
     if (vb->vblock_i == 1) {
-        mtf_sort_dictionaries_vb_1(vb);
+        ctx_sort_dictionaries_vb_1(vb);
 
         // for a file that's compressed (and hence we don't know the size of content a-priori) AND we know the
         // compressed file size (eg a local gz/bz2 file or a compressed file on a ftp server) - we now estimate the 
@@ -354,24 +385,24 @@ static void zip_compress_one_vb (VBlock *vb)
 
     zfile_compress_vb_header (vb); // vblock header
 
-    // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section() and
-    // vcf_zip_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
+    // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section().
+    // writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
-    mtf_merge_in_vb_ctx(vb);
+    ctx_merge_in_vb_ctx(vb);
 
     // for each context with CODEC_UNKNOWN - i.e. that was not assigned in Seg AND not inherited from
     // a previous VB during merge - find the best codecs for its local and b250 data. 
     // These codecs will be committed to zf_ctx so that subsequent VBs inherit it during their merge
     zip_assign_best_codec (vb);
 
-    if (vb->vblock_i == 1) mtf_vb_1_unlock(vb); 
+    if (vb->vblock_i == 1) ctx_vb_1_unlock(vb); 
 
     // merge in random access - IF it is used
     if (DTP(has_random_access)) 
         random_access_merge_in_vb (vb);
 
     // generate & compress b250 and local data for all ctxs (for reference files we don't output VBs)
-    if (!flag_make_reference && !flag_test_seg)
+    if (!flag.make_reference && !flag.test_seg)
         zip_generate_and_compress_ctxs (vb);
 
     // compress data-type specific sections
@@ -394,10 +425,10 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
     static DataType last_data_type = DT_NONE;
     static uint32_t prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
     
-    if (!flag_bind) prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
+    if (!flag.bind) prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
 
     // we cannot bind files of different type
-    ASSERT (!flag_bind || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
+    ASSERT (!flag.bind || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
             "%s: cannot bind %s because it is a %s file, whereas the previous file was a %s",
              global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
     last_data_type =  txt_file->data_type;
@@ -419,7 +450,7 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 
     DT_FUNC (txt_file, zip_initialize)();
 
-    mtf_initialize_for_zip();
+    ctx_initialize_for_zip();
 
     uint32_t max_lines_per_vb=0;
 
@@ -450,7 +481,7 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
             txt_line_i += (uint32_t)processed_vb->lines.len;
 
-            if (!flag_make_reference && !flag_test_seg)
+            if (!flag.make_reference && !flag.test_seg)
                 zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, PD_VBLOCK_DATA);
             else 
                 zip_update_txt_counters (processed_vb, true); // normally called from zip_output_processed_vb
@@ -469,20 +500,20 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
             // and copy the data we need for this vb. note: we need to do this before txtfile_read_vblock as
             // we need the num_lines of the pair file
             bool read_txt = true;
-            if (flag_pair == PAIR_READ_2) {
+            if (flag.pair == PAIR_READ_2) {
 
                 // normally we clone in the compute thread, because it might wait on mutex, but in this
                 // case we need to clone (i.e. create all contexts before we can read the pair file data)
-                mtf_clone_ctx (next_vb); 
+                ctx_clone_ctx (next_vb); 
 
                 // returns false if their is no vb with vb_i in the previous file
                 read_txt = fastq_read_pair_1_data (next_vb, prev_file_first_vb_i, prev_file_last_vb_i);
             }
 
             if (read_txt) {
-                if (flag_show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);            
+                if (flag.show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);            
                 txtfile_read_vblock (next_vb);
-                if (flag_show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
+                if (flag.show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
             }
 
             if (next_vb->txt_data.len)   // we found some data 
@@ -509,17 +540,17 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
     // go back and update some fields in the txt header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
     Md5Hash single_component_md5 = MD5HASH_NONE;
-    if (z_file && !flag_test_seg && !z_file->redirected && txt_header_header_pos >= 0) 
+    if (z_file && !flag.test_seg && !z_file->redirected && txt_header_header_pos >= 0) 
         success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:
-    if ((is_last_file || !flag_bind) && !flag_test_seg)
+    if ((is_last_file || !flag.bind) && !flag.test_seg)
         zip_write_global_area (dispatcher, single_component_md5);
 
-    zip_display_compression_ratio (dispatcher, flag_bind ? MD5HASH_NONE : single_component_md5, is_last_file || !flag_bind); // Done for reference + final compression ratio calculation
+    zip_display_compression_ratio (dispatcher, flag.bind ? MD5HASH_NONE : single_component_md5, is_last_file || !flag.bind); // Done for reference + final compression ratio calculation
     
-    if (flag_md5 && flag_bind && z_file->num_txt_components_so_far > 1 && is_last_file) 
+    if (flag.md5 && flag.bind && z_file->num_txt_components_so_far > 1 && is_last_file) 
         progress_concatenated_md5 (dt_name (z_file->data_type), md5_finalize (&z_file->md5_ctx_bound));
 
     z_file->disk_size              = z_file->disk_so_far;
@@ -530,4 +561,6 @@ finish:
 
     prev_file_first_vb_i = first_vb_i;
     dispatcher_finish (&dispatcher, &prev_file_last_vb_i);
+
+    DT_FUNC (txt_file, zip_finalize)();
 }

@@ -15,6 +15,7 @@
 #include "genozip.h"
 #include "context.h"
 #include "aes.h"
+#include "data_types.h"
 
 // REFERENCE file - only appears in .genozip format
 #define REF_GENOZIP_   ".ref" GENOZIP_EXT
@@ -183,7 +184,7 @@ extern const char *file_exts[];
                              { GVF,       CODEC_NONE, GVF_GENOZIP   }, { GVF_GZ,   CODEC_GZ,  GVF_GENOZIP   },\
                              { GVF_BZ2,   CODEC_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   CODEC_XZ,  GVF_GENOZIP   }, { } },\
                            { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { } },\
-                           { { BAM,       CODEC_BGZ,  BAM_GENOZIP   }, { } }, \
+                           { { BAM,       CODEC_NONE /*CODEC_BGZ*/,  BAM_GENOZIP   }, { } }, \
                            { { BCF,       CODEC_BCF,  BCF_GENOZIP   }, { BCF_GZ,   CODEC_BCF, BCF_GENOZIP   }, { BCF_BGZ, CODEC_BCF, BCF_GENOZIP }, { } }, \
                         }
 
@@ -291,7 +292,6 @@ typedef struct File {
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
     Buffer section_list_dict_buf;      // ZIP: a subset of section_list_buf - dictionaries are added here by VBs as they are being constructed
-    uint32_t sl_cursor, sl_dir_cursor; // PIZ: next index into section_list for searching for sections
     uint32_t num_txt_components_so_far;
 
     // stats strings (z_file only)
@@ -318,33 +318,36 @@ extern File *file_open_redirect (FileMode mode, FileSupertype supertype, DataTyp
 extern bool file_open_txt (File *file);
 extern void file_close (FileP *file_p, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
-extern bool file_seek (File *file, int64_t offset, int whence, bool soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
+extern bool file_seek (File *file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern uint64_t file_tell (File *file);
-extern uint64_t file_get_size (const char *filename);
 extern void file_set_input_type (const char *type_str);
 extern void file_set_input_size (const char *size_str);
 extern FileType file_get_type (const char *filename, bool enforce_23andme_name_format);
 extern FileType file_get_stdin_type (void);
 extern DataType file_get_data_type (FileType ft, bool is_input);
 extern const char *file_plain_text_ext_of_dt (DataType dt);
-extern bool file_is_dir (const char *filename);
-extern void file_remove (const char *filename, bool fail_quietly);
-extern void file_mkfifo (const char *filename);
 extern void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *ft);
 extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
-extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
 extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
 extern FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft);
 extern DataType file_get_dt_by_z_ft (FileType z_ft);
 extern FileType file_get_z_ft_by_dt (DataType dt);
 extern const char *file_plain_ext_by_dt (DataType dt);
-
+extern void file_remove_codec_ext (char *filename, FileType ft);
 extern const char *ft_name (FileType ft);
-extern const char *file_viewer (const File *file);
 extern const char *file_guess_original_filename (const File *file);
+
+// wrapper operations for operating system files
+extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
+extern bool file_put_data (const char *filename, void *data, uint64_t len);
+extern bool file_put_buffer (const char *filename, const Buffer *buf, unsigned buf_word_width);
+extern bool file_is_dir (const char *filename);
+extern void file_remove (const char *filename, bool fail_quietly);
+extern void file_mkfifo (const char *filename);
+extern uint64_t file_get_size (const char *filename);
 
 #define FILENAME_STDIN  "(stdin)"
 #define FILENAME_STDOUT "(stdout)"

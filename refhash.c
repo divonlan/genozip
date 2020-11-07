@@ -53,30 +53,14 @@ uint32_t layer_bitmask[64];  // 1s in the layer_bits[] LSbs
 static Buffer *refhash_bufs = NULL; // array of buffers, one for each layer
 uint32_t **refhashs = NULL;  // array of pointers to the beginning of each layer
 
-static SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-static uint32_t ref_hash_cursor = 0;
+static const SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
 // used for parallelizing read / write of the refhash
 static uint32_t next_task_layer = 0;
 static uint32_t next_task_start_within_layer = 0;
 
 // lookup table for base complement
-const char complement[256] =  { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 4
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 16
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 32
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 48
-                                4,'T',4,'G',4, 4, 4,'C',4, 4, 4, 4, 4, 4, 4, 4,   // 64  A(65)->T C(67)->G G(71)->C
-                                4, 4, 4, 4,'A',4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 84  T(84)->A
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 96  
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 112 
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 128
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+const char complement[256] =  { [0 ...255]=4, ['A']='T', ['C']='G', ['G']='C', ['T']='A' }; // complement A,C,G,T, others are 4
 
 // ------------------------------------------------------
 // stuff related to creating the refhash
@@ -118,7 +102,7 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
     
     ASSERT (this_range_size * 2 == r->ref.num_of_bits, 
             "Error in refhash_calc_one_range: mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.num_of_bits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64, 
-            this_range_size, this_range_size*2, r->ref.num_of_bits, ENT (char, z_file->contexts[0].dict, ENT (MtfNode, z_file->contexts[0].mtf, r->chrom)->char_index), 
+            this_range_size, this_range_size*2, r->ref.num_of_bits, ENT (char, z_file->contexts[0].dict, ENT (MtfNode, z_file->contexts[0].nodes, r->chrom)->char_index), 
             r->first_pos, r->last_pos);
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
@@ -216,7 +200,7 @@ static void refhash_compress_one_vb (VBlockP vb)
     
     comp_compress (vb, &vb->z_data, false, (SectionHeaderP)&header, ENT (char, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer), NULL);
 
-    if (flag_show_ref_hash) 
+    if (flag.show_ref_hash) 
         fprintf (stderr, "vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
                  vb->vblock_i, header.num_layers, header.layer_i, header.layer_bits, vb->refhash_start_in_layer, uncompressed_size, BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
@@ -247,7 +231,7 @@ static void refhash_uncompress_one_vb (VBlockP vb)
     uint32_t size  = BGEN32 (header->h.data_uncompressed_len);
     uint32_t layer_i = header->layer_i;
 
-    if (flag_show_ref_hash) // before the sanity checks
+    if (flag.show_ref_hash) // before the sanity checks
         fprintf (stderr, "vb_i=%u Uncompressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
                  vb->vblock_i, header->num_layers, layer_i, header->layer_bits, start, size, BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
@@ -273,11 +257,10 @@ static void refhash_read_one_vb (VBlockP vb)
 {
     buf_alloc (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers", 0); // room for 1 section header
 
-    if (!sections_get_next_section_of_type (&sl_ent, &ref_hash_cursor, SEC_REF_HASH, SEC_NONE))
+    if (!sections_get_next_section_of_type (&sl_ent, SEC_REF_HASH, SEC_NONE, true, false))
         return; // no more refhash sections
 
-    int32_t section_offset = zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, 
-                                                 "z_data", sizeof(SectionHeaderRefHash), sl_ent->section_type, sl_ent);
+    int32_t section_offset = zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, "z_data", sl_ent->section_type, sl_ent);
 
     if (((SectionHeaderRefHash *)vb->z_data.data)->layer_i >= num_layers)
         return; // don't read the high layers if beyond the requested num_layers
@@ -295,10 +278,9 @@ void refhash_load(void)
     refhash_initialize();
 
     sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-    ref_hash_cursor = 0;
 
     dispatcher_fan_out_task (ref_filename,
-                             PROGRESS_MESSAGE, "Reading reference hash table...", flag_test, 
+                             PROGRESS_MESSAGE, "Reading reference hash table...", flag.test, 
                              refhash_read_one_vb, 
                              refhash_uncompress_one_vb, 
                              NULL);
@@ -308,25 +290,25 @@ void refhash_load(void)
 
 void refhash_load_standalone (void)
 {
-    flag_reading_reference = true; // tell file.c and fasta.c that this is a reference
+    flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
 
-    TEMP_FLAG (command, PIZ);
-    RESET_FLAG (flag_test);
+    TEMP_VALUE (command, PIZ);
+    RESET_FLAG (test);
 
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
 
-    zfile_read_genozip_header (NULL);
+    zfile_read_genozip_header (0, 0, 0, 0);
 
     refhash_load();
 
     file_close (&z_file, false);
     file_close (&txt_file, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
     
-    RESTORE_FLAG (flag_test);
-    RESTORE_FLAG (command);
+    RESTORE_FLAG (test);
+    RESTORE_VALUE (command);
 
-    flag_reading_reference = false;
+    flag.reading_reference = false;
 }
 
 // ----------------------------
@@ -338,11 +320,11 @@ void refhash_initialize (void)
     uint32_t base_layer_bits;
 
     // case 1: called from ref_make_ref_init - initialize for making a reference file
-    if (flag_make_reference) {
+    if (flag.make_reference) {
         num_layers       = MAKE_REF_NUM_LAYERS;
         base_layer_bits  = MAKE_REF_BASE_LAYER_BITS;
         // we use the default vb size (16MB) not the reduced make-ref size (1MB), unless user overrides with --vblock
-        make_ref_vb_size = flag_vblock ? global_max_memory_per_vb : (atoi (TXT_DATA_PER_VB_DEFAULT) << 20);
+        make_ref_vb_size = flag.vblock ? global_max_memory_per_vb : (atoi (TXT_DATA_PER_VB_DEFAULT) << 20);
     }
 
     // case 2: piz_read_global_area from piz_read_global_area -> refhash_load - initialize when reading an external reference for ZIP of fasta or fastq
@@ -371,7 +353,7 @@ void refhash_initialize (void)
         // NOT: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min
         // due to a different LZMA internal mode when compressing the hash. However, the resulting file is MUCH smaller,
         // and loading of refhash during zip is MUCH faster
-        if (flag_make_reference) buf_set (&refhash_bufs[layer_i], 0xff); 
+        if (flag.make_reference) buf_set (&refhash_bufs[layer_i], 0xff); 
 
         refhashs[layer_i] = FIRSTENT (uint32_t, refhash_bufs[layer_i]);
     }

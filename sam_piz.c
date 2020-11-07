@@ -15,6 +15,7 @@
 #include "regions.h"
 #include "aligner.h"
 #include "file.h"
+#include "container.h"
 
 // returns true if section is to be skipped reading / uncompressing
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
@@ -44,7 +45,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
     unsigned seq_consumed=0, ref_consumed=0;
 
     // case: unaligned sequence - pos is 0 
-    if (!pos) {
+    if (!pos || (vb->chrom_name_len==1 && vb->chrom_name[0]=='*')) {
         // case: compressed with a reference, using our aligner
         if (z_file->flags & GENOZIP_FL_ALIGNER) {
             aligner_reconstruct_seq ((VBlockP)vb, bitmap_ctx, vb->seq_len, false);
@@ -74,7 +75,8 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
             subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
             cigar_op = cigar_lookup[(uint8_t)*(next_cigar++)];
-            ASSERT (cigar_op != CIGAR_INVALID, "Error in sam_piz_reconstruct_seq: Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
+            ASSERT (cigar_op, "Error in sam_piz_reconstruct_seq: Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
+            cigar_op &= 0x0f; // remove validity bit
         }
 
         if (cigar_op & CIGAR_CONSUMES_QUERY) {
@@ -120,9 +122,10 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
 {
     VBlockSAMP vb_sam = (VBlockSAMP)vb;
 
-    sam_analyze_cigar (snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL);
+    // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar
+    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL); 
 
-    if (reconstruct) {
+    if (flag.out_dt == DT_SAM) {
         if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
             RECONSTRUCT1 ('*');
         
@@ -133,14 +136,48 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
             RECONSTRUCT (snip, snip_len);    
     }
 
+    // BAM - output vb->textual_cigar generated in sam_analyze_cigar
+    else {
+        // now we have the info needed to reconstruct bin, l_read_name, n_cigar_op and l_seq
+        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
+        alignment->l_read_name = AFTERENT (char, vb->txt_data) - alignment->read_name;
+        alignment->n_cigar_op  = LTEN16 (vb_sam->textual_cigar.len);
+        alignment->l_seq       = (snip[0] == '-') ? 0 : LTEN32 (vb->seq_len);
+
+        RECONSTRUCT (vb_sam->textual_cigar.data, vb_sam->textual_cigar.len * sizeof (uint32_t));
+        buf_free (&vb_sam->textual_cigar);
+
+        // if BIN is SAM_SPECIAL_BIN, CTX_INST_SEMAPHORE is set by bam_piz_special_BIN - a signal to us to calculate
+        if (vb->contexts[SAM_BAM_BIN].inst & CTX_INST_SEMAPHORE) {
+            vb->contexts[SAM_BAM_BIN].inst &= ~CTX_INST_SEMAPHORE; // reset;
+
+            uint16_t flag = vb->contexts[SAM_FLAG].last_value.i;
+            PosType pos   = vb->contexts[SAM_POS ].last_value.i;
+            bool segment_unmapped = (flag & 0x4);
+            PosType last_pos = segment_unmapped ? pos : (pos + vb_sam->ref_consumed - 1);
+            
+            uint16_t bin = bam_reg2bin (pos - 1, last_pos-1);
+            alignment->bin = LTEN16 (bin); // override the -1 previously set by the translator
+        }
+    }
+
     vb_sam->last_cigar = snip;
 
-    if (flag_regions && vb->chrom_node_index != WORD_INDEX_NONE && vb->contexts[SAM_POS].last_value.i && 
+    if (flag.regions && vb->chrom_node_index != WORD_INDEX_NONE && vb->contexts[SAM_POS].last_value.i && 
         !regions_is_range_included (vb->chrom_node_index, vb->contexts[SAM_POS].last_value.i, vb->contexts[SAM_POS].last_value.i + vb_sam->ref_consumed - 1, true))
         vb->dont_show_curr_line = true;
 
     return false; // no new value
 }   
+
+// Case 1: BIN is set to SPECIAL, we will set new_value here to -1 and wait for CIGAR to calculate it, 
+//         as we need vb->ref_consumed - sam_piz_special_CIGAR will update the reconstruced value
+// Case 2: BIN is an textual integer snip - its BIN.last_value will be set as normal and transltor will reconstruct it
+SPECIAL_RECONSTRUCTOR (bam_piz_special_BIN)
+{
+    ctx->inst |= CTX_INST_SEMAPHORE; // signal to sam_piz_special_CIGAR to calculate
+    return false; // no new value
+}
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
 {
@@ -149,18 +186,19 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
     int32_t tlen_by_calc = atoi (snip);
     int32_t tlen_val = tlen_by_calc + vb->contexts[SAM_PNEXT].last_delta + vb->seq_len;
 
-    ctx->last_value.i = tlen_val;
+    new_value->i = tlen_val;
 
     if (reconstruct) { RECONSTRUCT_INT (tlen_val); }
 
-    return false; // no new value
+    return true; // new value
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_AS)
 {
-    if (reconstruct) { RECONSTRUCT_INT (vb->seq_len - atoi (snip)) };
+    new_value->i = vb->seq_len - atoi (snip);
+    if (reconstruct) { RECONSTRUCT_INT (new_value->i) };
     
-    return false; // no new value
+    return true; // new value
 }
 
 // logic: snip is eg "119C" (possibly also "") - we reconstruct the original, eg "119C31" 
@@ -182,7 +220,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
 {
     if (!vb->seq_len || !reconstruct) goto done;
 
-    Context *bdbi_ctx = mtf_get_existing_ctx (vb, dict_id_OPTION_BD_BI);
+    Context *bdbi_ctx = ctx_get_existing_ctx (vb, dict_id_OPTION_BD_BI);
 
     // note: bd and bi use their own next_local to retrieve data from bdbi_ctx. the actual index
     // in bdbi_ctx.local is calculated given the interlacing
@@ -222,7 +260,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
     if (!reconstruct) goto finish;
 
     // binary reconstruction - BAM format
-    if (flag_out_dt == DT_BAM)
+    if (flag.out_dt == DT_BAM)
         RECONSTRUCT (&lten_n, sizeof (uint32_t))
     
     // textual reconstruction - SAM format 
@@ -255,4 +293,227 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 finish:
     new_value->d = (double)machine_en.f;
     return true; // have new value
+}
+
+//-----------------------------------------------------------------
+// Translator functions for reconstructing SAM data into BAM format
+//-----------------------------------------------------------------
+
+// PIZ I/O thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
+TXTHEADER_TRANSLATOR (txtheader_bam2sam)
+{
+    uint32_t l_text = GET_UINT32 (ENT (char, *txt, 4));
+    memcpy (txt->data, ENT (char, *txt, 8), l_text);
+    txt->len = l_text;
+}
+
+TXTHEADER_TRANSLATOR (txtheader_sam2bam)
+{
+    // to do
+}
+
+// translate SAM ASCII sequence characters to BAM's 4-bit characters:
+TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
+{
+    // the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
+    static const uint8_t sam2bam_seq_map[256] = { ['=']=0x80, ['A']=0x81, ['C']=0x82, ['M']=0x83, ['G']=0x84, ['R']=0x85, ['S']=0x86, ['V']=0x87, 
+                                                  ['T']=0x88, ['W']=0x89, ['Y']=0x8a, ['H']=0x8b, ['K']=0x8c, ['D']=0x8d, ['B']=0x8e, ['N']=0x8f };
+    
+    static bool invalid_char_warning_shown = false; // we show this warning up to once per executipn
+
+    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
+    uint32_t l_seq = LTEN32 (alignment->l_seq);
+
+    // if l_seq=0, just remove the '*'
+    if (!l_seq) {
+        vb->txt_data.len--;
+        return 0;
+    }
+
+    // if l_seq is odd, 0 the next byte that will be half of our last result byte
+    if (l_seq % 2) *AFTERENT (char, vb->txt_data) = 0; 
+
+    uint8_t *seq_before=(uint8_t *)reconstructed, *seq_after=(uint8_t *)reconstructed; 
+    for (uint32_t i=0; i < (l_seq+1)/2; i++, seq_after++, seq_before += 2) {
+        uint8_t base[2] = { sam2bam_seq_map[(uint8_t)seq_before[0]], sam2bam_seq_map[(uint8_t)seq_before[1]] };
+        
+        // check for invalid characters - issue warning (only once per executation), and make then into an 'N'
+        for (unsigned b=0; b < 2; b++)
+            if (!base[b] && !invalid_char_warning_shown && !(b==1 && (i+1)*2 > l_seq)) {
+                WARN ("Warning when converting SAM sequence data to BAM: invalid character encodered, it will be converted as 'N': '%c' (ASCII %u)", base[b], base[b]);
+                invalid_char_warning_shown = true;
+                base[b] = 0x0f;
+            }
+
+        *seq_after = (base[0] << 4) | (base[1] & 0x0f);
+    }
+
+    vb->txt_data.len = vb->txt_data.len - l_seq + (l_seq+1)/2;
+
+    return 0;
+}
+
+// translate SAM ASCII (33-based) Phread values to BAM's 0-based
+TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
+{
+    // if QUAL is "*" there are two options:
+    // 1. If l_seq is 0, the QUAL is empty
+    // 2. If not (i.e. we have SEQ data but not QUAL) - it is a string of 0xff, length l_seq
+    if (reconstructed_len==1 && *reconstructed == '*') {
+        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
+        uint32_t l_seq = LTEN32 (alignment->l_seq);
+
+        if (!l_seq) // option 1
+            vb->txt_data.len--;
+        else {      // option 2
+            memset (LASTENT (uint8_t, vb->txt_data), 0xff, l_seq); // override the '*' and l_seq-1 more
+            vb->txt_data.len += l_seq - 1;
+        }
+    }
+    
+    else // we have QUAL - update Phred values
+        for (uint8_t i=0; i < reconstructed_len; i++)
+            reconstructed[i] -= 33; 
+
+    return 0;
+}
+
+// output the word_index of RNAME, which is verified in ref_contigs_verify_identical_chrom during seg
+// to be the same as the reference id 
+TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
+{
+    DECLARE_SNIP;
+    ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, ctx->last_value.i, &snip, &snip_len);
+
+    // if it is '*', reconstruct -1
+    if (snip_len == 1 && *snip == '*') 
+        RECONSTRUCT_BIN32 (-1)    
+
+    // if its RNEXT and =, emit the last index of RNAME
+    else if (ctx->did_i != CHROM && snip_len == 1 && *snip == '=') 
+        RECONSTRUCT_BIN32 (vb->contexts[CHROM].last_value.i)
+
+    // otherwise - output the word_index which was stored here because of CTX_FL_STORE_INDEX set in seg 
+    else     
+        RECONSTRUCT_BIN32 (ctx->last_value.i); 
+    
+    return 0;
+}
+
+// output, in binary form, POS-1 as BAM uses 0-based POS
+TRANSLATOR_FUNC (sam_piz_sam2bam_POS)
+{
+    RECONSTRUCT_BIN32 (ctx->last_value.i - 1);
+    return 0;
+}
+
+// translate OPTIONAL SAM->BAM - called as translator-only item on within the Optional reconstruction
+// fix prefix eg MX:i: -> MXs
+TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
+{
+    Container *con = (Container *)reconstructed;
+
+    if (reconstructed_len == -1) return 0; // no Optional data in this alignment
+
+    char *prefixes_before = &reconstructed[sizeof_container (*con)] + 2; // skip the empty prefixes of container wide, and item[0]
+    char *prefixes_after = prefixes_before;
+
+    for (unsigned i=1; i < con->num_items; i++, prefixes_before+=6, prefixes_after+=4) {
+        prefixes_after[0] = prefixes_before[0]; // tag[0] 
+        prefixes_after[1] = prefixes_before[1]; // tag[1]
+        prefixes_after[2] = prefixes_before[3]; // type
+        prefixes_after[3] = SNIP_CONTAINER; // end of prefix
+
+        // a SAM 'i' translate to one of several BAM types using the translator code
+        // that may be 0->6 (NONE to SAM2BAM_LTEN_U32)
+        if (prefixes_after[2] == 'i') 
+            prefixes_after[2] = "\0cCsSiI"[con->items[i].translator];
+    }
+
+    return -2 * (con->num_items-1); // change in prefixes_len
+}
+
+// translate OPTIONAL SAM->BAM - called after Optional reconstruction is done
+// sets block_size
+TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL)
+{
+    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
+    alignment->block_size = vb->txt_data.len - vb->line_start - sizeof (uint32_t); // block_size doesn't include the block_size field itself
+    alignment->block_size = LTEN32 (alignment->block_size);
+    return 0;
+}
+
+//------------------------------------------------------------------------------------
+// Translator and filter functions for reconstructing SAM / BAM data into FASTQ format
+//------------------------------------------------------------------------------------
+
+TXTHEADER_TRANSLATOR (txtheader_sam2fq)
+{
+    txt->len = 0; // fastq has no header
+}
+
+// filtering during reconstruction: called by container_reconstruct_do for each sam alignment (repeat)
+CONTAINER_FILTER_FUNC (sam_piz_sam2fq_filter)
+{
+    uint16_t flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    return !(flag & 0x100); // show only if this is a primary alignment (don't show its secondary alignments)
+}
+
+// reverse-complement the sequence if needed, and drop if "*"
+TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
+{
+    // full printable ascii with only AGCT->TCGA and agct->tcga
+    static const char complement[256] = { [33] '!','"','#','$','%','&','\'','(',')','*','+',',','-','.','/',
+                                          '0','1','2','3','4','5','6','7','8','9',':',';','<','=','>','?','@',
+                                          'T','B','G','D','E','F','C','H','I','J','K','L','M','N','O','P','Q','R','S','A','U','V','W','X','Y','Z',
+                                          '[','\\',']','^','_','`',
+                                          't','b','g','d','e','f','c','h','i','j','k','l','m','n','o','p','q','r','s','a','u','v','w','x','y','z'
+                                          ,'{','|','}','~' };
+
+    uint16_t flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    
+    // case: SEQ is "*" - don't show this fastq record
+    if (reconstructed_len==1 && *reconstructed == '*') 
+        vb->dont_show_curr_line = true;
+
+    // case: this sequence is reverse complemented - reverse-complement it
+    else if (flag & 0x10) {
+
+        // we move from the outside in, switching the left and right bases while also complementing both
+        for (unsigned i=0; i < reconstructed_len / 2; i++) {
+            char l_base = reconstructed[i];
+            char r_base = reconstructed[reconstructed_len-1-i];
+
+            reconstructed[i]                     = complement[(uint8_t)r_base];
+            reconstructed[reconstructed_len-1-i] = complement[(uint8_t)l_base];
+        }
+
+        if (reconstructed_len % 2) // we have an odd number of bases - now complement the middle one
+            reconstructed[reconstructed_len/2] = complement[(uint8_t)reconstructed[reconstructed_len/2]];
+    }
+
+    return 0;
+}
+
+// reverse the sequence if needed, and drop if "*"
+TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
+{
+    uint16_t flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    
+    // case: QUAL is "*" - don't show this fastq record
+    if (reconstructed_len==1 && *reconstructed == '*') 
+        vb->dont_show_curr_line = true;
+
+    // case: this sequence is reverse complemented - reverse the QUAL string
+    else if (flag & 0x10) {
+
+        // we move from the outside in, switching the left and right bases 
+        for (unsigned i=0; i < reconstructed_len / 2; i++) {
+            char tmp = reconstructed[i];
+            reconstructed[i] = reconstructed[reconstructed_len-1-i];
+            reconstructed[reconstructed_len-1-i] = tmp;
+        }
+    }
+
+    return 0;
 }

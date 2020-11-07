@@ -46,14 +46,13 @@ bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
         buf_alloc (vb, &vb->compressed, *uncompressed_len, 1.2, "compressed", 0);
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
-            char *start1=0, *start2=0;
-            uint32_t len1=0, len2=0;        
+            char *start1=0;
+            uint32_t len1=0;        
             
             // note: get what we need, might be less than what's available if calling from zip_assign_best_codec
-            callback (vb, line_i, &start1, &len1, &start2, &len2, *uncompressed_len - vb->compressed.len); 
+            callback (vb, line_i, &start1, &len1, *uncompressed_len - vb->compressed.len); 
 
             if (start1 && len1) buf_add (&vb->compressed, start1, len1);
-            if (start2 && len2) buf_add (&vb->compressed, start2, len2);
         }
 
         uncompressed = vb->compressed.data;
@@ -63,7 +62,7 @@ bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
                             16,  // lzp hash size
                             128, // lzp min size
                             LIBBSC_BLOCKSORTER_BWT, // block sorter 
-                            flag_fast ? LIBBSC_CODER_QLFC_STATIC : LIBBSC_CODER_QLFC_ADAPTIVE, // coder
+                            flag.fast ? LIBBSC_CODER_QLFC_STATIC : LIBBSC_CODER_QLFC_ADAPTIVE, // coder
                             LIBBSC_FEATURE_FASTMODE); // flags ("features")
 
     if (ret == LIBBSC_NOT_COMPRESSIBLE)

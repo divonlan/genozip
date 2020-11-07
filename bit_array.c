@@ -199,32 +199,32 @@ static inline word_t _get_word(const BitArray* bitarr, bit_index_t start)
 
 // Set 64 bits from a particular start position
 // Doesn't extend bit array
-static inline void _set_word(BitArray* bitarr, bit_index_t start, word_t word)
+static inline void _set_word (BitArray *bitarr, bit_index_t start, word_t word)
 {
-  word_addr_t word_index = bitset64_wrd(start);
-  word_offset_t word_offset = bitset64_idx(start);
+    word_addr_t word_index = bitset64_wrd(start);
+    word_offset_t word_offset = bitset64_idx(start);
 
-  if(word_offset == 0)
-  {
-    bitarr->words[word_index] = word;
-  }
-  else
-  {
-    bitarr->words[word_index]
-      = (word << word_offset) |
-        (bitarr->words[word_index] & bitmask64(word_offset));
+    if(word_offset == 0)
+        bitarr->words[word_index] = word;
+    
+    else {
+        bitarr->words[word_index] = (word << word_offset) |
+                                    (bitarr->words[word_index] & bitmask64(word_offset));
 
-    if(word_index+1 < bitarr->num_of_words)
-    {
-      bitarr->words[word_index+1]
-        = (word >> (WORD_SIZE - word_offset)) |
-          (bitarr->words[word_index+1] & (WORD_MAX << word_offset));
+        if(word_index+1 < bitarr->num_of_words) {
+
+            bitarr->words[word_index+1] = (word >> (WORD_SIZE - word_offset)) |
+                                          (bitarr->words[word_index+1] & (WORD_MAX << word_offset));
+
+            // added by divon: Mask top word only if its the last word --divon
+            if (word_index+2 == bitarr->num_of_words)
+                _mask_top_word (bitarr);
+        }
     }
-  }
 
-  // Mask top word
-  _mask_top_word(bitarr);
-  DEBUG_VALIDATE(bitarr);
+    // _mask_top_word(bitarr); // divon: removed bc not thread safe when setting different parts of the bit array with multiple threads
+
+    DEBUG_VALIDATE(bitarr);
 }
 
 static inline void _set_byte(BitArray *bitarr, bit_index_t start, uint8_t byte)
@@ -552,21 +552,21 @@ void bit_array_toggle_region(BitArray* bitarr, bit_index_t start, bit_index_t le
 //
 
 // set all elements of data to one
-void bit_array_set_all(BitArray* bitarr)
+void bit_array_set_all (BitArray *bitarr)
 {
-  bit_index_t num_of_bytes = bitarr->num_of_words * sizeof(word_t);
-  memset(bitarr->words, 0xFF, num_of_bytes);
-  _mask_top_word(bitarr);
-  DEBUG_VALIDATE(bitarr);
+    bit_index_t num_of_bytes = bitarr->num_of_words * sizeof(word_t);
+    memset(bitarr->words, 0xFF, num_of_bytes);
+    _mask_top_word(bitarr);
+    DEBUG_VALIDATE(bitarr);
 }
 
 // set all elements of data to zero
-void bit_array_clear_all(BitArray* bitarr)
+void bit_array_clear_all (BitArray *bitarr)
 {
-  if (!bitarr->words) return; // nothing to do
+    if (!bitarr->words) return; // nothing to do
 
-  memset(bitarr->words, 0, bitarr->num_of_words * sizeof(word_t));
-  DEBUG_VALIDATE(bitarr);
+    memset(bitarr->words, 0, bitarr->num_of_words * sizeof(word_t));
+    DEBUG_VALIDATE(bitarr);
 }
 
 // Set all 1 bits to 0, and all 0 bits to 1. AKA flip
@@ -1006,7 +1006,8 @@ static void _array_copy(BitArray* dst, bit_index_t dstindx,
     }
   }
 
-  _mask_top_word(dst);
+  // divon: removed due to thread safety - not needed, _set_word already masks top word if needed
+  // _mask_top_word(dst);
 }
 
 // destination and source may be the same bit_array

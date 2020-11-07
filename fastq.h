@@ -23,8 +23,8 @@ extern void fastq_seg_finalize();
 extern const char *fastq_seg_txt_line();
 
 // PIZ Stuff
-extern bool fastq_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
-extern bool fastq_piz_filter (VBlockP vb, DictId dict_id, ConstContainerP con, unsigned fastq_record_i, int item_i);
+extern bool fastq_piz_read_one_vb (VBlockP vb, ConstSectionListEntryP sl);
+CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 extern void fastq_piz_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len);
 

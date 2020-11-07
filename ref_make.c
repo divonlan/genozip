@@ -12,7 +12,7 @@ SPINLOCK (make_ref_spin);
 #define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)
 
 // called from ref_make_create_range, returns the range for this fasta VB. note that we have exactly one range per VB
-// as txtfile_read_vblock makes sure we have only one full or partial contig per VB (if flag_make_reference)
+// as txtfile_read_vblock makes sure we have only one full or partial contig per VB (if flag.make_reference)
 static Range *ref_make_ref_get_range (uint32_t vblock_i)
 {
     // access ranges.len under the protection of the mutex
@@ -55,7 +55,7 @@ void ref_make_create_range (VBlockP vb)
 // worrying about byte overlap. called from zip_one_file as zip_initialize
 void ref_make_ref_init (void)
 {
-    ASSERT0 (flag_make_reference, "Expecting flag_make_reference=true");
+    ASSERT0 (flag.make_reference, "Expecting flag.make_reference=true");
 
     buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges", RT_MAKE_REF); // must be allocated by I/O thread as its evb
     buf_zero (&ranges);

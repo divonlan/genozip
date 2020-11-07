@@ -16,6 +16,7 @@
 #include "reference.h"
 #include "zfile.h"
 #include "version.h"
+#include "arch.h"
 
 static int *count_per_section = NULL;
 
@@ -74,7 +75,7 @@ static void stats_show_file_metadata (Buffer *buf)
                    memchr (bound_txt_names.data, ' ', bound_txt_names.len) ? "s" : "", // a space separator indicates more than one file
                    (int)bound_txt_names.len, bound_txt_names.data);
     
-    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) 
+    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
         bufprintf (evb, buf, "Reference: %s\n", ref_filename);
 
     char ls[30];
@@ -88,7 +89,7 @@ static void stats_show_file_metadata (Buffer *buf)
     char timestr[100];
     time_t now = time (NULL);
     strftime (timestr, 100, "%Y-%m-%d %H:%M:%S", gmtime (&now));
-    bufprintf (evb, buf, "Genozip version: %s Date compressed: %s UTC\n", GENOZIP_CODE_VERSION, timestr);
+    bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s UTC\n", GENOZIP_CODE_VERSION, arch_get_distribution(), timestr);
 }
 
 typedef struct {
@@ -124,6 +125,21 @@ static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
 
             if (!strcmp (sbl[parent].name, "SQBITMAP")) sbl[parent].name = "SEQ"; // rename
         }
+}
+
+void stats_set_consolidation (VBlock *vb, DidIType parent, unsigned num_deps, ...)
+{
+    va_list args;
+    va_start (args, num_deps);
+
+    DidIType deps[num_deps];
+    for (unsigned d=0; d < num_deps; d++) 
+        deps[d] = (DidIType)va_arg (args, int); 
+
+    for (unsigned d=0; d < num_deps; d++)
+        vb->contexts[deps[d]].st_did_i = parent;
+
+    va_end (args);
 }
 
 static void stats_consolidate_related (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, unsigned num_deps, ...)
@@ -187,6 +203,10 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 #define PC(pc) ((pc==0 || pc>=10) ? 0 : (pc<1 ? 2:1))
     char s1[20], s2[20], s3[20], s4[20], s5[20], s6[20];
 
+    // add diagnostic info
+    bufprintf (evb, &z_file->stats_buf_2, "Command line: %s\n", command_line);
+    bufprintf (evb, &z_file->stats_buf_2, "System info: OS=%s cores=%u endianity=%s\n", 
+               arch_get_os(), arch_get_num_cores(), arch_get_endianity());
     bufprintf (evb, &z_file->stats_buf_2, "\nSections (sorted by %% of genozip file):%s\n", "");
     bufprintf (evb, &z_file->stats_buf_2, "did_i Name            Type            #Words  Snips-(%% of #Words)        Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  %s\n", "");
     bufprintf (evb, &z_file->stats_buf_2, "                                     in file   Dict  Local   Both         Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip%s\n", "");
@@ -237,7 +257,7 @@ void stats_compress (void)
 
         ASSERTW (s->z_size >= 0, "Hmm... s->z_size=%"PRId64" is negative for %s", s->z_size, s->name);
 
-        if (ctx && !ctx->mtf_i.len && !ctx->txt_len && !ctx->b250.len && !s->z_size) continue;
+        if (ctx && !ctx->node_i.len && !ctx->txt_len && !ctx->b250.len && !s->z_size) continue;
 
         s->txt_size = ctx ? ctx->txt_len : (i==-SEC_TXT_HEADER ? txtfile_get_bound_headers_len() : 0);
         
@@ -255,11 +275,11 @@ void stats_compress (void)
                              s->my_did_i = ctx->did_i;
                              s->st_did_i = ctx->st_did_i;
         /* did_i          */ str_uint_commas ((uint64_t)ctx->did_i, s->did_i); 
-        /* #Words in file */ str_uint_commas (ctx->mtf_i.len, s->words);
-        /* % dict         */ s->pc_dict              = !ctx->mtf_i.len         ? 0 : 100.0 * (double)ctx->mtf.len / (double)ctx->mtf_i.len;
-        /* % singletons   */ s->pc_singletons        = !ctx->mtf_i.len         ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->mtf_i.len;
-        /* % failed singl.*/ s->pc_failed_singletons = !ctx->mtf_i.len         ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->mtf_i.len;
-        /* % hash occupn. */ s->pc_hash_occupancy    = !ctx->global_hash_prime ? 0 : 100.0 * (double)(ctx->mtf.len + ctx->ol_mtf.len) / (double)ctx->global_hash_prime;
+        /* #Words in file */ str_uint_commas (ctx->node_i.len, s->words);
+        /* % dict         */ s->pc_dict              = !ctx->node_i.len         ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->node_i.len;
+        /* % singletons   */ s->pc_singletons        = !ctx->node_i.len         ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->node_i.len;
+        /* % failed singl.*/ s->pc_failed_singletons = !ctx->node_i.len         ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->node_i.len;
+        /* % hash occupn. */ s->pc_hash_occupancy    = !ctx->global_hash_prime ? 0 : 100.0 * (double)(ctx->nodes.len + ctx->ol_mtf.len) / (double)ctx->global_hash_prime;
         /* Hash           */ str_uint_commas (ctx->global_hash_prime, s->hash);
         /* uncomp dict    */ str_size (ctx->dict.len, s->uncomp_dict);
         /* comp dict      */ str_size (dict_compressed_size, s->comp_dict);
@@ -297,7 +317,8 @@ void stats_compress (void)
     stats_consolidate_related (sbl, num_stats, "Reference", 5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS));
 
-    stats_consolidate_related (sbl, num_stats, "Other", 12, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", TOPLEVEL, "TOP2BAM", "TOP2FQ", "LINEMETA", "CONTIG",
+    stats_consolidate_related (sbl, num_stats, "Other", 15, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
+                               TOPLEVEL, "TOP2BAM", "TOP2FQ", "TOP2VCF", "LINEMETA", "CONTIG",
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER));
 
@@ -312,7 +333,7 @@ void stats_compress (void)
     // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_so_far is 
     // missing, while txt_data_so_far_single is what was actually processed
     char s1[30], s2[30];
-    ASSERTW (all_txt_size == z_file->txt_data_so_far_bind || flag_optimize || flag_make_reference, 
+    ASSERTW (all_txt_size == z_file->txt_data_so_far_bind || flag.optimize || flag.make_reference, 
              "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), str_uint_commas (all_txt_size, s1), str_uint_commas (z_file->txt_data_so_far_bind, s2), 
              (int32_t)(z_file->txt_data_so_far_bind - all_txt_size)); 
@@ -325,13 +346,13 @@ void stats_compress (void)
 
 void stats_display (void)
 {
-    Buffer *buf = flag_show_stats == 1 ? &z_file->stats_buf_1 : &z_file->stats_buf_2;
+    Buffer *buf = flag.show_stats == 1 ? &z_file->stats_buf_1 : &z_file->stats_buf_2;
 
     if (!buf_is_allocated (buf)) return; // no stats available
 
     buf_print (buf , false);
 
-    SectionListEntry *sl = sections_get_first_section_of_type (SEC_STATS, false);
+    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_STATS, false);
 
     if (z_file->disk_size < (1<<20)) { // no need to print this note if total size > 1MB, as the ~2K of overhead is rounded off anyway
         char s[20];
@@ -344,12 +365,12 @@ void stats_display (void)
 
 void stats_read_and_display (void)
 {
-    SectionListEntry *sl = sections_get_first_section_of_type (SEC_STATS, true);
+    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_STATS, true);
     if (!sl) return; // genozip file does not contain stats sections (SEC_STATS was introduced in v 7.0.5)
 
     // read and uncompress the requested stats section
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_STATS, sl + (flag_show_stats==2));
-    zfile_uncompress_section (evb, evb->z_data.data, flag_show_stats == 1 ? &z_file->stats_buf_1 : &z_file->stats_buf_2, "z_file->stats_buf", 0, SEC_STATS);
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_STATS, sl + (flag.show_stats==2));
+    zfile_uncompress_section (evb, evb->z_data.data, flag.show_stats == 1 ? &z_file->stats_buf_1 : &z_file->stats_buf_2, "z_file->stats_buf", 0, SEC_STATS);
     buf_free (&evb->z_data);
     
     stats_display();

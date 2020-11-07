@@ -15,6 +15,8 @@
 
 MUTEX (ra_mutex);
 
+#define RA_UNKNOWN_CHROM_SKIP_POS 1
+
 void random_access_initialize(void)
 {    
     mutex_initialize (ra_mutex);
@@ -38,11 +40,20 @@ void random_access_alloc_ra_buf (VBlock *vb, int32_t chrom_node_index)
 
 // ZIP only: called from Seg when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom (for example, in an unsorted SAM or VCF). we maitain one ra field per chrom per vb
+// chrom_node_index==WORD_INDEX_NONE if we don't yet know what chrom this is and we will update it later (see fasta_seg_txt_line)
 void random_access_update_chrom (VBlock *vb, WordIndex chrom_node_index, const char *chrom_name, unsigned chrom_name_len)
 {
     // note: when FASTA calls this for a sequence that started in the previous vb, and hence chrom is unknown, chrom_node_index==-1.
     ASSERT (chrom_node_index >= -1, "Error in random_access_update_chrom: chrom_node_index=%d in vb_i=%u", 
             chrom_node_index, vb->vblock_i);
+
+    // if this is an "unavailable" chrom ("*") we don't store it and signal not to store POS either
+    if (chrom_name_len == 1 && chrom_name[0] == '*') {
+        vb->ra_buf.param = RA_UNKNOWN_CHROM_SKIP_POS;
+        vb->chrom_name     = chrom_name;
+        vb->chrom_name_len = chrom_name_len;
+        return;
+    }
 
     random_access_alloc_ra_buf (vb, chrom_node_index); // make sure ra_buf is big enough
 
@@ -55,14 +66,20 @@ void random_access_update_chrom (VBlock *vb, WordIndex chrom_node_index, const c
     vb->chrom_node_index = chrom_node_index;
 
     if (chrom_node_index != WORD_INDEX_NONE) {
-        vb->chrom_name       = chrom_name;
-        vb->chrom_name_len   = chrom_name_len;
+        vb->chrom_name     = chrom_name;
+        vb->chrom_name_len = chrom_name_len;
     }
 }
 
 // ZIP only: update the pos in the existing chrom entry
 void random_access_update_pos (VBlock *vb, DidIType did_i_pos)
 {
+    // if the last chrom was unknown ("*"), we do nothing with pos either
+    if (vb->ra_buf.param == RA_UNKNOWN_CHROM_SKIP_POS) {
+        vb->ra_buf.param = 0; // reset
+        return;
+    }
+    
     PosType this_pos = vb->contexts[did_i_pos].last_value.i;
 
     if (this_pos <= 0) return; // ignore pos<=0 (in SAM, 0 means unmapped POS)
@@ -124,7 +141,7 @@ void random_access_merge_in_vb (VBlock *vb)
         dst_ra->max_pos  = src_ra[i].max_pos;
 
         if (src_ra[i].chrom_index != WORD_INDEX_NONE) {
-            MtfNode *chrom_node = mtf_node_vb (chrom_ctx, (WordIndex)src_ra[i].chrom_index, NULL, NULL);
+            MtfNode *chrom_node = ctx_node_vb (chrom_ctx, (WordIndex)src_ra[i].chrom_index, NULL, NULL);
             dst_ra->chrom_index = chrom_node->word_index.n; // note: in the VB we store the node index, while in zfile we store tha word index
         }
         else 
@@ -223,7 +240,7 @@ static const RAEntry *random_access_get_first_ra_of_vb (uint32_t vb_i, const RAE
 bool random_access_is_vb_included (uint32_t vb_i,
                                    Buffer *region_ra_intersection_matrix) // out - a bytemap - rows are ra's of this VB, columns are regions, a cell is 1 if there's an intersection
 {
-    if (!flag_regions) return true; // if no -r/-R was specified, all VBs are included
+    if (!flag.regions) return true; // if no -r/-R was specified, all VBs are included
 
     ASSERT0 (region_ra_intersection_matrix, "Error: region_ra_intersection_matrix is NULL");
 
@@ -351,7 +368,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
         const char *chrom_snip; unsigned chrom_snip_len;
         if (from_zip) {
             if (ra[i].chrom_index != WORD_INDEX_NONE) {
-                MtfNode *chrom_node = mtf_get_node_by_word_index (ctx, ra[i].chrom_index);
+                MtfNode *chrom_node = ctx_get_node_by_word_index (ctx, ra[i].chrom_index);
                 chrom_snip     = ENT (char, ctx->dict, chrom_node->char_index);
                 chrom_snip_len = chrom_node->snip_len;
             }
@@ -381,8 +398,8 @@ void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosTy
 
 void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const char *buf_name, const char *show_index_msg)
 {
-    SectionListEntry *ra_sl = sections_get_first_section_of_type (sec_type, false);
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), sec_type, ra_sl);
+    const SectionListEntry *ra_sl = sections_get_first_section_of_type (sec_type, false);
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sec_type, ra_sl);
 
     zfile_uncompress_section (evb, evb->z_data.data, ra_buf, buf_name, 0, sec_type);
 

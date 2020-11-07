@@ -7,7 +7,6 @@
 #define COMPRESSOR_INCLUDED
 
 #include "genozip.h"
-#include "data_types.h"
 #include "codec.h"
 
 extern uint32_t comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,

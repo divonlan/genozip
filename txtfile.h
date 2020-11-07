@@ -30,4 +30,6 @@ extern void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_
 extern uint32_t def_unconsumed (VBlockP vb);
 extern int32_t def_is_header_done (void);
 
+extern DataType txtfile_get_file_dt (const char *filename);
+
 #endif

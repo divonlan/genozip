@@ -19,20 +19,21 @@
 #include "zfile.h"
 #include "data_types.h"
 #include "container.h"
+#include "codec.h"
 
 WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                      bool *is_new) // optional out
 {
-    buf_alloc (vb, &ctx->mtf_i, MAX (vb->lines.len, ctx->mtf_i.len + 1) * sizeof (uint32_t),
-               CTX_GROWTH, "contexts->mtf_i", ctx->did_i);
+    buf_alloc (vb, &ctx->node_i, MAX (vb->lines.len, ctx->node_i.len + 1) * sizeof (uint32_t),
+               CTX_GROWTH, "contexts->node_i", ctx->did_i);
     
-    WordIndex node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
+    WordIndex node_index = ctx_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
-    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
-            "Error in seg_by_did_i: out of range: dict=%s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
-            ctx->name, node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
+    ASSERT (node_index < ctx->nodes.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
+            "Error in seg_by_did_i: out of range: dict=%s node_i=%d nodes.len=%u ol_mtf.len=%u",  
+            ctx->name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_mtf.len);
     
-    NEXTENT (uint32_t, ctx->mtf_i) = node_index;
+    NEXTENT (uint32_t, ctx->node_i) = node_index;
     ctx->txt_len += add_bytes;
 
     // a snip who is stored in its entirety in local, with just a LOOKUP in the dictionary, is counted as a singleton
@@ -109,6 +110,13 @@ const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigne
     return 0; // avoid compiler warning - never reaches here
 }
 
+void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes)
+{
+    char snip[40];
+    unsigned snip_len = str_int (n, snip);
+    seg_by_did_i (vb, snip, snip_len, did_i, add_bytes);
+}
+
 void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
                              char *snip, unsigned *snip_len) // out
 {
@@ -167,11 +175,11 @@ PosType seg_pos_field (VBlock *vb,
         this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
 
     // < 0  -  caller allows a non-valid-number and this is indeed a non-valid-number, just store the string
-    // == 0 - 
-    //     for the primary pos field - we proceed as usual as we will need this value when reconstructing the reference
-    //     for non-primary - e.g. "not available" in SAM_PNEXT - we store "0" verbatim with SNIP_DONT_STORE
+    // cancled   // == 0 - 
+    // cancled   //     for the primary pos field - we proceed as usual as we will need this value when reconstructing the reference
+    // cancled   for non-primary - e.g. "not available" in SAM_PNEXT - we store "0" verbatim with SNIP_DONT_STORE
     // In both cases, we store as SNIP_DONT_STORE so that piz doesn't update last_value after reading this value
-    if (this_pos < 0 || (this_pos==0 && !(snip_ctx == base_ctx && base_did_i == DTF(pos)))) { 
+    if (this_pos < 0) {// } || (this_pos==0 && !(snip_ctx == base_ctx && base_did_i == DTF(pos)))) { 
 
         if (pos_str) { // option 1
             SAFE_ASSIGN (1, pos_str-1, SNIP_DONT_STORE);
@@ -273,10 +281,10 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
     // added to local if we have a trailing number
     if (num_digits) {
         uint32_t id_num = atoi (&id_snip[id_snip_len - num_digits]);
-        seg_add_to_local_uint32 (vb, mtf_get_ctx (vb, dict_id), id_num, 0);
+        seg_add_to_local_uint32 (vb, ctx_get_ctx (vb, dict_id), id_num, 0);
     }
 
-    Context *ctx = mtf_get_ctx (vb, dict_id);
+    Context *ctx = ctx_get_ctx (vb, dict_id);
     ctx->inst  |= CTX_INST_NO_STONS;
     ctx->ltype  = LT_UINT32;
 
@@ -371,7 +379,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
 
     // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
     // thereby both improving compression and improving --regions speed. 
-    if (flag_optimize_sort && con.num_items > 1) 
+    if (flag.optimize_sort && con.num_items > 1) 
         qsort (info_items, con.num_items, sizeof(InfoItem), sort_by_subfield_name);
 
     char prefixes[CONTAINER_MAX_PREFIXES_LEN]; // these are the Container prefixes
@@ -473,14 +481,14 @@ void seg_compound_field (VBlock *vb,
             ((con.num_items < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || sep=='.' || (ws_is_sep && (sep==' ' || sep=='\t' || sep==1))))) {
         
             // process the subfield that just ended
-            Context *sf_ctx = mtf_get_ctx (vb, con.items[con.num_items].dict_id);
+            Context *sf_ctx = ctx_get_ctx (vb, con.items[con.num_items].dict_id);
             ASSERT (sf_ctx, "Error in seg_compound_field: sf_ctx for %s is NULL", err_dict_id (con.items[con.num_items].dict_id));
 
             sf_ctx->st_did_i = field_ctx->did_i;
 
             // allocate memory if needed
-            buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->lines.len, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
-                       CTX_GROWTH, "contexts->mtf_i", sf_ctx->did_i);
+            buf_alloc (vb, &sf_ctx->node_i, MAX (vb->lines.len, sf_ctx->node_i.len + 1) * sizeof (uint32_t),
+                       CTX_GROWTH, "contexts->node_i", sf_ctx->did_i);
 
             // if snip is an integer, we store a delta
             char delta_snip[30];
@@ -491,22 +499,27 @@ void seg_compound_field (VBlock *vb,
                 delta_snip[0] = SNIP_SELF_DELTA;
 
                 PosType delta = this_value - sf_ctx->last_value.i;
-                snip_len = 1 + str_int (delta, &delta_snip[1]);
-                snip = delta_snip;
+                // note: if delta is 0 (inc. first line) - store just the snip, so that if the entire b250 is the same, it
+                // can be removed
+                if (delta) {
+                    snip_len = 1 + str_int (delta, &delta_snip[1]);
+                    snip = delta_snip;
 
-                sf_ctx->flags |= CTX_FL_STORE_INT;
+                    sf_ctx->flags |= CTX_FL_STORE_INT;
+                }
+
                 sf_ctx->last_value.i = this_value;
             }
-            else if (flag_pair == PAIR_READ_1)
+            else if (flag.pair == PAIR_READ_1)
                 sf_ctx->inst |= CTX_INST_NO_STONS; // prevent singletons, so pair-2 can compare to us
             
             // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
             // i.e. its already in the dictionary and hash table - so no resources wasted
-            uint32_t word_index = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, NULL);
+            uint32_t word_index = ctx_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, NULL);
 
             // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
             // and read 2 might have SNIP_PAIR_LOOKUP
-            if (flag_pair == PAIR_READ_2) {
+            if (flag.pair == PAIR_READ_2) {
  
                 // if the number of components in the compound is not exactly the same for every line of
                 // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
@@ -519,7 +532,7 @@ void seg_compound_field (VBlock *vb,
                     // inequality - we stop the pairing going forward till the end of this VB
                     !(sf_ctx->inst & CTX_INST_STOP_PAIRING)) {
                     
-                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250);  
+                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250, !(sf_ctx->pair_flags & CTX_FL_ALL_THE_SAME));  
                     
                     if (pair_word_index == WORD_INDEX_ONE_UP) 
                         pair_word_index = sf_ctx->pair_b250_iter.prev_word_index + 1;
@@ -527,12 +540,12 @@ void seg_compound_field (VBlock *vb,
                     sf_ctx->pair_b250_iter.prev_word_index = pair_word_index;
                     
                     // note: if the pair word is a singleton in pair_1 file, then pair_word_index will be the index of {SNIP_LOOKUP}
-                    // rather than the snip (as replaced in mtf_evaluate_snip_merge), therefore this condition will fail. This is quite
+                    // rather than the snip (as replaced in ctx_evaluate_snip_merge), therefore this condition will fail. This is quite
                     // rare, so not worth handling this case
                     if (word_index == pair_word_index) {
                         sf_ctx->inst |= CTX_INST_PAIR_B250;
                         static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
-                        word_index = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, lookup_pair_snip, 1, NULL);
+                        word_index = ctx_evaluate_snip_seg ((VBlockP)vb, sf_ctx, lookup_pair_snip, 1, NULL);
                     } else
                         // To improve: currently, pairing stops at the first non-match
                         sf_ctx->inst |= CTX_INST_STOP_PAIRING;                
@@ -541,7 +554,7 @@ void seg_compound_field (VBlock *vb,
                     sf_ctx->inst |= CTX_INST_STOP_PAIRING;
             }
 
-            NEXTENT (uint32_t, sf_ctx->mtf_i) = word_index;
+            NEXTENT (uint32_t, sf_ctx->node_i) = word_index;
 
             sf_ctx->txt_len += nonoptimized_len ? 0 : original_snip_len;
 
@@ -570,23 +583,23 @@ void seg_compound_field (VBlock *vb,
 // an array - all elements go into a single item context, multiple repeats
 uint32_t seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len, 
                           bool add_bytes_by_textual, // add bytes according to textual length inc. separator
-                          ContainerItemTransform transform, // instructions on how to transform array items if reconstructing as BAM or TRS_NONE
+                          TranslatorId trs, // instructions on how to transform array items if reconstructing as BAM or TRS_NONE
                           SegOptimize optimize) // optional optimization function
 {   
     const char *str = value; 
     int str_len = (int)value_len; // must be int, not unsigned, for the for loop
     
-    MiniContainer con     = { .num_items = 1, .flags = CONTAINER_DROP_FINAL_ITEM_SEP, 
-                              .repsep = {0,0}, .items = { { .seperator = {','}, .did_i = DID_I_NONE } } };
-    DictId arr_dict_id    = dict_id_make ("XX_ARRAY", 8);
-    arr_dict_id.id[0]     = FLIP_CASE (dict_id.id[0]);
-    arr_dict_id.id[1]     = FLIP_CASE (dict_id.id[1]);
-    con.items[0].dict_id   = sam_dict_id_optnl_sf (arr_dict_id);
-    con.items[0].transform = transform;
+    MiniContainer con       = { .num_items = 1, .flags = CONTAINER_DROP_FINAL_ITEM_SEP, 
+                                .repsep = {0,0}, .items = { { .seperator = {','}, .did_i = DID_I_NONE } } };
+    DictId arr_dict_id      = dict_id_make ("XX_ARRAY", 8);
+    arr_dict_id.id[0]       = FLIP_CASE (dict_id.id[0]);
+    arr_dict_id.id[1]       = FLIP_CASE (dict_id.id[1]);
+    con.items[0].dict_id    = sam_dict_id_optnl_sf (arr_dict_id);
+    con.items[0].translator = trs;
 
-    Context *parent_ctx   = mtf_get_ctx (vb, dict_id);
-    Context *arr_ctx      = mtf_get_ctx (vb, con.items[0].dict_id);
-    arr_ctx->st_did_i     = parent_ctx->did_i;
+    Context *parent_ctx     = ctx_get_ctx (vb, dict_id);
+    Context *arr_ctx        = ctx_get_ctx (vb, con.items[0].dict_id);
+    arr_ctx->st_did_i       = parent_ctx->did_i;
 
     for (con.repeats=0; con.repeats < CONTAINER_MAX_REPEATS && str_len > 0; con.repeats++) { // str_len will be -1 after last number
 
@@ -715,10 +728,10 @@ static void seg_set_hash_hints (VBlock *vb, int third_num)
         if (ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists
 
         if (third_num == 1) 
-            ctx->mtf_len_at_1_3 = ctx->mtf.len;
+            ctx->nodes_len_at_1_3 = ctx->nodes.len;
 
         else 
-            ctx->mtf_len_at_2_3 = ctx->mtf.len;
+            ctx->nodes_len_at_2_3 = ctx->nodes.len;
     }
 }
 
@@ -752,9 +765,9 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
     
     vb->lines.len = vb->lines.size / sizeof_line;
 
-    // allocate more to the mtf_i buffer of the fields, which each have num_lines entries
+    // allocate more to the node_i buffer of the fields, which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
-        buf_alloc_more_zero (vb, &vb->contexts[f].mtf_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
+        buf_alloc_more_zero (vb, &vb->contexts[f].node_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
 }
 
 static void seg_verify_file_size (VBlock *vb)
@@ -764,7 +777,7 @@ static void seg_verify_file_size (VBlock *vb)
     for (unsigned sf_i=0; sf_i < vb->num_contexts; sf_i++) 
         reconstructed_vb_size += vb->contexts[sf_i].txt_len;
         
-    if (vb->vb_data_size != reconstructed_vb_size && !flag_optimize) {
+    if (vb->vb_data_size != reconstructed_vb_size && !flag.optimize) {
 
         fprintf (stderr, "Txt lengths:\n");
         for (unsigned sf_i=0; sf_i < vb->num_contexts; sf_i++) {
@@ -787,9 +800,9 @@ void seg_all_data_lines (VBlock *vb)
 
     ASSERT_DT_FUNC (vb, seg_txt_line);
 
-    mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
+    ctx_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
 
-    mtf_verify_field_ctxs (vb);
+    ctx_verify_field_ctxs (vb);
     
     uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
  
@@ -803,15 +816,14 @@ void seg_all_data_lines (VBlock *vb)
     }
     buf_zero (&vb->lines);
 
-    // allocate the mtf_i for the fields which each have num_lines entries
+    // allocate the node_i for the fields which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
-        buf_alloc (vb, &vb->contexts[f].mtf_i, vb->lines.len * sizeof (uint32_t), 1, "contexts->mtf_i", f);
+        buf_alloc (vb, &vb->contexts[f].node_i, vb->lines.len * sizeof (uint32_t), 1, "contexts->node_i", f);
     
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
-    bool does_any_line_have_13 = false;
     for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
         if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
@@ -822,7 +834,6 @@ void seg_all_data_lines (VBlock *vb)
         //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
         bool has_13 = false;
         const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, &has_13);
-        if (has_13) does_any_line_have_13 = true;
 
         vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
@@ -844,18 +855,9 @@ void seg_all_data_lines (VBlock *vb)
         }
     }
 
-    // if no line has special EOL, we can get rid of the EOL ctx
-    if (!does_any_line_have_13 && DTF(eol) != -1) {
-        Context *eol_ctx = &vb->contexts[DTF(eol)];
-        buf_free (&eol_ctx->dict);
-        buf_free (&eol_ctx->mtf);
-        buf_free (&eol_ctx->mtf_i);
-        buf_free (&eol_ctx->local);
-    }
-
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
-    if (!flag_make_reference) seg_verify_file_size (vb);
+    if (!flag.make_reference) seg_verify_file_size (vb);
 
     COPY_TIMER (seg_all_data_lines);
 }

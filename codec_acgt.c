@@ -22,23 +22,8 @@ const char acgt_decode[4] = { 'A', 'C', 'G', 'T' };
 
 // table to convert ASCII to ACGT encoding. A,C,G,T (lower and upper case) are encoded as 0,1,2,3 respectively, 
 // and everything else (including N) is encoded as 0
-const uint8_t acgt_encode[256] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 0
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 16
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 32
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 48
-                                   0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,   // 64  A(65)->0 C(67)->1 G(71)->2
-                                   0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 80  T(84)->3
-                                   0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,   // 96  a(97)->0 c(99)->1 g(103)->2
-                                   0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 112 t(116)->3
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 128
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-
+const uint8_t acgt_encode[256] = { ['A']=0, ['C']=1, ['G']=2, ['T']=3, 
+                                   ['a']=0, ['c']=1, ['g']=2, ['t']=3 }; // all others are 0
 
 //--------------
 // ZIP side
@@ -95,25 +80,11 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
                           bool soft_fail)
 {
     // table to convert SEQ data to ACGT exceptions. The character is XORed with the entry in the table
-    static const uint8_t acgt_exceptions[256] = {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 0   -> XOR with 0 = stay unchanged
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 16
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 32
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 48
-        0,'A',0,'C',0, 0, 0,'G',0, 0, 0, 0, 0, 0, 0, 0,   // 64  A(65), C(67), G(71) -> 0 (XORed with self)
-        0, 0, 0, 0,'T',0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 80  T(84)->0
-        0, 'a'^1,0,'c'^1,0,0,0,'g'^1,0,0,0,0,0,0, 0, 0,   // 96  a(97), c(99), g(103)-> 1 (XORed with self XOR 1)
-        0, 0, 0, 0,'t'^1,0,0,0, 0, 0, 0, 0, 0, 0, 0, 0,   // 112 t(116)->1
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 128
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 
-    };
-
+    static const uint8_t acgt_exceptions[256] = { 
+        ['A']='A',   ['C']='C',   ['G']='G',   ['T']='T',  // -->0 (XORed with self)
+        ['a']='a'^1, ['c']='c'^1, ['g']='g'^1, ['t']='t'^1 // -->1 (XORed with self XOR 1)
+    };                                                     // all others are XORed with 0 and hence remain unchanged
+    
     START_TIMER;
     
     #define PACK(data,len) { if (len) vb->has_non_agct = codec_acgt_pack (packed, (data), (len)) || vb->has_non_agct; }
@@ -146,19 +117,15 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
         buf_alloc (vb, &nonref_x_ctx->local, *uncompressed_len, CTX_GROWTH, "ctx->local", nonref_x_ctx->did_i);
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
-            char *data_1=0, *data_2=0;
-            uint32_t data_1_len=0, data_2_len=0;
+            char *data_1=0;
+            uint32_t data_1_len=0;
             
-            callback (vb, line_i, &data_1, &data_1_len, &data_2, &data_2_len, *uncompressed_len - nonref_x_ctx->local.len);
+            callback (vb, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len);
 
             PACK (data_1, data_1_len);
-            PACK (data_2, data_2_len);
 
             for (uint32_t i=0; i < data_1_len; i++) 
                 NEXTENT (uint8_t, nonref_x_ctx->local) = (uint8_t)(data_1[i]) ^ acgt_exceptions[(uint8_t)(data_1[i])];
-
-            for (uint32_t i=0; i < data_2_len; i++) 
-                NEXTENT (uint8_t, nonref_x_ctx->local) = (uint8_t)(data_2[i]) ^ acgt_exceptions[(uint8_t)(data_2[i])];
         }
     }
     else 

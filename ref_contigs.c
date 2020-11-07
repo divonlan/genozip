@@ -14,6 +14,7 @@
 #include "vblock.h"
 #include "mutex.h"
 #include "seg.h"
+#include "refhash.h"
 
 static Buffer loaded_contigs              = EMPTY_BUFFER; // array of RefContig
 static Buffer loaded_contig_dict          = EMPTY_BUFFER;
@@ -65,24 +66,24 @@ void ref_contigs_compress (void)
 {
     static Buffer created_contigs = EMPTY_BUFFER;  
 
-    if (!buf_is_allocated (&z_file->contexts[CHROM].mtf)) return; // no contigs
+    if (!buf_is_allocated (&z_file->contexts[CHROM].nodes)) return; // no contigs
 
     // the number of contigs is at most the number of chroms - but could be less if some chroms have no sequence
-    buf_alloc (evb, &created_contigs, sizeof (RefContig) * z_file->contexts[CHROM].mtf.len, 1, "created_contigs", 0);
+    buf_alloc (evb, &created_contigs, sizeof (RefContig) * z_file->contexts[CHROM].nodes.len, 1, "created_contigs", 0);
 
     RefContig *last = NULL;
 
     for (uint32_t range_i=0; range_i < ranges.len; range_i++) {
         Range *r = ENT (Range, ranges, range_i);
 
-        // in case of REF_INTERNAL, chrom_word_index might still be WORD_INDEX_NONE. We get it now from the z_file data
+        // in case of RT_DENOVO, chrom_word_index might still be WORD_INDEX_NONE. We get it now from the z_file data
         if (r->chrom == WORD_INDEX_NONE)
             r->chrom = ref_contigs_get_word_index (r->chrom_name, r->chrom_name_len, WI_REF_CONTIG, false);
 
         // first range of a contig
         if (!last || r->chrom != last->chrom_index) {
 
-            // if gpos of the first range in this contig has been increased due to removing flaking regions
+            // if gpos of the first range in this contig has been increased due to removing flanking regions
             // and is no longer 64-aligned, we start the contig a little earlier to be 64-aligned
             // (note: this is guaranteed to be within the original contig before compacting, because the original
             // contig had a 64-aligned gpos)
@@ -90,9 +91,9 @@ void ref_contigs_compress (void)
 
             // in case of RT_DENOVO, we assign 64-aligned gpos (in case of RT_LOADED - gposes are loaded)
             if (ranges.param == RT_DENOVO)
-                r->gpos = r->chrom ? ROUNDUP64 ((r-1)->gpos + (r-1)->last_pos - (r-1)->first_pos + 1) : 0;
+                r->gpos = range_i ? ROUNDUP64 ((r-1)->gpos + (r-1)->last_pos - (r-1)->first_pos + 1) : 0;
 
-            MtfNode *chrom_node = ENT (MtfNode, z_file->contexts[CHROM].mtf, r->chrom);
+            MtfNode *chrom_node = ENT (MtfNode, z_file->contexts[CHROM].nodes, r->chrom);
 
             NEXTENT (RefContig, created_contigs) = (RefContig){
                 .gpos        = r->gpos - delta, 
@@ -114,7 +115,7 @@ void ref_contigs_compress (void)
         }
     }
     
-    if (flag_show_ref_contigs) ref_contigs_show (&created_contigs, true);
+    if (flag.show_ref_contigs) ref_contigs_show (&created_contigs, true);
 
     BGEN_ref_contigs (&created_contigs);
 
@@ -178,10 +179,10 @@ void ref_contigs_sort_chroms (void)
 // read and uncompress a contigs section (when pizzing the reference file or pizzing a data file with a stored reference)
 void ref_contigs_load_contigs (void)
 {
-    SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, false);
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_REF_CONTIGS, sl);
+    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, false);
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_REF_CONTIGS, sl);
 
-    if (flag_show_headers && exe_type == EXE_GENOCAT) goto done;
+    if (flag.show_headers && exe_type == EXE_GENOCAT) goto done;
 
     zfile_uncompress_section (evb, evb->z_data.data, &loaded_contigs, "loaded_contigs", 0, SEC_REF_CONTIGS);
 
@@ -194,7 +195,7 @@ void ref_contigs_load_contigs (void)
 
     ref_contigs_create_sorted_index();
 
-    if (flag_show_ref_contigs) {
+    if (flag.show_ref_contigs) {
         ref_contigs_show (&loaded_contigs, false);
         if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
     }
@@ -203,7 +204,7 @@ done:
     buf_free (&evb->z_data);
 }
 
-// called by mtf_copy_reference_contig_to_chrom_ctx when initializing ZIP for a new file using a pre-loaded external reference
+// called by ctx_copy_reference_contig_to_chrom_ctx when initializing ZIP for a new file using a pre-loaded external reference
 void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs)
 {
     if (out_contig_dict) *out_contig_dict = &loaded_contig_dict;
@@ -277,19 +278,19 @@ void ref_contigs_generate_data_if_denovo (void)
     // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
     Context *chrom_ctx = &z_file->contexts[CHROM];
 
-    ASSERT (flag_reference == REF_INTERNAL || (buf_is_allocated (&chrom_ctx->dict) && buf_is_allocated (&chrom_ctx->word_list)),
+    ASSERT (flag.reference == REF_INTERNAL || (buf_is_allocated (&chrom_ctx->dict) && buf_is_allocated (&chrom_ctx->word_list)),
             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);
 
     buf_copy (evb, &loaded_contig_dict, &chrom_ctx->dict, 1, 0, 0, "contig_dict", 0);
     
     // we copy from the z_file context after we completed segging a file
-    // note: we can't rely on chrom_ctx->mtf for the correct order as vb_i=1 resorted. rather, by mimicking the
+    // note: we can't rely on chrom_ctx->nodes for the correct order as vb_i=1 resorted. rather, by mimicking the
     // word_list generation as done in PIZ, we guarantee that we will get the same chrom_index
     // in case of multiple bound files, we re-do this in every file in case of additional chroms (not super effecient, but good enough because the context is small)
-    loaded_contigs.len = chrom_ctx->mtf.len;
+    loaded_contigs.len = chrom_ctx->nodes.len;
     buf_alloc (evb, &loaded_contigs, loaded_contigs.len * sizeof (RefContig), 1, "loaded_contigs", 0);
 
-    // similar logic to mtf_integrate_dictionary_fragment
+    // similar logic to ctx_integrate_dictionary_fragment
     char *start = loaded_contig_dict.data;
     for (uint32_t snip_i=0; snip_i < loaded_contigs.len; snip_i++) {
 
@@ -338,6 +339,22 @@ WordIndex ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned c
     return chrom_index;
 }
 
+// get length of contig according to ref_contigs (loaded or stored reference) - used in piz when generating
+// a file header of a translated data type eg SAM->BAM or ME23->VCF
+PosType ref_contigs_get_contig_length (const char *chrom_name, unsigned chrom_name_len)
+{
+    WordIndex chrom_index = ref_contigs_get_word_index (chrom_name, chrom_name_len, WI_REF_CONTIG, true);
+
+    // if not found, try common alternative names
+    if (chrom_index == WORD_INDEX_NONE)
+        chrom_index = ref_alt_chroms_zip_get_alt_index (chrom_name, chrom_name_len, WI_REF_CONTIG, WORD_INDEX_NONE);
+
+    if (chrom_index == WORD_INDEX_NONE) return -1; // chrom_name not found in ref_contigs
+    
+    // get info as it appears in reference
+    return ENT (Range, ranges, chrom_index)->last_pos;
+}
+
 // get contig by chrom_index, by binary searching for it
 static const RefContig *ref_contigs_get_contig_do (WordIndex chrom_index, int32_t start_i, int32_t end_i)
 {
@@ -371,6 +388,10 @@ PosType ref_contigs_get_genome_size (void)
     RefContig *rc_with_largest_gpos = &rc[0];
     for (uint64_t i=1; i < loaded_contigs.len; i++) 
         if (rc[i].gpos > rc_with_largest_gpos->gpos) rc_with_largest_gpos = &rc[i];
+
+    ASSERT (rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS, 
+            "Error in ref_contigs_get_genome_size: gpos=%"PRId64" out of range 0-%"PRId64,
+            rc_with_largest_gpos->gpos, MAX_GPOS);
 
     return rc_with_largest_gpos->gpos + (rc_with_largest_gpos->max_pos - rc_with_largest_gpos->min_pos + 1);
 }

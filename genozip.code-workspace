@@ -33,7 +33,10 @@
 			"istream": "c",
 			"ostream": "c",
 			"tuple": "c",
-			"*.tcc": "c"
+			"*.tcc": "c",
+			"deque": "c",
+			"unordered_map": "c",
+			"vector": "c"
 		},
 		"files.autoSave": "onFocusChange",
 		"files.exclude": {

@@ -27,14 +27,14 @@ void vcf_seg_initialize (VBlock *vb_)
     vb->contexts[VCF_FORMAT].inst = CTX_INST_NO_STONS;
     vb->contexts[VCF_INFO]  .inst = CTX_INST_NO_STONS;
 
-    mtf_get_ctx (vb, dict_id_FORMAT_GT)->inst = CTX_INST_NO_STONS; // we store the GT matrix in local, so cannot accomodate singletons
+    ctx_get_ctx (vb, dict_id_FORMAT_GT)->inst = CTX_INST_NO_STONS; // we store the GT matrix in local, so cannot accomodate singletons
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_mtf.len;
     buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf", 0);
     buf_zero (&vb->format_mapper_buf);
 
-    if (flag_gtshark) codec_gtshark_comp_init (vb_);
+    if (flag.gtshark) codec_gtshark_comp_init (vb_);
     else              codec_hapmat_comp_init  (vb_);
 }             
 
@@ -65,7 +65,7 @@ void vcf_seg_finalize (VBlockP vb_)
     
     container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
 
-    if (flag_show_alleles && vb->ht_matrix_ctx) {
+    if (flag.show_alleles && vb->ht_matrix_ctx) {
         printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_matrix_ctx->local.len);
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++)
@@ -79,7 +79,7 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
     char new_ref=0, new_alt=0;
 
     // if we have a reference, we use it
-    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
+    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
         PosType pos = vb->contexts[VCF_POS].last_value.i;
 
         RefLock lock;
@@ -92,7 +92,7 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
         if (vcf_ref == ref) new_ref = '-'; // this should always be the case...
         if (vcf_alt == ref) new_alt = '-'; 
 
-        if (flag_reference == REF_EXT_STORE)
+        if (flag.reference == REF_EXT_STORE)
             bit_array_set (&range->is_set, index_within_range);
 
         ref_unlock (lock);
@@ -187,7 +187,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
     uint32_t node_index = seg_by_did_i_ex (vb, snip, field_len+2, VCF_FORMAT, field_len + 1 /* \t or \n */, &is_new);
 
-    dl->format_mtf_i = node_index;
+    dl->format_node_i = node_index;
 
     if (is_new) {
         ASSERT (node_index == vb->format_mapper_buf.len, 
@@ -217,7 +217,7 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
     unsigned optimized_snip_len;
 
     // Optimize VQSLOD
-    if (flag_optimize_VQSLOD && (dict_id.num == dict_id_INFO_VQSLOD) &&
+    if (flag.optimize_VQSLOD && (dict_id.num == dict_id_INFO_VQSLOD) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
         
         vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;
@@ -233,14 +233,14 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
 
     // if SVLEN is negative, it is expected to be minus the delta between END and POS
     else if (dict_id.num == dict_id_INFO_SVLEN && vcf_seg_test_svlen (vb, *this_value, *this_value_len)) {
-        Context *ctx = mtf_get_ctx (vb, dict_id_INFO_SVLEN);
+        Context *ctx = ctx_get_ctx (vb, dict_id_INFO_SVLEN);
         seg_by_ctx ((VBlockP)vb, (char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }, 2, ctx, *this_value_len, NULL);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
     // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample)
     else if (dict_id.num == dict_id_INFO_DP) 
-        mtf_get_ctx (vb_, dict_id)->last_value.i = atoi (*this_value);
+        ctx_get_ctx (vb_, dict_id)->last_value.i = atoi (*this_value);
 
     // in case of AC, AN and AF - we store the values, and we postpone handling AC to the finalization
     else if (dict_id.num == dict_id_INFO_AC) { 
@@ -253,7 +253,7 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         vb->an = *this_value; 
         vb->an_len = *this_value_len;
         vb->is_an_before_ac = (vb->ac == NULL);
-        Context *ctx = mtf_get_ctx(vb, dict_id);
+        Context *ctx = ctx_get_ctx(vb, dict_id);
         ctx->flags |= CTX_FL_STORE_INT;
         ctx->inst  |= CTX_INST_NO_STONS;
     }
@@ -262,7 +262,7 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         vb->af = *this_value; 
         vb->af_len = *this_value_len;
         vb->is_af_before_ac = (vb->ac == NULL);     
-        Context *ctx = mtf_get_ctx(vb, dict_id);
+        Context *ctx = ctx_get_ctx(vb, dict_id);
         ctx->flags |= CTX_FL_STORE_FLOAT;
         ctx->inst  |= CTX_INST_NO_STONS;
     }
@@ -293,7 +293,7 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
                                              '0' + (char)vb->is_an_before_ac,
                                              '0' + (char)vb->is_af_before_ac };
 
-                    Context *ctx = mtf_get_ctx (vb, dict_id_INFO_AC);
+                    Context *ctx = ctx_get_ctx (vb, dict_id_INFO_AC);
                     ctx->inst |= CTX_INST_NO_STONS;
                     seg_by_ctx ((VBlockP)vb, special_snip, sizeof(special_snip), ctx, vb->ac_len, NULL);
                 }
@@ -431,11 +431,11 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     // shortcut if we have the same ploidy and phase as previous GT
     if (gt.repeats == vb->gt_prev_ploidy && gt.repsep[0] == vb->gt_prev_phase) {
 
-        buf_alloc (vb, &ctx->mtf_i, MAX (vb->lines.len, ctx->mtf_i.len + 1) * sizeof (uint32_t),
-                   CTX_GROWTH, "contexts->mtf_i", ctx->did_i);
+        buf_alloc (vb, &ctx->node_i, MAX (vb->lines.len, ctx->node_i.len + 1) * sizeof (uint32_t),
+                   CTX_GROWTH, "contexts->node_i", ctx->did_i);
 
-        WordIndex node_index = *LASTENT (uint32_t, ctx->mtf_i);
-        NEXTENT (uint32_t, ctx->mtf_i) = node_index;
+        WordIndex node_index = *LASTENT (uint32_t, ctx->node_i);
+        NEXTENT (uint32_t, ctx->node_i) = node_index;
         ctx->txt_len += save_cell_len;
 
         return node_index;
@@ -472,12 +472,12 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Container *sa
         // move next to the beginning of the subfield data, if there is any
         unsigned cell_len = end_of_sample ? 0 : seg_snip_len_tnc (cell, has_13);
         DictId dict_id = samples->items[sf].dict_id;
-        Context *ctx = mtf_get_ctx (vb, dict_id);
+        Context *ctx = ctx_get_ctx (vb, dict_id);
 
         // just initialize DP stuff, we're going to seg DP a bit later
         if (cell && ctx->dict_id.num == dict_id_FORMAT_DP) {
             dp_ctx = ctx;
-            info_dp_ctx = mtf_get_existing_ctx ((VBlockP)vb, dict_id_INFO_DP);
+            info_dp_ctx = ctx_get_existing_ctx ((VBlockP)vb, dict_id_INFO_DP);
             ctx->last_value.i = atoi (cell); // an integer terminated by : \t or \n
         }
 
@@ -496,15 +496,15 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Container *sa
         else if (dict_id.num == dict_id_FORMAT_GT)
             node_index = vcf_seg_FORMAT_GT (vb, ctx, dl, cell, cell_len, sample_i);
 
-        else if (flag_optimize_PL && dict_id.num == dict_id_FORMAT_PL && 
+        else if (flag.optimize_PL && dict_id.num == dict_id_FORMAT_PL && 
             optimize_vcf_pl (cell, cell_len, optimized_snip, &optimized_snip_len)) 
             EVAL_OPTIMIZED
 
-        else if (flag_optimize_GL && dict_id.num == dict_id_FORMAT_GL &&
+        else if (flag.optimize_GL && dict_id.num == dict_id_FORMAT_GL &&
             optimize_vector_2_sig_dig (cell, cell_len, optimized_snip, &optimized_snip_len))
             EVAL_OPTIMIZED
     
-        else if (flag_optimize_GP && dict_id.num == dict_id_FORMAT_GP && 
+        else if (flag.optimize_GP && dict_id.num == dict_id_FORMAT_GP && 
             optimize_vector_2_sig_dig (cell, cell_len, optimized_snip, &optimized_snip_len))
             EVAL_OPTIMIZED
 
@@ -550,7 +550,7 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
     // - repeats as the number of samples in the line (<= vcf_num_samples)
     // - num_items as the number of FORMAT subfields (inc. GT)
 
-    Container samples = *ENT (Container, vb->format_mapper_buf, dl->format_mtf_i); // make a copy of the template
+    Container samples = *ENT (Container, vb->format_mapper_buf, dl->format_node_i); // make a copy of the template
 
     const char *field_start;
     unsigned field_len=0, num_colons=0;

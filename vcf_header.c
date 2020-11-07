@@ -59,7 +59,7 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
             }
 
             // ZIP only: subsequent files - if we're in bound mode just compare to make sure the header is the same
-            else if (flag_bind && 
+            else if (flag.bind && 
                      (vcf_header->len-i != vcf_header_line.len || memcmp (vcf_header_line.data, &vcf_header->data[i], vcf_header_line.len))) {
 
                 fprintf (stderr, "%s: skipping %s: it has a different VCF header line than %s, see below:\n"
@@ -84,7 +84,7 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
             ASSERT (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
 
             // if --samples is used, update vcf_header and vcf_num_displayed_samples
-            if (flag_samples) samples_digest_vcf_header (vcf_header);
+            if (flag.samples) samples_digest_vcf_header (vcf_header);
 
             return true; 
         }

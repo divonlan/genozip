@@ -23,7 +23,7 @@ typedef struct { WordIndex user_file_chrom, alt_chrom_in_ref_file; } AltChrom;
 void ref_alt_chroms_compress (void)
 {
     Context *ctx = &z_file->contexts[CHROM];
-    uint32_t num_chroms = ctx->mtf.len;
+    uint32_t num_chroms = ctx->nodes.len;
     uint32_t num_contigs = ref_contigs_num_contigs();   // chroms that are in the reference file
     uint32_t num_alt_chroms = num_chroms - num_contigs; // chroms that are only in the user file, not in the reference
 
@@ -31,12 +31,12 @@ void ref_alt_chroms_compress (void)
 
     buf_alloc (evb, &z_file->alt_chrom_map, sizeof (AltChrom) * num_alt_chroms, 1, "z_file->alt_chrom_map", 0);
 
-    if (flag_show_ref_alts) 
+    if (flag.show_ref_alts) 
         fprintf (stderr, "\nAlternative chroms (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
 
     for (uint32_t i=0; i < num_alt_chroms; i++) {
         WordIndex chrom_index = num_contigs + i;
-        const MtfNode *chrom_node = ENT (MtfNode, ctx->mtf, chrom_index);
+        const MtfNode *chrom_node = ENT (MtfNode, ctx->nodes, chrom_index);
         const char *chrom_name = ENT (const char, ctx->dict, chrom_node->char_index);
         
         WordIndex alt_index = ref_alt_chroms_zip_get_alt_index (chrom_name, chrom_node->snip_len, WI_REF_CONTIG, WORD_INDEX_NONE);
@@ -46,8 +46,8 @@ void ref_alt_chroms_compress (void)
             NEXTENT (AltChrom, z_file->alt_chrom_map) = (AltChrom){ .user_file_chrom       = BGEN32 (chrom_index), 
                                                                     .alt_chrom_in_ref_file = BGEN32 (alt_index) };
     
-        if (flag_show_ref_alts) {
-            const MtfNode *alt_node = ENT (MtfNode, ctx->mtf, alt_index);
+        if (flag.show_ref_alts) {
+            const MtfNode *alt_node = ENT (MtfNode, ctx->nodes, alt_index);
             const char *alt_name = ENT (const char, ctx->dict, alt_node->char_index);
 
             fprintf (stderr, "In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, chrom_index, alt_name, alt_index);
@@ -62,14 +62,14 @@ void ref_alt_chroms_compress (void)
 
 void ref_alt_chroms_load (void)
 {
-    SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_ALT_CHROMS, true);
+    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_ALT_CHROMS, true);
     if (!sl) return; // we don't have alternate chroms
 
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_REF_ALT_CHROMS, sl);
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_REF_ALT_CHROMS, sl);
 
     zfile_uncompress_section (evb, evb->z_data.data, &evb->compressed, "compressed", 0, SEC_REF_ALT_CHROMS);
 
-    if (flag_show_ref_alts) 
+    if (flag.show_ref_alts) 
         fprintf (stderr, "\nAlternative chroms (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
 
     evb->compressed.len /= sizeof (AltChrom);
@@ -96,14 +96,14 @@ void ref_alt_chroms_load (void)
 
         map[chrom_index] = alt_index;
 
-        if (flag_show_ref_alts) {
-            const char *chrom_name = mtf_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom_index, 0, 0);
-            const char *alt_name   = mtf_get_snip_by_word_index (&ctx->word_list, &ctx->dict, alt_index, 0, 0);
+        if (flag.show_ref_alts) {
+            const char *chrom_name = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom_index, 0, 0);
+            const char *alt_name   = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, alt_index, 0, 0);
             fprintf (stderr, "In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, chrom_index, alt_name, alt_index);
         }
     }
 
-    if (flag_show_ref_alts && exe_type == EXE_GENOCAT) exit(0); // in genocat this, not the data
+    if (flag.show_ref_alts && exe_type == EXE_GENOCAT) exit(0); // in genocat this, not the data
 
     buf_free (&evb->z_data);
     buf_free (&evb->compressed);

@@ -236,7 +236,7 @@ Int32 BZ2_decompress ( DState* s )
 
       s->currBlockNo++;
       if (s->verbosity >= 2)
-         VPrintf1 ( "\n    [%d: huff+mtf ", s->currBlockNo );
+         VPrintf1 ( "\n    [%d: huff+nodes ", s->currBlockNo );
  
       s->storedBlockCRC = 0;
       GET_UCHAR(BZ_X_BCRC_1, uc);

@@ -13,6 +13,7 @@
 #include "optimize.h"
 #include "piz.h"
 #include "dict_id.h"
+#include "codec.h"
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
 
@@ -77,12 +78,12 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
     // get ctx's
     Context *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->contexts)
     for (unsigned i=0; i < con.num_items; i++) 
-        ctxs[i] = mtf_get_ctx (vb, con.items[i].dict_id); 
+        ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
 
     // set roll back point
-    uint64_t saved_mtf_i_len[MAX_ENST_ITEMS], saved_local_len[MAX_ENST_ITEMS], saved_txt_len[MAX_ENST_ITEMS];
+    uint64_t saved_node_i_len[MAX_ENST_ITEMS], saved_local_len[MAX_ENST_ITEMS], saved_txt_len[MAX_ENST_ITEMS];
     for (unsigned item_i=0; item_i < con.num_items; item_i++) {
-        saved_mtf_i_len[item_i] = ctxs[item_i]->mtf_i.len;
+        saved_node_i_len[item_i] = ctxs[item_i]->node_i.len;
         saved_local_len[item_i] = ctxs[item_i]->local.len;
         saved_txt_len  [item_i] = ctxs[item_i]->txt_len;
     }
@@ -125,7 +126,7 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
 badly_formatted:
     // roll back all the changed data
     for (unsigned item_i=0; item_i < con.num_items ; item_i++) {
-        ctxs[item_i]->mtf_i.len = saved_mtf_i_len[item_i];
+        ctxs[item_i]->node_i.len = saved_node_i_len[item_i];
         ctxs[item_i]->local.len = saved_local_len[item_i];
         ctxs[item_i]->txt_len   = saved_txt_len[item_i];
     }
@@ -138,7 +139,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
 {
     // ID - this is a sequential number (at least in GRCh37/38)
     if (dict_id.num == dict_id_ATTR_ID) {
-        Context *ctx = mtf_get_ctx (vb, dict_id);
+        Context *ctx = ctx_get_ctx (vb, dict_id);
         seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, true, *this_value, *this_value_len, 0, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
     }
@@ -162,7 +163,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
                              { .dict_id={.id="V2arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="ENSTid"  }, .seperator = {','}, .did_i = DID_I_NONE } }
         };
-        gff3_seg_array_of_struct (vb, mtf_get_ctx (vb, dict_id), Variant_effect, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), Variant_effect, *this_value, *this_value_len);
         return false;
     }
 
@@ -176,7 +177,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
                              { .dict_id={.id="S2iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="ENSTid"  }, .seperator = {','}, .did_i = DID_I_NONE } }
         };
-        gff3_seg_array_of_struct (vb, mtf_get_ctx (vb, dict_id), sift_prediction, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), sift_prediction, *this_value, *this_value_len);
         return false;
     }
 
@@ -190,7 +191,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
                              { .dict_id={.id="P2olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="ENSTid"   }, .seperator = {','}, .did_i = DID_I_NONE } }
         };
-        gff3_seg_array_of_struct (vb, mtf_get_ctx (vb, dict_id), polyphen_prediction, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), polyphen_prediction, *this_value, *this_value_len);
         return false;
     }
 
@@ -203,7 +204,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
                              { .dict_id={.id="v1arPep" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="ENSTid"  }, .seperator = {','}, .did_i = DID_I_NONE } }
         };
-        gff3_seg_array_of_struct (vb, mtf_get_ctx (vb, dict_id), variant_peptide, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), variant_peptide, *this_value, *this_value_len);
         return false;
     }
 
@@ -213,7 +214,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
         dict_id.num == dict_id_ATTR_ancestral_allele) {
 
         // note: all three are stored together in dict_id_ATTR_Reference_seq as they are correlated
-        Context *ctx = mtf_get_ctx (vb, dict_id_ATTR_Reference_seq); 
+        Context *ctx = ctx_get_ctx (vb, dict_id_ATTR_Reference_seq); 
         seg_add_to_local_text (vb, ctx, *this_value, *this_value_len, *this_value_len);
         
         return false; // do not add to dictionary/b250 - we already did it
@@ -221,7 +222,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
 
     // Optimize Variant_freq
     unsigned optimized_snip_len;
-    if (flag_optimize_Vf && (dict_id.num == dict_id_ATTR_Variant_freq) &&
+    if (flag.optimize_Vf && (dict_id.num == dict_id_ATTR_Variant_freq) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
         
         vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;

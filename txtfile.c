@@ -31,8 +31,8 @@ uint32_t txtfile_get_bound_headers_len(void) { return total_bound_txt_headers_le
 
 void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
 {
-    if (flag_md5) {
-        if (flag_bind && !is_2ndplus_txt_header)
+    if (flag.md5) {
+        if (flag.bind && !is_2ndplus_txt_header)
             md5_update (&z_file->md5_ctx_bound, data, len);
         
         md5_update (&z_file->md5_ctx_single, data, len);
@@ -222,12 +222,12 @@ void txtfile_read_vblock (VBlock *vb)
 
         NEXTENT (char *, block_start_buf)   = start;
         NEXTENT (uint32_t, block_len_buf)   = len;
-        NEXTENT (Md5Context, block_md5_buf) = flag_bind ? z_file->md5_ctx_bound : z_file->md5_ctx_single; // MD5 of entire file up to and including this block
+        NEXTENT (Md5Context, block_md5_buf) = flag.bind ? z_file->md5_ctx_bound : z_file->md5_ctx_single; // MD5 of entire file up to and including this block
 
         vb->txt_data.len += len;
 
         // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
-        if (flag_pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
+        if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
             vb->txt_data.len >= max_memory_per_vb && // we are about to exit the loop
             !fastq_txtfile_have_enough_lines (vb, &unconsumed_len)) { // we don't yet have all the data we need
 
@@ -249,7 +249,7 @@ void txtfile_read_vblock (VBlock *vb)
 
         // complete the MD5 of all data up to and including this VB based on the last full block + the consumed part of the 
         // last part-consumed-part-not-consumed block
-        if (flag_md5 && !flag_make_reference) {
+        if (flag.md5 && !flag.make_reference) {
             // find the block that is part-consumed-part-not-consumed block (note: blocks can have any size, not necessarily READ_BUFFER_SIZE)
             int32_t partial_block = block_i - 1;
             uint32_t unincluded_len = unconsumed_len;
@@ -268,9 +268,9 @@ void txtfile_read_vblock (VBlock *vb)
             }
         }
     }
-    else if (flag_md5 && !flag_make_reference)
+    else if (flag.md5 && !flag.make_reference)
         // MD5 of all data up to and including this VB is just the total MD5 of the file so far (as there is no unconsumed data)
-        vb->md5_hash_so_far = md5_snapshot (flag_bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
+        vb->md5_hash_so_far = md5_snapshot (flag.bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
 
@@ -331,9 +331,9 @@ done:
 // PIZ
 static void txtfile_write_to_disk (Buffer *buf)
 {
-    if (flag_md5) md5_update (&txt_file->md5_ctx_bound, buf->data, buf->len);
+    if (flag.md5) md5_update (&txt_file->md5_ctx_bound, buf->data, buf->len);
 
-    if (!flag_test) file_write (txt_file, buf->data, buf->len);
+    if (!flag.test) file_write (txt_file, buf->data, buf->len);
 
     txt_file->txt_data_so_far_single += buf->len;
     txt_file->disk_so_far            += buf->len;
@@ -345,12 +345,11 @@ void txtfile_write_one_vblock (VBlockP vb)
 
     txtfile_write_to_disk (&vb->txt_data);
 
-    // warn if VB is bad, but don't exit, so that we can continue and reconstruct the rest of the file for better debugging
-
     char s1[20], s2[20];
-    ASSERTW ((vb->txt_data.len == vb->vb_data_size) || // files are the same size, expected
-             (exe_type == EXE_GENOCAT) ||              // many genocat flags modify the output file, so don't compare
-             ((z_file->flags & GENOZIP_FL_TXT_IS_BIN) != (txt_file->flags & GENOZIP_FL_TXT_IS_BIN)), // we are reconstructing a BAM into a SAM or vice-versa - the SAM and BAM files have different sizes
+    bool is_tranlation = dt_get_translation (0,0);
+    ASSERTW (vb->txt_data.len == vb->vb_data_size || // files are the same size, expected
+             exe_type == EXE_GENOCAT ||              // many genocat flags modify the output file, so don't compare
+             is_tranlation,                          // we are translating between data types - the source and target txt files have different sizes
             "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
             vb->vblock_i, (uint32_t)vb->lines.len, vb->first_line,
             str_uint_commas (vb->vb_data_size, s1), dt_name (txt_file->data_type), str_uint_commas (vb->txt_data.len, s2), 
@@ -358,15 +357,28 @@ void txtfile_write_one_vblock (VBlockP vb)
 
     // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
     // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
-    if (flag_md5 && !flag_unbind && !md5_is_zero (vb->md5_hash_so_far)) {
+    if (flag.md5 && !flag.unbind && !md5_is_zero (vb->md5_hash_so_far)) {
         Md5Hash piz_hash_so_far = md5_snapshot (&txt_file->md5_ctx_bound);
-        ASSERTW (md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far), 
-                "MD5 of reconstructed vblock=%u (%s) differs from original file (%s). To see bad vblock:\n"
-                "%s %s | head -n%u | tail -n%u > bug%s", vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), 
-                file_viewer (txt_file), file_guess_original_filename (txt_file), 
-                DTP (line_height) * (vb->first_line + (uint32_t)vb->lines.len - 1), 
-                DTP (line_height) * (uint32_t)vb->lines.len,
-                file_plain_text_ext_of_dt (vb->data_type));
+
+        // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
+        if (!md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far)) {
+
+            // dump bad vb to disk
+            char dump_filename[strlen (z_name) + 100];
+            sprintf (dump_filename, "%s.bad.vblock=%u.start=%"PRIu64".len=%u", 
+                     z_name, vb->vblock_i, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len);
+            file_put_buffer (dump_filename, &vb->txt_data, 1);
+
+            WARN ("MD5 of reconstructed vblock=%u (%s) differs from original file (%s).\n"
+                  "Bad reconstructed vblock has been dumped to: %s\n"
+                  "To see the same data in the original file:\n"
+                  "   %s %s | dd skip=%"PRIu64" count=%u bs=1 of=bug%s",
+                  vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), dump_filename,
+                  codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
+                  vb->vb_position_txt_file, (uint32_t)vb->txt_data.len, file_plain_text_ext_of_dt (vb->data_type));
+
+            flag.md5 = false; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
+        }
     }
 
     COPY_TIMER (write);
@@ -379,7 +391,7 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
     // case: we don't know the disk file size (because its stdin or a URL where the server doesn't provide the size)
     if (!disk_size) { 
-        if (flag_stdin_size) disk_size = flag_stdin_size; // use the user-provided size, if there is one
+        if (flag.stdin_size) disk_size = flag.stdin_size; // use the user-provided size, if there is one
         else return; // we're unable to estimate if the disk size is not known
     } 
     
@@ -447,10 +459,10 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 
     // we always write the txt_header section, even if we don't actually have a header, because the section
     // header contains the data about the file
-    if (z_file && !flag_test_seg) zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
+    if (z_file && !flag.test_seg) zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
 
     // for stats: combined length of txt headers in this bound file, or only one file if not bound
-    if (!flag_bind) total_bound_txt_headers_len=0;
+    if (!flag.bind) total_bound_txt_headers_len=0;
     total_bound_txt_headers_len += evb->txt_data.len; 
 
     z_file->num_txt_components_so_far++; // when compressing
@@ -468,8 +480,7 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
     static Buffer header_section = EMPTY_BUFFER;
 
-    int header_offset = zfile_read_section (z_file, evb, 0, &header_section, "header_section", 
-                                            sizeof(SectionHeaderTxtHeader), SEC_TXT_HEADER, sl);
+    int header_offset = zfile_read_section (z_file, evb, 0, &header_section, "header_section", SEC_TXT_HEADER, sl);
     if (header_offset == EOF) {
         buf_free (&header_section);
         return false; // empty file (or in case of unbind mode - no more components) - not an error
@@ -483,11 +494,11 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
 
     // 1. in unbind mode - we open the output txt file of the component
     // 2. when reading a reference file - we create txt_file here (but don't actually open the physical file)
-    if (flag_unbind || flag_reading_reference) {
+    if (flag.unbind || flag.reading_reference) {
         ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in unbind mode or when reading reference");
         
-        char *filename = MALLOC (strlen (header->txt_filename) + strlen (flag_unbind) + 1);
-        sprintf (filename, "%s%s", flag_unbind, header->txt_filename);
+        char *filename = MALLOC (strlen (header->txt_filename) + strlen (flag.unbind) + 1);
+        sprintf (filename, "%s%s", flag.unbind, header->txt_filename);
 
         txt_file = file_open (filename, WRITE, TXT_FILE, z_file->data_type);
         FREE (filename); // file_open copies the names
@@ -497,43 +508,45 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
     txt_file->codec                = header->compression_type;
     
-    if (is_first_txt || flag_unbind) 
+    if (is_first_txt || flag.unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);
 
-    if (flag_unbind) *digest = header->md5_hash_single; // override md5 from genozip header
+    if (flag.unbind) *digest = header->md5_hash_single; // override md5 from genozip header
 
     // now get the text of the txt header itself
     static Buffer header_buf = EMPTY_BUFFER;
     
-    if (!(flag_show_headers && exe_type == EXE_GENOCAT))
+    if (!(flag.show_headers && exe_type == EXE_GENOCAT))
         zfile_uncompress_section (evb, header, &header_buf, "header_buf", 0, SEC_TXT_HEADER);
 
     bool is_vcf = (z_file->data_type == DT_VCF);
 
-    bool can_bind = (is_vcf && !(flag_show_headers && exe_type == EXE_GENOCAT)) ? vcf_header_set_globals(z_file->name, &header_buf) : true;
+    bool can_bind = (is_vcf && !(flag.show_headers && exe_type == EXE_GENOCAT)) ? vcf_header_set_globals(z_file->name, &header_buf) : true;
     if (!can_bind) {
         buf_free (&header_section);
         buf_free (&header_buf);
         return false;
     }
 
-    if (is_vcf && flag_drop_genotypes) vcf_header_trim_header_line (&header_buf); // drop FORMAT and sample names
+    if (is_vcf && flag.drop_genotypes) vcf_header_trim_header_line (&header_buf); // drop FORMAT and sample names
 
-    if (is_vcf && flag_header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
+    if (is_vcf && flag.header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
 
-    // if this is SAM/BAM make sure the output header is SAM or BAM according to flag_out_dt, and regardless of the source file
-    if (z_file->data_type == DT_SAM) bam_prepare_txt_header (&header_buf); 
+    // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
+    dt_translate_txtheader (&header_buf); 
 
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
-    if ((is_first_txt || flag_unbind) && !flag_no_header && !flag_reading_reference && !flag_show_headers) {
+    if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.show_headers) {
         txtfile_write_to_disk (&header_buf);
 
-        if (flag_md5 && !md5_is_zero (header->md5_header)) {
+        if (flag.md5 && !md5_is_zero (header->md5_header)) {
             Md5Hash reconstructed_header_len = md5_do (header_buf.data, header_buf.len);
 
             ASSERTW (md5_is_equal (reconstructed_header_len, header->md5_header), 
                      "MD5 of reconstructed %s header (%s) differs from original file (%s)",
                      dt_name (z_file->data_type), md5_display (reconstructed_header_len), md5_display (header->md5_header));
+
+            flag.md5 = false; // no point in continuing to check - all vblocks will fail as MD5 is cumulative
         }
     }
     
@@ -546,3 +559,12 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     return true;
 }
 
+DataType txtfile_get_file_dt (const char *filename)
+{
+    FileType ft = file_get_stdin_type(); // check for --input option
+
+    if (ft == UNKNOWN_FILE_TYPE) // no --input - get file type from filename
+        ft = file_get_type (filename, false);
+
+    return file_get_data_type (ft, true);
+}

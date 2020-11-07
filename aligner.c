@@ -146,8 +146,8 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
     // in case of --fast, we check only 1/5 of the bases, and we are content with a match (not searching any further) if it 
     // has at most 10 SNPs. On our test file, this reduced the number of calls to aligner_get_match_len by about 4X, 
     // at the cost of the compressed file being about 11% larger
-    uint32_t density = (flag_fast ? 5 : 1);
-    uint32_t max_snps_for_perfection = (flag_fast ? 10 : 2);
+    uint32_t density = (flag.fast ? 5 : 1);
+    uint32_t max_snps_for_perfection = (flag.fast ? 10 : 2);
 
     // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
     for (uint32_t i=0; i < seq_len; i += density) {    
@@ -301,14 +301,14 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     }
 
     // lock region of reference to protect is_set
-    RefLock lock = (flag_reference == REF_EXT_STORE) ? ref_lock (gpos, seq_len) : REFLOCK_NONE;
+    RefLock lock = (flag.reference == REF_EXT_STORE) ? ref_lock (gpos, seq_len) : REFLOCK_NONE;
 
     // shortcut if we have a full reference match
     if (is_all_ref) {
         bit_array_set_region (bitmap, bitmap_ctx->next_local, seq_len); // all bases match the reference
         bitmap_ctx->next_local += seq_len;
         
-        if (flag_reference == REF_EXT_STORE) 
+        if (flag.reference == REF_EXT_STORE) 
             bit_array_set_region (&genome.is_set, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
 
         goto done;
@@ -331,7 +331,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
             if (seq_base == ref_base) {
                 
                 // TO DO: replace this with bit_array_or_with (dst, start, len, src, start) (dst=is_set, src=bitmap) (bug 174)
-                if (flag_reference == REF_EXT_STORE) 
+                if (flag.reference == REF_EXT_STORE) 
                     bit_array_set (&genome.is_set, ref_i); // we will need this ref to reconstruct
 
                 use_reference = true;

@@ -14,7 +14,7 @@ typedef struct {
     bool has_haplotype_data; // FORMAT field contains GT
     bool has_genotype_data;  // FORMAT field contains subfields other than GT
 
-    WordIndex format_mtf_i;  // the mtf_i into contexts[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
+    WordIndex format_node_i;  // the node_i into contexts[VCF_FORMAT].nodes and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_node_i]
 } ZipDataLineVCF;
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
@@ -36,7 +36,7 @@ typedef struct VBlockVCF {
     char gt_prev_phase;
 
     // dictionaries stuff 
-    Buffer format_mapper_buf;         // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].mtf   
+    Buffer format_mapper_buf;         // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;
@@ -46,7 +46,7 @@ extern uint32_t vcf_num_samples; // ZIP
 extern uint32_t vcf_num_displayed_samples; // genocat with --samples
 extern void samples_digest_vcf_header (Buffer *vcf_header_buf);
 extern char *vcf_samples_is_included;
-#define samples_am_i_included(sample_i) (!flag_samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
+#define samples_am_i_included(sample_i) (!flag.samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
 
 #endif
 

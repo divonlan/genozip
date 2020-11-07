@@ -12,6 +12,8 @@
 #include "seg.h"
 #include "piz.h"
 #include "dict_id.h"
+#include "endianness.h"
+#include "file.h"
 
 //----------------------
 // Segmentation
@@ -28,6 +30,11 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, Container *con,
                                  const char *prefixes, unsigned prefixes_len, // a container-wide prefix (may be empty), followed (or not) by one prefix per item. Each prefixes is terminated by SNIP_CONTAINER.
                                  unsigned add_bytes)
 {
+    ctx->inst  |= CTX_INST_NO_STONS; // we need the word index to for container caching
+
+    // con=NULL means MISSING Container (see container_reconstruct_do)
+    if (!con) return seg_by_ctx (vb, NULL, 0, ctx, 0, NULL); 
+
     con->repeats = BGEN32 (con->repeats);
     char snip[1 + base64_sizeof(Container) + CONTAINER_MAX_PREFIXES_LEN]; // maximal size
     snip[0] = SNIP_CONTAINER;
@@ -36,8 +43,6 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, Container *con,
 
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
     uint32_t snip_len = 1 + b64_len + prefixes_len;
-
-    ctx->flags |= CTX_FL_CONTAINER;
 
     // store in struct cache
     return seg_by_ctx (vb, snip, snip_len, ctx, add_bytes, NULL); 
@@ -55,7 +60,7 @@ static inline void container_reconstruct_prefix (VBlockP vb, const char **prefix
     while (**prefixes != SNIP_CONTAINER) (*prefixes)++; // prefixes are terminated by SNIP_CONTAINER
     uint32_t len = (unsigned)((*prefixes) - start);
 
-    RECONSTRUCT (start, len);
+    if (len) RECONSTRUCT (start, len);
 
     (*prefixes)++; // skip SNIP_CONTAINER seperator
     (*prefixes_len) -= len + 1;
@@ -63,15 +68,17 @@ static inline void container_reconstruct_prefix (VBlockP vb, const char **prefix
 
 static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const Container *con, const char *prefixes, uint32_t prefixes_len)
 {
+    #define IS_CI_SET(flag) (((uint8_t)item->seperator[0] & 0x80) && ((uint8_t)item->seperator[0] & ~(uint8_t)0x80 & flag))
+
     TimeSpecType profiler_timer={0}; 
-    if (flag_show_time && (con->flags & CONTAINER_TOPLEVEL)) 
+    if (flag.show_time && (con->flags & CONTAINER_TOPLEVEL)) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, &prefixes, &prefixes_len); 
 
-    ASSERT (DTP (container_filter) || !(con->flags & CONTAINER_FILTER_REPEATS) || !(con->flags & CONTAINER_FILTER_ITEMS), 
-            "Error: data_type=%s doesn't support container_filter", dt_name (vb->data_type));
+    ASSERT (DTP (container_filter) || (!(con->flags & CONTAINER_FILTER_REPEATS) && !(con->flags & CONTAINER_FILTER_ITEMS)), 
+            "Error: data_type=%s doesn't support container_filter, despite being specified in the Container", dt_name (vb->data_type));
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
@@ -88,36 +95,50 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
         uint32_t item_prefixes_len = prefixes_len;
 
         for (unsigned i=0; i < con->num_items; i++) {
+            const ContainerItem *item = &con->items[i];
 
             if ((con->flags & CONTAINER_FILTER_ITEMS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
 
+            if (flag.show_containers && item->did_i != DID_I_NONE) // show container reconstruction 
+                fprintf (stderr, "Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
+                            vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), vb->contexts[item->did_i].name, 
+                            vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
+                
             container_reconstruct_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix (we will have one per item or none at all)
 
-            const ContainerItem *item = &con->items[i];
             int32_t reconstructed_len=0;
-            if (item->dict_id.num) {  // not a prefix-only item
+            if (item->dict_id.num) {  // not a prefix-only or translator-only item
 
-                if (flag_show_containers) // show container reconstruction 
-                    fprintf (stderr, "Line=%u Repeat=%u %.*s->%s\n", vb->line_i, rep_i, DICT_ID_LEN, dict_id_printable(dict_id).id, vb->contexts[item->did_i].name);
-                
-                reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, item->seperator[0] != CI_DONT_RECONSTRUCT, 0);
+                char *reconstruction_start = AFTERENT (char, vb->txt_data);
+                bool reconstruct = (flag.out_dt == z_file->data_type) || // not translating Or...
+                                   !IS_CI_SET (CI_TRANS_NOR);            // no prohibition on reconstructing when translating
+                reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, 0, reconstruct);
+
+                // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item
+                // using the designated "translator" function, if one is available
+                if (flag.do_translate && item->translator) 
+                    DT_FUNC(vb, translator)[item->translator](vb, &vb->contexts[item->did_i], reconstruction_start, reconstructed_len);  
             }            
-            if (reconstructed_len == -1 && i > 0)  // not WORD_INDEX_MISSING_SF - delete previous item's separator
+
+            // case: WORD_INDEX_MISSING_SF - delete previous item's separator if it has one (used by SAM_OPTIONAL - sam_seg_optional_all)
+            if (reconstructed_len == -1 && i > 0 && (item-1)->seperator[0] < 0x80)  
                 vb->txt_data.len -= ((item-1)->seperator[0] != 0) + ((item-1)->seperator[1] != 0);
 
-            // seperator determines what to do after the item
-            switch (item->seperator[0]) {
-                case CI_MOVE:
-                    vb->txt_data.len += item->seperator[1]; break;
-                case CI_NUL_TERMINATE:
-                    RECONSTRUCT1 (0); break;
-                case CI_DONT_RECONSTRUCT:
-                    break;
-                default: 
-                    // note: we emit this item's separator even if this item is missing - next item will delete it if also missing (last item in Samples doesn't have a seperator)
-                    if (item->seperator[0]) RECONSTRUCT1 (item->seperator[0]);
-                    if (item->seperator[1]) RECONSTRUCT1 (item->seperator[1]);
+            // seperator / flags determines what to do after the item            
+            if (flag.do_translate && IS_CI_SET (CI_TRANS_NUL))
+                RECONSTRUCT1 (0);
+
+            else if (!flag.do_translate && IS_CI_SET (CI_NATIVE_NEXT))
+                RECONSTRUCT1 (item->seperator[1]);
+
+            else if (!((uint8_t)item->seperator[0] & 0x80)) { // seperator, not flag
+                if (item->seperator[0]) RECONSTRUCT1 ((char)item->seperator[0]);
+                if (item->seperator[1]) RECONSTRUCT1 ((char)item->seperator[1]);
             }
+
+            // after all reconstruction and translation is done - move if needed
+            if (flag.do_translate && IS_CI_SET (CI_TRANS_MOVE))
+                vb->txt_data.len += (uint8_t)item->seperator[1];
         }
 
         if (rep_i+1 < con->repeats || !(con->flags & CONTAINER_DROP_FINAL_REPEAT_SEP)) {
@@ -169,7 +190,7 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
         // get the did_i for each dict_id
         for (uint8_t item_i=0; item_i < con.num_items; item_i++)
             if (con.items[item_i].dict_id.num)  // not a prefix-only item
-                con.items[item_i].did_i = mtf_get_existing_did_i (vb, con.items[item_i].dict_id);
+                con.items[item_i].did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
 
         // get prefixes
         unsigned st_size = sizeof_container (con);
@@ -183,7 +204,7 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
         ASSERT (!prefixes_len || prefixes[prefixes_len-1] == SNIP_CONTAINER, "Error in container_reconstruct: prefixes array does end with a SNIP_CONTAINER: %.*s",
                 prefixes_len, prefixes);
 
-        // cache it if it is cacheable 
+        // Backward compatability: prior to version 8.1 containers didn't have NO_STONS so singletons were in ctx.local with a word_index)
         if (word_index != WORD_INDEX_NONE) {
 
             ASSERT (st_size + prefixes_len <= 65535, "st_size=%u + prefixes_len=%u too large", st_size, prefixes_len);
@@ -200,10 +221,36 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
             *ENT (uint16_t, ctx->con_len,   word_index) = (uint16_t)(st_size + prefixes_len);
 
             buf_alloc (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len, 2, "context->con_cache", ctx->did_i);
+            
+            char *cached_con = AFTERENT (char, ctx->con_cache);
             buf_add (&ctx->con_cache, con_p, st_size);
             if (prefixes_len) buf_add (&ctx->con_cache, prefixes, prefixes_len);
+
+            con_p    = (Container *)cached_con; // update so we reconstruct from translated cached item
+            prefixes = cached_con + st_size;
+
+            // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_OPTIONAL)
+            ContainerItem *item0 = &con.items[0];
+            if (flag.do_translate && item0->did_i == DID_I_NONE && item0->translator) {
+                int32_t prefixes_len_change = DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len);  
+                prefixes_len       += prefixes_len_change;
+                ctx->con_cache.len += prefixes_len_change;
+            }
         }
     }
 
     container_reconstruct_do (vb, ctx->dict_id, con_p, prefixes, prefixes_len); 
 }
+
+// Translators reconstructing last_value as a little endian binary
+#define SET_n(type,mn,mx) type n = (type)ctx->last_value.i; \
+                           ASSERT (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx), "Error: Failed to convert %s to %s because of bad data in line %u of the %s file: value of %s=%"PRId64" is out of range [%"PRId64"-%"PRId64"]",\
+                                   dt_name (z_file->data_type), dt_name (flag.out_dt), vb->line_i, dt_name (z_file->data_type), \
+                                   ctx->name, (int64_t)(ctx->last_value.i), (int64_t)(mn), (int64_t)(mx))
+
+TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );              RECONSTRUCT1(n);       return 0; }
+TRANSLATOR_FUNC (container_translate_U8)       { SET_n (uint8_t,  0,         UINT8_MAX );              RECONSTRUCT1((char)n); return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_I16) { SET_n (int16_t,  INT16_MIN, INT16_MAX ); n=LTEN16(n); RECONSTRUCT(&n,2);     return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_U16) { SET_n (uint16_t, 0,         UINT16_MAX); n=LTEN16(n); RECONSTRUCT(&n,2);     return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_I32) { SET_n (int32_t,  INT32_MIN, INT32_MAX ); n=LTEN32(n); RECONSTRUCT(&n,4);     return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_U32) { SET_n (uint32_t, 0,         UINT32_MAX); n=LTEN32(n); RECONSTRUCT(&n,4);     return 0; }
