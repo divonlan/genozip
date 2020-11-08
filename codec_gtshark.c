@@ -27,10 +27,6 @@
 // -------------
 
 #define PIPE_MAX_BYTES 32768
-#define GTSHARK_CHROM_ID "Z"
-
-#define GTSHARK_VCF_LINE_VARDATA GTSHARK_CHROM_ID "\t.\t.\t.\t.\t.\t.\t.\tGT\t"
-static const unsigned vardata_len = 19;
 
 // gtshark vcf file stuff
 #define GTSHARK_CHROM_ID "Z"
