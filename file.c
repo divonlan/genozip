@@ -213,13 +213,13 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
     char reason[100];
     sprintf (reason, "To output a %s file", file_exts[file->type]);
     output_compressor = stream_create (0, 0, 0, global_max_memory_per_vb, 
-                                        redirected_stdout_file, // output is redirected unless flag.to_stdout
-                                        0, reason,
-                                        exec_name, 
-                                        stdout_option, // either to the terminal or redirected to output file
-                                        "--threads", threads_str,
-                                        format_option_1, format_option_2,
-                                        NULL);
+                                       redirected_stdout_file, // output is redirected unless flag.to_stdout
+                                       0, reason,
+                                       exec_name, 
+                                       stdout_option, // either to the terminal or redirected to output file
+                                       "--threads", threads_str,
+                                       format_option_1, format_option_2,
+                                       NULL);
     file->file = stream_to_stream_stdin (output_compressor);
 }
 

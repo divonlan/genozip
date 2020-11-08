@@ -497,9 +497,7 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     if (flag.unbind || flag.reading_reference) {
         ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in unbind mode or when reading reference");
         
-        char *filename = MALLOC (strlen (header->txt_filename) + strlen (flag.unbind) + 1);
-        sprintf (filename, "%s%s", flag.unbind, header->txt_filename);
-
+        const char *filename = txtfile_piz_get_filename (header->txt_filename, flag.unbind, false);
         txt_file = file_open (filename, WRITE, TXT_FILE, z_file->data_type);
         FREE (filename); // file_open copies the names
     }
@@ -567,4 +565,33 @@ DataType txtfile_get_file_dt (const char *filename)
         ft = file_get_type (filename, false);
 
     return file_get_data_type (ft, true);
+}
+
+// get filename of output txt file in genounzip if user didn't specific it with --output
+// case 1: outputing a single file - generate txt_filename based on the z_file's name
+// case 2: unbinding a genozip into multiple txt files - generate txt_filename of a component file from the
+//         component name in SEC_TXT_HEADER 
+const char *txtfile_piz_get_filename (const char *orig_name,const char *prefix, bool is_orig_name_genozip)
+{
+    unsigned fn_len = strlen (orig_name);
+    unsigned genozip_ext_len = is_orig_name_genozip ? strlen (GENOZIP_EXT) : 0;
+    char *txt_filename = (char *)MALLOC(fn_len + 10);
+
+    #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
+        ((z_file->data_type==(from) && flag.out_dt==(to) && strcmp (&txt_filename[fn_len-genozip_ext_len-strlen(ext)], (ext))) ? (int)strlen(ext) : 0) 
+
+    // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
+    int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_BAM,   ".sam") +
+                              EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_SAM,   ".bam") +
+                              EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_FASTQ, ".sam") +
+                              EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_FASTQ, ".bam") +
+                              EXT2_MATCHES_TRANSLATE (DT_VCF,  DT_BCF,   ".vcf") +
+                              EXT2_MATCHES_TRANSLATE (DT_ME23, DT_VCF,   ".txt");
+
+    sprintf ((char *)txt_filename, "%s%.*s%s%s", prefix,
+                fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
+                old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
+                (flag.bgzip && flag.out_dt != BAM) ? ".gz" : ""); // add .gz if --bgzip (except in BAM where it is implicit)
+
+    return txt_filename;
 }

@@ -11,7 +11,7 @@
 typedef struct {
     
     // genozip options that affect the compressed file
-    int bind, vblock, gtshark, fast, make_reference, md5;
+    int vblock, gtshark, fast, make_reference, md5;
 
     int optimize, optimize_sort, optimize_PL, optimize_GL, optimize_GP, optimize_VQSLOD,  // optimize flags
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC;
@@ -60,7 +60,13 @@ typedef struct {
            dump_one_local_dict_id;  // argument of --dump-local-one
 
     // internal flags set by the system, not the command line
-    int out_dt, reading_reference, do_translate, ref_use_aligner, genocat_info_only, multiple_files;
+    int out_dt,            // PIZ: output txt datatype
+        bind,              // ZIP: user used --output to bind 2+ files
+        reading_reference, // system is currently reading a reference file
+        do_translate,      // PIZ: decompression requires translation to another data type
+        ref_use_aligner,   // ZIP: compression requires using the aligner
+        genocat_info_only, // User requested to genocat with only metadata to be shown, not file contents
+        multiple_files;    // Command line includes multiple files
     uint64_t stdin_size;
 } Flags;
 

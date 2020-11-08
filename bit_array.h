@@ -174,13 +174,13 @@ typedef struct BitArray
 // Basics: Constructor, destructor, get length, resize
 //
 
-// Allocate using existing struct
 static inline void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) // divon
 {
   if (bitarr->num_of_bits % 64)
     bitarr->words[bitarr->num_of_words-1] &= bitmask64 (bitarr->num_of_bits % 64); 
 }
 
+// Allocate using existing struct
 extern BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits);
 extern void bit_array_dealloc(BitArray* bitarr);
 

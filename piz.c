@@ -657,7 +657,7 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
     ASSERT0 (has_txt_header, "Error in piz_one_file: cannot find SEC_TXT_HEADER");
 
     // read txt header from genozip file and write it to output txt file
-    piz_successful = txtfile_genozip_to_txt_header (NULL, &original_file_digest);
+    piz_successful = txtfile_genozip_to_txt_header (NULL, &original_file_digest); // if unbinding, also opens txt_file
     
     ASSERT (piz_successful || component_i > 0, "Error: failed to read %s header in %s", dt_name (z_file->data_type), z_name);
 

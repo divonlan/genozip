@@ -9,6 +9,8 @@
 #include "genozip.h"
 #include "md5.h"
 
+extern const char *txtfile_piz_get_filename (const char *orig_name, const char *prefix, bool is_orig_name_genozip);
+
 typedef bool (*TxtFileTestFunc)(const char *, int);
 extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, double success_threashold, TxtFileTestFunc test_func);
 

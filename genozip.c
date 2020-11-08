@@ -268,10 +268,10 @@ finish:
 }
 
 // if this is a bound file, and we don't have --unbind or --force, we ask the user
-static void main_update_unbind (void)
+static void main_ask_about_unbind (void)
 {
     if (!isatty(0) || !isatty(2)) return; // if we stdin or stderr is redirected - we cannot ask the user an interactive question
-    if (flag.test               ) return; // we don't ask in test
+    if (flag.test || flag.genocat_info_only) return; // other cases we don't ask test
 
     fprintf (stderr, "\n%s: %s contains %u bound files. You may either:\n"
                      "y) uncompress and unbind - retrieve the individual files (or use --unbind=<prefix> to add a prefix) ; or-\n"
@@ -307,8 +307,6 @@ static void main_genounzip (const char *z_filename,
     ASSINP (!txt_filename || !url_is_url (txt_filename), 
             "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, txt_filename);
 
-    unsigned fn_len = strlen (z_filename);
-
     // skip this file if its size is 0
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
@@ -324,7 +322,7 @@ static void main_genounzip (const char *z_filename,
 
     // if this is a bound file, and we don't have --unbind or --force, we ask the user
     if (z_file->num_components >= 2 && !flag.unbind && !flag.force)
-        main_update_unbind();
+        main_ask_about_unbind();
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
     if (flag.reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
@@ -349,36 +347,17 @@ static void main_genounzip (const char *z_filename,
     if (flag.out_dt == DT_NONE) 
         flag.out_dt = z_file->data_type;
 
-    // set txt_filename if translating (eg ".sam" to ".bam") or adding .gz
-    if (!txt_filename && !flag.to_stdout /* flag.bgzip || flag.out_dt != zdt */ && !flag.unbind) {
-        txt_filename = (char *)MALLOC(fn_len + 10);
+    // set txt_filename from genozip file name (inc. extensions if translating or --bgzip)
+    if (!txt_filename && !flag.to_stdout && !flag.unbind) 
+        txt_filename = txtfile_piz_get_filename (z_filename, "", true);
 
-        #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
-            ((zdt==(from) && flag.out_dt==(to) && strcmp (&txt_filename[fn_len-strlen (GENOZIP_EXT)-strlen(ext)], (ext))) ? (int)strlen(ext) : 0) 
-
-        // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
-        int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_BAM,   ".sam") +
-                                  EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_SAM,   ".bam") +
-                                  EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_FASTQ, ".sam") +
-                                  EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_FASTQ, ".bam") +
-                                  EXT2_MATCHES_TRANSLATE (DT_VCF,  DT_BCF,   ".vcf") +
-                                  EXT2_MATCHES_TRANSLATE (DT_ME23, DT_VCF,   ".txt");
-
-        sprintf ((char *)txt_filename, "%.*s%s%s", 
-                 fn_len - (int)strlen (GENOZIP_EXT) - old_ext_removed_len, z_filename,
-                 old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
-                 flag.bgzip ? ".gz" : "");     // add .gz if needed
-    }
-
-    // get output FILE 
+    // open output txt file (except if unbinding or outputting to stdout)
     if (txt_filename) {
-        ASSERT0 (!txt_file || flag.bind, "Error: txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
-
-        if (!txt_file)  // in bound mode, for second file onwards, txt_file is already open
-            txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag.out_dt);
+        ASSERT0 (!txt_file, "Error: txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
+        txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag.out_dt);
     }
-    else if (flag.to_stdout) { // stdout
-        txt_file = file_open_redirect (WRITE, TXT_FILE, flag.out_dt); // STDOUT
+    else if (flag.to_stdout) { 
+        txt_file = file_open_redirect (WRITE, TXT_FILE, flag.out_dt); // open stdout
     }
     else if (flag.unbind) {
         // do nothing - the component files will be opened by txtfile_genozip_to_txt_header()
@@ -395,10 +374,9 @@ static void main_genounzip (const char *z_filename,
     uint32_t component_i=0;
     while (piz_one_file (component_i, is_last_file) && flag.unbind) component_i++;
 
-    if (!flag.bind && !flag.to_stdout && !flag.unbind) 
-        // don't close the bound file - it will close with the process exits
+    if (!flag.to_stdout && !flag.unbind) 
+        // don't close stdout - we might still need it for the next file
         // don't close in unbind mode - piz_one_file() opens and closes each component
-        // don't close stdout - in bound mode, we might still need it for the next file
         file_close (&txt_file, false); 
 
     file_close (&z_file, false);
@@ -621,14 +599,32 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 
 static void main_copy_command_line (int argc, char **argv)
 {
-    unsigned len=0;
+    unsigned len=0, pw_len=0;
+    const char *pw=0;
+
     for (int i=0; i < argc; i++)
         len += strlen (argv[i]) + 1; // +1 for seperator (' ' or '\0')
 
     command_line = CALLOC (len);
 
-    for (int i=0; i < argc; i++)
-        sprintf ((char*)&command_line[strlen(command_line)], "%s%s", argv[i], (i < argc-1 ? " ": ""));
+    if ((pw = crypt_get_password())) pw_len  = strlen (pw);
+
+    for (int i=0; i < argc; i++) {
+
+        unsigned arg_len = strlen (argv[i]);
+
+        if (pw && !strcmp(argv[i], pw)) // "-p 123", "--pass 123" etc
+            sprintf ((char*)&command_line[strlen(command_line)], "***%s", (i < argc-1 ? " ": "")); // hide password
+
+        else if (pw && (arg_len >= pw_len + 2) &&  // check for -p123 or eg -fmp123
+                    !strcmp (&argv[i][arg_len-pw_len], pw) && // not air-tight test, but good enough (eg "-ofilenamep123" will incorrectly trigger)
+                    argv[i][0] == '-' &&
+                    argv[i][arg_len-pw_len-1] == 'p')
+            sprintf ((char*)&command_line[strlen(command_line)], "%.*s***%s", arg_len-pw_len, argv[i], (i < argc-1 ? " ": "")); // hide password
+
+        else
+            sprintf ((char*)&command_line[strlen(command_line)], "%s%s", argv[i], (i < argc-1 ? " ": ""));
+    }
 }
 
 void TEST()
@@ -645,7 +641,6 @@ int main (int argc, char **argv)
     vb_initialize_evb();
     random_access_initialize();
     codec_initialize();
-    main_copy_command_line (argc, argv);
 
     //TEST();exit(0);
 
@@ -665,6 +660,7 @@ int main (int argc, char **argv)
 
     bool is_short[256] = { 0 }; // indexed by character of short option.
     flags_init_from_command_line (argc, argv, is_short);
+    main_copy_command_line (argc, argv); // can only be called after --password is processed
 
     // if command not chosen explicitly, use the default determined by the executable name
     if (command < 0) { 
