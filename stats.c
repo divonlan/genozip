@@ -279,7 +279,7 @@ void stats_compress (void)
         /* % dict         */ s->pc_dict              = !ctx->node_i.len         ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->node_i.len;
         /* % singletons   */ s->pc_singletons        = !ctx->node_i.len         ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->node_i.len;
         /* % failed singl.*/ s->pc_failed_singletons = !ctx->node_i.len         ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->node_i.len;
-        /* % hash occupn. */ s->pc_hash_occupancy    = !ctx->global_hash_prime ? 0 : 100.0 * (double)(ctx->nodes.len + ctx->ol_mtf.len) / (double)ctx->global_hash_prime;
+        /* % hash occupn. */ s->pc_hash_occupancy    = !ctx->global_hash_prime ? 0 : 100.0 * (double)(ctx->nodes.len + ctx->ol_nodes.len) / (double)ctx->global_hash_prime;
         /* Hash           */ str_uint_commas (ctx->global_hash_prime, s->hash);
         /* uncomp dict    */ str_size (ctx->dict.len, s->uncomp_dict);
         /* comp dict      */ str_size (dict_compressed_size, s->comp_dict);

@@ -167,7 +167,7 @@ const char *url_get_status (const char *url, bool *file_exists, int64_t *file_si
 }
 
 
-// reads a string response from a URL, returns a null-terminated string and the number of characters (excluding \0)
+// reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0)
 uint32_t url_read_string (const char *url, char *data, uint32_t data_size,
                           const char *reason) // optional text in case curl execution fails
 {

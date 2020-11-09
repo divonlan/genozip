@@ -167,7 +167,7 @@ void fastq_seg_finalize (VBlockP vb)
     // top level snip
     Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = CONTAINER_TOPLEVEL | CONTAINER_FILTER_ITEMS | CONTAINER_FILTER_REPEATS,
+        .flags     = CON_FL_TOPLEVEL | CON_FL_FILTER_ITEMS | CON_FL_FILTER_REPEATS,
         .num_items = 7,
         .items     = { { (DictId)dict_id_fields[FASTQ_DESC],     DID_I_NONE, ""  },
                        { (DictId)dict_id_fields[FASTQ_E1L],      DID_I_NONE, ""  }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only

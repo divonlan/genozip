@@ -71,7 +71,7 @@ typedef struct {
     { 0, "FF17", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
     { 0, "FF18", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
     { 0, "FF19", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "BGZ",  "+.bgz",  "gunzip -c",   NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "BGZF", "+.bgz",  "gunzip -c",   NA1,                   NA2,                   NA3,                    NA4                 }, \
     { 0, "XZ",   "+.xz",   "xz -d -c",    NA1,                   NA2,                   NA3,                    NA4                 }, \
     { 0, "BCF",  "-.bcf",  "bcftools view", NA1,                 NA2,                   NA3,                    NA4                 }, \
     { 0, "BAM",  "-.bam",  "samtools view -h --threads 2", NA1,  NA2,                   NA3,                    NA4                 }, \

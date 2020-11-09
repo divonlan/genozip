@@ -36,7 +36,7 @@ void ref_alt_chroms_compress (void)
 
     for (uint32_t i=0; i < num_alt_chroms; i++) {
         WordIndex chrom_index = num_contigs + i;
-        const MtfNode *chrom_node = ENT (MtfNode, ctx->nodes, chrom_index);
+        const CtxNode *chrom_node = ENT (CtxNode, ctx->nodes, chrom_index);
         const char *chrom_name = ENT (const char, ctx->dict, chrom_node->char_index);
         
         WordIndex alt_index = ref_alt_chroms_zip_get_alt_index (chrom_name, chrom_node->snip_len, WI_REF_CONTIG, WORD_INDEX_NONE);
@@ -47,7 +47,7 @@ void ref_alt_chroms_compress (void)
                                                                     .alt_chrom_in_ref_file = BGEN32 (alt_index) };
     
         if (flag.show_ref_alts) {
-            const MtfNode *alt_node = ENT (MtfNode, ctx->nodes, alt_index);
+            const CtxNode *alt_node = ENT (CtxNode, ctx->nodes, alt_index);
             const char *alt_name = ENT (const char, ctx->dict, alt_node->char_index);
 
             fprintf (stderr, "In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, chrom_index, alt_name, alt_index);

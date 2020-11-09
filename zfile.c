@@ -275,9 +275,9 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
 {   
     vb->has_non_agct = false;
     
-    uint8_t flags = ctx->flags | 
-                    ((ctx->inst & CTX_INST_PAIR_LOCAL)  ? CTX_FL_PAIRED     : 0) |
-                    ((ctx->inst & CTX_INST_LOCAL_PARAM) ? CTX_FL_COPY_PARAM : 0);
+    SectionFlags flags = ctx->flags | 
+                         ((ctx->inst & CTX_INST_PAIR_LOCAL)  ? CTX_FL_PAIRED     : 0) |
+                         ((ctx->inst & CTX_INST_LOCAL_PARAM) ? CTX_FL_COPY_PARAM : 0);
                     
     uint32_t uncompressed_len = ctx->local.len * lt_desc[ctx->ltype].width;
     
@@ -847,7 +847,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool i
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderTxtHeader));
     header.h.codec                 = CODEC_BZ2;
     header.num_lines               = NUM_LINES_UNKNOWN; 
-    header.compression_type        = txt_file->codec; 
+    header.codec        = txt_file->codec; 
     header.md5_header              = header_md5;
     
     file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);

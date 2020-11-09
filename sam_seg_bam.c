@@ -18,8 +18,6 @@
 #include "dict_id.h"
 #include "codec.h"
 
-#define BAM_MAGIC "BAM\1" // first 4 characters of a BAM file
-
 // copy header ref data during reading header
 static uint32_t header_n_ref=0;
 static char **header_ref_contigs = NULL;
@@ -199,7 +197,7 @@ static inline void bam_rewrite_cigar (VBlockSAM *vb, uint16_t n_cigar_op, const 
     }
 
 finish:
-    *AFTERENT (char, vb->textual_cigar) = 0; // null terminate
+    *AFTERENT (char, vb->textual_cigar) = 0; // nul terminate
     vb->last_cigar = FIRSTENT (char, vb->textual_cigar);
 }
 

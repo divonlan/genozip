@@ -33,7 +33,7 @@ void me23_seg_finalize (VBlockP vb)
     // top level snip
     Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = CONTAINER_TOPLEVEL,
+        .flags     = CON_FL_TOPLEVEL,
         .num_items = 5,
         .items     = { { (DictId)dict_id_fields[ME23_ID],       DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[ME23_CHROM],    DID_I_NONE, "\t" },
@@ -46,7 +46,7 @@ void me23_seg_finalize (VBlockP vb)
 
     Container top_level_to_vcf = { 
         .repeats   = vb->lines.len,
-        .flags     = CONTAINER_TOPLEVEL,
+        .flags     = CON_FL_TOPLEVEL,
         .num_items = 5,
         .items     = { { (DictId)dict_id_fields[ME23_CHROM],    DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[ME23_POS],      DID_I_NONE, "\t" },
@@ -110,16 +110,16 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
                        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%.*s\n"
     
     // move the me23 and header to the side for a sec
-    buf_move (evb, &evb->compressed, evb, txt);
+    buf_move (evb, &evb->compressed, evb, txtheader_buf);
     ARRAY (char, header23, evb->compressed);
 
     Context *ctx = &z_file->contexts[ME23_CHROM];
     uint32_t num_chroms = (uint32_t)ctx->word_list.len;
     
-    buf_alloc (evb, txt, 1.3*evb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3)+50 +
+    buf_alloc (evb, txtheader_buf, 1.3*evb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3)+50 +
                num_chroms * (strlen (VCF_HEAD_2) + 100), 1, "txt_data", 0);
     
-    bufprintf (evb, txt, VCF_HEAD_1, ref_filename);
+    bufprintf (evb, txtheader_buf, VCF_HEAD_1, ref_filename);
     
     // add contigs used in this file
     for (uint32_t chrom_i=0; chrom_i < num_chroms; chrom_i++) {
@@ -129,20 +129,20 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
         const char *chrom_name = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom_i, 0, &chrom_name_len);
         PosType contig_len = ref_contigs_get_contig_length (chrom_name, chrom_name_len);
 
-        bufprintf (evb, txt, VCF_HEAD_2, chrom_name, contig_len);
+        bufprintf (evb, txtheader_buf, VCF_HEAD_2, chrom_name, contig_len);
     }
 
     // add original 23andMe header, prefixing lines with "##co=" instead of "#"
-    uint64_t header23_line_start = txt->len;
+    uint64_t header23_line_start = txtheader_buf->len;
     for (uint64_t i=0; i < evb->compressed.len; i++) {
         if (header23[i] == '#') {
-            header23_line_start = txt->len;
-            buf_add (txt, "##co=", 5);
+            header23_line_start = txtheader_buf->len;
+            buf_add (txtheader_buf, "##co=", 5);
         }
         else
-            NEXTENT (char, *txt) = header23[i];
+            NEXTENT (char, *txtheader_buf) = header23[i];
     }
-    txt->len = header23_line_start; // remove last 23andme line ("# rsid chromosome position genotype")
+    txtheader_buf->len = header23_line_start; // remove last 23andme line ("# rsid chromosome position genotype")
     
     // attempt to get sample name from 23andMe file name
     char *sample_name = "Person"; // default
@@ -160,7 +160,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     }
 
     // add final lines
-    bufprintf (evb, txt, VCF_HEAD_3, GENOZIP_CODE_VERSION, command_line, sample_name_len, sample_name);
+    bufprintf (evb, txtheader_buf, VCF_HEAD_3, GENOZIP_CODE_VERSION, command_line, sample_name_len, sample_name);
 
     buf_free (&evb->compressed);
 }

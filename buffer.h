@@ -79,8 +79,11 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                                                     : (buf)->size); \
 }
 
+#define buf_alloc_more_name(vb, buf, more, at_least, type, grow_at_least_factor,name) \
+    buf_alloc ((vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name), 0)
+
 #define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor) \
-    buf_alloc ((vb), (buf), MAX(at_least, ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (buf)->name, (buf)->param)
+    buf_alloc ((vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (buf)->name, (buf)->param)
 
 #define buf_alloc_more_zero(vb, buf, more, at_least, type, grow_at_least_factor) { \
     uint64_t size_before = (buf)->size; \

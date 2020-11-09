@@ -62,22 +62,22 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 // endianity bugs will be discovered more readily this way
 
 typedef struct SectionHeader {
-    uint32_t    magic; 
-    uint32_t    compressed_offset;    // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
-    uint32_t    data_encrypted_len;   // = data_compressed_len + padding if encrypted, 0 if not
-    uint32_t    data_compressed_len;
-    uint32_t    data_uncompressed_len;
-    uint32_t    vblock_i;             // VB with in file starting from 1 ; 0 for Txt Header
-    SectionType section_type;         // 1 byte
-    Codec       codec;                // 1 byte - primary codec in which this section is compressed
-    Codec       sub_codec;            // 1 byte - sub codec, in case primary codec invokes another codec
-    uint8_t     flags;                // CTX_FL_*
+    uint32_t     magic; 
+    uint32_t     compressed_offset;    // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
+    uint32_t     data_encrypted_len;   // = data_compressed_len + padding if encrypted, 0 if not
+    uint32_t     data_compressed_len;
+    uint32_t     data_uncompressed_len;
+    uint32_t     vblock_i;             // VB with in file starting from 1 ; 0 for Txt Header
+    SectionType  section_type;         // 1 byte
+    Codec        codec;                // 1 byte - primary codec in which this section is compressed
+    Codec        sub_codec;            // 1 byte - sub codec, in case primary codec invokes another codec
+    SectionFlags flags;                // CTX_FL_*
 } SectionHeader; 
 
 // flags written to SectionHeaderGenozipHeader.h.flags allowing Seg to communicate instructions to Piz
-#define GENOZIP_FL_REF_INTERNAL 0x01  // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
-#define GENOZIP_FL_ALIGNER      0x02  // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
-#define GENOZIP_FL_TXT_IS_BIN   0x04  // Source file is binary (BAM or BCF)
+#define GENOZIP_FL_REF_INTERNAL ((SectionFlags)0x01)  // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
+#define GENOZIP_FL_ALIGNER      ((SectionFlags)0x02)  // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
+#define GENOZIP_FL_TXT_IS_BIN   ((SectionFlags)0x04)  // Source file is binary (BAM or BCF)
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
@@ -90,7 +90,7 @@ typedef struct {
     Md5Hash  md5_hash_bound;          // md5 of original txt file, or 0s if no hash was calculated. if this is a binding - this is the md5 of the entire bound file.
     uint8_t  password_test[16];       // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
-    char created[FILE_METADATA_LEN];  // null-terminated metadata
+    char created[FILE_METADATA_LEN];  // nul-terminated metadata
     Md5Hash  license_hash;            // MD5(license_num)
 #define REF_FILENAME_LEN 256
     char ref_filename[REF_FILENAME_LEN]; // external reference filename, null-terimated. ref_filename[0]=0 if there is no external reference.
@@ -110,7 +110,7 @@ typedef struct {
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
-    Codec    compression_type; // compression codec of original file
+    Codec    codec;            // codec of original txt file (none, bgzf, gz, bz2...)
     uint8_t  unused[3];
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
     Md5Hash  md5_header;       // MD5 of header
@@ -182,13 +182,13 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 }
 
 // flags written to SectionHeaderCtx.h.flags allowing Seg to communicate instructions to Piz
-#define CTX_FL_STORE_INT    ((uint8_t)0x01) // after reconstruction of a snip, store it in ctx.last_value as int64_t (eg because they are a basis for a delta calculation)
-#define CTX_FL_STORE_FLOAT  ((uint8_t)0x02) // after reconstruction of a snip, store it in ctx.last_value as double
-#define CTX_FL_STORE_INDEX  ((uint8_t)0x03) // after reconstruction of a snip, the b250 word_index in ctx.last_value
-#define CTX_FL_PAIRED       ((uint8_t)0x04) // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-//#define CTX_FL_CONTAINER    ((uint8_t)0x08) // (canceled in 8.1 - files compressed with 8.0 will have alls containers have this flag)
-#define CTX_FL_COPY_PARAM   ((uint8_t)0x10) // copy ctx.b250/local.param from SectionHeaderCtx.param
-#define CTX_FL_ALL_THE_SAME ((uint8_t)0x20) // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
+#define CTX_FL_STORE_INT    ((SectionFlags)0x01) // after reconstruction of a snip, store it in ctx.last_value as int64_t (eg because they are a basis for a delta calculation)
+#define CTX_FL_STORE_FLOAT  ((SectionFlags)0x02) // after reconstruction of a snip, store it in ctx.last_value as double
+#define CTX_FL_STORE_INDEX  ((SectionFlags)0x03) // after reconstruction of a snip, the b250 word_index in ctx.last_value
+#define CTX_FL_PAIRED       ((SectionFlags)0x04) // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
+//#define CTX_FL_CONTAINER    ((SectionFlags)0x08) // (canceled in 8.1 - files compressed with 8.0 will have alls containers have this flag)
+#define CTX_FL_COPY_PARAM   ((SectionFlags)0x10) // copy ctx.b250/local.param from SectionHeaderCtx.param
+#define CTX_FL_ALL_THE_SAME ((SectionFlags)0x20) // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
 
 #define ctx_store_flag(flags) ((flags) & 0x3)
 
@@ -277,8 +277,6 @@ extern uint32_t st_header_size (SectionType sec_type);
 
 extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);
 
-extern bool sections_has_random_access(void);
-extern bool sections_has_reference(void);
 extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
 
 #endif

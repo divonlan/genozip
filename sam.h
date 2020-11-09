@@ -93,25 +93,29 @@ SPECIAL (SAM, 6, BIN,   bam_piz_special_BIN);
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
 // (included in the TOP2BAM container)
 // translator numbers must start from 1 - 0 is reserved for "none"
-TRANSLATOR (SAM, BAM,   1,  I8,       container_translate_I8)   // reconstruct binary little endian functions
-TRANSLATOR (SAM, BAM,   2,  U8,       container_translate_U8)   // 
-TRANSLATOR (SAM, BAM,   3,  LTEN_I16, container_translate_LTEN_I16) 
-TRANSLATOR (SAM, BAM,   4,  LTEN_U16, container_translate_LTEN_U16) 
-TRANSLATOR (SAM, BAM,   5,  LTEN_I32, container_translate_LTEN_I32) 
-TRANSLATOR (SAM, BAM,   6,  LTEN_U32, container_translate_LTEN_U32) 
-TRANSLATOR (SAM, BAM,   7,  RNAME,    sam_piz_sam2bam_RNAME)    // reconstructs the b250 index or -1 if "*"
-TRANSLATOR (SAM, BAM,   8,  POS,      sam_piz_sam2bam_POS)      // reconstructs Little Endian U32 0-based POS. 
-TRANSLATOR (SAM, BAM,   9,  SEQ,      sam_piz_sam2bam_SEQ)      // textual SEQ to BAM-format SEQ 
-TRANSLATOR (SAM, BAM,   10, QUAL,     sam_piz_sam2bam_QUAL)     // textual QUAL to BAM-format QUAL 
-TRANSLATOR (SAM, BAM,   11, OPTIONAL, sam_piz_sam2bam_OPTIONAL) // set block_size after Optional reconstruction
-TRANSLATOR (SAM, BAM,   12, OPTIONAL_SELF, sam_piz_sam2bam_OPTIONAL_SELF) // transform prefixes in Optional Container from SAM to BAM format 
-TRANSLATOR (SAM, FASTQ, 13, SEQ,      sam_piz_sam2fastq_SEQ)    // reverse-complement the sequence if needed, and drop if "*"
-TRANSLATOR (SAM, FASTQ, 14, QUAL,     sam_piz_sam2fastq_QUAL)   // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
-#define NUM_SAM_TRANS 15 // including "none"
+TRANSLATOR (SAM, BAM,   1,  I8,         container_translate_I8)   // reconstruct binary little endian functions
+TRANSLATOR (SAM, BAM,   2,  U8,         container_translate_U8)   // 
+TRANSLATOR (SAM, BAM,   3,  LTEN_I16,   container_translate_LTEN_I16) 
+TRANSLATOR (SAM, BAM,   4,  LTEN_U16,   container_translate_LTEN_U16) 
+TRANSLATOR (SAM, BAM,   5,  LTEN_I32,   container_translate_LTEN_I32) 
+TRANSLATOR (SAM, BAM,   6,  LTEN_U32,   container_translate_LTEN_U32) 
+TRANSLATOR (SAM, BAM,   7,  FLOAT,      sam_piz_sam2bam_FLOAT)      // reconstructs SAM-stored textual floating point as little endian 32bit float
+TRANSLATOR (SAM, BAM,   8,  ARRAY_SELF, sam_piz_sam2bam_ARRAY_SELF) // remove the comma from the prefix that contains the type, eg "i,"->"i"
+TRANSLATOR (SAM, BAM,   9,  RNAME,      sam_piz_sam2bam_RNAME)      // reconstructs the b250 index or -1 if "*"
+TRANSLATOR (SAM, BAM,   10, POS,        sam_piz_sam2bam_POS)        // reconstructs Little Endian U32 0-based POS. 
+TRANSLATOR (SAM, BAM,   11, SEQ,        sam_piz_sam2bam_SEQ)        // textual SEQ to BAM-format SEQ 
+TRANSLATOR (SAM, BAM,   12, QUAL,       sam_piz_sam2bam_QUAL)       // textual QUAL to BAM-format QUAL 
+TRANSLATOR (SAM, BAM,   13, TLEN,       sam_piz_sam2bam_TLEN)       // place TLEN last_value in BAM alignment 
+TRANSLATOR (SAM, BAM,   14, OPTIONAL,   sam_piz_sam2bam_OPTIONAL)   // set block_size after Optional reconstruction
+TRANSLATOR (SAM, BAM,   15, OPTIONAL_SELF, sam_piz_sam2bam_OPTIONAL_SELF) // transform prefixes in Optional Container from SAM to BAM format 
+TRANSLATOR (SAM, FASTQ, 16, SEQ,        sam_piz_sam2fastq_SEQ)      // reverse-complement the sequence if needed, and drop if "*"
+TRANSLATOR (SAM, FASTQ, 17, QUAL,       sam_piz_sam2fastq_QUAL)     // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
+#define NUM_SAM_TRANS   18 // including "none"
 #define SAM_TRANSLATORS { NULL /* none */, container_translate_I8, container_translate_U8, container_translate_LTEN_I16, \
                           container_translate_LTEN_U16, container_translate_LTEN_I32, container_translate_LTEN_U32, \
-                          sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, sam_piz_sam2bam_QUAL, sam_piz_sam2bam_OPTIONAL, \
-                          sam_piz_sam2bam_OPTIONAL_SELF, sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL }
+                          sam_piz_sam2bam_FLOAT, sam_piz_sam2bam_ARRAY_SELF, sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, \
+                          sam_piz_sam2bam_QUAL, sam_piz_sam2bam_TLEN, sam_piz_sam2bam_OPTIONAL, sam_piz_sam2bam_OPTIONAL_SELF, \
+                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL }
 
 TXTHEADER_TRANSLATOR (txtheader_bam2sam);
 TXTHEADER_TRANSLATOR (txtheader_sam2bam);

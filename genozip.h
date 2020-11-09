@@ -48,8 +48,8 @@ typedef struct Container *ContainerP;
 typedef const struct Container *ConstContainerP;
 typedef struct Context *ContextP;
 typedef const struct Context *ConstContextP;
-typedef struct MtfNode *MtfNodeP;
-typedef const struct MtfNode *ConstMtfNodeP;
+typedef struct CtxNode *MtfNodeP;
+typedef const struct CtxNode *ConstMtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
 typedef struct SectionListEntry *SectionListEntryP;
 typedef const struct SectionListEntry *ConstSectionListEntryP;
@@ -83,9 +83,10 @@ typedef union DictId {
 typedef uint8_t DidIType;   // index of a context in vb->contexts or z_file->contexts / a counter of contexts
 #define DID_I_NONE   255
 
-typedef uint64_t CharIndex; // index within dictionary
-typedef int32_t WordIndex;  // used for word and node indices
-typedef int64_t PosType;    // used for position coordinate within a genome
+typedef uint64_t CharIndex;   // index within dictionary
+typedef int32_t WordIndex;    // used for word and node indices
+typedef int64_t PosType;      // used for position coordinate within a genome
+typedef uint8_t SectionFlags; // used for section-type specific flags, transferred from zip to piz via SectionHeader.flags
 
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads, global_max_memory_per_vb;
@@ -103,7 +104,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_DOMQ    = 13, // compress SAM/FASTQ quality scores, if dominated by a single character
     CODEC_GTSHARK = 14, // compress VCF haplotype matrix with gtshark
     // external compressors (used by executing an external application)
-    CODEC_BGZ=20, CODEC_XZ=21, CODEC_BCF=22, CODEC_BAM=23, CODEC_CRAM=24, CODEC_ZIP=25,  
+    CODEC_BGZF=20, CODEC_XZ=21, CODEC_BCF=22, CODEC_BAM=23, CODEC_CRAM=24, CODEC_ZIP=25,  
 
     NUM_CODECS
 } Codec; 
@@ -147,7 +148,7 @@ typedef uint8_t TranslatorId;
 
 #define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item)
 
-#define TXTHEADER_TRANSLATOR(func) void func (BufferP txt)
+#define TXTHEADER_TRANSLATOR(func) void func (BufferP txtheader_buf)
 
 // IMPORTANT: This is part of the genozip file format. 
 typedef enum __attribute__ ((__packed__)) { // 1 byte

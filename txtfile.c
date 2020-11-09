@@ -77,7 +77,7 @@ uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
         }
 #endif
     }
-    else if (txt_file->codec == CODEC_GZ || txt_file->codec == CODEC_BGZ) {
+    else if (txt_file->codec == CODEC_GZ || txt_file->codec == CODEC_BGZF) {
         bytes_read = gzfread (data, 1, max_bytes, (gzFile)txt_file->file);
         
         if (bytes_read)
@@ -402,7 +402,7 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
     switch (txt_file->codec) {
         // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
         case CODEC_GZ:
-        case CODEC_BGZ:
+        case CODEC_BGZF:
         case CODEC_BZ2:  ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size; break;
 
         // for compressed files for which we don't have their size (eg streaming from an http server) - we use
@@ -504,7 +504,7 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
 
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
-    txt_file->codec                = header->compression_type;
+    txt_file->codec                = header->codec;
     
     if (is_first_txt || flag.unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);
@@ -540,11 +540,12 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
         if (flag.md5 && !md5_is_zero (header->md5_header)) {
             Md5Hash reconstructed_header_len = md5_do (header_buf.data, header_buf.len);
 
-            ASSERTW (md5_is_equal (reconstructed_header_len, header->md5_header), 
-                     "MD5 of reconstructed %s header (%s) differs from original file (%s)",
-                     dt_name (z_file->data_type), md5_display (reconstructed_header_len), md5_display (header->md5_header));
+            if (!md5_is_equal (reconstructed_header_len, header->md5_header)) {
+                WARN ("MD5 of reconstructed %s header (%s) differs from original file (%s)",
+                    dt_name (z_file->data_type), md5_display (reconstructed_header_len), md5_display (header->md5_header));
 
-            flag.md5 = false; // no point in continuing to check - all vblocks will fail as MD5 is cumulative
+                flag.md5 = false; // no point in continuing to check - all vblocks will fail as MD5 is cumulative
+            }
         }
     }
     

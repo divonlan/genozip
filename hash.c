@@ -15,7 +15,7 @@
 
 #define NO_NEXT 0xffffffff
 typedef struct {        
-    WordIndex node_index;     // index into Context.ol_mtf (if < ol_mtf.len) or Context.nodes or NODE_INDEX_NONE
+    WordIndex node_index;     // index into Context.ol_nodes (if < ol_nodes.len) or Context.nodes or NODE_INDEX_NONE
     uint32_t next;            // linked list - index into Context.global/local_hash or NO_NEXT
                               //               local_hash indices started at LOCAL_HASH_OFFSET
 } LocalHashEnt;
@@ -54,7 +54,7 @@ static void hash_populate_from_mtf (Context *zf_ctx)
     zf_ctx->nodes.len = 0; // hash_global_get_entry will increment it back to its original value
 
     for (uint64_t i=0; i < len; i++) {
-        MtfNode *node = ENT (MtfNode, zf_ctx->nodes, i);
+        CtxNode *node = ENT (CtxNode, zf_ctx->nodes, i);
         const char *snip = ENT (const char, zf_ctx->dict, node->char_index);
         hash_global_get_entry (zf_ctx, snip, node->snip_len, HASH_NEW_OK_NOT_SINGLETON, NULL /* the snip is not in the hash for sure */); 
     }
@@ -375,9 +375,9 @@ static inline uint32_t hash_do (uint32_t hash_len, const char *snip, unsigned sn
 
 // creates a node in the hash table, unless the snip is already there. 
 // the old node is in node, and NULL if its a new node.
-// returns the node_index (positive if in nodes and negative-2 if in ol_mtf - the singleton buffer)
+// returns the node_index (positive if in nodes and negative-2 if in ol_nodes - the singleton buffer)
 WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
-                                 MtfNode **old_node)        // out - node if node is found, NULL if not
+                                 CtxNode **old_node)        // out - node if node is found, NULL if not
 {
     GlobalHashEnt g_head, *g_hashent = &g_head;
     g_hashent->next = hash_do (zf_ctx->global_hash_prime, snip, snip_len); // entry in hash table determined by hash function on snip
@@ -401,7 +401,7 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
 
             if (mode != HASH_READ_ONLY) {
                 g_hashent->next = NO_NEXT;
-                g_hashent->node_index = (mode == HASH_NEW_OK_SINGLETON_IN_VB) ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+                g_hashent->node_index = (mode == HASH_NEW_OK_SINGLETON_IN_VB) ? (-zf_ctx->ol_nodes.len++ - 2) : zf_ctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
                 __atomic_store_n (&g_hashent->merge_num, zf_ctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_index
             }
 
@@ -451,10 +451,10 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
     GlobalHashEnt *new_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, next);
     new_hashent->merge_num     = zf_ctx->merge_num; // stamp our merge_num as the ones that set the node_index
     
-    // we enter the node as a singleton (=in ol_mtf) if this was a singleton in this VB but not in any previous VB 
+    // we enter the node as a singleton (=in ol_nodes) if this was a singleton in this VB but not in any previous VB 
     // (the second occurange in the file isn't a singleton anymore)
     bool is_singleton_global   = ((mode == HASH_NEW_OK_SINGLETON_IN_VB) && !singleton_encountered);
-    new_hashent->node_index    = is_singleton_global ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+    new_hashent->node_index    = is_singleton_global ? (-zf_ctx->ol_nodes.len++ - 2) : zf_ctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
     new_hashent->next          = NO_NEXT;
 
     ASSERT (zf_ctx->nodes.len <= MAX_NODE_INDEX, "Error in hash_global_get_entry: number of nodes in context %s exceeded the maximum of %u", 
@@ -480,7 +480,7 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
 WordIndex hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
                                   const char *snip, unsigned snip_len, 
                                   WordIndex node_index_if_new,
-                                  MtfNode **node)        // out - node if node is found, NULL if not
+                                  CtxNode **node)        // out - node if node is found, NULL if not
 {
     // first, search for the snip in the global table
     GlobalHashEnt g_head, *g_hashent = &g_head;

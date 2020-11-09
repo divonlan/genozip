@@ -40,17 +40,17 @@
 
 #define DECLARE_SNIP const char *snip=NULL; uint32_t snip_len=0
 
-typedef struct MtfNode {
+typedef struct CtxNode {
     CharIndex char_index; // character index into dictionary array
     uint32_t snip_len;    // not including SNIP_SEP terminator present in dictionary array
     int32_t  count;       // number of times this snip has been evaluated in this VB
     Base250  word_index;  // word index into dictionary 
-} MtfNode;
+} CtxNode;
 
 typedef struct {
     CharIndex char_index;
     uint32_t snip_len;
-} MtfWord;
+} CtxWord;
 
 typedef struct { // initialize with ctx_init_iterator()
     const uint8_t *next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
@@ -87,12 +87,12 @@ typedef struct Context {
     // ----------------------------
     // common fields for ZIP & PIZ
     // ----------------------------
-    const char name[DICT_ID_LEN+1]; // null-terminated printable dict_id
+    const char name[DICT_ID_LEN+1]; // nul-terminated printable dict_id
     DidIType did_i;            // the index of this ctx within the array vb->contexts
     DidIType st_did_i;         // in --stats, consolidate this context into st_did_i
     LocalType ltype;           // LT_* - type of local data - included in the section header
-    uint8_t flags;             // CTX_FL_* - flags to be included in section header (8 bits)
-    uint8_t pair_flags;        // Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
+    SectionFlags flags;        // CTX_FL_* - flags to be included in section header (8 bits)
+    SectionFlags pair_flags;   // Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // The buffer of b250 data containing indices (in b250) to word_list. 
@@ -105,9 +105,9 @@ typedef struct Context {
     // ----------------------------
     Buffer ol_dict;            // VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
                                // zfile: singletons are stored here
-    Buffer ol_mtf;             // MTF nodes - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
+    Buffer ol_nodes;             // MTF nodes - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
                                // zfile: nodes of singletons
-    Buffer nodes;                // array of MtfNode - in this VB that don't exist in ol_mtf. char/word indices are into dict.
+    Buffer nodes;                // array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
     Buffer node_i;              // contains 32bit indices into the ctx->nodes - this is an intermediate step before generating b250 or genotype_data 
     
     // settings
@@ -145,7 +145,7 @@ typedef struct Context {
     // ----------------------------
     // PIZ only fields
     // ----------------------------
-    Buffer word_list;          // PIZ only. word list. an array of MtfWord - listing the snips in dictionary
+    Buffer word_list;          // PIZ only. word list. an array of CtxWord - listing the snips in dictionary
     SnipIterator iterator;     // PIZ only: used to iterate on the context, reading one b250 word_index at a time
     uint32_t next_local;       // PIZ only: iterator on Context.local
 
@@ -174,9 +174,9 @@ extern WordIndex ctx_get_next_snip (VBlockP vb, Context *ctx, uint8_t ctx_flags,
 extern const char *ctx_peek_next_snip (VBlockP vb, Context *ctx);
 extern WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
 extern void ctx_clone_ctx (VBlockP vb);
-extern MtfNode *ctx_node_vb_do (const Context *ctx, WordIndex node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
+extern CtxNode *ctx_node_vb_do (const Context *ctx, WordIndex node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
-extern MtfNode *ctx_node_zf_do (const Context *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
+extern CtxNode *ctx_node_zf_do (const Context *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vb_ctx, bool is_lcodec);
@@ -219,8 +219,10 @@ extern void ctx_map_aliases (VBlockP vb);
 
 extern void ctx_vb_1_lock (VBlockP vb);
 extern void ctx_vb_1_unlock (VBlockP vb);
-extern MtfNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index);
+extern CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index);
 extern const char *ctx_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, WordIndex word_index, 
+                                               const char **snip, uint32_t *snip_len);
+extern const char *ctx_get_snip_by_node_index (const Buffer *nodes, const Buffer *dict, WordIndex node_index, 
                                                const char **snip, uint32_t *snip_len);
 
 extern void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);

@@ -178,21 +178,6 @@ const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
     return sl;
 }
 
-static inline bool sections_has_global_area_section (SectionType st)
-{
-    for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the reference sections are near the end
-        SectionType this_st = ENT (SectionListEntry, z_file->section_list_buf, i)->section_type;
-        if (st == this_st)
-            return true; // found
-        else if (this_st == SEC_DICT)
-            return false; // we arrived at a SEC_DICT without seeing it, so there isn't any
-    }
-    
-    return false;
-}
-bool sections_has_reference(void)     { return sections_has_global_area_section (SEC_REFERENCE); }
-bool sections_has_random_access(void) { return sections_has_global_area_section (SEC_RANDOM_ACCESS); }
-
 // I/O thread: called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
 void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits) // optional outs
 {

@@ -16,6 +16,7 @@
 #include "aligner.h"
 #include "file.h"
 #include "container.h"
+#include "version.h"
 
 // returns true if section is to be skipped reading / uncompressing
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
@@ -242,8 +243,11 @@ done:
     return false; // no new value
 }
 
-// if this file is a compression of a BAM file, we store floats in binary form to avoid losing precision
-// see bam_rewrite_one_optional_number()
+// note of float reconstruction:
+// When compressing SAM, floats are stored as a textual string, reconstruced natively for SAM and via sam_piz_sam2bam_FLOAT for BAM.
+//    Done this way so when reconstructing SAM, the correct number of textual digits is reconstructed.
+// When compressing BAM, floats are stored as 32-bit binaries, encoded as uint32, and stringified to a snip. They are reconstructed,
+//    either as textual for SAM or binary for BAM via bam_piz_special_FLOAT. Done this way so BAM binary float is reconstructd precisely.
 SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 {
     // get Little Endian n
@@ -302,14 +306,89 @@ finish:
 // PIZ I/O thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
 TXTHEADER_TRANSLATOR (txtheader_bam2sam)
 {
-    uint32_t l_text = GET_UINT32 (ENT (char, *txt, 4));
-    memcpy (txt->data, ENT (char, *txt, 8), l_text);
-    txt->len = l_text;
+    uint32_t l_text = GET_UINT32 (ENT (char, *txtheader_buf, 4));
+    memcpy (txtheader_buf->data, ENT (char, *txtheader_buf, 8), l_text);
+    txtheader_buf->len = l_text;
 }
 
+static void txtheader_sam2bam_count_sq (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
+{
+    (*(uint32_t *)callback_param)++;
+}
+
+static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
+{
+    Buffer *txtheader_buf = (Buffer *)callback_param;
+
+    buf_alloc_more (evb, txtheader_buf, chrom_name_len+9, 0, char, 1);
+
+    // l_name
+    chrom_name_len++; // inc. nul terminator
+    *(uint32_t *)AFTERENT (char, *txtheader_buf) = LTEN32 (chrom_name_len); 
+    txtheader_buf->len += sizeof (uint32_t);
+
+    ASSERT (chrom_name_len <= INT32_MAX, "Error: cannot convert to BAM because l_name=%u exceeds BAM format maximum of %u", chrom_name_len, INT32_MAX);
+
+    // name
+    buf_add (txtheader_buf, chrom_name, chrom_name_len-1);                  
+    NEXTENT (char, *txtheader_buf) = 0;
+
+    // l_ref
+    uint32_t last_pos32 = (uint32_t)last_pos;
+    *(uint32_t *)AFTERENT (char, *txtheader_buf) = LTEN32 (last_pos32); 
+    txtheader_buf->len += sizeof (uint32_t);
+
+    ASSERT (last_pos <= INT32_MAX, "Error: cannot convert to BAM because contig %.*s has length=%"PRId64" that exceeds BAM format maximum of %u", 
+            chrom_name_len-1, chrom_name, last_pos, INT32_MAX);
+}
+
+// prepare BAM header from SAM header, according to https://samtools.github.io/hts-specs/SAMv1.pdf section 4.2
 TXTHEADER_TRANSLATOR (txtheader_sam2bam)
 {
-    // to do
+    // grow buffer to accommodate the BAM header fixed size and text (inc. nul terminator)
+    buf_alloc (evb, txtheader_buf, 12 + txtheader_buf->len + 1, 1, "txt_data", 0);
+
+    // nul-terminate text - required by sam_iterate_SQ_lines - but without enlengthening buffer
+    *AFTERENT (char, *txtheader_buf) = 0;
+
+    // n_ref = count SQ lines in text
+    uint32_t n_ref=0;
+    sam_iterate_SQ_lines (txtheader_buf->data, txtheader_sam2bam_count_sq, &n_ref);
+
+    // we can't convert to BAM if its a SAM file without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
+    // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
+    // analysis. Better give an error here than create confusion downstream.
+    ASSERT (n_ref || !(z_file->flags & GENOZIP_FL_REF_INTERNAL), 
+            "Error: Failed to convert %s from SAM to BAM: genounzip requires that either the SAM header has SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or the file was genozipped with --reference or --REFERENCE", z_name);
+
+    // if no SQ lines - get lines from loaded contig (will be available only if file was compressed with --reference or --REFERENCE)
+    bool from_SQ = !!n_ref;
+    if (!from_SQ) n_ref = ref_num_loaded_contigs();
+
+    // grow buffer to accommodate estimated reference size (we will more in txtheader_sam2bam_ref_info if not enough)
+    buf_alloc_more (evb, txtheader_buf, n_ref * 100 + (50 + strlen (command_line)) , 0, char, 1);
+
+    // add PG
+    bufprintf (evb, txtheader_buf, "@PG\tID:genozip\tPN:genozip\tVN:%s\tCL:%s\n", GENOZIP_CODE_VERSION, command_line);
+
+    // construct magic, l_text, text and n_ref fields of BAM header
+    char *text = txtheader_buf->data + 8;
+    uint32_t l_text  = txtheader_buf->len;
+    ASSERT (txtheader_buf->len <= INT32_MAX, "Error: cannot convert to BAM because SAM header length (%"PRIu64" bytes) exceeds BAM format maximum of %u", txtheader_buf->len, INT32_MAX);
+
+    memmove (text, txtheader_buf->data, l_text);                          // text
+    memcpy (FIRSTENT (char, *txtheader_buf), BAM_MAGIC, 4);               // magic
+    *ENT (uint32_t, *txtheader_buf, 1) = LTEN32 (l_text);                 // l_text
+    *(uint32_t *)ENT (char, *txtheader_buf, l_text + 8) = LTEN32 (n_ref); // n_ref
+    txtheader_buf->len += 12; // BAM header length so far, before adding reference information
+
+    // option 1: copy reference information from SAM SQ lines, if available
+    if (from_SQ) 
+        sam_iterate_SQ_lines (text, txtheader_sam2bam_ref_info, txtheader_buf);
+
+    // option 2: copy reference information from ref_contigs if available - i.e. if pizzed with external or stored reference
+    else if (ref_num_loaded_contigs()) 
+        ref_contigs_iterate (txtheader_sam2bam_ref_info, txtheader_buf);
 }
 
 // translate SAM ASCII sequence characters to BAM's 4-bit characters:
@@ -372,7 +451,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     }
     
     else // we have QUAL - update Phred values
-        for (uint8_t i=0; i < reconstructed_len; i++)
+        for (uint32_t i=0; i < reconstructed_len; i++)
             reconstructed[i] -= 33; 
 
     return 0;
@@ -407,6 +486,14 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_POS)
     return 0;
 }
 
+// place value in correct location in alignment
+TRANSLATOR_FUNC (sam_piz_sam2bam_TLEN)
+{
+    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
+    alignment->tlen = LTEN32 (ctx->last_value.i);
+    return 0;
+}
+
 // translate OPTIONAL SAM->BAM - called as translator-only item on within the Optional reconstruction
 // fix prefix eg MX:i: -> MXs
 TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
@@ -415,7 +502,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
 
     if (reconstructed_len == -1) return 0; // no Optional data in this alignment
 
-    char *prefixes_before = &reconstructed[sizeof_container (*con)] + 2; // skip the empty prefixes of container wide, and item[0]
+    char *prefixes_before = &reconstructed[sizeof_container (*con)] + 2; // +2 to skip the empty prefixes of container wide, and item[0]
     char *prefixes_after = prefixes_before;
 
     for (unsigned i=1; i < con->num_items; i++, prefixes_before+=6, prefixes_after+=4) {
@@ -449,7 +536,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL)
 
 TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 {
-    txt->len = 0; // fastq has no header
+    txtheader_buf->len = 0; // fastq has no header
 }
 
 // filtering during reconstruction: called by container_reconstruct_do for each sam alignment (repeat)
@@ -516,4 +603,37 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
     }
 
     return 0;
+}
+
+// note of float reconstruction:
+// When compressing SAM, floats are stored as a textual string, reconstruced natively for SAM and via sam_piz_sam2bam_FLOAT for BAM.
+//    Done this way so when reconstructing SAM, the correct number of textual digits is reconstructed.
+// When compressing BAM, floats are stored as 32-bit binaries, encoded as uint32, and stringified to a snip. They are reconstructed,
+//    either as textual for SAM or binary for BAM via bam_piz_special_FLOAT. Done this way so BAM binary float is reconstructd precisely.
+TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
+{
+    union {
+        float f; // 32 bit float
+        uint32_t i;
+    } value;
+    
+    ASSERT0 (sizeof (value)==4, "Error in sam_piz_sam2fastq_FLOAT: expecting value to be 32 bits"); // should never happen
+
+    value.f = (float)ctx->last_value.d;
+    RECONSTRUCT_BIN32 (value.i);
+
+    return 0;
+}
+
+// remove the comma from the prefix that contains the type, eg "i,"->"i"
+TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
+{
+    Container *con = (Container *)reconstructed;
+    char *prefixes = &reconstructed[sizeof_container (*con)];
+
+    // remove the ',' from the prefix, and terminate with CON_PREFIX_SEP_SHOW_REPEATS - this will cause
+    // the number of repeats (in LTEN32) to be outputed after the prefix
+    prefixes[1] = CON_PREFIX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PREFIX_SEP_SHOW_REPEATS }
+    
+    return -1; // change in prefixes length
 }

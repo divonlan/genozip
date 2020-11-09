@@ -423,6 +423,8 @@ static void main_genozip (const char *txt_filename,
                           bool is_first_file, bool is_last_file,
                           char *exec_name)
 {
+    SAVE_FLAGS;
+
     license_get(); // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
 
     ASSINP (!z_filename || !url_is_url (z_filename), 
@@ -437,7 +439,7 @@ static void main_genozip (const char *txt_filename,
         // skip this file if its size is 0
         RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
 
-        if (!txt_file->file) return; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
+        if (!txt_file->file) goto done; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
     }
     else {  // stdin
         if (!txt_file) // possibly already open from main_load_reference
@@ -510,6 +512,9 @@ static void main_genozip (const char *txt_filename,
 
     // test the compression, if the user requested --test
     if (flag.test && (!flag.bind || is_last_file)) main_test_after_genozip (exec_name, z_filename, is_last_file);
+
+done:
+    RESTORE_FLAGS;
 }
 
 static void main_list_dir(const char *dirname)

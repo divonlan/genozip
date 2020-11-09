@@ -889,7 +889,7 @@ char* bit_array_to_str_rev(const BitArray* bitarr, char* str)
 
 
 // Get a string representations for a given region, using given on/off characters.
-// Note: does not null-terminate
+// Note: does not nul-terminate
 void bit_array_to_substr(const BitArray* bitarr,
                          bit_index_t start, bit_index_t length,
                          char* str, char on, char off,

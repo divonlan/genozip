@@ -62,9 +62,10 @@ typedef struct {
     // internal flags set by the system, not the command line
     int out_dt,            // PIZ: output txt datatype
         bind,              // ZIP: user used --output to bind 2+ files
+        ref_use_aligner,   // ZIP: compression requires using the aligner
+        const_chroms,      // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
         reading_reference, // system is currently reading a reference file
         do_translate,      // PIZ: decompression requires translation to another data type
-        ref_use_aligner,   // ZIP: compression requires using the aligner
         genocat_info_only, // User requested to genocat with only metadata to be shown, not file contents
         multiple_files;    // Command line includes multiple files
     uint64_t stdin_size;

@@ -93,7 +93,7 @@ void ref_contigs_compress (void)
             if (ranges.param == RT_DENOVO)
                 r->gpos = range_i ? ROUNDUP64 ((r-1)->gpos + (r-1)->last_pos - (r-1)->first_pos + 1) : 0;
 
-            MtfNode *chrom_node = ENT (MtfNode, z_file->contexts[CHROM].nodes, r->chrom);
+            CtxNode *chrom_node = ENT (CtxNode, z_file->contexts[CHROM].nodes, r->chrom);
 
             NEXTENT (RefContig, created_contigs) = (RefContig){
                 .gpos        = r->gpos - delta, 
@@ -156,8 +156,8 @@ static int ref_contigs_sort_chroms_alphabetically (const void *a, const void *b)
     uint32_t index_a = *(uint32_t *)a;
     uint32_t index_b = *(uint32_t *)b;
 
-    MtfWord *word_a = ENT (MtfWord, ctx->word_list, index_a);
-    MtfWord *word_b = ENT (MtfWord, ctx->word_list, index_b);
+    CtxWord *word_a = ENT (CtxWord, ctx->word_list, index_a);
+    CtxWord *word_b = ENT (CtxWord, ctx->word_list, index_b);
     
     return strcmp (ENT (char, ctx->dict, word_a->char_index),
                    ENT (char, ctx->dict, word_b->char_index));
@@ -179,7 +179,9 @@ void ref_contigs_sort_chroms (void)
 // read and uncompress a contigs section (when pizzing the reference file or pizzing a data file with a stored reference)
 void ref_contigs_load_contigs (void)
 {
-    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, false);
+    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, true);
+    if (!sl) return; // section doesn't exist
+
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_REF_CONTIGS, sl);
 
     if (flag.show_headers && exe_type == EXE_GENOCAT) goto done;
@@ -191,7 +193,7 @@ void ref_contigs_load_contigs (void)
 
     ASSERT0 (z_file->contexts[CHROM].dict.len, "Error in ref_contigs_load_contigs: CHROM dictionary is empty");
 
-    buf_copy (evb, &loaded_contig_dict, &z_file->contexts[CHROM].dict, 1, 0, 0, "contig_dict", 0);
+    buf_copy (evb, &loaded_contig_dict, &z_file->contexts[CHROM].dict, 1, 0, 0, "loaded_contig_dict", 0);
 
     ref_contigs_create_sorted_index();
 
@@ -235,7 +237,7 @@ static WordIndex ref_contigs_get_word_index_do (const char *chrom_name, unsigned
     }
     else {
         word_index = *ENT (WordIndex, z_file->chroms_sorted_index, mid_sorted_index);
-        MtfWord *mid_word = ENT (MtfWord, z_file->contexts[CHROM].word_list, word_index);
+        CtxWord *mid_word = ENT (CtxWord, z_file->contexts[CHROM].word_list, word_index);
         snip = ENT (const char, z_file->contexts[CHROM].dict, mid_word->char_index);
         snip_len = mid_word->snip_len;
     }
@@ -377,6 +379,17 @@ const RefContig *ref_contigs_get_contig (WordIndex chrom_index, bool soft_fail)
     ASSERT (rc || soft_fail, "Error in ref_contigs_get_contig: cannot find contig for chrom_index=%d", chrom_index);
 
     return rc;
+}
+
+// call a callback for each accessed contig. Note: callback function is the same as sam_iterate_SQ_lines
+void ref_contigs_iterate (RefContigsIteratorCallback callback, void *callback_param)
+{
+    ARRAY (RefContig, rc, loaded_contigs);
+
+    for (uint64_t i=0; i < loaded_contigs.len; i++) {
+        const char *ref_chrom_name = ENT (const char, loaded_contig_dict, rc[i].char_index); 
+        callback (ref_chrom_name, strlen (ref_chrom_name), rc[i].max_pos, callback_param);
+    }
 }
 
 PosType ref_contigs_get_genome_size (void)

@@ -82,6 +82,9 @@ extern WordIndex ref_contigs_verify_identical_chrom (const char *chrom_name, uns
 extern void ref_contigs_sort_chroms (void);
 extern void ref_contigs_load_contigs (void);
 
+typedef void (*RefContigsIteratorCallback)(const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param);
+extern void ref_contigs_iterate (RefContigsIteratorCallback callback, void *callback_param);
+
 // alt chroms stuff
 extern void ref_alt_chroms_load (void);
 extern void ref_alt_chroms_compress (void);

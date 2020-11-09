@@ -141,7 +141,7 @@ void random_access_merge_in_vb (VBlock *vb)
         dst_ra->max_pos  = src_ra[i].max_pos;
 
         if (src_ra[i].chrom_index != WORD_INDEX_NONE) {
-            MtfNode *chrom_node = ctx_node_vb (chrom_ctx, (WordIndex)src_ra[i].chrom_index, NULL, NULL);
+            CtxNode *chrom_node = ctx_node_vb (chrom_ctx, (WordIndex)src_ra[i].chrom_index, NULL, NULL);
             dst_ra->chrom_index = chrom_node->word_index.n; // note: in the VB we store the node index, while in zfile we store tha word index
         }
         else 
@@ -325,7 +325,7 @@ void random_access_get_first_chrom_of_vb (VBlockP vb, PosType *first_pos, PosTyp
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb->vblock_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
     ASSERT (ra, "Error in random_access_get_first_chrom_of_vb: vb_i=%u not found in random access index", vb->vblock_i);
 
-    MtfWord *chrom_word  = ENT (MtfWord, ctx->word_list, ra->chrom_index);            
+    CtxWord *chrom_word  = ENT (CtxWord, ctx->word_list, ra->chrom_index);            
     vb->chrom_name       = ENT (const char, ctx->dict, chrom_word->char_index);
     vb->chrom_name_len   = chrom_word->snip_len;
     vb->chrom_node_index = ra->chrom_index;
@@ -368,7 +368,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
         const char *chrom_snip; unsigned chrom_snip_len;
         if (from_zip) {
             if (ra[i].chrom_index != WORD_INDEX_NONE) {
-                MtfNode *chrom_node = ctx_get_node_by_word_index (ctx, ra[i].chrom_index);
+                CtxNode *chrom_node = ctx_get_node_by_word_index (ctx, ra[i].chrom_index);
                 chrom_snip     = ENT (char, ctx->dict, chrom_node->char_index);
                 chrom_snip_len = chrom_node->snip_len;
             }
@@ -378,7 +378,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
             }
         }
         else {
-            MtfWord *chrom_word = ENT (MtfWord, ctx->word_list, ra[i].chrom_index);
+            CtxWord *chrom_word = ENT (CtxWord, ctx->word_list, ra[i].chrom_index);
             chrom_snip = ENT (char, ctx->dict, chrom_word->char_index);
             chrom_snip_len = chrom_word->snip_len;
         }
@@ -398,7 +398,9 @@ void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosTy
 
 void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const char *buf_name, const char *show_index_msg)
 {
-    const SectionListEntry *ra_sl = sections_get_first_section_of_type (sec_type, false);
+    const SectionListEntry *ra_sl = sections_get_first_section_of_type (sec_type, true);
+    if (!ra_sl) return; // section doesn't exist
+
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sec_type, ra_sl);
 
     zfile_uncompress_section (evb, evb->z_data.data, ra_buf, buf_name, 0, sec_type);

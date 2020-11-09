@@ -8,17 +8,13 @@
 
 #include "genozip.h"
 
-// container snip: it starts with SNIP_CONTAINER, following by a base64 of a big endian Container
 #pragma pack(1)
-
-#define CONTAINER_DROP_FINAL_ITEM_SEP   0x01
-#define CONTAINER_DROP_FINAL_REPEAT_SEP 0x02
-#define CONTAINER_FILTER_REPEATS        0x04
-#define CONTAINER_FILTER_ITEMS          0x08
-#define CONTAINER_TOPLEVEL              0x10
-
-#define CONTAINER_MAX_REPEATS 4294967294UL // one less than maxuint32 to make it easier to loop with con.repeats without overflow 
 #define CONTAINER_MAX_PREFIXES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
+#define CON_PREFIX_SEP              '\x4'   // starts the prefix string and terminates every prefix within it
+#define CON_PREFIX_SEP_SHOW_REPEATS '\x5'   // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
+
+#define CONTAINER_MAX_REPEATS (UINT32_MAX-1) // one less than maxuint32 to make it easier to loop with con.repeats without overflow 
+#define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
 typedef struct ContainerItem {
     DictId dict_id;  
@@ -26,19 +22,34 @@ typedef struct ContainerItem {
 
     // seperator[0] values with bit 7 set (0x80) are interpreted as flags rather than a seperator, in 
     // which case seperator[1] is a parameter of the flags
+    #define CI_ITEM_HAS_FLAG(item) ((uint8_t)(item)->seperator[0] & 0x80)
     #define CI_TRANS_NUL   ((uint8_t)0x81) // In translated mode: '\0' seperator 
     #define CI_TRANS_NOR   ((uint8_t)0x82) // In translated mode: NO RECONSTRUCT: don't reconstruct number, just store it in last_value (not implemented for LT_SEQUENCE, LT_BITMAP, Containers, Sequences)
     #define CI_TRANS_MOVE  ((uint8_t)0x84) // (ORed) in addition: in translated: txt_data.len is moved seperator[1] bytes (0-255), after all recontruction and/or translation
     #define CI_NATIVE_NEXT ((uint8_t)0x88) // in non-translated mode: seperator is in seperator[1]
-
     uint8_t seperator[2];                 // 2 byte seperator reconstructed after the item (or flags)
+    
     TranslatorId translator;              // instructions how to translate this item, if this Container is reconstructed translating from one data type to another
 } ContainerItem;
+
+// container snip: it starts with SNIP_CONTAINER, following by a base64 of a big endian Container, with the number of
+// items actually used and optoinally followed by a prefix array.
+// The prefix array, if it exists, starts with CON_PREFIX_SEP followed by the container-wide prefix, followed
+// by a prefix for each item. Every prefix, if provided, is terminated by CON_PREFIX_SEP.
+// Only the container-wide prefix may alternatively be terminated by CON_PREFIX_SEP_SHOW_REPEATS.
 
 typedef struct Container {
     uint32_t repeats;     // number of "repeats" (array elements)
     uint8_t num_items;    // 1 to MAX_CONTAINER_ITEMS
+
+    // container flags
+    #define CON_FL_DROP_FINAL_ITEM_SEP   0x01
+    #define CON_FL_DROP_FINAL_REPEAT_SEP 0x02
+    #define CON_FL_FILTER_REPEATS        0x04
+    #define CON_FL_FILTER_ITEMS          0x08
+    #define CON_FL_TOPLEVEL              0x10
     uint8_t flags;
+    
     char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
     ContainerItem items[MAX_SUBFIELDS];
 } Container;
@@ -47,7 +58,7 @@ typedef struct Container {
 typedef struct MiniContainer {
     uint32_t repeats;     // number of "repeats" (array elements)
     uint8_t num_items;    // must be 1
-    uint8_t flags;
+    SectionFlags flags;
     char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
     ContainerItem items[1];
 } MiniContainer;

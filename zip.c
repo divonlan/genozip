@@ -109,7 +109,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
 
         if (node_index >= 0) { // normal index
 
-            MtfNode *node = ctx_node_vb (ctx, node_index, NULL, NULL);
+            CtxNode *node = ctx_node_vb (ctx, node_index, NULL, NULL);
 
             WordIndex n           = node->word_index.n;
             unsigned num_numerals = base250_len (node->word_index.encoded.numerals);

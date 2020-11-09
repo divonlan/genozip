@@ -531,7 +531,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     }
 
     // check if the genozip file includes a reference
-    bool has_ref_sections = sections_has_reference();
+    bool has_ref_sections = !!sections_get_first_section_of_type (SEC_REFERENCE, true);
 
     ASSERT (!has_ref_sections || flag.reference != REF_EXTERNAL || flag.reading_reference, 
             "Error: cannot use --reference with %s because it was not compressed with --reference", z_name);
@@ -555,19 +555,16 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
         // note: in case of a data file with stored reference - SEC_REF_RAND_ACC will contain the random access of the reference
         // and SEC_RANDOM_ACCESS will contain the random access of the data. In case of a .ref.genozip file, both sections exist 
         // and are identical. It made the coding easier and their size is negligible.
-        if (sections_has_random_access())
-            random_access_load_ra_section (SEC_RANDOM_ACCESS, &z_file->ra_buf, "z_file->ra_buf", 
-                                            flag.show_index ? "Random-access index contents (result of --show-index)" : NULL);
+        random_access_load_ra_section (SEC_RANDOM_ACCESS, &z_file->ra_buf, "z_file->ra_buf", 
+                                        flag.show_index ? "Random-access index contents (result of --show-index)" : NULL);
 
-        if (has_ref_sections) 
-            random_access_load_ra_section (SEC_REF_RAND_ACC, &ref_stored_ra, "ref_stored_ra", 
-                                            flag.show_ref_index && !flag.reading_reference ? "Reference random-access index contents (result of --show-index)" : NULL);
+        random_access_load_ra_section (SEC_REF_RAND_ACC, &ref_stored_ra, "ref_stored_ra", 
+                                        flag.show_ref_index && !flag.reading_reference ? "Reference random-access index contents (result of --show-index)" : NULL);
 
         if ((flag.reference == REF_STORED || flag.reference == REF_EXTERNAL) && !flag.reading_reference)
             ref_contigs_sort_chroms(); // create alphabetically sorted index for user file chrom word list
 
-        if (has_ref_sections) // note: in case of REF_EXTERNAL, reference is already pre-loaded
-            ref_contigs_load_contigs();
+        ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
 
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
         ref_alt_chroms_load();

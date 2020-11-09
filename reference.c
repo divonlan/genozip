@@ -532,8 +532,6 @@ void ref_load_stored_reference (void)
     if (flag.show_ref_seq) 
         ref_show_sequence();
 
-//bit_array_print_substr (NULL, &genome.ref, (2581367290+134)*2, 16);
-
     // now we can safely set the is_set regions originating from non-compacted ranges. we couldn't do it before, because
     // copied-from-FASTA ranges appear first in the genozip file, and after them could be compacted ranges that originate
     // from a full-contig range in EXT_STORE, whose regions copied-from-FASTA are 0s.
@@ -768,7 +766,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 
     if (flag.show_reference) {
         Context *ctx = &z_file->contexts[CHROM];
-        MtfNode *node = ENT (MtfNode, ctx->nodes, BGEN32 (header->chrom_word_index));
+        CtxNode *node = ENT (CtxNode, ctx->nodes, BGEN32 (header->chrom_word_index));
         fprintf (stderr, "Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
                  ref_filename, BGEN32 (header->chrom_word_index), 
                  ENT (char, ctx->dict, node->char_index), 

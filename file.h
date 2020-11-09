@@ -23,7 +23,7 @@
 // VCF file variations
 #define VCF_           ".vcf"
 #define VCF_GZ_        ".vcf.gz"
-#define VCF_BGZ_       ".vcf.bgz"
+#define VCF_BGZF_      ".vcf.bgz"
 #define VCF_BZ2_       ".vcf.bz2"
 #define VCF_XZ_        ".vcf.xz"
 #define VCF_GENOZIP_   ".vcf" GENOZIP_EXT
@@ -31,7 +31,7 @@
 // SAM file variations
 #define SAM_           ".sam"
 #define SAM_GZ_        ".sam.gz"
-#define SAM_BGZ_       ".sam.bgz"
+#define SAM_BGZF_      ".sam.bgz"
 #define SAM_BZ2_       ".sam.bz2"
 #define SAM_XZ_        ".sam.xz"
 #define CRAM_          ".cram"
@@ -44,7 +44,7 @@
 // BCF
 #define BCF_           ".bcf"
 #define BCF_GZ_        ".bcf.gz"
-#define BCF_BGZ_       ".bcf.bgz"
+#define BCF_BGZF_      ".bcf.bgz"
 #define BCF_GENOZIP_   ".bcf.genozip" 
 
 // FASTQ file variations
@@ -70,26 +70,26 @@
 #define FA_BZ2_        ".fa.bz2"
 #define FA_XZ_         ".fa.xz"
 #define FA_GENOZIP_    ".fa" GENOZIP_EXT
-#define FAA_            ".faa"
-#define FAA_GZ_         ".faa.gz"
-#define FAA_BZ2_        ".faa.bz2"
-#define FAA_XZ_         ".faa.xz"
-#define FAA_GENOZIP_    ".faa" GENOZIP_EXT
-#define FFN_            ".ffn"
-#define FFN_GZ_         ".ffn.gz"
-#define FFN_BZ2_        ".ffn.bz2"
-#define FFN_XZ_         ".ffn.xz"
-#define FFN_GENOZIP_    ".ffn" GENOZIP_EXT
-#define FNN_            ".fnn"
-#define FNN_GZ_         ".fnn.gz"
-#define FNN_BZ2_        ".fnn.bz2"
-#define FNN_XZ_         ".fnn.xz"
-#define FNN_GENOZIP_    ".fnn" GENOZIP_EXT
-#define FNA_            ".fna"
-#define FNA_GZ_         ".fna.gz"
-#define FNA_BZ2_        ".fna.bz2"
-#define FNA_XZ_         ".fna.xz"
-#define FNA_GENOZIP_    ".fna" GENOZIP_EXT
+#define FAA_           ".faa"
+#define FAA_GZ_        ".faa.gz"
+#define FAA_BZ2_       ".faa.bz2"
+#define FAA_XZ_        ".faa.xz"
+#define FAA_GENOZIP_   ".faa" GENOZIP_EXT
+#define FFN_           ".ffn"
+#define FFN_GZ_        ".ffn.gz"
+#define FFN_BZ2_       ".ffn.bz2"
+#define FFN_XZ_        ".ffn.xz"
+#define FFN_GENOZIP_   ".ffn" GENOZIP_EXT
+#define FNN_           ".fnn"
+#define FNN_GZ_        ".fnn.gz"
+#define FNN_BZ2_       ".fnn.bz2"
+#define FNN_XZ_        ".fnn.xz"
+#define FNN_GENOZIP_   ".fnn" GENOZIP_EXT
+#define FNA_           ".fna"
+#define FNA_GZ_        ".fna.gz"
+#define FNA_BZ2_       ".fna.bz2"
+#define FNA_XZ_        ".fna.xz"
+#define FNA_GENOZIP_   ".fna" GENOZIP_EXT
 
 // GFF3 file variations (including GVF, which is a subtype of GFF3)
 //#define GFF3_           ".gff3"
@@ -97,25 +97,25 @@
 //#define GFF3_BZ2_       ".gff3.bz2"
 //#define GFF3_XZ_        ".gff3.xz"
 //#define GFF3_GENOZIP_   ".gff3" GENOZIP_EXT
-#define GVF_            ".gvf"
-#define GVF_GZ_         ".gvf.gz"
-#define GVF_BZ2_        ".gvf.bz2"
-#define GVF_XZ_         ".gvf.xz"
-#define GVF_GENOZIP_    ".gvf" GENOZIP_EXT
+#define GVF_           ".gvf"
+#define GVF_GZ_        ".gvf.gz"
+#define GVF_BZ2_       ".gvf.bz2"
+#define GVF_XZ_        ".gvf.xz"
+#define GVF_GENOZIP_   ".gvf" GENOZIP_EXT
 
 // 23andMe file variations
 // note: 23andMe files come as a .txt, and therefore the user must specify --input to compress them. we have this
 // made-up file extension here to avoid needing special cases throughout the code
-#define ME23_           ".txt" // our made up extension - natively, 23andMe files come as a zip container containing a txt file
-#define ME23_ZIP_       ".zip" 
-#define ME23_GENOZIP_   ".txt" GENOZIP_EXT
+#define ME23_          ".txt" // our made up extension - natively, 23andMe files come as a zip container containing a txt file
+#define ME23_ZIP_      ".zip" 
+#define ME23_GENOZIP_  ".txt" GENOZIP_EXT
 
 typedef enum {TXT_FILE, Z_FILE} FileSupertype; 
 
 typedef enum      { UNKNOWN_FILE_TYPE, 
                     REF_GENOZIP,
-                    VCF, VCF_GZ, VCF_BGZ, VCF_BZ2, VCF_XZ, VCF_GENOZIP, 
-                    SAM, SAM_GZ, SAM_BGZ, SAM_BZ2, SAM_XZ, CRAM, SAM_GENOZIP,
+                    VCF, VCF_GZ, VCF_BGZF, VCF_BZ2, VCF_XZ, VCF_GENOZIP, 
+                    SAM, SAM_GZ, SAM_BGZF, SAM_BZ2, SAM_XZ, CRAM, SAM_GENOZIP,
                     FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ, FASTQ_GENOZIP,
                     FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,    FQ_GENOZIP,
                     FASTA, FASTA_GZ, FASTA_BZ2, FASTA_XZ, FASTA_GENOZIP,
@@ -128,13 +128,13 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,   GVF_GENOZIP,
                     ME23,  ME23_ZIP,                      ME23_GENOZIP, 
                     BAM,                                  BAM_GENOZIP,
-                    BCF, BCF_GZ, BCF_BGZ,                 BCF_GENOZIP,  
+                    BCF, BCF_GZ, BCF_BGZF,                 BCF_GENOZIP,  
                     AFTER_LAST_FILE_TYPE } FileType;
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    REF_GENOZIP_, \
-                   VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, VCF_GENOZIP_,\
-                   SAM_, SAM_GZ_, SAM_BGZ_, SAM_BZ2_, SAM_XZ_, CRAM_, SAM_GENOZIP_, \
+                   VCF_, VCF_GZ_, VCF_BGZF_, VCF_BZ2_, VCF_XZ_, VCF_GENOZIP_,\
+                   SAM_, SAM_GZ_, SAM_BGZF_, SAM_BZ2_, SAM_XZ_, CRAM_, SAM_GENOZIP_, \
                    FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FASTQ_GENOZIP_, \
                    FQ_,    FQ_GZ_,    FQ_BZ2_,    FQ_XZ_,    FQ_GENOZIP_, \
                    FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FASTA_GENOZIP_,\
@@ -147,7 +147,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    GVF_,   GVF_GZ_,   GVF_BZ2_,   GVF_XZ_,   GVF_GENOZIP_, \
                    ME23_,  ME23_ZIP_,                        ME23_GENOZIP_,\
                    BAM_,                                     BAM_GENOZIP_,\
-                   BCF_, BCF_GZ_, BCF_BGZ_,                  BCF_GENOZIP_,\
+                   BCF_, BCF_GZ_, BCF_BGZF_,                  BCF_GENOZIP_,\
                    "stdin", "stdout" }
 extern const char *file_exts[];
 
@@ -158,9 +158,9 @@ extern const char *file_exts[];
                              { FASTA_BZ2, CODEC_BZ2,  REF_GENOZIP   }, { FASTA_XZ, CODEC_XZ,  REF_GENOZIP   },\
                              { FA,        CODEC_NONE, REF_GENOZIP   }, { FA_GZ,    CODEC_GZ,  REF_GENOZIP   },\
                              { FA_BZ2,    CODEC_BZ2,  REF_GENOZIP   }, { FA_XZ,    CODEC_XZ,  REF_GENOZIP   }, { } }, \
-                           { { VCF,       CODEC_NONE, VCF_GENOZIP   }, { VCF_GZ,   CODEC_GZ,  VCF_GENOZIP   }, { VCF_BGZ, CODEC_GZ,  VCF_GENOZIP },\
+                           { { VCF,       CODEC_NONE, VCF_GENOZIP   }, { VCF_GZ,   CODEC_GZ,  VCF_GENOZIP   }, { VCF_BGZF, CODEC_GZ,  VCF_GENOZIP },\
                              { VCF_BZ2,   CODEC_BZ2,  VCF_GENOZIP   }, { VCF_XZ,   CODEC_XZ,  VCF_GENOZIP   }, { } },\
-                           { { SAM,       CODEC_NONE, SAM_GENOZIP   }, { SAM_GZ,   CODEC_GZ,  SAM_GENOZIP   }, { SAM_BGZ, CODEC_GZ,  SAM_GENOZIP },\
+                           { { SAM,       CODEC_NONE, SAM_GENOZIP   }, { SAM_GZ,   CODEC_GZ,  SAM_GENOZIP   }, { SAM_BGZF, CODEC_GZ,  SAM_GENOZIP },\
                              { SAM_BZ2,   CODEC_BZ2,  SAM_GENOZIP   }, { SAM_XZ,   CODEC_XZ,  SAM_GENOZIP   },\
                              { CRAM,      CODEC_CRAM, SAM_GENOZIP   }, { }, },\
                            { { FASTQ,     CODEC_NONE, FASTQ_GENOZIP }, { FASTQ_GZ, CODEC_GZ,  FASTQ_GENOZIP },\
@@ -184,15 +184,15 @@ extern const char *file_exts[];
                              { GVF,       CODEC_NONE, GVF_GENOZIP   }, { GVF_GZ,   CODEC_GZ,  GVF_GENOZIP   },\
                              { GVF_BZ2,   CODEC_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   CODEC_XZ,  GVF_GENOZIP   }, { } },\
                            { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { } },\
-                           { { BAM,       CODEC_NONE /*CODEC_BGZ*/,  BAM_GENOZIP   }, { } }, \
-                           { { BCF,       CODEC_BCF,  BCF_GENOZIP   }, { BCF_GZ,   CODEC_BCF, BCF_GENOZIP   }, { BCF_BGZ, CODEC_BCF, BCF_GENOZIP }, { } }, \
+                           { { BAM,       CODEC_NONE /*CODEC_BGZF*/,  BAM_GENOZIP   }, { } }, \
+                           { { BCF,       CODEC_BCF,  BCF_GENOZIP   }, { BCF_GZ,   CODEC_BCF, BCF_GENOZIP   }, { BCF_BGZF, CODEC_BCF, BCF_GENOZIP }, { } }, \
                         }
 
 // Supported output formats for genounzip
 // plain file MUST appear first on the list - this will be the default output when redirecting
 // GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz
 #define TXT_OUT_FT_BY_DT { { 0 }, /* a reference file cannot be uncompressed */  \
-                           { VCF, VCF_GZ, VCF_BGZ, BCF, 0 },  \
+                           { VCF, VCF_GZ, VCF_BGZF, BCF, 0 },  \
                            { SAM, SAM_GZ, BAM, 0 },     \
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 }, \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
@@ -224,7 +224,7 @@ extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings -
   (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_CRAM)
 
 #define file_is_read_via_int_decompressor(file) \
-  (file->codec == CODEC_GZ || file->codec == CODEC_BGZ || file->codec == CODEC_BZ2)
+  (file->codec == CODEC_GZ || file->codec == CODEC_BGZF || file->codec == CODEC_BZ2)
 
 #define file_is_written_via_ext_compressor(file) (file->codec == CODEC_BCF || file->codec == CODEC_GZ)
 
@@ -262,7 +262,7 @@ typedef struct File {
 
     // Used for READING GENOZIP files
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
-    uint8_t flags;                     // genozip file flags as read from SectionHeaderGenozipHeader.h.flags
+    SectionFlags flags;                // genozip file flags as read from SectionHeaderGenozipHeader.h.flags
     uint32_t num_components;           // set from genozip header
     uint32_t num_copied_ref_sections;  // number of SEC_REFERENCE sections with vblock_i==0 (a result of being created with ref_copy_one_compressed_section)
     

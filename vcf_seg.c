@@ -30,7 +30,7 @@ void vcf_seg_initialize (VBlock *vb_)
     ctx_get_ctx (vb, dict_id_FORMAT_GT)->inst = CTX_INST_NO_STONS; // we store the GT matrix in local, so cannot accomodate singletons
 
     // room for already existing FORMATs from previous VBs
-    vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_mtf.len;
+    vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_nodes.len;
     buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf", 0);
     buf_zero (&vb->format_mapper_buf);
 
@@ -49,7 +49,7 @@ void vcf_seg_finalize (VBlockP vb_)
     // top level snip
     Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = CONTAINER_TOPLEVEL,
+        .flags     = CON_FL_TOPLEVEL,
         .num_items = 10,
         .items     = { { (DictId)dict_id_fields[VCF_CHROM],   DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[VCF_POS],     DID_I_NONE, "\t" },
@@ -153,7 +153,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
     ASSSEG0 (field_len >= 2, field_start, "Error: missing or invalid FORMAT field");
 
     Container format_mapper = (Container){ 
-        .flags     = CONTAINER_DROP_FINAL_REPEAT_SEP | CONTAINER_FILTER_ITEMS | CONTAINER_FILTER_REPEATS,
+        .flags     = CON_FL_DROP_FINAL_REPEAT_SEP | CON_FL_FILTER_ITEMS | CON_FL_FILTER_REPEATS,
         .repsep    = "\t"
     };
 
@@ -348,7 +348,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
 {
     // the GT field is represented as a Container, with a single item repeating as required by poidy, and the seperator 
     // determined by the phase
-    MiniContainer gt = { .repeats=1, .num_items=1, .flags=CONTAINER_DROP_FINAL_REPEAT_SEP };
+    MiniContainer gt = { .repeats=1, .num_items=1, .flags=CON_FL_DROP_FINAL_REPEAT_SEP };
     gt.items[0] = (ContainerItem){ .dict_id = (DictId)dict_id_FORMAT_GT_HT, .did_i = DID_I_NONE };
     unsigned save_cell_len = cell_len;
 
@@ -457,6 +457,33 @@ static inline unsigned seg_snip_len_tnc (const char *snip, bool *has_13)
     return s - snip - *has_13;
 }
 
+// a comma-separated array - each element goes into its own item context, single repeat (somewhat similar to compound, but 
+// intended for simple arrays - just comma separators, no delta between lines or optimizations)
+#define MAX_HETERO_ARRAY_ITEMS 36
+static WordIndex vcf_seg_hetero_array_field (VBlock *vb, DictId dict_id, const char *value, int value_len)
+{   
+    Container con = seg_initialize_container_array (vb, dict_id, false);    
+
+    for (con.num_items=0; con.num_items < MAX_HETERO_ARRAY_ITEMS && value_len > 0; con.num_items++) { // value_len will be -1 after last number
+
+        const char *snip = value;
+        for (; value_len && *value != ','; value++, value_len--) {};
+
+        unsigned number_len = (unsigned)(value - snip);
+
+        if (con.num_items == MAX_HETERO_ARRAY_ITEMS-1) // final permitted repeat - take entire remaining string
+            number_len += value_len;
+
+        if (value_len > 0) con.items[con.num_items].seperator[0] = ','; 
+        seg_by_dict_id (vb, snip, number_len, con.items[con.num_items].dict_id, number_len + (value_len>0 /* has comma */));
+        
+        value_len--; // skip comma
+        value++;
+    }
+
+    return container_seg_by_dict_id (vb, dict_id, (Container *)&con, 0);
+}
+
 static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Container *samples, uint32_t sample_i,
                                 const char *cell, // beginning of sample, also beginning of first "cell" (subfield)
                                 unsigned sample_len,  // not including the \t or \n 
@@ -524,7 +551,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Container *sa
             node_index = vcf_seg_delta_vs_other ((VBlockP)vb, ctx, dp_ctx, cell, cell_len, -1);
 
         else if (dict_id.num == dict_id_FORMAT_AD || dict_id.num == dict_id_FORMAT_ADALL) 
-            node_index = seg_hetero_array_field ((VBlockP)vb, dict_id, cell, cell_len);
+            node_index = vcf_seg_hetero_array_field ((VBlockP)vb, dict_id, cell, cell_len);
 
         else
             node_index = seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);

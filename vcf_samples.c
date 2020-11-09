@@ -13,7 +13,7 @@ static bool cmd_is_negative_samples = false;
 
 // referring to samples in the vcf file
 char *vcf_samples_is_included;                // a bytemap indicating for each sample if it is included
-static char **vcf_sample_names;               // an array of char * to null-terminated names of samples 
+static char **vcf_sample_names;               // an array of char * to nul-terminated names of samples 
 static char *vcf_sample_names_data;           // vcf_sample_names point into here
 
 // called from genozip.c for processing the --samples flag

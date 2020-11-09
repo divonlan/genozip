@@ -26,8 +26,8 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, Container *con,
                                  // 3. a "container-wide prefix" followed by exactly one prefix per item. the per-item prefixes will be
                                  //    displayed once per repeat, before their respective items. in this case, the container-wide prefix
                                  //    may be empty. 
-                                 // Each prefix is terminated by a SNIP_CONTAINER character
-                                 const char *prefixes, unsigned prefixes_len, // a container-wide prefix (may be empty), followed (or not) by one prefix per item. Each prefixes is terminated by SNIP_CONTAINER.
+                                 // Each prefix is terminated by a CON_PREFIX_SEP character
+                                 const char *prefixes, unsigned prefixes_len, // a container-wide prefix (may be empty), followed (or not) by one prefix per item. Each prefixes is terminated by CON_PREFIX_SEP.
                                  unsigned add_bytes)
 {
     ctx->inst  |= CTX_INST_NO_STONS; // we need the word index to for container caching
@@ -52,44 +52,50 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, Container *con,
 // Reconstruction
 //----------------------
 
-static inline void container_reconstruct_prefix (VBlockP vb, const char **prefixes, uint32_t *prefixes_len)
+static inline void container_reconstruct_prefix (VBlockP vb, const Container *con, const char **prefixes, uint32_t *prefixes_len)
 {
+    ASSERT (*prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "Error in container_reconstruct_prefix: prefixes_len=%u is too big", *prefixes_len);
+
     if (! (*prefixes_len)) return; // nothing to do
     
     const char *start = *prefixes;
-    while (**prefixes != SNIP_CONTAINER) (*prefixes)++; // prefixes are terminated by SNIP_CONTAINER
+    while (**prefixes != CON_PREFIX_SEP && **prefixes != CON_PREFIX_SEP_SHOW_REPEATS) (*prefixes)++; // prefixes are terminated by CON_PREFIX_SEP
     uint32_t len = (unsigned)((*prefixes) - start);
 
     if (len) RECONSTRUCT (start, len);
 
-    (*prefixes)++; // skip SNIP_CONTAINER seperator
+    // if the seperator is CON_PREFIX_SEP_SHOW_REPEATS, output the number of repeats. This is for BAM 'B' array 'count' field.
+    if (**prefixes == CON_PREFIX_SEP_SHOW_REPEATS)
+        RECONSTRUCT_BIN32 (con->repeats);
+
+    (*prefixes)++; // skip seperator
     (*prefixes_len) -= len + 1;
 }
 
 static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const Container *con, const char *prefixes, uint32_t prefixes_len)
 {
-    #define IS_CI_SET(flag) (((uint8_t)item->seperator[0] & 0x80) && ((uint8_t)item->seperator[0] & ~(uint8_t)0x80 & flag))
+    #define IS_CI_SET(flag) (CI_ITEM_HAS_FLAG (item) && ((uint8_t)item->seperator[0] & ~(uint8_t)0x80 & flag))
 
     TimeSpecType profiler_timer={0}; 
-    if (flag.show_time && (con->flags & CONTAINER_TOPLEVEL)) 
+    if (flag.show_time && (con->flags & CON_FL_TOPLEVEL)) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
-    container_reconstruct_prefix (vb, &prefixes, &prefixes_len); 
+    container_reconstruct_prefix (vb, con, &prefixes, &prefixes_len); 
 
-    ASSERT (DTP (container_filter) || (!(con->flags & CONTAINER_FILTER_REPEATS) && !(con->flags & CONTAINER_FILTER_ITEMS)), 
+    ASSERT (DTP (container_filter) || (!(con->flags & CON_FL_FILTER_REPEATS) && !(con->flags & CON_FL_FILTER_ITEMS)), 
             "Error: data_type=%s doesn't support container_filter, despite being specified in the Container", dt_name (vb->data_type));
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip
-        if (con->flags & CONTAINER_TOPLEVEL) {
+        if (con->flags & CON_FL_TOPLEVEL) {
             vb->line_i = vb->first_line + rep_i;
             vb->line_start = vb->txt_data.len;
             vb->dont_show_curr_line = false; 
         }
     
-        if ((con->flags & CONTAINER_FILTER_REPEATS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, -1))) continue; // repeat is filtered out
+        if ((con->flags & CON_FL_FILTER_REPEATS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, -1))) continue; // repeat is filtered out
 
         const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
         uint32_t item_prefixes_len = prefixes_len;
@@ -97,18 +103,21 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
         for (unsigned i=0; i < con->num_items; i++) {
             const ContainerItem *item = &con->items[i];
 
-            if ((con->flags & CONTAINER_FILTER_ITEMS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
+            if ((con->flags & CON_FL_FILTER_ITEMS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
 
             if (flag.show_containers && item->did_i != DID_I_NONE) // show container reconstruction 
                 fprintf (stderr, "Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
                             vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), vb->contexts[item->did_i].name, 
                             vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
-                
-            container_reconstruct_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix (we will have one per item or none at all)
+
+            container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len); // item prefix (we will have one per item or none at all)
 
             int32_t reconstructed_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
 
+if (vb->line_i==16) {
+    int stop=1;
+}
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
                 bool reconstruct = (flag.out_dt == z_file->data_type) || // not translating Or...
                                    !IS_CI_SET (CI_TRANS_NOR);            // no prohibition on reconstructing when translating
@@ -121,7 +130,7 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
             }            
 
             // case: WORD_INDEX_MISSING_SF - delete previous item's separator if it has one (used by SAM_OPTIONAL - sam_seg_optional_all)
-            if (reconstructed_len == -1 && i > 0 && (item-1)->seperator[0] < 0x80)  
+            if (reconstructed_len == -1 && i > 0 && !CI_ITEM_HAS_FLAG(item-1))  
                 vb->txt_data.len -= ((item-1)->seperator[0] != 0) + ((item-1)->seperator[1] != 0);
 
             // seperator / flags determines what to do after the item            
@@ -131,7 +140,7 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
             else if (!flag.do_translate && IS_CI_SET (CI_NATIVE_NEXT))
                 RECONSTRUCT1 (item->seperator[1]);
 
-            else if (!((uint8_t)item->seperator[0] & 0x80)) { // seperator, not flag
+            else if (!CI_ITEM_HAS_FLAG(item)) { // seperator, not flag
                 if (item->seperator[0]) RECONSTRUCT1 ((char)item->seperator[0]);
                 if (item->seperator[1]) RECONSTRUCT1 ((char)item->seperator[1]);
             }
@@ -141,21 +150,25 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
                 vb->txt_data.len += (uint8_t)item->seperator[1];
         }
 
-        if (rep_i+1 < con->repeats || !(con->flags & CONTAINER_DROP_FINAL_REPEAT_SEP)) {
+        if (rep_i+1 < con->repeats || !(con->flags & CON_FL_DROP_FINAL_REPEAT_SEP)) {
             if (con->repsep[0]) RECONSTRUCT1 (con->repsep[0]);
             if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
         }
 
         // in top level: after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
-        if ((con->flags & CONTAINER_TOPLEVEL) && vb->dont_show_curr_line) 
+        if ((con->flags & CON_FL_TOPLEVEL) && vb->dont_show_curr_line) 
             vb->txt_data.len = vb->line_start; 
     }
 
-    if (con->flags & CONTAINER_DROP_FINAL_ITEM_SEP)
-        vb->txt_data.len -= (con->items[con->num_items-1].seperator[0] != 0) + 
-                            (con->items[con->num_items-1].seperator[1] != 0);
+    // remove final seperator, if we need to
+    if (con->flags & CON_FL_DROP_FINAL_ITEM_SEP) {
+        const ContainerItem *item = &con->items[con->num_items-1]; // last item
 
-    if (con->flags & CONTAINER_TOPLEVEL)   
+        vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (flag.do_translate ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
+                                                   : (!!item->seperator[0] + !!item->seperator[1]);
+    }
+
+    if (con->flags & CON_FL_TOPLEVEL)   
         COPY_TIMER (piz_reconstruct_vb);
 }
 
@@ -201,10 +214,11 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
         ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "Error in container_reconstruct: prefixes_len=%u longer than CONTAINER_MAX_PREFIXES_LEN=%u", 
                 prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
 
-        ASSERT (!prefixes_len || prefixes[prefixes_len-1] == SNIP_CONTAINER, "Error in container_reconstruct: prefixes array does end with a SNIP_CONTAINER: %.*s",
+        ASSERT (!prefixes_len || prefixes[prefixes_len-1] == CON_PREFIX_SEP, "Error in container_reconstruct: prefixes array does end with a CON_PREFIX_SEP: %.*s",
                 prefixes_len, prefixes);
 
-        // Backward compatability: prior to version 8.1 containers didn't have NO_STONS so singletons were in ctx.local with a word_index)
+        // condition testing needed only for backward compatability with 8.0.x: prior to version 8.1 containers didn't have NO_STONS 
+        // so singletons were in ctx.local without a word_index)
         if (word_index != WORD_INDEX_NONE) {
 
             ASSERT (st_size + prefixes_len <= 65535, "st_size=%u + prefixes_len=%u too large", st_size, prefixes_len);
@@ -218,9 +232,8 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
 
             // place Container followed by prefix in the cache
             *ENT (uint32_t, ctx->con_index, word_index) = (uint32_t)ctx->con_cache.len;
-            *ENT (uint16_t, ctx->con_len,   word_index) = (uint16_t)(st_size + prefixes_len);
 
-            buf_alloc (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len, 2, "context->con_cache", ctx->did_i);
+            buf_alloc (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 2, "context->con_cache", ctx->did_i);
             
             char *cached_con = AFTERENT (char, ctx->con_cache);
             buf_add (&ctx->con_cache, con_p, st_size);
@@ -233,9 +246,15 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
             ContainerItem *item0 = &con.items[0];
             if (flag.do_translate && item0->did_i == DID_I_NONE && item0->translator) {
                 int32_t prefixes_len_change = DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len);  
+                ASSERT (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, "Error in container_reconstruct: prefixes_len_change=%d exceeds range maximum %u",
+                        prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE)
+                
                 prefixes_len       += prefixes_len_change;
                 ctx->con_cache.len += prefixes_len_change;
             }
+
+            // finally, record the length (possibly updated by the translator)
+            *ENT (uint16_t, ctx->con_len, word_index) = (uint16_t)(st_size + prefixes_len);
         }
     }
 

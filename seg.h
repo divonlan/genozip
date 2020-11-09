@@ -43,6 +43,8 @@ extern PosType seg_pos_field (VBlockP vb,
 
 extern void seg_id_field (VBlockP vb, DictId dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator);
 
+extern Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_1_items);
+
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip);
 extern void seg_info_field (VBlockP vb, SegSpecialInfoSubfields seg_special_subfields, const char *info_str, unsigned info_len);
 
@@ -59,8 +61,6 @@ extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *fiel
                                 bool ws_is_sep, unsigned nonoptimized_len, unsigned add_for_eol);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
-extern uint32_t seg_array_field (VBlockP vb, DictId dict_id, const char *value, unsigned value_len, bool add_bytes_by_textual, TranslatorId trs, SegOptimize optimize);
-extern WordIndex seg_hetero_array_field (VBlockP vb, DictId dict_id, const char *value, int value_len);
 
 extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
                                     char *snip, unsigned *snip_len);

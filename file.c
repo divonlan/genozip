@@ -322,7 +322,7 @@ bool file_open_txt (File *file)
             break;
 
         case CODEC_GZ:
-        case CODEC_BGZ:
+        case CODEC_BGZF:
             if (file->mode == READ) {
                 if (file->is_remote) { 
                     FILE *url_fp = url_open (NULL, file->name);
@@ -443,7 +443,7 @@ static void file_initialize_z_file_data (File *file)
         INIT (node_i);
         INIT (global_hash);
         INIT (ol_dict);
-        INIT (ol_mtf);
+        INIT (ol_nodes);
         INIT (local_hash);
         INIT (word_list);
     }
@@ -610,7 +610,7 @@ void file_close (File **file_p,
     
     if (file->file) {
 
-        if (file->mode == READ && (file->codec == CODEC_GZ || file->codec == CODEC_BGZ)) {
+        if (file->mode == READ && (file->codec == CODEC_GZ || file->codec == CODEC_BGZF)) {
             int ret = gzclose_r((gzFile)file->file);
             ASSERTW (!ret, "%s: warning: failed to close file: %s", global_cmd, file_printname (file));
         }
@@ -665,8 +665,11 @@ void file_write (File *file, const void *data, unsigned len)
     // .genozip file will be corrupted
     if (!file->name && command != ZIP && errno == EINVAL) exit(0);
 
-    ASSERT (bytes_written == len, "Error: failed to write %u bytes to %s: %s", 
-            len, file->name ? file->name : FILENAME_STDOUT, strerror(errno));
+    // exit quietly if failed to write to stdout - likely downstream consumer (piped executable or terminal) was closed
+    if (bytes_written < len && !file->name) exit (0);
+
+    // error if failed to write to file
+    ASSERT (bytes_written == len, "Error: failed to write %u bytes to %s: %s", len, file->name, strerror(errno));
 }
 
 void file_remove (const char *filename, bool fail_quietly)
@@ -774,7 +777,7 @@ bool file_seek (File *file, int64_t offset,
 
 uint64_t file_tell (File *file)
 {
-    if (command == ZIP && file == txt_file && (file->codec == CODEC_GZ || file->codec == CODEC_BGZ))
+    if (command == ZIP && file == txt_file && (file->codec == CODEC_GZ || file->codec == CODEC_BGZF))
         return gzconsumed64 ((gzFile)txt_file->file); 
     
     if (command == ZIP && file == txt_file && file->codec == CODEC_BZ2)

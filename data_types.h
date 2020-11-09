@@ -188,13 +188,13 @@ extern DataTypeFields dt_fields[NUM_DATATYPES];
 }
 
 #define TRANSLATIONS { \
-    /*                          non-bin-dt binary dst-txt   toplevel   factor  txt header translator */ \
-    /* SAM to BAM          */ { DT_SAM,    false, DT_BAM,   SAM_TOP2BAM,  2,   txtheader_sam2bam  }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 and QUAL="*"->0xff X seq_len */ \
-    /* SAM to FASTQ        */ { DT_SAM,    false, DT_FASTQ, SAM_TOP2FQ,   1,   txtheader_sam2fq   }, /* sizes of SEQ, QUAL, QNAME the same */ \
-    /* Binary SAM to SAM   */ { DT_SAM,    true,  DT_SAM,   SAM_TOPLEVEL, 3,   txtheader_bam2sam  }, /* BAM stores sequences in 2x and numbers in 1-2.5x */ \
-    /* Binary SAM to BAM   */ { DT_SAM,    true,  DT_BAM,   SAM_TOP2BAM,  2,   NULL               }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 */ \
-    /* Binary BAM to FASTQ */ { DT_SAM,    true,  DT_FASTQ, SAM_TOP2FQ,   1.5, txtheader_sam2fq   }, /* sizes of QNAME, QUAL the same, SEQ x2 */ \
-    /* 23andMe to VCF      */ { DT_ME23,   false, DT_VCF,   ME23_TOP2VCF, 4,   txtheader_me232vcf }, \
+    /*                          non-bin-dt binary dst_txt_dt toplevel   factor  txtheader_translator */ \
+    /* SAM to BAM          */ { DT_SAM,    false, DT_BAM,    SAM_TOP2BAM,  2,   txtheader_sam2bam  }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 and QUAL="*"->0xff X seq_len */ \
+    /* SAM to FASTQ        */ { DT_SAM,    false, DT_FASTQ,  SAM_TOP2FQ,   1,   txtheader_sam2fq   }, /* sizes of SEQ, QUAL, QNAME the same */ \
+    /* Binary SAM to SAM   */ { DT_SAM,    true,  DT_SAM,    SAM_TOPLEVEL, 3,   txtheader_bam2sam  }, /* BAM stores sequences in 2x and numbers in 1-2.5x */ \
+    /* Binary SAM to BAM   */ { DT_SAM,    true,  DT_BAM,    SAM_TOP2BAM,  2,   NULL               }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 */ \
+    /* Binary BAM to FASTQ */ { DT_SAM,    true,  DT_FASTQ,  SAM_TOP2FQ,   1.5, txtheader_sam2fq   }, /* sizes of QNAME, QUAL the same, SEQ x2 */ \
+    /* 23andMe to VCF      */ { DT_ME23,   false, DT_VCF,    ME23_TOP2VCF, 4,   txtheader_me232vcf }, \
 }
 
 extern bool dt_get_translation (DidIType *toplevel, float *factor);

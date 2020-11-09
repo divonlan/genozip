@@ -20,6 +20,7 @@
 #include "data_types.h"
 #include "container.h"
 #include "codec.h"
+#include "reference.h"
 
 WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                      bool *is_new) // optional out
@@ -29,9 +30,9 @@ WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *
     
     WordIndex node_index = ctx_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
-    ASSERT (node_index < ctx->nodes.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
-            "Error in seg_by_did_i: out of range: dict=%s node_i=%d nodes.len=%u ol_mtf.len=%u",  
-            ctx->name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_mtf.len);
+    ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
+            "Error in seg_by_did_i: out of range: dict=%s node_i=%d nodes.len=%u ol_nodes.len=%u",  
+            ctx->name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_nodes.len);
     
     NEXTENT (uint32_t, ctx->node_i) = node_index;
     ctx->txt_len += add_bytes;
@@ -131,8 +132,13 @@ WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
-    WordIndex chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, CHROM, chrom_str_len+1);
+    bool is_new;
+    WordIndex chrom_node_index = seg_by_did_i_ex (vb, chrom_str, chrom_str_len, CHROM, chrom_str_len+1, &is_new);
 
+    // don't allow adding chros if const_chroms (except "*")
+    ASSSEG (!is_new || !flag.const_chroms || (chrom_str_len == 1 && chrom_str[0] == '*'), 
+            chrom_str, "Error: contig '%.*s' appears in file, but is missing in the reference file and file header", chrom_str_len, chrom_str);
+            
     random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_str, chrom_str_len);
 
     return chrom_node_index;
@@ -311,7 +317,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
     const int info_field   = DTF(info);
     const char *field_name = DTF(names)[info_field];
 
-    Container con = { .repeats=1, .num_items=0, .repsep={0,0}, .flags=CONTAINER_DROP_FINAL_ITEM_SEP };
+    Container con = { .repeats=1, .num_items=0, .repsep={0,0}, .flags=CON_FL_DROP_FINAL_ITEM_SEP };
 
     const char *this_name = info_str, *this_value = NULL;
     int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
@@ -383,7 +389,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
         qsort (info_items, con.num_items, sizeof(InfoItem), sort_by_subfield_name);
 
     char prefixes[CONTAINER_MAX_PREFIXES_LEN]; // these are the Container prefixes
-    prefixes[0] = prefixes[1] = SNIP_CONTAINER; // initial SNIP_CONTAINER follow by seperator of empty Container-wide prefix
+    prefixes[0] = prefixes[1] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix
     unsigned prefixes_len = 2;
 
     // Populate the Container 
@@ -400,7 +406,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
 
         memcpy (&prefixes[prefixes_len], ii->start, ii->len);
         prefixes_len += ii->len;
-        prefixes[prefixes_len++] = SNIP_CONTAINER;
+        prefixes[prefixes_len++] = CON_PREFIX_SEP;
 
         total_names_len += ii->len;
     }
@@ -435,7 +441,7 @@ fallback:
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
-static inline Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_1_items)
+Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_1_items)
 {
     Container con = (Container){ .repeats = 1 };
 
@@ -578,80 +584,6 @@ void seg_compound_field (VBlock *vb,
     }
 
     container_seg_by_ctx (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con.num_items + num_double_sep - 1) + add_for_eol);
-}
-
-// an array - all elements go into a single item context, multiple repeats
-uint32_t seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len, 
-                          bool add_bytes_by_textual, // add bytes according to textual length inc. separator
-                          TranslatorId trs, // instructions on how to transform array items if reconstructing as BAM or TRS_NONE
-                          SegOptimize optimize) // optional optimization function
-{   
-    const char *str = value; 
-    int str_len = (int)value_len; // must be int, not unsigned, for the for loop
-    
-    MiniContainer con       = { .num_items = 1, .flags = CONTAINER_DROP_FINAL_ITEM_SEP, 
-                                .repsep = {0,0}, .items = { { .seperator = {','}, .did_i = DID_I_NONE } } };
-    DictId arr_dict_id      = dict_id_make ("XX_ARRAY", 8);
-    arr_dict_id.id[0]       = FLIP_CASE (dict_id.id[0]);
-    arr_dict_id.id[1]       = FLIP_CASE (dict_id.id[1]);
-    con.items[0].dict_id    = sam_dict_id_optnl_sf (arr_dict_id);
-    con.items[0].translator = trs;
-
-    Context *parent_ctx     = ctx_get_ctx (vb, dict_id);
-    Context *arr_ctx        = ctx_get_ctx (vb, con.items[0].dict_id);
-    arr_ctx->st_did_i       = parent_ctx->did_i;
-
-    for (con.repeats=0; con.repeats < CONTAINER_MAX_REPEATS && str_len > 0; con.repeats++) { // str_len will be -1 after last number
-
-        const char *snip = str;
-        for (; str_len && *str != ','; str++, str_len--) {};
-
-        unsigned number_len = (unsigned)(str - snip);
-
-        if (con.repeats == CONTAINER_MAX_REPEATS-1) // final permitted repeat - take entire remaining string
-            number_len += str_len;
-
-        unsigned snip_len = number_len; 
-             
-        char new_number_str[30];
-        if (optimize && con.repeats < CONTAINER_MAX_REPEATS-1 && snip_len < 25)
-            optimize (&snip, &snip_len, new_number_str);
-
-        seg_by_ctx (vb, snip, snip_len, arr_ctx, add_bytes_by_textual ? number_len+1 : 0, NULL);
-        
-        str_len--; // skip comma
-        str++;
-    }
-
-    container_seg_by_ctx (vb, parent_ctx, (Container *)&con, 0, 0, 0);
-
-    return con.repeats;
-}
-
-// an comma-separated array - each element goes into its own item context, single repeat (somewhat similar to compound, but 
-// intended for simple arrays - just comma separators, no delta between lines or optimizations)
-WordIndex seg_hetero_array_field (VBlock *vb, DictId dict_id, const char *value, int value_len)
-{   
-    Container con = seg_initialize_container_array (vb, dict_id, false);    
-
-    for (con.num_items=0; con.num_items < MAX_COMPOUND_COMPONENTS && value_len > 0; con.num_items++) { // value_len will be -1 after last number
-
-        const char *snip = value;
-        for (; value_len && *value != ','; value++, value_len--) {};
-
-        unsigned number_len = (unsigned)(value - snip);
-
-        if (con.num_items == MAX_COMPOUND_COMPONENTS-1) // final permitted repeat - take entire remaining string
-            number_len += value_len;
-
-        if (value_len > 0) con.items[con.num_items].seperator[0] = ','; 
-        seg_by_dict_id (vb, snip, number_len, con.items[con.num_items].dict_id, number_len + (value_len>0 /* has comma */));
-        
-        value_len--; // skip comma
-        value++;
-    }
-
-    return container_seg_by_dict_id (vb, dict_id, (Container *)&con, 0);
 }
 
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 

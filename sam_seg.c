@@ -22,8 +22,18 @@
 static const char optional_field_translator[256] = {
     ['c']=SAM2BAM_I8,       ['C']=SAM2BAM_U8, 
     ['s']=SAM2BAM_LTEN_I16, ['S']=SAM2BAM_LTEN_U16,
-    ['i']=SAM2BAM_LTEN_I32, ['I']=SAM2BAM_LTEN_U32 
+    ['i']=SAM2BAM_LTEN_I32, ['I']=SAM2BAM_LTEN_U32,
+    ['f']=SAM2BAM_FLOAT
 };
+
+static const char optional_field_store_flag[256] = {
+    ['c']=CTX_FL_STORE_INT, ['C']=CTX_FL_STORE_INT, 
+    ['s']=CTX_FL_STORE_INT, ['S']=CTX_FL_STORE_INT,
+    ['i']=CTX_FL_STORE_INT, ['I']=CTX_FL_STORE_INT,
+    ['f']=CTX_FL_STORE_FLOAT
+};
+
+static Buffer SQ_chroms = EMPTY_BUFFER; // names of chroms read from header
 
 // called by I/O thread (zip_initialize callback)
 void sam_zip_initialize (void)
@@ -35,42 +45,29 @@ void sam_zip_initialize (void)
     // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
     if (!flag.reference || flag.reference == REF_INTERNAL) ref_initialize_ranges (RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
+    // if we're compressing against a reference or file contains SQ records - the file can not have RNAME chroms beyond those
+    flag.const_chroms |= flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE;
+    
     // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
     random_access_alloc_ra_buf (evb, 0);
 }
 
-bool sam_inspect_txt_header (BufferP txt_header)
+static void sam_inspect_txt_header_one_SQ (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
 {
-    if (!(flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) return true; // we're not using a reference - all is good
+    // add chrom to tp list (we will add to context in sam_seg_initialize)
+    buf_alloc_more_name (evb, &SQ_chroms, chrom_name_len+1, 50000, char, 2, "SQ_chroms");
+    buf_add (&SQ_chroms, chrom_name, chrom_name_len);
+    NEXTENT (char, SQ_chroms) = 0;
 
-    char *line = txt_header->data;
+    // if we're using a reference - verify that SQ is in the reference
+    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
+        ref_contigs_verify_identical_chrom (chrom_name, chrom_name_len, last_pos, WORD_INDEX_NONE);
+}
 
-    while (1) {
-        line = strchr (line, '@');
-        if (!line) break;
-
-        if (line[1] == 'S' && line[2] == 'Q') { // this test will always be in the buffer - possible in the overflow area
-            char *newline = strchr (line, '\n');
-            *newline = 0;
-
-            // line looks something like: @SQ\tSN:chr10\tLN:135534747 (no strict order between SN and LN and there could be more parameters)
-            char *chrom_name   = strstr (line, "SN:"); 
-            char *last_pos_str = strstr (line, "LN:"); 
-
-            if (chrom_name && last_pos_str) {
-                unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
-                PosType last_pos = (PosType)strtoull (&last_pos_str[3], NULL, 10);
-                ref_contigs_verify_identical_chrom (&chrom_name[3], chrom_name_len, last_pos, WORD_INDEX_NONE);
-            }
-
-            line = newline+1;
-
-            *newline = '\n'; // restore
-        }
-        else 
-            line++;
-    }
-
+bool sam_inspect_txt_header (BufferP txt_header)
+{    
+    *AFTERENT (char, *txt_header) = 0; // nul-terminate as required by sam_iterate_SQ_lines
+    sam_iterate_SQ_lines (txt_header->data, sam_inspect_txt_header_one_SQ, NULL);
     return true;
 }
 
@@ -146,8 +143,6 @@ void sam_seg_initialize (VBlock *vb)
 {
     // note: all numeric fields needs STORE_INT to be reconstructable to BAM (possibly already set)
     // via the translators set in the SAM_TOP2BAM Container
-    vb->contexts[SAM_RNAME].inst      = CTX_INST_NO_STONS; // needs b250 words_index for random access
-    vb->contexts[SAM_RNEXT].inst      = CTX_INST_NO_STONS; // BAM reconstruction needs RNAME, RNEXT word indices
     vb->contexts[SAM_SQBITMAP].ltype  = LT_BITMAP;
     vb->contexts[SAM_SQBITMAP].inst   = CTX_INST_LOCAL_ALWAYS;
     vb->contexts[SAM_TLEN].flags      = CTX_FL_STORE_INT;
@@ -158,15 +153,41 @@ void sam_seg_initialize (VBlock *vb)
     vb->contexts[SAM_GPOS].ltype      = LT_UINT32;
     vb->contexts[SAM_GPOS].flags      = CTX_FL_STORE_INT;
 
-    // when reconstructing BAM, we output the word_index instead of the string
-    vb->contexts[SAM_RNAME].flags     = CTX_FL_STORE_INDEX;
-    vb->contexts[SAM_RNEXT].flags     = CTX_FL_STORE_INDEX;
+    Context *rname_ctx = &vb->contexts[SAM_RNAME];
+    Context *rnext_ctx = &vb->contexts[SAM_RNEXT];
+
+    rname_ctx->flags = rnext_ctx->flags = CTX_FL_STORE_INDEX; // when reconstructing BAM, we output the word_index instead of the string
+    rname_ctx->inst  = rnext_ctx->inst  = CTX_INST_NO_STONS;  // BAM reconstruction needs RNAME, RNEXT word indices. also needed for random access.
 
     // in --stats, consolidate stats 
     stats_set_consolidation (vb, SAM_SQBITMAP, 4, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND);
     stats_set_consolidation (vb, SAM_E2_Z, 4, SAM_2NONREF, SAM_N2ONREFX, SAM_2GPOS, SAM_S2TRAND);
 
     codec_acgt_comp_init (vb);
+
+    if (vb->vblock_i == 1) {
+    
+        // RNEXT must have the same IDs for loaded contigs as CHROM (see also bug 221)
+        if (rname_ctx->ol_nodes.len) {
+            for (uint32_t i=0; i < rname_ctx->ol_nodes.len; i++) {
+                DECLARE_SNIP;
+                ctx_get_snip_by_node_index (&rname_ctx->ol_nodes, &rname_ctx->ol_dict, i, &snip, &snip_len);
+                ctx_evaluate_snip_seg (vb, rnext_ctx, snip, snip_len, NULL);
+            }
+        }
+
+        // add chrom data read from SQ records in header to RNAME dictionary
+        if (SQ_chroms.len) {
+            for (char *chrom=FIRSTENT (char, SQ_chroms); chrom < AFTERENT (char, SQ_chroms); chrom += strlen (chrom) + 1) {
+                ctx_evaluate_snip_seg (vb, rname_ctx, chrom, strlen(chrom), NULL);
+                ctx_evaluate_snip_seg (vb, rnext_ctx, chrom, strlen(chrom), NULL);
+            }
+
+            buf_free (&SQ_chroms);
+
+            flag.const_chroms = true; // the file cannot have a chrom not already in the RNAME dictionary
+        }
+    }
 }
 
 void sam_seg_finalize (VBlockP vb)
@@ -185,7 +206,7 @@ void sam_seg_finalize (VBlockP vb)
     // top level snip - reconstruction as SAM
     Container top_level_sam = { 
         .repeats   = vb->lines.len,
-        .flags     = CONTAINER_TOPLEVEL,
+        .flags     = CON_FL_TOPLEVEL,
         .num_items = 13,
         .items     = { { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, "\t" },
@@ -209,7 +230,7 @@ void sam_seg_finalize (VBlockP vb)
     // Translation (a feature of Container): items reconstruct their data and then call a translation function to translate it to the desired format
     Container top_level_bam = { 
         .repeats   = vb->lines.len,
-        .flags     = CONTAINER_TOPLEVEL,
+        .flags     = CON_FL_TOPLEVEL,
         .num_items = 13,
         .items     = { { (DictId)dict_id_fields[SAM_RNAME],    DID_I_NONE, { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
                        { (DictId)dict_id_fields[SAM_POS],      DID_I_NONE, { CI_TRANS_NOR | CI_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
@@ -217,10 +238,10 @@ void sam_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[SAM_BAM_BIN],  DID_I_NONE, { CI_TRANS_NOR | CI_TRANS_MOVE, 2 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
                        { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
                        { (DictId)dict_id_fields[SAM_RNEXT],    DID_I_NONE, { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
-                       { (DictId)dict_id_fields[SAM_PNEXT],    DID_I_NONE, { CI_TRANS_NOR                    }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                       { (DictId)dict_id_fields[SAM_TLEN],     DID_I_NONE, { CI_TRANS_NOR                    }, SAM2BAM_LTEN_I32 }, // Translate - textual to binary number
+                       { (DictId)dict_id_fields[SAM_PNEXT],    DID_I_NONE, { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
                        { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, { CI_TRANS_NUL                    }                   }, // normal 
                        { (DictId)dict_id_fields[SAM_CIGAR],    DID_I_NONE, ""                                                    }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
+                       { (DictId)dict_id_fields[SAM_TLEN],     DID_I_NONE, { CI_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN needs vb->seq_num
                        { (DictId)dict_id_fields[SAM_SQBITMAP], DID_I_NONE, "",                                  SAM2BAM_SEQ      }, // Translate - textual format to BAM format
                        { (DictId)dict_id_fields[SAM_QUAL],     DID_I_NONE, "",                                  SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
                        { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE, { CI_TRANS_NOR                    }, SAM2BAM_OPTIONAL }, // no need to translate - already translated by the Optional container itself (see sam_seg_optional_all)
@@ -228,9 +249,9 @@ void sam_seg_finalize (VBlockP vb)
     };
 
     // no container wide-prefix, skip l_name with a 4-character prefix
-    static const char bam_line_prefix[] = { SNIP_CONTAINER, // has prefix 
-                                            SNIP_CONTAINER, // end of (empty) container-wide prefix
-                                            ' ',' ',' ',' ', SNIP_CONTAINER }; // first item prefix - 4 spaces (place holder for block_size)
+    static const char bam_line_prefix[] = { CON_PREFIX_SEP, // has prefix 
+                                            CON_PREFIX_SEP, // end of (empty) container-wide prefix
+                                            ' ',' ',' ',' ', CON_PREFIX_SEP }; // first item prefix - 4 spaces (place holder for block_size)
 
     container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2BAM], &top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
                           IS_BAM ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
@@ -238,7 +259,7 @@ void sam_seg_finalize (VBlockP vb)
     // top level snip - reconstruction as FASTQ
     Container top_level_fastq = { 
         .repeats   = vb->lines.len,
-        .flags     = CONTAINER_TOPLEVEL | CONTAINER_FILTER_REPEATS, // filter - drop non-primary chimeric reads and reads without QUAL data
+        .flags     = CON_FL_TOPLEVEL | CON_FL_FILTER_REPEATS, // filter - drop non-primary chimeric reads and reads without QUAL data
         .num_items = 7,
         .items     = { { (DictId)dict_id_fields[SAM_RNAME],    DID_I_NONE, { CI_TRANS_NOR } }, // needed for reconstructing seq 
                        { (DictId)dict_id_fields[SAM_POS],      DID_I_NONE, { CI_TRANS_NOR } }, // needed for reconstructing seq
@@ -251,8 +272,8 @@ void sam_seg_finalize (VBlockP vb)
     };
 
     // add a '@' to the description line, use a prefix to add the + line    
-    static const char fastq_line_prefix[] = { SNIP_CONTAINER, SNIP_CONTAINER, '@', SNIP_CONTAINER, SNIP_CONTAINER, SNIP_CONTAINER, 
-                                              SNIP_CONTAINER, SNIP_CONTAINER, SNIP_CONTAINER, '+', '\n', SNIP_CONTAINER };
+    static const char fastq_line_prefix[] = { CON_PREFIX_SEP, CON_PREFIX_SEP, '@', CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, 
+                                              CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, '+', '\n', CON_PREFIX_SEP };
 
     container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2FQ], &top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 }
@@ -566,7 +587,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
 
     for (uint32_t i=0; i < field_len; sa_oa.repeats++) {
 
-        ASSSEG (sa_oa.repeats <= CONTAINER_MAX_REPEATS, field, "Error in sam_seg_SA_or_OA_field - exceeded maximum repeats allowed (%lu) while parsing %s",
+        ASSSEG (sa_oa.repeats <= CONTAINER_MAX_REPEATS, field, "Error in sam_seg_SA_or_OA_field - exceeded maximum repeats allowed (%u) while parsing %s",
                 CONTAINER_MAX_REPEATS, err_dict_id (subfield_dict_id));
 
         DO_SSF (rname,  ','); // these also do sanity checks
@@ -630,7 +651,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
 
     for (uint32_t i=0; i < field_len; xa.repeats++) {
 
-        ASSSEG (xa.repeats <= CONTAINER_MAX_REPEATS, field, "Error in sam_seg_XA_field - exceeded maximum repeats allowed (%lu) while parsing XA",
+        ASSSEG (xa.repeats <= CONTAINER_MAX_REPEATS, field, "Error in sam_seg_XA_field - exceeded maximum repeats allowed (%u) while parsing XA",
                 CONTAINER_MAX_REPEATS);
 
         DO_SSF (rname,  ','); 
@@ -779,6 +800,72 @@ static inline char sam_seg_bam_type_to_sam_type (char type)
     return (type=='c' || type=='C' || type=='s' || type=='S' || type=='I') ? 'i' : type;
 }
 
+// an array - all elements go into a single item context, multiple repeats
+static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len)
+{   
+    // get optimization function, if there is one
+    SegOptimize optimize = NULL;
+    if (flag.optimize_ZM && dict_id.num == dict_id_OPTION_ZM && value_len > 3 && value[0] == 's')  // XM:B:s,
+        optimize = sam_optimize_ZM;
+
+    // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
+    Context *container_ctx     = ctx_get_ctx (vb, dict_id);
+
+    Container con = { .num_items = 2, .flags = CON_FL_DROP_FINAL_ITEM_SEP, 
+                      .repsep = {0,0}, 
+                      .items = { { .translator = SAM2BAM_ARRAY_SELF, .did_i = DID_I_NONE },  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
+                                 { .seperator = {0, ','},            .did_i = DID_I_NONE } } // item[1] is actual array item
+                    };
+    
+    char prefixes[] = { CON_PREFIX_SEP, value[0], ',', CON_PREFIX_SEP }; // prefix contains type eg "i,"
+    
+    const char *str = value + 2;      // remove type and comma
+    int str_len = (int)value_len - 2; // must be int, not unsigned, for the for loop
+
+    // prepare context where array elements will go in
+    DictId arr_dict_id        = dict_id_make ("XX_ARRAY", 8);
+    arr_dict_id.id[0]         = FLIP_CASE (dict_id.id[0]);
+    arr_dict_id.id[1]         = FLIP_CASE (dict_id.id[1]);
+    con.items[1].dict_id      = sam_dict_id_optnl_sf (arr_dict_id);
+    con.items[1].translator   = optional_field_translator[(uint8_t)value[0]]; // instructions on how to transform array items if reconstructing as BAM (value[0] is the subtype of the array)
+    con.items[1].seperator[0] = CI_TRANS_NOR | CI_NATIVE_NEXT; // when translating - don't reconstruct, just store value in last_value
+    
+    Context *element_ctx      = ctx_get_ctx (vb, con.items[1].dict_id);
+    element_ctx->st_did_i     = container_ctx->did_i;
+    element_ctx->flags        = optional_field_store_flag[(uint8_t)value[0]];
+
+    for (con.repeats=0; con.repeats < CONTAINER_MAX_REPEATS && str_len > 0; con.repeats++) { // str_len will be -1 after last number
+
+        const char *snip = str;
+        for (; str_len && *str != ','; str++, str_len--) {};
+
+        unsigned number_len = (unsigned)(str - snip);
+        unsigned snip_len   = number_len; // might be changed by optimize
+             
+        char new_number_str[30];
+        if (optimize && snip_len < 25)
+            optimize (&snip, &snip_len, new_number_str);
+
+        seg_by_ctx (vb, snip, snip_len, element_ctx, IS_BAM ? 0 : number_len+1, NULL);
+        
+        str_len--; // skip comma
+        str++;
+    }
+
+    ASSSEG (con.repeats < CONTAINER_MAX_REPEATS, value, "Error: array has too many elements, more than %u", CONTAINER_MAX_REPEATS);
+
+    // add bytes here in case of BAM - all to main field
+    unsigned container_add_bytes=0;
+    if (IS_BAM) {
+        unsigned add_bytes_per_repeat = sam_seg_optional_add_bytes (value[0], 0, true);
+        container_add_bytes = add_bytes_per_repeat * con.repeats + 4 /* count */ + 1 /* type */ ;
+    }
+    else 
+        container_add_bytes = 2; // type - eg "i,"
+
+    container_seg_by_ctx (vb, container_ctx, (Container *)&con, prefixes, sizeof(prefixes), container_add_bytes);
+}
+
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
 static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, 
@@ -881,33 +968,18 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
     }
 
     // Numeric array array
-    else if (bam_type == 'B') {
-        SegOptimize optimize = NULL;
-
-        if (flag.optimize_ZM && dict_id.num == dict_id_OPTION_ZM && value_len > 3 && value[0] == 's')  // XM:B:s,
-            optimize = sam_optimize_ZM;
-
-        TranslatorId trs = optional_field_translator[(uint8_t)value[0]]; // instructions on how to transform array items if reconstructing as BAM (value[0] is the subtype of the array)
-
-        uint32_t repeats = seg_array_field ((VBlockP)vb, dict_id, value, value_len, !IS_BAM, trs, optimize);
-
-        // add bytes here in case of BAM - all to main field
-        if (IS_BAM) {
-            unsigned add_bytes_per_repeat = sam_seg_optional_add_bytes (value[0], 0, true);
-            ctx_get_ctx (vb, dict_id)->txt_len += add_bytes_per_repeat * (repeats-1) + 4 // don't include 1st repeat which is the type, +4 for count
-                                                  + 1; // type (but not tag and 'B' which are part of OPTIONAL)
-        }
-    }
+    else if (bam_type == 'B') 
+        sam_seg_array_field ((VBlockP)vb, dict_id, value, value_len);
 
     // All other subfields - normal snips in their own dictionary
     else        
         seg_by_dict_id (vb, value, value_len, dict_id, add_bytes); 
 
-    // integer fields need to be STORE_INT to be reconstructable as BAM
-    if (sam_type == 'i') {
+    // integer and float fields need to be STORE_INT/FLOAT to be reconstructable as BAM
+    if (optional_field_store_flag[(uint8_t)sam_type]) {
         Context *ctx;
         if ((ctx = ctx_get_existing_ctx (vb, dict_id)))
-            ctx->flags |= CTX_FL_STORE_INT;
+            ctx->flags |= optional_field_store_flag[(uint8_t)sam_type];
     }
  
     return dict_id;
@@ -942,8 +1014,8 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
 {
     const bool is_bam = IS_BAM;
     Container con = { .repeats=1 };
-    char prefixes[MAX_SUBFIELDS * 6 + 3]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by SNIP_CONTAINER ; +3 for the initial SNIP_CONTAINER
-    prefixes[0] = prefixes[1] = prefixes[2] = SNIP_CONTAINER; // initial SNIP_CONTAINER follow by seperator of empty Container-wide prefix followed by seperator for empty prefix for translator-only item[0]
+    char prefixes[MAX_SUBFIELDS * 6 + 3]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PREFIX_SEP ; +3 for the initial CON_PREFIX_SEP
+    prefixes[0] = prefixes[1] = prefixes[2] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix followed by seperator for empty prefix for translator-only item[0]
     unsigned prefixes_len=3;
     const char *value, *tag;
     char type;
@@ -961,17 +1033,17 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
              ['c']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['C']=CI_NATIVE_NEXT | CI_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
              ['s']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['S']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
              ['i']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['I']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-             ['f']=CI_NATIVE_NEXT | CI_TRANS_NOR,                                     // compressing SAM - a float is stored as text, and when piz with translate to BAM - is not reconstructed, instead - translated
+             ['f']=CI_NATIVE_NEXT | CI_TRANS_NOR,                                      // compressing SAM - a float is stored as text, and when piz with translate to BAM - is not reconstructed, instead - translated
              ['Z']=CI_NATIVE_NEXT | CI_TRANS_NUL, ['H']=CI_NATIVE_NEXT | CI_TRANS_NUL, // reconstruct text and then \t seperator if SAM and \0 if BAM 
-             ['B']=CI_NATIVE_NEXT                                                     // reconstruct array and then \t seperator if SAM and no seperator for BAM
+             ['B']=CI_NATIVE_NEXT                                                      // reconstruct array and then \t seperator if SAM and no seperator for BAM
         }, 
         { // compressing from BAM
              ['c']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['C']=CI_NATIVE_NEXT | CI_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
              ['s']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['S']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
              ['i']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['I']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-             ['f']=CI_NATIVE_NEXT,                                                    // compressing SAM - a float is stored as a SPECIAL, and the special reconstructor handles the SAM and BAM reconstructing
+             ['f']=CI_NATIVE_NEXT,                                                     // compressing SAM - a float is stored as a SPECIAL, and the special reconstructor handles the SAM and BAM reconstructing
              ['Z']=CI_NATIVE_NEXT | CI_TRANS_NUL, ['H']=CI_NATIVE_NEXT | CI_TRANS_NUL, // reconstruct text and then \t seperator if SAM and \0 if BAM 
-             ['B']=CI_NATIVE_NEXT                                                     // reconstruct array and then \t seperator if SAM and no seperator for BAM
+             ['B']=CI_NATIVE_NEXT                                                      // reconstruct array and then \t seperator if SAM and no seperator for BAM
         } };
 
 
@@ -987,7 +1059,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         // in the optional field prefix (unlike array type), all integer types become 'i'.
         char prefix_type = sam_seg_bam_type_to_sam_type (type);
 
-        char prefix[6] = { tag[0], tag[1], ':', prefix_type, ':', SNIP_CONTAINER}; 
+        char prefix[6] = { tag[0], tag[1], ':', prefix_type, ':', CON_PREFIX_SEP}; 
         memcpy (&prefixes[prefixes_len], prefix, 6);
         prefixes_len += 6;
 
@@ -1113,7 +1185,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     sam_analyze_cigar (vb, field_start, field_len, &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed);
     vb->last_cigar = field_start;
     unsigned last_cigar_len = field_len;
-    ((char *)vb->last_cigar)[field_len] = 0; // null-terminate CIGAR string
+    ((char *)vb->last_cigar)[field_len] = 0; // nul-terminate CIGAR string
 
     SEG_NEXT_ITEM (SAM_RNEXT);
     

@@ -126,7 +126,7 @@ void fasta_seg_finalize (VBlockP vb)
     // top level snip
     Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = CONTAINER_TOPLEVEL,
+        .flags     = CON_FL_TOPLEVEL,
         .num_items = 2,
         .items     = { { (DictId)dict_id_fields[FASTA_LINEMETA], DID_I_NONE, ""   },
                        { (DictId)dict_id_fields[FASTA_EOL],      DID_I_NONE, ""   } }
