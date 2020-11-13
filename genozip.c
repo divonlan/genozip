@@ -249,7 +249,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             str_uint_commas (BGEN64 (header->num_lines), num_lines_str);
             
             num_lines_count += BGEN64 (header->num_lines);
-            bufprintf (evb, &str_buf, item_format, num_lines_str, "", txt_size_str, 0, 0.0, md5_display (header->md5_hash_single), "", "",
+            bufprintf (evb, &str_buf, item_format, "", num_lines_str, "", txt_size_str, 0, 0.0, md5_display (header->md5_hash_single), "", "",
                        -(int)FILENAME_WIDTH, header->txt_filename, "");
 
             buf_free (&evb->compressed);
