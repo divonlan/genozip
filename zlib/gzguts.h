@@ -200,7 +200,7 @@ typedef struct {
     z_stream strm;          /* stream structure in-place (not a pointer) */
 
     Bytef injection[INJECTION_SIZE]; /* Added by Divon: a hacky injection of initial data from file_open_txt_read */
-
+    unsigned injection_size; /* up to INJECTION_SIZE */
 } gz_state;
 typedef gz_state FAR *gz_statep;
 

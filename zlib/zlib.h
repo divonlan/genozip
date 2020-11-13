@@ -1657,7 +1657,7 @@ ZEXTERN int ZEXPORT gzclose_w OF((gzFile file));
 be consumed next, instead of reading from disk
  */
 #define INJECTION_SIZE 18
-ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection));
+ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection, uInt injection_size));
 
 ZEXTERN const char * ZEXPORT gzerror OF((gzFile file, int *errnum));
 /*

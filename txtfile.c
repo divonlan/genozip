@@ -47,17 +47,28 @@ static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_
 static inline uint32_t txtfile_read_block_plain (VBlock *vb, uint32_t max_bytes)
 {
     char *data = AFTERENT (char, vb->txt_data);
-    int32_t bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
-    ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", txt_name, strerror(errno));
+    int32_t bytes_read;
 
-    // bytes_read=0 and we're using an external decompressor - it is either EOF or
-    // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
-    if (!bytes_read && file_is_read_via_ext_decompressor (txt_file)) {
-        file_assert_ext_decompressor();
-        txt_file->is_eof = true;
-        return 0; // all is good - just a normal end-of-file
+    // case: we have data passed to us from file_open_txt_read - handle it first
+    if (!vb->txt_data.len && evb->compressed.len) {
+        memcpy (data, evb->compressed.data, (bytes_read = evb->compressed.len));
+        buf_free (&evb->compressed);
     }
-    
+
+    // case: normal read
+    else {
+        bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
+        ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", txt_name, strerror(errno));
+
+        // bytes_read=0 and we're using an external decompressor - it is either EOF or
+        // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
+        if (!bytes_read && file_is_read_via_ext_decompressor (txt_file)) {
+            file_assert_ext_decompressor();
+            txt_file->is_eof = true;
+            return 0; // all is good - just a normal end-of-file
+        }
+    }
+
     txt_file->disk_so_far += (int64_t)bytes_read;
 
 #ifdef _WIN32
@@ -139,8 +150,8 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /*
                   .is_decompressed  = false };           
         }
         else {
-            block_uncomp_len = bgzf_read_block ((FILE *)txt_file->file, txt_file->name, 
-                                                AFTERENT (uint8_t, vb->compressed), &block_comp_len, false);
+            block_uncomp_len = (uint32_t)bgzf_read_block ((FILE *)txt_file->file, txt_file->name, 
+                                                          AFTERENT (uint8_t, vb->compressed), &block_comp_len, false);
             // case EOF - verify the BGZF end of file marker
             if (!block_uncomp_len) {
                 ASSERT (block_comp_len == BGZF_EOF_LEN && !memcmp (AFTERENT (uint8_t, vb->compressed), BGZF_EOF, BGZF_EOF_LEN),

@@ -34,10 +34,10 @@ local int gz_load(state, buf, len, have)
             get = max;
         
         // added by Divon
-        if (state->injection[0]) {
-            memcpy (buf + *have, state->injection, INJECTION_SIZE);
-            ret = INJECTION_SIZE;
-            state->injection[0] = 0;
+        if (state->injection_size) {
+            memcpy (buf + *have, state->injection, state->injection_size);
+            ret = state->injection_size;
+            state->injection_size = 0;
         }
         else
             ret = read(state->fd, buf + *have, get);
@@ -417,10 +417,18 @@ int ZEXPORT gzread(file, buf, len)
 }
 
 // added by Divon - stores 18 bytes ("injection") to later be consumed by gz_load
-ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection))
+ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection, uInt injection_size))
 {
     gz_statep state = (gz_statep)file;
-    memcpy (state->injection, injection, INJECTION_SIZE);  
+
+    if (injection_size > INJECTION_SIZE) {
+        fprintf (stderr, "Error in gzinject: injection_size=%u too big", injection_size);
+        exit(1);
+    }
+
+    memcpy (state->injection, injection, injection_size);  
+    state->injection_size = injection_size;
+
     return 0;
 }
 

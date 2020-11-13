@@ -45,25 +45,31 @@ static uint32_t bgzf_fread (FILE *fp, void *dst_buf, uint32_t count)
     return bytes; // == count
 }
 
-// reads and validates a BGZF block, and returns the uncompressed size, or 0 and block_size>0 if its a GZIP but not BGZIP block and soft_fail
-uint32_t bgzf_read_block (FILE *fp, const char *filename, 
-                          uint8_t *block /* must be BGZF_MAX_BLOCK_SIZE in size */, uint32_t *block_size /* out */,
-                          bool soft_fail)
+// reads and validates a BGZF block, and returns the uncompressed size, or, in case of soft_fail:
+int32_t bgzf_read_block (FILE *fp, const char *filename, 
+                         uint8_t *block /* must be BGZF_MAX_BLOCK_SIZE in size */, uint32_t *block_size /* out */,
+                         bool soft_fail)
 {
     BgzfHeader *h = (BgzfHeader *)block;
 
     *block_size = bgzf_fread (fp, h, sizeof (struct BgzfHeader)); // read the header
-    if (! *block_size) return 0;
+    if (! *block_size) return BGZF_BLOCK_IS_NOT_GZIP;
 
-    ASSERT0 (*block_size >= 12, "Error in bgzf_read_block: block_size read is < 12"); // less than the minimal gz block header size
+    if (*block_size < 12) {
+        ASSERT0 (soft_fail, "Error in bgzf_read_block: block_size read is < 12"); // less than the minimal gz block header size
+        return BGZF_BLOCK_IS_NOT_GZIP;
+    } 
 
     // case: this is not a GZ / BGZF block at all - error (see: https://tools.ietf.org/html/rfc1952)
-    ASSERT (h->id1==31 && h->id2==139, "Error: expecting %s to be compressed with gzip format, but it is not", filename);
+    if (h->id1 != 31 || h->id2 != 139) {
+        ASSERT (soft_fail, "Error: expecting %s to be compressed with gzip format, but it is not", filename);
+        return BGZF_BLOCK_IS_NOT_GZIP;
+    }
 
     // case: this is NOT a valid BGZF block
     if (!(*block_size == 18 && h->cm==8 && h->flg==4 && h->si1==66 && h->si2==67)) {
         ASSERT (soft_fail, "Error in bgzf_read_block: invalid BGZF block while reading %s", filename);
-        return 0;
+        return BGZF_BLOCK_GZIP_NOT_BGZIP;
     }
 
     *block_size = LTEN16 (h->bsize) + 1;

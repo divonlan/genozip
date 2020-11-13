@@ -313,12 +313,12 @@ static bool file_open_txt_read (File *file)
             // read the first potential BGZF block to test if this is GZ or BGZF
             uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
             uint32_t block_size;
-            uint32_t bgzf_uncompressed_size = bgzf_read_block (fp, file->name, block, &block_size, true);
+            int32_t bgzf_uncompressed_size = bgzf_read_block (fp, file->name, block, &block_size, true);
             
             // case: this is indeed a bgzf - we put the still-compressed data in vb->compressed for later consumption
-            // when reading the txtfile header
-            if (bgzf_uncompressed_size) {
-                buf_alloc (evb, &evb->compressed, block_size, 1, "unconsumed_txt"); 
+            // is txtfile_read_block_bgzf
+            if (bgzf_uncompressed_size >= 0) {
+                buf_alloc (evb, &evb->compressed, block_size, 1, "compressed"); 
                 evb->compressed.param = bgzf_uncompressed_size; // pass uncompressed size in param
 
                 buf_add (&evb->compressed, block, block_size);
@@ -329,11 +329,21 @@ static bool file_open_txt_read (File *file)
 
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
             // (note: we cannot re-read the bytes from the file as the file might be piped in)
-            else {
+            else if (bgzf_uncompressed_size == BGZF_BLOCK_GZIP_NOT_BGZIP) {
                 file->file  = gzdopen (fileno(fp), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
                 file->codec = CODEC_GZ;
-                gzinject (file->file, block); // a hack - adds a 18 bytes of compressed data to the in stream, which will be consumed next, instead of reading from disk
+                gzinject (file->file, block, block_size); // a hack - adds a 18 bytes of compressed data to the in stream, which will be consumed next, instead of reading from disk
             } 
+
+            // case: this is not GZIP format at all. treat as a plain file, and put the data read in vb->compressed 
+            // for later consumption is txtfile_read_block_plain
+            else if (bgzf_uncompressed_size == BGZF_BLOCK_IS_NOT_GZIP) {
+                buf_alloc (evb, &evb->compressed, block_size, 1, "compressed"); 
+                buf_add (&evb->compressed, block, block_size);
+                
+                file->file  = fp;
+                file->codec = CODEC_NONE;
+            }
 
             break;
         }

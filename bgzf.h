@@ -19,7 +19,9 @@ typedef struct BgzfBlock {
     bool is_decompressed;
 } BgzfBlock;
 
-extern uint32_t bgzf_read_block (FILE *fp, const char *filename, uint8_t *block, uint32_t *block_size, bool soft_fail);
+#define BGZF_BLOCK_GZIP_NOT_BGZIP -1
+#define BGZF_BLOCK_IS_NOT_GZIP    -2
+extern int32_t bgzf_read_block (FILE *fp, const char *filename, uint8_t *block, uint32_t *block_size, bool soft_fail);
 extern void bgzf_uncompress_vb (VBlockP vb);
 extern void bgzf_uncompress_one_block (VBlockP vb, BgzfBlock *bb);
 
