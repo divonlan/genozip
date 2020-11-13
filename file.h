@@ -128,7 +128,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,   GVF_GENOZIP,
                     ME23,  ME23_ZIP,                      ME23_GENOZIP, 
                     BAM,                                  BAM_GENOZIP,
-                    BCF, BCF_GZ, BCF_BGZF,                 BCF_GENOZIP,  
+                    BCF, BCF_GZ, BCF_BGZF,                BCF_GENOZIP,  
                     AFTER_LAST_FILE_TYPE } FileType;
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
@@ -184,7 +184,7 @@ extern const char *file_exts[];
                              { GVF,       CODEC_NONE, GVF_GENOZIP   }, { GVF_GZ,   CODEC_GZ,  GVF_GENOZIP   },\
                              { GVF_BZ2,   CODEC_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   CODEC_XZ,  GVF_GENOZIP   }, { } },\
                            { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { } },\
-                           { { BAM,       CODEC_NONE /*CODEC_BGZF*/,  BAM_GENOZIP   }, { } }, \
+                           { { BAM,       CODEC_BGZF,  BAM_GENOZIP  }, { } }, \
                            { { BCF,       CODEC_BCF,  BCF_GENOZIP   }, { BCF_GZ,   CODEC_BCF, BCF_GENOZIP   }, { BCF_BGZF, CODEC_BCF, BCF_GENOZIP }, { } }, \
                         }
 

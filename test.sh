@@ -79,8 +79,7 @@ test_bam() {
         local arg=("--no-PG" "")
         samtools view --help |& grep no-PG >& /dev/null # test for --no-PG (exists since samtools 1.10, see https://github.com/samtools/samtools/releases/)
         local missing_no_PG=$? # $?==0 if exists, 1 if not
-        samtools view ${arg[$missing_no_PG]} bam-test.input.sam -OBAM -h > bam-test.input.bam.gz || exit 1
-gunzip -f bam-test.input.bam.gz # temporarily until we implement bgzip
+        samtools view ${arg[$missing_no_PG]} bam-test.input.sam -OBAM -h > bam-test.input.bam || exit 1
         $genozip $arg1 bam-test.input.bam $2 -fto $output || exit 1
         $genounzip $arg1 $output $2 --force --output bam-test.output.bam || exit 1
         sleep 0.2 # wait for BAM to be flushed to the disk
