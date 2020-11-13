@@ -290,7 +290,7 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
                                      char sep, // if non-zero, outputs after the reconstructino
                                      bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data
 {
-    ASSERT (did_i < vb->num_contexts, ";Error in piz_reconstruct_from_ctx_do: did_i=%u out of range: vb->num_contexts=%u", did_i, vb->num_contexts);
+    ASSERT (did_i < vb->num_contexts, "Error in piz_reconstruct_from_ctx_do: did_i=%u out of range: vb->num_contexts=%u", did_i, vb->num_contexts);
 
     Context *ctx = &vb->contexts[did_i];
 
@@ -476,12 +476,10 @@ static void piz_uncompress_one_vb (VBlock *vb)
         fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
                     vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
-    DidIType toplevel;
-    float factor;
-    flag.do_translate = dt_get_translation (&toplevel, &factor); // translate if we're using an alternative toplevel snip
+    DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
 
     // note: txt_data is fully allocated in advance and cannot be extended mid-reconstruction (container_reconstruct_do and possibly others rely on this)
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size * factor + 10000, 1.1, "txt_data"); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size * trans.factor + 10000, 1.1, "txt_data"); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
 
     piz_uncompress_all_ctxs (vb, 0);
 
@@ -489,7 +487,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     if (exe_type == EXE_GENOCAT && flag.genocat_info_only) goto done;
 
     // reconstruct from top level snip
-    piz_reconstruct_from_ctx (vb, toplevel, 0, true);
+    piz_reconstruct_from_ctx (vb, trans.toplevel, 0, true);
 
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
@@ -643,7 +641,8 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
         ASSERT (!flag.test || !md5_is_zero (original_file_digest), 
                 "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5 or --test", z_name);
 
-        ASSERT0 (!((flag.test || flag.md5) && dt_get_translation(0,0)), "Error: --test or --md5 cannot be used when converting a file to another format"); 
+        if (flag.test || flag.md5) 
+            ASSERT0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
     }
 
     if (!dispatcher) 

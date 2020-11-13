@@ -12,57 +12,29 @@
 #include "strings.h"
 
 DataTypeProperties dt_props [NUM_DATATYPES] = DATA_TYPE_PROPERTIES;
-DataTypeProperties dt_props_def = DATA_TYPE_FUNCTIONS_DEFAULT;
-
+DataTypeProperties dt_props_def             = DATA_TYPE_FUNCTIONS_DEFAULT;
 DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 
-static struct { DataType src_z_non_bin_dt; 
-                uint8_t src_z_is_binary;  // same type as z_file.flags
-                DataType dst_txt_dt;
-                DidIType toplevel;
-                float factor; 
-                TXTHEADER_TRANSLATOR ((*txtheader_translator));
-              } translations[] = TRANSLATIONS;
-
-#define NUM_TRANSLATIONS (sizeof (translations) / sizeof (translations[0]))
-
 // gets the toplevel and factor, and returns true if translating
-bool dt_get_translation (DidIType *toplevel, float *factor) // optional outs
+const DtTranslation dt_get_translation (void)
 {
-    DidIType my_toplevel;
-    float my_factor;
+    static DtTranslation translations[] = TRANSLATIONS;
+    #define NUM_TRANSLATIONS (sizeof (translations) / sizeof (translations[0]))
+
+    bool i_am_binary = !!(z_file->flags & GENOZIP_FL_TXT_IS_BIN);
 
     for (unsigned i=0; i < NUM_TRANSLATIONS; i++)
         if (translations[i].src_z_non_bin_dt == z_file->data_type &&
-            translations[i].src_z_is_binary  == !!(z_file->flags & GENOZIP_FL_TXT_IS_BIN) &&
-            translations[i].dst_txt_dt       == flag.out_dt) {
-                my_factor   = translations[i].factor;
-                my_toplevel = translations[i].toplevel;
-                goto finish;
-            }
-            
-    // not a translation
-    my_factor   = 1;
-    my_toplevel = DTFZ(toplevel);
+            translations[i].src_z_is_binary  == i_am_binary &&
+            translations[i].dst_txt_dt       == flag.out_dt) 
+            return translations[i];
 
-finish:
-    if (factor)   *factor   = my_factor;
-    if (toplevel) *toplevel = my_toplevel;
-
-    return (my_toplevel != DTFZ(toplevel)); // true we're using an alternative toplevel snip
-}
-
-// calls the txtheader translator
-void dt_translate_txtheader (BufferP txt)
-{
-    for (unsigned i=0; i < NUM_TRANSLATIONS; i++)
-        if (translations[i].src_z_non_bin_dt == z_file->data_type &&
-            translations[i].src_z_is_binary  == !!(z_file->flags & GENOZIP_FL_TXT_IS_BIN) &&
-            translations[i].dst_txt_dt       == flag.out_dt) {
-                // we found a translation - it may or may not have a txtheader translator
-                if (translations[i].txtheader_translator) translations[i].txtheader_translator (txt);
-                break;
-            }
+    // translation not found - return a non-translation "translation"
+    return (DtTranslation){ .dst_txt_dt      = z_file->data_type, 
+                            .factor          = 1, 
+                            .is_src_dt       = true, 
+                            .src_z_is_binary = i_am_binary, 
+                            .toplevel        = DTFZ(toplevel) };
 }
 
 const char *dt_name (DataType dt)

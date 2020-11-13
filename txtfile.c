@@ -472,14 +472,14 @@ void txtfile_write_one_vblock (VBlockP vb)
     txtfile_write_to_disk (&vb->txt_data);
 
     char s1[20], s2[20];
-    bool is_tranlation = dt_get_translation (0,0);
+
     ASSERTW (vb->txt_data.len == vb->vb_data_size || // files are the same size, expected
              exe_type == EXE_GENOCAT ||              // many genocat flags modify the output file, so don't compare
-             is_tranlation,                          // we are translating between data types - the source and target txt files have different sizes
-            "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-            vb->vblock_i, (uint32_t)vb->lines.len, vb->first_line,
-            str_uint_commas (vb->vb_data_size, s1), dt_name (txt_file->data_type), str_uint_commas (vb->txt_data.len, s2), 
-            (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
+             !dt_get_translation().is_src_dt,        // we are translating between data types - the source and target txt files have different sizes
+             "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
+             vb->vblock_i, (uint32_t)vb->lines.len, vb->first_line,
+             str_uint_commas (vb->vb_data_size, s1), dt_name (txt_file->data_type), str_uint_commas (vb->txt_data.len, s2), 
+             (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
 
     // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
     // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
@@ -656,7 +656,8 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     if (is_vcf && flag.header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
 
     // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
-    dt_translate_txtheader (&header_buf); 
+    DtTranslation trans = dt_get_translation();
+    if (trans.txtheader_translator) trans.txtheader_translator (&header_buf); 
 
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
     if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.show_headers) {

@@ -173,9 +173,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     const unsigned FILENAME_WIDTH = 40;
 
-    const char *head_format = "\n%11s %10s %10s %6s %s  %*s %s\n";
-    const char *foot_format = "\nTotal:            %10s %10s %5.*fX\n";
-    const char *item_format = "%11s %10s %10s %5.*fX  %s  %s%s%*s %s\n";
+    const char *head_format = "\n%-5.5s %11s %10s %10s %6s %s  %*s %s\n";
+    const char *foot_format = "\nTotal:                  %10s %10s %5.*fX\n";
+    const char *item_format = "%-5.5s %11s %10s %10s %5.*fX  %s  %s%s%*s %s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
@@ -197,7 +197,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     }
 
     if (first_file) {
-        bufprintf (evb, &str_buf, head_format, "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
+        bufprintf (evb, &str_buf, head_format, "Type", "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
         first_file = false;
     }
     
@@ -224,7 +224,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     // TODO: have an option to print ref_file_name and ref_file_md5
     
-    bufprintf (evb, &str_buf, item_format, num_lines_str, 
+    bufprintf (evb, &str_buf, item_format, dt_name (z_file->data_type), num_lines_str, 
                z_size_str, txt_size_str, ratio < 100, ratio, 
                md5_display (md5_hash_bound),
                (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
