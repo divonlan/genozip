@@ -239,6 +239,7 @@ typedef struct File {
     FileType type;
     bool is_remote;                    // true if file is downloaded from a url
     bool redirected;                   // true if this file is redirected from stdin/stdout
+    bool is_eof;                       // we've read the entire file
     DataType data_type;
     Codec codec;                       // txt_file: generic codec used with this file
 
@@ -262,6 +263,7 @@ typedef struct File {
 
     // Used for READING GENOZIP files
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
+
     SectionFlags flags;                // genozip file flags as read from SectionHeaderGenozipHeader.h.flags
     uint32_t num_components;           // set from genozip header
     uint32_t num_copied_ref_sections;  // number of SEC_REFERENCE sections with vblock_i==0 (a result of being created with ref_copy_one_compressed_section)
@@ -300,13 +302,9 @@ typedef struct File {
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;
 
-#   define READ_BUFFER_SIZE (1<<19)    // 512KB
     // Used for reading txt files
     Buffer unconsumed_txt;             // excess data read from the txt file - moved to the next VB
-    
-    // Used for reading genozip files
-    uint32_t z_next_read, z_last_read;   // indices into read_buffer for z_file
-    char read_buffer[];                  // only allocated for mode=READ files   
+
 } File;
 
 // globals
@@ -315,7 +313,6 @@ extern File *z_file, *txt_file;
 // methods
 extern File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
 extern File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type);
-extern bool file_open_txt (File *file);
 extern void file_close (FileP *file_p, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
@@ -341,7 +338,7 @@ extern const char *ft_name (FileType ft);
 extern const char *file_guess_original_filename (const File *file);
 
 // wrapper operations for operating system files
-extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
+extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, bool add_string_terminator);
 extern bool file_put_data (const char *filename, void *data, uint64_t len);
 extern bool file_put_buffer (const char *filename, const Buffer *buf, unsigned buf_word_width);
 extern bool file_is_dir (const char *filename);

@@ -31,7 +31,7 @@ void vcf_seg_initialize (VBlock *vb_)
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_nodes.len;
-    buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf", 0);
+    buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf");
     buf_zero (&vb->format_mapper_buf);
 
     if (flag.gtshark) codec_gtshark_comp_init (vb_);
@@ -193,7 +193,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         ASSERT (node_index == vb->format_mapper_buf.len, 
                 "Error: node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
-        buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf", 0);
+        buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf");
     }    
 
     Container *con = ENT (Container, vb->format_mapper_buf, node_index);
@@ -432,7 +432,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     if (gt.repeats == vb->gt_prev_ploidy && gt.repsep[0] == vb->gt_prev_phase) {
 
         buf_alloc (vb, &ctx->node_i, MAX (vb->lines.len, ctx->node_i.len + 1) * sizeof (uint32_t),
-                   CTX_GROWTH, "contexts->node_i", ctx->did_i);
+                   CTX_GROWTH, "contexts->node_i");
 
         WordIndex node_index = *LASTENT (uint32_t, ctx->node_i);
         NEXTENT (uint32_t, ctx->node_i) = node_index;

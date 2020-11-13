@@ -58,8 +58,9 @@ char *buf_display (const Buffer *buf)
 const char *buf_desc (const Buffer *buf)
 {
     static char desc[300]; // use static memory instead of malloc since we could be in the midst of a memory issue when this is called
-    sprintf (desc, "%s:%"PRId64" len=%"PRIu64" allocated in %s:%u by vb_i=%d", 
-             buf->name ? buf->name : "(no name)", buf->param, buf->len, buf->func, buf->code_line, (buf->vb ? buf->vb->vblock_i : -999));
+    sprintf (desc, "%s param=%"PRId64" len=%"PRIu64" size=%"PRId64" allocated in %s:%u by vb_i=%d", 
+             buf->name ? buf->name : "(no name)", buf->param, buf->len, buf->size, buf->func, buf->code_line, 
+             (buf->vb ? buf->vb->vblock_i : -999));
     return desc;
 }
 
@@ -332,7 +333,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     Buffer *bl = &vb->buffer_list;
 
-    buf_alloc (vb, bl, MAX (INITIAL_MAX_MEM_NUM_BUFFERS, bl->len+1) * sizeof(Buffer *), 2, "buffer_list", vb->id);
+    buf_alloc (vb, bl, MAX (INITIAL_MAX_MEM_NUM_BUFFERS, bl->len+1) * sizeof(Buffer *), 2, "buffer_list");
 
     ((Buffer **)bl->data)[bl->len++] = buf;
 
@@ -346,16 +347,13 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 }
 
 static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_size, 
-                      const char *func, uint32_t code_line, const char *name, int64_t param)
+                      const char *func, uint32_t code_line, const char *name)
 {
     // set some parameters before allocation so they can go into the error message in case of failure
     buf->func        = func;
     buf->code_line   = code_line;
 
-    if (name) {
-        buf->name  = name;
-        buf->param = param;
-    } 
+    if (name) buf->name  = name;
     ASSERT (buf->name, "Error: buffer has no name. func=%s:%u", buf->func, buf->code_line);
 
     if (!memory) {
@@ -391,7 +389,7 @@ uint64_t buf_alloc_do (VBlock *vb,
                        uint64_t requested_size,
                        double grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
                        const char *func, uint32_t code_line,
-                       const char *name, int64_t param)      
+                       const char *name)      
 {
     START_TIMER;
 
@@ -410,7 +408,7 @@ uint64_t buf_alloc_do (VBlock *vb,
 
     // case 1: we have enough memory already
     if (requested_size <= buf->size) {
-        if (!buf->data) buf_init (buf, buf->memory, buf->size, buf->size, func, code_line, name, param);
+        if (!buf->data) buf_init (buf, buf->memory, buf->size, buf->size, func, code_line, name);
         goto finish;
     }
 
@@ -446,7 +444,7 @@ uint64_t buf_alloc_do (VBlock *vb,
                 (*overlay_count)--; // overlaying buffers are now on their own - no regular buffer
                 buf->memory = buf->data = NULL;
                 buf->size = buf->len = 0;
-                buf_alloc_do (vb, buf, new_size, 1, func, code_line, name, param); // recursive call - simple alloc
+                buf_alloc_do (vb, buf, new_size, 1, func, code_line, name); // recursive call - simple alloc
           
                 // copy old data
                 memcpy (buf->data, old_data, old_size);
@@ -458,7 +456,7 @@ uint64_t buf_alloc_do (VBlock *vb,
                 char *old_memory = buf->memory;
                 __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
                 char *new_memory = (char *)buf_low_level_realloc (old_memory, new_size + overhead_size, func, code_line);
-                buf_init (buf, new_memory, new_size, old_size, func, code_line, name, param);
+                buf_init (buf, new_memory, new_size, old_size, func, code_line, name);
             }
             buf->overlayable = true; // renew this, as it was reset by buf_init
             pthread_mutex_unlock (&overlay_mutex);
@@ -468,7 +466,7 @@ uint64_t buf_alloc_do (VBlock *vb,
             char *old_memory = buf->memory;
             __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
             char *new_memory = (char *)buf_low_level_realloc (old_memory, new_size + overhead_size, func, code_line);
-            buf_init (buf, new_memory, new_size, old_size, func, code_line, name, param);
+            buf_init (buf, new_memory, new_size, old_size, func, code_line, name);
         }
     }
 
@@ -481,7 +479,7 @@ uint64_t buf_alloc_do (VBlock *vb,
 
         buf->type   = BUF_REGULAR;
 
-        buf_init (buf, memory, new_size, 0, func, code_line, name, param);
+        buf_init (buf, memory, new_size, 0, func, code_line, name);
         buf_add_to_buffer_list(vb, buf);
     }
 
@@ -645,7 +643,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
                   uint64_t bytes_per_entry, // how many bytes are counted by a unit of .len
                   uint64_t src_start_entry, uint64_t max_entries,  // if 0 copies the entire buffer 
                   const char *func, unsigned code_line,
-                  const char *name, int64_t param) // dst buffer settings, or take from src if 0
+                  const char *name) // dst buffer settings, or take from src if 0
 {
     ASSERT (src->data, "Error in buf_copy call from %s:%u: src->data is NULL", func, code_line);
     
@@ -656,7 +654,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
     if (!bytes_per_entry) bytes_per_entry=1;
     
     buf_alloc_do (dst_vb, dst, num_entries * bytes_per_entry, 1, func, code_line,
-                  name ? name : src->name, name ? param : src->param); // use realloc rather than malloc to allocate exact size
+                  name ? name : src->name); // use realloc rather than malloc to allocate exact size
 
     memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);
 
@@ -687,7 +685,7 @@ void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
 void buf_add_string (VBlockP vb, Buffer *buf, const char *str) 
 { 
     unsigned len = strlen (str); 
-    buf_alloc (vb, buf, MAX (1000, buf->len + len + 1), 2, "string_buf", 0);
+    buf_alloc_more (vb, buf, len+1, 1000, char, 2, "string_buf");
     buf_add (buf, str, len);
     buf->data[buf->len] = '\0'; // string terminator without increasing buf->len
 }

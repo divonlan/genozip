@@ -211,15 +211,20 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Fix bug in genocat --show-headers
 - Add back gtshark as a codec for VCF allele data, --gtshark option
 
-8.1
+8.0.4
+- 10X improvement in --gtshark speed by moving to in-memory comms using fifo
+- fixed thread safety issue in bit_array.c 
+
+9
 - Framework supports binary source files, and native compression of BAM (not through samtools)
 - Framework supports file translations SAM->BAM, BAM->SAM, SAM/BAM->FASTQ
 - New flags: --sam --fastq for genounzip/genocat - to allow SAM/BAM to be reconstructed as SAM, BAM or FASTQ
 - New flag: --vcf genounzip/genocat - reconstruct a 23andMe file as a VCF
-- 10X improvement in --gtshark speed by moving to in-memory comms using fifo
 - --dump-one-local and --dump-one-b250 now output a file per VB
 - New flag: --dump-section
+- New flag: --show-bgzf for genozip - show bgzf blocks
 - New flag: --show-containers for genounzip/genocat - show flow of container reconstruction
+- Flag --show-time can now accept an optional argument eg. --show-time=compressor
 - For b250 sections that have all the same entry - store the entry only once. If the entry is word_index=0, drop the section
 - genols --unbind - new flag - shows the components of bound files
-- remove support for Visual C compiler
+- removed support for Visual C compiler

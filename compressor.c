@@ -24,10 +24,6 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
     ASSERT0 (BGEN32 (header->magic) == GENOZIP_MAGIC, "Error in comp_compress: corrupt header - bad magic");
 
-    // if the user requested --fast - we always use BZLIB, never LZMA or BSC
-    if (flag.fast && (header->codec == CODEC_LZMA || header->codec == CODEC_BSC))
-        header->codec = CODEC_BZ2;
-
     ASSERT (header->codec < NUM_CODECS, "Error in comp_compress: unsupported section compressor=%u", header->codec);
 
     unsigned compressed_offset     = BGEN32 (header->compressed_offset);
@@ -59,7 +55,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
     // note: its ok for other threads to allocate evb data because we have a special mutex in buffer protecting the 
     // evb buffer list
-    buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, z_data->name, z_data->param);
+    buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, z_data->name);
 
     // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec instead
     Codec comp_codec = codec_args[header->codec].compress ? header->codec : codec_args[header->codec].sub_codec;
@@ -79,7 +75,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         // if output buffer is too small, increase it, and try again
         if (!success) {
             buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + data_uncompressed_len  + encryption_padding_reserve + 50 /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */, 1,
-                       z_data->name ? z_data->name : "z_data", z_data->param);
+                       z_data->name ? z_data->name : "z_data");
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
             data_uncompressed_len = BGEN32 (header->data_uncompressed_len); // reset
@@ -185,45 +181,10 @@ void comp_unit_test (SectionHeader *header)
     codec_args[header->codec].compress (evb, header, data, &size, 0, comp, &comp_len, false);
 
     Buffer uncomp = EMPTY_BUFFER;
-    buf_alloc (evb, &uncomp, size, 1, "uncomp", 0);
+    buf_alloc (evb, &uncomp, size, 1, "uncomp");
     codec_args[header->codec].uncompress (evb, header->codec, comp, comp_len, &uncomp, size, CODEC_NONE);
 
     printf ("Unit test %s!\n", memcmp (data, uncomp.data, size) ? "failed" : "succeeded");
 
     exit(0);
 }
-
-/*
-static Codec vcf_zip_get_best_gt_compressor (VBlock *vb, Buffer *test_data)
-{
-    static Codec best_gt_data_compressor = CODEC_UNKNOWN;
-    static Buffer compressed = EMPTY_BUFFER; // no thread issues as protected my mutex
-
-    // get best compression codec for gt data - lzma or bzlib - their performance varies considerably with
-    // the type of data - with either winning by a big margin
-    pthread_mutex_lock (&best_gt_data_compressor_mutex);    
-
-    if (best_gt_data_compressor != CODEC_UNKNOWN) goto finish; // answer already known
-
-    #define TEST_BLOCK_SIZE 100000
-    buf_alloc (vb, &compressed, TEST_BLOCK_SIZE+1000, 1, "compressed_data_test", 0);
-
-    uint32_t uncompressed_len = MIN (test_data->len, TEST_BLOCK_SIZE);
-
-    uint32_t bzlib_comp_len = compressed.size;
-    codec_bz2_compress (vb, CODEC_BZ2, test_data->data, uncompressed_len, NULL, compressed.data, &bzlib_comp_len, false);
-    
-    uint32_t lzma_comp_len = compressed.size;
-    codec_lzma_compress (vb, CODEC_LZMA, test_data->data, uncompressed_len, NULL, compressed.data, &lzma_comp_len, false);
-    
-    if      (bzlib_comp_len < uncompressed_len && bzlib_comp_len < lzma_comp_len) best_gt_data_compressor = CODEC_BZ2;
-    else if (lzma_comp_len  < uncompressed_len && lzma_comp_len < bzlib_comp_len) best_gt_data_compressor = CODEC_LZMA;
-    else                                                                          best_gt_data_compressor = CODEC_NONE;
-
-    buf_free (&compressed);
-
-finish:
-    pthread_mutex_unlock (&best_gt_data_compressor_mutex);
-    return best_gt_data_compressor;
-}
-*/

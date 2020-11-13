@@ -15,9 +15,10 @@
 #include "codec.h"
 #include "stats.h"
 
-// returns true if txt_data[txt_i] is the end of a FASTA read (= next char is > or end-of-file)
-static inline bool fasta_is_end_of_line (VBlock *vb, 
-                                                 int32_t txt_i) // index of a \n in txt_data
+// returns true if txt_data[txt_i] is the end of a FASTA read (= next char is > or end-of-file), false if not, 
+// and -1 if more data (lower first_i) is needed 
+static inline int fasta_is_end_of_line (VBlock *vb, uint32_t first_i,
+                                        int32_t txt_i) // index of a \n in txt_data
 {
     ARRAY (char, txt, vb->txt_data);
 
@@ -28,21 +29,18 @@ static inline bool fasta_is_end_of_line (VBlock *vb,
         return txt[txt_i+1] == '>';
 
     // if we're at the end of the line, we scan back to the previous \n and check if it NOT the >
-    for (int32_t i=txt_i-1; i >= 0; i--) 
+    for (int32_t i=txt_i-1; i >= first_i; i--) 
         if (txt[i] == '\n') 
             return txt[txt_i+1] != '>'; // this row is a sequence row, not a description row
 
-    // we can't find a complete FASTQ block in the entire vb data
-    ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);
-    return 0; // squash compiler warning ; never reaches here
+    return -1; // we need more data (lower first_i)
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-uint32_t fasta_unconsumed (VBlockP vb)
+int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    uint32_t unconsumed_len=0;
-
     // case: reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
+    // (note: first_i=0 when flag.make_reference)
     if (flag.make_reference) {
         bool data_found = false;
         ARRAY (char, txt, vb->txt_data);
@@ -52,33 +50,34 @@ uint32_t fasta_unconsumed (VBlockP vb)
         
             // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
             // everything following to the next VB
-            if (data_found && txt[i]=='>' && txt[i-1]=='\n') {
-                unconsumed_len = vb->txt_data.len - i;
-                break;
-            }                
+            if (data_found && txt[i]=='>' && txt[i-1]=='\n') 
+                return vb->txt_data.len - i;
 
             if (!data_found && (txt[i] != '\n' && txt[i] != '\r')) data_found = true; // anything, except for empty lines, is considered data
         }
     }
 
     // we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
-    if (!unconsumed_len) {
-        for (int32_t i=vb->txt_data.len-1; i >= 0; i--) {
+    for (; *i >= first_i; (*i)--) {
 
-            if (vb->txt_data.data[i] == '\n') {
+        if (vb->txt_data.data[*i] == '\n') {
 
-                // when compressing FASTA with a reference - an "end of line" is one that the next character is >, or it is the end of the file
-                // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), line cannot be too long - they 
-                // must fit in a VB
-                if ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && !fasta_is_end_of_line (vb, i)) 
-                    continue;
+            // when compressing FASTA with a reference - an "end of line" is one that the next character is >, or it is the end of the file
+            // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), line cannot be too long - they 
+            // must fit in a VB
+            if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
+                switch (fasta_is_end_of_line (vb, first_i, *i)) {
+                    case true  : break;            // end of line
+                    case false : continue;         // not end of line
+                    default    : goto out_of_data; // need more data (lower first_i)
+                }
 
-                unconsumed_len = vb->txt_data.len-1 - i;
-                break;
-            }
+            return vb->txt_data.len-1 - *i;
         }
     }
-    return unconsumed_len;
+
+out_of_data:
+    return -1; // cannot find end-of-line in the data starting first_i
 }
 
 // callback function for compress to get data of one line (called by codec_lzma_data_in_callback)

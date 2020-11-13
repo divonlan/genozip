@@ -52,10 +52,14 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
     uint32_t range_num_set_bits;  /* ZIP: I/O thread telling compute thread to how many bits are set in range.is_set */ \
     \
-    uint32_t refhash_layer;     /* create_ref && reading external reference: compressing/decompressing refresh */ \
+    uint32_t refhash_layer;    /* create_ref && reading external reference: compressing/decompressing refresh */ \
     uint32_t refhash_start_in_layer;     /* create_ref && reading external reference: compressing/decompressing refresh */ \
     \
     ProfilerRec profile; \
+    \
+    /* bgzf - for handling bgzf-compressed files */ \
+    struct libdeflate_decompressor *bgzf_decompressor; \
+    Buffer bgzf_blocks;        /* ZIP: an array of BgzfBlock tracking the decompression of blocks into txt_data */\
     \
     /* random access, chrom, pos */ \
     Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\

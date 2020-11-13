@@ -40,8 +40,8 @@ typedef struct DataTypeProperties {
     // TXT file properties
     enum {HDR_NONE, HDR_OK, HDR_MUST} txt_header_required;
     char txt_header_1st_char;  // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
-    int32_t (*is_header_done) (void);  // header length if header read is complete, 0 if not complete yet + sets lines.len
-    uint32_t (*unconsumed) (VBlockP);  // called by I/O thread called by txtfile_read_vblock to get the length of uncosumed txt beyond the vblock txt
+    int32_t (*is_header_done) (void);  // header length if header read is complete, -1 if not complete yet + sets lines.len
+    int32_t (*unconsumed) (VBlockP, uint32_t first_i, int32_t *i);  // called by I/O thread called by txtfile_get_unconsumed_to_pass_up to get the length of unconsumed txt to pass to next vb. returns -1 if first_i is too high and it needs more data.
     bool (*zip_inspect_txt_header) (BufferP txt_header); // called by I/O thread to verify the txt header. returns false if this txt file should be skipped
 
     // ZIP callbacks

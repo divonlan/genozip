@@ -58,7 +58,7 @@ typedef struct Buffer {
 #define LASTENT(type, buf)    ((type *)(&(buf).data[((buf).len-1) * sizeof(type)]))
 #define AFTERENT(type, buf)   ((type *)(&(buf).data[((buf).len  ) * sizeof(type)]))
 #define NEXTENT(type, buf)    (*(type *)(&(buf).data[((buf).len++) * sizeof(type)]))
-#define ENTNUM(buf, ent)      ((((char*)(ent)) - ((buf).data)) / sizeof (*ent))
+#define ENTNUM(buf, ent)      ((uint32_t)((((char*)(ent)) - ((buf).data)) / sizeof (*ent)))
 #define ISLASTENT(buf,ent)    (ENTNUM((buf),(ent)) == (buf).len - 1)
 
 extern void buf_initialize(void);
@@ -70,24 +70,21 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                               uint64_t requested_size, 
                               double grow_at_least_factor, // grow more than new_size   
                               const char *func, uint32_t code_line,
-                              const char *name, int64_t param);
+                              const char *name);
 
 // efficient wrapper
-#define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name, param) { \
+#define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name) { \
     uint64_t new_req_size = (requested_size); /* make copy to allow ++ */ \
-    ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name), (param)) \
+    ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name)) \
                                                     : (buf)->size); \
 }
 
-#define buf_alloc_more_name(vb, buf, more, at_least, type, grow_at_least_factor,name) \
-    buf_alloc ((vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name), 0)
-
-#define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor) \
-    buf_alloc ((vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (buf)->name, (buf)->param)
+#define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor,name) \
+    buf_alloc ((vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
 
 #define buf_alloc_more_zero(vb, buf, more, at_least, type, grow_at_least_factor) { \
     uint64_t size_before = (buf)->size; \
-    buf_alloc_more((vb), (buf), (more), (at_least), type, (grow_at_least_factor)); \
+    buf_alloc_more((vb), (buf), (more), (at_least), type, (grow_at_least_factor), 0); \
     if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 }
 
@@ -108,9 +105,9 @@ extern void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line);
 extern void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src, uint64_t bytes_per_entry,
                          uint64_t src_start_entry, uint64_t max_entries, // if 0 copies the entire buffer
                          const char *func, uint32_t code_line,
-                         const char *name, int64_t param);
-#define buf_copy(dst_vb,dst,src,bytes_per_entry,src_start_entry,max_entries,name,param) \
-  buf_copy_do ((VBlockP)(dst_vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(name),(param))
+                         const char *name);
+#define buf_copy(dst_vb,dst,src,bytes_per_entry,src_start_entry,max_entries,name) \
+  buf_copy_do ((VBlockP)(dst_vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(name))
 
 extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 

@@ -124,9 +124,11 @@ extern VBlockP evb;
 #endif
 
 // we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
+#ifndef __bool_true_false_are_defined
 typedef _Bool bool;
 #define true 1
 #define false 0
+#endif
 
 #define SAVE_VALUE(flag) typeof(flag) save_##flag = flag 
 #define TEMP_VALUE(flag,temp) typeof(flag) save_##flag = flag ; flag = (temp)
@@ -157,7 +159,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     NUM_ENCRYPTION_TYPES
 } EncryptionType;
 
-#define ENC_NAMES { "No encryption", "AES 256 bit" }
+#define ENC_NAMES { "NO_ENC", "AES256" }
 
 #define COMPRESSOR_CALLBACK(func) \
 void func (VBlockP vb, uint32_t vb_line_i, \

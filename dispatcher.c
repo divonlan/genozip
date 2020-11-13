@@ -125,7 +125,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
 
     vb_create_pool (MAX (2,max_threads+1 /* one for evb */));
 
-    buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf", 0);
+    buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf");
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
@@ -163,7 +163,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     COPY_TIMER_VB (evb, wallclock);
 
-    if (flag.show_time) 
+    if (flag.show_time && !flag.show_time[0]) // show-time without the optional parameter 
         profiler_print_report (&evb->profile, 
                                dd->max_threads, dd->max_vb_id_so_far+1,
                                dd->filename, dd->next_vb_i + (command != ZIP)); // in ZIP, the last VB is empty

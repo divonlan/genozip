@@ -195,9 +195,7 @@ static void refhash_compress_one_vb (VBlockP vb)
                                     .layer_bits              = (uint8_t)layer_bits[vb->refhash_layer],
                                     .start_in_layer          = BGEN32 (vb->refhash_start_in_layer)     };
 
-    vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
-    vb->z_data.param = vb->vblock_i;
-    
+    vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set    
     comp_compress (vb, &vb->z_data, false, (SectionHeaderP)&header, ENT (char, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer), NULL);
 
     if (flag.show_ref_hash) 
@@ -255,7 +253,7 @@ static void refhash_uncompress_one_vb (VBlockP vb)
 
 static void refhash_read_one_vb (VBlockP vb)
 {
-    buf_alloc (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers", 0); // room for 1 section header
+    buf_alloc (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
 
     if (!sections_get_next_section_of_type (&sl_ent, SEC_REF_HASH, SEC_NONE, true, false))
         return; // no more refhash sections
@@ -347,7 +345,7 @@ void refhash_initialize (void)
 
     // base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
     for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-        buf_alloc (evb, &refhash_bufs[layer_i], layer_size[layer_i], 1, "refhash_bufs", layer_i);
+        buf_alloc (evb, &refhash_bufs[layer_i], layer_size[layer_i], 1, "refhash_bufs");
 
         // set all entries to NO_GPOS. note: no need to set in ZIP, as we will be reading the data from the refernce file
         // NOT: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min

@@ -29,6 +29,7 @@
 #include "codec.h"
 #include "compressor.h"
 #include "strings.h"
+#include "bgzf.h"
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, bool is_final_component)
 {
@@ -85,7 +86,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
     ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->node_i is not empty. Dict=%s", ctx->name);
 
     buf_alloc (vb, &ctx->b250, ctx->node_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
-               1.1, "ctx->b250_buf", 0);
+               1.1, "ctx->b250_buf");
 
     bool show = (flag.show_b250 || dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_b250.num) && !sample_size;
 
@@ -245,6 +246,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
                 if (dict_id_printable (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
                     ctx_dump_binary (vb, ctx, false);
 
+                if (flag.show_time) codec_show_time (vb, "B250", ctx->name, ctx->bcodec);
                 zfile_compress_b250_data (vb, ctx);
             }
         }
@@ -257,6 +259,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
             if (ctx->ltype == LT_BITMAP) 
                 LTEN_bit_array (buf_get_bitarray (&ctx->local));
 
+            if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->name, ctx->lcodec);
             zfile_compress_local_data (vb, ctx, 0);
         }
     }
@@ -353,13 +356,16 @@ static void zip_compress_one_vb (VBlock *vb)
 {
     START_TIMER; 
 
-    // if we're vb_i=1 lock, and unlock only when we're done merging. all other vbs need  
-    // to wait for our merge. that is because our dictionaries are sorted 
-    if (vb->vblock_i == 1) ctx_vb_1_lock(vb); 
+    // if the txt file is compressed with BGZF, we uncompress now, in the compute thread
+    if (txt_file->codec == CODEC_BGZF) 
+        bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
+
+    // calculate the MD5 contribution of this VB to the single file and bound files, and the MD5 snapshot of this VB
+    if (flag.md5 && !flag.make_reference) txtfile_md5_one_vb (vb); 
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
-    buf_alloc (vb, &vb->z_data, vb->vb_data_size / 3, 1.2, "z_data", 0);
+    buf_alloc (vb, &vb->z_data, vb->vb_data_size / 3, 1.2, "z_data");
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
     if (flag.pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
@@ -388,6 +394,7 @@ static void zip_compress_one_vb (VBlock *vb)
     // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section().
     // writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
+    // note: vb>=2 will block here, until vb=1 is completed
     ctx_merge_in_vb_ctx(vb);
 
     // for each context with CODEC_UNKNOWN - i.e. that was not assigned in Seg AND not inherited from

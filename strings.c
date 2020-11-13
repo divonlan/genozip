@@ -19,6 +19,16 @@ char *str_tolower (const char *in, char *out /* out allocated by caller - can be
     return startout;
 }
 
+char char_to_printable (char c) 
+{
+    switch ((uint8_t)c) {
+        case 32 ... 127 : return c   ; // printable ASCII
+        case '\t'       : 
+        case '\n'       : 
+        case '\r'       : return ' ' ; // whitespace
+        default         : return '?' ; // unprintable
+    }
+}
 
 char *str_size (uint64_t size, char *str /* out */)
 {
@@ -127,6 +137,13 @@ char *str_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated b
     sprintf (str, "0x%"PRIx64, (uint64_t)p);
 #endif
     return str;
+}
+
+bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last_c)
+{
+    for (; str_len ; str++, str_len--)
+        if (*str < first_c || *str > last_c) return false;
+    return true;
 }
 
 const char *type_name (unsigned item, 

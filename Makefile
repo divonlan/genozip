@@ -15,7 +15,7 @@ LDFLAGS     += -lpthread -lm
 
 ifdef IS_CONDA 
 	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION=\"conda\"
-	LDFLAGS += -lbz2 # conda - dynamic linking with bz2 
+	LDFLAGS += -lbz2 -ldeflate # conda - dynamic linking with bz2 and deflate
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -24,10 +24,10 @@ ifdef IS_CONDA
 	endif
 else
 	CC=gcc
-	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1 -march=native 
+	CFLAGS = -Wall -I. -Izlib -Ibzlib -Ilibdeflate -D_LARGEFILE64_SOURCE=1 -march=native 
 endif 
 
-SRC_DIRS = zlib bzlib lzma bsc compatibility
+SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
 MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
           zip.c piz.c seg.c zfile.c aligner.c flags.c \
@@ -37,7 +37,7 @@ MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c lic
 		  fasta_seg.c fasta_piz.c fastq.c fast_shared.c \
 		  gff3_seg.c \
 		  me23.c \
-		  buffer.c random_access.c sections.c base64.c \
+		  buffer.c random_access.c sections.c base64.c bgzf.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_none.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
@@ -52,7 +52,9 @@ BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c b
 LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
 BSC_SRCS   = bsc/divsufsort.c bsc/adler32.c bsc/bwt.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/qlfc_model.c bsc/qlfc.c
- 
+
+DEFLATE_SRCS = libdeflate/deflate_decompress.c libdeflate/utils.c libdeflate/x86_cpu_features.c libdeflate/arm_cpu_features.c
+
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
@@ -61,7 +63,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
              buffer.h file.h context.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h \
-			 reference.h ref_private.h refhash.h aligner.h mutex.h \
+			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h\
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h \
              compatibility/mac_gettime.h  \
@@ -72,8 +74,8 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 bsc/adler32.h bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
 			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h
 			 
-ifeq ($(CC),cl)
-	MY_SRCS += compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/visual_c_pthread.c
+ifeq ($(CC),cl) # Microsoft Visual C
+	$(error Only the gcc compiler is currently supported)
 endif
 
 OBJDIR=objdir # fallback if not win, linux, mac
@@ -101,7 +103,7 @@ endif
 
 ifndef IS_CONDA 
 # local - static link everything
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS)
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS)
 else 
 # conda - use packages for bzip2
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS)

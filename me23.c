@@ -117,7 +117,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     uint32_t num_chroms = (uint32_t)ctx->word_list.len;
     
     buf_alloc (evb, txtheader_buf, 1.3*evb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3)+50 +
-               num_chroms * (strlen (VCF_HEAD_2) + 100), 1, "txt_data", 0);
+               num_chroms * (strlen (VCF_HEAD_2) + 100), 1, "txt_data");
     
     bufprintf (evb, txtheader_buf, VCF_HEAD_1, ref_filename);
     

@@ -481,7 +481,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     flag.do_translate = dt_get_translation (&toplevel, &factor); // translate if we're using an alternative toplevel snip
 
     // note: txt_data is fully allocated in advance and cannot be extended mid-reconstruction (container_reconstruct_do and possibly others rely on this)
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size * factor + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size * factor + 10000, 1.1, "txt_data"); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
 
     piz_uncompress_all_ctxs (vb, 0);
 
@@ -605,7 +605,8 @@ static bool piz_read_one_vb (VBlock *vb)
     ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
-    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(uint32_t), 0, "z_section_headers", 1); // room for section headers  
+    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(uint32_t), 0, "z_section_headers"); // room for section headers  
+
     NEXTENT (uint32_t, vb->z_section_headers) = vb_header_offset; // vb_header_offset is always 0 for VB header
 
     // read all b250 and local of all fields and subfields
@@ -684,7 +685,7 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
                     VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
                     
                     if (region_ra_intersection_matrix.data) {
-                        buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix", next_vb->vblock_i);
+                        buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix");
                         buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
                     }
                     

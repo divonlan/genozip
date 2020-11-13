@@ -32,7 +32,7 @@ void random_access_alloc_ra_buf (VBlock *vb, int32_t chrom_node_index)
     uint64_t old_len = vb->ra_buf.len;
     uint64_t new_len = chrom_node_index + 2; // +2 because we store for chrom_node_index [-1, chrom_node_index]
     if (new_len > old_len) {
-        buf_alloc (vb, &vb->ra_buf, sizeof (RAEntry) * MAX (new_len, 500), 2, "ra_buf", vb->vblock_i);
+        buf_alloc (vb, &vb->ra_buf, sizeof (RAEntry) * MAX (new_len, 500), 2, "ra_buf");
         memset (ENT (RAEntry, vb->ra_buf, old_len), 0, (new_len - old_len) * sizeof (RAEntry));
         vb->ra_buf.len = new_len;
     }
@@ -123,7 +123,7 @@ void random_access_merge_in_vb (VBlock *vb)
 {
     mutex_lock (ra_mutex);
 
-    buf_alloc (evb, &z_file->ra_buf, (z_file->ra_buf.len + vb->ra_buf.len) * sizeof(RAEntry), 2, "z_file->ra_buf", 0); 
+    buf_alloc (evb, &z_file->ra_buf, (z_file->ra_buf.len + vb->ra_buf.len) * sizeof(RAEntry), 2, "z_file->ra_buf"); 
 
     ARRAY (RAEntry, src_ra, vb->ra_buf);
 
@@ -184,7 +184,7 @@ void random_access_finalize_entries (Buffer *ra_buf)
 
     // use sorter to consturct a sorted RA
     static Buffer sorted_ra_buf = EMPTY_BUFFER; // must be static because its added to buf_list
-    buf_alloc (evb, &sorted_ra_buf, sizeof (RAEntry) * ra_buf->len, 1, ra_buf->name, 0);
+    buf_alloc (evb, &sorted_ra_buf, sizeof (RAEntry) * ra_buf->len, 1, ra_buf->name);
     sorted_ra_buf.len = ra_buf->len;
 
     for (uint32_t i=0; i < ra_buf->len; i++) 
@@ -248,7 +248,7 @@ bool random_access_is_vb_included (uint32_t vb_i,
     ASSERT (!buf_is_allocated (region_ra_intersection_matrix), "Error: expecting region_ra_intersection_matrix to be unallcoated vb_i=%u", vb_i);
 
     unsigned num_regions = regions_max_num_chregs();
-    buf_alloc (evb, region_ra_intersection_matrix, z_file->ra_buf.len * num_regions, 1, "region_ra_intersection_matrix", vb_i);
+    buf_alloc (evb, region_ra_intersection_matrix, z_file->ra_buf.len * num_regions, 1, "region_ra_intersection_matrix");
     buf_zero (region_ra_intersection_matrix);
 
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
@@ -290,7 +290,7 @@ void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min_pos, P
     if (!buf_is_allocated (&z_file->ra_min_max_by_chrom)) {
         uint64_t num_chroms = z_file->contexts[CHROM].word_list.len;
 
-        buf_alloc (evb, &z_file->ra_min_max_by_chrom, num_chroms * sizeof (MinMax), 1, "z_file->ra_min_max_by_chrom", 0);
+        buf_alloc (evb, &z_file->ra_min_max_by_chrom, num_chroms * sizeof (MinMax), 1, "z_file->ra_min_max_by_chrom");
         buf_zero (&z_file->ra_min_max_by_chrom); // safety
         z_file->ra_min_max_by_chrom.len = num_chroms;
 

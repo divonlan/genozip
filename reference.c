@@ -86,7 +86,7 @@ void ref_unload_reference (bool force_clean_all)
         // REF_EXT_STORE compacts ranges. We recover them from the copy
         if (buf_is_allocated (&genome_ref_copy)) { // won't be allocated if we are compressing only one file or if not REF_EXT_STORE
             memcpy (genome.ref.words, genome_ref_copy.data, genome.ref.num_of_words * sizeof (word_t));
-            buf_copy (evb, &ranges, &ranges_copy, sizeof (Range), 0, 0, "ranges", 0);
+            buf_copy (evb, &ranges, &ranges_copy, sizeof (Range), 0, 0, "ranges");
         }
     }
 
@@ -469,7 +469,7 @@ static void ref_read_one_range (VBlockP vb)
 
     if (range_is_included) { 
 
-        buf_alloc (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers", 2); // room for 2 section headers  
+        buf_alloc (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers"); // room for 2 section headers  
 
         ASSERT0 (vb->z_section_headers.len < 2, "Error in ref_read_one_range: unexpected 3rd recursive entry");
 
@@ -507,8 +507,8 @@ void ref_load_stored_reference (void)
         random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
         
         if (flag.reading_reference) {
-            buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra", 0);
-            buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list", 0);
+            buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra");
+            buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list");
         }
 
         ref_initialize_ranges (RT_LOADED);
@@ -516,7 +516,7 @@ void ref_load_stored_reference (void)
         sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
         spin_initialize (region_to_set_list_spin);
-        buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list", 0);
+        buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list");
     }
     
     // decompress reference using Dispatcher
@@ -1046,7 +1046,7 @@ void ref_compress_ref (void)
     if (ranges.param == RT_LOADED)
         ref_copy_compressed_sections_from_reference_file ();
 
-    buf_alloc (evb, &ref_stored_ra, sizeof (RAEntry) * ranges.len, 1, "ref_stored_ra", 0);
+    buf_alloc (evb, &ref_stored_ra, sizeof (RAEntry) * ranges.len, 1, "ref_stored_ra");
     ref_stored_ra.len = 0; // re-initialize, in case we read the external reference into here
     
     spin_initialize (ref_stored_ra_spin);
@@ -1182,13 +1182,13 @@ static void ref_save_genome_copy_if_needed (bool is_last_file)
 
     // make a copy of genome and ranges
     if (!is_last_file && !buf_is_allocated (&genome_ref_copy)) {
-        buf_alloc (evb, &genome_ref_copy, genome.ref.num_of_words * sizeof (word_t), 1, "genome_ref_copy", 0);
+        buf_alloc (evb, &genome_ref_copy, genome.ref.num_of_words * sizeof (word_t), 1, "genome_ref_copy");
         BitArray *bar = buf_get_bitarray (&genome_ref_copy);
         bar->num_of_bits  = genome.ref.num_of_bits;
         bar->num_of_words = genome.ref.num_of_words;
 
         // copy initial state of ranges, before they are modifed by compacting
-        buf_copy (evb, &ranges_copy, &ranges, sizeof (Range), 0, 0, "ranges_copy", 0);
+        buf_copy (evb, &ranges_copy, &ranges, sizeof (Range), 0, 0, "ranges_copy");
     }
 }
 
@@ -1209,10 +1209,10 @@ void ref_load_external_reference (bool display, bool is_last_file)
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
 
     // save and reset flags that are intended to operate on the compressed file rather than the reference file
-    flag.test = flag.md5 = flag.show_time = flag.show_memory = flag.show_stats= flag.no_header =
+    flag.test = flag.md5 = flag.show_memory = flag.show_stats= flag.no_header =
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict = 
     flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = 0;
-    flag.grep = flag.unbind = 0;
+    flag.grep = flag.show_time = flag.unbind = 0;
     flag.dict_id_show_one_b250 = flag.dict_id_show_one_dict = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE;
 
     TEMP_VALUE (command, PIZ);
@@ -1249,9 +1249,10 @@ static void ref_allocate_loaded_genome (void)
     ranges.len = (z_file->flags & GENOZIP_FL_REF_INTERNAL) ? z_file->contexts[CHROM].word_list.len :
                                                              ref_contigs_num_contigs();
 
-    buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges", RT_LOADED); 
+    buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges");     
     buf_zero (&ranges);
-    
+    ranges.param = RT_LOADED;
+
     for (uint32_t range_id=0; range_id < ranges.len; range_id++) 
         ENT (Range, ranges, range_id)->range_id = range_id;
 
@@ -1343,7 +1344,8 @@ void ref_initialize_ranges (RangesType ranges_type)
 
         ranges.len = REF_NUM_DENOVO_RANGES;
     
-        buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges", RT_DENOVO); 
+        buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges"); 
+        ranges.param = RT_DENOVO;
         buf_zero (&ranges);
         ref_lock_initialize_denovo_genome();
     }

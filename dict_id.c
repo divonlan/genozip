@@ -224,7 +224,7 @@ Buffer *dict_id_create_aliases_buf (void)
 
     // build global alias reference, which will be immutable until the end of this z_file
     dict_id_aliases_buf.len = dict_id_num_aliases * sizeof (DictIdAlias);
-    buf_alloc (evb, &dict_id_aliases_buf, dict_id_aliases_buf.len, 1, "dict_id_aliases_buf", 0);
+    buf_alloc (evb, &dict_id_aliases_buf, dict_id_aliases_buf.len, 1, "dict_id_aliases_buf");
 
     DictIdAlias *next = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)

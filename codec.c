@@ -9,6 +9,7 @@
 #include "dict_id.h"
 #include "file.h"
 #include "zfile.h"
+#include "profiler.h"
 
 // --------------------------------------
 // memory functions that serve the codecs
@@ -22,7 +23,7 @@ void *codec_alloc (VBlock *vb, int size, double grow_at_least_factor)
     // so subsequent VBs will allocate roughly the same amount of memory for each buffer
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (!buf_is_allocated (&vb->codec_bufs[i])) {
-            buf_alloc (vb, &vb->codec_bufs[i], size, grow_at_least_factor, "codec_bufs", i);
+            buf_alloc (vb, &vb->codec_bufs[i], size, grow_at_least_factor, "codec_bufs");
             //printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;
         }
@@ -106,26 +107,42 @@ typedef struct {
 
 static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 {
-    // case: select for significant difference in size (more than 2%)
-    if (t1->size  < t2->size  * 0.98) return -1; // t1 has significantly better size
-    if (t2->size  < t1->size  * 0.98) return  1; // t2 has significantly better size
+    // in --best - we primarily consider size, and consider time only if the size if very close
+    if (!flag.fast) {
+        // case: select for significant difference in size (more than 2%)
+        if (t1->size  < t2->size  * 0.98) return -1; // t1 has significantly better size
+        if (t2->size  < t1->size  * 0.98) return  1; // t2 has significantly better size
 
-    // case: size is similar, select for significant difference in time (more than 50%)
-    if (t1->clock < t2->clock * 0.50) return -1; // t1 has significantly better time
-    if (t2->clock < t1->clock * 0.50) return  1; // t2 has significantly better time
+        // case: size is similar, select for significant difference in time (more than 50%)
+        if (t1->clock < t2->clock * 0.50) return -1; // t1 has significantly better time
+        if (t2->clock < t1->clock * 0.50) return  1; // t2 has significantly better time
 
-    // case: size and time are quite similar, check 2nd level 
+        // case: size and time are quite similar, check 2nd level 
 
-    // case: select for smaller difference in size (more than 1%)
-    if (t1->size  < t2->size  * 0.99) return -1; // t1 has significantly better size
-    if (t2->size  < t1->size  * 0.99) return  1; // t2 has significantly better size
+        // case: select for smaller difference in size (more than 1%)
+        if (t1->size  < t2->size  * 0.99) return -1; // t1 has significantly better size
+        if (t2->size  < t1->size  * 0.99) return  1; // t2 has significantly better size
 
-    // case: select for smaller difference in time (more than 15%)
-    if (t1->clock < t2->clock * 0.85) return -1; // t1 has significantly better time
-    if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
+        // case: select for smaller difference in time (more than 15%)
+        if (t1->clock < t2->clock * 0.85) return -1; // t1 has significantly better time
+        if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
 
-    // time and size are very similar (within %1 and 15% respectively) - select for smaller size
-    return t1->size - t2->size;
+        // time and size are very similar (within %1 and 15% respectively) - select for smaller size
+        return t1->size - t2->size;
+    }
+
+    // in --fast, we primarily consider time, and consider size only if time is very close
+    else {
+        if (t1->clock < t2->clock * 0.90) return -1; // t1 has significantly better time
+        if (t2->clock < t1->clock * 0.90) return  1; // t2 has significantly better time
+
+        // case: select for significant difference in size (more than 10%)
+        if (t1->size  < t2->size  * 0.90) return -1; // t1 has significantly better size
+        if (t2->size  < t1->size  * 0.90) return  1; // t2 has significantly better size
+
+        // time and size are similar - select for time
+        return t1->clock - t2->clock;
+    }
 }
 
 // this function tests each of our generic codecs on a 100KB sample of local or b250 data, and assigns the best one based on 
@@ -142,12 +159,14 @@ static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 //    the codec during cloning    
 void codec_assign_best_codec (VBlockP vb, ContextP ctx, bool is_local, uint32_t len)
 {
+    START_TIMER;
+
     RESET_FLAG (show_headers);
     uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
     uint64_t save_z_data       = vb->z_data.len;
 
     CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA } };
-    const unsigned num_tests = flag.fast ? 2 : 4; // don't consider BSC or LZMA if --fast as they are slow
+    const unsigned num_tests = 4;
 
     Codec *selected_codec = is_local ? &ctx->lcodec : &ctx->bcodec;
 
@@ -168,6 +187,8 @@ void codec_assign_best_codec (VBlockP vb, ContextP ctx, bool is_local, uint32_t 
     // measure the compressed size and duration for a small sample of of the local data, for each codec
     for (unsigned t=0; t < num_tests; t++) {
         *selected_codec = tests[t].codec;
+
+        if (flag.show_time) codec_show_time (vb, "Assign", ctx->name, *selected_codec);
 
         clock_t start_time = clock();
         tests[t].size  = (*selected_codec == CODEC_NONE) ? len : 
@@ -196,6 +217,25 @@ done:
     vb->z_data.len = save_z_data;
     vb->section_list_buf.len = save_section_list; 
     RESTORE_FLAG (show_headers);
+
+    COPY_TIMER (codec_assign_best_codec);
+}
+
+// print prefix to the string to be printed by COPY_TIMER in the codec compression functions in case
+// of eg. --show-time=compressor_lzma
+void codec_show_time (VBlock *vb, const char *name, const char *subname, Codec codec)
+{
+//fprintf (stderr, "name=%s\n", name ? name:"N/A");    
+    if ((strcmp (flag.show_time, "compressor_lzma"  ) && codec==CODEC_LZMA) ||
+        (strcmp (flag.show_time, "compressor_bsc"   ) && codec==CODEC_BSC ) || 
+        (strcmp (flag.show_time, "compressor_acgt"  ) && codec==CODEC_ACGT) || 
+        (strcmp (flag.show_time, "compressor_domq"  ) && codec==CODEC_DOMQ) || 
+        (strcmp (flag.show_time, "compressor_hapmat") && codec==CODEC_HAPM) || 
+        (strcmp (flag.show_time, "compressor_bz2"   ) && codec==CODEC_BZ2 )) {
+
+        vb->profile.next_name    = name;
+        vb->profile.next_subname = subname;
+    }
 }
 
 // needs to be after all the functions as it refers to them

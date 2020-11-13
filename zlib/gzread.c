@@ -32,7 +32,16 @@ local int gz_load(state, buf, len, have)
         get = len - *have;
         if (get > max)
             get = max;
-        ret = read(state->fd, buf + *have, get);
+        
+        // added by Divon
+        if (state->injection[0]) {
+            memcpy (buf + *have, state->injection, INJECTION_SIZE);
+            ret = INJECTION_SIZE;
+            state->injection[0] = 0;
+        }
+        else
+            ret = read(state->fd, buf + *have, get);
+
         if (ret <= 0)
             break;
         *have += (unsigned)ret;
@@ -405,6 +414,14 @@ int ZEXPORT gzread(file, buf, len)
 
     /* return the number of bytes read (this is assured to fit in an int) */
     return (int)len;
+}
+
+// added by Divon - stores 18 bytes ("injection") to later be consumed by gz_load
+ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection))
+{
+    gz_statep state = (gz_statep)file;
+    memcpy (state->injection, injection, INJECTION_SIZE);  
+    return 0;
 }
 
 /* -- see zlib.h -- */

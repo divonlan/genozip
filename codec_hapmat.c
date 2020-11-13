@@ -55,8 +55,7 @@ static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlock *vb)
 {
     START_TIMER; 
 
-    buf_alloc (vb, &vb->hapmat_helper_index_buf, vb->num_haplotypes_per_line * sizeof(HaploTypeSortHelperIndex), 0,
-               "hapmat_helper_index_buf", vb->vblock_i);
+    buf_alloc (vb, &vb->hapmat_helper_index_buf, vb->num_haplotypes_per_line * sizeof(HaploTypeSortHelperIndex), 0, "hapmat_helper_index_buf");
     buf_zero (&vb->hapmat_helper_index_buf);
     ARRAY (HaploTypeSortHelperIndex, helper_index, vb->hapmat_helper_index_buf);
 
@@ -120,7 +119,7 @@ bool codec_hapmat_compress (VBlock *vb,
     qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
 
     vb->hapmat_one_array.len = vb->lines.len;
-    buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array", 0);
+    buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array");
     
     if (flag.show_alleles) 
         printf ("\nAfter transpose and sorting:\n");
@@ -153,7 +152,7 @@ bool codec_hapmat_compress (VBlock *vb,
     // create a permutation index for the vblock
     // we populate the hapmat_hapmat_index_ctx local, and it will be written after us, as the context is create after the hapmat_ctx 
     buf_alloc (vb, &vb->hapmat_index_ctx->local, vb->num_haplotypes_per_line * sizeof(uint32_t), 
-               0, "context->local", vb->hapmat_index_ctx->did_i);
+               0, "context->local");
     vb->hapmat_index_ctx->local.len = vb->num_haplotypes_per_line;
     
     ARRAY (uint32_t, hp_index, vb->hapmat_index_ctx->local);
@@ -183,8 +182,8 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb)
     uint32_t num_haplotypes_per_line = vb->num_haplotypes_per_line = (uint32_t)(vb->ht_matrix_ctx->local.len / vb->lines.len);
 
     vb->hapmat_one_array.len = num_haplotypes_per_line + 7; // +7 because depermuting_loop works on a word (32/64 bit) boundary
-    buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array", vb->vblock_i);
-    buf_alloc (vb, &vb->hapmat_columns_data, sizeof (char *) * vb->hapmat_one_array.len, 1, "hapmat_columns_data", 0); // realloc for exact size (+15 is padding for 64b operations)
+    buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array");
+    buf_alloc (vb, &vb->hapmat_columns_data, sizeof (char *) * vb->hapmat_one_array.len, 1, "hapmat_columns_data"); // realloc for exact size (+15 is padding for 64b operations)
 
     // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
     // note: haplotype columns are permuted only within their own sample block
@@ -195,7 +194,7 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb)
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
     // note: txt_file->max_lines_per_vb will be zero if genozip file was created by redirecting output
-    buf_alloc (vb, &vb->hapmat_column_of_zeros, MAX (txt_file->max_lines_per_vb, vb->lines.len), 1, "hapmat_column_of_zeros", 0);
+    buf_alloc (vb, &vb->hapmat_column_of_zeros, MAX (txt_file->max_lines_per_vb, vb->lines.len), 1, "hapmat_column_of_zeros");
     buf_zero (&vb->hapmat_column_of_zeros);
 
     for (uint32_t ht_i = 0; ht_i < num_haplotypes_per_line; ht_i++) 

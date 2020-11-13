@@ -16,6 +16,7 @@ extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, doub
 
 extern void txtfile_estimate_txt_data_size (VBlockP vb);
 extern void txtfile_write_one_vblock (VBlockP vb);
+extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
 
 extern bool txtfile_header_to_genozip (uint32_t *vcf_line_i);
 extern bool txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Md5Hash *digest);
@@ -23,13 +24,11 @@ extern bool txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Md5Hash *d
 extern void txtfile_header_initialize(void);
 uint32_t txtfile_get_bound_headers_len(void); // for stats
 
-extern uint32_t txtfile_read_block (char *data, uint32_t max_bytes);
-
 extern void txtfile_read_vblock (VBlockP vb);
-extern void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header);
+extern void txtfile_md5_one_vb (VBlockP vb);
 
 // callbacks
-extern uint32_t def_unconsumed (VBlockP vb);
+extern int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern int32_t def_is_header_done (void);
 
 extern DataType txtfile_get_file_dt (const char *filename);

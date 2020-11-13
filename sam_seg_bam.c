@@ -68,27 +68,25 @@ int32_t bam_is_header_done (void)
 }   
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-uint32_t bam_unconsumed (VBlockP vb)
+// if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
+int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    uint32_t next=0, vblock_len;
-    #define VBLEN vb->txt_data.len
-    #define VBSKIP(n) if (VBLEN < next + n) goto done; next += n
-    #define VB32 (next + 4 <= VBLEN ? GET_UINT32 (ENT (char, vb->txt_data, next)) : 0) ; if (VBLEN < next + 4) goto done; next += 4;
+    *i = MIN (*i, vb->txt_data.len - sizeof(BAMAlignmentFixed));
 
-    while (1) {
-        vblock_len = next;
-        
-        uint32_t block_size = VB32;
-        ASSERT (block_size, "Error in bam_unconsumed: found block_size=0 in vb=%u", vb->vblock_i);
-
-        VBSKIP (block_size);
+    // find the first alignment in the data (going backwards) that is entirely in the data - 
+    // we identify and alignment by l_read_name and read_name
+    for (; *i >= first_i; (*i)--) {
+        BAMAlignmentFixed *aln = (BAMAlignmentFixed *)ENT (char, vb->txt_data, *i);
+        if (&aln->read_name[aln->l_read_name] <= AFTERENT (char, vb->txt_data) && // we have the entire propose read name
+            aln->read_name[aln->l_read_name-1] == 0 && // nul-terminated
+            *i + LTEN32 (aln->block_size) + 4 <= vb->txt_data.len && // proposed block fits in data (+4 bc block_size value excludes itself)
+            str_is_in_range (aln->read_name, aln->l_read_name-1, '!', '~')) // all printable ascii (per SAM spec)
+            // TODO - add aln->bin calculation to increase confidence
+            
+            return vb->txt_data.len - (*i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
     }
 
-done:
-    ASSERT (vblock_len, "Error in bam_unconsumed: vb=%u has only %u bytes, not enough for even the first alignment line", 
-            vb->vblock_i, (int)vb->txt_data.len);
-
-    return vb->txt_data.len - vblock_len;
+    return -1; // we can't find any alignment - need more data (lower first_i)
 }
 
 void bam_seg_initialize (VBlock *vb)
@@ -166,7 +164,7 @@ static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, i
 static inline void bam_rewrite_cigar (VBlockSAM *vb, uint16_t n_cigar_op, const uint32_t *cigar)
 {
     if (!n_cigar_op) {
-        buf_alloc (vb, &vb->textual_cigar, 2, 2, "textual_cigar", 0);
+        buf_alloc (vb, &vb->textual_cigar, 2, 2, "textual_cigar");
         NEXTENT (char, vb->textual_cigar) = '*';
         goto finish;
     }
@@ -184,7 +182,7 @@ static inline void bam_rewrite_cigar (VBlockSAM *vb, uint16_t n_cigar_op, const 
         else ABORT ("op_len=%u too long in vb=%u: ", vb->vblock_i, op_len); 
     }
 
-    buf_alloc (vb, &vb->textual_cigar, len + 1 /* for \0 */, 2, "textual_cigar", 0);
+    buf_alloc (vb, &vb->textual_cigar, len + 1 /* for \0 */, 2, "textual_cigar");
 
     for (uint16_t i=0; i < n_cigar_op; i++) {
         uint32_t subcigar = LTEN32 (cigar[i]);
@@ -226,7 +224,7 @@ static void bam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_s
 
 static inline void bam_rewrite_seq (VBlockSAM *vb, uint32_t l_seq, const char *next_field)
 {
-    buf_alloc (vb, &vb->textual_seq, l_seq+1 /* +1 for last half-byte */, 1.5, "textual_seq", 0);
+    buf_alloc (vb, &vb->textual_seq, l_seq+1 /* +1 for last half-byte */, 1.5, "textual_seq");
 
     if (!l_seq) {
         NEXTENT (char, vb->textual_seq) = '*';
@@ -304,7 +302,7 @@ const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field,
 
     uint32_t max_len = (*type == 'B') ? (12 * GET_UINT32 (next_field) + 10) : // worst case scenario for item: "-1000000000,"
                        30;
-    buf_alloc (vb, &vb->textual_opt, max_len, 2, "textual_opt", 0); // a rather inefficient max in case of arrays, to do: tighten the calculation
+    buf_alloc (vb, &vb->textual_opt, max_len, 2, "textual_opt"); // a rather inefficient max in case of arrays, to do: tighten the calculation
 
     if (*type != 'B')
         next_field = bam_rewrite_one_optional_number (vb, next_field, *type);

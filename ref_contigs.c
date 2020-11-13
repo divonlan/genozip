@@ -69,7 +69,7 @@ void ref_contigs_compress (void)
     if (!buf_is_allocated (&z_file->contexts[CHROM].nodes)) return; // no contigs
 
     // the number of contigs is at most the number of chroms - but could be less if some chroms have no sequence
-    buf_alloc (evb, &created_contigs, sizeof (RefContig) * z_file->contexts[CHROM].nodes.len, 1, "created_contigs", 0);
+    buf_alloc (evb, &created_contigs, sizeof (RefContig) * z_file->contexts[CHROM].nodes.len, 1, "created_contigs");
 
     RefContig *last = NULL;
 
@@ -142,7 +142,7 @@ static void ref_contigs_create_sorted_index (void)
     if (buf_is_allocated (&loaded_contigs_sorted_index)) return; // already done
 
     // contig_words_sorted_index - an array of uint32 of indexes into contig_words - sorted by alphabetical order of the snip in contig_dict
-    buf_alloc (evb, &loaded_contigs_sorted_index, sizeof(uint32_t) * loaded_contigs.len, 1, "loaded_contigs_sorted_index", 0);
+    buf_alloc (evb, &loaded_contigs_sorted_index, sizeof(uint32_t) * loaded_contigs.len, 1, "loaded_contigs_sorted_index");
     for (uint32_t i=0; i < loaded_contigs.len; i++)
         NEXTENT (uint32_t, loaded_contigs_sorted_index) = i;
 
@@ -169,7 +169,7 @@ void ref_contigs_sort_chroms (void)
     uint32_t num_chroms = z_file->contexts[CHROM].word_list.len;
 
     // z_file->chroms_sorted_index - an array of uint32 of indexes into z_file->contexts[CHROM].word_list - sorted by alphabetical order of the snip in z_file->contexts[CHROM].dict
-    buf_alloc (evb, &z_file->chroms_sorted_index, sizeof(uint32_t) * num_chroms, 1, "z_file->chroms_sorted_index", 0);
+    buf_alloc (evb, &z_file->chroms_sorted_index, sizeof(uint32_t) * num_chroms, 1, "z_file->chroms_sorted_index");
     for (uint32_t i=0; i < num_chroms; i++)
         NEXTENT (uint32_t, z_file->chroms_sorted_index) = i;
 
@@ -193,7 +193,7 @@ void ref_contigs_load_contigs (void)
 
     ASSERT0 (z_file->contexts[CHROM].dict.len, "Error in ref_contigs_load_contigs: CHROM dictionary is empty");
 
-    buf_copy (evb, &loaded_contig_dict, &z_file->contexts[CHROM].dict, 1, 0, 0, "loaded_contig_dict", 0);
+    buf_copy (evb, &loaded_contig_dict, &z_file->contexts[CHROM].dict, 1, 0, 0, "loaded_contig_dict");
 
     ref_contigs_create_sorted_index();
 
@@ -283,14 +283,14 @@ void ref_contigs_generate_data_if_denovo (void)
     ASSERT (flag.reference == REF_INTERNAL || (buf_is_allocated (&chrom_ctx->dict) && buf_is_allocated (&chrom_ctx->word_list)),
             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);
 
-    buf_copy (evb, &loaded_contig_dict, &chrom_ctx->dict, 1, 0, 0, "contig_dict", 0);
+    buf_copy (evb, &loaded_contig_dict, &chrom_ctx->dict, 1, 0, 0, "contig_dict");
     
     // we copy from the z_file context after we completed segging a file
     // note: we can't rely on chrom_ctx->nodes for the correct order as vb_i=1 resorted. rather, by mimicking the
     // word_list generation as done in PIZ, we guarantee that we will get the same chrom_index
     // in case of multiple bound files, we re-do this in every file in case of additional chroms (not super effecient, but good enough because the context is small)
     loaded_contigs.len = chrom_ctx->nodes.len;
-    buf_alloc (evb, &loaded_contigs, loaded_contigs.len * sizeof (RefContig), 1, "loaded_contigs", 0);
+    buf_alloc (evb, &loaded_contigs, loaded_contigs.len * sizeof (RefContig), 1, "loaded_contigs");
 
     // similar logic to ctx_integrate_dictionary_fragment
     char *start = loaded_contig_dict.data;

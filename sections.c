@@ -60,7 +60,7 @@ uint64_t sections_add_to_list (VBlock *vb, const SectionHeader *header)
         offset = vb->z_data.len;
     }
 
-    buf_alloc (alc_vb, buf, MAX (buf->len + 1, 50) * sizeof(SectionListEntry), 2, name, vb->vblock_i);
+    buf_alloc (alc_vb, buf, MAX (buf->len + 1, 50) * sizeof(SectionListEntry), 2, name);
     
     SectionListEntry *ent = &NEXTENT (SectionListEntry, *buf);
     ent->section_type     = header->section_type;
@@ -77,7 +77,7 @@ void sections_list_concat (VBlock *vb, BufferP section_list_buf)
 {
     buf_alloc (evb, &z_file->section_list_buf, 
               (z_file->section_list_buf.len + section_list_buf->len) * sizeof(SectionListEntry), 2, 
-              "z_file->section_list_buf", 0);
+              "z_file->section_list_buf");
   
     SectionListEntry *dst = AFTERENT (SectionListEntry, z_file->section_list_buf);
     SectionListEntry *src = FIRSTENT (SectionListEntry, *section_list_buf);

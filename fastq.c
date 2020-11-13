@@ -20,8 +20,8 @@
 #include "aligner.h"
 #include "stats.h"
 
-// returns true if txt_data[txt_i] is the end of a FASTQ line (= block of 4 lines in the file)
-static inline bool fastq_is_end_of_line (VBlock *vb, int32_t txt_i) // index of a \n in txt_data
+// returns true if txt_data[txt_i] is the end of a FASTQ line (= block of 4 lines in the file); -1 if out of data
+static inline int fastq_is_end_of_line (VBlock *vb, uint32_t first_i, int32_t txt_i) // index of a \n in txt_data
 {
 #   define IS_NL_BEFORE_QUAL_LINE(i) \
         ((i > 3) && ((txt[i-2] == '\n' && txt[i-1] == '+') || /* \n line ending case */ \
@@ -36,26 +36,28 @@ static inline bool fastq_is_end_of_line (VBlock *vb, int32_t txt_i) // index of 
         return txt[txt_i+1] == '@' && !IS_NL_BEFORE_QUAL_LINE(txt_i);
 
     // if we're at the end of the line, we scan back to the previous \n and check if it is at the +
-    for (int32_t i=txt_i-1; i >= 0; i--) 
+    for (int32_t i=txt_i-1; i >= first_i; i--) 
         if (txt[i] == '\n') 
             return IS_NL_BEFORE_QUAL_LINE(i);
 
-    // we can't find a complete FASTQ block in the entire vb data
-    ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);
-    return 0; // squash compiler warning ; never reaches here
+    return -1; 
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-uint32_t fastq_unconsumed (VBlockP vb)
+int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 {    
-    for (int32_t i=vb->txt_data.len-1; i >= 0; i--) {
+    for (; *i >= first_i; (*i)--) {
         // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
-        if (vb->txt_data.data[i] == '\n' && fastq_is_end_of_line (vb, i)) 
-            return vb->txt_data.len-1 - i;
+        if (vb->txt_data.data[*i] == '\n')
+            switch (fastq_is_end_of_line (vb, first_i, *i)) {
+                case true  : return vb->txt_data.len-1 - *i; // end of line
+                case false : continue;                      // not end of line, continue searching
+                default    : goto out_of_data;  
+            }
     }
 
-    ABORT ("Error in fastq_unconsumed: no new line was found in vb=%u", vb->vblock_i);
-    return 0; // quiet compiler warning
+out_of_data:
+    return -1; // cannot find end-of-line in the data starting first_i
 }
 
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
@@ -203,7 +205,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
 
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
     sl++;
-    buf_alloc (vb, &vb->z_section_headers, MAX ((MAX_DICTS * 2 + 50),  vb->z_section_headers.len + MAX_SUBFIELDS + 10) * sizeof(uint32_t), 0, "z_section_headers", 1); // room for section headers  
+    buf_alloc (vb, &vb->z_section_headers, MAX ((MAX_DICTS * 2 + 50),  vb->z_section_headers.len + MAX_SUBFIELDS + 10) * sizeof(uint32_t), 0, "z_section_headers"); // room for section headers  
 
     while (sl->section_type == SEC_B250 || sl->section_type == SEC_LOCAL) {
         
@@ -301,7 +303,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
 
     else {
         Context *nonref_ctx = &vb->contexts[FASTQ_NONREF];
-        buf_alloc ((VBlockP)vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), CTX_GROWTH, "context->local", FASTQ_NONREF); 
+        buf_alloc ((VBlockP)vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), CTX_GROWTH, "context->local"); 
         buf_add (&nonref_ctx->local, seq_start, dl->seq_len);
     }
 

@@ -57,7 +57,9 @@ void ref_make_ref_init (void)
 {
     ASSERT0 (flag.make_reference, "Expecting flag.make_reference=true");
 
-    buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges", RT_MAKE_REF); // must be allocated by I/O thread as its evb
+    buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges"); // must be allocated by I/O thread as its evb
+    ranges.param = RT_MAKE_REF;
+    
     buf_zero (&ranges);
 
     refhash_initialize();

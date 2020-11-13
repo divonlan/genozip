@@ -22,7 +22,7 @@ typedef struct {
     int pair; // unfortunately we can't rely on enum being sizeof(int)
 
     // genounzip options
-    int bgzip;
+    int bgzip, out_dt;
     char *unbind;
 
     // genocat options for showing only a subset of the file 
@@ -49,10 +49,10 @@ typedef struct {
     int show_memory, show_dict, show_b250, show_headers, show_aliases,
         show_index, show_gheader, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_ref_alts,
-        show_codec_test, show_containers, show_alleles, show_time,
+        show_codec_test, show_containers, show_alleles, show_bgzf,
         debug_progress, show_hash, debug_memory, show_vblocks, show_threads,
         test_seg;
-    char *dump_section, *show_is_set;
+    char *dump_section, *show_is_set, *show_time;
 
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
            dict_id_show_one_dict,   // argument of --show-dict-one
@@ -60,14 +60,13 @@ typedef struct {
            dump_one_local_dict_id;  // argument of --dump-local-one
 
     // internal flags set by the system, not the command line
-    int out_dt,            // PIZ: output txt datatype
-        bind,              // ZIP: user used --output to bind 2+ files
-        ref_use_aligner,   // ZIP: compression requires using the aligner
-        const_chroms,      // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
-        reading_reference, // system is currently reading a reference file
-        do_translate,      // PIZ: decompression requires translation to another data type
-        genocat_info_only, // User requested to genocat with only metadata to be shown, not file contents
-        multiple_files;    // Command line includes multiple files
+    bool bind,               // ZIP: user used --output to bind 2+ files
+         ref_use_aligner,    // ZIP: compression requires using the aligner
+         const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
+         reading_reference,  // system is currently reading a reference file
+         do_translate,       // PIZ: decompression requires translation to another data type
+         genocat_info_only,  // User requested to genocat with only metadata to be shown, not file contents
+         multiple_files;     // Command line includes multiple files
     uint64_t stdin_size;
 } Flags;
 

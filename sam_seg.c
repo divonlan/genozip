@@ -55,7 +55,7 @@ void sam_zip_initialize (void)
 static void sam_inspect_txt_header_one_SQ (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
 {
     // add chrom to tp list (we will add to context in sam_seg_initialize)
-    buf_alloc_more_name (evb, &SQ_chroms, chrom_name_len+1, 50000, char, 2, "SQ_chroms");
+    buf_alloc_more (evb, &SQ_chroms, chrom_name_len+1, 50000, char, 2, "SQ_chroms");
     buf_add (&SQ_chroms, chrom_name, chrom_name_len);
     NEXTENT (char, SQ_chroms) = 0;
 
@@ -128,7 +128,7 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
 
     if (!line_data) return; // only length was requested
 
-    buf_alloc (vb, &vb->bd_bi_line, dl->seq_len * 2, 2, "bd_bi_line", 0);
+    buf_alloc (vb, &vb->bd_bi_line, dl->seq_len * 2, 2, "bd_bi_line");
 
     // calculate character-wise delta
     for (unsigned i=0; i < dl->seq_len; i++) {
@@ -175,18 +175,20 @@ void sam_seg_initialize (VBlock *vb)
                 ctx_evaluate_snip_seg (vb, rnext_ctx, snip, snip_len, NULL);
             }
         }
+    }
 
-        // add chrom data read from SQ records in header to RNAME dictionary
-        if (SQ_chroms.len) {
-            for (char *chrom=FIRSTENT (char, SQ_chroms); chrom < AFTERENT (char, SQ_chroms); chrom += strlen (chrom) + 1) {
-                ctx_evaluate_snip_seg (vb, rname_ctx, chrom, strlen(chrom), NULL);
-                ctx_evaluate_snip_seg (vb, rnext_ctx, chrom, strlen(chrom), NULL);
-            }
-
-            buf_free (&SQ_chroms);
-
-            flag.const_chroms = true; // the file cannot have a chrom not already in the RNAME dictionary
+    // add chrom data read from SQ records in header to RNAME dictionary
+    // TO DO - we needlessly re-do this in every VB. It would be better to do this from the I/O thread
+    // for any compute threads (potentially in a sam_zip_read_one_vb) similar to ctx_copy_reference_contig_to_chrom_ctx
+    // the challenge is to merge these with the contigs from the reference. This is not very important
+    // as usually this takes < 1% of the time of seg_all_data_lines
+    if (SQ_chroms.len) {
+        for (char *chrom=FIRSTENT (char, SQ_chroms); chrom < AFTERENT (char, SQ_chroms); chrom += strlen (chrom) + 1) {
+            ctx_evaluate_snip_seg (vb, rname_ctx, chrom, strlen(chrom), NULL);
+            ctx_evaluate_snip_seg (vb, rnext_ctx, chrom, strlen(chrom), NULL);
         }
+
+        flag.const_chroms = true; // the file cannot have a chrom not already in the RNAME dictionary
     }
 }
 
@@ -375,10 +377,13 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
     if (!recursion_level) {
         // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it
-        buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-                buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
+        //buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
+        //        buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
         
-        buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
+        buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
+                   "context->local"); 
+        
+        buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local"); 
 
         buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
     }

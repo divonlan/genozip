@@ -6,6 +6,7 @@
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
 // it means a block of lines from the text file. 
 
+#include <libdeflate.h>
 #include "genozip.h"
 #include "context.h"
 #include "vblock.h"
@@ -61,6 +62,7 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->hapmat_columns_data);
     buf_free(&vb->hapmat_one_array);
     buf_free(&vb->hapmat_column_of_zeros);
+    buf_free(&vb->bgzf_blocks);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
@@ -93,6 +95,7 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->txt_data);
     buf_destroy (&vb->z_data);
     buf_destroy (&vb->z_section_headers);
+    buf_destroy (&vb->bgzf_blocks);
     buf_destroy (&vb->spiced_pw);
     buf_destroy (&vb->show_headers_buf);
     buf_destroy (&vb->show_b250_buf);
@@ -113,6 +116,8 @@ void vb_destroy_vb (VBlockP *vb_p)
     // destory data_type -specific buffers
     if (vb->data_type != DT_NONE)
         DT_FUNC(vb, destroy_vb)(vb);
+
+    libdeflate_free_decompressor (vb->bgzf_decompressor);
 
     FREE (*vb_p);
 }

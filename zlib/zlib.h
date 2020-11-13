@@ -1653,6 +1653,12 @@ ZEXTERN int ZEXPORT gzclose_w OF((gzFile file));
    zlib library.
 */
 
+/* Added by Divon - adds a 18 bytes of compressed data to the in stream, which will 
+be consumed next, instead of reading from disk
+ */
+#define INJECTION_SIZE 18
+ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection));
+
 ZEXTERN const char * ZEXPORT gzerror OF((gzFile file, int *errnum));
 /*
      Returns the error message for the last error which occurred on the given

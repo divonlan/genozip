@@ -51,6 +51,7 @@ typedef struct {
 #define USE_SUBCODEC NULL
 
 #define CODEC_ARGS { /* aligned with Codec defined in genozip.h */ \
+/*  simp name    ext       viewer         compress               uncompress             reconstruct             est_size            sub_codec */ \
     { 1, "N/A",  "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
     { 1, "NONE", "+",      "cat",         codec_none_compress,   codec_none_uncompress, NA3,                    codec_none_est_size }, \
     { 1, "GZ",   "+.gz",   "gunzip -c",   NA1,                   NA2,                   NA3,                    NA4                 }, \
@@ -97,6 +98,7 @@ extern const char *codec_name (Codec codec);
 extern void *codec_alloc (VBlockP vb, int size, double grow_at_least_factor);
 extern void codec_free (VBlockP vb, void *addr);
 extern void codec_free_all (VBlockP vb);
+extern void codec_show_time (VBlockP vb, const char *name, const char *subname, Codec codec);
 
 #define CODEC_ASSIGN_SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
 extern void codec_assign_best_codec (VBlockP vb, ContextP ctx, bool is_local, uint32_t len);

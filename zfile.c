@@ -53,6 +53,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         str_int (header->flags, flags);
 
     char str[1000];
+    #define PRINT if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else printf ("%s", str)
 
     sprintf (str, "%c %s%-*"PRIu64" %-19s %*.*s %4s%-3s %5s%-3s %4s%-3s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x\n",
              rw, 
@@ -69,15 +70,51 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
              BGEN32 (header->data_compressed_len), 
              BGEN32 (header->data_encrypted_len), 
              BGEN32 (header->magic));
+    PRINT;
 
-    if (vb) {
-        unsigned len = strlen (str);
-        buf_alloc (vb, &vb->show_headers_buf, vb->show_headers_buf.len + len + 1, 2, "show_headers_buf", 0);
-        strcpy (&vb->show_headers_buf.data[vb->show_headers_buf.len], str);
-        vb->show_headers_buf.len += len;
+#define SEC_TAB "            ++  "
+    if (header->section_type == SEC_GENOZIP_HEADER) {
+        SectionHeaderGenozipHeader *h = (SectionHeaderGenozipHeader *)header;
+        sprintf (str, SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u md5bound=%s md5ref=%s \n" 
+                      SEC_TAB "created=\"%.*s\" ref=\"%.*s\"\n",
+                 h->genozip_version, encryption_name (h->encryption_type), dt_name (BGEN16 (h->data_type)), 
+                 BGEN64 (h->uncompressed_data_size), BGEN64 (h->num_items_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
+                 md5_display (h->md5_hash_bound), md5_display (h->ref_file_md5), FILE_METADATA_LEN, h->created, REF_FILENAME_LEN, h->ref_filename);
+        PRINT;
     }
-    else 
-        printf ("%s", str);
+
+    else if (header->section_type == SEC_TXT_HEADER) {
+        SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
+        sprintf (str, SEC_TAB "txt_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u codec=%s md5_single=%s md5_header=%s\n" 
+                      SEC_TAB "txt_filename=\"%.*s\"\n",
+                 BGEN64 (h->txt_data_size), BGEN64 (h->num_lines), BGEN32 (h->max_lines_per_vb), codec_name (h->codec), 
+                 md5_display (h->md5_hash_single), md5_display (h->md5_header), TXT_FILENAME_LEN, h->txt_filename);;
+        PRINT;
+    }
+
+    else if (header->section_type == SEC_VB_HEADER) {
+        SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
+        sprintf (str, SEC_TAB "first_line=%u lines=%u longest_line=%u vb_data_size=%u z_data_bytes=%u md5_hash_so_far=%s\n",
+                 BGEN32 (h->first_line), BGEN32 (h->num_lines), BGEN32 (h->longest_line_len), BGEN32 (h->vb_data_size), 
+                 BGEN32 (h->z_data_bytes), md5_display (h->md5_hash_so_far));
+        PRINT;
+    }
+
+    else if (header->section_type == SEC_REFERENCE || header->section_type == SEC_REF_IS_SET) {
+        SectionHeaderReference *h = (SectionHeaderReference *)header;
+        sprintf (str, SEC_TAB "pos=%"PRIu64" gpos=%"PRIu64" num_bases=%u chrom_word_index=%u\n",
+                 BGEN64 (h->pos), BGEN64 (h->gpos), BGEN32 (h->num_bases), BGEN32 (h->chrom_word_index)); 
+        PRINT;
+    }
+    
+    else if (header->section_type == SEC_REF_HASH) {
+        SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
+        sprintf (str, SEC_TAB "num_layers=%u layer_i=%u layer_bits=%u start_in_layer=%u\n",
+                 h->num_layers, h->layer_i, h->layer_bits, BGEN32 (h->start_in_layer)); 
+        PRINT;
+    }
+    
+
 }
 
 static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_data)
@@ -166,7 +203,7 @@ void zfile_uncompress_section (VBlock *vb,
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
         if (uncompressed_data_buf_name) { 
-            buf_alloc (vb, uncompressed_data, data_uncompressed_len + sizeof (uint64_t), 1.1, uncompressed_data_buf_name, 0); // add a 64b word for safety in case this buffer will be converted to a bitarray later
+            buf_alloc (vb, uncompressed_data, data_uncompressed_len + sizeof (uint64_t), 1.1, uncompressed_data_buf_name); // add a 64b word for safety in case this buffer will be converted to a bitarray later
             uncompressed_data->len = data_uncompressed_len;
         }
 
@@ -211,13 +248,14 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
                                      uint32_t num_words, const char *data, uint32_t num_chars)
 {
     START_TIMER;
+    Codec codec = CODEC_BSC;
 
     SectionHeaderDictionary header = (SectionHeaderDictionary){ 
         .h.magic                 = BGEN32 (GENOZIP_MAGIC),
         .h.section_type          = SEC_DICT,
         .h.data_uncompressed_len = BGEN32 (num_chars),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary)),
-        .h.codec                 = CODEC_BSC,
+        .h.codec                 = codec,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .num_snips               = BGEN32 (num_words),
         .dict_id                 = ctx->dict_id
@@ -234,6 +272,8 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
 
     if (flag.list_chroms && ctx->did_i == CHROM)
         str_print_null_seperated_data (data, num_chars, false, vb->data_type == DT_SAM);
+
+    if (flag.show_time) codec_show_time (vb, "DICT", ctx->name, codec);
 
     z_file->dict_data.name  = "z_file->dict_data"; // comp_compress requires that it is set in advance
     comp_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);
@@ -323,8 +363,9 @@ void zfile_compress_section_data_codec (VBlock *vb, SectionType section_type,
         .vblock_i              = BGEN32 (vb->vblock_i)
     };
 
+    if (flag.show_time) codec_show_time (vb, st_name (section_type), NULL, codec);
+
     vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
-    vb->z_data.param = vb->vblock_i;
     comp_compress (vb, &vb->z_data, false, &header, 
                    section_data ? section_data->data : NULL, 
                    callback);
@@ -333,12 +374,21 @@ void zfile_compress_section_data_codec (VBlock *vb, SectionType section_type,
 // reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
 // this doesn't make a big difference for SSD, but makes a huge difference for HD
 // return true if data was read as requested, false if file has reached EOF and error otherwise
-static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t len, bool fail_quietly_if_not_enough_data)
+static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t len)
 {
     START_TIMER;
 
     ASSERT0 (len, "Error: in zfile_read_from_disk, len is 0");
+    ASSERT (buf_has_space (buf, len), "Error in zfile_read_from_disk: buf is out of space: len=%u but remaining space in buffer=%u (tip: run with --show-headers to see where it fails)",
+            len, (uint32_t)(buf->size - buf->len));
 
+    char *start = AFTERENT (char, *buf);
+    uint32_t bytes = fread (start, 1, len, (FILE *)file->file);
+    ASSERT (bytes == len, "Error in zfile_read_from_disk: read only %u bytes out of len=%u", bytes, len);
+
+    file->disk_so_far += bytes;
+    buf->len          += bytes;
+/*
     void *start = (void *)&buf->data[buf->len];
 
     uint32_t memcpyied = 0;
@@ -379,7 +429,7 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
 
         memcpyied += memcpy_len;
     }
-
+*/
     COPY_TIMER (read);
 
     return start;
@@ -408,12 +458,13 @@ int32_t zfile_read_section_do (File *file,
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
     
     uint32_t header_offset = data->len;
-    buf_alloc (vb, data, header_offset + header_size, 2, buf_name, 1);
+    buf_alloc (vb, data, header_offset + header_size, 2, buf_name);
+    data->param = 1;
     
     // move the cursor to the section. file_seek is smart not to cause any overhead if no moving is needed
     if (sl) file_seek (file, sl->offset, SEEK_SET, false);
 
-    SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
+    SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size); // note: header in file can be shorter than header_size if its an earlier version
     uint32_t bytes_read = header_size;
 
     // case: we're done! no more bound files
@@ -473,14 +524,13 @@ int32_t zfile_read_section_do (File *file,
             z_name, header_size, compressed_offset, st_name(header->section_type));
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
-    buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "zfile_read_section", 2);
+    buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "zfile_read_section");
+    data->param = 2;
     header = (SectionHeader *)&data->data[header_offset]; // update after realloc
 
     // read section data - but only if header size is as expected
-    if (remaining_data_len > 0 && compressed_offset == header_size) {
-        ASSERT (zfile_read_from_disk (file, vb, data, remaining_data_len, false), 
-                "Error: failed to read section data, section_type=%s: %s", st_name(header->section_type), strerror (errno));
-    }
+    if (remaining_data_len > 0 && compressed_offset == header_size)
+        zfile_read_from_disk (file, vb, data, remaining_data_len);
 
     return header_offset;
 }
@@ -502,9 +552,9 @@ void *zfile_read_section_header (VBlockP vb, uint64_t offset,
     ASSERT (!vb->compressed.len, "Error in zfile_read_section_header vb_i=%u expected_sec_type=%s: expecting vb->compressed to be free, but its not",
             vb->vblock_i, st_name (expected_sec_type));
     
-    buf_alloc (evb, &vb->compressed, header_size, 4, "compressed", 0); 
+    buf_alloc (evb, &vb->compressed, header_size, 4, "compressed"); 
 
-    SectionHeader *header = zfile_read_from_disk (z_file, evb, &vb->compressed, header_size, false); 
+    SectionHeader *header = zfile_read_from_disk (z_file, evb, &vb->compressed, header_size); 
 
     ASSERT (header, "Error in zfile_read_section_header: Failed to read header of section type %s from file %s: %s", 
             st_name(expected_sec_type), z_name, strerror (errno));
@@ -830,7 +880,7 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     footer.magic                 = BGEN32 (GENOZIP_MAGIC);
     footer.genozip_header_offset = BGEN64 (genozip_header_offset);
 
-    buf_alloc (evb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data", 0);
+    buf_alloc (evb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data");
     memcpy (&z_data->data[z_data->len], &footer, sizeof(SectionFooterGenozipHeader));
     z_data->len += sizeof(SectionFooterGenozipHeader);
 }
@@ -856,7 +906,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool i
     static Buffer txt_header_buf = EMPTY_BUFFER;
 
     buf_alloc (evb, &txt_header_buf, sizeof (SectionHeaderTxtHeader) + txt_header_text->len / 3, // generous guess of compressed size
-               1, "txt_header_buf", 0); 
+               1, "txt_header_buf"); 
 
     comp_compress (evb, &txt_header_buf, true, (SectionHeader*)&header, 
                    txt_header_text->len ? txt_header_text->data : NULL, // actual header may be missing (eg in SAM it is permitted to not have a header)
@@ -932,7 +982,6 @@ void zfile_compress_vb_header (VBlock *vb)
 
     // copy section header into z_data - to be eventually written to disk by the I/O thread. this section doesn't have data.
     vb->z_data.name  = "z_data"; // this is the first allocation of z_data - comp_compress requires that it is pre-named
-    vb->z_data.param = vb->vblock_i;
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&vb_header, NULL, NULL);
 }
 

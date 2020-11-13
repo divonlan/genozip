@@ -231,7 +231,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 void stats_compress (void)
 {
     stats_show_file_metadata(&z_file->stats_buf_1);
-    buf_copy (evb, &z_file->stats_buf_2, &z_file->stats_buf_1, 0,0,0, "z_file->stats_buf_2", 0);
+    buf_copy (evb, &z_file->stats_buf_2, &z_file->stats_buf_1, 0,0,0, "z_file->stats_buf_2");
 
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_size=0;
 
@@ -383,7 +383,7 @@ void stats_add_txt_name (const char *fn)
 {
     unsigned fn_len = strlen (fn);
 
-    buf_alloc (evb, &bound_txt_names, bound_txt_names.len + fn_len + 1, 2, "bound_txt_names", 0);
+    buf_alloc (evb, &bound_txt_names, bound_txt_names.len + fn_len + 1, 2, "bound_txt_names");
     
     if (bound_txt_names.len) buf_add (&bound_txt_names, " ", 1);
     buf_add (&bound_txt_names, fn, fn_len);

@@ -320,7 +320,7 @@ static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_n
 {
     Buffer *txtheader_buf = (Buffer *)callback_param;
 
-    buf_alloc_more (evb, txtheader_buf, chrom_name_len+9, 0, char, 1);
+    buf_alloc_more (evb, txtheader_buf, chrom_name_len+9, 0, char, 1, 0);
 
     // l_name
     chrom_name_len++; // inc. nul terminator
@@ -346,7 +346,7 @@ static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_n
 TXTHEADER_TRANSLATOR (txtheader_sam2bam)
 {
     // grow buffer to accommodate the BAM header fixed size and text (inc. nul terminator)
-    buf_alloc (evb, txtheader_buf, 12 + txtheader_buf->len + 1, 1, "txt_data", 0);
+    buf_alloc (evb, txtheader_buf, 12 + txtheader_buf->len + 1, 1, "txt_data");
 
     // nul-terminate text - required by sam_iterate_SQ_lines - but without enlengthening buffer
     *AFTERENT (char, *txtheader_buf) = 0;
@@ -366,7 +366,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     if (!from_SQ) n_ref = ref_num_loaded_contigs();
 
     // grow buffer to accommodate estimated reference size (we will more in txtheader_sam2bam_ref_info if not enough)
-    buf_alloc_more (evb, txtheader_buf, n_ref * 100 + (50 + strlen (command_line)) , 0, char, 1);
+    buf_alloc_more (evb, txtheader_buf, n_ref * 100 + (50 + strlen (command_line)) , 0, char, 1, 0);
 
     // add PG
     bufprintf (evb, txtheader_buf, "@PG\tID:genozip\tPN:genozip\tVN:%s\tCL:%s\n", GENOZIP_CODE_VERSION, command_line);

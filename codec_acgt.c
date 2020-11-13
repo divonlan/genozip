@@ -95,11 +95,12 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
     ASSERT0 (!vb->compressed.len && !vb->compressed.param, "Error in codec_acgt_compress_nonref: expecting vb->compressed to be free, but its not");
 
     // we will pack into vb->compressed
-    buf_alloc (vb, &vb->compressed, roundup_bits2bytes64 (*uncompressed_len * 2), 1, "compress", 0);
+    buf_alloc (vb, &vb->compressed, roundup_bits2bytes64 (*uncompressed_len * 2), 1, "compress");
     BitArray *packed = buf_get_bitarray (&vb->compressed);
 
     // option 1 - pack contiguous data
     if (uncompressed) {
+START_TIMER;        
         // overlay the NONREF.local to NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
         buf_set_overlayable (&nonref_ctx->local);
         buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, "context->local", nonref_x_ctx->did_i);
@@ -109,12 +110,14 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
         // calculate the exception in-place in NONREF.local also overlayed to NONREF_X.local
         for (uint32_t i=0; i < *uncompressed_len; i++) \
             ((char*)uncompressed)[i] = (uint8_t)(uncompressed[i]) ^ acgt_exceptions[(uint8_t)(uncompressed[i])];
+COPY_TIMER (tmp1);
     }
 
     // option 2 - callback to get each line
     else if (callback) {
+START_TIMER;        
 
-        buf_alloc (vb, &nonref_x_ctx->local, *uncompressed_len, CTX_GROWTH, "ctx->local", nonref_x_ctx->did_i);
+        buf_alloc (vb, &nonref_x_ctx->local, *uncompressed_len, CTX_GROWTH, "ctx->local");
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
             char *data_1=0;
@@ -127,6 +130,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
             for (uint32_t i=0; i < data_1_len; i++) 
                 NEXTENT (uint8_t, nonref_x_ctx->local) = (uint8_t)(data_1[i]) ^ acgt_exceptions[(uint8_t)(data_1[i])];
         }
+COPY_TIMER (tmp2);
     }
     else 
         ABORT0 ("Error in codec_acgt_compress_nonref: neither src_data nor callback is provided");
@@ -135,10 +139,12 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
     // original order, and improves compression ratio by about 2%
     LTEN_bit_array (packed);
 
-    CodecCompress *compress = codec_args[codec_args[header->codec].sub_codec].compress;
+    Codec sub_codec = codec_args[header->codec].sub_codec;
+    CodecCompress *compress = codec_args[sub_codec].compress;
     uint32_t packed_uncompressed_len = packed->num_of_words * sizeof (word_t);
 
     PAUSE_TIMER; // sub-codec compresssors account for themselves
+    if (flag.show_time) codec_show_time (vb, "Subcodec", vb->profile.next_subname, sub_codec);
     compress (vb, header, (char *)packed->words, &packed_uncompressed_len, NULL, compressed, compressed_len, false); // no soft fail
     RESUME_TIMER (compressor_actg);
 
@@ -192,7 +198,7 @@ void codec_acgt_uncompress (VBlock *vb, Codec codec,
     ASSERT0 (!vb->compressed.len && !vb->compressed.param, "Error in codec_acgt_uncompress: expected vb->compressed to be free, but its not");
 
     uint64_t bitmap_num_bytes = roundup_bits2bytes64 (num_bases * 2); // 4 nucleotides per byte, rounded up to whole 64b words
-    buf_alloc (vb, &vb->compressed, bitmap_num_bytes, 1, "compressed", 0);    
+    buf_alloc (vb, &vb->compressed, bitmap_num_bytes, 1, "compressed");    
 
     // uncompress bitmap using CODEC_ACGT.sub_codec (passed to us as sub_codec) into vb->compressed
     codec_args[sub_codec].uncompress (vb, sub_codec, compressed, compressed_len, &vb->compressed, bitmap_num_bytes, CODEC_NONE);

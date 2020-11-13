@@ -26,7 +26,7 @@ WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *
                      bool *is_new) // optional out
 {
     buf_alloc (vb, &ctx->node_i, MAX (vb->lines.len, ctx->node_i.len + 1) * sizeof (uint32_t),
-               CTX_GROWTH, "contexts->node_i", ctx->did_i);
+               CTX_GROWTH, "contexts->node_i");
     
     WordIndex node_index = ctx_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
@@ -135,7 +135,7 @@ WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str
     bool is_new;
     WordIndex chrom_node_index = seg_by_did_i_ex (vb, chrom_str, chrom_str_len, CHROM, chrom_str_len+1, &is_new);
 
-    // don't allow adding chros if const_chroms (except "*")
+    // don't allow adding chroms if const_chroms (except "*")
     ASSSEG (!is_new || !flag.const_chroms || (chrom_str_len == 1 && chrom_str[0] == '*'), 
             chrom_str, "Error: contig '%.*s' appears in file, but is missing in the reference file and file header", chrom_str_len, chrom_str);
             
@@ -213,7 +213,7 @@ PosType seg_pos_field (VBlock *vb,
     if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value.i) {
         
         // store the value in store it in local - uint32
-        buf_alloc (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, snip_ctx->name, snip_ctx->did_i);
+        buf_alloc (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, snip_ctx->name);
         NEXTENT (uint32_t, snip_ctx->local) = BGEN32 (this_pos);
         snip_ctx->txt_len += add_bytes;
 
@@ -494,7 +494,7 @@ void seg_compound_field (VBlock *vb,
 
             // allocate memory if needed
             buf_alloc (vb, &sf_ctx->node_i, MAX (vb->lines.len, sf_ctx->node_i.len + 1) * sizeof (uint32_t),
-                       CTX_GROWTH, "contexts->node_i", sf_ctx->did_i);
+                       CTX_GROWTH, "contexts->node_i");
 
             // if snip is an integer, we store a delta
             char delta_snip[30];
@@ -590,7 +590,8 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx,
                             const char *snip, unsigned snip_len, 
                             unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
-    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + snip_len + 1, vb->lines.len * (snip_len+1)), 2, ctx->name, ctx->did_i); 
+    buf_alloc_more (vb, &ctx->local, snip_len + 1, vb->lines.len * (snip_len+1), char, CTX_GROWTH, "ctx->local");
+    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + snip_len + 1, vb->lines.len * (snip_len+1)), 2, ctx->name); 
     if (snip_len) buf_add (&ctx->local, snip, snip_len); 
     
     static const char sep[1] = { SNIP_SEP };
@@ -602,14 +603,16 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx,
 void seg_add_to_local_fixed (VBlock *vb, Context *ctx, const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
 {
     if (data_len) {
-        buf_alloc (vb, &ctx->local, MAX (ctx->local.len + data_len, vb->lines.len * data_len), CTX_GROWTH, ctx->name, ctx->did_i); 
+        buf_alloc_more (vb, &ctx->local, data_len, vb->lines.len * data_len, char, CTX_GROWTH, "ctx->local")
+        //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + data_len, vb->lines.len * data_len), CTX_GROWTH, ctx->name); 
         buf_add (&ctx->local, data, data_len); 
     }
 }
 
 void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned add_bytes)
 {
-    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint8_t), CTX_GROWTH, ctx->name, ctx->did_i);
+    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint8_t, CTX_GROWTH, "ctx->local");
+    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint8_t), CTX_GROWTH, ctx->name);
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int8_t, value);
     NEXTENT (uint8_t, ctx->local) = value;
@@ -619,7 +622,8 @@ void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned a
 
 void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned add_bytes)
 {
-    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint16_t), CTX_GROWTH, ctx->name, ctx->did_i);
+    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint16_t, CTX_GROWTH, "ctx->local");
+    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint16_t), CTX_GROWTH, ctx->name);
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int16_t, value);
     NEXTENT (uint16_t, ctx->local) = BGEN16 (value);
@@ -629,7 +633,8 @@ void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned
 
 void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes)
 {
-    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name, ctx->did_i);
+    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "ctx->local");
+    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name);
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int32_t, value);
     NEXTENT (uint32_t, ctx->local) = BGEN32 (value);
@@ -639,7 +644,8 @@ void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned
 
 void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned add_bytes)
 {
-    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint64_t), CTX_GROWTH, ctx->name, ctx->did_i);
+    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint64_t, CTX_GROWTH, "ctx->local");
+    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint64_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int64_t, value);
     NEXTENT (uint64_t, ctx->local) = BGEN64 (value);
@@ -692,7 +698,8 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
     uint32_t num_old_lines = vb->lines.len;
     
     // note: sadly, we cannot use the normal Buffer macros here because each data_type has its own line type
-    buf_alloc (vb, &vb->lines, vb->lines.size + sizeof_line, 2, "lines", vb->vblock_i);
+    buf_alloc (vb, &vb->lines, vb->lines.size + sizeof_line, 2, "lines");
+    
     memset (&vb->lines.data[num_old_lines * sizeof_line], 0, vb->lines.size - num_old_lines * sizeof_line);
     
     vb->lines.len = vb->lines.size / sizeof_line;
@@ -740,17 +747,17 @@ void seg_all_data_lines (VBlock *vb)
  
     // allocate lines
     if (vb->lines.len) { // counted by txt vblock reader - for example: bam
-        buf_alloc (vb, &vb->lines, vb->lines.len * sizeof_line, 1.2, "lines", vb->vblock_i);
+        buf_alloc (vb, &vb->lines, vb->lines.len * sizeof_line, 1.2, "lines");
     }
     else {
-        buf_alloc (vb, &vb->lines, seg_estimate_num_lines(vb) * sizeof_line, 1.2, "lines", vb->vblock_i);
+        buf_alloc (vb, &vb->lines, seg_estimate_num_lines(vb) * sizeof_line, 1.2, "lines");
         vb->lines.len = vb->lines.size / sizeof_line;
     }
     buf_zero (&vb->lines);
 
     // allocate the node_i for the fields which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
-        buf_alloc (vb, &vb->contexts[f].node_i, vb->lines.len * sizeof (uint32_t), 1, "contexts->node_i", f);
+        buf_alloc (vb, &vb->contexts[f].node_i, vb->lines.len * sizeof (uint32_t), 1, "contexts->node_i");
     
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
 

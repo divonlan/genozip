@@ -145,7 +145,7 @@ static const char *help_genozip_developer[] = {
     "",
     "Usage: as flags for genozip (Z), genounzip (U), genocat (C), genols (L)",
     "",
-    "   ZUCL --show-time       Show what functions are consuming the most time",
+    "   ZUCL --show-time=<res> Show what functions are consuming the most time. Optional <res> is one of the members of ProfilerRec defined in profiler.h such 'compressor_lzma' or a substring such as 'compressor_'",
     "",
     "   ZUCL --show-memory     Show what buffers are consuming the most memory",
     "",
@@ -210,6 +210,8 @@ static const char *help_genozip_developer[] = {
     "   UC   --show-is-set     <contig> Shows the contents of SEC_REF_IS_SET section for the given contig",    
     "",
     "   Z    --show-codec-test Genozip tests for the best codec when it first encounters a new type of data. See the results",    
+    "",
+    "   Z    --show-bgzf       Show bgzf blocks as they are being decompressed",    
 };
 
 static const char *help_genounzip[] = {

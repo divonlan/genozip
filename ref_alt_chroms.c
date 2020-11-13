@@ -29,7 +29,7 @@ void ref_alt_chroms_compress (void)
 
     if (!num_alt_chroms) return; // no need for an alt chroms sections as we have none
 
-    buf_alloc (evb, &z_file->alt_chrom_map, sizeof (AltChrom) * num_alt_chroms, 1, "z_file->alt_chrom_map", 0);
+    buf_alloc (evb, &z_file->alt_chrom_map, sizeof (AltChrom) * num_alt_chroms, 1, "z_file->alt_chrom_map");
 
     if (flag.show_ref_alts) 
         fprintf (stderr, "\nAlternative chroms (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
@@ -76,7 +76,7 @@ void ref_alt_chroms_load (void)
     Context *ctx = &z_file->contexts[CHROM];
 
     // create mapping user index -> reference index
-    buf_alloc (evb, &z_file->alt_chrom_map, sizeof (WordIndex) * ctx->word_list.len, 1, "z_file->alt_chrom_map", 0);
+    buf_alloc (evb, &z_file->alt_chrom_map, sizeof (WordIndex) * ctx->word_list.len, 1, "z_file->alt_chrom_map");
     z_file->alt_chrom_map.len = ctx->word_list.len;
 
     // initialize with unity mapping

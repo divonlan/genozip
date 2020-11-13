@@ -22,14 +22,19 @@
 #include "crypt.h"
 #include "progress.h"
 #include "codec.h"
+#include "bgzf.h"
+#include "mutex.h"
 #include "zlib/zlib.h"
 
 static bool is_first_txt = true; 
 static uint32_t total_bound_txt_headers_len = 0;
 
+MUTEX (vb_md5_mutex);   // ZIP: used for serializing MD5ing of VBs
+static uint32_t vb_md5_last=0; // last vb to be MD5ed 
+
 uint32_t txtfile_get_bound_headers_len(void) { return total_bound_txt_headers_len; }
 
-void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
+static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
 {
     if (flag.md5) {
         if (flag.bind && !is_2ndplus_txt_header)
@@ -39,64 +44,190 @@ void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_hea
     }
 }
 
-// peformms a single I/O read operation - returns number of bytes read 
-uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
+static inline uint32_t txtfile_read_block_plain (VBlock *vb, uint32_t max_bytes)
+{
+    char *data = AFTERENT (char, vb->txt_data);
+    int32_t bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
+    ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", txt_name, strerror(errno));
+
+    // bytes_read=0 and we're using an external decompressor - it is either EOF or
+    // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
+    if (!bytes_read && file_is_read_via_ext_decompressor (txt_file)) {
+        file_assert_ext_decompressor();
+        txt_file->is_eof = true;
+        return 0; // all is good - just a normal end-of-file
+    }
+    
+    txt_file->disk_so_far += (int64_t)bytes_read;
+
+#ifdef _WIN32
+    // in Windows using Powershell, the first 3 characters on an stdin pipe are BOM: 0xEF,0xBB,0xBF https://en.wikipedia.org/wiki/Byte_order_mark
+    // these charactes are not in 7-bit ASCII, so highly unlikely to be present natrually in a textual txt file
+    if (txt_file->redirected && 
+        txt_file->disk_so_far == (int64_t)bytes_read &&  // start of file
+        bytes_read >= 3  && 
+        (uint8_t)data[0] == 0xEF && 
+        (uint8_t)data[1] == 0xBB && 
+        (uint8_t)data[2] == 0xBF) {
+
+        // Bomb the BOM
+        bytes_read -= 3;
+        memcpy (data, data + 3, bytes_read);
+        txt_file->disk_so_far -= 3;
+    }
+#endif
+    vb->txt_data.len += bytes_read;
+
+    return (uint32_t)bytes_read;
+}
+
+static inline uint32_t txtfile_read_block_gz (VBlock *vb, uint32_t max_bytes)
+{
+    uint32_t bytes_read = gzfread (AFTERENT (char, vb->txt_data), 1, max_bytes, (gzFile)txt_file->file);
+    vb->txt_data.len += bytes_read;
+
+    if (bytes_read)
+        txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); // this is actually all the data uncompressed so far, some of it not yet read by us and still waiting in zlib's output buffer
+    else
+        txt_file->is_eof = true;
+
+    return bytes_read;
+}
+
+static inline uint32_t txtfile_read_block_bz2 (VBlock *vb, uint32_t max_bytes)
+{
+    uint32_t bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, AFTERENT (char, vb->txt_data), max_bytes);
+    vb->txt_data.len += bytes_read;
+
+    if (bytes_read)
+        txt_file->disk_so_far = BZ2_consumed ((BZFILE *)txt_file->file); 
+    else
+        txt_file->is_eof = true;
+
+    return bytes_read;
+}
+
+// BGZF: we read *compressed* data into vb->compressed - that will be decompressed later. we read
+// data with a *decompressed* size up to max_bytes. vb->compressed always contains only full BGZF blocks
+static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /* must be signed */, bool uncompress)
+{
+    if (uncompress) buf_alloc (vb, &vb->txt_data, max_bytes, 0, "txt_data");
+
+    uint32_t block_comp_len, block_uncomp_len, uncomp_len=0;
+    while (vb->compressed.param < max_bytes - BGZF_MAX_BLOCK_SIZE) {
+
+        buf_alloc_more (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, uncompress ? 0 : max_bytes/4, char, 1.5, "compressed")
+
+        // case: we have data passed to us from file_open_txt_read - handle it first
+        if (!vb->txt_data.len && evb->compressed.len) {
+            block_uncomp_len = evb->compressed.param;
+            block_comp_len   = evb->compressed.len;
+
+            // if we're reading a VB (not the txt header) - copy the compressed data from evb to vb
+            if (evb != vb) {
+                buf_copy (vb, &vb->compressed, &evb->compressed, 0,0,0,0);
+                buf_free (&evb->compressed);
+            }
+
+            // add block to list
+            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_bytes / BGZF_MAX_BLOCK_SIZE, BgzfBlock, 2, "bgzf_blocks");
+            NEXTENT (BgzfBlock, vb->bgzf_blocks) = (BgzfBlock)
+                { .txt_data_index   = 0,
+                  .compressed_index = 0,
+                  .uncomp_size      = block_uncomp_len,
+                  .comp_size        = block_comp_len,
+                  .is_decompressed  = false };           
+        }
+        else {
+            block_uncomp_len = bgzf_read_block ((FILE *)txt_file->file, txt_file->name, 
+                                                AFTERENT (uint8_t, vb->compressed), &block_comp_len, false);
+            // case EOF - verify the BGZF end of file marker
+            if (!block_uncomp_len) {
+                ASSERT (block_comp_len == BGZF_EOF_LEN && !memcmp (AFTERENT (uint8_t, vb->compressed), BGZF_EOF, BGZF_EOF_LEN),
+                        "Error: unexpected premature end of bgzf-compressed file %s", txt_name);
+                txt_file->is_eof = true;
+                break;
+            }
+
+            // add block to list
+            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_bytes / BGZF_MAX_BLOCK_SIZE, BgzfBlock, 2, "bgzf_blocks");
+            NEXTENT (BgzfBlock, vb->bgzf_blocks) = (BgzfBlock)
+                { .txt_data_index   = vb->txt_data.len, // after passed-down data and all previous blocks
+                  .compressed_index = vb->compressed.len,
+                  .uncomp_size      = block_uncomp_len,
+                  .comp_size        = block_comp_len,
+                  .is_decompressed  = false };           
+
+            vb->compressed.len   += block_comp_len;   // compressed size
+            vb->compressed.param += block_uncomp_len; // total uncompressed length of data in vb->compress
+        }
+
+        uncomp_len       += block_uncomp_len; // total uncompressed length of data read by this function call
+        vb->txt_data.len += block_uncomp_len; // total length of txt_data after adding decompressed vb->compressed (may also include pass-down data)
+
+        // we decompress one block a time in the loop so that the decompression is parallel with the disk reading into cache
+        if (uncompress) bgzf_uncompress_one_block (vb, LASTENT (BgzfBlock, vb->bgzf_blocks));  
+    }
+
+    // TO DO - store isize of each block in a per-component section
+
+    return uncomp_len;
+}
+
+// performs a single I/O read operation - returns number of bytes read
+// data is placed in vb->txt_data, except if its BGZF and uncompress=false - compressed data is placed in vb->compressed
+static uint32_t txtfile_read_block (VBlock *vb, uint32_t max_bytes,
+                                    bool uncompress) // in BGZF, uncompress the data. ignored if not BGZF
 {
     START_TIMER;
 
-    int32_t bytes_read=0;
+    if (txt_file->is_eof) return 0; // nothing more to read
 
-    if (file_is_plain_or_ext_decompressor (txt_file)) {
-        
-        bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
-        ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", txt_name, strerror(errno));
+    uint32_t bytes_read=0;
 
-        // bytes_read=0 and we're using an external decompressor - it is either EOF or
-        // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
-        if (!bytes_read && file_is_read_via_ext_decompressor (txt_file)) {
-            file_assert_ext_decompressor();
-            goto finish; // all is good - just a normal end-of-file
-        }
-        
-        txt_file->disk_so_far += (int64_t)bytes_read;
-
-#ifdef _WIN32
-        // in Windows using Powershell, the first 3 characters on an stdin pipe are BOM: 0xEF,0xBB,0xBF https://en.wikipedia.org/wiki/Byte_order_mark
-        // these charactes are not in 7-bit ASCII, so highly unlikely to be present natrually in a VCF file
-        if (txt_file->redirected && 
-            txt_file->disk_so_far == (int64_t)bytes_read &&  // start of file
-            bytes_read >= 3  && 
-            (uint8_t)data[0] == 0xEF && 
-            (uint8_t)data[1] == 0xBB && 
-            (uint8_t)data[2] == 0xBF) {
-
-            // Bomb the BOM
-            bytes_read -= 3;
-            memcpy (data, data + 3, bytes_read);
-            txt_file->disk_so_far -= 3;
-        }
-#endif
-    }
-    else if (txt_file->codec == CODEC_GZ || txt_file->codec == CODEC_BGZF) {
-        bytes_read = gzfread (data, 1, max_bytes, (gzFile)txt_file->file);
-        
-        if (bytes_read)
-            txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); // this is actually all the data uncompressed so far, some of it not yet read by us and still waiting in zlib's output buffer
-    }
-    else if (txt_file->codec == CODEC_BZ2) { 
-        bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, data, max_bytes);
-
-        if (bytes_read)
-            txt_file->disk_so_far = BZ2_consumed ((BZFILE *)txt_file->file); 
-    } 
-    else {
-        ABORT ("txtfile_read_block: Invalid file type %s (codec=%s)", ft_name (txt_file->type), codec_name (txt_file->codec));
-    }
+    if (file_is_plain_or_ext_decompressor (txt_file)) 
+        bytes_read = txtfile_read_block_plain (vb, max_bytes);
     
-finish:
-    COPY_TIMER_VB (evb, read);
+    // BGZF: we read *compressed* data into vb->compressed - that will be decompressed later. we read
+    // data with a *decompressed* size up to max_bytes. vb->compressed always contains only full BGZF blocks
+    else if (txt_file->codec == CODEC_BGZF) 
+        bytes_read = txtfile_read_block_bgzf (vb, max_bytes, uncompress); // bytes_read is in uncompressed terms
 
+    else if (txt_file->codec == CODEC_GZ) 
+        bytes_read = txtfile_read_block_gz (vb, max_bytes);
+
+    else if (txt_file->codec == CODEC_BZ2) 
+        bytes_read = txtfile_read_block_bz2 (vb, max_bytes);
+    
+    else 
+        ABORT ("txtfile_read_block: Invalid file type %s (codec=%s)", ft_name (txt_file->type), codec_name (txt_file->codec));
+    
+    COPY_TIMER_VB (evb, read);
     return bytes_read;
+}
+
+// ZIP: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
+void txtfile_md5_one_vb (VBlock *vb)
+{
+    // wait for our turn
+    while (1) {
+        mutex_lock (vb_md5_mutex);
+        
+        if (vb_md5_last == vb->vblock_i - 1) break; // its our turn now
+
+        // not our turn, wait 10ms and try again
+        mutex_unlock (vb_md5_mutex);
+        usleep (10000);
+    }
+
+    // MD5 of all data up to and including this VB is just the total MD5 of the file so far (as there is no unconsumed data)
+    txtfile_update_md5 (vb->txt_data.data, vb->txt_data.len, false);
+
+    // take a snapshot of MD5 as per the end of this VB - this will be used to test for errors in piz after each VB  
+    vb->md5_hash_so_far = md5_snapshot (flag.bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
+
+    vb_md5_last++; // next please
+    mutex_unlock (vb_md5_mutex);
 }
 
 // default callback from DataTypeProperties.is_header_done: 
@@ -134,29 +265,23 @@ static Md5Hash txtfile_read_header (bool is_first_txt)
     uint32_t bytes_read=1 /* non-zero */;
 
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
-    while ((header_len = (DT_FUNC (txt_file, is_header_done)())) < 0) {
+    #define HEADER_BLOCK (256*1024) // we have no idea how big the header will be... read this much at time
+    while ((header_len = (DT_FUNC (txt_file, is_header_done)())) < 0) { // we might have data here from txtfile_test_data
 
         ASSERT (bytes_read, "Error in txtfile_read_header: %s: %s file too short - unexpected end-of-file", txt_name, dt_name(txt_file->data_type));
 
-        buf_alloc (evb, &evb->txt_data, evb->txt_data.len + READ_BUFFER_SIZE, 1.2, "txt_data", 0);    
-        uint32_t bytes_read = txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
-
-        evb->txt_data.len += bytes_read; 
+        buf_alloc_more (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
+        bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true);
     }
 
-    if (header_len == -1) header_len = 0; // case: no header at all
-
     // the excess data is for the next vb to read 
-    buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, header_len, 0, "txt_file->unconsumed_txt", 0);
+    buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, header_len, 0, "txt_file->unconsumed_txt");
 
     txt_file->txt_data_so_far_single = evb->txt_data.len = header_len; // trim
 
-    // md5 header - with logic related to is_first
-    txtfile_update_md5 (evb->txt_data.data, evb->txt_data.len, !is_first_txt);
+    // md5 header - always md5_ctx_single, md5_ctx_bound only if first component 
+    txtfile_update_md5 (evb->txt_data.data, evb->txt_data.len, !is_first_txt); 
     Md5Hash header_md5 = md5_snapshot (&z_file->md5_ctx_single);
-
-    // md5 unconsumed_txt - always
-    txtfile_update_md5 (txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len, false);
 
     COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
 
@@ -164,15 +289,39 @@ static Md5Hash txtfile_read_header (bool is_first_txt)
 }
 
 // default "unconsumed" function file formats where we need to read whole \n-ending lines. returns the unconsumed data length
-uint32_t def_unconsumed (VBlockP vb)
+int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    for (int32_t i=vb->txt_data.len-1; i >= 0; i--) 
-        if (vb->txt_data.data[i] == '\n') 
-            return vb->txt_data.len-1 - i;
+    for (; *i >= first_i; (*i)--) 
+        if (vb->txt_data.data[*i] == '\n') 
+            return vb->txt_data.len-1 - *i;
 
-    ABORT ("Error in def_unconsumed: vb=%u has only %u bytes, not enough for even the first line", 
-           vb->vblock_i, (int)vb->txt_data.len);
-    return 0; // quieten compiler warning
+    return -1; // cannot find \n in the data starting first_i
+}
+
+static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
+{
+    int32_t passed_up_len;
+    int32_t i=vb->txt_data.len-1;
+
+    // case: the data is BGZF-compressed in vb->compressed, except for passed down data from prev VB        
+    // uncompress one block at a time to see if its sufficient. usually, one block is enough
+    if (vb->compressed.len)
+        for (int block_i=vb->bgzf_blocks.len-1; block_i >= 0; block_i--) {
+            BgzfBlock *bb = ENT (BgzfBlock, vb->bgzf_blocks, block_i);
+            bgzf_uncompress_one_block (vb, bb);
+
+            passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, bb->txt_data_index, &i);
+            if (passed_up_len >= 0) goto done; // we have the answer (callback returns -1 if no it needs more data)
+        }
+        // if not found - fall through to test the passed-down data too now
+
+    // test remaining txt_data including passed-down data from previous VB
+    passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, 0, &i);
+
+    ASSERT (passed_up_len >= 0, "Error in txtfile_get_unconsumed_to_pass_up: failed to find a single complete line in the entire vb in vb=%u", vb->vblock_i);
+
+done:
+    return (uint32_t)passed_up_len;
 }
 
 // ZIP I/O threads
@@ -182,95 +331,60 @@ void txtfile_read_vblock (VBlock *vb)
 
     ASSERT_DT_FUNC (txt_file, unconsumed);
 
-    static Buffer block_md5_buf = EMPTY_BUFFER, block_start_buf = EMPTY_BUFFER, block_len_buf = EMPTY_BUFFER;
-
     uint64_t pos_before = 0;
     if (file_is_read_via_int_decompressor (txt_file))
         pos_before = file_tell (txt_file);
 
-    buf_alloc (vb, &vb->txt_data, global_max_memory_per_vb, 1, "txt_data", vb->vblock_i);    
+    buf_alloc (vb, &vb->txt_data, global_max_memory_per_vb, 1, "txt_data");    
 
-    // start with using the unconsumed data from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
+    // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
     if (buf_is_allocated (&txt_file->unconsumed_txt)) {
-        buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, 0 ,0 ,0, "txt_data", vb->vblock_i);
+        buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, 0 ,0 ,0, "txt_data");
         buf_free (&txt_file->unconsumed_txt);
     }
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
     uint64_t max_memory_per_vb = global_max_memory_per_vb;
-    uint32_t unconsumed_len=0;
+    uint32_t passed_up_len=0;
+
+    bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
+                             flag.make_reference;        // unconsumed callback for make-reference needs to inspect the whole data
+
     int32_t block_i=0 ; for (; vb->txt_data.len < max_memory_per_vb; block_i++) {  
 
-        buf_alloc (evb, &block_md5_buf,   sizeof (Md5Context) * MAX (100, block_md5_buf.len+1), 2, "block_md5_buf",   0); // static buffer added to evb list - we are in I/O thread now
-        buf_alloc (evb, &block_start_buf, sizeof (char *)     * MAX (100, block_md5_buf.len+1), 2, "block_start_buf", 0); 
-        buf_alloc (evb, &block_len_buf,   sizeof (uint32_t)   * MAX (100, block_md5_buf.len+1), 2, "block_len_buf",   0); 
-
-        char *start = AFTERENT (char, vb->txt_data);
-        uint32_t len = txtfile_read_block (start, MIN (READ_BUFFER_SIZE, max_memory_per_vb - vb->txt_data.len));
-
-        if (!len) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
-            ASSERT (!vb->txt_data.len || !(DT_FUNC (txt_file, unconsumed)(vb)) || txt_file->data_type == DT_REF, /* REF terminates VBs after every contig */
-                    "Error: input file %s ends abruptly after reading %" PRIu64 " bytes in vb=%u", 
-                    txt_name, vb->txt_data.len, vb->vblock_i);
-            break;
-        }
+        uint32_t len = txtfile_read_block (vb, max_memory_per_vb - vb->txt_data.len, always_uncompress);
+        if (!len)  break; // EOF
             
-        // note: we md_udpate after every block, rather on the complete data (vb or txt header) when its done
-        // because this way the OS read buffers / disk cache get pre-filled in parallel to our md5
-        // Note: we md5 everything we read - even unconsumed data
-        txtfile_update_md5 (start, len, false);
-
-        NEXTENT (char *, block_start_buf)   = start;
-        NEXTENT (uint32_t, block_len_buf)   = len;
-        NEXTENT (Md5Context, block_md5_buf) = flag.bind ? z_file->md5_ctx_bound : z_file->md5_ctx_single; // MD5 of entire file up to and including this block
-
-        vb->txt_data.len += len;
-
         // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
         if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
             vb->txt_data.len >= max_memory_per_vb && // we are about to exit the loop
-            !fastq_txtfile_have_enough_lines (vb, &unconsumed_len)) { // we don't yet have all the data we need
+            !fastq_txtfile_have_enough_lines (vb, &passed_up_len)) { // we don't yet have all the data we need
 
             // if we need more lines - increase memory and keep on reading
             max_memory_per_vb *= 1.1; 
-            buf_alloc (vb, &vb->txt_data, max_memory_per_vb, 1, "txt_data", vb->vblock_i);    
+            buf_alloc (vb, &vb->txt_data, max_memory_per_vb, 1, "txt_data");    
         }
     }
-    
-    // case: we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
-    if (!unconsumed_len && vb->txt_data.len) unconsumed_len = DT_FUNC(txt_file, unconsumed)(vb);
 
-    // if we have some unconsumed data, pass it to the next vb
-    if (unconsumed_len) {
+    if (always_uncompress) buf_free (&vb->compressed); // tested by txtfile_get_unconsumed_to_pass_up
+
+    // callback to decide what part of txt_data to pass up to the next VB (usually partial lines, but sometimes more)
+    if (!passed_up_len && vb->txt_data.len) 
+        passed_up_len = txtfile_get_unconsumed_to_pass_up (vb);
+
+    // make sure file isn't truncated - if we reached EOF there should be no data to be passed up   
+    ASSERT (!passed_up_len || !txt_file->is_eof,
+            "Error: input file %s ends abruptly after reading %" PRIu64 " bytes in vb=%u", txt_name, vb->txt_data.len, vb->vblock_i);
+
+    // if we have some unconsumed data, pass it up to the next vb
+    if (passed_up_len) {
         buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, 1, // evb, because dst buffer belongs to File
-                  vb->txt_data.len - unconsumed_len, unconsumed_len, "txt_file->unconsumed_txt", vb->vblock_i);
+                  vb->txt_data.len - passed_up_len, passed_up_len, "txt_file->unconsumed_txt");
 
-        vb->txt_data.len -= unconsumed_len;
-
-        // complete the MD5 of all data up to and including this VB based on the last full block + the consumed part of the 
-        // last part-consumed-part-not-consumed block
-        if (flag.md5 && !flag.make_reference) {
-            // find the block that is part-consumed-part-not-consumed block (note: blocks can have any size, not necessarily READ_BUFFER_SIZE)
-            int32_t partial_block = block_i - 1;
-            uint32_t unincluded_len = unconsumed_len;
-            ARRAY (uint32_t, block_len, block_len_buf);
-
-            while (unincluded_len > block_len[partial_block] && partial_block >= 0) unincluded_len -= block_len[partial_block--];
-            
-            // in the extremely unlikely case where unconsumed block goes back and includes part of the unconsumed data passed on
-            // from the previous VB, we will just not have a vb->md5_hash_so_far for this VB. no harm.
-            if (partial_block >= 0) {
-                // use the Md5Context of the last fully-consumed block as the basis, and update it with the consumed part of the partial block
-                Md5Context md5_ctx = partial_block ? *ENT (Md5Context, block_md5_buf, partial_block-1) : MD5CONTEXT_NONE; // copy context
-                md5_update (&md5_ctx, *ENT (char *, block_start_buf, partial_block), block_len[partial_block] - unincluded_len);
-
-                vb->md5_hash_so_far = md5_snapshot (&md5_ctx);  
-            }
-        }
+        // now, if our data is bgzf-compressed, txt_data.len becomes shorter than indicated by vb->bgzf_blocks. that's ok - all that data
+        // is decompressed and passed-down to the next VB. because it has been decompressed, the compute thread won't try to decompress it again
+        vb->txt_data.len -= passed_up_len; 
     }
-    else if (flag.md5 && !flag.make_reference)
-        // MD5 of all data up to and including this VB is just the total MD5 of the file so far (as there is no unconsumed data)
-        vb->md5_hash_so_far = md5_snapshot (flag.bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
 
@@ -281,10 +395,10 @@ void txtfile_read_vblock (VBlock *vb)
         vb->vb_data_read_size = file_tell (txt_file) - pos_before; // gz/bz2 compressed bytes read
 
     if (DTPT(zip_read_one_vb)) DTPT(zip_read_one_vb)(vb);
-        
-    buf_free (&block_md5_buf);
-    buf_free (&block_start_buf);
-    buf_free (&block_len_buf);
+
+    // if this is vb=1, we lock the mutex here in the I/O thread before any compute threads start running.
+    // this will cause vb>=2 to block on merge, until vb=1 has completed its merge and unlocked it in zip_compress_one_vb()
+    if (vb->vblock_i == 1) ctx_vb_1_lock(vb); 
 
     COPY_TIMER (txtfile_read_vblock);
 }
@@ -300,13 +414,13 @@ bool txtfile_test_data (char first_char,            // first character in every 
     unsigned num_lines_so_far = 0; // number of data (non-header) lines
     unsigned successes = 0;
 
-    while (1) {      // read data from the file until either 1. EOF is reached 2. we pass the header + 100 lines
-        // enlarge if needed        
-        if (!evb->txt_data.data || evb->txt_data.size - evb->txt_data.len < READ_BUFFER_SIZE) 
-            buf_alloc (evb, &evb->txt_data, evb->txt_data.size + READ_BUFFER_SIZE + 1 /* for \0 */, 1.2, "txt_data", 0);    
+    #define TEST_BLOCK_SIZE (256 * 1024)
+
+    while (1) {      // read data from the file until either 1. EOF is reached 2. we pass the header + num_lines_to_test lines
+        buf_alloc_more (evb, &evb->txt_data, TEST_BLOCK_SIZE + 1 /* for \0 */, 0, char, 1.2, "txt_data");    
 
         uint64_t start_read = evb->txt_data.len;
-        evb->txt_data.len += txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
+        txtfile_read_block (evb, TEST_BLOCK_SIZE, true);
         if (start_read == evb->txt_data.len) break; // EOF
 
         ARRAY (char, str, evb->txt_data); // declare here, in case of a realloc ^ 
@@ -323,6 +437,7 @@ bool txtfile_test_data (char first_char,            // first character in every 
             }
         }
     }
+    // note: read data is left in evb->txt_data for the use of txtfile_read_header
 
 done:
     return (double)successes / (double)num_lines_so_far >= success_threashold;
@@ -337,6 +452,17 @@ static void txtfile_write_to_disk (Buffer *buf)
 
     txt_file->txt_data_so_far_single += buf->len;
     txt_file->disk_so_far            += buf->len;
+}
+
+// dump bad vb to disk
+const char *txtfile_dump_vb (VBlockP vb, const char *base_name)
+{
+    char *dump_filename = MALLOC (strlen (base_name) + 100); // we're going to leak this allocation
+    sprintf (dump_filename, "%s.bad.vblock=%u.start=%"PRIu64".len=%u", 
+                base_name, vb->vblock_i, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len);
+    file_put_buffer (dump_filename, &vb->txt_data, 1);
+
+    return dump_filename;
 }
 
 void txtfile_write_one_vblock (VBlockP vb)
@@ -364,16 +490,11 @@ void txtfile_write_one_vblock (VBlockP vb)
         if (!md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far)) {
 
             // dump bad vb to disk
-            char dump_filename[strlen (z_name) + 100];
-            sprintf (dump_filename, "%s.bad.vblock=%u.start=%"PRIu64".len=%u", 
-                     z_name, vb->vblock_i, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len);
-            file_put_buffer (dump_filename, &vb->txt_data, 1);
-
             WARN ("MD5 of reconstructed vblock=%u (%s) differs from original file (%s).\n"
                   "Bad reconstructed vblock has been dumped to: %s\n"
                   "To see the same data in the original file:\n"
                   "   %s %s | dd skip=%"PRIu64" count=%u bs=1 of=bug%s",
-                  vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), dump_filename,
+                  vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), txtfile_dump_vb (vb, z_name),
                   codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
                   vb->vb_position_txt_file, (uint32_t)vb->txt_data.len, file_plain_text_ext_of_dt (vb->data_type));
 
@@ -441,6 +562,10 @@ void txtfile_header_initialize(void)
 bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 {    
     Md5Hash header_md5 = MD5HASH_NONE;
+
+    // intialize MD5 stuff
+    mutex_initialize (vb_md5_mutex);
+    if (!z_file->num_txt_components_so_far) vb_md5_last = 0; // reset if we're starting a new z_file
 
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 

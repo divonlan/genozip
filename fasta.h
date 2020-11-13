@@ -9,7 +9,7 @@
 #include "genozip.h"
 
 // Txtfile stuff
-extern uint32_t fasta_unconsumed (VBlockP vb);
+extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(fasta_zip_seq)

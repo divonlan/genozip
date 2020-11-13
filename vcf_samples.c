@@ -45,7 +45,7 @@ void vcf_samples_add  (const char *samples_str)
             }
         if (is_duplicate) continue; // skip duplicates "genocat -s sample1,sample2,sample1"
 
-        buf_alloc (evb, &cmd_samples_buf, MAX (cmd_samples_buf.len + 1, 100) * sizeof (char*), 2, "cmd_samples_buf", 0);
+        buf_alloc (evb, &cmd_samples_buf, MAX (cmd_samples_buf.len + 1, 100) * sizeof (char*), 2, "cmd_samples_buf");
 
         NEXTENT (char *, cmd_samples_buf) = one_sample;
     }

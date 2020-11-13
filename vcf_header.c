@@ -54,7 +54,7 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
         
             // if first vcf file - copy the header to the global
             if (!buf_is_allocated (&vcf_header_line)) {
-                buf_copy (evb, &vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "vcf_header_line", 0);
+                buf_copy (evb, &vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "vcf_header_line");
                 vcf_header_line_filename = filename;
             }
 

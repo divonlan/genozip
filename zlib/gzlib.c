@@ -116,6 +116,7 @@ local gzFile gz_open(path, fd, mode)
     state->size = 0;            /* no buffers allocated yet */
     state->want = GZBUFSIZE;    /* requested buffer size */
     state->msg = NULL;          /* no error message yet */
+    state->injection[0] = 0; // added by Divon
 
     /* interpret mode */
     state->mode = GZ_NONE;

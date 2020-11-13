@@ -109,7 +109,7 @@ void regions_add (const char *region_str)
         char *one_rs = strtok_r (next_region_token, ",", &next_region_token);
         if (!one_rs) break;
 
-        buf_alloc (evb, &regions_buf, MAX (regions_buf.len + 1, 100), 2, "regions_buf", 0);
+        buf_alloc (evb, &regions_buf, MAX (regions_buf.len + 1, 100), 2, "regions_buf");
 
         char *after_colon;
         char *before_colon = strtok_r (one_rs, ":", &after_colon);
@@ -192,7 +192,7 @@ void regions_make_chregs (void)
              chr_i         <= (chrom_word_index == WORD_INDEX_NONE ? num_chroms-1 : chrom_word_index);
              chr_i++) {
             
-            buf_alloc (evb, &chregs[chr_i], (++chregs[chr_i].len) * sizeof (Chreg), 2, "chregs", chr_i);
+            buf_alloc (evb, &chregs[chr_i], (++chregs[chr_i].len) * sizeof (Chreg), 2, "chregs");
             
             Chreg *chreg = LASTENT (Chreg, chregs[chr_i]);
             chreg->start_pos = reg->start_pos;
@@ -214,7 +214,7 @@ void regions_transform_negative_to_positive_complement()
 
     // initialize regions for each chr - to be the whole chr
     for (unsigned chr_i=0; chr_i < num_chroms; chr_i++) {
-        buf_alloc (evb, &chregs[chr_i], sizeof (Chreg), 1, "chregs", chr_i);
+        buf_alloc (evb, &chregs[chr_i], sizeof (Chreg), 1, "chregs");
         Chreg *chreg = ENT (Chreg, chregs[chr_i], 0);
         chreg->start_pos   = 0;
         chreg->end_pos     = MAX_POS;
@@ -247,8 +247,8 @@ void regions_transform_negative_to_positive_complement()
                 // case: negative is strictly within positive - split positive to the two flanking regions
                 else if (neg_chreg->start_pos > pos_chreg->start_pos && neg_chreg->end_pos < pos_chreg->end_pos) {
                     chregs[chr_i].len++;
-                    buf_alloc (evb, &chregs[chr_i], chregs[chr_i].len * sizeof (Chreg), 2, "chregs", chr_i);
-
+                    buf_alloc (evb, &chregs[chr_i], chregs[chr_i].len * sizeof (Chreg), 2, "chregs");
+                    
                     Chreg *new_pos_chreg = LASTENT (Chreg, chregs[chr_i]);
                     Chreg *pos_chreg = ENT (Chreg, chregs[chr_i], posreg_i); // update after realloc
 

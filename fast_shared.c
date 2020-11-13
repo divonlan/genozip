@@ -45,7 +45,7 @@ bool fast_piz_test_grep (VBlockFAST *vb)
     if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
     
     // we only need room for one line for now 
-    buf_alloc (vb, &vb->txt_data, vb->longest_line_len, 1.1, "txt_data", vb->vblock_i);
+    buf_alloc (vb, &vb->txt_data, vb->longest_line_len, 1.1, "txt_data");
 
     // uncompress & map desc field (filtered by piz_is_skip_section)
     vb->grep_stages = GS_TEST; // tell piz_is_skip_section to skip decompressing sections not needed for determining the grep

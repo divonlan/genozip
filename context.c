@@ -83,7 +83,7 @@ static inline CharIndex ctx_insert_to_dict (VBlock *vb_of_dict, Context *ctx, Di
 
     static const char *buf_name[3] = { "contexts->dict", "zf_ctx->dict", "zf_ctx->ol_dict" };
     buf_alloc (vb_of_dict, dict, MAX ((dict->len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 
-               CTX_GROWTH, buf_name[type] , ctx->did_i);
+               CTX_GROWTH, buf_name[type]);
     
     if (type == DICT_ZF) buf_set_overlayable (dict); // during merge
     
@@ -279,7 +279,7 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
             "Error: too many words in ctx %s, max allowed number of words is is %u", zf_ctx->name, MAX_WORDS_IN_CTX);
 
     buf_alloc (evb, nodes, sizeof (CtxNode) * MAX(INITIAL_NUM_NODES, nodes->len), CTX_GROWTH, 
-               is_singleton_in_global ? "zf_ctx->ol_nodes" : "zf_ctx->nodes", zf_ctx->did_i);
+               is_singleton_in_global ? "zf_ctx->ol_nodes" : "zf_ctx->nodes");
 
     // set either singleton node or regular node with this snip
     *node = LASTENT (CtxNode, *nodes);
@@ -341,7 +341,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
     ASSERT (vb_ctx->nodes.len < MAX_NODE_INDEX, "Error: too many words in dictionary %s", vb_ctx->name);
 
     buf_alloc (segging_vb, &vb_ctx->nodes, sizeof (CtxNode) * MAX(INITIAL_NUM_NODES, 1+vb_ctx->nodes.len), CTX_GROWTH, 
-               "contexts->nodes", vb_ctx->did_i);
+               "contexts->nodes");
 
     vb_ctx->nodes.len++; // new hash entry or extend linked list
 
@@ -438,8 +438,7 @@ static void ctx_copy_reference_contig_to_chrom_ctx (void)
     // Create chrom context, this is the first context so it will be did_i=0, hence the requirement that chrom is always the first field
     ASSERT0 (CHROM == 0, "Error: CHROM must be 0");
     
-    Context copy_from_ctx;
-    memset (&copy_from_ctx, 0, sizeof (Context));
+    Context copy_from_ctx = {};
     copy_from_ctx.dict_id = (DictId)dict_id_fields[CHROM];
     copy_from_ctx.inst    = CTX_INST_NO_STONS; // needs b250 node_index for random access;
     strcpy ((char*)copy_from_ctx.name, DTFZ(names)[CHROM]);
@@ -450,11 +449,11 @@ static void ctx_copy_reference_contig_to_chrom_ctx (void)
     Context *zf_ctx = &z_file->contexts[CHROM];
     ARRAY (RefContig, contigs, *ref_contigs);
 
-    buf_copy (evb, &zf_ctx->dict, ref_config_dict, 0,0,0, "z_file->contexts->dict", zf_ctx->did_i);
+    buf_copy (evb, &zf_ctx->dict, ref_config_dict, 0,0,0, "z_file->contexts->dict");
     buf_set_overlayable (&zf_ctx->dict);
 
     // build nodes from reference word_list
-    buf_alloc (evb, &zf_ctx->nodes, sizeof (CtxNode) * ref_contigs->len, 1, "z_file->contexts->nodes", zf_ctx->did_i);
+    buf_alloc (evb, &zf_ctx->nodes, sizeof (CtxNode) * ref_contigs->len, 1, "z_file->contexts->nodes");
     buf_set_overlayable (&zf_ctx->nodes);
     zf_ctx->nodes.len = ref_contigs->len;
 
@@ -474,7 +473,7 @@ static void ctx_copy_reference_contig_to_chrom_ctx (void)
 
 void ctx_initialize_for_zip (void)
 {
-    if (z_file->dicts_mutex_initialized) return;
+    if (z_file->dicts_mutex_initialized) return; // we've been here already
 
     mutex_initialize (z_file->dicts_mutex);
     mutex_initialize (wait_for_vb_1_mutex);
@@ -802,7 +801,7 @@ void ctx_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
     uint64_t dict_old_len = zf_ctx->dict.len;
-    buf_alloc (evb, &zf_ctx->dict, zf_ctx->dict.len + fragment.len, CTX_GROWTH, "z_file->contexts->dict", header->h.section_type);
+    buf_alloc (evb, &zf_ctx->dict, zf_ctx->dict.len + fragment.len, CTX_GROWTH, "z_file->contexts->dict");
     buf_set_overlayable (&zf_ctx->dict);
 
     memcpy (AFTERENT (char, zf_ctx->dict), fragment.data, fragment.len);
@@ -811,7 +810,7 @@ void ctx_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // extend word list memory - and calculate the new words. If there is no room - old memory is abandoned 
     // (so that VBs that are overlaying it continue to work uninterrupted) and a new memory is allocated
     buf_alloc (evb, &zf_ctx->word_list, (zf_ctx->word_list.len + (uint64_t)num_snips) * sizeof (CtxWord), CTX_GROWTH, 
-               "z_file->contexts->word_list", zf_ctx->did_i);
+               "z_file->contexts->word_list");
     buf_set_overlayable (&zf_ctx->word_list);
 
     char *start = fragment.data;
@@ -922,7 +921,7 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
         // prepare sorter array containing indices into ctx->nodes. We are going to sort it rather than sort nodes directly
         // as the b250 data contains node indices into ctx->nodes.
         static Buffer sorter = EMPTY_BUFFER;
-        buf_alloc (vb, &sorter, ctx->nodes.len * sizeof (int32_t), CTX_GROWTH, "sorter", ctx->did_i);
+        buf_alloc (vb, &sorter, ctx->nodes.len * sizeof (int32_t), CTX_GROWTH, "sorter");
         for (WordIndex i=0; i < ctx->nodes.len; i++)
             NEXTENT (WordIndex, sorter) = i;
 
@@ -934,7 +933,7 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
         static Buffer old_dict = EMPTY_BUFFER;
         buf_move (vb, &old_dict, vb, &ctx->dict);
 
-        buf_alloc (vb, &ctx->dict, old_dict.len, CTX_GROWTH, "contexts->dict", did_i);
+        buf_alloc (vb, &ctx->dict, old_dict.len, CTX_GROWTH, "contexts->dict");
         ctx->dict.len = old_dict.len;
 
         char *next = ctx->dict.data;
