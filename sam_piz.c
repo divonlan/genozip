@@ -265,7 +265,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 
     // binary reconstruction - BAM format
     if (flag.out_dt == DT_BAM)
-        RECONSTRUCT (&lten_n, sizeof (uint32_t))
+        RECONSTRUCT (&machine_en.f, sizeof (float))
     
     // textual reconstruction - SAM format 
     else { 

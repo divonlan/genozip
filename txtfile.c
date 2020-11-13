@@ -660,7 +660,7 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     if (trans.txtheader_translator) trans.txtheader_translator (&header_buf); 
 
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
-    if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.show_headers) {
+    if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.genocat_info_only) {
         txtfile_write_to_disk (&header_buf);
 
         if (flag.md5 && !md5_is_zero (header->md5_header)) {

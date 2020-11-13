@@ -105,9 +105,10 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
 
             if ((con->flags & CON_FL_FILTER_ITEMS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
 
-            if (flag.show_containers && item->did_i != DID_I_NONE) // show container reconstruction 
+            if (flag.show_containers && (item->did_i != DID_I_NONE || item->dict_id.num)) // show container reconstruction 
                 fprintf (stderr, "Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
-                            vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), vb->contexts[item->did_i].name, 
+                            vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), 
+                            item->did_i != DID_I_NONE ? vb->contexts[item->did_i].name : "(DID_I_NONE)", 
                             vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 
             container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len); // item prefix (we will have one per item or none at all)
@@ -198,9 +199,12 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
 
         // get the did_i for each dict_id
         for (uint8_t item_i=0; item_i < con.num_items; item_i++)
-            if (con.items[item_i].dict_id.num)  // not a prefix-only item
+            if (con.items[item_i].dict_id.num) { // not a prefix-only item
                 con.items[item_i].did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
-
+                ASSERT (con.items[item_i].did_i != DID_I_NONE, "Error in container_reconstruct analyzing a %s container: unable to find did_i for item %.8s",
+                        ctx->name, dict_id_print (con.items[item_i].dict_id));
+            }
+            
         // get prefixes
         unsigned st_size = sizeof_container (con);
         con_p         = &con;

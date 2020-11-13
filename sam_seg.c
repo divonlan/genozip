@@ -19,13 +19,6 @@
 #include "container.h"
 #include "stats.h"
 
-static const char optional_field_translator[256] = {
-    ['c']=SAM2BAM_I8,       ['C']=SAM2BAM_U8, 
-    ['s']=SAM2BAM_LTEN_I16, ['S']=SAM2BAM_LTEN_U16,
-    ['i']=SAM2BAM_LTEN_I32, ['I']=SAM2BAM_LTEN_U32,
-    ['f']=SAM2BAM_FLOAT
-};
-
 static const char optional_field_store_flag[256] = {
     ['c']=CTX_FL_STORE_INT, ['C']=CTX_FL_STORE_INT, 
     ['s']=CTX_FL_STORE_INT, ['S']=CTX_FL_STORE_INT,
@@ -786,6 +779,20 @@ static void sam_optimize_ZM (const char **snip, unsigned *snip_len, char *new_st
     }    
 }
 
+static inline TranslatorId optional_field_translator (char type)
+{
+    switch (type) {
+        case 'c' : return SAM2BAM_I8;
+        case 'C' : return SAM2BAM_U8;
+        case 's' : return SAM2BAM_LTEN_I16;
+        case 'S' : return SAM2BAM_LTEN_U16;
+        case 'i' : return SAM2BAM_LTEN_I32;
+        case 'I' : return SAM2BAM_LTEN_U32;
+        case 'f' : return IS_BAM ? 0 : SAM2BAM_FLOAT; // when reconstucting BAM->BAM we use SPECIAL_FLOAT rather than a translator
+        default  : return 0;
+    }
+}
+
 static inline unsigned sam_seg_optional_add_bytes (char type, unsigned value_len, bool is_bam)
 {
     if (is_bam)
@@ -832,7 +839,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
     arr_dict_id.id[0]         = FLIP_CASE (dict_id.id[0]);
     arr_dict_id.id[1]         = FLIP_CASE (dict_id.id[1]);
     con.items[1].dict_id      = sam_dict_id_optnl_sf (arr_dict_id);
-    con.items[1].translator   = optional_field_translator[(uint8_t)value[0]]; // instructions on how to transform array items if reconstructing as BAM (value[0] is the subtype of the array)
+    con.items[1].translator   = optional_field_translator ((uint8_t)value[0]); // instructions on how to transform array items if reconstructing as BAM (value[0] is the subtype of the array)
     con.items[1].seperator[0] = CI_TRANS_NOR | CI_NATIVE_NEXT; // when translating - don't reconstruct, just store value in last_value
     
     Context *element_ctx      = ctx_get_ctx (vb, con.items[1].dict_id);
@@ -1054,7 +1061,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
 
         con.items[con.num_items++] = (ContainerItem) {
             .dict_id      = sam_seg_optional_field (vb, dl, is_bam, tag, type, value, value_len),
-            .translator   = optional_field_translator[(uint8_t)type], // how to transform the field if reconstructing to BAM
+            .translator   = optional_field_translator ((uint8_t)type), // how to transform the field if reconstructing to BAM
             .seperator    = { sep_by_type[is_bam][(uint8_t)type], '\t' },
             .did_i        = DID_I_NONE, // seg always puts NONE, PIZ changes it
         };

@@ -71,8 +71,8 @@ SPECIAL (SAM, 6, BIN,   bam_piz_special_BIN);
     /*         alias                        maps to this ctx          */     \
     { DT_SAM,  &dict_id_OPTION_MC,          &dict_id_OPTION_CIGAR         }, \
     { DT_SAM,  &dict_id_OPTION_OC,          &dict_id_OPTION_CIGAR         }, \
-    { DT_BAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_E2_Z]     }, \
-    { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_U2_Z]     },
+    { DT_SAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_E2_Z]     }, \
+    { DT_SAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_U2_Z]     },
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS  \
     { DT_SAM,   &dict_id_OPTION_BD_BI,      sam_zip_bd_bi }, \
@@ -80,8 +80,8 @@ SPECIAL (SAM, 6, BIN,   bam_piz_special_BIN);
 
 #define BAM_DICT_ID_ALIASES \
     /*         alias                        maps to this ctx              */ \
-    { DT_SAM,  &dict_id_OPTION_MC,          &dict_id_OPTION_CIGAR         }, \
-    { DT_SAM,  &dict_id_OPTION_OC,          &dict_id_OPTION_CIGAR         }, \
+    { DT_BAM,  &dict_id_OPTION_MC,          &dict_id_OPTION_CIGAR         }, \
+    { DT_BAM,  &dict_id_OPTION_OC,          &dict_id_OPTION_CIGAR         }, \
     { DT_BAM,  &dict_id_OPTION_E2,          &dict_id_fields[SAM_E2_Z]     }, \
     { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_U2_Z]     },
 

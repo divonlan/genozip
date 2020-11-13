@@ -371,7 +371,8 @@ void flags_update (unsigned num_files, char **filenames, const bool *is_short)
 
     // cases where genocat is used to view some information, but not the file contents
     flag.genocat_info_only = exe_type == EXE_GENOCAT &&
-                             (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.dict_id_show_one_dict.num ||
-                              flag.show_index || flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || flag.dump_section || flag.show_headers ||
-                              flag.show_reference || flag.show_ref_contigs || flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || flag.show_ref_seq);
+        (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.dict_id_show_one_dict.num ||
+        flag.show_index || flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || flag.dump_section || flag.show_headers ||
+        flag.show_reference || flag.show_ref_contigs || flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
+        flag.show_ref_seq || flag.show_aliases);
 }

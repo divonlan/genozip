@@ -311,7 +311,6 @@ static void main_genounzip (const char *z_filename,
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
     z_file = file_open (z_filename, READ, Z_FILE, DT_NONE);    
-    #define zdt z_file->data_type // for code readability
 
     // read the genozip header:
     // 1) verify the data type deduced from the file name, or set the data type if it wasn't deduced
@@ -319,6 +318,10 @@ static void main_genounzip (const char *z_filename,
     // 3) identify skip cases (DT_NONE returned) - empty file, unzip of a reference
     // 4) reset flag.unbind if file contains only one component
     if (!zfile_read_genozip_header (0,0,0,0)) goto done; 
+
+    // if we're genocatting a BAM file, output it as a SAM unless user requested otherwise
+    if (z_file->data_type == DT_SAM && (z_file->flags & GENOZIP_FL_TXT_IS_BIN) && flag.out_dt==-1 && exe_type == EXE_GENOCAT)
+        flag.out_dt = DT_SAM;
 
     // if this is a bound file, and we don't have --unbind or --force, we ask the user
     if (z_file->num_components >= 2 && !flag.unbind && !flag.force)
