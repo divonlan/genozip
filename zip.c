@@ -531,7 +531,7 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
                 ASSERT0 (next_vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, "Error: Cannot compress stdin data because its size is 0");
 
                 // this vb has no data
-                dispatcher_input_exhausted (dispatcher);
+                dispatcher_set_input_exhausted (dispatcher, true);
                 
                 // update to the conclusive size. it might have been 0 (eg STDIN if HTTP) or an estimate (if compressed)
                 txt_file->txt_data_size_single = txt_file->txt_data_so_far_single; 

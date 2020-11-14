@@ -58,12 +58,12 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     ProfilerRec profile; \
     \
     /* bgzf - for handling bgzf-compressed files */ \
-    struct libdeflate_decompressor *bgzf_decompressor; \
+    void *libdeflate;          /* Handle into the libdeflate compressor or decompressor */ \
     Buffer bgzf_blocks;        /* ZIP: an array of BgzfBlock tracking the decompression of blocks into txt_data */\
     \
     /* random access, chrom, pos */ \
     Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
-    WordIndex chrom_node_index;  /* ZIP and PIZ: index and name of chrom of the current line */ \
+    WordIndex chrom_node_index;/* ZIP and PIZ: index and name of chrom of the current line */ \
     const char *chrom_name;    \
     unsigned chrom_name_len; \
     uint32_t seq_len;          /* PIZ - last calculated seq_len (as defined by each data_type) */\
@@ -72,42 +72,42 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer region_ra_intersection_matrix;  /* PIZ: a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region */\
     \
     /* crypto stuff */\
-    Buffer spiced_pw;  /* used by crypt_generate_aes_key() */\
+    Buffer spiced_pw;          /* used by crypt_generate_aes_key() */\
     uint8_t aes_round_key[240];/* for 256 bit aes */\
     uint8_t aes_iv[AES_BLOCKLEN]; \
     int bi; \
     \
     /* file data */\
-    Buffer z_data;                    /* all headers and section data as read from disk */\
+    Buffer z_data;             /* all headers and section data as read from disk */\
     \
-    Buffer txt_data;                  /* ZIP only: txt_data as read from disk - either the txt header (in evb) or the VB data lines */\
+    Buffer txt_data;           /* ZIP only: txt_data as read from disk - either the txt header (in evb) or the VB data lines */\
     \
-    int16_t z_next_header_i;          /* next header of this VB to be encrypted or decrypted */\
+    int16_t z_next_header_i;   /* next header of this VB to be encrypted or decrypted */\
     \
-    Buffer z_section_headers;         /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
+    Buffer z_section_headers;  /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
     \
-    Buffer compressed;                /* helper buffer for writing to/from zfile: used by various functions. user must assert that its free before use, and buf_free after use. */\
+    Buffer compressed;         /* helper buffer for writing to/from zfile: used by various functions. user must assert that its free before use, and buf_free after use. */\
     \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
-    DidIType num_contexts;            /* total number of dictionaries of all types */\
+    DidIType num_contexts;     /* total number of dictionaries of all types */\
     Context contexts[MAX_DICTS];    \
     DidIType dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
     /* ZIP only: reference range lookup caching */ \
-    RangeP prev_range; /* previous range returned by ref_seg_get_locked_range */ \
+    RangeP prev_range;         /* previous range returned by ref_seg_get_locked_range */ \
     uint32_t prev_range_range_i; /* range_i used to calculate previous range */ \
     WordIndex prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
-    Buffer show_headers_buf;                   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
-    Buffer show_b250_buf;                      /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
-    Buffer section_list_buf;                   /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
+    Buffer show_headers_buf;   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
+    Buffer show_b250_buf;      /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
+    Buffer section_list_buf;   /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     \
     /* Codec stuff */ \
     Buffer codec_bufs[NUM_CODEC_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
     \
     /* used by CODEC_ACGT (For SEQ) */ \
-    bool has_non_agct;            /* ZIP only */ \
+    bool has_non_agct;         /* ZIP only */ \
     \
     /* used by HT matrix codec */ \
     uint32_t num_haplotypes_per_line; \
@@ -118,7 +118,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer hapmat_helper_index_buf; /* used by codec_hapmat_count_alt_alleles */ \
     Buffer hapmat_columns_data;     /* used by codec_hapmat_piz_get_one_line */ \
     Buffer hapmat_column_of_zeros;  /* used by codec_hapmat_piz_calculate_columns */  \
-    Buffer hapmat_one_array;            /* one line or column */ \
+    Buffer hapmat_one_array;        /* one line or column */ \
     \
     /* used by CODEC_GTSHARK */ \
     Context *gtshark_gt_ctx, *gtshark_db_ctx, *gtshark_ex_ctx; \

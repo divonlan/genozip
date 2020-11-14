@@ -620,6 +620,64 @@ static bool piz_read_one_vb (VBlock *vb)
     return ok_to_compute;
 }
 
+static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
+{
+    Md5Hash decompressed_file_digest = md5_finalize (&txt_file->md5_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bound file
+    char s[200]; 
+
+    if (md5_is_zero (original_file_digest)) { 
+        sprintf (s, "MD5 = %s", md5_display (decompressed_file_digest));
+        progress_finalize_component (s); 
+    }
+
+    else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
+
+        if (flag.md5) { 
+            sprintf (s, "MD5 = %s verified as identical to the original %s", 
+                        md5_display (decompressed_file_digest), dt_name (z_file->data_type));
+            progress_finalize_component (s); 
+        }
+
+        //else if (flag.test) progress_finalize_component ("Success");
+    }
+    else if (flag.test) {
+        progress_finalize_component ("FAILED!!!");
+        ABORT ("Error: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",
+                md5_display (original_file_digest), md5_display (decompressed_file_digest));
+    }
+
+    else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file
+                    "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
+                    txt_file->name, md5_display (decompressed_file_digest), dt_name (txt_file->data_type), 
+                    md5_display (original_file_digest));
+
+    return decompressed_file_digest;
+}
+
+// returns false if VB was dispatched, and true if vb was skipped
+bool piz_dispatch_one_vb (Dispatcher dispatcher, const SectionListEntry *sl_ent)
+{
+    static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
+    if (!random_access_is_vb_included (sl_ent->vblock_i, &region_ra_intersection_matrix)) return true; // skip this VB if not included
+
+    VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
+    
+    if (region_ra_intersection_matrix.data) {
+        buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix");
+        buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
+    }
+    
+    // read one VB's genozip data
+    bool grepped_out = !piz_read_one_vb (next_vb);
+
+    if (grepped_out || (flag.show_headers && exe_type == EXE_GENOCAT)) 
+        dispatcher_abandon_next_vb (dispatcher); 
+    else
+        dispatcher_compute (dispatcher, piz_uncompress_one_vb);
+
+    return false;
+}
+
 // returns true is successfully outputted a txt file.
 // called once per components (txt file) within a z_file, even if we're not unbinding
 bool piz_one_file (uint32_t component_i, bool is_last_file)
@@ -646,93 +704,57 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
 
         if (flag.test || flag.md5) 
             ASSERT0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
-    }
 
-    if (!dispatcher) 
         dispatcher = dispatcher_init (global_max_threads, 0, flag.test, is_last_file, z_file->basename, PROGRESS_PERCENT, 0);
-
-    bool has_txt_header = sections_get_next_section_of_type1 (&sl_ent, SEC_TXT_HEADER, false, true);
-    if (flag.unbind && !has_txt_header) return false; // unbinding - no more components
-
-    ASSERT0 (has_txt_header, "Error in piz_one_file: cannot find SEC_TXT_HEADER");
-
-    // read txt header from genozip file and write it to output txt file
-    piz_successful = txtfile_genozip_to_txt_header (NULL, &original_file_digest); // if unbinding, also opens txt_file
+    }
     
-    ASSERT (piz_successful || component_i > 0, "Error: failed to read %s header in %s", dt_name (z_file->data_type), z_name);
-
-    if (!piz_successful || flag.header_only) goto finish;
-
-    if (flag.unbind) dispatcher_resume (dispatcher); // accept more input 
-
+    else if (flag.unbind) {
+        if (!sections_get_next_section_of_type (&sl_ent, SEC_TXT_HEADER, false, true)) return false; // unbinding - no more components
+        sl_ent--; // rewind;
+    
+        dispatcher_set_input_exhausted (dispatcher, false); // accept more input 
+    }
+  
     if (DTPZ(piz_initialize)) DTPZ(piz_initialize)();
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
     // 2. Wait for the first thread (by sequential order) to complete and write data
 
-    bool header_only_file = true; // initialize
-    do {
+    bool header_only_file = true; // initialize - true until we encounter a VB header
+    unsigned txt_header_i=0;
+
+    while (!dispatcher_is_done (dispatcher)) {
+
         // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a variant block and compute it
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
 
-            bool done_reading_vbs = true;
-            if (sections_get_next_section_of_type (&sl_ent, SEC_TXT_HEADER, SEC_VB_HEADER, SEC_BGZF, false, true)) {
+            bool another_header = sections_get_next_section_of_type2 (&sl_ent, SEC_TXT_HEADER, SEC_VB_HEADER, false, true);
 
-                switch (sl_ent->section_type) {
-                case SEC_VB_HEADER: {
+            if (another_header && sl_ent->section_type == SEC_VB_HEADER) 
+                header_only_file &= piz_dispatch_one_vb (dispatcher, sl_ent);  // function returns true if VB was skipped
 
-                    static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
-                    if (!random_access_is_vb_included (sl_ent->vblock_i, &region_ra_intersection_matrix)) continue; // skip this VB if not included
+            else if (another_header && sl_ent->section_type == SEC_TXT_HEADER) { // 1st component or 2nd+ component and we're concatenating
 
-                    VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
-                    
-                    if (region_ra_intersection_matrix.data) {
-                        buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix");
-                        buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
-                    }
-                    
-                    // read one VB's genozip data
-                    bool grepped_out = !piz_read_one_vb (next_vb);
+                if (flag.unbind && txt_header_i++) goto no_more_data; // if unbinding, this function processes only one component (it will be called again for the next component)
 
-                    if (grepped_out || (flag.show_headers && exe_type == EXE_GENOCAT)) 
-                        dispatcher_abandon_next_vb (dispatcher); 
+                txtfile_genozip_to_txt_header (sl_ent, (txt_header_i>=2 ? NULL : &original_file_digest)); // read header - skip 2nd+ txt header if not unbinding
 
-                    else
-                        dispatcher_compute (dispatcher, piz_uncompress_one_vb);
-                        
-                    header_only_file = false;
-                    done_reading_vbs = false; // we might have more VBs to read                
-                    break;
-                }
+                if (flag.unbind) dispatcher_resume (dispatcher); // if unbind, this function is called for every file seperately
 
-                case SEC_TXT_HEADER:
-                    if (!flag.unbind) {   // 2nd+ SEC_TXT_HEADER of a bound file
-                        done_reading_vbs = false; // we might have VBs to read                
-                        txtfile_genozip_to_txt_header (sl_ent, NULL); // skip 2nd+ txt header if not unbinding
-                    }
-                    break;
-
-                case SEC_BGZF:
-                    done_reading_vbs = false; // we might have VBs to read                
-                    bgzf_read_and_uncompress_isizes (sl_ent);
-                    break;
-                    
-                default:
-                    ABORT0 ("Error in piz_one_file: unexpected section");
-            }
+                if (flag.header_only) goto finish;
             }
 
-            // case: we're done - either no more headers, OR found a SEC_TXT_HEADER while unbinding
-            if (done_reading_vbs) {
+            else { // we're done (either no more headers, or unbinding and we completed a whole component)
+no_more_data:            
                 sl_ent--; // re-read in next call to this function if unbinding
-
-                dispatcher_input_exhausted (dispatcher);
+                dispatcher_set_input_exhausted (dispatcher, true);
 
                 if (header_only_file)
                     dispatcher_finalize_one_vb (dispatcher);
             }
         }
+
         // PRIORITY 2: Wait for the first thread (by sequential order) to complete and write data
         else { // if (dispatcher_has_processed_vb (dispatcher, NULL)) {
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
@@ -746,41 +768,10 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
 
             dispatcher_finalize_one_vb (dispatcher);
         }
-
-    } while (!dispatcher_is_done (dispatcher));
-
-    // verify file integrity, if the genounzip compress was run with --md5 or --test
-    Md5Hash decompressed_file_digest = MD5HASH_NONE;
-    if (flag.md5) {
-        decompressed_file_digest = md5_finalize (&txt_file->md5_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bounding file
-        char s[200]; 
-
-        if (md5_is_zero (original_file_digest)) { 
-            sprintf (s, "MD5 = %s", md5_display (decompressed_file_digest));
-            progress_finalize_component (s); 
-        }
-
-        else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
-
-            if (flag.md5) { 
-                sprintf (s, "MD5 = %s verified as identical to the original %s", 
-                         md5_display (decompressed_file_digest), dt_name (z_file->data_type));
-                progress_finalize_component (s); 
-            }
-
-            //else if (flag.test) progress_finalize_component ("Success");
-        }
-        else if (flag.test) {
-            progress_finalize_component ("FAILED!!!");
-            ABORT ("Error: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",
-                   md5_display (original_file_digest), md5_display (decompressed_file_digest));
-        }
-
-        else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file
-                     "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
-                     txt_file->name, md5_display (decompressed_file_digest), dt_name (txt_file->data_type), 
-                     md5_display (original_file_digest));
     }
+    
+    // verify file integrity, if the genounzip compress was run with --md5 or --test
+    Md5Hash decompressed_file_digest = flag.md5 ? piz_one_file_verify_md5 (original_file_digest) : MD5HASH_NONE;
 
     if (flag.unbind) file_close (&txt_file, true); // close this component file
 

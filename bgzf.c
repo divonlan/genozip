@@ -117,7 +117,7 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlock *bb)
 
     ASSERT (h->id1==31 && h->id2==139, "Error in bgzf_uncompress_vb: corrupt bgzf data in vb->compressed: vb=%u compressed_index=%u", vb->vblock_i, bb->compressed_index);
 
-    if (!vb->bgzf_decompressor) vb->bgzf_decompressor = libdeflate_alloc_decompressor();
+    if (!vb->libdeflate) vb->libdeflate = libdeflate_alloc_decompressor();
 
     if (flag.show_bgzf)
         fprintf (stderr, "%-7s vb=%u i=%u compressed_index=%u size=%u txt_data_index=%u size=%u ",
@@ -126,7 +126,7 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlock *bb)
 
 //fprintf (stderr, "\nbb->txt_data_index=%u bb->uncomp_size=%u  xxx %s\n", bb->txt_data_index, bb->uncomp_size, buf_desc (&vb->compressed));
     enum libdeflate_result ret = 
-        libdeflate_deflate_decompress (vb->bgzf_decompressor, 
+        libdeflate_deflate_decompress (vb->libdeflate, 
                                        h+1, bb->comp_size - sizeof(*h),   // compressed
                                        ENT (char, vb->txt_data, bb->txt_data_index), bb->uncomp_size, NULL); // uncompressed
 
@@ -156,9 +156,13 @@ void bgzf_uncompress_vb (VBlock *vb)
 // PIZ SIDE
 //---------
 
-void bgzf_read_and_uncompress_isizes (const SectionListEntry *sl_ent)
+void bgzf_read_and_uncompress_isizes (const SectionListEntry *sl_ent) 
 {
     ASSERT0 (!evb->z_data.len, "Error in bgzf_read_and_uncompress_isizes: expecting evb->z_data to be empty");
+
+    // skip passed all VBs of this component, and read SEC_BGZF - the last section of the component - if it exists
+    if (!sections_get_next_section_of_type (&sl_ent, SEC_BGZF, false, false)) // updates sl_ent, but its a local var, doesn't affect our caller
+        return; // no SEC_BGZF section - likely not a codec=BGZF txt file
 
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_BGZF, sl_ent);
 

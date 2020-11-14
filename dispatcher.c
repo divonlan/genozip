@@ -323,15 +323,17 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher)
         dispatcher_show_progress (dispatcher);
 }                           
 
-void dispatcher_input_exhausted (Dispatcher dispatcher)
+void dispatcher_set_input_exhausted (Dispatcher dispatcher, bool exhausted)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-    dd->input_exhausted = true;
+    dd->input_exhausted = exhausted;
 
-    vb_release_vb (dd->next_vb);
-    dd->next_vb = NULL;
+    if (exhausted) {
+        vb_release_vb (dd->next_vb);
+        dd->next_vb = NULL;
 
-    dd->next_vb_i--; // we didn't use this vb_i
+        dd->next_vb_i--; // we didn't use this vb_i
+    }
 }    
 
 bool dispatcher_is_done (Dispatcher dispatcher)
@@ -385,7 +387,7 @@ uint32_t dispatcher_fan_out_task (const char *filename,  // NULL to continue wit
             prepare (next_vb);
 
             if (!next_vb->ready_to_dispatch) {
-                dispatcher_input_exhausted (dispatcher);
+                dispatcher_set_input_exhausted (dispatcher, true);
                 dispatcher_finalize_one_vb (dispatcher); 
             }
         }

@@ -83,7 +83,8 @@ void vb_release_vb (VBlock *vb)
     //                   we have logic in vb_get_vb() to update its vb_i
     // vb->num_sample_blocks : we keep this value as it is needed by vb_cleanup_memory, and it doesn't change
     //                         between VBs of a file or bound files.
-    // vb->data_type : type of this vb 
+    // vb->data_type   : type of this vb 
+    // vb->libdefalte  : an instance of libdeflate - no need to re-instantiate between VBs
 }
 
 void vb_destroy_vb (VBlockP *vb_p)
@@ -117,7 +118,8 @@ void vb_destroy_vb (VBlockP *vb_p)
     if (vb->data_type != DT_NONE)
         DT_FUNC(vb, destroy_vb)(vb);
 
-    libdeflate_free_decompressor (vb->bgzf_decompressor);
+    if (command == ZIP) libdeflate_free_decompressor (vb->libdeflate);
+    else                libdeflate_free_compressor   (vb->libdeflate);
 
     FREE (*vb_p);
 }

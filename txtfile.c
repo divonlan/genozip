@@ -457,6 +457,8 @@ done:
 // PIZ
 static void txtfile_write_to_disk (Buffer *buf)
 {
+    if (!buf->len) return;
+    
     if (flag.md5) md5_update (&txt_file->md5_ctx_bound, buf->data, buf->len);
 
     if (!flag.test) file_write (txt_file, buf->data, buf->len);
@@ -670,6 +672,10 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
     DtTranslation trans = dt_get_translation();
     if (trans.txtheader_translator) trans.txtheader_translator (&header_buf); 
+
+    // get SEC_BGZF data if available
+    bgzf_read_and_uncompress_isizes (sl);     
+    // TO DO: recompress with BGZF if needed
 
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
     if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.genocat_info_only) {

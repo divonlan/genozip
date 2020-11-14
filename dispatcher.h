@@ -27,7 +27,7 @@ extern bool dispatcher_has_free_thread (Dispatcher dispatcher);
 extern VBlockP dispatcher_get_next_vb (Dispatcher dispatcher);
 extern void dispatcher_finalize_one_vb (Dispatcher dispatcher);
 extern void dispatcher_abandon_next_vb (Dispatcher dispatcher);
-extern void dispatcher_input_exhausted (Dispatcher dispatcher);
+extern void dispatcher_set_input_exhausted (Dispatcher dispatcher, bool exhausted);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i);
