@@ -840,10 +840,11 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
     // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
     Context *container_ctx     = ctx_get_ctx (vb, dict_id);
 
-    Container con = { .num_items = 2, .flags = CON_FL_DROP_FINAL_ITEM_SEP, 
-                      .repsep = {0,0}, 
-                      .items = { { .translator = SAM2BAM_ARRAY_SELF, .did_i = DID_I_NONE },  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
-                                 { .seperator = {0, ','},            .did_i = DID_I_NONE } } // item[1] is actual array item
+    Container con = { .num_items = 2, 
+                      .flags     = CON_FL_DROP_FINAL_ITEM_SEP, 
+                      .repsep    = {0,0}, 
+                      .items     = { { .translator = SAM2BAM_ARRAY_SELF, .did_i = DID_I_NONE },  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
+                                     { .seperator = {0, ','},            .did_i = DID_I_NONE } } // item[1] is actual array item
                     };
     
     char prefixes[] = { CON_PREFIX_SEP, value[0], ',', CON_PREFIX_SEP }; // prefix contains type eg "i,"

@@ -28,6 +28,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_LOCAL           = 12, 
     SEC_REF_ALT_CHROMS  = 13,
     SEC_STATS           = 14,
+    SEC_BGZF            = 15, // optionally appears per component (txt header) and contains the uncompressed sizes of the source file bgzf block
 
     NUM_SEC_TYPES // fake section for counting
 } SectionType;
@@ -49,6 +50,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     {"SEC_LOCAL",           sizeof (SectionHeaderCtx)           }, \
     {"SEC_REF_ALT_CHROMS",  sizeof (SectionHeader)              }, \
     {"SEC_STATS",           sizeof (SectionHeader)              }, \
+    {"SEC_BGZF",            sizeof (SectionHeader)              }, \
 }
 
 // Section headers - big endian
@@ -111,7 +113,7 @@ typedef struct {
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     Codec    codec;            // codec of original txt file (none, bgzf, gz, bz2...)
-    uint8_t  unused[3];
+    uint8_t  codec_args[3];    // codec specific arguments: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
     Md5Hash  md5_header;       // MD5 of header
 #define TXT_FILENAME_LEN 256

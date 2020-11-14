@@ -150,8 +150,8 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /*
                   .is_decompressed  = false };           
         }
         else {
-            block_uncomp_len = (uint32_t)bgzf_read_block ((FILE *)txt_file->file, txt_file->name, 
-                                                          AFTERENT (uint8_t, vb->compressed), &block_comp_len, false);
+            block_uncomp_len = (uint32_t)bgzf_read_block (txt_file, AFTERENT (uint8_t, vb->compressed), &block_comp_len, false);
+
             // case EOF - verify the BGZF end of file marker
             if (!block_uncomp_len) {
                 ASSERT (block_comp_len == BGZF_EOF_LEN && !memcmp (AFTERENT (uint8_t, vb->compressed), BGZF_EOF, BGZF_EOF_LEN),
@@ -593,9 +593,10 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
         return false;
     }
 
-    // we always write the txt_header section, even if we don't actually have a header, because the section
-    // header contains the data about the file
-    if (z_file && !flag.test_seg) zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
+    if (z_file && !flag.test_seg)       
+        // we always write the txt_header section, even if we don't actually have a header, because the section
+        // header contains the data about the file
+        zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
 
     // for stats: combined length of txt headers in this bound file, or only one file if not bound
     if (!flag.bind) total_bound_txt_headers_len=0;

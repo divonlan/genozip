@@ -307,42 +307,40 @@ static bool file_open_txt_read (File *file)
 
         case CODEC_GZ:
         case CODEC_BGZF: {
-            FILE *fp = file->is_remote ? url_open (NULL, file->name) : fopen (file->name, "rb");
-            ASSERT (fp, "Error in file_open_txt_read: failed to open %s: %s", file->name, strerror (errno));
+            file->file = (FILE *)(file->is_remote ? url_open (NULL, file->name) : fopen (file->name, "rb"));
+            ASSERT (file->file, "Error in file_open_txt_read: failed to open %s: %s", file->name, strerror (errno));
 
             // read the first potential BGZF block to test if this is GZ or BGZF
             uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
             uint32_t block_size;
-            int32_t bgzf_uncompressed_size = bgzf_read_block (fp, file->name, block, &block_size, true);
+
+            int32_t bgzf_uncompressed_size = bgzf_read_block (file, block, &block_size, true);
             
             // case: this is indeed a bgzf - we put the still-compressed data in vb->compressed for later consumption
             // is txtfile_read_block_bgzf
             if (bgzf_uncompressed_size >= 0) {
+                file->codec = CODEC_BGZF;
+
                 buf_alloc (evb, &evb->compressed, block_size, 1, "compressed"); 
                 evb->compressed.param = bgzf_uncompressed_size; // pass uncompressed size in param
-
                 buf_add (&evb->compressed, block, block_size);
                 
-                file->file  = fp;
-                file->codec = CODEC_BGZF;
             }
 
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
             // (note: we cannot re-read the bytes from the file as the file might be piped in)
             else if (bgzf_uncompressed_size == BGZF_BLOCK_GZIP_NOT_BGZIP) {
-                file->file  = gzdopen (fileno(fp), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
                 file->codec = CODEC_GZ;
+                file->file  = gzdopen (fileno((FILE *)file->file), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
                 gzinject (file->file, block, block_size); // a hack - adds a 18 bytes of compressed data to the in stream, which will be consumed next, instead of reading from disk
             } 
 
             // case: this is not GZIP format at all. treat as a plain file, and put the data read in vb->compressed 
             // for later consumption is txtfile_read_block_plain
             else if (bgzf_uncompressed_size == BGZF_BLOCK_IS_NOT_GZIP) {
+                file->codec = CODEC_NONE;
                 buf_alloc (evb, &evb->compressed, block_size, 1, "compressed"); 
                 buf_add (&evb->compressed, block, block_size);
-                
-                file->file  = fp;
-                file->codec = CODEC_NONE;
             }
 
             break;
@@ -679,6 +677,7 @@ void file_close (File **file_p,
         buf_destroy (&file->section_list_buf);
         buf_destroy (&file->section_list_dict_buf);
         buf_destroy (&file->unconsumed_txt);
+        buf_destroy (&file->bgzf_isizes);
         buf_destroy (&file->stats_buf_1);
         buf_destroy (&file->stats_buf_2);
 
@@ -768,24 +767,6 @@ bool file_seek (File *file, int64_t offset,
                 int whence, // SEEK_SET, SEEK_CUR or SEEK_END
                 int soft_fail) // 1=warning 2=silent
 {
-    ASSERT0 (file->supertype == Z_FILE, "Error: file_seek only works for Z_FILE supertype");
-/*
-    // check if we can just move the read buffers rather than seeking
-    if (file->mode == READ && file->z_next_read != file->z_last_read && whence == SEEK_SET) {
-#ifdef __APPLE__
-        int64_t move_by = offset - ftello ((FILE *)file->file);
-#else
-        int64_t move_by = offset - ftello64 ((FILE *)file->file);
-#endif
-
-        // case: move is within read buffer already in memory (ftello shows the disk location after read of the last buffer)
-        // we just change the buffer pointers rather than discarding the buffer and re-reading
-        if (move_by <= 0 && move_by >= -(int64_t)file->z_last_read) {
-            file->z_next_read = file->z_last_read + move_by; // only z_file uses next/last_Read
-            return true;
-        }
-    }
-*/
 #ifdef __APPLE__
     int ret = fseeko ((FILE *)file->file, offset, whence);
 #else
@@ -802,9 +783,6 @@ bool file_seek (File *file, int64_t offset,
     else {
         ASSERT (!ret, "Error: fseeko failed on file %s: %s", file_printname (file), strerror (errno));
     }
-
-    // reset the read buffers
-    //if (!ret || file->mode == WRITEREAD) file->z_next_read = file->z_last_read = READ_BUFFER_SIZE;
 
     return !ret;
 }

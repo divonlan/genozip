@@ -7,7 +7,7 @@
 
 #define BGZF_MAX_BLOCK_SIZE 65536 // maximum block size of both compressed and uncompressed data of one block
 
-// BGZF EOF marker, see https://samtools.github.io/hts-specs/SAMv1.pdf section 4.1.2
+// BGZF EOF marker is simply an empty block, see https://samtools.github.io/hts-specs/SAMv1.pdf section 4.1.2
 #define BGZF_EOF_LEN 28
 #define BGZF_EOF "\x1f\x8b\x08\x04\x00\x00\x00\x00\x00\xff\x06\x00\x42\x43\x02\x00\x1b\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
@@ -21,7 +21,8 @@ typedef struct BgzfBlock {
 
 #define BGZF_BLOCK_GZIP_NOT_BGZIP -1
 #define BGZF_BLOCK_IS_NOT_GZIP    -2
-extern int32_t bgzf_read_block (FILE *fp, const char *filename, uint8_t *block, uint32_t *block_size, bool soft_fail);
+extern int32_t bgzf_read_block (FileP file, uint8_t *block, uint32_t *block_size, bool soft_fail);
 extern void bgzf_uncompress_vb (VBlockP vb);
 extern void bgzf_uncompress_one_block (VBlockP vb, BgzfBlock *bb);
+extern void bgzf_compress_bgzf_section (void);
 

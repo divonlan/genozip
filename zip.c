@@ -550,6 +550,9 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
     if (z_file && !flag.test_seg && !z_file->redirected && txt_header_header_pos >= 0) 
         success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
+    // write the BGZF section containing BGZF block sizes, if this txt file is compressed with BGZF
+    bgzf_compress_bgzf_section();
+
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:
     if ((is_last_file || !flag.bind) && !flag.test_seg)

@@ -85,10 +85,11 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     else if (header->section_type == SEC_TXT_HEADER) {
         SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
-        sprintf (str, SEC_TAB "txt_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u codec=%s md5_single=%s md5_header=%s\n" 
-                      SEC_TAB "txt_filename=\"%.*s\"\n",
-                 BGEN64 (h->txt_data_size), BGEN64 (h->num_lines), BGEN32 (h->max_lines_per_vb), codec_name (h->codec), 
-                 md5_display (h->md5_hash_single), md5_display (h->md5_header), TXT_FILENAME_LEN, h->txt_filename);;
+        sprintf (str, SEC_TAB "txt_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u md5_single=%s md5_header=%s\n" 
+                      SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) txt_filename=\"%.*s\"\n",
+                 BGEN64 (h->txt_data_size), BGEN64 (h->num_lines), BGEN32 (h->max_lines_per_vb), 
+                 md5_display (h->md5_hash_single), md5_display (h->md5_header), 
+                 codec_name (h->codec), h->codec_args[0], h->codec_args[1], h->codec_args[2], TXT_FILENAME_LEN, h->txt_filename);
         PRINT;
     }
 
@@ -897,9 +898,16 @@ void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool i
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderTxtHeader));
     header.h.codec                 = CODEC_BZ2;
     header.num_lines               = NUM_LINES_UNKNOWN; 
-    header.codec        = txt_file->codec; 
+    header.codec                   = txt_file->codec; 
     header.md5_header              = header_md5;
     
+    // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
+    if (txt_file->codec == CODEC_BGZF) {
+        header.codec_args[0] = (txt_file->disk_size      ) & 0xff; // LSB of size
+        header.codec_args[1] = (txt_file->disk_size >> 8 ) & 0xff;
+        header.codec_args[2] = (txt_file->disk_size >> 16) & 0xff;
+    }
+        
     file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);
     file_remove_codec_ext (header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
     

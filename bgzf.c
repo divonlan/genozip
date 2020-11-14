@@ -7,6 +7,9 @@
 #include "vblock.h"
 #include "arch.h"
 #include "strings.h"
+#include "file.h"
+#include "zfile.h"
+#include "zip.h"
 
 typedef struct __attribute__ ((__packed__)) BgzfHeader {
     uint8_t id1, id2, cm, flg;
@@ -29,14 +32,18 @@ static const char *libdeflate_error (int err)
     }
 }
 
+//--------------------------------------------------------------------
+// ZIP SIDE - decompress BGZF-compressed file and prepare BGZF section
+//--------------------------------------------------------------------
+
 // unfortunately, we can't use fread(), since file_open_txt_read, who calls us, might later try to open the file
 // with gzdopen which then gzread uses read() - causing skipping of the data that already is read into fread() buffers
 // here, we read the amount of data requested, unless EOF is encountered first
-static uint32_t bgzf_fread (FILE *fp, void *dst_buf, uint32_t count)
+static uint32_t bgzf_fread (File *file, void *dst_buf, uint32_t count)
 {
     uint32_t bytes=0;
     while (bytes < count) {
-        uint32_t bytes_once = read (fileno(fp), &((char*)dst_buf)[bytes], count - bytes);
+        uint32_t bytes_once = read (fileno((FILE *)file->file), &((char*)dst_buf)[bytes], count - bytes);
         if (!bytes_once) return bytes;  // EOF
 
         bytes += bytes_once;
@@ -46,13 +53,13 @@ static uint32_t bgzf_fread (FILE *fp, void *dst_buf, uint32_t count)
 }
 
 // reads and validates a BGZF block, and returns the uncompressed size, or, in case of soft_fail:
-int32_t bgzf_read_block (FILE *fp, const char *filename, 
+int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called from file_open_txt_read
                          uint8_t *block /* must be BGZF_MAX_BLOCK_SIZE in size */, uint32_t *block_size /* out */,
                          bool soft_fail)
 {
     BgzfHeader *h = (BgzfHeader *)block;
 
-    *block_size = bgzf_fread (fp, h, sizeof (struct BgzfHeader)); // read the header
+    *block_size = bgzf_fread (file, h, sizeof (struct BgzfHeader)); // read the header
     if (! *block_size) return BGZF_BLOCK_IS_NOT_GZIP;
 
     if (*block_size < 12) {
@@ -60,26 +67,46 @@ int32_t bgzf_read_block (FILE *fp, const char *filename,
         return BGZF_BLOCK_IS_NOT_GZIP;
     } 
 
-    // case: this is not a GZ / BGZF block at all - error (see: https://tools.ietf.org/html/rfc1952)
+    // case: this is not a GZ / BGZF block at all (see: https://tools.ietf.org/html/rfc1952)
     if (h->id1 != 31 || h->id2 != 139) {
-        ASSERT (soft_fail, "Error: expecting %s to be compressed with gzip format, but it is not", filename);
+        ASSERT (soft_fail, "Error: expecting %s to be compressed with gzip format, but it is not", file->name);
         return BGZF_BLOCK_IS_NOT_GZIP;
     }
 
-    // case: this is NOT a valid BGZF block
+    // case: this is GZIP block that is NOT a valid BGZF block (see: https://samtools.github.io/hts-specs/SAMv1.pdf)
     if (!(*block_size == 18 && h->cm==8 && h->flg==4 && h->si1==66 && h->si2==67)) {
-        ASSERT (soft_fail, "Error in bgzf_read_block: invalid BGZF block while reading %s", filename);
+        ASSERT (soft_fail, "Error in bgzf_read_block: invalid BGZF block while reading %s", file->name);
         return BGZF_BLOCK_GZIP_NOT_BGZIP;
     }
 
     *block_size = LTEN16 (h->bsize) + 1;
     
     uint32_t body_size = *block_size - sizeof (struct BgzfHeader);
-    ASSERT (bgzf_fread (fp, h+1, body_size) == body_size, 
-            "Error in bgzf_read_block: failed to read body of BGZF block in %s: %s", filename, strerror (errno));
+    ASSERT (bgzf_fread (file, h+1, body_size) == body_size, 
+            "Error in bgzf_read_block: failed to read body of BGZF block in %s: %s", file->name, strerror (errno));
 
     uint32_t isize_lt32 = *(uint32_t *)&block[*block_size - 4];
-    return LTEN32 (isize_lt32);
+    uint32_t isize = LTEN32 (isize_lt32); // 0...65536 per spec
+
+    // add isize to buffer that will be written to SEC_BGZF
+    if (isize) { // don't store EOF block (with isize=0)
+        buf_alloc_more (evb, &file->bgzf_isizes, 1, global_max_memory_per_vb / 63000, uint16_t, 2, "bgzf_isizes");
+        NEXTENT (uint16_t, file->bgzf_isizes) = BGEN16 ((uint16_t)(isize - 1)); // -1 to make the range 0..65535
+    }
+    
+    return isize;
+}
+
+void bgzf_compress_bgzf_section (void)
+{
+    if (!txt_file->bgzf_isizes.len) return; // this txt file is not compressed with BGZF - we don't need a BGZF section
+
+    txt_file->bgzf_isizes.len *= sizeof (uint16_t);
+    zfile_compress_section_data (evb, SEC_BGZF, &txt_file->bgzf_isizes);
+    txt_file->bgzf_isizes.len /= sizeof (uint16_t); // restore
+
+    // actually write to disk
+    zip_output_processed_vb (evb, NULL, false, PD_VBLOCK_DATA);  
 }
 
 void bgzf_uncompress_one_block (VBlock *vb, BgzfBlock *bb)
@@ -124,3 +151,8 @@ void bgzf_uncompress_vb (VBlock *vb)
 
     COPY_TIMER (bgzf_uncompress_vb);
 }
+
+//---------
+// PIZ SIDE
+//---------
+
