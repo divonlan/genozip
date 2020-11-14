@@ -584,7 +584,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
     ctx_initialize_primary_field_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
 
     const SectionListEntry *sl_ent = NULL; 
-    while (sections_get_next_section_of_type (&sl_ent, SEC_DICT, SEC_NONE, true, false)) {
+    while (sections_get_next_section_of_type1 (&sl_ent, SEC_DICT, true, false)) {
 
         if (last_vb_i && sl_ent->vblock_i > last_vb_i) break;
 

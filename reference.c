@@ -443,7 +443,7 @@ finish:
 
 static void ref_read_one_range (VBlockP vb)
 {
-    if (!sections_get_next_section_of_type (&sl_ent, SEC_REFERENCE, SEC_REF_IS_SET, true, false) || // no more reference sections
+    if (!sections_get_next_section_of_type (&sl_ent, SEC_REFERENCE, SEC_REF_IS_SET, SEC_NONE, true, false) || // no more reference sections
         ((sl_ent+1)->offset - sl_ent->offset) == sizeof (SectionHeaderReference)) // final, header-only section sometimes exists (see ref_compress_ref)
         return; // we're done
     

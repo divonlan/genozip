@@ -29,6 +29,7 @@
 #include "stats.h"
 #include "codec.h"
 #include "container.h"
+#include "bgzf.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new lacon_pos
 // Special values:
@@ -619,7 +620,8 @@ static bool piz_read_one_vb (VBlock *vb)
     return ok_to_compute;
 }
 
-// returns true is successfully outputted a txt file
+// returns true is successfully outputted a txt file.
+// called once per components (txt file) within a z_file, even if we're not unbinding
 bool piz_one_file (uint32_t component_i, bool is_last_file)
 {
     static Dispatcher dispatcher = NULL; // static dispatcher - with flag.unbind, we use the same dispatcher when unzipping components
@@ -649,7 +651,7 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
     if (!dispatcher) 
         dispatcher = dispatcher_init (global_max_threads, 0, flag.test, is_last_file, z_file->basename, PROGRESS_PERCENT, 0);
 
-    bool has_txt_header = sections_get_next_section_of_type (&sl_ent, SEC_TXT_HEADER, SEC_NONE, false, true);
+    bool has_txt_header = sections_get_next_section_of_type1 (&sl_ent, SEC_TXT_HEADER, false, true);
     if (flag.unbind && !has_txt_header) return false; // unbinding - no more components
 
     ASSERT0 (has_txt_header, "Error in piz_one_file: cannot find SEC_TXT_HEADER");
@@ -675,9 +677,10 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
 
             bool done_reading_vbs = true;
-            if (sections_get_next_section_of_type (&sl_ent, SEC_TXT_HEADER, SEC_VB_HEADER, false, true)) {
+            if (sections_get_next_section_of_type (&sl_ent, SEC_TXT_HEADER, SEC_VB_HEADER, SEC_BGZF, false, true)) {
 
-                if (sl_ent->section_type == SEC_VB_HEADER) {
+                switch (sl_ent->section_type) {
+                case SEC_VB_HEADER: {
 
                     static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
                     if (!random_access_is_vb_included (sl_ent->vblock_i, &region_ra_intersection_matrix)) continue; // skip this VB if not included
@@ -700,11 +703,24 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
                         
                     header_only_file = false;
                     done_reading_vbs = false; // we might have more VBs to read                
+                    break;
                 }
-                else if (!flag.unbind) {   // 2nd+ SEC_TXT_HEADER of a bound file
+
+                case SEC_TXT_HEADER:
+                    if (!flag.unbind) {   // 2nd+ SEC_TXT_HEADER of a bound file
+                        done_reading_vbs = false; // we might have VBs to read                
+                        txtfile_genozip_to_txt_header (sl_ent, NULL); // skip 2nd+ txt header if not unbinding
+                    }
+                    break;
+
+                case SEC_BGZF:
                     done_reading_vbs = false; // we might have VBs to read                
-                    txtfile_genozip_to_txt_header (sl_ent, NULL); // skip 2nd+ txt header if not unbinding
-                }
+                    bgzf_read_and_uncompress_isizes (sl_ent);
+                    break;
+                    
+                default:
+                    ABORT0 ("Error in piz_one_file: unexpected section");
+            }
             }
 
             // case: we're done - either no more headers, OR found a SEC_TXT_HEADER while unbinding

@@ -268,7 +268,9 @@ extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff
 extern const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail);
-extern bool sections_get_next_section_of_type (const SectionListEntry **sl_ent, SectionType st1, SectionType st2, bool must_be_next_section, bool seek);
+extern bool sections_get_next_section_of_type (const SectionListEntry **sl_ent, SectionType st1, SectionType st2, SectionType st3, bool must_be_next_section, bool seek);
+#define sections_get_next_section_of_type1(sl_ent,st,must_be_next_section,seek) sections_get_next_section_of_type(sl_ent,st,SEC_NONE,SEC_NONE,must_be_next_section,seek)
+
 extern uint32_t sections_count_sections (SectionType st);
 extern const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
 extern void sections_get_prev_file_vb_i (const SectionListEntry *sl, uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i);

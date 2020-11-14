@@ -156,3 +156,19 @@ void bgzf_uncompress_vb (VBlock *vb)
 // PIZ SIDE
 //---------
 
+void bgzf_read_and_uncompress_isizes (const SectionListEntry *sl_ent)
+{
+    ASSERT0 (!evb->z_data.len, "Error in bgzf_read_and_uncompress_isizes: expecting evb->z_data to be empty");
+
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_BGZF, sl_ent);
+
+    zfile_uncompress_section (evb, evb->z_data.data, &txt_file->bgzf_isizes, "txt_file->bgzf_isizes", 0, SEC_BGZF);
+    txt_file->bgzf_isizes.len /= 2;
+
+    buf_free (&evb->z_data);
+
+    // convert to native endianity from big endian
+    ARRAY (uint16_t, isizes, txt_file->bgzf_isizes);
+    for (uint32_t i=0; i < txt_file->bgzf_isizes.len; i++) 
+        isizes[i] = BGEN16 (isizes[i]); // now it contains isize-1 - a value 0->65535 representing an isize 1->65536
+}                

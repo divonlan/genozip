@@ -19,10 +19,20 @@ typedef struct BgzfBlock {
     bool is_decompressed;
 } BgzfBlock;
 
+//---------
+// ZIP side
+//---------
+
 #define BGZF_BLOCK_GZIP_NOT_BGZIP -1
 #define BGZF_BLOCK_IS_NOT_GZIP    -2
 extern int32_t bgzf_read_block (FileP file, uint8_t *block, uint32_t *block_size, bool soft_fail);
 extern void bgzf_uncompress_vb (VBlockP vb);
 extern void bgzf_uncompress_one_block (VBlockP vb, BgzfBlock *bb);
 extern void bgzf_compress_bgzf_section (void);
+
+//---------
+// PIZ side
+//---------
+
+extern void bgzf_read_and_uncompress_isizes (ConstSectionListEntryP sl_ent);
 

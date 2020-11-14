@@ -95,7 +95,7 @@ void sections_list_concat (VBlock *vb, BufferP section_list_buf)
 
 // section iterator. returns true if a section of this type was found.
 bool sections_get_next_section_of_type (const SectionListEntry **sl_ent, // optional in/out. if NULL - search entire list
-                                        SectionType st1, SectionType st2, 
+                                        SectionType st1, SectionType st2, SectionType st3, 
                                         bool must_be_next_section,       // check only next section, not entire remaining list
                                         bool seek)                       // if true, seek if found
 {
@@ -109,7 +109,7 @@ bool sections_get_next_section_of_type (const SectionListEntry **sl_ent, // opti
 
             sl = sl ? (sl + 1) : FIRSTENT (const SectionListEntry, z_file->section_list_buf); 
 
-            if (sl->section_type == st1 || sl->section_type == st2) {
+            if (sl->section_type == st1 || sl->section_type == st2 || sl->section_type == st3) {
                 found = true;
                 break;
             }
@@ -118,7 +118,7 @@ bool sections_get_next_section_of_type (const SectionListEntry **sl_ent, // opti
     // case: we aren't allowed to skip sections - check if the next section is what we were after
     else {
         sl++;
-        found = sl->section_type == st1 || sl->section_type == st2;
+        found = sl->section_type == st1 || sl->section_type == st2 || sl->section_type == st3;
     }
 
     if (found && seek)
