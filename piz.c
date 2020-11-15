@@ -678,13 +678,12 @@ bool piz_dispatch_one_vb (Dispatcher dispatcher, const SectionListEntry *sl_ent)
     return false;
 }
 
-// returns true is successfully outputted a txt file.
-// called once per components (txt file) within a z_file, even if we're not unbinding
+// called once per components reconstructed txt_file: i.e.. if unbinding there will be multiple calls.
+// returns: false if we're unbinding and there are no more components. true otherwise.
 bool piz_one_file (uint32_t component_i, bool is_last_file)
 {
     static Dispatcher dispatcher = NULL; // static dispatcher - with flag.unbind, we use the same dispatcher when unzipping components
     static const SectionListEntry *sl_ent = NULL; // preserve for unbinding multiple files
-    bool piz_successful = true;
 
     // read genozip header
     Md5Hash original_file_digest;
@@ -736,16 +735,16 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
 
             else if (another_header && sl_ent->section_type == SEC_TXT_HEADER) { // 1st component or 2nd+ component and we're concatenating
 
-                if (flag.unbind && txt_header_i++) goto no_more_data; // if unbinding, this function processes only one component (it will be called again for the next component)
+                if (flag.unbind && txt_header_i++) goto no_more_data; // if unbinding, we processes only one component (piz_one_file will be called again for the next component)
 
-                txtfile_genozip_to_txt_header (sl_ent, (txt_header_i>=2 ? NULL : &original_file_digest)); // read header - skip 2nd+ txt header if not unbinding
+                txtfile_genozip_to_txt_header (sl_ent, (txt_header_i>=2 ? NULL : &original_file_digest)); // read header - it will skip 2nd+ txt header if concatenating
 
-                if (flag.unbind) dispatcher_resume (dispatcher); // if unbind, this function is called for every file seperately
+                if (flag.unbind) dispatcher_resume (dispatcher); 
 
                 if (flag.header_only) goto finish;
             }
 
-            else { // we're done (either no more headers, or unbinding and we completed a whole component)
+            else { // we're done (concatenating: no more VBs in the entire file ; unbinding: no more VBs in our component)
 no_more_data:            
                 sl_ent--; // re-read in next call to this function if unbinding
                 dispatcher_set_input_exhausted (dispatcher, true);
@@ -780,10 +779,10 @@ no_more_data:
 
 finish:
     // in unbind mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here
-    if (!flag.unbind || !piz_successful) {
+    if (!flag.unbind) {
         if (dispatcher) dispatcher_finish (&dispatcher, NULL);
     } else
         dispatcher_pause (dispatcher);
 
-    return piz_successful;
+    return true;
 }

@@ -62,9 +62,9 @@ test_header() {
 }
 
 test_count_genocat_lines() {
-    local cmd="$genocat $output $2"
+    local cmd="$genocat $output $2 $arg1"
     test_header "$cmd"
-    $genozip $arg1 -fo $output || exit 1
+    $genozip $arg1 $1 -fo $output || exit 1
     local wc=`$cmd | wc -l`
     if (( $wc != $3 )); then
         echo "FAILED - expected $3 lines, but getting $wc"
@@ -324,7 +324,7 @@ $genozip $arg1 --force -m2E $GRCh38 --output $output $file1 $file2 $file3 $file4
 $genounzip $arg1 -t $output || exit 1
 rm -f $file3 $file4 $output
 
-test_header "multiple bound VCF with --reference (hg19), and unbind"
+test_header "multiple bound VCF with --reference using hg19, and unbind"
 rm -f td/*.genozip
 file1=copy1.test-file.vcf
 file2=copy2.test-file.vcf

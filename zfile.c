@@ -374,7 +374,7 @@ void zfile_compress_section_data_codec (VBlock *vb, SectionType section_type,
 
 // reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
 // this doesn't make a big difference for SSD, but makes a huge difference for HD
-// return true if data was read as requested, false if file has reached EOF and error otherwise
+// return a pointer to the data read
 static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t len)
 {
     START_TIMER;
@@ -387,57 +387,14 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
     uint32_t bytes = fread (start, 1, len, (FILE *)file->file);
     ASSERT (bytes == len, "Error in zfile_read_from_disk: read only %u bytes out of len=%u", bytes, len);
 
-    file->disk_so_far += bytes;
-    buf->len          += bytes;
-/*
-    void *start = (void *)&buf->data[buf->len];
+    buf->len += bytes;
 
-    uint32_t memcpyied = 0;
-    uint32_t len_save  = len;
-
-    while (len) {
-
-        if (file->z_next_read == file->z_last_read) { // nothing left in read_buffer - replenish it from disk
-
-            if (file->z_last_read != READ_BUFFER_SIZE && !memcpyied) return NULL; // EOF reached last time, nothing more to read
-
-            if (file->z_last_read != READ_BUFFER_SIZE && memcpyied && fail_quietly_if_not_enough_data) return NULL; // partial read = quiet error as requested
-            
-            ASSERT (file->z_last_read == READ_BUFFER_SIZE, 
-                    "Error: end-of-file while reading %s, read %u bytes, but wanted to read %u bytes", 
-                    z_name, memcpyied, len_save);
-
-            file->z_last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)file->file);
-
-            file->z_next_read = 0;
-            file->disk_so_far += file->z_last_read;
-
-            ASSERT (file->z_last_read || !memcpyied, "Error: data requested could not be read bytes_so_far=%"PRIu64"", file->disk_so_far);
-            if (!file->z_last_read) {
-                COPY_TIMER (read);
-                return NULL; // file is exhausted - nothing read
-            }
-        }
-
-        uint32_t memcpy_len = MIN (len, file->z_last_read - file->z_next_read);
-
-        ASSERT (buf_has_space (buf, memcpy_len), "Error in zfile_read_from_disk: buf is out of space: len=%u memcpy_len=%u len_save=%u but remaining space in buffer=%u (tip: run with --show-headers to see where it fails)",
-                len, memcpy_len, len_save, (uint32_t)(buf->size - buf->len));
-
-        buf_add (buf, file->read_buffer + file->z_next_read, memcpy_len);
-        len               -= memcpy_len;
-        file->z_next_read += memcpy_len;
-
-        memcpyied += memcpy_len;
-    }
-*/
     COPY_TIMER (read);
 
     return start;
 }
 
-// read section header - called from the I/O thread, but for a specific VB
-// returns offset of header within data, EOF if end of file
+// read section header - called from the I/O thread. returns offset of header within data
 int32_t zfile_read_section_do (File *file,
                                VBlock *vb, 
                                uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
@@ -467,9 +424,6 @@ int32_t zfile_read_section_do (File *file,
 
     SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size); // note: header in file can be shorter than header_size if its an earlier version
     uint32_t bytes_read = header_size;
-
-    // case: we're done! no more bound files
-    if (!header && expected_sec_type == SEC_TXT_HEADER) return EOF; 
 
     ASSERT (header, "Error in zfile_read_section: Failed to read data from file %s while expecting section type %s: %s", 
             z_name, st_name(expected_sec_type), strerror (errno));
@@ -659,10 +613,8 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
     uint32_t sizeof_genozip_header = MIN (sizeof (SectionHeaderGenozipHeader),
                                           (uint32_t)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));
     
-    ret = zfile_read_section_do (z_file, evb, 0, &evb->z_data, "genozip_header", SEC_GENOZIP_HEADER, &dummy_sl, sizeof_genozip_header);
+    zfile_read_section_do (z_file, evb, 0, &evb->z_data, "genozip_header", SEC_GENOZIP_HEADER, &dummy_sl, sizeof_genozip_header);
 
-    ASSERT0 (ret != EOF, "Error: unexpected EOF when reading genozip header");
-    
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
     ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 

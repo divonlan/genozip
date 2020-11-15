@@ -29,10 +29,10 @@ void vcf_header_initialize (void)
 
 bool vcf_inspect_txt_header (Buffer *txt_header)
 {
-    return vcf_header_set_globals (txt_file->name, txt_header);
+    return vcf_header_set_globals (txt_file->name, txt_header, true);
 }
 
-bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
+bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bool soft_fail)
 {
     static const char *vcf_header_line_filename = NULL; // file from which the header line was taken
 
@@ -62,16 +62,18 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
             else if (flag.bind && 
                      (vcf_header->len-i != vcf_header_line.len || memcmp (vcf_header_line.data, &vcf_header->data[i], vcf_header_line.len))) {
 
-                fprintf (stderr, "%s: skipping %s: it has a different VCF header line than %s, see below:\n"
-                                 "========= %s =========\n"
-                                 "%.*s"
-                                 "========= %s ==========\n"
-                                 "%.*s"
-                                 "=======================================\n", 
-                         global_cmd, filename, vcf_header_line_filename,
-                         vcf_header_line_filename, (uint32_t)vcf_header_line.len, vcf_header_line.data,
-                         filename, (uint32_t)vcf_header->len-i, &vcf_header->data[i]);
-                return false;
+                WARN ("%s: skipping %s: it has a different VCF header line than %s, see below:\n"
+                      "========= %s =========\n"
+                      "%.*s"
+                      "========= %s ==========\n"
+                      "%.*s"
+                      "=======================================\n", 
+                      global_cmd, filename, vcf_header_line_filename,
+                      vcf_header_line_filename, (uint32_t)vcf_header_line.len, vcf_header_line.data,
+                      filename, (uint32_t)vcf_header->len-i, &vcf_header->data[i]);
+                
+                if (soft_fail) return false;
+                else           exit_on_error (false);
             }
 
             //count samples

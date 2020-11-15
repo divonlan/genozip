@@ -471,7 +471,7 @@ static void txtfile_write_to_disk (Buffer *buf)
 const char *txtfile_dump_vb (VBlockP vb, const char *base_name)
 {
     char *dump_filename = MALLOC (strlen (base_name) + 100); // we're going to leak this allocation
-    sprintf (dump_filename, "%s.bad.vblock=%u.start=%"PRIu64".len=%u", 
+    sprintf (dump_filename, "%s.vblock=%u.start=%"PRIu64".len=%u.dump", 
                 base_name, vb->vblock_i, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len);
     file_put_buffer (dump_filename, &vb->txt_data, 1);
 
@@ -613,17 +613,13 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     return true; // everything's good
 }
 
-// PIZ: returns offset of header within data, EOF if end of file
-bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
+// PIZ: reads the txt header from the genozip file and outputs it to the reconstructed txt file
+void txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
 {
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
     static Buffer header_section = EMPTY_BUFFER;
 
-    int header_offset = zfile_read_section (z_file, evb, 0, &header_section, "header_section", SEC_TXT_HEADER, sl);
-    if (header_offset == EOF) {
-        buf_free (&header_section);
-        return false; // empty file (or in case of unbind mode - no more components) - not an error
-    }
+    zfile_read_section (z_file, evb, 0, &header_section, "header_section", SEC_TXT_HEADER, sl);
 
     // handle the GENOZIP header of the txt header section
     SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)header_section.data;
@@ -656,19 +652,15 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     if (!(flag.show_headers && exe_type == EXE_GENOCAT))
         zfile_uncompress_section (evb, header, &header_buf, "header_buf", 0, SEC_TXT_HEADER);
 
-    bool is_vcf = (z_file->data_type == DT_VCF);
+    if (z_file->data_type == DT_VCF) {
 
-    bool can_bind = (is_vcf && !(flag.show_headers && exe_type == EXE_GENOCAT)) ? vcf_header_set_globals(z_file->name, &header_buf) : true;
-    if (!can_bind) {
-        buf_free (&header_section);
-        buf_free (&header_buf);
-        return false;
+        if (!(flag.show_headers && exe_type == EXE_GENOCAT)) vcf_header_set_globals(z_file->name, &header_buf, false);
+
+        if (flag.drop_genotypes) vcf_header_trim_header_line (&header_buf); // drop FORMAT and sample names
+
+        if (flag.header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
     }
-
-    if (is_vcf && flag.drop_genotypes) vcf_header_trim_header_line (&header_buf); // drop FORMAT and sample names
-
-    if (is_vcf && flag.header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
-
+    
     // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
     DtTranslation trans = dt_get_translation();
     if (trans.txtheader_translator) trans.txtheader_translator (&header_buf); 
@@ -698,8 +690,6 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
 
     z_file->num_txt_components_so_far++;
     is_first_txt = false;
-
-    return true;
 }
 
 DataType txtfile_get_file_dt (const char *filename)

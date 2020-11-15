@@ -288,9 +288,7 @@ static void main_ask_about_unbind (void)
     fprintf (stderr, "\n");
 }
 
-static void main_genounzip (const char *z_filename,
-                            const char *txt_filename, 
-                            bool is_last_file)
+static void main_genounzip (const char *z_filename, const char *txt_filename, bool is_last_file)
 {
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;

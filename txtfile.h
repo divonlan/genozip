@@ -19,7 +19,7 @@ extern void txtfile_write_one_vblock (VBlockP vb);
 extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
 
 extern bool txtfile_header_to_genozip (uint32_t *vcf_line_i);
-extern bool txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Md5Hash *digest);
+extern void txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Md5Hash *digest);
 
 extern void txtfile_header_initialize(void);
 uint32_t txtfile_get_bound_headers_len(void); // for stats
