@@ -394,6 +394,7 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
     return start;
 }
 
+
 // read section header - called from the I/O thread. returns offset of header within data
 int32_t zfile_read_section_do (File *file,
                                VBlock *vb, 
@@ -670,7 +671,7 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
 
     z_file->genozip_version   = header->genozip_version;
     z_file->flags             = header->h.flags;
-    if (digest) *digest = header->md5_hash_bound; 
+    if (digest) *digest       = header->md5_hash_bound; 
     if (txt_data_size) *txt_data_size = BGEN64 (header->uncompressed_data_size);
     if (num_items_bound) *num_items_bound = BGEN64 (header->num_items_bound); 
     if (created) memcpy (created, header->created, FILE_METADATA_LEN);

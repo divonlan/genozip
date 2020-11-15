@@ -13,6 +13,7 @@
 #include "file.h"
 #include "reference.h"
 #include "md5.h"
+#include "bgzf.h"
 
 // pool of VBs allocated based on number of threads
 static VBlockPool *pool = NULL;

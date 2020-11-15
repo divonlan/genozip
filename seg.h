@@ -106,7 +106,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
                               "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
                               "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
                               "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
-                              "\nTo get vblock: %s %s | dd skip=%"PRIu64" count=%u bs=1 of=vb.%u%s" \
+                              "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s"\
                               "\nDumped bad vblock from memory: %s", \
             __VA_ARGS__, txt_name, vb->line_i, vb->vblock_i, \
             /* pos_in_vb:         */ (PosType)(p_into_txt ? (p_into_txt - vb->txt_data.data) : -1), \
@@ -126,7 +126,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
             /* snip len:          */ p_into_txt ? (unsigned)(MIN (p_into_txt+3, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX (p_into_txt-2, vb->txt_data.data) /* start_pos */) : -1,\
             /* condition for snip */ (vb->txt_data.data && p_into_txt && (p_into_txt >= vb->txt_data.data) && (p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
             /* snip start:        */    MAX (p_into_txt-3, vb->txt_data.data) : "(inaccessible)"),\
-            /* dd params:         */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len,\
+            /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len,\
             /* output filename:   */ vb->vblock_i, file_plain_ext_by_dt (vb->data_type),\
             /* dump filename:     */ txtfile_dump_vb ((VBlockP)vb, txt_name))
 

@@ -53,7 +53,8 @@ LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
 BSC_SRCS   = bsc/divsufsort.c bsc/adler32.c bsc/bwt.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/qlfc_model.c bsc/qlfc.c
 
-DEFLATE_SRCS = libdeflate/deflate_compress.c libdeflate/deflate_decompress.c libdeflate/utils.c libdeflate/x86_cpu_features.c libdeflate/arm_cpu_features.c
+DEFLATE_SRCS = libdeflate/deflate_compress.c libdeflate/deflate_decompress.c libdeflate/utils.c libdeflate/x86_cpu_features.c \
+             libdeflate/arm_cpu_features.c libdeflate/crc32.c
 
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 

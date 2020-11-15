@@ -375,10 +375,11 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     uint32_t component_i=0;
     while (piz_one_file (component_i, is_last_file) && flag.unbind) component_i++;
 
-    if (!flag.to_stdout && !flag.unbind) 
+    if (!flag.to_stdout && !flag.unbind) {
         // don't close stdout - we might still need it for the next file
         // don't close in unbind mode - piz_one_file() opens and closes each component
         file_close (&txt_file, false); 
+    }
 
     file_close (&z_file, false);
 

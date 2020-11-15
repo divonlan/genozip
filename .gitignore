@@ -83,3 +83,5 @@ utils/*
 conda/README.md
 *.local
 *.b250
+*.bad 
+*.good

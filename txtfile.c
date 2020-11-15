@@ -32,17 +32,24 @@ static uint32_t total_bound_txt_headers_len = 0;
 MUTEX (vb_md5_mutex);   // ZIP: used for serializing MD5ing of VBs
 static uint32_t vb_md5_last=0; // last vb to be MD5ed 
 
-uint32_t txtfile_get_bound_headers_len(void) { return total_bound_txt_headers_len; }
-
-static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
+static const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext) 
 {
-    if (flag.md5) {
-        if (flag.bind && !is_2ndplus_txt_header)
-            md5_update (&z_file->md5_ctx_bound, data, len);
-        
-        md5_update (&z_file->md5_ctx_single, data, len);
-    }
+    char *dump_filename = MALLOC (strlen (base_name) + 100); // we're going to leak this allocation
+    sprintf (dump_filename, "%s.vblock-%u.start-%"PRIu64".len-%u.%s", 
+             base_name, vb->vblock_i, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len, ext);
+    return dump_filename;
 }
+
+// dump bad vb to disk
+const char *txtfile_dump_vb (VBlockP vb, const char *base_name)
+{
+    const char *dump_filename = txtfile_dump_filename (vb, base_name, "bad");
+    file_put_buffer (dump_filename, &vb->txt_data, 1);
+
+    return dump_filename;
+}
+
+uint32_t txtfile_get_bound_headers_len(void) { return total_bound_txt_headers_len; }
 
 static inline uint32_t txtfile_read_block_plain (VBlock *vb, uint32_t max_bytes)
 {
@@ -131,7 +138,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /*
 
         // case: we have data passed to us from file_open_txt_read - handle it first
         if (!vb->txt_data.len && evb->compressed.len) {
-            block_uncomp_len = evb->compressed.param;
+            block_uncomp_len = evb->compressed.param; // uncompressed length of bgzf-compressed data in compressed
             block_comp_len   = evb->compressed.len;
 
             // if we're reading a VB (not the txt header) - copy the compressed data from evb to vb
@@ -141,11 +148,11 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /*
             }
 
             // add block to list
-            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_bytes / BGZF_MAX_BLOCK_SIZE, BgzfBlock, 2, "bgzf_blocks");
-            NEXTENT (BgzfBlock, vb->bgzf_blocks) = (BgzfBlock)
-                { .txt_data_index   = 0,
+            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_bytes / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
+            NEXTENT (BgzfBlockZip, vb->bgzf_blocks) = (BgzfBlockZip)
+                { .txt_index        = 0,
                   .compressed_index = 0,
-                  .uncomp_size      = block_uncomp_len,
+                  .txt_size         = block_uncomp_len,
                   .comp_size        = block_comp_len,
                   .is_decompressed  = false };           
         }
@@ -161,11 +168,11 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /*
             }
 
             // add block to list
-            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_bytes / BGZF_MAX_BLOCK_SIZE, BgzfBlock, 2, "bgzf_blocks");
-            NEXTENT (BgzfBlock, vb->bgzf_blocks) = (BgzfBlock)
-                { .txt_data_index   = vb->txt_data.len, // after passed-down data and all previous blocks
+            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_bytes / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
+            NEXTENT (BgzfBlockZip, vb->bgzf_blocks) = (BgzfBlockZip)
+                { .txt_index        = vb->txt_data.len, // after passed-down data and all previous blocks
                   .compressed_index = vb->compressed.len,
-                  .uncomp_size      = block_uncomp_len,
+                  .txt_size         = block_uncomp_len,
                   .comp_size        = block_comp_len,
                   .is_decompressed  = false };           
 
@@ -173,14 +180,13 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /*
             vb->compressed.param += block_uncomp_len; // total uncompressed length of data in vb->compress
         }
 
-        uncomp_len       += block_uncomp_len; // total uncompressed length of data read by this function call
-        vb->txt_data.len += block_uncomp_len; // total length of txt_data after adding decompressed vb->compressed (may also include pass-down data)
+        uncomp_len            += block_uncomp_len; // total uncompressed length of data read by this function call
+        vb->txt_data.len      += block_uncomp_len; // total length of txt_data after adding decompressed vb->compressed (may also include pass-down data)
+        txt_file->disk_so_far += block_comp_len;   
 
         // we decompress one block a time in the loop so that the decompression is parallel with the disk reading into cache
-        if (uncompress) bgzf_uncompress_one_block (vb, LASTENT (BgzfBlock, vb->bgzf_blocks));  
+        if (uncompress) bgzf_uncompress_one_block (vb, LASTENT (BgzfBlockZip, vb->bgzf_blocks));  
     }
-
-    // TO DO - store isize of each block in a per-component section
 
     return uncomp_len;
 }
@@ -223,7 +229,6 @@ void txtfile_md5_one_vb (VBlock *vb)
     // wait for our turn
     while (1) {
         mutex_lock (vb_md5_mutex);
-        
         if (vb_md5_last == vb->vblock_i - 1) break; // its our turn now
 
         // not our turn, wait 10ms and try again
@@ -231,11 +236,39 @@ void txtfile_md5_one_vb (VBlock *vb)
         usleep (10000);
     }
 
-    // MD5 of all data up to and including this VB is just the total MD5 of the file so far (as there is no unconsumed data)
-    txtfile_update_md5 (vb->txt_data.data, vb->txt_data.len, false);
+    if (command == ZIP) {
+        // MD5 of all data up to and including this VB is just the total MD5 of the file so far (as there is no unconsumed data)
+        if (flag.bind) md5_update (&z_file->md5_ctx_bound, vb->txt_data.data, vb->txt_data.len);
+        md5_update (&z_file->md5_ctx_single, vb->txt_data.data, vb->txt_data.len);
 
-    // take a snapshot of MD5 as per the end of this VB - this will be used to test for errors in piz after each VB  
-    vb->md5_hash_so_far = md5_snapshot (flag.bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
+        // take a snapshot of MD5 as per the end of this VB - this will be used to test for errors in piz after each VB  
+        vb->md5_hash_so_far = md5_snapshot (flag.bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
+    }
+    
+    else { // PIZ
+        md5_update (&txt_file->md5_ctx_bound, vb->txt_data.data, vb->txt_data.len);
+
+        // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
+        // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
+        if (!flag.unbind && !md5_is_zero (vb->md5_hash_so_far)) {
+            Md5Hash piz_hash_so_far = md5_snapshot (&txt_file->md5_ctx_bound);
+
+            // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
+            if (!md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far)) {
+
+                // dump bad vb to disk
+                WARN ("MD5 of reconstructed vblock=%u (%s) differs from original file (%s).\n"
+                    "Bad reconstructed vblock has been dumped to: %s\n"
+                    "To see the same data in the original file:\n"
+                    "   %s %s | head -c %"PRIu64" | tail -c %u > %s",
+                    vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), txtfile_dump_vb (vb, z_name),
+                    codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
+                    vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len, txtfile_dump_filename (vb, z_name, "good"));
+
+                flag.md5 = false; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
+            }
+        }
+    }
 
     vb_md5_last++; // next please
     mutex_unlock (vb_md5_mutex);
@@ -285,13 +318,19 @@ static Md5Hash txtfile_read_header (bool is_first_txt)
         bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true);
     }
 
+    buf_free (&evb->compressed); // in case it was bgzf-compressed
+
     // the excess data is for the next vb to read 
     buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, header_len, 0, "txt_file->unconsumed_txt");
 
     txt_file->txt_data_so_far_single = evb->txt_data.len = header_len; // trim
 
     // md5 header - always md5_ctx_single, md5_ctx_bound only if first component 
-    txtfile_update_md5 (evb->txt_data.data, evb->txt_data.len, !is_first_txt); 
+    if (flag.md5) {
+        if (flag.bind && is_first_txt) md5_update (&z_file->md5_ctx_bound, evb->txt_data.data, evb->txt_data.len);
+        md5_update (&z_file->md5_ctx_single, evb->txt_data.data, evb->txt_data.len);
+    }
+
     Md5Hash header_md5 = md5_snapshot (&z_file->md5_ctx_single);
 
     COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
@@ -318,10 +357,10 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
     // uncompress one block at a time to see if its sufficient. usually, one block is enough
     if (vb->compressed.len)
         for (int block_i=vb->bgzf_blocks.len-1; block_i >= 0; block_i--) {
-            BgzfBlock *bb = ENT (BgzfBlock, vb->bgzf_blocks, block_i);
+            BgzfBlockZip *bb = ENT (BgzfBlockZip, vb->bgzf_blocks, block_i);
             bgzf_uncompress_one_block (vb, bb);
 
-            passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, bb->txt_data_index, &i);
+            passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &i);
             if (passed_up_len >= 0) goto done; // we have the answer (callback returns -1 if no it needs more data)
         }
         // if not found - fall through to test the passed-down data too now
@@ -455,34 +494,24 @@ done:
 }
 
 // PIZ
-static void txtfile_write_to_disk (Buffer *buf)
+void txtfile_write_to_disk (Buffer *buf)
 {
     if (!buf->len) return;
     
-    if (flag.md5) md5_update (&txt_file->md5_ctx_bound, buf->data, buf->len);
-
     if (!flag.test) file_write (txt_file, buf->data, buf->len);
 
     txt_file->txt_data_so_far_single += buf->len;
     txt_file->disk_so_far            += buf->len;
 }
 
-// dump bad vb to disk
-const char *txtfile_dump_vb (VBlockP vb, const char *base_name)
-{
-    char *dump_filename = MALLOC (strlen (base_name) + 100); // we're going to leak this allocation
-    sprintf (dump_filename, "%s.vblock=%u.start=%"PRIu64".len=%u.dump", 
-                base_name, vb->vblock_i, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len);
-    file_put_buffer (dump_filename, &vb->txt_data, 1);
-
-    return dump_filename;
-}
-
 void txtfile_write_one_vblock (VBlockP vb)
 {
     START_TIMER;
 
-    txtfile_write_to_disk (&vb->txt_data);
+    if (txt_file->codec == CODEC_BGZF) 
+        bgzf_write_to_disk (vb); 
+    else
+        txtfile_write_to_disk (&vb->txt_data);
 
     char s1[20], s2[20];
 
@@ -493,27 +522,6 @@ void txtfile_write_one_vblock (VBlockP vb)
              vb->vblock_i, (uint32_t)vb->lines.len, vb->first_line,
              str_uint_commas (vb->vb_data_size, s1), dt_name (txt_file->data_type), str_uint_commas (vb->txt_data.len, s2), 
              (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
-
-    // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
-    // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
-    if (flag.md5 && !flag.unbind && !md5_is_zero (vb->md5_hash_so_far)) {
-        Md5Hash piz_hash_so_far = md5_snapshot (&txt_file->md5_ctx_bound);
-
-        // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-        if (!md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far)) {
-
-            // dump bad vb to disk
-            WARN ("MD5 of reconstructed vblock=%u (%s) differs from original file (%s).\n"
-                  "Bad reconstructed vblock has been dumped to: %s\n"
-                  "To see the same data in the original file:\n"
-                  "   %s %s | dd skip=%"PRIu64" count=%u bs=1 of=bug%s",
-                  vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), txtfile_dump_vb (vb, z_name),
-                  codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
-                  vb->vb_position_txt_file, (uint32_t)vb->txt_data.len, file_plain_text_ext_of_dt (vb->data_type));
-
-            flag.md5 = false; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
-        }
-    }
 
     COPY_TIMER (write);
 }
@@ -614,15 +622,22 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 }
 
 // PIZ: reads the txt header from the genozip file and outputs it to the reconstructed txt file
-void txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
+void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_component_i, Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
 {
-    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
-    static Buffer header_section = EMPTY_BUFFER;
+    bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
 
-    zfile_read_section (z_file, evb, 0, &header_section, "header_section", SEC_TXT_HEADER, sl);
+    // initialize md5 stuff
+    if (unbind_component_i == 0) {
+        mutex_initialize (vb_md5_mutex);
+        vb_md5_last = 0;
+    }
+
+    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
+
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "header_section", SEC_TXT_HEADER, sl);
 
     // handle the GENOZIP header of the txt header section
-    SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)header_section.data;
+    SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)evb->z_data.data;
 
     ASSERT (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderTxtHeader)), 
             "Error: invalid txt header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderTxtHeader));
@@ -647,46 +662,54 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     if (flag.unbind) *digest = header->md5_hash_single; // override md5 from genozip header
 
     // now get the text of the txt header itself
-    static Buffer header_buf = EMPTY_BUFFER;
-    
-    if (!(flag.show_headers && exe_type == EXE_GENOCAT))
-        zfile_uncompress_section (evb, header, &header_buf, "header_buf", 0, SEC_TXT_HEADER);
+    if (!show_headers_only)
+        zfile_uncompress_section (evb, header, &evb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
 
     if (z_file->data_type == DT_VCF) {
 
-        if (!(flag.show_headers && exe_type == EXE_GENOCAT)) vcf_header_set_globals(z_file->name, &header_buf, false);
+        if (!show_headers_only) vcf_header_set_globals(z_file->name, &evb->txt_data, false);
 
-        if (flag.drop_genotypes) vcf_header_trim_header_line (&header_buf); // drop FORMAT and sample names
+        if (flag.drop_genotypes) vcf_header_trim_header_line (&evb->txt_data); // drop FORMAT and sample names
 
-        if (flag.header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
+        if (flag.header_one) vcf_header_keep_only_last_line (&evb->txt_data);  // drop lines except last (with field and samples name)
     }
     
     // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
     DtTranslation trans = dt_get_translation();
-    if (trans.txtheader_translator) trans.txtheader_translator (&header_buf); 
+    if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
     // get SEC_BGZF data if available
     bgzf_read_and_uncompress_isizes (sl);     
-    // TO DO: recompress with BGZF if needed
 
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
     if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.genocat_info_only) {
-        txtfile_write_to_disk (&header_buf);
+
+        if (flag.md5) md5_update (&txt_file->md5_ctx_bound, evb->txt_data.data, evb->txt_data.len);
+
+        if (txt_file->codec == CODEC_BGZF) {
+            bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
+            bgzf_compress_vb (evb);
+            bgzf_write_to_disk (evb);
+        } 
+        else
+            txtfile_write_to_disk (&evb->txt_data);
 
         if (flag.md5 && !md5_is_zero (header->md5_header)) {
-            Md5Hash reconstructed_header_len = md5_do (header_buf.data, header_buf.len);
+            Md5Hash reconstructed_header_len = md5_do (evb->txt_data.data, evb->txt_data.len);
 
             if (!md5_is_equal (reconstructed_header_len, header->md5_header)) {
-                WARN ("MD5 of reconstructed %s header (%s) differs from original file (%s)",
-                    dt_name (z_file->data_type), md5_display (reconstructed_header_len), md5_display (header->md5_header));
+                WARN ("MD5 of reconstructed %s header (%s) differs from original file (%s)\n"
+                      "Bad reconstructed vblock has been dumped to: %s\n",
+                      dt_name (z_file->data_type), md5_display (reconstructed_header_len), md5_display (header->md5_header),
+                      txtfile_dump_vb (evb, z_name));
 
                 flag.md5 = false; // no point in continuing to check - all vblocks will fail as MD5 is cumulative
             }
         }
     }
     
-    buf_free (&header_section);
-    buf_free (&header_buf);
+    buf_free (&evb->z_data);
+    buf_free (&evb->txt_data);
 
     z_file->num_txt_components_so_far++;
     is_first_txt = false;

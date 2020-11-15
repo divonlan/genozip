@@ -259,4 +259,4 @@ _128_bits_at_a_time:
 
 #define IMPL_ALIGNMENT		16
 #define IMPL_SEGMENT_SIZE	16
-#include "../crc32_vec_template.h"
+#include "crc32_vec_template.h"

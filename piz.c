@@ -465,7 +465,6 @@ static void piz_uncompress_one_vb (VBlock *vb)
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
     vb->first_line       = BGEN32 (header->first_line);      
     vb->lines.len        = BGEN32 (header->num_lines);       
-    vb->vb_data_size     = BGEN32 (header->vb_data_size);    
     vb->longest_line_len = BGEN32 (header->longest_line_len);
     vb->md5_hash_so_far  = header->md5_hash_so_far;
 
@@ -490,6 +489,13 @@ static void piz_uncompress_one_vb (VBlock *vb)
 
     // reconstruct from top level snip
     piz_reconstruct_from_ctx (vb, trans.toplevel, 0, true);
+
+    // compress txt_data into BGZF blocks (in vb->compressed) if applicable
+    if (vb->bgzf_blocks.len) bgzf_compress_vb (vb);
+
+    // calculate the MD5 contribution of this VB to the single file and bound files, and the MD5 snapshot of this VB
+    if (flag.md5) txtfile_md5_one_vb (vb); 
+
 
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
@@ -601,6 +607,7 @@ static bool piz_read_one_vb (VBlock *vb)
     vb->vb_position_txt_file = txt_file->disk_so_far;
     
     int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sl++); 
+    vb->vb_data_size = BGEN32 (((SectionHeaderVbHeader *)vb->z_data.data)->vb_data_size); // needed by bgzf_calculate_blocks_one_vb
 
     ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
@@ -614,6 +621,9 @@ static bool piz_read_one_vb (VBlock *vb)
 
     // read additional sections and other logic specific to this data type
     bool ok_to_compute = DTPZ(piz_read_one_vb) ? DTPZ(piz_read_one_vb)(vb, sl) : true; // true if we should go forward with computing this VB (otherwise skip it)
+
+    // calculate the BGZF blocks that the compute thread is expected to compress
+    if (txt_file->codec == CODEC_BGZF) bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
 
     COPY_TIMER (piz_read_one_vb); 
 
@@ -680,7 +690,7 @@ bool piz_dispatch_one_vb (Dispatcher dispatcher, const SectionListEntry *sl_ent)
 
 // called once per components reconstructed txt_file: i.e.. if unbinding there will be multiple calls.
 // returns: false if we're unbinding and there are no more components. true otherwise.
-bool piz_one_file (uint32_t component_i, bool is_last_file)
+bool piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is_last_file)
 {
     static Dispatcher dispatcher = NULL; // static dispatcher - with flag.unbind, we use the same dispatcher when unzipping components
     static const SectionListEntry *sl_ent = NULL; // preserve for unbinding multiple files
@@ -691,7 +701,7 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
     // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --unbind, 
     static DataType data_type = DT_NONE; 
 
-    if (component_i == 0) {
+    if (unbind_component_i == 0) {
 
         data_type = piz_read_global_area (&original_file_digest);
         if (data_type == DT_NONE || flag.reading_reference) goto finish; // reference file has no VBs
@@ -737,7 +747,7 @@ bool piz_one_file (uint32_t component_i, bool is_last_file)
 
                 if (flag.unbind && txt_header_i++) goto no_more_data; // if unbinding, we processes only one component (piz_one_file will be called again for the next component)
 
-                txtfile_genozip_to_txt_header (sl_ent, (txt_header_i>=2 ? NULL : &original_file_digest)); // read header - it will skip 2nd+ txt header if concatenating
+                txtfile_genozip_to_txt_header (sl_ent, unbind_component_i, (txt_header_i>=2 ? NULL : &original_file_digest)); // read header - it will skip 2nd+ txt header if concatenating
 
                 if (flag.unbind) dispatcher_resume (dispatcher); 
 
@@ -762,7 +772,6 @@ no_more_data:
             if (!flag.reading_reference) txtfile_write_one_vblock (processed_vb);
 
             z_file->num_vbs++;
-            
             z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
 
             dispatcher_finalize_one_vb (dispatcher);
@@ -774,8 +783,7 @@ no_more_data:
 
     if (flag.unbind) file_close (&txt_file, true); // close this component file
 
-    if (!flag.test) 
-        progress_finalize_component_time ("Done", decompressed_file_digest);
+    if (!flag.test) progress_finalize_component_time ("Done", decompressed_file_digest);
 
 finish:
     // in unbind mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here

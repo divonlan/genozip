@@ -306,6 +306,8 @@ finish:
 // PIZ I/O thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
 TXTHEADER_TRANSLATOR (txtheader_bam2sam)
 {
+    ASSERT0 (buf_is_allocated (txtheader_buf), "Error in txtheader_bam2sam: txtheader_buf not allocated");
+
     uint32_t l_text = GET_UINT32 (ENT (char, *txtheader_buf, 4));
     memcpy (txtheader_buf->data, ENT (char, *txtheader_buf, 8), l_text);
     txtheader_buf->len = l_text;

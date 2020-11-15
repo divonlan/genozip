@@ -439,9 +439,11 @@ static bool file_open_txt_write (File *file)
 
     // open the file, based on the codec 
     switch (file->codec) { 
-        case CODEC_NONE : file->file = fopen (file->name, WRITE); break;
         case CODEC_GZ   :
-        case CODEC_BGZF : file_redirect_output_to_stream (file, "bgzip", "--stdout", NULL, NULL); break;
+        case CODEC_BGZF : 
+        case CODEC_NONE : file->file = fopen (file->name, WRITE); break;
+        //case CODEC_GZ   :
+        //case CODEC_BGZF : file_redirect_output_to_stream (file, "bgzip", "--stdout", NULL, NULL); break;
         case CODEC_BCF  : file_redirect_output_to_stream (file, "bcftools", "view", "-Ob", NULL); break;
         case CODEC_BAM  : file_redirect_output_to_stream (file, "samtools", "view", "-OBAM",  file_samtools_no_PG()); break;
         case CODEC_CRAM : file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", file_samtools_no_PG()); break;
@@ -642,10 +644,13 @@ void file_close (File **file_p,
     
     if (file->file) {
 
-        if (file->mode == READ && (file->codec == CODEC_GZ)) {
-            int ret = gzclose_r((gzFile)file->file);
-            ASSERTW (!ret, "%s: warning: failed to close file: %s", global_cmd, file_printname (file));
-        }
+        if (file->mode == WRITE && file->supertype == TXT_FILE && file->codec == CODEC_BGZF)
+            ASSERT (fwrite (BGZF_EOF, BGZF_EOF_LEN, 1, (FILE *)file->file), "Failed to write BGZF EOF to %s: %s", file->name, strerror (errno)); 
+            // proceed to FCLOSE below     
+
+        if (file->mode == READ && (file->codec == CODEC_GZ))
+            ASSERTW (!gzclose_r((gzFile)file->file), "%s: warning: failed to close file: %s", global_cmd, file_printname (file))
+
         else if (file->mode == READ && file->codec == CODEC_BZ2)
             BZ2_bzclose((BZFILE *)file->file);
         
@@ -905,8 +910,12 @@ const char *file_guess_original_filename (const File *file)
         if (last_dot) *last_dot = 0;
     }
 
-    // add new extension
-    strcpy (&org_name[strlen(org_name)], &ext[1]);
+    int org_len = strlen (org_name); 
+    if (org_len >= 4 && !strcmp (&org_name[org_len-4], ".bam")) {
+        // don't add extension to .bam
+    }
+    else // add new extension
+        strcpy (&org_name[org_len], &ext[1]);
 
     return org_name;
 }

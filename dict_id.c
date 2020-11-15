@@ -9,6 +9,7 @@
 #include "file.h"
 #include "zfile.h"
 #include "sections.h"
+#include "vblock.h"
 
 // globals externed in dict_id.h and initialized in dict_id_initialize
 static Buffer dict_id_aliases_buf  = EMPTY_BUFFER;
@@ -244,16 +245,14 @@ void dict_id_read_aliases (void)
 { 
     if (!sections_get_next_section_of_type (NULL, SEC_DICT_ID_ALIASES, false, true)) return; // no aliases section
 
-    static Buffer compressed_aliases = EMPTY_BUFFER;
-
     buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
 
-    zfile_read_section (z_file, evb, 0, &compressed_aliases, "dict_id_aliases_buf", SEC_DICT_ID_ALIASES, NULL);    
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_DICT_ID_ALIASES, NULL);    
 
-    SectionHeader *header = (SectionHeader *)compressed_aliases.data;
+    SectionHeader *header = (SectionHeader *)evb->z_data.data;
     zfile_uncompress_section (evb, header, &dict_id_aliases_buf, "dict_id_aliases_buf", 0, SEC_DICT_ID_ALIASES);
 
-    buf_destroy (&compressed_aliases);
+    buf_free (&evb->z_data);
 
     dict_id_aliases = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     dict_id_num_aliases = dict_id_aliases_buf.len / sizeof (DictIdAlias);

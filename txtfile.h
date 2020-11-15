@@ -19,13 +19,14 @@ extern void txtfile_write_one_vblock (VBlockP vb);
 extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
 
 extern bool txtfile_header_to_genozip (uint32_t *vcf_line_i);
-extern void txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Md5Hash *digest);
+extern void txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, uint32_t unbind_component_i, Md5Hash *digest);
 
 extern void txtfile_header_initialize(void);
 uint32_t txtfile_get_bound_headers_len(void); // for stats
 
 extern void txtfile_read_vblock (VBlockP vb);
 extern void txtfile_md5_one_vb (VBlockP vb);
+extern void txtfile_write_to_disk (BufferP buf);
 
 // callbacks
 extern int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);

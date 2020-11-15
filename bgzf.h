@@ -12,12 +12,15 @@
 #define BGZF_EOF "\x1f\x8b\x08\x04\x00\x00\x00\x00\x00\xff\x06\x00\x42\x43\x02\x00\x1b\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 // data type of vblock.bgzf_blocks
-typedef struct BgzfBlock {
-    uint32_t txt_data_index;   // index of uncompressed block within vb->txt_data. The first block doesn't necessarily have index=0 bc there could be passed-down data
-    uint32_t compressed_index; // index within vb->compressed
-    uint32_t uncomp_size, comp_size;
+typedef struct BgzfBlockZip {
+    uint32_t txt_index, txt_size;    // index of uncompressed block within vb->txt_data. The first block doesn't necessarily have index=0 bc there could be passed-down data
+    uint32_t compressed_index, comp_size; // index within vb->compressed
     bool is_decompressed;
-} BgzfBlock;
+} BgzfBlockZip;
+
+typedef struct BgzfBlockPiz {
+    uint32_t txt_index, txt_size; // index of uncompressed block within vb->txt_data. The first block doesn't necessarily have index=0 bc there could be passed-down data
+} BgzfBlockPiz;
 
 //---------
 // ZIP side
@@ -27,7 +30,7 @@ typedef struct BgzfBlock {
 #define BGZF_BLOCK_IS_NOT_GZIP    -2
 extern int32_t bgzf_read_block (FileP file, uint8_t *block, uint32_t *block_size, bool soft_fail);
 extern void bgzf_uncompress_vb (VBlockP vb);
-extern void bgzf_uncompress_one_block (VBlockP vb, BgzfBlock *bb);
+extern void bgzf_uncompress_one_block (VBlockP vb, BgzfBlockZip *bb);
 extern void bgzf_compress_bgzf_section (void);
 
 //---------
@@ -35,4 +38,7 @@ extern void bgzf_compress_bgzf_section (void);
 //---------
 
 extern void bgzf_read_and_uncompress_isizes (ConstSectionListEntryP sl_ent);
+extern void bgzf_calculate_blocks_one_vb (VBlockP vb, uint32_t vb_txt_data_len);
+extern void bgzf_compress_vb (VBlockP vb);
+extern void bgzf_write_to_disk (VBlockP vb);
 

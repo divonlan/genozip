@@ -59,7 +59,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* bgzf - for handling bgzf-compressed files */ \
     void *libdeflate;          /* Handle into the libdeflate compressor or decompressor */ \
-    Buffer bgzf_blocks;        /* ZIP: an array of BgzfBlock tracking the decompression of blocks into txt_data */\
+    Buffer bgzf_blocks;        /* ZIP: an array of BgzfBlockZip tracking the decompression of blocks into txt_data */\
     \
     /* random access, chrom, pos */ \
     Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
