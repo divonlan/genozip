@@ -17,7 +17,7 @@
 typedef struct {
     int64_t wallclock, read, compute, compressor_bz2, compressor_lzma, compressor_bsc, 
         write, piz_read_one_vb, codec_hapmat_piz_get_one_line, 
-        sam_seg_seq_field, compressor_domq, compressor_actg, bgzf_uncompress_vb,
+        sam_seg_seq_field, compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread,
         piz_get_line_subfields,  zip_generate_and_compress_ctxs, ctx_merge_in_vb_ctx,
         zfile_uncompress_section, codec_assign_best_codec,
         piz_reconstruct_vb, buf_alloc, txtfile_read_header, txtfile_read_vblock,
@@ -39,7 +39,7 @@ typedef struct timespec TimeSpecType;
 #define START_TIMER     TimeSpecType profiler_timer; \
                         if (flag.show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
 
-#define COPY_TIMER_FULL(vb,res) /* str - print in case of specific show-time=<res> */ \
+#define COPY_TIMER_FULL(vb,res) { /* str - print in case of specific show-time=<res> */ \
     if (flag.show_time) { \
         TimeSpecType tb; \
         clock_gettime(CLOCK_REALTIME, &tb); \
@@ -53,7 +53,8 @@ typedef struct timespec TimeSpecType;
             (vb)->profile.next_name = (vb)->profile.next_subname = NULL;\
         }\
         (vb)->profile.res += delta; \
-    }
+    } \
+}
 
 #define COPY_TIMER(res)         COPY_TIMER_FULL(vb, res)
 #define COPY_TIMER_VB(vb,res)   COPY_TIMER_FULL(vb, res)

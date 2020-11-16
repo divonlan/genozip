@@ -157,7 +157,10 @@ void bgzf_uncompress_vb (VBlock *vb)
 
     buf_free (&vb->compressed); // now that we are finished decompressing we can free it
 
-    COPY_TIMER (bgzf_uncompress_vb);
+    if (flag.show_time) {
+        if (arch_am_i_io_thread ()) COPY_TIMER (bgzf_io_thread)
+        else                        COPY_TIMER (bgzf_compute_thread);
+    }
 }
 
 //---------
@@ -214,6 +217,8 @@ void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
 
 static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t isize)
 {
+    START_TIMER;
+
     // use level 6 - same as samtools and bgzip default level. if we're lucky (same gzip library and user used default level),
     // we will reconstruct precisely even at the .gz level
     #define BGZF_DEFAULT_COMPRESSION_LEVEL 6 
@@ -249,6 +254,11 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
     BgzfFooter footer = { .crc32 = LTEN32 (libdeflate_crc32 (0, in, isize)),
                           .isize = LTEN32 (isize) };
     buf_add (&vb->compressed, &footer, sizeof (BgzfFooter));
+
+    if (flag.show_time) {
+        if (arch_am_i_io_thread ()) COPY_TIMER (bgzf_io_thread)
+        else                        COPY_TIMER (bgzf_compute_thread);
+    }
 
     return (uint32_t)out_size;
 } 

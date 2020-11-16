@@ -126,19 +126,21 @@ static inline uint32_t txtfile_read_block_bz2 (VBlock *vb, uint32_t max_bytes)
 }
 
 // BGZF: we read *compressed* data into vb->compressed - that will be decompressed later. we read
-// data with a *decompressed* size up to max_bytes. vb->compressed always contains only full BGZF blocks
-static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /* must be signed */, bool uncompress)
+// data with a *decompressed* size up to max_uncomp. vb->compressed always contains only full BGZF blocks
+static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /* must be signed */, bool uncompress)
 {
-    if (uncompress) buf_alloc (vb, &vb->txt_data, max_bytes, 0, "txt_data");
+    #define uncomp_len param // we use vb->compress.param to hold the uncompressed length of the bgzf data in vb->compress
 
-    uint32_t block_comp_len, block_uncomp_len, uncomp_len=0;
-    while (vb->compressed.param < max_bytes - BGZF_MAX_BLOCK_SIZE) {
+    if (uncompress) buf_alloc (vb, &vb->txt_data, max_uncomp, 0, "txt_data");
 
-        buf_alloc_more (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, uncompress ? 0 : max_bytes/4, char, 1.5, "compressed")
+    uint32_t block_comp_len, block_uncomp_len, this_uncomp_len=0;
+    while (vb->compressed.uncomp_len < max_uncomp - BGZF_MAX_BLOCK_SIZE) {
+
+        buf_alloc (vb, &vb->compressed, MAX (max_uncomp/4, vb->txt_data.len + BGZF_MAX_BLOCK_SIZE), 1.5, "compressed")
 
         // case: we have data passed to us from file_open_txt_read - handle it first
         if (!vb->txt_data.len && evb->compressed.len) {
-            block_uncomp_len = evb->compressed.param; // uncompressed length of bgzf-compressed data in compressed
+            block_uncomp_len = evb->compressed.uncomp_len;
             block_comp_len   = evb->compressed.len;
 
             // if we're reading a VB (not the txt header) - copy the compressed data from evb to vb
@@ -148,7 +150,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /*
             }
 
             // add block to list
-            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_bytes / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
+            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_uncomp / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
             NEXTENT (BgzfBlockZip, vb->bgzf_blocks) = (BgzfBlockZip)
                 { .txt_index        = 0,
                   .compressed_index = 0,
@@ -168,7 +170,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /*
             }
 
             // add block to list
-            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_bytes / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
+            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_uncomp / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
             NEXTENT (BgzfBlockZip, vb->bgzf_blocks) = (BgzfBlockZip)
                 { .txt_index        = vb->txt_data.len, // after passed-down data and all previous blocks
                   .compressed_index = vb->compressed.len,
@@ -177,18 +179,19 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_bytes /*
                   .is_decompressed  = false };           
 
             vb->compressed.len   += block_comp_len;   // compressed size
-            vb->compressed.param += block_uncomp_len; // total uncompressed length of data in vb->compress
         }
 
-        uncomp_len            += block_uncomp_len; // total uncompressed length of data read by this function call
-        vb->txt_data.len      += block_uncomp_len; // total length of txt_data after adding decompressed vb->compressed (may also include pass-down data)
-        txt_file->disk_so_far += block_comp_len;   
+        this_uncomp_len           += block_uncomp_len; // total uncompressed length of data read by this function call
+        vb->compressed.uncomp_len += block_uncomp_len; // total uncompressed length of data in vb->compress
+        vb->txt_data.len          += block_uncomp_len; // total length of txt_data after adding decompressed vb->compressed (may also include pass-down data)
+        txt_file->disk_so_far     += block_comp_len;   
 
         // we decompress one block a time in the loop so that the decompression is parallel with the disk reading into cache
         if (uncompress) bgzf_uncompress_one_block (vb, LASTENT (BgzfBlockZip, vb->bgzf_blocks));  
     }
 
-    return uncomp_len;
+    return this_uncomp_len;
+#undef param
 }
 
 // performs a single I/O read operation - returns number of bytes read
@@ -315,7 +318,7 @@ static Md5Hash txtfile_read_header (bool is_first_txt)
         ASSERT (bytes_read, "Error in txtfile_read_header: %s: %s file too short - unexpected end-of-file", txt_name, dt_name(txt_file->data_type));
 
         buf_alloc_more (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
-        bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true);
+        bytes_read = txtfile_read_block (evb, evb->txt_data.len + HEADER_BLOCK, true);
     }
 
     buf_free (&evb->compressed); // in case it was bgzf-compressed

@@ -18,7 +18,8 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(compressor_bsc);
     ADD(zip_generate_and_compress_ctxs);
     ADD(codec_assign_best_codec);
-    ADD(bgzf_uncompress_vb);
+    ADD(bgzf_io_thread);
+    ADD(bgzf_compute_thread);
     ADD(piz_reconstruct_vb);
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
@@ -110,8 +111,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (read, 2);
         PRINT (md5, 2);
         PRINT (write, 1);
+        PRINT (bgzf_io_thread, 1);
         fprintf (stderr, "GENOZIP compute threads %u\n", ms(p->compute));
-        PRINT (bgzf_uncompress_vb, 1);
         PRINT (ctx_clone_ctx, 1);
         PRINT (seg_all_data_lines, 1);
         PRINT (aligner_best_match, 2);
@@ -125,6 +126,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (zfile_compress_dictionary_data, 2);
         PRINT (zip_generate_and_compress_ctxs, 1);
         PRINT (codec_assign_best_codec, 1);
+        PRINT (bgzf_compute_thread, 1);
         PRINT (compressor_bz2,  2);
         PRINT (compressor_lzma, 2);
         PRINT (compressor_bsc,  2);
