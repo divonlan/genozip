@@ -20,7 +20,7 @@ extern bool sam_inspect_txt_header (BufferP txt_header);
 // SEG Stuff
 extern void sam_seg_initialize (VBlockP vb);
 extern void sam_seg_finalize (VBlockP vb);
-extern const char *sam_seg_txt_line (VBlockP vb_, const char *field_start_line, bool *has_special_eol);
+extern const char *sam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern uint32_t sam_seg_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
 extern uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len);
 
@@ -36,7 +36,7 @@ extern void txtheader_bam2sam (BufferP txt);
 extern void bam_read_vblock (VBlockP vb);
 extern void bam_seg_initialize (VBlockP vb);
 extern void bam_zip_finalize (void);
-extern const char *bam_seg_txt_line (VBlockP vb_, const char *field_start_line, bool *has_special_eol);
+extern const char *bam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 
 // SAM-to-FASTQ stuff
 CONTAINER_FILTER_FUNC (sam_piz_sam2fq_filter);

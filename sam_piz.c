@@ -75,7 +75,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
         if (!subcigar_len) {
             subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
-            cigar_op = cigar_lookup[(uint8_t)*(next_cigar++)];
+            cigar_op = cigar_lookup_sam[(uint8_t)*(next_cigar++)];
             ASSERT (cigar_op, "Error in sam_piz_reconstruct_seq: Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
             cigar_op &= 0x0f; // remove validity bit
         }

@@ -216,8 +216,8 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
 {
     // use level 6 - same as samtools and bgzip default level. if we're lucky (same gzip library and user used default level),
     // we will reconstruct precisely even at the .gz level
-
     #define BGZF_DEFAULT_COMPRESSION_LEVEL 6 
+    
     #define BGZF_MAX_CDATA_SIZE (BGZF_MAX_BLOCK_SIZE - sizeof (BgzfHeader) - sizeof (BgzfFooter))
 
     if (!vb->libdeflate) vb->libdeflate = libdeflate_alloc_compressor (BGZF_DEFAULT_COMPRESSION_LEVEL);
@@ -244,7 +244,7 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
     ASSERT (out_size, "Error in bgzf_uncompress_vb: cannot compress block with %u bytes into a BGZF block with %u bytes", isize, BGZF_MAX_BLOCK_SIZE);
     vb->compressed.len += out_size;
 
-    header->bsize = LTEN16 ((uint16_t)(sizeof (BgzfHeader) + out_size + 8 - 1));
+    header->bsize = LTEN16 ((uint16_t)(sizeof (BgzfHeader) + out_size + sizeof (BgzfFooter) - 1));
 
     BgzfFooter footer = { .crc32 = LTEN32 (libdeflate_crc32 (0, in, isize)),
                           .isize = LTEN32 (isize) };

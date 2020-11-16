@@ -234,7 +234,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     return true; // all other cases -  procedue with adding to dictionary/b250
 }
 
-const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
+const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;

@@ -639,7 +639,7 @@ static void vcf_seg_complete_missing_lines (VBlockVCF *vb)
    all samples go into the SAMPLES context, which is a Container
    Haplotype and phase data are stored in a separate buffers + a SNIP_SPECIAL in the GT context 
 */
-const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
+const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);

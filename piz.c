@@ -643,13 +643,13 @@ static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
     else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
         if (flag.md5) { 
+            DataType dt = z_file->data_type == DT_SAM && (z_file->flags & GENOZIP_FL_TXT_IS_BIN) ? DT_BAM : z_file->data_type;
             sprintf (s, "MD5 = %s verified as identical to the original %s", 
-                        md5_display (decompressed_file_digest), dt_name (z_file->data_type));
+                        md5_display (decompressed_file_digest), dt_name (dt));
             progress_finalize_component (s); 
         }
-
-        //else if (flag.test) progress_finalize_component ("Success");
     }
+    
     else if (flag.test) {
         progress_finalize_component ("FAILED!!!");
         ABORT ("Error: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",

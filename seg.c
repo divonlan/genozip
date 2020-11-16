@@ -765,14 +765,16 @@ void seg_all_data_lines (VBlock *vb)
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
     for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
-        if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
+        uint32_t remaining_txt_len = AFTERENT (char, vb->txt_data) - field_start;
+        //if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
+        if (!remaining_txt_len) { // we're done
             vb->lines.len = vb->line_i; // update to actual number of lines
             break;
         }
 
         //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
         bool has_13 = false;
-        const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, &has_13);
+        const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
 
         vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
         field_start = next_field;

@@ -257,7 +257,7 @@ uint32_t fastq_get_pair_vb_i (VBlockP vb)
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
-const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
+const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     ZipDataLineFAST *dl = DATA_LINE (vb->line_i);
 

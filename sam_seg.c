@@ -1160,7 +1160,7 @@ bool sam_zip_is_unaligned_line (const char *line, int len)
     return (field_len == 1 && *field_start == '0');
 }
 
-const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
+const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb->line_i);

@@ -23,7 +23,7 @@
 ##co= 17. Format and info subfield names that exceed 8 characters (DictId size)
 ##co= 18. Lines with different ploidy types: HAPLO, PHASED, NOT_PHASED and MIXED 
 ##co= 19. No FORMAT and samples in a line, despite file having samples
-##co= 20. Extreme POS values (0 and ‭2147483647‬ == 0x7ffffff)
+##co= 20. Extreme POS values (0 and ‭2147483647‬ == 0x7fffffff)
 ##co= 21. ID - numeric, non-numeric, partial-numeric, numeric 10+ digits, leading 0
 ##co= 22. Optimization - FORMAT subfields GL,GP,PL and INFO subfield VQSLOD
 ##co= 23. DP and MIN_DP - FORMAT subfields - case when they're identical and case when not

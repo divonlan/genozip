@@ -57,7 +57,7 @@ void me23_seg_finalize (VBlockP vb)
     container_seg_by_ctx (vb, &vb->contexts[ME23_TOP2VCF], &top_level_to_vcf, 0, 0, 0);
 }
 
-const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
+const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;

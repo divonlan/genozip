@@ -55,7 +55,8 @@ typedef VBlockSAM *VBlockSAMP;
 #define CIGAR_DIGIT              1
 #define CIGAR_CONSUMES_QUERY     2
 #define CIGAR_CONSUMES_REFERENCE 4
-extern const uint8_t cigar_lookup[256];
+extern const uint8_t cigar_lookup_sam[256];
+extern const uint8_t cigar_lookup_bam[16];
 
 // loading a Little Endian uint32_t from an unaligned buffer
 #define GET_UINT16(p) (((uint8_t*)p)[0] | (((uint8_t*)p)[1] << 8))

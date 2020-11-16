@@ -146,7 +146,7 @@ void fasta_seg_finalize (VBlockP vb)
 //     note: if a comment line is the first line in a VB - it will be segmented as a description. No harm done.
 // 123 - a sequence line - any line that's not a description of sequence line - store its length
 // these ^ are preceded by a 'Y' if the line has a Windows-style \r\n line ending or 'X' if not
-const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *has_13) // index in vb->txt_data where this line starts
+const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t remaining_txt_len, bool *has_13) // index in vb->txt_data where this line starts
 {
     // get entire line
     unsigned line_len;

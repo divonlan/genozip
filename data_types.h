@@ -49,7 +49,7 @@ typedef struct DataTypeProperties {
     void (*zip_finalize)(void);        // called by I/O thread after each txt file compressing is done
     void (*zip_read_one_vb)(VBlockP);  // called by I/O thread after reading txt of one vb into vb->txt_data
     void (*seg_initialize)(VBlockP);   // called by Compute thread at the beginning of Seg
-    const char *(*seg_txt_line)(VBlockP, const char *field_start_line, bool *has_13);  // Called by Compute thread to Seg one line
+    const char *(*seg_txt_line)(VBlockP, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13);  // Called by Compute thread to Seg one line
     void (*seg_finalize)(VBlockP);     // called by Compute thread at the end of Seg
     void (*compress)(VBlockP);
 

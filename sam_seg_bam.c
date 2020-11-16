@@ -23,6 +23,8 @@ static uint32_t header_n_ref=0;
 static char **header_ref_contigs = NULL;
 static uint32_t *header_ref_contigs_len = NULL;
 
+#define MAX_POS_BAM ((PosType)0x7fffffff)
+
 // returns header length if header read is complete + sets lines.len, -1 not complete yet 
 // note: usually a BAM header fits into a single 512KB READ BUFFER, so this function is called only twice (without and then with data).
 // callback from DataTypeProperties.is_header_done
@@ -76,14 +78,45 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     // find the first alignment in the data (going backwards) that is entirely in the data - 
     // we identify and alignment by l_read_name and read_name
     for (; *i >= first_i; (*i)--) {
-        BAMAlignmentFixed *aln = (BAMAlignmentFixed *)ENT (char, vb->txt_data, *i);
-        if (&aln->read_name[aln->l_read_name] <= AFTERENT (char, vb->txt_data) && // we have the entire propose read name
-            aln->read_name[aln->l_read_name-1] == 0 && // nul-terminated
-            *i + LTEN32 (aln->block_size) + 4 <= vb->txt_data.len && // proposed block fits in data (+4 bc block_size value excludes itself)
-            str_is_in_range (aln->read_name, aln->l_read_name-1, '!', '~')) // all printable ascii (per SAM spec)
-            // TODO - add aln->bin calculation to increase confidence
-            
-            return vb->txt_data.len - (*i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
+        const BAMAlignmentFixed *aln = (const BAMAlignmentFixed *)ENT (char, vb->txt_data, *i);
+
+        uint32_t block_size = LTEN32 (aln->block_size);
+        uint32_t l_seq      = LTEN32 (aln->l_seq);
+        uint16_t n_cigar_op = LTEN16 (aln->n_cigar_op);
+
+        // test to see block_size makes sense
+        if (*i + block_size + 4 > vb->txt_data.len ||
+            block_size < sizeof (BAMAlignmentFixed) + 4*n_cigar_op  + aln->l_read_name + l_seq + (l_seq+1)/2)
+            continue;
+
+        // test to see l_read_name makes sense
+        if (LTEN32 (aln->l_read_name) < 2 ||
+            &aln->read_name[aln->l_read_name] > AFTERENT (char, vb->txt_data)) continue;
+
+        // test pos
+        int32_t pos = LTEN32 (aln->pos);
+        if (pos < -1) continue;
+
+        // test read_name    
+        if (aln->read_name[aln->l_read_name-1] != 0 || // nul-terminated
+            !str_is_in_range (aln->read_name, aln->l_read_name-1, '!', '~')) continue;  // all printable ascii (per SAM spec)
+
+        // test l_seq vs seq_len implied by cigar
+        if (aln->l_seq) {
+            uint32_t seq_len_by_cigar=0;
+            uint32_t *cigar = (uint32_t *)((uint8_t *)(aln+1) + aln->l_read_name);
+            for (uint16_t cigar_op_i=0; cigar_op_i < n_cigar_op; cigar_op_i++) {
+                uint8_t cigar_op = *(uint8_t *)&cigar[cigar_op_i] & 0xf; // LSB by Little Endian - take 4 LSb
+                uint32_t op_len = cigar[cigar_op_i] >> 4;
+                if (cigar_lookup_bam[cigar_op] & CIGAR_CONSUMES_QUERY) seq_len_by_cigar += op_len; 
+            }
+            if (l_seq != seq_len_by_cigar) continue;
+        }
+
+        // TODO - add aln->bin calculation to increase confidence
+
+        // all tests passed - this is indeed an alignment
+        return vb->txt_data.len - (*i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
     }
 
     return -1; // we can't find any alignment - need more data (lower first_i)
@@ -122,7 +155,7 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t f
     PosType last_pos = segment_unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
     uint16_t reg2bin = bam_reg2bin (this_pos-1, last_pos-1);
 
-    if (!is_bam || (last_pos <= (PosType)0x7ffffff /* largest POS is SAM */ && reg2bin == bin))
+    if (!is_bam || (last_pos <= MAX_POS_BAM && reg2bin == bin))
         seg_by_did_i (vb, ((char []){ SNIP_SPECIAL, SAM_SPECIAL_BIN }), 2, SAM_BAM_BIN, is_bam ? sizeof (uint16_t) : 0)
     
     else {
@@ -135,8 +168,8 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t f
 
 static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
-    ASSERT (ref_id >= -1 && ref_id < (int32_t)header_n_ref, "Error in bam_seg_ref_id: vb=%u: encountered ref_id=%d but header has only %u contigs",
-            vb->vblock_i, ref_id, header_n_ref);
+    ASSERT (ref_id >= -1 && ref_id < (int32_t)header_n_ref, "Error in bam_seg_ref_id: vb=%u line_i=%u: encountered ref_id=%d but header has only %u contigs",
+            vb->vblock_i, vb->line_i, ref_id, header_n_ref);
 
     // get snip and snip_len
     DECLARE_SNIP;
@@ -325,7 +358,8 @@ const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field,
     return next_field;
 }
 
-const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminology for one line */, bool *has_13_unused)   
+const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminology for one line */,
+                              uint32_t remaining_txt_len, bool *has_13_unused)   
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
@@ -333,6 +367,12 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     // *** ingest BAM alignment fixed-length fields ***
     uint32_t block_size = NEXT_UINT32;
+
+    // a non-sensical block_size might indicate an false-positive identification of a BAM alignment in bam_unconsumed
+    ASSERT (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
+            "Error in bam_seg_txt_line: vb=%u line_i=%u (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
+            vb->vblock_i, vb->line_i, block_size+4, remaining_txt_len);
+
     int32_t ref_id      = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
     PosType this_pos    = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown 
     uint8_t l_read_name = NEXT_UINT8;               // QNAME length

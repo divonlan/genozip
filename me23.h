@@ -9,7 +9,7 @@
 
 #include "genozip.h"
 
-extern const char *me23_seg_txt_line (VBlockP vb_, const char *field_start_line, bool *has_special_eol);
+extern const char *me23_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void me23_seg_initialize (VBlockP vb);
 extern void me23_seg_finalize (VBlockP vb);
 

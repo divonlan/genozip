@@ -8,12 +8,19 @@
 #include "file.h"
 
 // table of valid cigar_op as defined in https://samtools.github.io/hts-specs/SAMv1.pdf
-const uint8_t cigar_lookup[256] = { // note: bit 4 (0x10) is set for all valid values
+const uint8_t cigar_lookup_sam[256] = { // note: bit 4 (0x10) is set for all valid values
     ['0'...'9']=0x11,                   // digits
     ['H']=0x10, ['P']=0x10,             // consume neither
     ['I']=0x12, ['S']=0x12, ['*']=0x12, // consume query (seq) only. Note: '*' is when CIGAR is "151*" - alignment with no CIGAR but a SEQ
     ['D']=0x14, ['N']=0x14,             // consume reference only
     ['M']=0x16, ['=']=0x16, ['X']=0x16  // consume both query and reference
+};
+
+const uint8_t cigar_lookup_bam[16] = {  // note: bit 4 (0x10) is set for all valid values
+    [5/*H*/]=0x10, [6/*P*/]=0x10,       // consume neither
+    [1/*I*/]=0x12, [4/*S*/]=0x12,       // consume query (seq) only.
+    [2/*D*/]=0x14, [3/*N*/]=0x14,       // consume reference only
+    [0/*M*/]=0x16, [7/*=*/]=0x16, [8/*X*/]=0x16  // consume both query and reference
 };
 
 unsigned sam_vb_size (void) { return sizeof (VBlockSAM); }
@@ -66,7 +73,7 @@ void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len,
     for (unsigned i=0; i < cigar_len; i++) {
 
         char c = cigar[i];
-        char lookup = cigar_lookup[(uint8_t)c];
+        char lookup = cigar_lookup_sam[(uint8_t)c];
 
         ASSERT (lookup, "Error: Invalid CIGAR in %s: invalid operation %c. CIGAR=%.*s", txt_name, cigar[i], cigar_len, cigar);
         lookup &= 0x0f; // remove validity bit

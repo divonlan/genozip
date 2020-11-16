@@ -23,9 +23,12 @@
             //"args": ["test-file-unaligned.sam.genozip", "-ftecopy.test-file-ref.fa.ref.genozip" ]
             //"args": ["test-file-unaligned.sam", "-fmecopy.test-file-ref.fa.ref.genozip" ]
             //"args": ["HJ3GHDRXX_1_191121_FD09254826_Homo-sapiens_CTGAAGCT-TAATCTTA_R_191112_RAYTOB_DNA_M001_R1.fastq.gz", "HJ3GHDRXX_1_191121_FD09254826_Homo-sapiens_CTGAAGCT-TAATCTTA_R_191112_RAYTOB_DNA_M001_R2.fastq.gz", "-fmojunk.genozip"]
-            "args": ["-fmecopy.test-file-ref.fa.ref.genozip","test-file-unaligned.sam"]
-            //"args": ["test-file.sam", "-fm@1"]
-            
+            //"args": ["test-file.sam.genozip", "-fojunk.sam.bz2"]
+            //"args": ["-f", "bug9.sam", "-Edata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip"]
+            //"args": ["bug.sam", "-Edata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip","-f"]
+            "args": ["bug.fq.gz", "-f@1"]
+            //"args": ["junk.bam.genozip", "-t@1"],
+            //"args": ["d:\\My-DNA\\Dante\\GFX0241869.bam", "-fod:\\My-DNA\\GFX0241869.v9.bam.genozip"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
