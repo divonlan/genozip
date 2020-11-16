@@ -193,7 +193,8 @@ static void zip_assign_best_codec (VBlock *vb)
         Context *ctx = &vb->contexts[did_i];
        
         // local
-        codec_assign_best_codec (vb, ctx, true, ctx->local.len * lt_desc[ctx->ltype].width);
+        if (ctx->local.len)
+            codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL, ctx->local.len * lt_desc[ctx->ltype].width);
 
         // b250
         if (ctx->node_i.len * sizeof (uint32_t) < MIN_LEN_FOR_COMPRESSION)
@@ -202,7 +203,7 @@ static void zip_assign_best_codec (VBlock *vb)
         // generate a sample of ctx.b250 data from ctx.node_i data
         zip_generate_b250_section (vb, ctx, CODEC_ASSIGN_SAMPLE_SIZE);
 
-        codec_assign_best_codec (vb, ctx, false, ctx->b250.len);
+        codec_assign_best_codec (vb, ctx, NULL, SEC_B250, ctx->b250.len);
 
         ctx->b250.len = 0; // roll back
     }

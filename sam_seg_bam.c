@@ -17,6 +17,7 @@
 #include "random_access.h"
 #include "dict_id.h"
 #include "codec.h"
+#include "flags.h"
 
 // copy header ref data during reading header
 static uint32_t header_n_ref=0;
@@ -85,7 +86,7 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
         uint16_t n_cigar_op = LTEN16 (aln->n_cigar_op);
 
         // test to see block_size makes sense
-        if (*i + block_size + 4 > vb->txt_data.len ||
+        if ((uint64_t)*i + (uint64_t)block_size + 4 > (uint64_t)vb->txt_data.len || // 64 bit arith to catch block_size=-1 that will overflow in 32b
             block_size < sizeof (BAMAlignmentFixed) + 4*n_cigar_op  + aln->l_read_name + l_seq + (l_seq+1)/2)
             continue;
 
@@ -102,7 +103,7 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
             !str_is_in_range (aln->read_name, aln->l_read_name-1, '!', '~')) continue;  // all printable ascii (per SAM spec)
 
         // test l_seq vs seq_len implied by cigar
-        if (aln->l_seq) {
+        if (aln->l_seq && n_cigar_op) {
             uint32_t seq_len_by_cigar=0;
             uint32_t *cigar = (uint32_t *)((uint8_t *)(aln+1) + aln->l_read_name);
             for (uint16_t cigar_op_i=0; cigar_op_i < n_cigar_op; cigar_op_i++) {
@@ -147,9 +148,9 @@ void bam_zip_finalize (void)
     header_n_ref = 0;
 }
 
-void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t flag, PosType this_pos)
+void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t sam_flag, PosType this_pos)
 {
-    bool segment_unmapped = (flag & 0x4);
+    bool segment_unmapped = (sam_flag & 0x4);
     bool is_bam = IS_BAM;
 
     PosType last_pos = segment_unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
@@ -159,8 +160,12 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t f
         seg_by_did_i (vb, ((char []){ SNIP_SPECIAL, SAM_SPECIAL_BIN }), 2, SAM_BAM_BIN, is_bam ? sizeof (uint16_t) : 0)
     
     else {
-        WARN ("FYI: bad bin value in vb=%u vb->line_i=%u: this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm.",
-              vb->vblock_i, vb->line_i, this_pos, vb->ref_consumed, flag, last_pos, bin, reg2bin);
+        static bool warning_shown = false;
+        if (!warning_shown) { 
+            WARN ("FYI: bad bin value in vb=%u vb->line_i=%u: this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
+                  vb->vblock_i, vb->line_i, this_pos, vb->ref_consumed, sam_flag, last_pos, bin, reg2bin);
+            warning_shown = true;
+        }
         seg_integer (vb, SAM_BAM_BIN, bin, is_bam);
         vb->contexts[SAM_BAM_BIN].flags = CTX_FL_STORE_INT;
     }
@@ -379,7 +384,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     uint8_t mapq        = NEXT_UINT8;
     uint16_t bin        = NEXT_UINT16;
     uint16_t n_cigar_op = NEXT_UINT16;
-    uint16_t flag       = NEXT_UINT16;
+    uint16_t sam_flag   = NEXT_UINT16;              // not to be confused with our global var "flag"
     uint32_t l_seq      = NEXT_UINT32;              // note: we stick with the same logic as SAM for consistency - dl->seq_len is determined by CIGAR 
     int32_t next_ref_id = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
     PosType next_pos    = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown
@@ -394,7 +399,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     seg_integer (vb, SAM_MAPQ, mapq, true); // MAPQ
 
-    seg_integer (vb, SAM_FLAG, flag, true); // FLAG
+    seg_integer (vb, SAM_FLAG, sam_flag, true); // FLAG
     
     bam_seg_ref_id (vb_, SAM_RNEXT, next_ref_id, ref_id); // RNEXT
 
@@ -414,7 +419,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     next_field += n_cigar_op * sizeof (uint32_t);
 
     // Segment BIN after we've gathered bin, flags, pos and vb->ref_confumed (and before sam_seg_seq_field which ruins vb->ref_consumed)
-    bam_seg_bin (vb, bin, flag, this_pos);
+    bam_seg_bin (vb, bin, sam_flag, this_pos);
 
     // SEQ - calculate diff vs. reference (denovo or loaded)
     bam_rewrite_seq (vb, l_seq, next_field);

@@ -187,8 +187,8 @@ extern void main_exit (bool show_stack, bool is_error);
 #define RETURNW0(condition, ret, string)     { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n%s\n", string); } return ret; } }
 #define ABORT(format, ...)                   { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);}
 #define ABORT0(string)                       { fprintf (stderr, "\n%s\n", string); exit_on_error(true);}
-#define WARN(format, ...)                    { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }
-#define WARN0(string)                        { fprintf (stderr, "\n%s\n", string); }
+#define WARN(format, ...)                    { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } }
+#define WARN0(string)                        { if (!flag.quiet) fprintf (stderr, "\n%s\n", string); }
 #define ASSERTGOTO(condition, format, ...)   { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); goto error; }}
 
 #endif

@@ -375,17 +375,17 @@ void zfile_compress_section_data_codec (VBlock *vb, SectionType section_type,
 // reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
 // this doesn't make a big difference for SSD, but makes a huge difference for HD
 // return a pointer to the data read
-static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t len)
+static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t len, SectionType st)
 {
     START_TIMER;
 
-    ASSERT0 (len, "Error: in zfile_read_from_disk, len is 0");
-    ASSERT (buf_has_space (buf, len), "Error in zfile_read_from_disk: buf is out of space: len=%u but remaining space in buffer=%u (tip: run with --show-headers to see where it fails)",
-            len, (uint32_t)(buf->size - buf->len));
+    ASSERT (len, "Error in zfile_read_from_disk reading %s: len is 0", st_name (st));
+    ASSERT (buf_has_space (buf, len), "Error in zfile_read_from_disk reading %s: buf is out of space: len=%u but remaining space in buffer=%u (tip: run with --show-headers to see where it fails)",
+            st_name (st), len, (uint32_t)(buf->size - buf->len));
 
     char *start = AFTERENT (char, *buf);
     uint32_t bytes = fread (start, 1, len, (FILE *)file->file);
-    ASSERT (bytes == len, "Error in zfile_read_from_disk: read only %u bytes out of len=%u", bytes, len);
+    ASSERT (bytes == len, "Error in zfile_read_from_disk reading %s: read only %u bytes out of len=%u", st_name (st), bytes, len);
 
     buf->len += bytes;
 
@@ -423,7 +423,7 @@ int32_t zfile_read_section_do (File *file,
     // move the cursor to the section. file_seek is smart not to cause any overhead if no moving is needed
     if (sl) file_seek (file, sl->offset, SEEK_SET, false);
 
-    SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size); // note: header in file can be shorter than header_size if its an earlier version
+    SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size, expected_sec_type); // note: header in file can be shorter than header_size if its an earlier version
     uint32_t bytes_read = header_size;
 
     ASSERT (header, "Error in zfile_read_section: Failed to read data from file %s while expecting section type %s: %s", 
@@ -486,7 +486,7 @@ int32_t zfile_read_section_do (File *file,
 
     // read section data - but only if header size is as expected
     if (remaining_data_len > 0 && compressed_offset == header_size)
-        zfile_read_from_disk (file, vb, data, remaining_data_len);
+        zfile_read_from_disk (file, vb, data, remaining_data_len, expected_sec_type);
 
     return header_offset;
 }
@@ -510,7 +510,7 @@ void *zfile_read_section_header (VBlockP vb, uint64_t offset,
     
     buf_alloc (evb, &vb->compressed, header_size, 4, "compressed"); 
 
-    SectionHeader *header = zfile_read_from_disk (z_file, evb, &vb->compressed, header_size); 
+    SectionHeader *header = zfile_read_from_disk (z_file, evb, &vb->compressed, header_size, expected_sec_type); 
 
     ASSERT (header, "Error in zfile_read_section_header: Failed to read header of section type %s from file %s: %s", 
             st_name(expected_sec_type), z_name, strerror (errno));

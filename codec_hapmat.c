@@ -162,7 +162,7 @@ bool codec_hapmat_compress (VBlock *vb,
     // since codecs were already assigned to contexts before compression of all contexts begun, but
     // we just created this context now, we assign a codec manually
     // BUG: I can't this to work... reconstruction failed. no idea why. bug 215.
-    //codec_assign_best_codec (vb, vb->hapmat_index_ctx, true, vb->num_haplotypes_per_line * sizeof(uint32_t));
+    //codec_assign_best_codec (vb, vb->hapmat_index_ctx, NULL, SEC_LOCAL, vb->num_haplotypes_per_line * sizeof(uint32_t));
     vb->hapmat_index_ctx->lcodec = CODEC_BSC; // in the mean time, until bug 215 is fixed
 
     COPY_TIMER (compressor_hapmat);

@@ -74,7 +74,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
         // if output buffer is too small, increase it, and try again
         if (!success) {
-            buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + data_uncompressed_len  + encryption_padding_reserve + 50 /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */, 1,
+            buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 50 /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */, 1,
                        z_data->name ? z_data->name : "z_data");
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
@@ -137,7 +137,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
     // add section to the list - except for genozip header which we already added in zfile_compress_genozip_header()
     uint64_t offset=0;
-    if (header->section_type != SEC_GENOZIP_HEADER)
+    if (header->section_type != SEC_GENOZIP_HEADER && header->section_type != SEC_NONE /* from codec_assign_best_codec */)
         offset = sections_add_to_list (vb, header);
 
     z_data->len += total_z_len;

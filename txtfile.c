@@ -354,7 +354,7 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
 {
     int32_t passed_up_len;
-    int32_t i=vb->txt_data.len-1;
+    int32_t i=vb->txt_data.len-1; // next index to test (going backwards)
 
     // case: the data is BGZF-compressed in vb->compressed, except for passed down data from prev VB        
     // uncompress one block at a time to see if its sufficient. usually, one block is enough

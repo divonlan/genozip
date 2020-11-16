@@ -253,7 +253,7 @@ bool codec_gtshark_compress (VBlock *vb,
     if (vb->gtshark_ex_ctx->local.len) {
         // since codecs were already assigned to contexts before compression of all contexts begun, but
         // we just created this context now, we assign a codec manually
-        codec_assign_best_codec (vb, vb->gtshark_ex_ctx, true, vb->gtshark_ex_ctx->local.len);
+        codec_assign_best_codec (vb, vb->gtshark_ex_ctx, NULL, SEC_LOCAL, vb->gtshark_ex_ctx->local.len);
 
         vb->gtshark_ex_ctx->lsubcodec_piz = CODEC_GTSHARK; // we have exceptions - EX is the last section
     }

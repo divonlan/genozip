@@ -12,6 +12,7 @@
 #include "zip.h"
 #include "arch.h"
 #include "txtfile.h"
+#include "codec.h"
 
 // all data in Little Endian
 typedef struct __attribute__ ((__packed__)) BgzfHeader {
@@ -110,7 +111,13 @@ void bgzf_compress_bgzf_section (void)
     if (!txt_file->bgzf_isizes.len) return; // this txt file is not compressed with BGZF - we don't need a BGZF section
 
     txt_file->bgzf_isizes.len *= sizeof (uint16_t);
-    zfile_compress_section_data (evb, SEC_BGZF, &txt_file->bgzf_isizes);
+
+    // usually BZ2 is the best, but if the sizes are highly random (happens in long read SAM/BAM), then BZ2 can be bloated
+    // and even produce an error. that's why we test.
+    Codec codec = codec_assign_best_codec (evb, NULL, &txt_file->bgzf_isizes, SEC_BGZF, txt_file->bgzf_isizes.len);
+
+    zfile_compress_section_data_codec (evb, SEC_BGZF, &txt_file->bgzf_isizes, NULL, 0, codec);
+
     txt_file->bgzf_isizes.len /= sizeof (uint16_t); // restore
 
     // actually write to disk
