@@ -97,10 +97,13 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
         PRINT (ctx_integrate_dictionary_fragment, 2);
+        PRINT (bgzf_io_thread, 1);
         PRINT (write, 1);
         fprintf (stderr, "GENOUNZIP compute threads: %u\n", ms(p->compute));
         PRINT (zfile_uncompress_section, 1);
         PRINT (piz_reconstruct_vb, 1);
+        PRINT (md5, 1);
+        PRINT (bgzf_compute_thread, 1);
         PRINT (piz_get_line_subfields, 2);
         PRINT (codec_hapmat_piz_get_one_line, 2);
     }
@@ -109,7 +112,6 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (txtfile_read_header, 1);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
-        PRINT (md5, 2);
         PRINT (write, 1);
         PRINT (bgzf_io_thread, 1);
         fprintf (stderr, "GENOZIP compute threads %u\n", ms(p->compute));
@@ -126,14 +128,15 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (zfile_compress_dictionary_data, 2);
         PRINT (zip_generate_and_compress_ctxs, 1);
         PRINT (codec_assign_best_codec, 1);
+        PRINT (md5, 1);
         PRINT (bgzf_compute_thread, 1);
-        PRINT (compressor_bz2,  2);
-        PRINT (compressor_lzma, 2);
-        PRINT (compressor_bsc,  2);
-        PRINT (compressor_domq, 2);
-        PRINT (compressor_actg, 2);
-        PRINT (compressor_hapmat,   2);
-        PRINT (codec_hapmat_count_alt_alleles, 3);
+        PRINT (compressor_bz2,  1);
+        PRINT (compressor_lzma, 1);
+        PRINT (compressor_bsc,  1);
+        PRINT (compressor_domq, 1);
+        PRINT (compressor_actg, 1);
+        PRINT (compressor_hapmat, 1);
+        PRINT (codec_hapmat_count_alt_alleles, 2);
     }    
 
     PRINT (buf_alloc, 0);

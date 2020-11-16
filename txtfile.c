@@ -344,7 +344,9 @@ static Md5Hash txtfile_read_header (bool is_first_txt)
 // default "unconsumed" function file formats where we need to read whole \n-ending lines. returns the unconsumed data length
 int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    for (; *i >= first_i; (*i)--) 
+    ASSERT (*i >= 0 && *i < vb->txt_data.len, "Error in def_unconsumed: *i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+
+    for (; *i >= (int32_t)first_i; (*i)--) 
         if (vb->txt_data.data[*i] == '\n') 
             return vb->txt_data.len-1 - *i;
 
@@ -371,7 +373,8 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
     // test remaining txt_data including passed-down data from previous VB
     passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, 0, &i);
 
-    ASSERT (passed_up_len >= 0, "Error in txtfile_get_unconsumed_to_pass_up: failed to find a single complete line in the entire vb in vb=%u", vb->vblock_i);
+    ASSERT (passed_up_len >= 0, "Error in txtfile_get_unconsumed_to_pass_up: failed to find a single complete line in the entire vb in vb=%u. VB dumped: %s", 
+            vb->vblock_i, txtfile_dump_vb (vb, txt_name));
 
 done:
     return (uint32_t)passed_up_len;

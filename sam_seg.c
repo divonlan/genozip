@@ -1081,6 +1081,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
     if (con.num_items > 1) { // we have Optional fields, not just the translator item
         if (con.items[con.num_items-1].seperator[0] & 0x80) // is a flag
             con.items[con.num_items-1].seperator[0] &= ~(CI_NATIVE_NEXT & ~(uint8_t)0x80); // last Optional field has no tab
+        con.items[con.num_items-1].seperator[1] = 0;
         container_seg_by_ctx ((VBlockP)vb, &vb->contexts[SAM_OPTIONAL], &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * (con.num_items-1)); // account for : SAM: "MX:i:" BAM: "MXi"
     }
     else
