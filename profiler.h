@@ -21,7 +21,7 @@ typedef struct {
         piz_get_line_subfields,  zip_generate_and_compress_ctxs, ctx_merge_in_vb_ctx,
         zfile_uncompress_section, codec_assign_best_codec,
         piz_reconstruct_vb, buf_alloc, txtfile_read_header, txtfile_read_vblock,
-        seg_all_data_lines, compressor_hapmat, codec_hapmat_count_alt_alleles,
+        seg_all_data_lines, compressor_hapmat, codec_hapmat_count_alt_alleles, seg_initialize,
         ctx_integrate_dictionary_fragment, ctx_clone_ctx, ctx_merge_in_vb_ctx_one_dict_id,
         md5,zfile_compress_dictionary_data, aligner_best_match, aligner_get_word_from_seq,
         lock_mutex_compress_dict, lock_mutex_zf_ctx, aligner_get_match_len, generate_rev_complement_genome,

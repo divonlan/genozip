@@ -18,6 +18,7 @@
 #include "dict_id.h"
 #include "codec.h"
 #include "flags.h"
+#include "profiler.h"
 
 // copy header ref data during reading header
 static uint32_t header_n_ref=0;
@@ -129,6 +130,8 @@ void bam_seg_initialize (VBlock *vb)
 {
     sam_seg_initialize (vb);
 
+    START_TIMER; // adds to sam_seg_initialize time
+
     // copy contigs from header in vb=1 for RNAME and RNEXT dictionaries
     if (vb->vblock_i == 1) {
         for (unsigned i=0; i < header_n_ref; i++) {
@@ -141,6 +144,8 @@ void bam_seg_initialize (VBlock *vb)
         vb->contexts[SAM_RNAME].inst |= CTX_INST_NO_VB1_SORT; 
         vb->contexts[SAM_RNEXT].inst |= CTX_INST_NO_VB1_SORT;
     }
+
+    COPY_TIMER (seg_initialize);
 }
 
 void bam_zip_finalize (void)

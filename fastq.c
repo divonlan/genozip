@@ -133,6 +133,8 @@ void fastq_zip_initialize (void)
 // called by Compute thread at the beginning of this VB
 void fastq_seg_initialize (VBlockFAST *vb)
 {
+    START_TIMER;
+
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
         vb->contexts[FASTQ_STRAND].ltype = LT_BITMAP;
         vb->contexts[FASTQ_GPOS  ].ltype = LT_UINT32;
@@ -158,6 +160,8 @@ void fastq_seg_initialize (VBlockFAST *vb)
 
     // in --stats, consolidate stats into SQBITMAP
     stats_set_consolidation ((VBlockP)vb, FASTQ_SQBITMAP, 4, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND);
+
+    COPY_TIMER (seg_initialize);
 }
 
 void fastq_seg_finalize (VBlockP vb)

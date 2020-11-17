@@ -153,6 +153,8 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
 
 void sam_seg_initialize (VBlock *vb)
 {
+    START_TIMER;
+
     // note: all numeric fields needs STORE_INT to be reconstructable to BAM (possibly already set)
     // via the translators set in the SAM_TOP2BAM Container
     vb->contexts[SAM_SQBITMAP].ltype  = LT_BITMAP;
@@ -202,6 +204,8 @@ void sam_seg_initialize (VBlock *vb)
 
         flag.const_chroms = true; // the file cannot have a chrom not already in the RNAME dictionary
     }
+
+    COPY_TIMER (seg_initialize);
 }
 
 void sam_seg_finalize (VBlockP vb)

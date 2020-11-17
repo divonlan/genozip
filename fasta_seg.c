@@ -98,6 +98,8 @@ void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i,
 
 void fasta_seg_initialize (VBlockFAST *vb)
 {
+    START_TIMER;
+
     ASSERT (vb->vblock_i > 1 || *FIRSTENT (char, vb->txt_data) == '>' || *FIRSTENT (char, vb->txt_data) == ';',
             "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
 
@@ -117,9 +119,10 @@ void fasta_seg_initialize (VBlockFAST *vb)
     else { // make-reference
         vb->contexts[FASTA_CONTIG].inst |= CTX_INST_NO_VB1_SORT; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference
     }
-    
 
     vb->contexts[FASTA_CONTIG].inst |= CTX_INST_NO_STONS; // needs b250 node_index for reference
+
+    COPY_TIMER (seg_initialize);
 }
 
 void fasta_seg_finalize (VBlockP vb)

@@ -16,6 +16,8 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(compressor_bz2);
     ADD(compressor_lzma);
     ADD(compressor_bsc);
+    ADD(compressor_domq);
+    ADD(compressor_actg);
     ADD(zip_generate_and_compress_ctxs);
     ADD(codec_assign_best_codec);
     ADD(bgzf_io_thread);
@@ -32,10 +34,9 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(txtfile_read_vblock);
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
-    ADD(compressor_domq);
+    ADD(seg_initialize);
     ADD(ctx_merge_in_vb_ctx);
     ADD(codec_hapmat_count_alt_alleles);
-    ADD(compressor_actg);
     ADD(md5);
     ADD(lock_mutex_compress_dict);
     ADD(lock_mutex_zf_ctx);
@@ -120,6 +121,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (aligner_best_match, 2);
         PRINT (aligner_get_match_len, 3);
         PRINT (aligner_get_word_from_seq, 3);
+        PRINT (seg_initialize, 2);
         PRINT (sam_seg_seq_field,2);
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (lock_mutex_zf_ctx, 2);
