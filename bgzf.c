@@ -128,9 +128,17 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 {
     if (bb->is_decompressed) return; // already decompressed - nothing to do
 
+//if (vb->vblock_i==4405) fprintf (stderr, "\nbb->txt_index=%u bb->txt_size=%u  xxx %s\n", bb->txt_index, bb->txt_size, buf_desc (&vb->compressed));
+
     BgzfHeader *h = (BgzfHeader *)ENT (char, vb->compressed, bb->compressed_index);
 
-    ASSERT (h->id1==31 && h->id2==139, "Error in bgzf_uncompress_vb: corrupt bgzf data in vb->compressed: vb=%u compressed_index=%u", vb->vblock_i, bb->compressed_index);
+    // verify that entire block is within vb->compressed
+    ASSERT (bb->compressed_index + sizeof (BgzfHeader) < vb->compressed.len && // we have at least the header - we can access bsize
+            bb->compressed_index + (uint32_t)LTEN16 (h->bsize) + 1 <= vb->compressed.len, 
+            "Error in bgzf_uncompress_vb: bgzf block size goes past the end of in vb->compressed: vb=%u compressed_index=%u vb->compressed.len=%"PRIu64, 
+            vb->vblock_i, bb->compressed_index, vb->compressed.len);
+
+    ASSERT (h->id1==31 && h->id2==139, "Error in bgzf_uncompress_vb: not a valid bgzf block in vb->compressed: vb=%u compressed_index=%u", vb->vblock_i, bb->compressed_index);
 
     if (!vb->libdeflate) vb->libdeflate = libdeflate_alloc_decompressor();
 
@@ -139,7 +147,6 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
                  arch_am_i_io_thread() ? "IO" : "COMPUTE", vb->vblock_i, 
                  ENTNUM (vb->bgzf_blocks, bb), bb->compressed_index, bb->comp_size, bb->txt_index, bb->txt_size);
 
-//fprintf (stderr, "\nbb->txt_index=%u bb->txt_size=%u  xxx %s\n", bb->txt_index, bb->txt_size, buf_desc (&vb->compressed));
     enum libdeflate_result ret = 
         libdeflate_deflate_decompress (vb->libdeflate, 
                                        h+1, bb->comp_size - sizeof(*h),   // compressed
@@ -158,7 +165,7 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 void bgzf_uncompress_vb (VBlock *vb)
 {
     START_TIMER;
-
+//if (vb->vblock_i==4405) fprintf (stderr, "xxx vb->bgzf_blocks.len=%u\n", (int)vb->bgzf_blocks.len);
     for (uint32_t block_i=0; block_i < vb->bgzf_blocks.len ; block_i++) 
         bgzf_uncompress_one_block (vb, ENT (BgzfBlockZip, vb->bgzf_blocks, block_i));
 
@@ -177,8 +184,8 @@ void bgzf_uncompress_vb (VBlock *vb)
 void bgzf_read_and_uncompress_isizes (const SectionListEntry *sl_ent) 
 {
     // skip passed all VBs of this component, and read SEC_BGZF - the last section of the component - if it exists
-    if (!sections_get_next_section_of_type (&sl_ent, SEC_BGZF, false, false)) // updates sl_ent, but its a local var, doesn't affect our caller
-        return; // no SEC_BGZF section - likely not a codec=BGZF txt file
+    ASSERT0 (sections_get_next_section_of_type (&sl_ent, SEC_BGZF, false, false), // updates sl_ent, but its a local var, doesn't affect our caller
+             "Error in bgzf_read_and_uncompress_isizes: file does not contain a SEC_BGZF section");
 
     int32_t offset = zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_BGZF, sl_ent);
 
@@ -309,7 +316,7 @@ void bgzf_write_to_disk (VBlock *vb)
     if (txt_file->unconsumed_txt.len) {
     
         ASSERT (txt_file->unconsumed_txt.len + uncompressed_at_vb_start <= BGZF_MAX_BLOCK_SIZE, 
-                "Error in bgzf_write_to_disk: too much uncompressed data at start: txt_file->unconsumed_txt.len=%u uncompressed_at_vb_start=%u > %u",
+                "Error in bgzf_write_to_disk: too much uncompressed data at start: txt_file->unconsumed_txt.len=%u + uncompressed_at_vb_start=%u > %u",
                 (uint32_t)txt_file->unconsumed_txt.len, uncompressed_at_vb_start, BGZF_MAX_BLOCK_SIZE);
 
         char block[BGZF_MAX_BLOCK_SIZE];

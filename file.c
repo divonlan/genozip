@@ -320,7 +320,7 @@ static bool file_open_txt_read (File *file)
             // is txtfile_read_block_bgzf
             if (bgzf_uncompressed_size >= 0) {
                 file->codec = CODEC_BGZF;
-
+                
                 buf_alloc (evb, &evb->compressed, block_size, 1, "compressed"); 
                 evb->compressed.param = bgzf_uncompressed_size; // pass uncompressed size in param
                 buf_add (&evb->compressed, block, block_size);
@@ -422,13 +422,17 @@ static bool file_open_txt_write (File *file)
 
         // case: output file has a .gz extension (eg the user did "genounzip xx.vcf.genozip -o yy.gz")
         if ((file_has_ext (file->name, ".gz") || file_has_ext (file->name, ".bgz")) &&  
-            file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) // data type supports .gz txt output
+            file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
             
             file->type = txt_out_ft_by_dt[file->data_type][1]; 
+            flag.bgzf = true;
+        }
         
         // case: not .gz - use the default plain file format
-        else 
+        else { 
             file->type = txt_out_ft_by_dt[file->data_type][0]; 
+            ASSINP (!flag.bgzf, "%s: using --output in combination with --bgzip, requires the output filename to end with .gz or .bgz", global_cmd);
+        }
     }
 
     // get the codec    

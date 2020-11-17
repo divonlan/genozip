@@ -248,12 +248,14 @@ void txtfile_md5_one_vb (VBlock *vb)
         vb->md5_hash_so_far = md5_snapshot (flag.bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
     }
     
-    else { // PIZ
+    else {
+        static bool failed = false; // note: when testing multiple files, if a file fails the test, we don't test subsequent files, so no need to reset this variable
+
         md5_update (&txt_file->md5_ctx_bound, vb->txt_data.data, vb->txt_data.len);
 
         // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
         // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
-        if (!flag.unbind && !md5_is_zero (vb->md5_hash_so_far)) {
+        if (!failed && !flag.unbind && !md5_is_zero (vb->md5_hash_so_far)) {
             Md5Hash piz_hash_so_far = md5_snapshot (&txt_file->md5_ctx_bound);
 
             // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
@@ -268,7 +270,7 @@ void txtfile_md5_one_vb (VBlock *vb)
                     codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
                     vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len, txtfile_dump_filename (vb, z_name, "good"));
 
-                flag.md5 = false; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
+                failed = true; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
             }
         }
     }
@@ -684,9 +686,12 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
     DtTranslation trans = dt_get_translation();
     if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
-    // get SEC_BGZF data if available
-    bgzf_read_and_uncompress_isizes (sl);     
-
+    // get SEC_BGZF data if needed
+    if (flag.bgzf) {
+        bgzf_read_and_uncompress_isizes (sl);     
+        header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_read_and_uncompress_isizes
+    }
+    
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
     if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.genocat_info_only) {
 
@@ -700,7 +705,7 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
         else
             txtfile_write_to_disk (&evb->txt_data);
 
-        if (flag.md5 && !md5_is_zero (header->md5_header)) {
+        if (!md5_is_zero (header->md5_header)) {
             Md5Hash reconstructed_header_len = md5_do (evb->txt_data.data, evb->txt_data.len);
 
             if (!md5_is_equal (reconstructed_header_len, header->md5_header)) {
@@ -708,8 +713,6 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
                       "Bad reconstructed vblock has been dumped to: %s\n",
                       dt_name (z_file->data_type), md5_display (reconstructed_header_len), md5_display (header->md5_header),
                       txtfile_dump_vb (evb, z_name));
-
-                flag.md5 = false; // no point in continuing to check - all vblocks will fail as MD5 is cumulative
             }
         }
     }
@@ -755,7 +758,7 @@ const char *txtfile_piz_get_filename (const char *orig_name,const char *prefix, 
     sprintf ((char *)txt_filename, "%s%.*s%s%s", prefix,
                 fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
                 old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
-                (flag.bgzip && flag.out_dt != BAM) ? ".gz" : ""); // add .gz if --bgzip (except in BAM where it is implicit)
+                (flag.bgzf && flag.out_dt != BAM) ? ".gz" : ""); // add .gz if --bgzip (except in BAM where it is implicit)
 
     return txt_filename;
 }

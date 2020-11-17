@@ -39,6 +39,8 @@ static inline int fasta_is_end_of_line (VBlock *vb, uint32_t first_i,
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
+    ASSERT (*i >= 0 && *i < vb->txt_data.len, "Error in def_unconsumed: *i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+
     // case: reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
     // (note: first_i=0 when flag.make_reference)
     if (flag.make_reference) {
@@ -58,7 +60,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     }
 
     // we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
-    for (; *i >= first_i; (*i)--) {
+    for (; *i >= (int32_t)first_i; (*i)--) {
 
         if (vb->txt_data.data[*i] == '\n') {
 

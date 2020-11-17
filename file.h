@@ -126,7 +126,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     FNA,   FNA_GZ,   FNA_BZ2,   FNA_XZ,   FNA_GENOZIP,
 //                    GFF3,  GFF3_GZ,  GFF3_BZ2,  GFF3_XZ,  GFF3_GENOZIP,
                     GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,   GVF_GENOZIP,
-                    ME23,  ME23_ZIP,                      ME23_GENOZIP, 
+                    ME23,  ME23_GZ,  ME23_ZIP,            ME23_GENOZIP, 
                     BAM,                                  BAM_GENOZIP,
                     BCF, BCF_GZ, BCF_BGZF,                BCF_GENOZIP,  
                     AFTER_LAST_FILE_TYPE } FileType;
@@ -183,21 +183,21 @@ extern const char *file_exts[];
                              { GFF3_BZ2,  CODEC_BZ2,  GFF3_GENOZIP  }, { GFF3_XZ,  CODEC_XZ,  GFF3_GENOZIP  },*/ \
                              { GVF,       CODEC_NONE, GVF_GENOZIP   }, { GVF_GZ,   CODEC_GZ,  GVF_GENOZIP   },\
                              { GVF_BZ2,   CODEC_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   CODEC_XZ,  GVF_GENOZIP   }, { } },\
-                           { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { } },\
+                           { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_GZ,  CODEC_GZ,  ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { } },\
                            { { BAM,       CODEC_BGZF,  BAM_GENOZIP  }, { } }, \
                            { { BCF,       CODEC_BCF,  BCF_GENOZIP   }, { BCF_GZ,   CODEC_BCF, BCF_GENOZIP   }, { BCF_BGZF, CODEC_BCF, BCF_GENOZIP }, { } }, \
                         }
 
 // Supported output formats for genounzip
-// plain file MUST appear first on the list - this will be the default output when redirecting
-// GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz
+// plain file MUST appear first on the list - this will be the default output when redirecting 
+// GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz (see file_open_txt_write)
 #define TXT_OUT_FT_BY_DT { { 0 }, /* a reference file cannot be uncompressed */  \
                            { VCF, VCF_GZ, VCF_BGZF, BCF, 0 },  \
                            { SAM, SAM_GZ, BAM, 0 },     \
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 }, \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
                            { GVF, GVF_GZ, /*GFF3, GFF3_GZ,*/ 0 }, \
-                           { ME23, ME23_ZIP, 0 }, \
+                           { ME23, ME23_GZ, ME23_ZIP, 0 }, \
                            { 0 }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
                            { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
                          }                        

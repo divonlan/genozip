@@ -74,11 +74,13 @@ int32_t bam_is_header_done (void)
 // if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
 int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
+    ASSERT (*i >= 0 && *i < vb->txt_data.len, "Error in def_unconsumed: *i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+
     *i = MIN (*i, vb->txt_data.len - sizeof(BAMAlignmentFixed));
 
     // find the first alignment in the data (going backwards) that is entirely in the data - 
     // we identify and alignment by l_read_name and read_name
-    for (; *i >= first_i; (*i)--) {
+    for (; *i >= (int32_t)first_i; (*i)--) {
         const BAMAlignmentFixed *aln = (const BAMAlignmentFixed *)ENT (char, vb->txt_data, *i);
 
         uint32_t block_size = LTEN32 (aln->block_size);
@@ -154,7 +156,7 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t s
     bool is_bam = IS_BAM;
 
     PosType last_pos = segment_unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
-    uint16_t reg2bin = bam_reg2bin (this_pos-1, last_pos-1);
+    uint16_t reg2bin = bam_reg2bin (this_pos-1, (last_pos+1) -1); // zero-based, half-closed half-open [start,end)
 
     if (!is_bam || (last_pos <= MAX_POS_BAM && reg2bin == bin))
         seg_by_did_i (vb, ((char []){ SNIP_SPECIAL, SAM_SPECIAL_BIN }), 2, SAM_BAM_BIN, is_bam ? sizeof (uint16_t) : 0)

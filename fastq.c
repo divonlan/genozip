@@ -46,7 +46,9 @@ static inline int fastq_is_end_of_line (VBlock *vb, uint32_t first_i, int32_t tx
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 {    
-    for (; *i >= first_i; (*i)--) {
+    ASSERT (*i >= 0 && *i < vb->txt_data.len, "Error in def_unconsumed: *i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+
+    for (; *i >= (int32_t)first_i; (*i)--) {
         // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
         if (vb->txt_data.data[*i] == '\n')
             switch (fastq_is_end_of_line (vb, first_i, *i)) {

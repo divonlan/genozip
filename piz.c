@@ -494,7 +494,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     if (vb->bgzf_blocks.len) bgzf_compress_vb (vb);
 
     // calculate the MD5 contribution of this VB to the single file and bound files, and the MD5 snapshot of this VB
-    if (flag.md5) txtfile_md5_one_vb (vb); 
+    if (!md5_is_zero (vb->md5_hash_so_far)) txtfile_md5_one_vb (vb); 
 
 
 done:
@@ -604,7 +604,7 @@ static bool piz_read_one_vb (VBlock *vb)
 
     const SectionListEntry *sl = sections_vb_first (vb->vblock_i, false); 
 
-    vb->vb_position_txt_file = txt_file->disk_so_far;
+    vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
     
     int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sl++); 
     vb->vb_data_size = BGEN32 (((SectionHeaderVbHeader *)vb->z_data.data)->vb_data_size); // needed by bgzf_calculate_blocks_one_vb
@@ -632,6 +632,8 @@ static bool piz_read_one_vb (VBlock *vb)
 
 static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
 {
+    if (md5_is_zero (original_file_digest)) return MD5HASH_NONE; // file was not compressed with --md5 or --test
+
     Md5Hash decompressed_file_digest = md5_finalize (&txt_file->md5_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bound file
     char s[200]; 
 
@@ -643,9 +645,8 @@ static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
     else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
         if (flag.md5) { 
-            DataType dt = z_file->data_type == DT_SAM && (z_file->flags & GENOZIP_FL_TXT_IS_BIN) ? DT_BAM : z_file->data_type;
             sprintf (s, "MD5 = %s verified as identical to the original %s", 
-                        md5_display (decompressed_file_digest), dt_name (dt));
+                        md5_display (decompressed_file_digest), dt_name (txt_file->data_type));
             progress_finalize_component (s); 
         }
     }
@@ -777,9 +778,11 @@ no_more_data:
             dispatcher_finalize_one_vb (dispatcher);
         }
     }
+
+    // verifies bgzf reconstructed file against codec_args    
     
-    // verify file integrity, if the genounzip compress was run with --md5 or --test
-    Md5Hash decompressed_file_digest = flag.md5 ? piz_one_file_verify_md5 (original_file_digest) : MD5HASH_NONE;
+    // verifies reconstructed file against MD5 (if compressed with --md5 or ) and/or codec_args (if bgzf)
+    Md5Hash decompressed_file_digest = piz_one_file_verify_md5 (original_file_digest);
 
     if (flag.unbind) file_close (&txt_file, true); // close this component file
 

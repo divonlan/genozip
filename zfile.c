@@ -600,7 +600,7 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
     // case: there is no genozip header. this can happen if the file was truncated (eg because compression did not complete)
     // note: this can also happen if the file is genozip v1, but I don't think there are any real v1 files in the wild
     // so I will keep the error message simple and not mention it
-    ASSERTGOTO (BGEN32 (footer.magic) == GENOZIP_MAGIC, "Error: failed to read file %s - the file appears to be incomplete.", z_name);
+    ASSERTGOTO (BGEN32 (footer.magic) == GENOZIP_MAGIC, "Error: failed to read file %s - the file appears to be incomplete (it is missing the genozip footer).", z_name);
 
     // read genozip header
     uint64_t footer_offset = BGEN64 (footer.genozip_header_offset);
@@ -618,22 +618,22 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
 
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
-    ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
-            "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
-            "You might want to consider upgrading genozip to the newest version.\n",
-            z_name, header->genozip_version, GENOZIP_CODE_VERSION);
+    ASSERTGOTO (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
+                "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
+                "You might want to consider upgrading genozip to the newest version.\n",
+                z_name, header->genozip_version, GENOZIP_CODE_VERSION);
 
     // in version 6, we canceled backward compatability with v1-v5
-    ASSERT (header->genozip_version >= 6, "Error: %s was compressed with an older version of genozip - version %u.\nIt may be uncompressed with genozip versions %u to 5",
-            z_name, header->genozip_version, header->genozip_version);
+    ASSERTGOTO (header->genozip_version >= 6, "Skipping %s: it was compressed with an older version of genozip - version %u.\nIt may be uncompressed with genozip versions %u to 5",
+                z_name, header->genozip_version, header->genozip_version);
 
     // in version 7, we canceled backward compatability with v6
-    ASSERT (header->genozip_version >= 7, "Error: %s was compressed with an version 6 of genozip - version %u.\nIt may be uncompressed with genozip versions 6",
-            z_name, header->genozip_version);
+    ASSERTGOTO (header->genozip_version >= 7, "Skipping %s: it was compressed with version 6 of genozip.\nIt may be uncompressed with genozip versions 6",
+                z_name);
 
     // in version 8, we canceled backward compatability with v7
-    ASSERT (header->genozip_version >= 8, "Error: %s was compressed with an version 7 of genozip - version %u.\nIt may be uncompressed with genozip versions 7",
-            z_name, header->genozip_version);
+    ASSERTGOTO (header->genozip_version >= 8, "Skipping %s: it was compressed with version 7 of genozip.\nIt may be uncompressed with genozip versions 7",
+                z_name);
 
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
@@ -646,8 +646,9 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
         ASSERT (z_file->data_type == data_type, "Error: %s - file extension indicates this is a %s file, but according to its contents it is a %s", 
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
-    if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --1d
-        
+    if (txt_file)// txt_file is still NULL in case of --1d
+        txt_file->data_type = (data_type == DT_SAM) && (z_file->flags & GENOZIP_FL_TXT_IS_BIN) ? DT_BAM : data_type;
+
     ASSERT (header->encryption_type != ENC_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
             "Error: password provided, but file %s is not encrypted", z_name);
 
@@ -696,10 +697,8 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
     // case: we are reading a file that is not expected to be a reference file
     else {
         // case: we are attempting to decompress a reference file - this is not supported
-        if (data_type == DT_REF && !(flag.genocat_info_only && exe_type == EXE_GENOCAT) && exe_type != EXE_GENOLS) { // we will stop a bit later in this case
-            WARN ("%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
-            goto final;
-        }
+        ASSERTGOTO (data_type != DT_REF || (flag.genocat_info_only && exe_type == EXE_GENOCAT) || exe_type == EXE_GENOLS,
+                    "%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
 
         if (flag.show_reference && !md5_is_zero (header->ref_file_md5)) {
             fprintf (stderr, "%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
@@ -761,7 +760,8 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.h.codec                 = CODEC_BZ2;
     header.h.flags                 = z_file->flags |
                                      (flag.reference == REF_INTERNAL ? GENOZIP_FL_REF_INTERNAL : 0) |
-                                     (flag.ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0);
+                                     (flag.ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0) |
+                                     (txt_file->codec == CODEC_BGZF  ? GENOZIP_FL_BGZF         : 0);
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)z_data_type);
     header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;

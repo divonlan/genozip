@@ -22,13 +22,16 @@ typedef struct {
     int pair; // unfortunately we can't rely on enum being sizeof(int)
 
     // genounzip options
-    int bgzip, out_dt;
+    int plain, bgzf, out_dt;
     char *unbind;
 
     // genocat options for showing only a subset of the file 
     int header_one, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential;
     char *grep;
+
+    // genols options
+    int bytes;
 
     // options affecting the software interaction (but not the file contents)
     int force, quiet, to_stdout, replace, do_register,
@@ -84,5 +87,6 @@ extern Flags flag;
 
 extern void flags_init_from_command_line (int argc, char **argv, bool *is_short);
 extern void flags_update (unsigned num_files, char **filenames, const bool *is_short);
+extern void flags_update_zip_one_file (void);
 
 #endif

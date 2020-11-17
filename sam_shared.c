@@ -107,7 +107,7 @@ void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len,
     ASSERT (!seq_consumed || *seq_consumed, "Error: Invalid CIGAR in %s: CIGAR implies 0-length SEQ. CIGAR=%.*s", txt_name, cigar_len, cigar);
 }
 
-// calculate bin given an alignment covering [first_pos_0,last_pos_0] (0-based positions)
+// calculate bin given an alignment covering [first_pos_0,last_pos_0) (0-based positions, half-closed, half-open)
 // code adapted from https://samtools.github.io/hts-specs/SAMv1.pdf section 5.3
 uint16_t bam_reg2bin (int32_t first_pos_0, int32_t last_pos_0)
 {

@@ -159,6 +159,17 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             return;
         }
 
+        char *last_c = (char *)&z_filename[strlen(z_filename)-1];
+        if (*last_c == '/' 
+#ifdef _WIN32
+            || *last_c == '\\'
+#endif
+            ) {
+            *last_c = 0; // remove trailing '/' or '\'
+            main_list_dir (z_filename);
+            return;
+        }
+ 
         // filename is a directory - show directory contents (but not recursively)
         if (!subdir && file_is_dir (z_filename)) {
             main_list_dir (z_filename);
@@ -177,17 +188,28 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     const char *foot_format = "\nTotal:                  %10s %10s %5.*fX\n";
     const char *item_format = "%-5.5s %11s %10s %10s %5.*fX  %s  %s%s%*s %s\n";
 
+    const char *head_format_bytes = "\n%-5.5s %11s %15s %15s %6s  %*s\n";
+    const char *foot_format_bytes = "\nTotal:            %15s %15s %5.*fX\n";
+    const char *item_format_bytes = "%-5.5s %11s %15s %15s %5.*fX  %s%s%*s\n";
+
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
     static Buffer str_buf = EMPTY_BUFFER; 
     
     if (finalize) {
         if (files_listed > 1) {
-            str_size(total_compressed_len, z_size_str);
-            str_size(total_uncompressed_len, txt_size_str);
             double ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
-            bufprintf (evb, &str_buf, foot_format, z_size_str, txt_size_str, ratio < 100, ratio);
+            if (flag.bytes) {
+                str_int (total_compressed_len, z_size_str);
+                str_int (total_uncompressed_len, txt_size_str);
+                bufprintf (evb, &str_buf, foot_format_bytes, z_size_str, txt_size_str, ratio < 100, ratio);
+            }
+            else {
+                str_size(total_compressed_len, z_size_str);
+                str_size(total_uncompressed_len, txt_size_str);
+                bufprintf (evb, &str_buf, foot_format, z_size_str, txt_size_str, ratio < 100, ratio);
+            }
         }
         
         ASSERTW (!files_ignored, "Ignored %u file%s that %s not have a " GENOZIP_EXT " extension", 
@@ -197,7 +219,11 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     }
 
     if (first_file) {
-        bufprintf (evb, &str_buf, head_format, "Type", "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
+        if (flag.bytes) 
+            bufprintf (evb, &str_buf, head_format_bytes, "Type", "Records", "Compressed", "Original", "Factor", -(int)FILENAME_WIDTH, "Name")
+        else
+            bufprintf (evb, &str_buf, head_format, "Type", "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
+        
         first_file = false;
     }
     
@@ -210,7 +236,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
 
-    Md5Hash md5_hash_bound; //, license_hash, ref_file_md5;
+    Md5Hash md5_hash_bound; 
     uint64_t txt_data_size, num_lines;
     char created[FILE_METADATA_LEN];
     if (!zfile_read_genozip_header (&md5_hash_bound, &txt_data_size, &num_lines, created))
@@ -218,19 +244,34 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     double ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
     
-    str_size (z_file->disk_size, z_size_str);
-    str_size (txt_data_size, txt_size_str);
     str_uint_commas (num_lines, num_lines_str);
     
     // TODO: have an option to print ref_file_name and ref_file_md5
+
+    DataType dt = (z_file->data_type == DT_SAM && (z_file->flags & GENOZIP_FL_TXT_IS_BIN)) ? DT_BAM : z_file->data_type;
+
+    if (flag.bytes) {
+        str_int (z_file->disk_size, z_size_str);
+        str_int (txt_data_size, txt_size_str);
     
-    bufprintf (evb, &str_buf, item_format, dt_name (z_file->data_type), num_lines_str, 
-               z_size_str, txt_size_str, ratio < 100, ratio, 
-               md5_display (md5_hash_bound),
-               (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
-               is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
-               z_filename, created);
-            
+        bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), num_lines_str, 
+                   z_size_str, txt_size_str, ratio < 100, ratio, 
+                   (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
+                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
+                   z_filename);
+    }
+    else {
+        str_size (z_file->disk_size, z_size_str);
+        str_size (txt_data_size, txt_size_str);
+    
+        bufprintf (evb, &str_buf, item_format, dt_name (dt), num_lines_str, 
+                   z_size_str, txt_size_str, ratio < 100, ratio, 
+                   md5_display (md5_hash_bound),
+                   (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
+                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
+                   z_filename, created);
+    }
+
     total_compressed_len   += z_file->disk_size;
     total_uncompressed_len += txt_data_size;
     
@@ -498,6 +539,8 @@ static void main_genozip (const char *txt_filename,
     } 
     else ABORT0 ("Error: No output channel");
     
+    flags_update_zip_one_file();
+
     txt_file->basename = file_basename (txt_filename, false, FILENAME_STDIN, NULL, 0);
     zip_one_file (txt_file->basename, is_last_file);
 

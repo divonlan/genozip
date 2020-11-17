@@ -112,7 +112,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
                             const char *filename, // filename, or NULL if filename is unchanged
                             ProgressType prog, const char *prog_msg /* used if prog=PROGRESS_MESSAGE */)   
 {
-    clock_gettime(CLOCK_REALTIME, &profiler_timer);
+    clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
     DispatcherData *dd = (DispatcherData *)CALLOC (sizeof(DispatcherData));
     dd->next_vb_i    = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
