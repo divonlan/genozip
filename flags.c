@@ -380,9 +380,29 @@ void flags_update (unsigned num_files, char **filenames, const bool *is_short)
 
 void flags_update_zip_one_file (void)
 {
+}
+
+void flags_update_piz_one_file (void)
+{
+    // handle native binary formats (BAM). note on BCF and CRAM: we used bcftools/samtools as an external 
+    // compressor, so that genozip sees the text, not binary, data of these files - the same as if the file were compressed with eg bz2
+    if (command == PIZ && flag.out_dt == DT_NONE && (z_file->flags & GENOZIP_FL_TXT_IS_BIN)) {
+        if (z_file->data_type == DT_SAM) 
+            // genounzip of a SAM genozip file with is_binary outputs BAM unless the user overrides with --sam or --fastq
+            flag.out_dt = DT_BAM;
+        // future binary data types here
+    }
+
+    // in case translating from SAM.genozip to BAM
+    // is this correct ??????
+    if (flag.out_dt == DT_BAM) z_file->flags |= GENOZIP_FL_TXT_IS_BIN; // reconstructed file is in binary form
+    
+    if (flag.out_dt == DT_NONE) 
+        flag.out_dt = z_file->data_type;
+
     // .bcf will be bgzipped by bcftools, ignore --bgzip flag as we don't need an additional bgzip step
     if (flag.out_dt == DT_BCF) flag.bgzf=0;
 
-    // BAM and GENOZIP_FL_BGZF imply bgzf, unless user specifically asked for plain or we're outputting to stdout
-    if ((flag.out_dt == DT_BAM || (z_file->flags & GENOZIP_FL_BGZF)) && (!flag.plain && !flag.to_stdout)) flag.bgzf=true;
+    // BAM or GENOZIP_FL_BGZF imply bgzf, unless user specifically asked for plain or we're outputting to stdout
+    if ((flag.out_dt == DT_BAM || (z_file->flags & GENOZIP_FL_BGZF)) && (!flag.plain && !flag.to_stdout)) flag.bgzf=true;   
 }

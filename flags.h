@@ -88,5 +88,6 @@ extern Flags flag;
 extern void flags_init_from_command_line (int argc, char **argv, bool *is_short);
 extern void flags_update (unsigned num_files, char **filenames, const bool *is_short);
 extern void flags_update_zip_one_file (void);
+extern void flags_update_piz_one_file (void);
 
 #endif

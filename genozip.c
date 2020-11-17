@@ -377,18 +377,8 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         }
     }
 
-    // handle native binary formats (BAM). note on BCF and CRAM: we used bcftools/samtools as an external 
-    // compressor, so that genozip sees the text, not binary, data of these files - the same as if the file were compressed with eg bz2
-    if (command == PIZ && flag.out_dt == DT_NONE && (z_file->flags & GENOZIP_FL_TXT_IS_BIN)) {
-        if (z_file->data_type == DT_SAM) 
-            // genounzip of a SAM genozip file with is_binary outputs BAM unless the user overrides with --sam or --fastq
-            flag.out_dt = DT_BAM;
-        // future binary data types here
-    }
+    flags_update_piz_one_file();
     
-    if (flag.out_dt == DT_NONE) 
-        flag.out_dt = z_file->data_type;
-
     // set txt_filename from genozip file name (inc. extensions if translating or --bgzip)
     if (!txt_filename && !flag.to_stdout && !flag.unbind) 
         txt_filename = txtfile_piz_get_filename (z_filename, "", true);
@@ -408,8 +398,6 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
 
-    if (flag.out_dt == DT_BAM) z_file->flags |= GENOZIP_FL_TXT_IS_BIN; // reconstructed file is in binary form
-    
     z_file->basename = file_basename (z_filename, false, FILENAME_STDIN, NULL, 0); // memory freed in file_close
     
     // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.

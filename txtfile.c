@@ -516,7 +516,7 @@ void txtfile_write_one_vblock (VBlockP vb)
 {
     START_TIMER;
 
-    if (txt_file->codec == CODEC_BGZF) 
+    if (flag.bgzf) 
         bgzf_write_to_disk (vb); 
     else
         txtfile_write_to_disk (&vb->txt_data);
@@ -662,12 +662,18 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
 
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
-    txt_file->codec                = header->codec;
+    //txt_file->codec                = header->codec; // we ignore header->codec for now
     
     if (is_first_txt || flag.unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);
 
     if (flag.unbind) *digest = header->md5_hash_single; // override md5 from genozip header
+
+    // get SEC_BGZF data if needed
+    if (flag.bgzf) {
+        bgzf_read_and_uncompress_isizes (sl);     
+        header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_read_and_uncompress_isizes
+    }
 
     // now get the text of the txt header itself
     if (!show_headers_only)
@@ -682,22 +688,18 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
         if (flag.header_one) vcf_header_keep_only_last_line (&evb->txt_data);  // drop lines except last (with field and samples name)
     }
     
+    if (!evb->txt_data.len) goto done; // case: this txt file has no header - we're done
+
     // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
     DtTranslation trans = dt_get_translation();
     if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
-    // get SEC_BGZF data if needed
-    if (flag.bgzf) {
-        bgzf_read_and_uncompress_isizes (sl);     
-        header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_read_and_uncompress_isizes
-    }
-    
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
     if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.genocat_info_only) {
 
         if (flag.md5) md5_update (&txt_file->md5_ctx_bound, evb->txt_data.data, evb->txt_data.len);
 
-        if (txt_file->codec == CODEC_BGZF) {
+        if (flag.bgzf) {
             bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
             bgzf_compress_vb (evb);
             bgzf_write_to_disk (evb);
@@ -716,7 +718,8 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
             }
         }
     }
-    
+
+done:
     buf_free (&evb->z_data);
     buf_free (&evb->txt_data);
 
@@ -758,7 +761,7 @@ const char *txtfile_piz_get_filename (const char *orig_name,const char *prefix, 
     sprintf ((char *)txt_filename, "%s%.*s%s%s", prefix,
                 fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
                 old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
-                (flag.bgzf && flag.out_dt != BAM) ? ".gz" : ""); // add .gz if --bgzip (except in BAM where it is implicit)
+                (flag.bgzf && flag.out_dt != DT_BAM) ? ".gz" : ""); // add .gz if --bgzip (except in BAM where it is implicit)
 
     return txt_filename;
 }

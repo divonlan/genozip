@@ -623,7 +623,7 @@ static bool piz_read_one_vb (VBlock *vb)
     bool ok_to_compute = DTPZ(piz_read_one_vb) ? DTPZ(piz_read_one_vb)(vb, sl) : true; // true if we should go forward with computing this VB (otherwise skip it)
 
     // calculate the BGZF blocks that the compute thread is expected to compress
-    if (txt_file->codec == CODEC_BGZF) bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
+    if (flag.bgzf) bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
 
     COPY_TIMER (piz_read_one_vb); 
 
@@ -780,7 +780,7 @@ no_more_data:
     }
 
     // verifies bgzf reconstructed file against codec_args    
-    
+
     // verifies reconstructed file against MD5 (if compressed with --md5 or ) and/or codec_args (if bgzf)
     Md5Hash decompressed_file_digest = piz_one_file_verify_md5 (original_file_digest);
 
