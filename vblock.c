@@ -26,7 +26,7 @@ void vb_release_vb (VBlock *vb)
 {
     if (!vb) return; // nothing to release
 
-    vb->first_line = vb->vblock_i = vb->num_haplotypes_per_line = 0;
+    vb->first_line = vb->vblock_i = vb->num_haplotypes_per_line = vb->fragment_len = vb->fragment_num_words = 0;
     vb->vb_data_size = vb->vb_data_read_size = vb->longest_line_len = vb->line_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
@@ -37,14 +37,14 @@ void vb_release_vb (VBlock *vb)
     vb->dont_show_curr_line = vb->has_non_agct = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
-    vb->chrom_name = NULL;
+    vb->chrom_name = vb->fragment_start = NULL;
     vb->prev_range = NULL;
     vb->ht_matrix_ctx = NULL;
     vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->md5_hash_so_far = MD5HASH_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
-    
+    vb->fragment_ctx = 0;
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
 

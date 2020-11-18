@@ -10,7 +10,6 @@
 #include "strings.h"
 #include "dict_id.h"
 #include "dispatcher.h"
-#include "zip.h"
 #include "zfile.h"
 #include "endianness.h"
 #include "random_access.h"
@@ -957,11 +956,6 @@ static void ref_compress_one_range (VBlockP vb)
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
 }
 
-void ref_output_vb (VBlockP vb) 
-{ 
-    zip_output_processed_vb (vb, &vb->section_list_buf, false, PD_REFERENCE_DATA); 
-}
-
 // compress the reference - one section at the time, using Dispatcher to do them in parallel 
 // note: this is not called in make_reference - instead, ref_make_prepare_range_for_compress is called
 static void ref_prepare_range_for_compress (VBlockP vb)
@@ -1038,7 +1032,7 @@ void ref_compress_ref (void)
 
     if (ranges.param != RT_MAKE_REF) {
         ref_contigs_compress(); // also assigns gpos to de-novo ranges 
-        zip_output_processed_vb (evb, &evb->section_list_buf, false, PD_REFERENCE_DATA); 
+        zfile_output_processed_vb (evb); 
     }
 
     // copy already-compressed SEQ sections from the genozip reference file, but only such sections that are almost entirely
@@ -1060,7 +1054,7 @@ void ref_compress_ref (void)
         dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing reference...", false, 
                                  flag.make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
-                                 ref_output_vb);
+                                 zfile_output_processed_vb);
 
     RESTORE_FLAGS;
     
@@ -1081,7 +1075,7 @@ void ref_compress_ref (void)
         qsort (ranges.data, ranges.len, sizeof (Range), ref_contigs_range_sorter);
 
         ref_contigs_compress(); 
-        zip_output_processed_vb (evb, &evb->section_list_buf, false, PD_REFERENCE_DATA); 
+        zfile_output_processed_vb (evb); 
     }
 }
 

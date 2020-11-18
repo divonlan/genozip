@@ -70,7 +70,6 @@ extern Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_le
 extern void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos);
 extern void ref_print_is_set (const Range *r, PosType around_pos);
 extern const char *ref_get_cram_ref (void);
-extern void ref_output_vb (VBlockP vb);
 extern void ref_make_ref_init (void);
 extern void ref_generate_reverse_complement_genome (void);
 

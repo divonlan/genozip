@@ -39,11 +39,17 @@ unzip:
 #include "dict_id.h"
 #include "reference.h"
 #include "mutex.h"
+#include "progress.h"
+#include "dispatcher.h"
+#include "compressor.h"
+#include "strings.h"
+#include "codec.h"
+#include "flags.h"
+#include "zip.h"
 
 #define INITIAL_NUM_NODES 10000
 
 MUTEX (wait_for_vb_1_mutex);
-MUTEX (compress_dictionary_data_mutex);
 
 static inline void ctx_lock_do (VBlock *vb, pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
 {
@@ -467,8 +473,6 @@ static void ctx_copy_reference_contig_to_chrom_ctx (void)
     
     // allocate and populate hash from zf_ctx->nodes
     hash_alloc_global (zf_ctx, zf_ctx->nodes.len);
-
-    zfile_compress_dictionary_data (evb, zf_ctx, zf_ctx->nodes.len, zf_ctx->dict.data, zf_ctx->dict.len);
 }
 
 void ctx_initialize_for_zip (void)
@@ -477,7 +481,6 @@ void ctx_initialize_for_zip (void)
 
     mutex_initialize (z_file->dicts_mutex);
     mutex_initialize (wait_for_vb_1_mutex);
-    mutex_initialize (compress_dictionary_data_mutex);
 
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)
         ctx_copy_reference_contig_to_chrom_ctx();
@@ -576,9 +579,6 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     if (!vb_ctx->bcodec) vb_ctx->bcodec = zf_ctx->bcodec;
 
     if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // nothing yet for this dict_id
-
-    uint64_t start_dict_len = zf_ctx->dict.len;
-    uint64_t start_nodes_len  = zf_ctx->nodes.len;
  
     if (!buf_is_allocated (&zf_ctx->dict)) {
         // allocate hash table, based on the statitics gather by this first vb that is merging this dict and 
@@ -610,22 +610,6 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
             // a previous VB already already calculated the word index for this node. if it was done by vb_i=1,
             // then it is also re-sorted and the word_index is no longer the same as the node_index
             vb_node->word_index = zf_node->word_index;
-    }
-
-    // we now compress the dictionaries directly from z_file. note: we must continue to hold
-    // the mutex during compression, lest another thread re-alloc the dictionary.
-    const char *start_dict = &zf_ctx->dict.data[start_dict_len]; // we take the pointer AFTER the evaluate, since dict can be reallocted
-    uint32_t added_chars   = (uint32_t)(zf_ctx->dict.len - start_dict_len);
-    uint32_t added_words   = (uint32_t)(zf_ctx->nodes.len  - start_nodes_len);
-
-    // compress incremental part of dictionary added by this vb. note: dispatcher calls this function in the correct order of VBs.
-    if (added_chars) {
-        {   START_TIMER; 
-            ctx_lock (merging_vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", merging_vb->vblock_i);
-            COPY_TIMER_VB (merging_vb, lock_mutex_compress_dict);
-        }  
-        zfile_compress_dictionary_data (merging_vb, zf_ctx, added_words, start_dict, added_chars);
-        ctx_unlock (merging_vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", merging_vb->vblock_i);
     }
 
 finish:
@@ -966,7 +950,7 @@ void ctx_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
     }
 }
 
-// ZIP only: run by I/O thread during zip_output_processed_vb()
+// ZIP only: run by I/O thread during zfile_output_processed_vb()
 void ctx_update_stats (VBlock *vb)
 {
     // zf_ctx doesn't store node_i, but we just use node_i.len as a counter for displaying in genozip_show_sections
@@ -1045,4 +1029,98 @@ void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, fals
                          : file_put_buffer (dump_fn, &ctx->b250, 1);
 
     ASSERTW (success, "Warning: ctx_dump_binary failed to output file %s: %s", dump_fn, strerror (errno));
+}
+
+// --------------------------------
+// Compress and output dictionaries
+// --------------------------------
+
+static Context *frag_ctx;
+static const CtxNode *frag_next_node;
+
+// compress the dictionary fragment - either an entire dict, or part of it if its large
+static void ctx_prepare_for_dict_compress (VBlockP vb)
+{
+    #define FRAGMENT_SIZE (1<<20) // max fragment size 
+
+    while (frag_ctx < &z_file->contexts[z_file->num_contexts]) {
+
+        if (!frag_next_node) {
+            if (!frag_ctx->nodes.len) {
+                frag_ctx++;
+                continue; // unused context
+            }
+            frag_next_node = FIRSTENT (const CtxNode, frag_ctx->nodes);
+        }
+
+        vb->fragment_ctx = frag_ctx;
+        vb->fragment_start = ENT (char, frag_ctx->dict, frag_next_node->char_index);
+
+        while (frag_next_node < AFTERENT (CtxNode, frag_ctx->nodes) && 
+               vb->fragment_len + frag_next_node->snip_len < FRAGMENT_SIZE) {
+            vb->fragment_len += frag_next_node->snip_len + 1;
+            vb->fragment_num_words++;
+            frag_next_node++;
+        }
+
+        if (frag_next_node == AFTERENT (CtxNode, frag_ctx->nodes)) {
+            frag_ctx++;
+            frag_next_node = NULL;
+        }
+
+        if (vb->fragment_len) {
+            vb->ready_to_dispatch = true;
+            break;
+        }
+    }
+}
+
+static void ctx_compress_one_dict_fragment (VBlockP vb)
+{
+    START_TIMER;
+    Codec codec = CODEC_BSC;
+
+    SectionHeaderDictionary header = (SectionHeaderDictionary){ 
+        .h.magic                 = BGEN32 (GENOZIP_MAGIC),
+        .h.section_type          = SEC_DICT,
+        .h.data_uncompressed_len = BGEN32 (vb->fragment_len),
+        .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary)),
+        .h.codec                 = codec,
+        .h.vblock_i              = BGEN32 (vb->vblock_i),
+        .num_snips               = BGEN32 (vb->fragment_num_words),
+        .dict_id                 = vb->fragment_ctx->dict_id
+    };
+
+    if (flag.show_dict) {
+        fprintf (stderr, "%s (vb_i=%u, did=%u, num_snips=%u):\t", 
+                 vb->fragment_ctx->name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
+        str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, true, false);
+    }
+    
+    if (dict_id_printable (vb->fragment_ctx->dict_id).num == flag.dict_id_show_one_dict.num)
+        str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, false, false);
+
+    if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
+        str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, false, vb->data_type == DT_SAM);
+
+    if (flag.show_time) codec_show_time (vb, "DICT", vb->fragment_ctx->name, codec);
+
+    vb->z_data.name = "z_data"; // comp_compress requires that it is set in advance
+    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, vb->fragment_start, NULL);
+
+    COPY_TIMER (ctx_compress_one_dict_fragment)    
+
+    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+}
+
+// called by I/O thread in zip_write_global_area
+void ctx_compress_dictionaries (void)
+{
+    frag_ctx = &z_file->contexts[0];
+    frag_next_node = NULL;
+
+    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, 
+                             ctx_prepare_for_dict_compress, 
+                             ctx_compress_one_dict_fragment, 
+                             zfile_output_processed_vb);
 }

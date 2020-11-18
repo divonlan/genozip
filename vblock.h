@@ -52,8 +52,14 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
     uint32_t range_num_set_bits;  /* ZIP: I/O thread telling compute thread to how many bits are set in range.is_set */ \
     \
-    uint32_t refhash_layer;    /* create_ref && reading external reference: compressing/decompressing refresh */ \
-    uint32_t refhash_start_in_layer;     /* create_ref && reading external reference: compressing/decompressing refresh */ \
+    /* data for dictionary compressing */ \
+    const char *fragment_start;     \
+    uint32_t fragment_len;     \
+    uint32_t fragment_num_words; \
+    const Context *fragment_ctx; \
+    \
+    uint32_t refhash_layer;    /* create_ref && reading external reference: compressing/decompressing refhash */ \
+    uint32_t refhash_start_in_layer;     /* create_ref && reading external reference: compressing/decompressing refhash */ \
     \
     ProfilerRec profile; \
     \

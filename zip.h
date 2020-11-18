@@ -10,9 +10,6 @@
 
 extern void zip_one_file (const char *vcf_basename, bool is_last_file);
 
-typedef enum { PD_VBLOCK_DATA, PD_DICT_DATA, PD_REFERENCE_DATA } ProcessedDataType;
-extern void zip_output_processed_vb (VBlockP vb, BufferP section_list_buf, bool update_txt_file, ProcessedDataType pd_type);
-
 // --------------------------------------------------
 // utilities for use by zip_*_compress_one_vb
 // --------------------------------------------------

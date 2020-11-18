@@ -214,7 +214,7 @@ void refhash_compress_refhash (void)
     dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing hash table (this can take several minutes)...", false, 
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
-                             ref_output_vb);
+                             zfile_output_processed_vb);
 }
 
 // ----------------------------------------------------------------------------------------------

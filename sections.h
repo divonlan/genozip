@@ -264,8 +264,8 @@ typedef struct RefContig {
 #pragma pack()
 
 // zip stuff
-extern uint64_t sections_add_to_list (VBlockP vb, const SectionHeader *header);
-extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
+extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
+extern void sections_list_concat (VBlockP vb);
 
 // piz stuff
 extern const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail);

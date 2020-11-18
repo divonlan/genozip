@@ -121,14 +121,14 @@ void bgzf_compress_bgzf_section (void)
     txt_file->bgzf_isizes.len /= sizeof (uint16_t); // restore
 
     // actually write to disk
-    zip_output_processed_vb (evb, NULL, false, PD_VBLOCK_DATA);  
+    zfile_output_processed_vb (evb);  
 }
 
 void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 {
     if (bb->is_decompressed) return; // already decompressed - nothing to do
 
-//if (vb->vblock_i==4405) fprintf (stderr, "\nbb->txt_index=%u bb->txt_size=%u  xxx %s\n", bb->txt_index, bb->txt_size, buf_desc (&vb->compressed));
+if (vb->vblock_i==4405) fprintf (stderr, "\nbb->txt_index=%u bb->txt_size=%u  xxx %s\n", bb->txt_index, bb->txt_size, buf_desc (&vb->compressed));
 
     BgzfHeader *h = (BgzfHeader *)ENT (char, vb->compressed, bb->compressed_index);
 
@@ -165,7 +165,7 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 void bgzf_uncompress_vb (VBlock *vb)
 {
     START_TIMER;
-//if (vb->vblock_i==4405) fprintf (stderr, "xxx vb->bgzf_blocks.len=%u\n", (int)vb->bgzf_blocks.len);
+if (vb->vblock_i==4405) fprintf (stderr, "xxx vb->bgzf_blocks.len=%u\n", (int)vb->bgzf_blocks.len);
     for (uint32_t block_i=0; block_i < vb->bgzf_blocks.len ; block_i++) 
         bgzf_uncompress_one_block (vb, ENT (BgzfBlockZip, vb->bgzf_blocks, block_i));
 

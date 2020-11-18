@@ -160,6 +160,9 @@ typedef struct Context {
     
 } Context;
 
+#define CTX &vb->contexts
+#define Z_CTX &z_file->contexts
+
 #define NEXTLOCAL(type, ctx) (*ENT (type, (ctx)->local, (ctx)->next_local++))
 static inline bool PAIRBIT(Context *ctx)      { BitArrayP b = buf_get_bitarray (&ctx->pair);  bool ret = bit_array_get (b, ctx->next_local);                    return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
 static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); bool ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; }
@@ -226,6 +229,7 @@ extern const char *ctx_get_snip_by_node_index (const Buffer *nodes, const Buffer
                                                const char **snip, uint32_t *snip_len);
 
 extern void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
+extern void ctx_compress_dictionaries (void);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 

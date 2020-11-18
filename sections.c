@@ -20,7 +20,7 @@ static const struct {const char *name; uint32_t header_size; } abouts[NUM_SEC_TY
 const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES] = LOCALTYPE_DESC;
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections. returns offset
-uint64_t sections_add_to_list (VBlock *vb, const SectionHeader *header)
+void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 {
     DictId dict_id = DICT_ID_NONE;
 
@@ -28,69 +28,36 @@ uint64_t sections_add_to_list (VBlock *vb, const SectionHeader *header)
     else if (header->section_type == SEC_B250 ) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
     else if (header->section_type == SEC_LOCAL) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
 
-    // 1. if this is a vcf_header, random_access or genozip_header - it goes directly into the z_file by the I/O thread
-    //    before or after all the compute threads are operational
-    // 2. if this is a dictionary - it goes directly into z_file by the Compute thread while merge holds the mutex:
-    //    ctx_merge_in_vb_ctx_one_dict_id -> zfile_compress_dictionary_data
-    // 3. if we this section is part of a VB (other than a dictionary), we store the entry within the VB and merge it to
-    //    the z_file in the correct order of VBs by the I/O thread after the compute thread is finished.
-    //
-    // offsets in case 2 and 3 are relative to their buffer at this point, and will be updated later
-
-    uint64_t offset;
-    Buffer *buf;
-    char *name;
-    VBlockP alc_vb;
-    if (header->section_type == SEC_DICT) {          // case 1 - dictionaries
-        buf    = &z_file->section_list_dict_buf;
-        alc_vb = evb; // z_file buffer goes to evb
-        name   = "z_file->section_list_dict_buf";
-        offset = z_file->dict_data.len;
-    }
-    else if (!vb->vblock_i) {  // case 2 - txt header, random access etc
-        buf    = &z_file->section_list_buf;
-        alc_vb = evb; // z_file buffer goes to evb
-        name   = "z_file->section_list_buf";
-        offset = z_file->disk_so_far + vb->z_data.len;
-    }
-    else {                       // case 3 - VB content
-        buf    = &vb->section_list_buf;
-        alc_vb = vb;
-        name   = "section_list_buf";
-        offset = vb->z_data.len;
-    }
-
-    buf_alloc (alc_vb, buf, MAX (buf->len + 1, 50) * sizeof(SectionListEntry), 2, name);
+    buf_alloc_more (vb, &vb->section_list_buf, 1, 50, SectionListEntry, 2, "section_list_buf");
     
-    SectionListEntry *ent = &NEXTENT (SectionListEntry, *buf);
-    ent->section_type     = header->section_type;
-    ent->vblock_i         = BGEN32 (header->vblock_i); // big endian in header - convert back to native
-    ent->dict_id          = dict_id;
-    ent->offset           = offset;  // this is a partial offset (within d) - we will correct it later
-
-    return offset;
+    NEXTENT (SectionListEntry, vb->section_list_buf) = (SectionListEntry) {
+        .section_type = header->section_type,
+        .vblock_i     = BGEN32 (header->vblock_i), // big endian in header - convert back to native
+        .dict_id      = dict_id,
+        .offset       = vb->z_data.len  // this is a partial offset (within d) - we will correct it later
+    };
 }
 
 // Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file section list - just before 
 // writing those sections to the disk. we use the current disk position to update the offset
-void sections_list_concat (VBlock *vb, BufferP section_list_buf)
+void sections_list_concat (VBlock *vb)
 {
     buf_alloc (evb, &z_file->section_list_buf, 
-              (z_file->section_list_buf.len + section_list_buf->len) * sizeof(SectionListEntry), 2, 
+              (z_file->section_list_buf.len + vb->section_list_buf.len) * sizeof(SectionListEntry), 2, 
               "z_file->section_list_buf");
   
     SectionListEntry *dst = AFTERENT (SectionListEntry, z_file->section_list_buf);
-    SectionListEntry *src = FIRSTENT (SectionListEntry, *section_list_buf);
+    SectionListEntry *src = FIRSTENT (SectionListEntry, vb->section_list_buf);
 
     // update the offset
-    for (unsigned i=0; i < section_list_buf->len; i++)
+    for (unsigned i=0; i < vb->section_list_buf.len; i++)
         src[i].offset += z_file->disk_so_far;
 
     // copy all entries
-    memcpy (dst, src, section_list_buf->len * sizeof(SectionListEntry));
-    z_file->section_list_buf.len += section_list_buf->len;
+    memcpy (dst, src, vb->section_list_buf.len * sizeof(SectionListEntry));
+    z_file->section_list_buf.len += vb->section_list_buf.len;
 
-    buf_free (section_list_buf);
+    buf_free (&vb->section_list_buf);
 }
 
 // section iterator. returns true if a section of this type was found.

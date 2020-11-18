@@ -12,6 +12,7 @@
 #include "zfile.h"
 #include "strings.h"
 #include "compressor.h"
+#include "zfile.h"
 
 // compresses data - either a contiguous block or one line at a time. If both are NULL that there is no data to compress.
 // returns data_compressed_len
@@ -135,15 +136,19 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     else
         total_z_len = compressed_offset + data_compressed_len;
 
-    // add section to the list - except for genozip header which we already added in zfile_compress_genozip_header()
-    uint64_t offset=0;
-    if (header->section_type != SEC_GENOZIP_HEADER && header->section_type != SEC_NONE /* from codec_assign_best_codec */)
-        offset = sections_add_to_list (vb, header);
+    // add section to the section list
+    if (header->section_type != SEC_GENOZIP_HEADER && // the section list is part of the genozip header section currently being compressed, so can't add to it
+        header->section_type != SEC_NONE /* from codec_assign_best_codec */)
+        sections_add_to_list (vb, header);
+
+    if (flag.show_headers) 
+        zfile_show_header (header, vb->vblock_i ? vb : NULL, z_data->len, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
 
     z_data->len += total_z_len;
 
-    if (flag.show_headers) 
-        zfile_show_header (header, vb->vblock_i ? vb : NULL, offset, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
+    // if we're compressing a global buffer in the I/O thread, we can write it immeidately
+    if (vb == evb && header->section_type != SEC_NONE) 
+        zfile_output_processed_vb (vb);
 
 done:
     return data_compressed_len;

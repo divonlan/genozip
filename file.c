@@ -462,7 +462,7 @@ static bool file_open_txt_write (File *file)
 // thread satety issue:
 // without our pre-allocation, some of these buffers will be first allocated by a compute threads 
 // when the first vb containing a certain did_i is merged in (for the contexts buffers) or
-// when the first dictionary is compressed (for dict_data) or ra is merged (for ra_buf). while these operations 
+// ra is merged (for ra_buf). while these operations 
 // are done while holding a mutex, so that compute threads don't run over each over, buf_alloc 
 // may change buf_lists in evb buffers, while the I/O thread might be doing so concurrently
 // resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
@@ -491,13 +491,11 @@ static void file_initialize_z_file_data (File *file)
 #undef INIT
 #define INIT(buf) file->buf.name = #buf; \
                   buf_add_to_buffer_list (evb, &file->buf);
-    INIT (dict_data);
     INIT (ra_buf);
     INIT (ra_min_max_by_chrom);
     INIT (chroms_sorted_index);
     INIT (alt_chrom_map);
     INIT (section_list_buf);
-    INIT (section_list_dict_buf);
     INIT (unconsumed_txt);
     INIT (stats_buf_1);
     INIT (stats_buf_2);
@@ -678,13 +676,11 @@ void file_close (File **file_p,
         for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
             ctx_destroy_context (&file->contexts[i]);
 
-        buf_destroy (&file->dict_data);
         buf_destroy (&file->ra_buf);
         buf_destroy (&file->ra_min_max_by_chrom);
         buf_destroy (&file->chroms_sorted_index);
         buf_destroy (&file->alt_chrom_map);
         buf_destroy (&file->section_list_buf);
-        buf_destroy (&file->section_list_dict_buf);
         buf_destroy (&file->unconsumed_txt);
         buf_destroy (&file->bgzf_isizes);
         buf_destroy (&file->stats_buf_1);

@@ -26,6 +26,7 @@
 #include "strings.h"
 #include "dict_id.h"
 #include "reference.h"
+#include "dispatcher.h"
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
@@ -242,45 +243,6 @@ static void zfile_get_metadata(char *metadata)
 
     // sanity
     ASSERT0 (strlen (metadata) < FILE_METADATA_LEN, "Error: metadata too long");
-}
-
-// ZIP: called by compute threads, while holding the compress_dictionary_data_mutex
-void zfile_compress_dictionary_data (VBlock *vb, Context *ctx, 
-                                     uint32_t num_words, const char *data, uint32_t num_chars)
-{
-    START_TIMER;
-    Codec codec = CODEC_BSC;
-
-    SectionHeaderDictionary header = (SectionHeaderDictionary){ 
-        .h.magic                 = BGEN32 (GENOZIP_MAGIC),
-        .h.section_type          = SEC_DICT,
-        .h.data_uncompressed_len = BGEN32 (num_chars),
-        .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary)),
-        .h.codec                 = codec,
-        .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .num_snips               = BGEN32 (num_words),
-        .dict_id                 = ctx->dict_id
-    };
-
-    if (flag.show_dict) {
-        fprintf (stderr, "%s (vb_i=%u, did=%u, num_snips=%u):\t", 
-                 ctx->name, vb->vblock_i, ctx->did_i, num_words);
-        str_print_null_seperated_data (data, num_chars, true, false);
-    }
-    
-    if (dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_dict.num)
-        str_print_null_seperated_data (data, num_chars, false, false);
-
-    if (flag.list_chroms && ctx->did_i == CHROM)
-        str_print_null_seperated_data (data, num_chars, false, vb->data_type == DT_SAM);
-
-    if (flag.show_time) codec_show_time (vb, "DICT", ctx->name, codec);
-
-    z_file->dict_data.name  = "z_file->dict_data"; // comp_compress requires that it is set in advance
-    comp_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);
-
-    COPY_TIMER (zfile_compress_dictionary_data)    
-//printf ("End compress dict vb_i=%u did_i=%u\n", vb->vblock_i, ctx->did_i);
 }
 
 uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
@@ -746,7 +708,8 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     // "manually" add the genozip section to the section list - normally it is added in comp_compress()
     // but in this case the genozip section containing the list will already be ready...
     sections_add_to_list (evb, &header.h);
-
+    sections_list_concat (evb); // usually done in output_process_vb, but the section list will be already compressed within the genozip header...
+    
     bool is_encrypted = crypt_have_password();
 
     uint32_t num_sections = z_file->section_list_buf.len;
@@ -837,6 +800,8 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     buf_alloc (evb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data");
     memcpy (&z_data->data[z_data->len], &footer, sizeof(SectionFooterGenozipHeader));
     z_data->len += sizeof(SectionFooterGenozipHeader);
+
+    zfile_output_processed_vb (evb); // write footer
 }
 
 // ZIP
@@ -965,6 +930,28 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
     if (crypt_have_password())  
         crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
                   BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
+}
+
+void zfile_output_processed_vb (VBlock *vb)
+{
+    START_TIMER;
+
+    sections_list_concat (vb);
+    
+    file_write (z_file, vb->z_data.data, vb->z_data.len);
+    COPY_TIMER (write);
+
+    z_file->disk_so_far += (int64_t)vb->z_data.len;
+    vb->z_data.len = 0;
+
+    // this function holds the mutex and hence has a non-trival performance penalty. we call
+    // it only if the user specifically requested --show-stats
+    if (flag.show_stats) ctx_update_stats (vb);
+
+    if (flag.show_headers && buf_is_allocated (&vb->show_headers_buf))
+        buf_print (&vb->show_headers_buf, false);
+
+    if (flag.show_threads) dispatcher_show_time ("Write genozip data done", -1, vb->vblock_i);
 }
 
 DataType zfile_get_file_dt (const char *filename)

@@ -268,10 +268,10 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
     COPY_TIMER (zip_generate_and_compress_ctxs);
 }
 
-static void zip_update_txt_counters (VBlock *vb, bool update_txt_file)
+static void zip_update_txt_counters (VBlock *vb)
 {
     // note: in case of an FASTQ with flag.optimize_DESC, we already updated this in fastq_txtfile_count_lines
-    if (update_txt_file && !(flag.optimize_DESC && vb->data_type == DT_FASTQ)) 
+    if (!(flag.optimize_DESC && vb->data_type == DT_FASTQ)) 
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
         
     z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all bound files in this z_file
@@ -279,44 +279,15 @@ static void zip_update_txt_counters (VBlock *vb, bool update_txt_file)
     z_file->txt_data_so_far_bind             += (int64_t)vb->vb_data_size;
 }
 
-void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_txt_file, ProcessedDataType pd_type)
-{
-    START_TIMER;
-
-    Buffer *data_buf = (pd_type == PD_DICT_DATA) ? &z_file->dict_data : &vb->z_data;
-
-    if (section_list_buf) sections_list_concat (vb, section_list_buf);
-
-    file_write (z_file, data_buf->data, data_buf->len);
-    COPY_TIMER (write);
-
-    z_file->disk_so_far += (int64_t)data_buf->len;
-    data_buf->len = 0;
-
-    if (pd_type == PD_VBLOCK_DATA) 
-        zip_update_txt_counters (vb, update_txt_file);
-
-    // this function holds the mutex and hence has a non-trival performance penalty. we call
-    // it only if the user specifically requested --show-stats
-    if (flag.show_stats) ctx_update_stats (vb);
-
-    if (flag.show_headers && buf_is_allocated (&vb->show_headers_buf))
-        buf_print (&vb->show_headers_buf, false);
-
-    if (flag.show_threads) dispatcher_show_time ("Write genozip data done", -1, vb->vblock_i);
-}
-
 // write all the sections at the end of the file, after all VB stuff has been written
 static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_component_md5)
 {
-    // output dictionaries (inc. aliases) to disk - they are in the "processed" data of evb
-    if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
-        zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, PD_DICT_DATA);  
-
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
     if (DTPZ(has_random_access)) 
         random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
+    ctx_compress_dictionaries();
+    
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL)
         ref_alt_chroms_compress();
@@ -341,7 +312,7 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
         random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, flag.show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
 
     // flush to disk before stats
-    zip_output_processed_vb (evb, NULL, false, PD_VBLOCK_DATA);  
+    //zfile_output_processed_vb (evb);  
 
     stats_compress();
 
@@ -349,7 +320,7 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
     zfile_compress_genozip_header (single_component_md5);    
 
     // output to disk stats and genozip header sections to disk
-    zip_output_processed_vb (evb, NULL, false, PD_VBLOCK_DATA);  
+    //zfile_output_processed_vb (evb);  
 }
 
 // entry point for compute thread
@@ -490,9 +461,9 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
             txt_line_i += (uint32_t)processed_vb->lines.len;
 
             if (!flag.make_reference && !flag.test_seg)
-                zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, PD_VBLOCK_DATA);
-            else 
-                zip_update_txt_counters (processed_vb, true); // normally called from zip_output_processed_vb
+                zfile_output_processed_vb (processed_vb);
+            
+            zip_update_txt_counters (processed_vb);
 
             z_file->num_vbs++;
             
