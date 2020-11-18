@@ -114,7 +114,7 @@ void bgzf_compress_bgzf_section (void)
 
     // usually BZ2 is the best, but if the sizes are highly random (happens in long read SAM/BAM), then BZ2 can be bloated
     // and even produce an error. that's why we test.
-    Codec codec = codec_assign_best_codec (evb, NULL, &txt_file->bgzf_isizes, SEC_BGZF, txt_file->bgzf_isizes.len);
+    Codec codec = codec_assign_best_codec (evb, NULL, &txt_file->bgzf_isizes, SEC_BGZF);
 
     zfile_compress_section_data_codec (evb, SEC_BGZF, &txt_file->bgzf_isizes, NULL, 0, codec);
 

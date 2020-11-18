@@ -208,7 +208,6 @@ static inline DidIType ctx_get_existing_did_i_do (VBlockP vb, DictId dict_id, Co
 extern ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id); // returns NULL if context doesn't exist
 #define ctx_get_existing_ctx(vb,dict_id) ctx_get_existing_ctx_do ((VBlockP)vb, (DictId)dict_id)
 
-extern void ctx_integrate_dictionary_fragment (VBlockP vb, char *data);
 extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
 extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 extern void ctx_verify_field_ctxs_do (VBlockP vb, const char *func, uint32_t code_line);
@@ -229,6 +228,9 @@ extern const char *ctx_get_snip_by_node_index (const Buffer *nodes, const Buffer
                                                const char **snip, uint32_t *snip_len);
 
 extern void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
+
+typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
+extern void ctx_read_all_dictionaries (ReadChromeType read_chrom);
 extern void ctx_compress_dictionaries (void);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);

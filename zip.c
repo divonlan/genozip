@@ -185,7 +185,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
 // contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
 static void zip_assign_best_codec (VBlock *vb)
 {
-    if (flag.show_codec_test && vb->vblock_i == 1)
+    if (flag.show_codec && vb->vblock_i == 1)
         fprintf (stderr, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
                  "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
 
@@ -193,8 +193,11 @@ static void zip_assign_best_codec (VBlock *vb)
         Context *ctx = &vb->contexts[did_i];
        
         // local
-        if (ctx->local.len)
-            codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL, ctx->local.len * lt_desc[ctx->ltype].width);
+        if (ctx->local.len) {
+            ctx->local.len *= lt_desc[ctx->ltype].width;
+            codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
+            ctx->local.len /= lt_desc[ctx->ltype].width;
+        }
 
         // b250
         if (ctx->node_i.len * sizeof (uint32_t) < MIN_LEN_FOR_COMPRESSION)
@@ -203,7 +206,7 @@ static void zip_assign_best_codec (VBlock *vb)
         // generate a sample of ctx.b250 data from ctx.node_i data
         zip_generate_b250_section (vb, ctx, CODEC_ASSIGN_SAMPLE_SIZE);
 
-        codec_assign_best_codec (vb, ctx, NULL, SEC_B250, ctx->b250.len);
+        codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
 
         ctx->b250.len = 0; // roll back
     }

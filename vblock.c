@@ -45,6 +45,7 @@ void vb_release_vb (VBlock *vb)
     vb->md5_hash_so_far = MD5HASH_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
     vb->fragment_ctx = 0;
+    vb->fragment_codec = 0;
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
 

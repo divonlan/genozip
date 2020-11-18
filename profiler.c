@@ -41,11 +41,12 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(lock_mutex_zf_ctx);
     ADD(ctx_merge_in_vb_ctx_one_dict_id);
     ADD(ctx_clone_ctx);
-    ADD(ctx_integrate_dictionary_fragment);
+    ADD(ctx_dict_build_word_lists);
     ADD(aligner_best_match);
     ADD(aligner_get_match_len);
     ADD(aligner_get_word_from_seq);
     ADD(generate_rev_complement_genome);
+    ADD(ctx_read_all_dictionaries);
     ADD(tmp1);
     ADD(tmp2);
     ADD(tmp3);
@@ -96,7 +97,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "GENOUNZIP I/O thread (piz_one_file):\n");
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
-        PRINT (ctx_integrate_dictionary_fragment, 2);
+        PRINT (ctx_read_all_dictionaries, 1)
+        PRINT (ctx_dict_build_word_lists, 2);
         PRINT (bgzf_io_thread, 1);
         PRINT (write, 1);
         fprintf (stderr, "GENOUNZIP compute threads: %u\n", ms(p->compute));
@@ -125,8 +127,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (lock_mutex_zf_ctx, 2);
         PRINT (ctx_merge_in_vb_ctx_one_dict_id, 2);
-        PRINT (ctx_compress_one_dict_fragment, 2);
         PRINT (zip_generate_and_compress_ctxs, 1);
+        PRINT (ctx_compress_one_dict_fragment, 1);
         PRINT (codec_assign_best_codec, 1);
         PRINT (md5, 1);
         PRINT (bgzf_compute_thread, 1);

@@ -89,17 +89,11 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         #define _rg {"register",      no_argument,       &flag.do_register,      1 }
         #define _ss {"show-stats",    no_argument,       &flag.show_stats,       1 } 
         #define _SS {"SHOW-STATS",    no_argument,       &flag.show_stats,       2 } 
-        #define _sd {"show-dict",     no_argument,       &flag.show_dict,        1 } 
-        #define _d1 {"show-one-dict", required_argument, 0, '\3'                   }
-        #define _d2 {"show-dict-one", required_argument, 0, '\3'                   }
         #define _lc {"list-chroms",   no_argument,       &flag.list_chroms,      1 } // identical to --show-one-dict for the CHROM dict of the data type
-        #define _s2 {"show-b250",     no_argument,       &flag.show_b250,        1 } 
-        #define _s5 {"show-one-b250", required_argument, 0, '\2'                   }
-        #define _s6 {"show-b250-one", required_argument, 0, '\2'                   }
-        #define _s7 {"dump-one-b250", required_argument, 0, '\5'                   }
-        #define _s8 {"dump-b250-one", required_argument, 0, '\5'                   }
-        #define _S7 {"dump-one-local",required_argument, 0, '\6'                   }
-        #define _S8 {"dump-local-one",required_argument, 0, '\6'                   }
+        #define _s2 {"show-b250",     optional_argument, 0, '\2'                   }
+        #define _sd {"show-dict",     optional_argument, 0, '\3'                   }
+        #define _s7 {"dump-b250",     required_argument, 0, '\5'                   }
+        #define _S7 {"dump-local",    required_argument, 0, '\6'                   }
         #define _S9 {"dump-section",  required_argument, 0, '\7'                   }        
         #define _sa {"show-alleles",  no_argument,       &flag.show_alleles,     1 }
         #define _st {"show-time",     optional_argument, 0, '\1'                   } 
@@ -118,7 +112,7 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         #define _cn {"show-containers", no_argument,     &flag.show_containers,  1 }  
         #define _sI {"show-is-set",   required_argument, 0, '~',                   }  
         #define _sA {"show-aliases",  no_argument,       &flag.show_aliases,     1 }  
-        #define _sc {"show-codec-test", no_argument,     &flag.show_codec_test,  1 }  
+        #define _sc {"show-codec",    no_argument,       &flag.show_codec,       1 }  
         #define _sb {"show-bgzf",     no_argument,       &flag.show_bgzf,        1 }
         #define _dS {"test-seg",      no_argument,       &flag.test_seg,         1 }  
         #define _dm {"debug-memory",  no_argument,       &flag.debug_memory,     1 }  
@@ -127,9 +121,9 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _sb, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sc, _sI, _gt,          _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _sb, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _rA, _rS,           _sA,      _sI,      _cn,     _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _rA, _rS,           _sA,      _sI,      _cn,     _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _sb, _lc, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sc, _sI, _gt,          _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _sb, _lc, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _rA, _rS,           _sA,      _sI,      _cn,     _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _rA, _rS,           _sA,      _sI,      _cn,     _00 };
         static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                                                          _u,     _p, _e,                                                                                                                              _st, _sm,                                   _dm,                                                                                                                                                             _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
@@ -186,10 +180,14 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
             case 'g' : flag.grep          = optarg  ; break;
             case '~' : flag.show_is_set   = optarg  ; break;
             case '\7': flag.dump_section  = optarg  ; break;
-            case '\2': flag.dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
+            case '\2': if (optarg) flag.dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); 
+                       else        flag.show_b250 = 1;
+                       break;
+            case '\3': if (optarg) flag.dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); 
+                       else        flag.show_dict = 1;
+                       break;
             case '\5': flag.dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg)); break;
             case '\6': flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg)); break;
-            case '\3': flag.dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : vb_set_global_max_memory_per_vb (optarg); 
                        flag.vblock = true;
                        break;
@@ -328,7 +326,7 @@ void flags_update (unsigned num_files, char **filenames, const bool *is_short)
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag.show_dict || flag.show_b250 || flag.show_headers || flag.show_threads || flag.show_bgzf ||
         flag.dict_id_show_one_b250.num || flag.dict_id_show_one_dict.num || flag.show_reference ||
-        flag.show_alleles || flag.show_vblocks || flag.show_codec_test || (flag.show_index && command==PIZ))
+        flag.show_alleles || flag.show_vblocks || flag.show_codec || (flag.show_index && command==PIZ))
         flag.quiet=true; // don't show progress
 
     // override these ^ if user chose to be --noisy

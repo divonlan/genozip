@@ -495,56 +495,6 @@ void *zfile_read_section_header (VBlockP vb, uint64_t offset,
     return header;
 }
 
-// PIZ
-void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom)
-{
-    ctx_initialize_primary_field_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
-
-    const SectionListEntry *sl_ent = NULL; 
-    while (sections_get_next_section_of_type (&sl_ent, SEC_DICT, true, false)) {
-
-        if (last_vb_i && sl_ent->vblock_i > last_vb_i) break;
-
-        // cases where we can skip reading these dictionaries because we don't be using them
-        bool is_chrom = (sl_ent->dict_id.num == dict_id_fields[CHROM]);
-        if (read_chrom == DICTREAD_CHROM_ONLY  && !is_chrom) continue;
-        if (read_chrom == DICTREAD_EXCEPT_CHROM && is_chrom) continue;
-
-        if (piz_is_skip_sectionz (sl_ent->section_type, sl_ent->dict_id)) continue;
-        
-        zfile_read_section (z_file, evb, sl_ent->vblock_i, &evb->z_data, "z_data", sl_ent->section_type, sl_ent);    
-
-        // update dictionaries in z_file->contexts with dictionary data 
-        if (!(flag.show_headers && exe_type == EXE_GENOCAT))
-            ctx_integrate_dictionary_fragment (evb, evb->z_data.data);
-
-        buf_free (&evb->z_data);
-    }
-
-    // output the dictionaries if we're asked to
-    if (flag.show_dict || flag.dict_id_show_one_dict.num || flag.list_chroms) {
-        for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
-            Context *ctx = &z_file->contexts[did_i];
-
-#define MAX_PRINTABLE_DICT_LEN 100000
-
-            if (dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_dict.num) 
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, false);
-            
-            if (flag.list_chroms && ctx->did_i == CHROM)
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, z_file->data_type == DT_SAM);
-            
-            if (flag.show_dict) {
-                fprintf (stderr, "%s (did_i=%u, num_snips=%u):\t", ctx->name, did_i, (uint32_t)ctx->word_list.len);
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), true, false);
-            }
-        }
-        fprintf (stderr, "\n");
-
-        if (exe_type == EXE_GENOCAT) exit_ok; // if this is genocat - we're done
-    }
-}
-
 // returns false if file should be skipped
 bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64_t *num_items_bound, char *created) // optional outs
 {
@@ -709,7 +659,7 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     // but in this case the genozip section containing the list will already be ready...
     sections_add_to_list (evb, &header.h);
     sections_list_concat (evb); // usually done in output_process_vb, but the section list will be already compressed within the genozip header...
-    
+
     bool is_encrypted = crypt_have_password();
 
     uint32_t num_sections = z_file->section_list_buf.len;

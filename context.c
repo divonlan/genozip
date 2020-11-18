@@ -46,6 +46,7 @@ unzip:
 #include "codec.h"
 #include "flags.h"
 #include "zip.h"
+#include "piz.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -718,7 +719,7 @@ done:
     return ctx;
 }
 
-// called from seg_all_data_lines (ZIP) and zfile_read_all_dictionaries (PIZ) to initialize all
+// called from seg_all_data_lines (ZIP) and ctx_read_all_dictionaries (PIZ) to initialize all
 // primary field ctx's. these are not always used (e.g. when some are not read from disk due to genocat options)
 // but we maintain their fixed positions anyway as the code relies on it
 void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */, 
@@ -747,72 +748,6 @@ void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
             dict_id_to_did_i_map[dict_id.map_key] = dst_ctx->did_i;        
         }
     }
-}
-
-// PIZ only: this is called by the I/O thread after reading a dictionary section 
-void ctx_integrate_dictionary_fragment (VBlock *vb, char *section_data)
-{    
-    START_TIMER;
-
-    // thread safety note: this function is called only from the piz dispatcher thread,
-    // so no thread safety issues with this static buffer.
-    static Buffer fragment = EMPTY_BUFFER;
-
-    // thread-safety note: while the dispatcher thread is integrating new dictionary fragments,
-    // compute threads might be using these dictionaries. This is ok, bc the dispatcher thread makes
-    // sure we integrate dictionaries from vbs by order - so that running compute threads never
-    // need to access the new parts of dictionaries. We also pre-allocate the dictionaries in
-    // txtfile_genozip_to_txt_header() so that they don't need to be realloced. dict.len may be accessed
-    // by compute threads, but its change is assumed to be atomic, so that no weird things will happen
-    SectionHeaderDictionary *header = (SectionHeaderDictionary *)section_data;
-
-    ASSERT (header->h.section_type == SEC_DICT,
-            "Error in ctx_integrate_dictionary_fragment: header->h.section_type=%s is not SEC_DICT", st_name(header->h.section_type));
-
-    uint32_t num_snips = BGEN32 (header->num_snips);
-
-    zfile_uncompress_section (vb, section_data, &fragment, "fragment", 0, SEC_DICT);
-
-    // special treatment if this is GL - de-optimize
-    //if (header->dict_id.num == dict_id_FORMAT_GL)
-    //    gl_deoptimize (fragment.data, fragment.len);
-
-    // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
-    // a non-contiguous array of contexts (some are missing if not used by this vb)
-
-    Context *zf_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, header->dict_id);
-
-    // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
-    // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
-    uint64_t dict_old_len = zf_ctx->dict.len;
-    buf_alloc (evb, &zf_ctx->dict, zf_ctx->dict.len + fragment.len, CTX_GROWTH, "z_file->contexts->dict");
-    buf_set_overlayable (&zf_ctx->dict);
-
-    memcpy (AFTERENT (char, zf_ctx->dict), fragment.data, fragment.len);
-    zf_ctx->dict.len += fragment.len;
-
-    // extend word list memory - and calculate the new words. If there is no room - old memory is abandoned 
-    // (so that VBs that are overlaying it continue to work uninterrupted) and a new memory is allocated
-    buf_alloc (evb, &zf_ctx->word_list, (zf_ctx->word_list.len + (uint64_t)num_snips) * sizeof (CtxWord), CTX_GROWTH, 
-               "z_file->contexts->word_list");
-    buf_set_overlayable (&zf_ctx->word_list);
-
-    char *start = fragment.data;
-    for (uint32_t snip_i=0; snip_i < num_snips; snip_i++) {
-
-        CtxWord *word = &NEXTENT (CtxWord, zf_ctx->word_list);
-
-        char *c=start; while (*c != SNIP_SEP) c++;
-
-        word->snip_len   = c - start;
-        word->char_index = dict_old_len + (start - fragment.data);
-
-        start = c+1; // skip over the SNIP_SEP
-    }
-
-    buf_free (&fragment);
-
-    COPY_TIMER (ctx_integrate_dictionary_fragment);
 }
 
 // PIZ only: this is called by the I/O thread after it integrated all the dictionary fragment read from disk for one VB.
@@ -1031,17 +966,20 @@ void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, fals
     ASSERTW (success, "Warning: ctx_dump_binary failed to output file %s: %s", dump_fn, strerror (errno));
 }
 
-// --------------------------------
-// Compress and output dictionaries
-// --------------------------------
+// -------------------------------------
+// ZIP: Compress and output dictionaries
+// -------------------------------------
 
 static Context *frag_ctx;
 static const CtxNode *frag_next_node;
+static Codec frag_codec = CODEC_UNKNOWN;
 
 // compress the dictionary fragment - either an entire dict, or part of it if its large
 static void ctx_prepare_for_dict_compress (VBlockP vb)
 {
-    #define FRAGMENT_SIZE (1<<20) // max fragment size 
+    // max fragment size - 1MB - a relatively small size to enable utilization of more cores, as only a handful of dictionaries
+    // are expected to be big enough to have multiple fragments
+    #define FRAGMENT_SIZE (1<<20) 
 
     while (frag_ctx < &z_file->contexts[z_file->num_contexts]) {
 
@@ -1055,6 +993,7 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
 
         vb->fragment_ctx = frag_ctx;
         vb->fragment_start = ENT (char, frag_ctx->dict, frag_next_node->char_index);
+        vb->fragment_codec = frag_codec;
 
         while (frag_next_node < AFTERENT (CtxNode, frag_ctx->nodes) && 
                vb->fragment_len + frag_next_node->snip_len < FRAGMENT_SIZE) {
@@ -1066,9 +1005,15 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
         if (frag_next_node == AFTERENT (CtxNode, frag_ctx->nodes)) {
             frag_ctx++;
             frag_next_node = NULL;
+            frag_codec = CODEC_UNKNOWN;
         }
 
         if (vb->fragment_len) {
+
+            // if its the first fragment - assign a codec
+            if (vb->fragment_codec == CODEC_UNKNOWN)
+                vb->fragment_codec = frag_codec =
+                    codec_assign_best_codec (vb, vb->fragment_ctx, NULL, SEC_DICT);
             vb->ready_to_dispatch = true;
             break;
         }
@@ -1078,14 +1023,13 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
 static void ctx_compress_one_dict_fragment (VBlockP vb)
 {
     START_TIMER;
-    Codec codec = CODEC_BSC;
 
     SectionHeaderDictionary header = (SectionHeaderDictionary){ 
         .h.magic                 = BGEN32 (GENOZIP_MAGIC),
         .h.section_type          = SEC_DICT,
         .h.data_uncompressed_len = BGEN32 (vb->fragment_len),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary)),
-        .h.codec                 = codec,
+        .h.codec                 = vb->fragment_codec,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .num_snips               = BGEN32 (vb->fragment_num_words),
         .dict_id                 = vb->fragment_ctx->dict_id
@@ -1103,7 +1047,7 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
         str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, false, vb->data_type == DT_SAM);
 
-    if (flag.show_time) codec_show_time (vb, "DICT", vb->fragment_ctx->name, codec);
+    if (flag.show_time) codec_show_time (vb, "DICT", vb->fragment_ctx->name, vb->fragment_codec);
 
     vb->z_data.name = "z_data"; // comp_compress requires that it is set in advance
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, vb->fragment_start, NULL);
@@ -1123,4 +1067,162 @@ void ctx_compress_dictionaries (void)
                              ctx_prepare_for_dict_compress, 
                              ctx_compress_one_dict_fragment, 
                              zfile_output_processed_vb);
+}
+
+// -------------------------------------
+// PIZ: Read and decompress dictionaries
+// -------------------------------------
+static const SectionListEntry *dict_sl = NULL; 
+static ReadChromeType read_chrom_policy;
+static uint32_t dict_len;
+static Context *dict_ctx;
+
+static void ctx_dict_alloc_all_dictionaries (void)
+{
+    const SectionListEntry *sl = NULL;
+    uint32_t dict_len=0;
+
+    while (sections_get_next_section_of_type (&sl, SEC_DICT, false, false)) {
+        SectionHeaderDictionary *header = zfile_read_section_header (evb, sl->offset, sl->vblock_i, SEC_DICT);
+        dict_len += BGEN32 (header->h.data_uncompressed_len);
+        buf_free (&evb->compressed); 
+
+        // if this is the last fragment of the dictionary - allocate now
+        if ((sl+1)->dict_id.num != sl->dict_id.num) { 
+            Context *zf_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, header->dict_id);
+            buf_alloc (evb, &zf_ctx->dict, dict_len, 0, "context->dict");
+            buf_set_overlayable (&zf_ctx->dict);
+            zf_ctx->dict.len = dict_len;
+            dict_len = 0;
+        }
+    }
+}
+
+static void ctx_dict_read_one_vb (VBlockP vb)
+{
+    buf_alloc (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
+
+    if (!sections_get_next_section_of_type (&dict_sl, SEC_DICT, false, false))
+        return; // we're done - no more SEC_DICT sections
+
+    // cases where we can skip reading these dictionaries because we don't be using them
+    bool is_chrom = (dict_sl->dict_id.num == dict_id_fields[CHROM]);
+    if (read_chrom_policy == DICTREAD_CHROM_ONLY  && !is_chrom) return; // we're done - since CHROM is always the first dictionary
+    if (read_chrom_policy == DICTREAD_EXCEPT_CHROM && is_chrom) goto done;
+
+    if (piz_is_skip_sectionz (SEC_DICT, dict_sl->dict_id)) goto done;
+    
+    zfile_read_section (z_file, vb, dict_sl->vblock_i, &vb->z_data, "z_data", SEC_DICT, dict_sl);    
+    SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
+    
+    // new context
+    if (!dict_ctx || header->dict_id.num != dict_ctx->dict_id.num) {
+        dict_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, header->dict_id);
+        dict_len = 0;
+    }
+
+    vb->fragment_ctx   = dict_ctx;
+    vb->fragment_start = ENT (char, dict_ctx->dict, dict_len);
+    vb->fragment_len   = BGEN32 (header->h.data_uncompressed_len);
+
+    dict_ctx->word_list.len += BGEN32 (header->num_snips);
+
+    dict_len += vb->fragment_len;
+
+done: 
+    // note: in cases we just "goto" here, no data is read, and a thread is needlessly created to decompress it
+    // this is because the vb_i of the section needs to match the vb_i of the thread
+    vb->ready_to_dispatch = true;
+}
+
+// entry point of compute thread of dictionary decompression
+static void ctx_dict_uncompress_one_vb (VBlockP vb)
+{
+    if (!vb->fragment_ctx || (flag.show_headers && exe_type == EXE_GENOCAT)) goto done; // nothing to do in this thread
+
+    SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
+
+    // a hack for uncompressing to a location withing the buffer - while multiple threads are uncompressing into 
+    // non-overlappying regions in the same buffer in parallel
+    Buffer copy = vb->fragment_ctx->dict;
+    copy.data   = vb->fragment_start;
+    zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_DICT);
+
+done:
+    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+}
+
+static void ctx_dict_build_word_lists (void)
+{    
+    START_TIMER;
+
+    for (Context *ctx=z_file->contexts; ctx < &z_file->contexts[z_file->num_contexts]; ctx++) {
+
+        if (!ctx->word_list.len || ctx->word_list.data) continue; // skip if 1. no words, or 2. already built
+
+        buf_alloc (evb, &ctx->word_list, ctx->word_list.len * sizeof (CtxWord), 0, "word_list");
+        buf_set_overlayable (&ctx->word_list);
+
+        const char *word_start = ctx->dict.data;
+        for (uint32_t snip_i=0; snip_i < ctx->word_list.len; snip_i++) {
+
+            const char *c=word_start; while (*c) c++;
+
+            *ENT (CtxWord, ctx->word_list, snip_i) = (CtxWord) {
+                .snip_len   = c - word_start,
+                .char_index = word_start - ctx->dict.data
+            };
+
+            word_start = c+1; // skip over the \0 seperator
+        }
+    }
+
+    COPY_TIMER_VB (evb, ctx_dict_build_word_lists);
+}
+
+void ctx_read_all_dictionaries (ReadChromeType read_chrom)
+{
+    START_TIMER;
+
+    ctx_initialize_primary_field_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+
+    dict_sl = NULL;
+    read_chrom_policy = read_chrom;
+    dict_ctx = NULL;
+
+    ctx_dict_alloc_all_dictionaries ();
+
+    dispatcher_fan_out_task (NULL, PROGRESS_NONE, "Reading dictionaries...", flag.test, 
+                             ctx_dict_read_one_vb, 
+                             ctx_dict_uncompress_one_vb, 
+                             NULL);
+
+    // build word lists in z_file->contexts with dictionary data 
+    if (!(flag.show_headers && exe_type == EXE_GENOCAT))
+        ctx_dict_build_word_lists();
+
+    // output the dictionaries if we're asked to
+    if (flag.show_dict || flag.dict_id_show_one_dict.num || flag.list_chroms) {
+        for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
+            Context *ctx = &z_file->contexts[did_i];
+
+#define MAX_PRINTABLE_DICT_LEN 100000
+
+            if (dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_dict.num) 
+                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, false);
+            
+            if (flag.list_chroms && ctx->did_i == CHROM)
+                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, z_file->data_type == DT_SAM);
+            
+            if (flag.show_dict) {
+                fprintf (stderr, "%s (did_i=%u, num_snips=%u):\t", ctx->name, did_i, (uint32_t)ctx->word_list.len);
+                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), true, false);
+            }
+        }
+        fprintf (stderr, "\n");
+
+        if (exe_type == EXE_GENOCAT) exit_ok; // if this is genocat - we're done
+    }
+
+    COPY_TIMER_VB (evb, ctx_read_all_dictionaries);
 }

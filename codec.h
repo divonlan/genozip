@@ -101,7 +101,7 @@ extern void codec_free_all (VBlockP vb);
 extern void codec_show_time (VBlockP vb, const char *name, const char *subname, Codec codec);
 
 #define CODEC_ASSIGN_SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
-extern Codec codec_assign_best_codec (VBlockP vb, ContextP ctx, BufferP non_ctx_data, SectionType st, uint32_t len);
+extern Codec codec_assign_best_codec (VBlockP vb, ContextP ctx, BufferP non_ctx_data, SectionType st);
 
 // ACGT stuff
 extern const uint8_t acgt_encode[256];

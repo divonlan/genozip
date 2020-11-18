@@ -292,7 +292,7 @@ void ref_contigs_generate_data_if_denovo (void)
     loaded_contigs.len = chrom_ctx->nodes.len;
     buf_alloc (evb, &loaded_contigs, loaded_contigs.len * sizeof (RefContig), 1, "loaded_contigs");
 
-    // similar logic to ctx_integrate_dictionary_fragment
+    // similar logic to ctx_dict_build_word_lists
     char *start = loaded_contig_dict.data;
     for (uint32_t snip_i=0; snip_i < loaded_contigs.len; snip_i++) {
 

@@ -230,3 +230,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - For b250 sections that have all the same entry - store the entry only once. If the entry is word_index=0, drop the section
 - genols --unbind - new flag - shows the components of bound files
 - removed support for Visual C compiler
+- Replaced --show-one-dict and --show-one-b250 with an optional parameter in --show-dict and show-b250
+  and renamed --dump-one-local and --dump-one-b250 to --dump-local --dump-b250
+- More effecient storage of dictionaries - consolidate into far less sections and multi-threaded decompression.

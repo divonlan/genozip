@@ -178,7 +178,7 @@ bool codec_domq_compress (VBlock *vb,
 
         // since codecs were already assigned to contexts before compression of all contexts begun, but
         // we just created this context now, we assign a codec manually
-        codec_assign_best_codec (vb, qdomruns_ctx, NULL, SEC_LOCAL, qdomruns_ctx->local.len);
+        codec_assign_best_codec (vb, qdomruns_ctx, NULL, SEC_LOCAL);
 
         *uncompressed_len = (uint32_t)qual_buf->len;
         return compress (vb, header, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);

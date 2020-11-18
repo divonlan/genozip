@@ -20,9 +20,6 @@ extern void zfile_compress_section_data_codec (VBlockP vb, SectionType section_t
 #define zfile_compress_section_data(vb, section_type, section_data) \
     zfile_compress_section_data_codec ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2)
 
-typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
-extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom);
-
 extern uint32_t zfile_compress_b250_data  (VBlockP vb, ContextP ctx);
 extern uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_size);
 

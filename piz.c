@@ -548,7 +548,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag.header_only) {
         
-        zfile_read_all_dictionaries (0, DICTREAD_ALL); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
+        ctx_read_all_dictionaries (DICTREAD_ALL); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
         regions_make_chregs();
@@ -567,7 +567,9 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
         random_access_load_ra_section (SEC_REF_RAND_ACC, &ref_stored_ra, "ref_stored_ra", 
                                         flag.show_ref_index && !flag.reading_reference ? "Reference random-access index contents (result of --show-index)" : NULL);
 
-        if ((flag.reference == REF_STORED || flag.reference == REF_EXTERNAL) && !flag.reading_reference)
+        if ((flag.reference == REF_STORED || flag.reference == REF_EXTERNAL) && 
+            !flag.reading_reference &&
+            !(flag.show_headers && exe_type == EXE_GENOCAT))
             ref_contigs_sort_chroms(); // create alphabetically sorted index for user file chrom word list
 
         ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
@@ -632,7 +634,7 @@ static bool piz_read_one_vb (VBlock *vb)
 
 static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
 {
-    if (md5_is_zero (original_file_digest)) return MD5HASH_NONE; // file was not compressed with --md5 or --test
+    if (md5_is_zero (original_file_digest) || flag.genocat_info_only) return MD5HASH_NONE; // file was not compressed with --md5 or --test
 
     Md5Hash decompressed_file_digest = md5_finalize (&txt_file->md5_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bound file
     char s[200]; 

@@ -282,8 +282,6 @@ void refhash_load(void)
                              refhash_read_one_vb, 
                              refhash_uncompress_one_vb, 
                              NULL);
-
-    buf_test_overflows_all_vbs ("refhash_load");
 }
 
 void refhash_load_standalone (void)
