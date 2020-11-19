@@ -529,6 +529,8 @@ static bool file_open_z (File *file)
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
         // uses the --output option, he is unrestricted in the choice of a file name
         file->type = file_get_z_ft_by_txt_in_ft (file->data_type, txt_file->type); 
+
+        mutex_initialize (file->dicts_mutex);
     }
 
     ASSERT (!file->is_remote, "Error: it is not possible to access remote genozip files; when attempting to open %s", file->name);

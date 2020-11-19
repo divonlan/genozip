@@ -179,18 +179,6 @@ void sam_seg_initialize (VBlock *vb)
 
     codec_acgt_comp_init (vb);
 
-    if (vb->vblock_i == 1) {
-    
-        // RNEXT must have the same IDs for loaded contigs as CHROM (see also bug 221)
-        if (rname_ctx->ol_nodes.len) {
-            for (uint32_t i=0; i < rname_ctx->ol_nodes.len; i++) {
-                DECLARE_SNIP;
-                ctx_get_snip_by_node_index (&rname_ctx->ol_nodes, &rname_ctx->ol_dict, i, &snip, &snip_len);
-                ctx_evaluate_snip_seg (vb, rnext_ctx, snip, snip_len, NULL);
-            }
-        }
-    }
-
     // add chrom data read from SQ records in header to RNAME dictionary
     // TO DO - we needlessly re-do this in every VB. It would be better to do this from the I/O thread
     // for any compute threads (potentially in a sam_zip_read_one_vb) similar to ctx_copy_reference_contig_to_chrom_ctx

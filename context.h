@@ -232,6 +232,7 @@ extern void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
 typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
 extern void ctx_read_all_dictionaries (ReadChromeType read_chrom);
 extern void ctx_compress_dictionaries (void);
+extern void ctx_copy_reference_contig_to_chrom_ctx (DidIType dst_did_i);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 

@@ -423,28 +423,32 @@ static void ctx_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictI
 
 static Context *ctx_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx); // forward declaration
 
-// ZIP I/O thread: when starting to zip a new file, with pre-loaded external reference, we integrate the reference FASTA CONTIG
-// dictionary as the chrom dictionary of the new file
-static void ctx_copy_reference_contig_to_chrom_ctx (void)
+// ZIP I/O thread: 
+// 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference FASTA CONTIG
+//    dictionary as the chrom dictionary of the new file
+// 2. in SAM, DENOVO: after creating loaded_contigs from SQ records, we copy them to the RNAME dictionary
+void ctx_copy_reference_contig_to_chrom_ctx (DidIType dst_did_i)
 {
     ConstBufferP ref_contigs, ref_config_dict;
     ref_contigs_get (&ref_config_dict, &ref_contigs);
 
-    ASSERT0 (buf_is_allocated (ref_contigs) && buf_is_allocated (ref_config_dict), 
-             "Error in ctx_copy_reference_contig_to_chrom_ctx: expecting ref_contigs and ref_config_dict to be allocated");
+    // note: in REF_INTERNAL it is possible that there are no contigs - unaligned SAM
+    if (flag.reference == REF_INTERNAL && !ref_contigs->len) return;
 
-    // Create chrom context, this is the first context so it will be did_i=0, hence the requirement that chrom is always the first field
-    ASSERT0 (CHROM == 0, "Error: CHROM must be 0");
+    ASSERT0 (buf_is_allocated (ref_contigs) && buf_is_allocated (ref_config_dict),
+             "Error in ctx_copy_reference_contig_to_chrom_ctx: expecting ref_contigs and ref_config_dict to be allocated");
     
-    Context copy_from_ctx = {};
-    copy_from_ctx.dict_id = (DictId)dict_id_fields[CHROM];
-    copy_from_ctx.inst    = CTX_INST_NO_STONS; // needs b250 node_index for random access;
-    strcpy ((char*)copy_from_ctx.name, DTFZ(names)[CHROM]);
-    
-    ctx_add_new_zf_ctx (evb, &copy_from_ctx);
+    Context *zf_ctx = &z_file->contexts[dst_did_i];
+
+    mutex_initialize (zf_ctx->mutex);
+
+    zf_ctx->did_i    = dst_did_i; 
+    zf_ctx->dict_id  = (DictId)dict_id_fields[dst_did_i];
+    zf_ctx->inst     = CTX_INST_NO_STONS;
+    strncpy ((char*)zf_ctx->name, DTFZ(names)[dst_did_i], DICT_ID_LEN);
+    ((char*)zf_ctx->name)[DICT_ID_LEN] = 0;
 
     // copy reference dict
-    Context *zf_ctx = &z_file->contexts[CHROM];
     ARRAY (RefContig, contigs, *ref_contigs);
 
     buf_copy (evb, &zf_ctx->dict, ref_config_dict, 0,0,0, "z_file->contexts->dict");
@@ -469,13 +473,7 @@ static void ctx_copy_reference_contig_to_chrom_ctx (void)
 
 void ctx_initialize_for_zip (void)
 {
-    if (z_file->dicts_mutex_initialized) return; // we've been here already
-
-    mutex_initialize (z_file->dicts_mutex);
     mutex_initialize (wait_for_vb_1_mutex);
-
-    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)
-        ctx_copy_reference_contig_to_chrom_ctx();
 }
 
 // find the z_file context that corresponds to dict_id. It could be possibly a different did_i

@@ -434,6 +434,14 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 
     ctx_initialize_for_zip();
 
+    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
+        
+        if (z_file->data_type == DT_SAM || z_file->data_type == DT_BAM)
+            ctx_copy_reference_contig_to_chrom_ctx (SAM_RNEXT);
+        
+        ctx_copy_reference_contig_to_chrom_ctx (CHROM); 
+    }
+
     uint32_t max_lines_per_vb=0;
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:

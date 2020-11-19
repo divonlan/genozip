@@ -402,7 +402,10 @@ PosType ref_contigs_get_genome_size (void)
     for (uint64_t i=1; i < loaded_contigs.len; i++) 
         if (rc[i].gpos > rc_with_largest_gpos->gpos) rc_with_largest_gpos = &rc[i];
 
-    ASSERT (rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS, 
+    // note: gpos can exceed MAX_GPOS if compressed with REF_INTERNAL (and will, if there are a lot of tiny contigs
+    // to which we grant 1M gpos space) - this is ok because denovo doesn't use gpos, rather the POS from the SAM alighment
+
+    ASSERT ((rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS) || (z_file->flags & GENOZIP_FL_REF_INTERNAL),
             "Error in ref_contigs_get_genome_size: gpos=%"PRId64" out of range 0-%"PRId64,
             rc_with_largest_gpos->gpos, MAX_GPOS);
 
