@@ -107,42 +107,32 @@ typedef struct {
 
 static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 {
-    // in --best - we primarily consider size, and consider time only if the size if very close
-    if (!flag.fast) {
-        // case: select for significant difference in size (more than 2%)
-        if (t1->size  < t2->size  * 0.98) return -1; // t1 has significantly better size
-        if (t2->size  < t1->size  * 0.98) return  1; // t2 has significantly better size
-
-        // case: size is similar, select for significant difference in time (more than 50%)
-        if (t1->clock < t2->clock * 0.50) return -1; // t1 has significantly better time
-        if (t2->clock < t1->clock * 0.50) return  1; // t2 has significantly better time
-
-        // case: size and time are quite similar, check 2nd level 
-
-        // case: select for smaller difference in size (more than 1%)
-        if (t1->size  < t2->size  * 0.99) return -1; // t1 has significantly better size
-        if (t2->size  < t1->size  * 0.99) return  1; // t2 has significantly better size
-
-        // case: select for smaller difference in time (more than 15%)
-        if (t1->clock < t2->clock * 0.85) return -1; // t1 has significantly better time
-        if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
-
-        // time and size are very similar (within %1 and 15% respectively) - select for smaller size
-        return t1->size - t2->size;
+    // in --fast mode - if one if significantly faster with a modest size hit, take it. Otherwise, take the best.
+    if (flag.fast) {
+        if (t1->clock < t2->clock * 0.90 && t1->size < t2->size * 1.3) return -1; // t1 has 10% or more better time with at most 30% size hit
+        if (t2->clock < t1->clock * 0.90 && t2->size < t1->size * 1.3) return  1; 
     }
 
-    // in --fast, we primarily consider time, and consider size only if time is very close
-    else {
-        if (t1->clock < t2->clock * 0.90) return -1; // t1 has significantly better time
-        if (t2->clock < t1->clock * 0.90) return  1; // t2 has significantly better time
+    // case: select for significant difference in size (more than 2%)
+    if (t1->size  < t2->size  * 0.98) return -1; // t1 has significantly better size
+    if (t2->size  < t1->size  * 0.98) return  1; // t2 has significantly better size
 
-        // case: select for significant difference in size (more than 10%)
-        if (t1->size  < t2->size  * 0.90) return -1; // t1 has significantly better size
-        if (t2->size  < t1->size  * 0.90) return  1; // t2 has significantly better size
+    // case: size is similar, select for significant difference in time (more than 50%)
+    if (t1->clock < t2->clock * 0.50) return -1; // t1 has significantly better time
+    if (t2->clock < t1->clock * 0.50) return  1; // t2 has significantly better time
 
-        // time and size are similar - select for time
-        return t1->clock - t2->clock;
-    }
+    // case: size and time are quite similar, check 2nd level 
+
+    // case: select for smaller difference in size (more than 1%)
+    if (t1->size  < t2->size  * 0.99) return -1; // t1 has significantly better size
+    if (t2->size  < t1->size  * 0.99) return  1; // t2 has significantly better size
+
+    // case: select for smaller difference in time (more than 15%)
+    if (t1->clock < t2->clock * 0.85) return -1; // t1 has significantly better time
+    if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
+
+    // time and size are very similar (within %1 and 15% respectively) - select for smaller size
+    return t1->size - t2->size;
 }
 
 // this function tests each of our generic codecs on a 100KB sample of local or b250 data, and assigns the best one based on 
