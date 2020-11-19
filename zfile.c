@@ -356,6 +356,7 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
     ASSERT (bytes == len, "Error in zfile_read_from_disk reading %s: read only %u bytes out of len=%u", st_name (st), bytes, len);
 
     buf->len += bytes;
+    file->disk_so_far += bytes;
 
     COPY_TIMER (read);
 
