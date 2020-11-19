@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   move-to-front.c
+//   context.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
@@ -12,15 +12,6 @@ zip:
     3) merge back into the main (z_file) dictionaries - we use thread synchronization to make
     sure this happens in the sequencial order of variant blocks. this merging will also
     causes update of the word and char indices in ctx->nodes
-
-    4) compress the incremental part of the dictionaries added by this VB
-
-unzip:
-    1) Dispatcher thread integrates the dictionaries fragments added by this VB
-
-    2) Create MTF array mapping word indices to char indices (one array in z-file)
-
-    3) Re-create genotype data by looking up words in the dictionaries
 */
 
 #include <errno.h>
@@ -974,12 +965,13 @@ static Context *frag_ctx;
 static const CtxNode *frag_next_node;
 static Codec frag_codec = CODEC_UNKNOWN;
 
-// compress the dictionary fragment - either an entire dict, or part of it if its large
+// compress the dictionary fragment - either an entire dict, or divide it to fragments if large to allow multi-threaded
+// compression and decompression
 static void ctx_prepare_for_dict_compress (VBlockP vb)
 {
     // max fragment size - 1MB - a relatively small size to enable utilization of more cores, as only a handful of dictionaries
     // are expected to be big enough to have multiple fragments
-    #define FRAGMENT_SIZE (1<<20) 
+    #define FRAGMENT_SIZE (1<<20)
 
     while (frag_ctx < &z_file->contexts[z_file->num_contexts]) {
 
@@ -997,6 +989,13 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
 
         while (frag_next_node < AFTERENT (CtxNode, frag_ctx->nodes) && 
                vb->fragment_len + frag_next_node->snip_len < FRAGMENT_SIZE) {
+
+            // we allow snips to be so large that it will cause the fragment to be FRAGMENT_SIZE/2 or less, which will cause
+            // mis-calculation of size_upper_bound in ctx_dict_read_one_vb (if this ever becomes a problem, we can set FRAGMENT_SIZE
+            // dynamically based on the largest snip in the dictionary)
+            ASSERT (frag_next_node->snip_len < FRAGMENT_SIZE/2,
+                    "Error: found a word in dict=%s that is larger than %u, the maximum supported by genozip", frag_ctx->name, FRAGMENT_SIZE/2);
+
             vb->fragment_len += frag_next_node->snip_len + 1;
             vb->fragment_num_words++;
             frag_next_node++;
@@ -1063,7 +1062,7 @@ void ctx_compress_dictionaries (void)
     frag_ctx = &z_file->contexts[0];
     frag_next_node = NULL;
 
-    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, 
+    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, false,
                              ctx_prepare_for_dict_compress, 
                              ctx_compress_one_dict_fragment, 
                              zfile_output_processed_vb);
@@ -1074,29 +1073,7 @@ void ctx_compress_dictionaries (void)
 // -------------------------------------
 static const SectionListEntry *dict_sl = NULL; 
 static ReadChromeType read_chrom_policy;
-static uint32_t dict_len;
 static Context *dict_ctx;
-
-static void ctx_dict_alloc_all_dictionaries (void)
-{
-    const SectionListEntry *sl = NULL;
-    uint32_t dict_len=0;
-
-    while (sections_get_next_section_of_type (&sl, SEC_DICT, false, false)) {
-        SectionHeaderDictionary *header = zfile_read_section_header (evb, sl->offset, sl->vblock_i, SEC_DICT);
-        dict_len += BGEN32 (header->h.data_uncompressed_len);
-        buf_free (&evb->compressed); 
-
-        // if this is the last fragment of the dictionary - allocate now
-        if ((sl+1)->dict_id.num != sl->dict_id.num) { 
-            Context *zf_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, header->dict_id);
-            buf_alloc (evb, &zf_ctx->dict, dict_len, 0, "context->dict");
-            buf_set_overlayable (&zf_ctx->dict);
-            zf_ctx->dict.len = dict_len;
-            dict_len = 0;
-        }
-    }
-}
 
 static void ctx_dict_read_one_vb (VBlockP vb)
 {
@@ -1114,20 +1091,37 @@ static void ctx_dict_read_one_vb (VBlockP vb)
     
     zfile_read_section (z_file, vb, dict_sl->vblock_i, &vb->z_data, "z_data", SEC_DICT, dict_sl);    
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
-    
+
+    vb->fragment_len = BGEN32 (header->h.data_uncompressed_len);
+
     // new context
     if (!dict_ctx || header->dict_id.num != dict_ctx->dict_id.num) {
         dict_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, header->dict_id);
-        dict_len = 0;
+
+        // in v9+ same-dict fragments are consecutive in the file, and all but the last are FRAGMENT_SIZE or a bit less, allowing pre-allocation
+        if (z_file->genozip_version >= 9) {
+            unsigned num_fragments=0; 
+            for (const SectionListEntry *sl=dict_sl; sl->dict_id.num == dict_ctx->dict_id.num; sl++) num_fragments++;
+
+            // get size: for multi-fragment dictionaries, first fragment will be at or slightly less than FRAGMENT_SIZE, which is a power of 2.
+            // this allows us to calculate the FRAGMENT_SIZE with which this file was compressed and hence an upper bound on the size
+            uint32_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : roundup2pow (vb->fragment_len) * num_fragments;
+            
+            buf_alloc (evb, &dict_ctx->dict, size_upper_bound, 0, "context->dict");
+            buf_set_overlayable (&dict_ctx->dict);
+        }
     }
 
-    vb->fragment_ctx   = dict_ctx;
-    vb->fragment_start = ENT (char, dict_ctx->dict, dict_len);
-    vb->fragment_len   = BGEN32 (header->h.data_uncompressed_len);
+    // when pizzing a v8 file, we run in single-thread since we need to do the following dictionary enlargement with which fragment
+    if (z_file->genozip_version == 8) {
+        buf_alloc_more (evb, &dict_ctx->dict, vb->fragment_len, 0, char, 0, "context->dict");
+        buf_set_overlayable (&dict_ctx->dict);
+    }
 
+    vb->fragment_ctx         = dict_ctx;
+    vb->fragment_start       = ENT (char, dict_ctx->dict, dict_ctx->dict.len);
     dict_ctx->word_list.len += BGEN32 (header->num_snips);
-
-    dict_len += vb->fragment_len;
+    dict_ctx->dict.len      += vb->fragment_len;
 
 done: 
     // note: in cases we just "goto" here, no data is read, and a thread is needlessly created to decompress it
@@ -1146,7 +1140,7 @@ static void ctx_dict_uncompress_one_vb (VBlockP vb)
     // non-overlappying regions in the same buffer in parallel
     Buffer copy = vb->fragment_ctx->dict;
     copy.data   = vb->fragment_start;
-    zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_DICT);
+    zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc
 
 done:
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
@@ -1190,9 +1184,9 @@ void ctx_read_all_dictionaries (ReadChromeType read_chrom)
     read_chrom_policy = read_chrom;
     dict_ctx = NULL;
 
-    ctx_dict_alloc_all_dictionaries ();
-
-    dispatcher_fan_out_task (NULL, PROGRESS_NONE, "Reading dictionaries...", flag.test, 
+    dispatcher_fan_out_task (NULL, PROGRESS_NONE, "Reading dictionaries...", 
+                             flag.test, 
+                             z_file->genozip_version == 8, // For v8 files, we read all fragments in the I/O thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
                              ctx_dict_read_one_vb, 
                              ctx_dict_uncompress_one_vb, 
                              NULL);

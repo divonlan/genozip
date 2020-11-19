@@ -128,7 +128,7 @@ void vb_destroy_vb (VBlockP *vb_p)
 
 void vb_create_pool (unsigned num_vbs)
 {
-    ASSERT (!pool || num_vbs==pool->num_vbs, 
+    ASSERT (!pool || num_vbs <= pool->num_vbs, 
             "Error: vb pool already exists, but with the wrong number of vbs - expected %u but it has %u", num_vbs, pool->num_vbs);
 
     if (!pool)  {

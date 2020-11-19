@@ -31,6 +31,6 @@ extern void dispatcher_set_input_exhausted (Dispatcher dispatcher, bool exhauste
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i);
-extern uint32_t dispatcher_fan_out_task (const char *filename, ProgressType prog, const char *prog_msg, bool test_mode, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
+extern uint32_t dispatcher_fan_out_task (const char *filename, ProgressType prog, const char *prog_msg, bool test_mode, bool force_single_thread, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
 
 #endif

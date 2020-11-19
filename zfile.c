@@ -161,8 +161,10 @@ static void zfile_dump_section (Buffer *uncompressed_data, SectionHeader *sectio
     file_put_data (filename, section_header, section_header_len);
 
     // body
-    sprintf (filename, "%s.%u.%s.body", st_name (section_header->section_type), vb_i, dict_id_print (dict_id));
-    file_put_buffer (filename, uncompressed_data, 1);
+    if (uncompressed_data->len) {
+        sprintf (filename, "%s.%u.%s.body", st_name (section_header->section_type), vb_i, dict_id_print (dict_id));
+        file_put_buffer (filename, uncompressed_data, 1);
+    }
 }
 
 // uncompressed a block and adds a \0 at its end. Returns the length of the uncompressed block, without the \0.
@@ -204,7 +206,7 @@ void zfile_uncompress_section (VBlock *vb,
 
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
-        if (uncompressed_data_buf_name) { 
+        if (uncompressed_data_buf_name) {
             buf_alloc (vb, uncompressed_data, data_uncompressed_len + sizeof (uint64_t), 1.1, uncompressed_data_buf_name); // add a 64b word for safety in case this buffer will be converted to a bitarray later
             uncompressed_data->len = data_uncompressed_len;
         }
@@ -216,8 +218,12 @@ void zfile_uncompress_section (VBlock *vb,
     if (flag.show_b250 && expected_section_type == SEC_B250) 
         zfile_show_b250_section (section_header_p, uncompressed_data);
     
-    if (flag.dump_section && !strcmp (st_name (expected_section_type), flag.dump_section))
+    if (flag.dump_section && !strcmp (st_name (expected_section_type), flag.dump_section)) {
+        uint64_t save_len = uncompressed_data->len;
+        uncompressed_data->len = data_uncompressed_len; // might be different, eg in the case of ref_hash
         zfile_dump_section (uncompressed_data, section_header, compressed_offset, dict_id);
+        uncompressed_data->len = save_len; // restore
+    }
 
     if (vb) COPY_TIMER (zfile_uncompress_section);
 }

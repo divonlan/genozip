@@ -523,7 +523,7 @@ void ref_load_stored_reference (void)
     dispatcher_fan_out_task (external ? ref_filename     : z_file->basename, 
                              external ? PROGRESS_MESSAGE : PROGRESS_NONE, 
                              external ? "Reading reference file..." : NULL, 
-                             flag.test, 
+                             flag.test, false,
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NULL);
@@ -1051,7 +1051,7 @@ void ref_compress_ref (void)
 
     // proceed to compress all ranges that have still have data in them after copying
     uint32_t num_vbs_dispatched = 
-        dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing reference...", false, 
+        dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing reference...", false, false,
                                  flag.make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
                                  zfile_output_processed_vb);
@@ -1161,7 +1161,7 @@ static void ref_reverse_compliment_genome_do (VBlock *vb)
 void ref_generate_reverse_complement_genome (void)
 {
     START_TIMER;
-    dispatcher_fan_out_task (NULL, PROGRESS_NONE, 0, false, 
+    dispatcher_fan_out_task (NULL, PROGRESS_NONE, 0, false, false,
                                 ref_reverse_compliment_genome_prepare, 
                                 ref_reverse_compliment_genome_do, 
                                 NULL);

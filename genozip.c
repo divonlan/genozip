@@ -672,6 +672,7 @@ void TEST()
     (void)!fread (data, 1, 14236798, fp); // (void)! to quieten compiler "warning: ignoring return value"
 }
 
+
 int main (int argc, char **argv)
 {
     arch_initialize();

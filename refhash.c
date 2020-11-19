@@ -211,7 +211,8 @@ void refhash_compress_refhash (void)
     next_task_layer = 0;
     next_task_start_within_layer = 0;
 
-    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing hash table (this can take several minutes)...", false, 
+    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing hash table (this can take several minutes)...", 
+                             false, false,
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
                              zfile_output_processed_vb);
@@ -278,7 +279,7 @@ void refhash_load(void)
     sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
     dispatcher_fan_out_task (ref_filename,
-                             PROGRESS_MESSAGE, "Reading reference hash table...", flag.test, 
+                             PROGRESS_MESSAGE, "Reading reference hash table...", flag.test, false,
                              refhash_read_one_vb, 
                              refhash_uncompress_one_vb, 
                              NULL);

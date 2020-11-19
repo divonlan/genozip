@@ -216,20 +216,29 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - fixed thread safety issue in bit_array.c 
 
 9.0.0
-- Framework supports binary source files, and native compression of BAM (not through samtools)
+Functionality:
+- Backwards compatible with v8 - v8-compressed files can be read by v9
+- Framework supports binary source files
+- Native compression of BAM (no longer use samtools for BAM)
 - Framework supports file translations SAM->BAM, BAM->SAM, SAM/BAM->FASTQ
-- New flags: --sam --fastq for genounzip/genocat - to allow SAM/BAM to be reconstructed as SAM, BAM or FASTQ
-- New flag: --vcf genounzip/genocat - reconstruct a 23andMe file as a VCF
-- --dump-one-local and --dump-one-b250 now output a file per VB
-- New flag: --plain in genounzip / genocat - negates implicit --bgzip
-- New flag: --bytes for genols - show sizes in bytes
-- New flag: --dump-section
-- New flag: --show-bgzf for genozip - show bgzf blocks
-- New flag: --show-containers for genounzip/genocat - show flow of container reconstruction
-- Flag --show-time can now accept an optional argument eg. --show-time=compressor
+- Native reading and writing of BGZF data
+- When decompressing a file that was originally compressed with BGZF (eg BAM, fq.gz...) - the BGZF blocks are reconstructed.
+- New / changed flags: 
+    --sam (new flag) --fastq for genounzip/genocat - to allow SAM/BAM to be reconstructed as SAM, BAM or FASTQ
+    --vcf (new flag) genounzip/genocat - reconstruct a 23andMe file as a VCF
+    --plain (new flag) in genounzip / genocat - negates implicit --bgzip
+    --dump-local and --dump-b250 (renamed from dump-one-local and dump-one-b250) now output a file per VB
+    --bytes (new flag) for genols - show sizes in bytes
+    --dump-section (new flag)
+    --show-bgzf (new flag) for genozip - show bgzf blocks
+    --show-containers (new flag) for genounzip/genocat - show flow of container reconstruction
+    --show-time can now accept an optional argument eg. --show-time=compressor
+    --unbind in genols (new flag) - shows the components of bound files
+    --show-dict and show-b250 now accept an optional paramter + removed --show-one-dict and --show-one-b250
+Compression improvements:
 - For b250 sections that have all the same entry - store the entry only once. If the entry is word_index=0, drop the section
-- genols --unbind - new flag - shows the components of bound files
+- Improvements in codec assignment algorithm, and use it for dictionary and some other section types in addition to b250 and local
+- 30% improvment in dictionary size of disk due to consolidation of fragments and codec assignment.
+- Multi-threaded decompression of dictionaries.
+Cleanup:
 - removed support for Visual C compiler
-- Replaced --show-one-dict and --show-one-b250 with an optional parameter in --show-dict and show-b250
-  and renamed --dump-one-local and --dump-one-b250 to --dump-local --dump-b250
-- More effecient storage of dictionaries - consolidate into far less sections and multi-threaded decompression.

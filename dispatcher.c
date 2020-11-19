@@ -123,7 +123,10 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
     if (filename)
         dd->filename = filename;
 
-    vb_create_pool (MAX (2,max_threads+1 /* one for evb */));
+    ASSERT (max_threads <= global_max_threads, "Error in dispatcher_init: expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
+    
+    // always create the pool based on global_max_threads, not max_threads, because it is the same pool throughout the execution
+    vb_create_pool (MAX (2,global_max_threads+1 /* one for evb */));
 
     buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf");
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
@@ -355,9 +358,10 @@ uint32_t dispatcher_fan_out_task (const char *filename,  // NULL to continue wit
                                   ProgressType prog,
                                   const char *prog_msg,  // used if prog=PROGRESS_MESSAGE 
                                   bool test_mode,
+                                  bool force_single_thread, 
                                   DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
-    Dispatcher dispatcher = dispatcher_init (global_max_threads, 0, test_mode, true, filename, prog, prog_msg);
+    Dispatcher dispatcher = dispatcher_init (force_single_thread ? 1 : global_max_threads, 0, test_mode, true, filename, prog, prog_msg);
     do {
         VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;
