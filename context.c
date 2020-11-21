@@ -408,7 +408,7 @@ void ctx_clone (VBlock *vb)
     COPY_TIMER (ctx_clone);
 }
 
-static void ctx_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictId dict_id, DidIType *dict_id_to_did_i_map)
+static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, DidIType *dict_id_to_did_i_map)
 {
     ctx->did_i    = did_i;
     ctx->st_did_i = DID_I_NONE;
@@ -436,14 +436,8 @@ void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs_buf, C
              "Error in ctx_copy_ref_contigs_to_zf: expecting contigs and contigs_dict to be allocated");
     
     Context *zf_ctx = &z_file->contexts[dst_did_i];
-
+    zf_ctx->inst = CTX_INST_NO_STONS;
     mutex_initialize (zf_ctx->mutex);
-
-    zf_ctx->did_i    = dst_did_i; 
-    zf_ctx->dict_id  = (DictId)dict_id_fields[dst_did_i];
-    zf_ctx->inst     = CTX_INST_NO_STONS;
-    strncpy ((char*)zf_ctx->name, DTFZ(names)[dst_did_i], DICT_ID_LEN);
-    ((char*)zf_ctx->name)[DICT_ID_LEN] = 0;
 
     // copy reference dict
     ARRAY (RefContig, contigs, *contigs_buf);
@@ -696,7 +690,7 @@ Context *ctx_get_ctx_if_not_found_by_inline (
     ASSERT (*num_contexts+1 < MAX_DICTS, 
             "Error: number of dictionaries is greater than MAX_DICTS=%u", MAX_DICTS);
 
-    ctx_initialize_ctx (ctx, dt, did_i, dict_id, dict_id_to_did_i_map);
+    ctx_initialize_ctx (ctx, did_i, dict_id, dict_id_to_did_i_map);
 
     // thread safety: the increment below MUST be AFTER the initialization of ctx, bc piz_get_line_subfields
     // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
@@ -729,7 +723,7 @@ void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
                     dst_ctx = ctx_get_zf_ctx (dict_id_aliases[alias_i].dst);
 
         if (!dst_ctx) // normal field, not an alias
-            ctx_initialize_ctx (&contexts[f], dt, f, dict_id, dict_id_to_did_i_map);
+            ctx_initialize_ctx (&contexts[f], f, dict_id, dict_id_to_did_i_map);
 
         else { // an alias
             contexts[f].did_i = dst_ctx->did_i;
