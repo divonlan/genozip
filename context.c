@@ -467,7 +467,7 @@ void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs_buf, C
     // allocate and populate hash from zf_ctx->nodes
     hash_alloc_global (zf_ctx, zf_ctx->nodes.len);
 
-    z_file->num_contexts = MAX (z_file->num_contexts, dst_did_i);
+    z_file->num_contexts = MAX (z_file->num_contexts, dst_did_i+1);
 }
 
 void ctx_initialize_for_zip (void)

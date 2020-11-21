@@ -15,9 +15,15 @@
 #include "mutex.h"
 #include "seg.h"
 
-// ZIP of a file with REF_EXTERNAL/REF_EXT_STORE: When a chrom in the user file matches an alternate chrom in the reference file, 
-// we create a mapping here user_chrom->alt_chrom and pass it to Piz as a SEC_REF_ALT_CHROMS section. It contains at most as many entries 
+// ZIP of a file with REF_EXTERNAL/REF_EXT_STORE: When a chrom index in the txt file matches an a different chrom index in the reference file, 
+// we create a mapping here pass it to Piz as a SEC_REF_ALT_CHROMS section. It contains at most as many entries 
 // as the number of contigs in the reference file.
+
+// this is needed in two cases:
+// 1. In a file without a header: in case the chrom_name in the txt is an alternate name to the one in the header (eg "22"->"chr22")
+// 2. In a file with a header: the reference index will be different from the txt if the header and reference chroms are not
+//    in the same order
+
 void ref_alt_chroms_compress (void)
 {
     // case: when compressing SAM or BAM with a header (including BAM header with no SQs - unaligned BAM), 
@@ -27,14 +33,14 @@ void ref_alt_chroms_compress (void)
     Context *ctx = &z_file->contexts[CHROM];
     uint32_t num_chroms = ctx->nodes.len;
     uint32_t num_contigs = ref_contigs_num_contigs();   // chroms that are in the reference file
-    uint32_t num_alt_chroms = num_chroms - num_contigs; // chroms that are only in the user file, not in the reference
+    uint32_t num_alt_chroms = num_chroms - num_contigs; // chroms that are only in the txt file, not in the reference
 
     if (!num_alt_chroms) return; // no need for an alt chroms sections as we have none
 
     buf_alloc (evb, &z_file->alt_chrom_map, sizeof (AltChrom) * num_alt_chroms, 1, "z_file->alt_chrom_map");
 
     if (flag.show_ref_alts) 
-        fprintf (stderr, "\nAlternative chroms (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
+        fprintf (stderr, "\nAlternative chrom indices (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
 
     for (uint32_t i=0; i < num_alt_chroms; i++) {
         WordIndex chrom_index = num_contigs + i;
@@ -45,8 +51,8 @@ void ref_alt_chroms_compress (void)
 
         // an alt_index might be missing for chrom snips like '=' or '*' or sequence-less chroms that don't appear in the reference
         if (alt_index != WORD_INDEX_NONE)           
-            NEXTENT (AltChrom, z_file->alt_chrom_map) = (AltChrom){ .user_file_chrom       = BGEN32 (chrom_index), 
-                                                                    .alt_chrom_in_ref_file = BGEN32 (alt_index) };
+            NEXTENT (AltChrom, z_file->alt_chrom_map) = (AltChrom){ .txt_chrom = BGEN32 (chrom_index), 
+                                                                    .ref_chrom = BGEN32 (alt_index) };
     
         if (flag.show_ref_alts) {
             const CtxNode *alt_node = ENT (CtxNode, ctx->nodes, alt_index);
@@ -75,7 +81,7 @@ void ref_alt_chroms_load (void)
     zfile_uncompress_section (evb, evb->z_data.data, &evb->compressed, "compressed", 0, SEC_REF_ALT_CHROMS);
 
     if (flag.show_ref_alts) 
-        fprintf (stderr, "\nAlternative chroms (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
+        fprintf (stderr, "\nAlternative chrom indices (output of --show-ref-alts): chroms that are in the txt file and are mapped to a different index in the reference\n");
 
     evb->compressed.len /= sizeof (AltChrom);
     Context *ctx = &z_file->contexts[CHROM];
@@ -93,18 +99,18 @@ void ref_alt_chroms_load (void)
     // the reference
     for (uint32_t i=0; i < evb->compressed.len; i++) {
         AltChrom *ent = ENT (AltChrom, evb->compressed, i);
-        WordIndex chrom_index = BGEN32 (ent->user_file_chrom);
-        WordIndex alt_index   = BGEN32 (ent->alt_chrom_in_ref_file);
+        WordIndex txt_chrom_index = BGEN32 (ent->txt_chrom);
+        WordIndex ref_chrom_index = BGEN32 (ent->ref_chrom);
 
-        ASSERT (chrom_index >= 0 && chrom_index < ctx->word_list.len, "Error in ref_alt_chroms_load: chrom_index=%d out of range [0,%d]", chrom_index, (int32_t)ctx->word_list.len);
-        ASSERT (alt_index >= 0 && alt_index < ref_contigs_num_contigs(), "Error in ref_alt_chroms_load: alt_index=%d out of range [0,%u]", alt_index, ref_contigs_num_contigs());
+        ASSERT (txt_chrom_index >= 0 && txt_chrom_index < ctx->word_list.len, "Error in ref_alt_chroms_load: txt_chrom_index=%d out of range [0,%d]", txt_chrom_index, (int32_t)ctx->word_list.len);
+        ASSERT (ref_chrom_index >= 0 && ref_chrom_index < ref_contigs_num_contigs(), "Error in ref_alt_chroms_load: ref_chrom_index=%d out of range [0,%u]", ref_chrom_index, ref_contigs_num_contigs());
 
-        map[chrom_index] = alt_index;
+        map[txt_chrom_index] = ref_chrom_index;
 
         if (flag.show_ref_alts) {
-            const char *chrom_name = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom_index, 0, 0);
-            const char *alt_name   = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, alt_index, 0, 0);
-            fprintf (stderr, "In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, chrom_index, alt_name, alt_index);
+            const char *chrom_name = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, txt_chrom_index, 0, 0);
+            const char *alt_name   = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, ref_chrom_index, 0, 0);
+            fprintf (stderr, "In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, txt_chrom_index, alt_name, ref_chrom_index);
         }
     }
 

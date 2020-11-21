@@ -262,7 +262,7 @@ typedef struct RefContig {
 } RefContig; 
 
 // the data of SEC_REF_ALT_CHROMS
-typedef struct { WordIndex user_file_chrom, alt_chrom_in_ref_file; } AltChrom;
+typedef struct { WordIndex txt_chrom, ref_chrom; } AltChrom; 
 
 #pragma pack()
 

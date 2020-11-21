@@ -226,9 +226,6 @@ static Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
     ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "Error in ref_get_range_by_chrom: chrom=%d out of range - ctx->word_list.len=%u",
             chrom, (uint32_t)ctx->word_list.len);
 
-    // if chrom is not in reference, get the reference chrom to which it is mapped (eg. 'chr22' -> '22')
-    //chrom = buf_is_allocated (&z_file->alt_chrom_map) ? *ENT (WordIndex, z_file->alt_chrom_map, chrom) : chrom; <--- need reverse lookup - file chrom by alt chrom
-
     uint32_t chrom_name_len;
     ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom, chrom_name, &chrom_name_len);
     Range *r = ENT (Range, ranges, chrom); // in PIZ, we have one range per chrom
@@ -286,8 +283,6 @@ static void ref_show_sequence (void)
 // vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET sections
 static void ref_uncompress_one_range (VBlockP vb)
 {
-//junk[my].bit_before = bit_array_get_bit (&genome.ref, (2581367290+134)*2);
-
     if (!buf_is_allocated (&vb->z_data) || !vb->z_data.len) goto finish; // we have no data in this VB because it was skipped due to --regions or genocat --show-headers
 
     SectionHeaderReference *header = (SectionHeaderReference *)vb->z_data.data;
@@ -673,11 +668,14 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
     }
 
     // test to see if this contig is in the reference
+    WordIndex ref_index;
     if (!flag.reading_reference) { // segging VCF or SAM with external reference
 
-        // case: we have a header - we just look at header contigs
+        // case: we have a header - we lookup the reference contig matching vb->chrom_node_index in header_contigs
+        // as the header chroms occupy the beginnin of context[CHROM] which might not be the same as the reference chroms
         if (has_header_contigs) {
-            if (ENT (RefContig, header_contigs, vb->chrom_node_index)->chrom_index == WORD_INDEX_NONE) 
+            ref_index = ENT (RefContig, header_contigs, vb->chrom_node_index)->chrom_index;
+            if (ref_index == WORD_INDEX_NONE) 
                 return NULL; // not in reference
         }
 
@@ -685,20 +683,25 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
         else { 
             uint32_t num_contigs = ref_contigs_num_contigs();
 
-            // chrom is not in the reference as is, test if it is in the reference using an alternative name (eg "22"->"chr22")
-            if (vb->chrom_node_index >= num_contigs) 
-                vb->chrom_node_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, vb->chrom_node_index); // change temporarily just for ref_range_id_by_word_index()
+            // case: chrom is part of the reference (same index)
+            if (vb->chrom_node_index < num_contigs) 
+                ref_index = vb->chrom_node_index; 
+            
+            // case: chrom is not in the reference as is, test if it is in the reference using an alternative name (eg "22"->"chr22")
+            else {
+                ref_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, vb->chrom_node_index); // change temporarily just for ref_range_id_by_word_index()
 
-            // case: the contig is not in the reference - we will just consider it an unaligned line 
-            // (we already gave a warning for this in ref_contigs_get_ref_chrom, so no need for another one)
-            if (vb->chrom_node_index >= num_contigs) return NULL;
+                // case: the contig is not in the reference - we will just consider it an unaligned line 
+                // (we already gave a warning for this in ref_contigs_get_ref_chrom, so no need for another one)
+                if (ref_index >= num_contigs) return NULL;
+            }
         }
     }
 
-    ASSSEG (vb->chrom_node_index < ranges.len, field, "Error in ref_seg_get_locked_range: vb->chrom_node_index=%u expected to be smaller than ranges.len=%u", 
-            vb->chrom_node_index, (uint32_t)ranges.len);
+    ASSSEG (ref_index < ranges.len, field, "Error in ref_seg_get_locked_range: ref_index=%u expected to be smaller than ranges.len=%u", 
+            ref_index, (uint32_t)ranges.len);
 
-    Range *range = ENT (Range, ranges, vb->chrom_node_index);
+    Range *range = ENT (Range, ranges, ref_index);
     PosType gpos = range->gpos + (pos - range->first_pos);
 
     *lock = ref_lock (gpos, seq_len);
@@ -722,17 +725,11 @@ Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, cons
     // sanity checks
     ASSSEG0 (vb->chrom_name, field, "Error in ref_seg_get_locked_range: vb->chrom_name=NULL");
 
-    uint32_t save_chrom_index = vb->chrom_node_index; // might temporarily change with alt chrom names
-    
-    Range *range = NULL;
     switch (ranges.param) {
-        case RT_DENOVO : range = ref_seg_get_locked_range_denovo (vb, pos, field, lock); break;
-        case RT_LOADED : range = ref_seg_get_locked_range_loaded (vb, pos, seq_len, field, lock); break;
-        default        : ABORT ("Error in ref_seg_get_locked_range: invalid ranges.param=%"PRId64, ranges.param);
+        case RT_DENOVO : return ref_seg_get_locked_range_denovo (vb, pos, field, lock);
+        case RT_LOADED : return ref_seg_get_locked_range_loaded (vb, pos, seq_len, field, lock);
+        default        : ABORT ("Error in ref_seg_get_locked_range: invalid ranges.param=%"PRId64, ranges.param); return 0;
     }
-
-    vb->chrom_node_index = save_chrom_index; // restore
-    return range; // returning locked range
 }
 
 // ----------------------------------------------

@@ -15,6 +15,7 @@
 #include "mutex.h"
 #include "seg.h"
 #include "refhash.h"
+#include "profiler.h"
 
 // contigs loaded from a reference file
 Buffer loaded_contigs                     = EMPTY_BUFFER; // array of RefContig
@@ -57,19 +58,24 @@ static void ref_contigs_show (const Buffer *contigs_buf, bool created)
     ARRAY (const RefContig, cn, *contigs_buf);
     Context *chrom_ctx = &z_file->contexts[CHROM];
 
-    fprintf (stderr, "\nContigs as they appear in the reference%s:\n", created ? " created" : "");
+    fprintf (stderr, "\nContigs as they appear in the reference%s:\n", created ? " created (note: contig names are as they appear in the txt data, not the reference)" : "");
     for (uint32_t i=0; i < contigs_buf->len; i++) {
 
         const char *chrom_name = ENT (const char, chrom_ctx->dict, cn[i].char_index);
 
-        fprintf (stderr, "i=%u %s gpos=%"PRId64" min_pos=%"PRId64" max_pos=%"PRId64" chrom_index=%d char_index=%"PRIu64" snip_len=%u\n",
-                 i, chrom_name, cn[i].gpos, cn[i].min_pos, cn[i].max_pos, cn[i].chrom_index, cn[i].char_index, cn[i].snip_len);
+        if (cn[i].snip_len)
+            fprintf (stderr, "i=%u '%s' gpos=%"PRId64" min_pos=%"PRId64" max_pos=%"PRId64" chrom_index=%d char_index=%"PRIu64" snip_len=%u\n",
+                    i, chrom_name, cn[i].gpos, cn[i].min_pos, cn[i].max_pos, cn[i].chrom_index, cn[i].char_index, cn[i].snip_len);
+        else
+            fprintf (stderr, "i=%u chrom_index=%d (unused - not present in txt data)\n", i, cn[i].chrom_index);
     }
 }
 
 // create and compress contigs - sorted by chrom_index
 void ref_contigs_compress (void)
 {
+    START_TIMER;
+
     static Buffer created_contigs = EMPTY_BUFFER;  
 
     if (!buf_is_allocated (&z_file->contexts[CHROM].nodes)) return; // no contigs
@@ -100,15 +106,33 @@ void ref_contigs_compress (void)
             if (ranges.param == RT_DENOVO)
                 r->gpos = range_i ? ROUNDUP64 ((r-1)->gpos + (r-1)->last_pos - (r-1)->first_pos + 1) : 0;
 
-            CtxNode *chrom_node = ENT (CtxNode, z_file->contexts[CHROM].nodes, r->chrom);
+            WordIndex txt_chrom = WORD_INDEX_NONE;
+
+            // case: we have header contigs. In this case, the contigs in reference (including in ranges) have a different index
+            // as their index is relative to the reference
+            if (has_header_contigs) {
+                // search for the reference chrom index r->chrom in header_contigs to find the equivalent chrom (same or alt name) in txt
+                for (uint32_t i=0; i < header_contigs.len; i++)
+                    if (ENT (RefContig, header_contigs, i)->chrom_index == r->chrom) {
+                        txt_chrom = i;
+                        break; // found
+                    }
+                // note: this is O(num_chrom^2). but tests on my PC with 3000 contigs ref x 300 contig file result in 3 millisec. we could build a sorted index and binary search, but not worth it
+            }
+            
+            // case: absent header contigs, reference chroms are copied to contexts[CHROM] and hence the indices are the same
+            else
+                txt_chrom = r->chrom;
+                
+            CtxNode *chrom_node = (txt_chrom != WORD_INDEX_NONE) ? ENT (CtxNode, z_file->contexts[CHROM].nodes, txt_chrom) : NULL;
 
             NEXTENT (RefContig, created_contigs) = (RefContig){
                 .gpos        = r->gpos - delta, 
                 .min_pos     = r->first_pos - delta,
                 .max_pos     = r->last_pos,
-                .chrom_index = r->chrom, 
-                .char_index  = chrom_node->char_index, 
-                .snip_len    = chrom_node->snip_len 
+                .chrom_index = r->chrom,  // reference index
+                .char_index  = chrom_node ? chrom_node->char_index : (CharIndex)-1, 
+                .snip_len    = chrom_node ? chrom_node->snip_len   : 0
             };
 
             last = LASTENT (RefContig, created_contigs);
@@ -127,7 +151,10 @@ void ref_contigs_compress (void)
     BGEN_ref_contigs (&created_contigs);
 
     created_contigs.len *= sizeof (RefContig);
-    zfile_compress_section_data_codec (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
+    zfile_compress_section_data_codec (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, CODEC_BSC); 
+
+    COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the disk writing here as we account for it on its own
+
     zfile_output_processed_vb (evb); 
 
     buf_free (&created_contigs);
@@ -332,13 +359,13 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsig
     // note: in case of an alt name, but in the correct index - no need to create an alt chrom entry as no index mapping is needed
     if (ref_chrom != WORD_INDEX_NONE && ref_chrom != header_chrom) {
         buf_alloc_more (evb, &z_file->alt_chrom_map, 1, 100, AltChrom, 2, "z_file->alt_chrom_map");
-        NEXTENT (AltChrom, z_file->alt_chrom_map) = (AltChrom){ .user_file_chrom       = BGEN32 (ref_chrom), 
-                                                                .alt_chrom_in_ref_file = BGEN32 (ref_chrom) };
+        NEXTENT (AltChrom, z_file->alt_chrom_map) = (AltChrom){ .txt_chrom = BGEN32 (header_chrom), 
+                                                                .ref_chrom = BGEN32 (ref_chrom) };
 
         if (flag.show_ref_alts) 
             fprintf (stderr, "In %s header: '%.*s' (index=%d) In reference: '%s' (index=%d)\n", 
                      dt_name (txt_file->data_type), chrom_name_len, chrom_name, header_chrom, 
-                    ref_contigs_get_chrom_snip (ref_chrom, 0, 0), ref_chrom);
+                     ref_contigs_get_chrom_snip (ref_chrom, 0, 0), ref_chrom);
     }
 
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
