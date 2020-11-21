@@ -477,8 +477,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
                     vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
     DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
-    flag.do_translate = trans.is_alt_toplevel;
-    
+
     // note: txt_data is fully allocated in advance and cannot be extended mid-reconstruction (container_reconstruct_do and possibly others rely on this)
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size * trans.factor + 10000, 1.1, "txt_data"); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
 

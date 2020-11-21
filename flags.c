@@ -405,4 +405,6 @@ void flags_update_piz_one_file (void)
 
     // BAM or GENOZIP_FL_BGZF imply bgzf, unless user specifically asked for plain or we're outputting to stdout
     if ((flag.out_dt == DT_BAM || (z_file->flags & GENOZIP_FL_BGZF)) && (!flag.plain && !flag.to_stdout)) flag.bgzf=true;   
+
+    flag.do_translate = dt_get_translation().is_alt_toplevel;
 }

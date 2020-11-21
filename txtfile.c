@@ -255,7 +255,7 @@ void txtfile_md5_one_vb (VBlock *vb)
 
         // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
         // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
-        if (!failed && !flag.unbind && !md5_is_zero (vb->md5_hash_so_far)) {
+        if (!failed && !flag.unbind && !flag.do_translate && !md5_is_zero (vb->md5_hash_so_far)) {
             Md5Hash piz_hash_so_far = md5_snapshot (&txt_file->md5_ctx_bound);
 
             // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
@@ -709,7 +709,7 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
         else
             txtfile_write_to_disk (&evb->txt_data);
 
-        if (!md5_is_zero (header->md5_header)) {
+        if (!md5_is_zero (header->md5_header) && !flag.do_translate) {
             Md5Hash reconstructed_header_len = md5_do (evb->txt_data.data, evb->txt_data.len);
 
             if (!md5_is_equal (reconstructed_header_len, header->md5_header)) {

@@ -300,6 +300,10 @@ void bgzf_compress_vb (VBlock *vb)
 // Called by I/O thread to complete the work Compute Thread cannot do - see 1,2,3 below
 void bgzf_write_to_disk (VBlock *vb)
 {
+    if (!txt_file->unconsumed_txt.len && !vb->compressed.len) return; // nothing to do
+
+    ASSERT (vb->bgzf_blocks.len, "Error in bgzf_write_to_disk: vb->bgzf_blocks.len=0 in vb=%u", vb->vblock_i);
+    
     // get the regions at the beginning and end of txt_data which the compute thread did NOT compress
     uint32_t uncompressed_at_vb_start = FIRSTENT (BgzfBlockPiz, vb->bgzf_blocks)->txt_index;
     BgzfBlockPiz *last_block = LASTENT (BgzfBlockPiz, vb->bgzf_blocks);
