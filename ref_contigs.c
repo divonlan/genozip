@@ -150,12 +150,10 @@ void ref_contigs_compress (void)
 
     BGEN_ref_contigs (&created_contigs);
 
+    COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
+
     created_contigs.len *= sizeof (RefContig);
     zfile_compress_section_data_codec (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, CODEC_BSC); 
-
-    COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the disk writing here as we account for it on its own
-
-    zfile_output_processed_vb (evb); 
 
     buf_free (&created_contigs);
 }

@@ -229,7 +229,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats, double txt_r
                 all_comp_ratio / txt_ratio, all_pc_of_txt, all_pc_of_z);
 
     if (txt_ratio != 1)
-        bufprintf (evb, &z_file->stats_buf_2, "\nNote: The source file was compressed was %s. txt sizes were calculated by applying the observed source file-wide compression ratio to the uncompressed txt data\n", 
+        bufprintf (evb, &z_file->stats_buf_2, "\nNote: The source file was compressed with %s. txt sizes were calculated by applying the observed source file-wide compression ratio to the uncompressed txt data\n", 
                    codec_name (txt_file->codec));
 }
 

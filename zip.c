@@ -280,7 +280,6 @@ static void zip_update_txt_counters (VBlock *vb)
     z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all bound files in this z_file
     z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
     z_file->txt_data_so_far_bind             += (int64_t)vb->vb_data_size;
-    z_file->txt_disk_so_far_bind             += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
@@ -315,16 +314,10 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
     if (store_ref) 
         random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, flag.show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
 
-    // flush to disk before stats
-    //zfile_output_processed_vb (evb);  
-
     stats_compress();
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
     zfile_compress_genozip_header (single_component_md5);    
-
-    // output to disk stats and genozip header sections to disk
-    zfile_output_processed_vb (evb);  
 }
 
 // entry point for compute thread
@@ -557,6 +550,8 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:
+    z_file->txt_disk_so_far_bind  += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
+
     if ((is_last_file || !flag.bind) && !flag.test_seg)
         zip_write_global_area (dispatcher, single_component_md5);
 

@@ -736,6 +736,7 @@ Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, cons
 // Compressing ranges into SEC_REFERENCE sections
 // ----------------------------------------------
 
+// ZIP I/O thread
 static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, SectionListEntry **sl)
 {
     // get section list entry from ref_file_section_list - which will be used by zfile_read_section to seek to the correct offset
@@ -759,15 +760,16 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
     // some minor changes to the header...
     header->h.vblock_i  = 0; // we don't belong to any VB and there is no encryption of external ref
 
+    // "manually" add the reference section to the section list - normally it is added in comp_compress()
+    sections_add_to_list (evb, &header->h);
+    sections_list_concat (evb); // must be called before disk_so_far is updated
+
     // Write header and body of the reference to z_file
     // Note on encryption: reference sections originating from an external reference are never encrypted - not
     // by us here, and not in the source reference fasta (because with disallow --make-reference in combination with --password)
     START_TIMER;
     file_write (z_file, ref_seq_section.data, ref_seq_section.len);
     COPY_TIMER_VB (evb, write);
-
-    // "manually" add the reference section to the section list - normally it is added in comp_compress()
-    sections_add_to_list (evb, &header->h);
 
     z_file->disk_so_far += ref_seq_section.len;   // length of GENOZIP data writen to disk
 

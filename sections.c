@@ -42,10 +42,10 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 // writing those sections to the disk. we use the current disk position to update the offset
 void sections_list_concat (VBlock *vb)
 {
-    buf_alloc (evb, &z_file->section_list_buf, 
-              (z_file->section_list_buf.len + vb->section_list_buf.len) * sizeof(SectionListEntry), 2, 
-              "z_file->section_list_buf");
-  
+    if (!vb->section_list_buf.len) return;
+
+    buf_alloc_more (evb, &z_file->section_list_buf, vb->section_list_buf.len, 0, SectionListEntry, 2, "z_file->section_list_buf");
+
     SectionListEntry *dst = AFTERENT (SectionListEntry, z_file->section_list_buf);
     SectionListEntry *src = FIRSTENT (SectionListEntry, vb->section_list_buf);
 
@@ -62,9 +62,9 @@ void sections_list_concat (VBlock *vb)
 
 // section iterator. returns true if a section of this type was found.
 bool sections_get_next_section_of_type2 (const SectionListEntry **sl_ent, // optional in/out. if NULL - search entire list
-                                        SectionType st1, SectionType st2, 
-                                        bool must_be_next_section,       // check only next section, not entire remaining list
-                                        bool seek)                       // if true, seek if found
+                                         SectionType st1, SectionType st2, 
+                                         bool must_be_next_section,       // check only next section, not entire remaining list
+                                         bool seek)                       // if true, seek if found
 {
     const SectionListEntry *sl = sl_ent ? *sl_ent : NULL; 
     bool found = false;
