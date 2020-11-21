@@ -292,9 +292,9 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
     ctx_compress_dictionaries();
     
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
-    if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL)
+    if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL) 
         ref_alt_chroms_compress();
-    
+
     // output reference, if needed
     bool store_ref = flag.reference == REF_INTERNAL || flag.reference == REF_EXT_STORE || flag.make_reference;
     if (store_ref) 
@@ -323,7 +323,7 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
     zfile_compress_genozip_header (single_component_md5);    
 
     // output to disk stats and genozip header sections to disk
-    //zfile_output_processed_vb (evb);  
+    zfile_output_processed_vb (evb);  
 }
 
 // entry point for compute thread
@@ -344,7 +344,7 @@ static void zip_compress_one_vb (VBlock *vb)
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
     if (flag.pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
-        ctx_clone_ctx (vb);
+        ctx_clone (vb);
 
     // split each line in this variant block to its components
     seg_all_data_lines (vb);
@@ -398,6 +398,28 @@ static void zip_compress_one_vb (VBlock *vb)
     COPY_TIMER (compute);
 }
 
+// copy contigs from reference or SAM/BAM header to CHROM (and RNEXT too, for SAM/BAM)
+void zip_prepopulate_contig_data (void)
+{
+    if (flag.reference != REF_NONE) {
+        ConstBufferP contigs=NULL, contigs_dict=NULL;    
+
+        // in BAM SQ is mandatory, in SAM it is optional - if we have SQ records, we use them for RNAME/RNEXT
+        // (even if we're also using a reference)
+        if (z_file->data_type == DT_SAM || z_file->data_type == DT_BAM)
+            sam_header_get_contigs (&contigs_dict, &contigs);
+
+        // In SQ-less SAM, and in other data types, if we're using a reference - get our CHROM data from it
+        if (!contigs && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) 
+            ref_contigs_get (&contigs_dict, &contigs);
+
+        ctx_copy_ref_contigs_to_zf (CHROM, contigs, contigs_dict); 
+
+        if (z_file->data_type == DT_SAM || z_file->data_type == DT_BAM)
+            ctx_copy_ref_contigs_to_zf (SAM_RNEXT, contigs, contigs_dict);
+    }
+}
+
 // this is the main dispatcher function. It first processes the txt header, then proceeds to read 
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
@@ -434,13 +456,8 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 
     ctx_initialize_for_zip();
 
-    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
-        
-        if (z_file->data_type == DT_SAM || z_file->data_type == DT_BAM)
-            ctx_copy_reference_contig_to_chrom_ctx (SAM_RNEXT);
-        
-        ctx_copy_reference_contig_to_chrom_ctx (CHROM); 
-    }
+    // copy contigs from reference or SAM/BAM header to CHROM (and RNEXT too, for SAM/BAM)
+    zip_prepopulate_contig_data();
 
     uint32_t max_lines_per_vb=0;
 
@@ -494,7 +511,7 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 
                 // normally we clone in the compute thread, because it might wait on mutex, but in this
                 // case we need to clone (i.e. create all contexts before we can read the pair file data)
-                ctx_clone_ctx (next_vb); 
+                ctx_clone (next_vb); 
 
                 // returns false if their is no vb with vb_i in the previous file
                 read_txt = fastq_read_pair_1_data (next_vb, prev_file_first_vb_i, prev_file_last_vb_i);

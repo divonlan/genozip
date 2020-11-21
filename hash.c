@@ -48,7 +48,7 @@ static uint32_t hash_next_size_up (uint64_t size)
 
 // this is called when allocing memory for global hash - it copies pre-exiting nodes data, for example, when copying in a
 // reference contig dictionary  
-static void hash_populate_from_mtf (Context *zf_ctx)
+static void hash_populate_from_nodes (Context *zf_ctx)
 {
     uint64_t len = zf_ctx->nodes.len;
     zf_ctx->nodes.len = 0; // hash_global_get_entry will increment it back to its original value
@@ -354,7 +354,7 @@ void hash_alloc_global (ContextP zf_ctx, uint32_t estimated_entries)
     // we set all entries to {NO_NEXT, NODE_INDEX_NONE, NODE_INDEX_NONE} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
     memset (zf_ctx->global_hash.data, 0xff, sizeof(GlobalHashEnt) * zf_ctx->global_hash.len);
 
-    hash_populate_from_mtf (zf_ctx);
+    hash_populate_from_nodes (zf_ctx);
 }
 
 // tested hash table sizes up to 5M. turns out smaller tables (up to a point) are faster, despite having longer

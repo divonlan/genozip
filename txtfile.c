@@ -605,7 +605,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
     // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
-    if (!(DT_FUNC_OPTIONAL (txt_file, zip_inspect_txt_header, true)(&evb->txt_data))) { 
+    if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(&evb->txt_data))) { 
         // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
         return false;
@@ -689,6 +689,8 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
     }
     
     if (!evb->txt_data.len) goto done; // case: this txt file has no header - we're done
+
+    DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
 
     // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
     DtTranslation trans = dt_get_translation();

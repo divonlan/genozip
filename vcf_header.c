@@ -29,6 +29,8 @@ void vcf_header_initialize (void)
 
 bool vcf_inspect_txt_header (Buffer *txt_header)
 {
+    if (command != ZIP) return true;
+    
     return vcf_header_set_globals (txt_file->name, txt_header, true);
 }
 

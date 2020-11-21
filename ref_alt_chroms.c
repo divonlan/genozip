@@ -15,13 +15,15 @@
 #include "mutex.h"
 #include "seg.h"
 
-typedef struct { WordIndex user_file_chrom, alt_chrom_in_ref_file; } AltChrom;
-
 // ZIP of a file with REF_EXTERNAL/REF_EXT_STORE: When a chrom in the user file matches an alternate chrom in the reference file, 
 // we create a mapping here user_chrom->alt_chrom and pass it to Piz as a SEC_REF_ALT_CHROMS section. It contains at most as many entries 
 // as the number of contigs in the reference file.
 void ref_alt_chroms_compress (void)
 {
+    // case: when compressing SAM or BAM with a header (including BAM header with no SQs - unaligned BAM), 
+    // alt chroms were already prepared in ref_contigs_ref_chrom_from_header_chrom
+    if (has_header_contigs) goto just_compress;
+
     Context *ctx = &z_file->contexts[CHROM];
     uint32_t num_chroms = ctx->nodes.len;
     uint32_t num_contigs = ref_contigs_num_contigs();   // chroms that are in the reference file
@@ -54,9 +56,12 @@ void ref_alt_chroms_compress (void)
         }
     }
 
-    z_file->alt_chrom_map.len *= sizeof (AltChrom);
-    zfile_compress_section_data_codec (evb, SEC_REF_ALT_CHROMS, &z_file->alt_chrom_map, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
-
+just_compress:
+    if (z_file->alt_chrom_map.len) {
+        z_file->alt_chrom_map.len *= sizeof (AltChrom);
+        zfile_compress_section_data_codec (evb, SEC_REF_ALT_CHROMS, &z_file->alt_chrom_map, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
+    }
+    
     buf_free (&z_file->alt_chrom_map);
 }
 

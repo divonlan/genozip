@@ -57,7 +57,17 @@ typedef struct Buffer {
 #define FIRSTENT(type, buf)   ((type *)( (buf).data))
 #define LASTENT(type, buf)    ((type *)(&(buf).data[((buf).len-1) * sizeof(type)]))
 #define AFTERENT(type, buf)   ((type *)(&(buf).data[((buf).len  ) * sizeof(type)]))
-#define NEXTENT(type, buf)    (*(type *)(&(buf).data[((buf).len++) * sizeof(type)]))
+
+extern const char *buf_desc (const Buffer *buf);
+
+static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *func, uint32_t code_line) 
+{ 
+    uint64_t index = (buf->len++) * size;
+    ASSERT (index + size <= buf->size, "Error in %s:%u: NEXTENT went beyond end of buffer: size=%u index=%"PRIu64": %s", 
+            func, code_line, (unsigned)size, index, buf_desc (buf));
+    return index;
+}
+#define NEXTENT(type, buf)    (*(type *)(&(buf).data[NEXTENT_get_index (&(buf), sizeof(type), __FUNCTION__, __LINE__)]))
 #define ENTNUM(buf, ent)      ((uint32_t)((((char*)(ent)) - ((buf).data)) / sizeof (*ent)))
 #define ISLASTENT(buf,ent)    (ENTNUM((buf),(ent)) == (buf).len - 1)
 
@@ -151,8 +161,6 @@ extern void *buf_low_level_realloc (void *p, size_t size, const char *func, uint
 extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t code_line);
 #define MALLOC(size) buf_low_level_malloc (size, false, __FUNCTION__, __LINE__)
 #define CALLOC(size) buf_low_level_malloc (size, true,  __FUNCTION__, __LINE__)
-
-extern const char *buf_desc (const Buffer *buf);
 
 // bitmap stuff
 extern uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits);

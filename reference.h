@@ -77,7 +77,7 @@ extern void ref_generate_reverse_complement_genome (void);
 extern void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs);
 extern uint32_t ref_num_loaded_contigs (void);
 extern PosType ref_contigs_get_contig_length (const char *chrom_name, unsigned chrom_name_len);
-extern WordIndex ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, WordIndex must_be_chrom_index);
+extern WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, WordIndex header_chrom);
 extern void ref_contigs_sort_chroms (void);
 extern void ref_contigs_load_contigs (void);
 
@@ -110,7 +110,8 @@ extern void ref_print_bases_region (FILE *file, ConstBitArrayP bitarr, ConstBitA
 extern const char *ref_filename;
 extern Md5Hash ref_md5;
 extern Buffer ref_stored_ra;
-
+extern Buffer loaded_contigs, header_contigs, header_contigs_dict;
+extern bool has_header_contigs;
 extern Range genome, genome_rev;
 extern PosType genome_size;
 

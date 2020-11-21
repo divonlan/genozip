@@ -58,7 +58,7 @@ char *buf_display (const Buffer *buf)
 const char *buf_desc (const Buffer *buf)
 {
     static char desc[300]; // use static memory instead of malloc since we could be in the midst of a memory issue when this is called
-    sprintf (desc, "%s param=%"PRId64" len=%"PRIu64" size=%"PRId64" allocated in %s:%u by vb_i=%d", 
+    sprintf (desc, "\"%s\" param=%"PRId64" len=%"PRIu64" size=%"PRId64" allocated in %s:%u by vb_i=%d", 
              buf->name ? buf->name : "(no name)", buf->param, buf->len, buf->size, buf->func, buf->code_line, 
              (buf->vb ? buf->vb->vblock_i : -999));
     return desc;

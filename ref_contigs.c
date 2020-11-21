@@ -16,9 +16,15 @@
 #include "seg.h"
 #include "refhash.h"
 
-static Buffer loaded_contigs              = EMPTY_BUFFER; // array of RefContig
-static Buffer loaded_contig_dict          = EMPTY_BUFFER;
+// contigs loaded from a reference file
+Buffer loaded_contigs                     = EMPTY_BUFFER; // array of RefContig
+static Buffer loaded_contigs_dict         = EMPTY_BUFFER;
 static Buffer loaded_contigs_sorted_index = EMPTY_BUFFER; // an array of uint32 of indexes into loaded_contigs - sorted by alphabetical order of the snip in contig_dict
+
+// contigs loaded from the header (eg SAM or BAM header)
+bool has_header_contigs    = false;
+Buffer header_contigs      = EMPTY_BUFFER; // array of RefContig
+Buffer header_contigs_dict = EMPTY_BUFFER;
 
 #ifdef __linux__ 
 extern int strncasecmp (const char *s1, const char *s2, size_t n); // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
@@ -27,7 +33,7 @@ extern int strncasecmp (const char *s1, const char *s2, size_t n); // defined in
 void ref_contigs_free (void)
 {
     buf_free (&loaded_contigs);          
-    buf_free (&loaded_contig_dict);
+    buf_free (&loaded_contigs_dict);
     buf_free (&loaded_contigs_sorted_index);
 }
 
@@ -69,7 +75,8 @@ void ref_contigs_compress (void)
     if (!buf_is_allocated (&z_file->contexts[CHROM].nodes)) return; // no contigs
 
     // the number of contigs is at most the number of chroms - but could be less if some chroms have no sequence
-    buf_alloc (evb, &created_contigs, sizeof (RefContig) * z_file->contexts[CHROM].nodes.len, 1, "created_contigs");
+    // in SAM with header and -E, we don't copy the contigs to CHROM, so we take the length from loaded_contigs.
+    buf_alloc (evb, &created_contigs, sizeof (RefContig) * MAX (z_file->contexts[CHROM].nodes.len, loaded_contigs.len), 1, "created_contigs");
 
     RefContig *last = NULL;
 
@@ -121,7 +128,8 @@ void ref_contigs_compress (void)
 
     created_contigs.len *= sizeof (RefContig);
     zfile_compress_section_data_codec (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
-    
+    zfile_output_processed_vb (evb); 
+
     buf_free (&created_contigs);
 }
 
@@ -133,8 +141,8 @@ static int ref_contigs_sort_contigs_alphabetically (const void *a, const void *b
     RefContig *contig_a = ENT (RefContig, loaded_contigs, index_a);
     RefContig *contig_b = ENT (RefContig, loaded_contigs, index_b);
     
-    return strcmp (ENT (char, loaded_contig_dict, contig_a->char_index),
-                   ENT (char, loaded_contig_dict, contig_b->char_index));
+    return strcmp (ENT (char, loaded_contigs_dict, contig_a->char_index),
+                   ENT (char, loaded_contigs_dict, contig_b->char_index));
 }
 
 static void ref_contigs_create_sorted_index (void)
@@ -193,7 +201,7 @@ void ref_contigs_load_contigs (void)
 
     ASSERT0 (z_file->contexts[CHROM].dict.len, "Error in ref_contigs_load_contigs: CHROM dictionary is empty");
 
-    buf_copy (evb, &loaded_contig_dict, &z_file->contexts[CHROM].dict, 1, 0, 0, "loaded_contig_dict");
+    buf_copy (evb, &loaded_contigs_dict, &z_file->contexts[CHROM].dict, 1, 0, 0, "loaded_contigs_dict");
 
     ref_contigs_create_sorted_index();
 
@@ -206,10 +214,10 @@ done:
     buf_free (&evb->z_data);
 }
 
-// called by ctx_copy_reference_contig_to_chrom_ctx when initializing ZIP for a new file using a pre-loaded external reference
+// called by ctx_copy_ref_contigs_to_zf when initializing ZIP for a new file using a pre-loaded external reference
 void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs)
 {
-    if (out_contig_dict) *out_contig_dict = &loaded_contig_dict;
+    if (out_contig_dict) *out_contig_dict = &loaded_contigs_dict;
     if (out_contigs) *out_contigs = &loaded_contigs;
 }
 
@@ -232,7 +240,7 @@ static WordIndex ref_contigs_get_word_index_do (const char *chrom_name, unsigned
     if (wi_type == WI_REF_CONTIG) {
         word_index = *ENT (WordIndex, loaded_contigs_sorted_index, mid_sorted_index);
         RefContig *mid_word = ENT (RefContig, loaded_contigs, word_index);
-        snip = ENT (const char, loaded_contig_dict, mid_word->char_index);
+        snip = ENT (const char, loaded_contigs_dict, mid_word->char_index);
         snip_len = mid_word->snip_len;
     }
     else {
@@ -267,7 +275,7 @@ WordIndex ref_contigs_get_word_index (const char *chrom_name, unsigned chrom_nam
 const char *ref_contigs_get_chrom_snip (WordIndex chrom_index, const char **snip, uint32_t *snip_len)
 {
     const RefContig *contig = ref_contigs_get_contig (chrom_index, false);
-    const char *my_snip = ENT (const char, loaded_contig_dict, contig->char_index);
+    const char *my_snip = ENT (const char, loaded_contigs_dict, contig->char_index);
     
     if (snip) *snip = my_snip;
     if (snip_len) *snip_len = contig->snip_len;
@@ -283,7 +291,7 @@ void ref_contigs_generate_data_if_denovo (void)
     ASSERT (flag.reference == REF_INTERNAL || (buf_is_allocated (&chrom_ctx->dict) && buf_is_allocated (&chrom_ctx->word_list)),
             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);
 
-    buf_copy (evb, &loaded_contig_dict, &chrom_ctx->dict, 1, 0, 0, "contig_dict");
+    buf_copy (evb, &loaded_contigs_dict, &chrom_ctx->dict, 1, 0, 0, "contig_dict");
     
     // we copy from the z_file context after we completed segging a file
     // note: we can't rely on chrom_ctx->nodes for the correct order as vb_i=1 resorted. rather, by mimicking the
@@ -293,14 +301,14 @@ void ref_contigs_generate_data_if_denovo (void)
     buf_alloc (evb, &loaded_contigs, loaded_contigs.len * sizeof (RefContig), 1, "loaded_contigs");
 
     // similar logic to ctx_dict_build_word_lists
-    char *start = loaded_contig_dict.data;
+    char *start = loaded_contigs_dict.data;
     for (uint32_t snip_i=0; snip_i < loaded_contigs.len; snip_i++) {
 
         RefContig *contig = ENT (RefContig, loaded_contigs, snip_i);
 
         char *c=start; while (*c != SNIP_SEP) c++;
         contig->snip_len   = c - start;
-        contig->char_index = start - loaded_contig_dict.data;
+        contig->char_index = start - loaded_contigs_dict.data;
 
         start = c+1; // skip over the SNIP_SEP
     }
@@ -309,36 +317,48 @@ void ref_contigs_generate_data_if_denovo (void)
     ref_contigs_create_sorted_index();
 }
 
-// ZIP SAM: verify that we have the specified chrom (name & last_pos) loaded from the reference. called by sam_inspect_txt_header
-// returns the chrom_index of the chrom
-WordIndex ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos,
-                                              WordIndex must_be_chrom_index) // provided if chrom must appear with this index or WORD_INDEX_NONE                                    
-{
-    WordIndex chrom_index = ref_contigs_get_word_index (chrom_name, chrom_name_len, WI_REF_CONTIG, true);
+// ZIP SAM/BAM: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 
+// called by sam_header_add_contig. returns true if contig is in reference
+WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos,
+                                                   WordIndex header_chrom)
+{               
+    WordIndex ref_chrom = ref_contigs_get_word_index (chrom_name, chrom_name_len, WI_REF_CONTIG, true);
 
-    // if not found, try common alternative names
-    if (chrom_index == WORD_INDEX_NONE)
-        chrom_index = ref_alt_chroms_zip_get_alt_index (chrom_name, chrom_name_len, WI_REF_CONTIG, WORD_INDEX_NONE);
+    // case: not found, try again, with common alternative names (eg "22"->"chr22")
+    if (ref_chrom == WORD_INDEX_NONE) 
+        ref_chrom = ref_alt_chroms_zip_get_alt_index (chrom_name, chrom_name_len, WI_REF_CONTIG, WORD_INDEX_NONE);
+        
+    // case: found (original or alternate name), but in a different index than header - create a alt_chrom entry to map indeces
+    // note: in case of an alt name, but in the correct index - no need to create an alt chrom entry as no index mapping is needed
+    if (ref_chrom != WORD_INDEX_NONE && ref_chrom != header_chrom) {
+        buf_alloc_more (evb, &z_file->alt_chrom_map, 1, 100, AltChrom, 2, "z_file->alt_chrom_map");
+        NEXTENT (AltChrom, z_file->alt_chrom_map) = (AltChrom){ .user_file_chrom       = BGEN32 (ref_chrom), 
+                                                                .alt_chrom_in_ref_file = BGEN32 (ref_chrom) };
 
-    ASSERT (chrom_index != WORD_INDEX_NONE || must_be_chrom_index == WORD_INDEX_NONE, "Error: contig %s appears in file header, but is absent from the reference file %s",
-            chrom_name, ref_filename);
-
-    ASSERT (chrom_index == must_be_chrom_index || must_be_chrom_index == WORD_INDEX_NONE, "Error: contig %s appears in the file header at index %d, but appears at index %d in the reference file %s",
-            chrom_name, must_be_chrom_index, chrom_index, ref_filename);
+        if (flag.show_ref_alts) 
+            fprintf (stderr, "In %s header: '%.*s' (index=%d) In reference: '%s' (index=%d)\n", 
+                     dt_name (txt_file->data_type), chrom_name_len, chrom_name, header_chrom, 
+                    ref_contigs_get_chrom_snip (ref_chrom, 0, 0), ref_chrom);
+    }
 
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
-    RETURNW (chrom_index != WORD_INDEX_NONE, chrom_index, "Warning: header of %s lists contig '%.*s', which is absent from %s. This might result in sub-optimal compression (but no harm otherwise).",
-             txt_file->basename, chrom_name_len, chrom_name, ref_filename);
+    if (ref_chrom == WORD_INDEX_NONE) {
+        static bool shown = false;
+        ASSERTW (command != ZIP || shown, "Warning: header of %s has contig '%.*s' (and maybe others, too), missing in %s. No harm.",
+                 txt_file->basename, chrom_name_len, chrom_name, ref_filename);
+        shown = true; // show only once 
+        return WORD_INDEX_NONE;
+    }
 
     // get info as it appears in reference
-    PosType ref_last_pos = ENT (Range, ranges, chrom_index)->last_pos;
-    RefContig *contig = ENT (RefContig, loaded_contigs, chrom_index);
-    const char *ref_chrom_name = ENT (const char, loaded_contig_dict, contig->char_index); // might be different that chrom_name if we used an alt_name
+    PosType ref_last_pos = ENT (Range, ranges, ref_chrom)->last_pos;
+    RefContig *contig = ENT (RefContig, loaded_contigs, ref_chrom);
+    const char *ref_chrom_name = ENT (const char, loaded_contigs_dict, contig->char_index); // might be different that chrom_name if we used an alt_name
 
-    ASSERT (last_pos == ref_last_pos, "Error: wrong reference file: file %s has a @SQ header field specifying contig '%.*s' with LN=%"PRId64", however in reference %s the last position of '%s' is %"PRId64,
+    ASSERT (last_pos == ref_last_pos, "Error: wrong reference file: %s has an @SQ line 'SN:%.*s LN:%"PRId64"', but in %s '%s' has LN=%"PRId64,
             txt_name, chrom_name_len, chrom_name, last_pos, ref_filename, ref_chrom_name, ref_last_pos);
 
-    return chrom_index;
+    return ref_chrom;
 }
 
 // get length of contig according to ref_contigs (loaded or stored reference) - used in piz when generating
@@ -387,7 +407,7 @@ void ref_contigs_iterate (RefContigsIteratorCallback callback, void *callback_pa
     ARRAY (RefContig, rc, loaded_contigs);
 
     for (uint64_t i=0; i < loaded_contigs.len; i++) {
-        const char *ref_chrom_name = ENT (const char, loaded_contig_dict, rc[i].char_index); 
+        const char *ref_chrom_name = ENT (const char, loaded_contigs_dict, rc[i].char_index); 
         callback (ref_chrom_name, strlen (ref_chrom_name), rc[i].max_pos, callback_param);
     }
 }
@@ -429,7 +449,7 @@ WordIndex ref_contigs_get_by_accession_number (const char *ac, unsigned ac_len)
 
     // search by numeric only - easier as we don't have to worry about case. when candidate is found, compare letters
     for (WordIndex alt_chrom=0 ; alt_chrom < loaded_contigs.len; alt_chrom++) {
-        const char *alt_chrom_name = ENT (const char, loaded_contig_dict, ENT (RefContig, loaded_contigs, alt_chrom)->char_index);
+        const char *alt_chrom_name = ENT (const char, loaded_contigs_dict, ENT (RefContig, loaded_contigs, alt_chrom)->char_index);
         const char *substr = strstr (alt_chrom_name, numeric);
         if (substr && (substr - alt_chrom_name >= letter_len) && !strncasecmp (substr-letter_len, ac, (size_t)(numeric_len + letter_len))) 
             return alt_chrom;

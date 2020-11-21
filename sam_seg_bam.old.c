@@ -20,6 +20,57 @@
 #include "flags.h"
 #include "profiler.h"
 
+// copy header ref data during reading header
+static uint32_t header_n_ref=0;
+static char **header_ref_contigs = NULL;
+static uint32_t *header_ref_contigs_len = NULL;
+
+#define MAX_POS_BAM ((PosType)0x7fffffff)
+
+// returns header length if header read is complete + sets lines.len, -1 not complete yet 
+// note: usually a BAM header fits into a single 512KB READ BUFFER, so this function is called only twice (without and then with data).
+// callback from DataTypeProperties.is_header_done
+int32_t bam_is_header_done (void)
+{
+    uint32_t next=0;
+    #define HDRLEN evb->txt_data.len
+    #define HDRSKIP(n) if (HDRLEN < next + n) return -1; next += n
+    #define HDR32 (next + 4 <= HDRLEN ? GET_UINT32 (&evb->txt_data.data[next]) : 0) ; if (HDRLEN < next + 4) return -1; next += 4;
+
+    HDRSKIP(4); // magic
+    ASSERT (!memcmp (evb->txt_data.data, BAM_MAGIC, 4), // magic
+            "Error in bam_read_txt_header: %s doesn't have a BAM magic - it doesn't seem to be a BAM file", txt_name);
+
+    // sam header text
+    uint32_t l_text = HDR32;
+    const char *text = ENT (const char, evb->txt_data, next);
+    HDRSKIP(l_text);
+
+    header_n_ref = HDR32;
+
+    if (!header_ref_contigs) {
+        header_ref_contigs     = MALLOC (header_n_ref * sizeof (char *));
+        header_ref_contigs_len = MALLOC (header_n_ref * sizeof (uint32_t));
+    }
+
+    for (uint32_t ref_i=0; ref_i < header_n_ref; ref_i++) {
+        header_ref_contigs_len[ref_i] = HDR32;
+        header_ref_contigs[ref_i] = ENT (char, evb->txt_data, next);
+
+        HDRSKIP(header_ref_contigs_len[ref_i]);
+        header_ref_contigs_len[ref_i]--;
+
+        HDRSKIP(4); // l_ref
+    }
+
+    // we have the entire header - count the text lines in the SAM header
+    evb->lines.len = 0;
+    for (unsigned i=0; i < l_text; i++)
+        if (text[i] == '\n') evb->lines.len++;
+
+    return next; // return BAM header length
+}   
+
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 // if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
 int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
@@ -75,6 +126,35 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     return -1; // we can't find any alignment - need more data (lower first_i)
 }
 
+void bam_seg_initialize (VBlock *vb)
+{
+    sam_seg_initialize (vb);
+
+    START_TIMER; // adds to sam_seg_initialize time
+
+    // copy contigs from header in vb=1 for RNAME and RNEXT dictionaries
+    if (vb->vblock_i == 1) {
+        for (unsigned i=0; i < header_n_ref; i++) {
+            ctx_evaluate_snip_seg (vb, &vb->contexts[SAM_RNAME], header_ref_contigs[i], header_ref_contigs_len[i], NULL);
+            ctx_evaluate_snip_seg (vb, &vb->contexts[SAM_RNEXT], header_ref_contigs[i], header_ref_contigs_len[i], NULL);
+        }
+
+        // keep the contigs in the order as in BAM header as word_index of these also
+        // reference to ref_id in the reference list in the BAM header
+        vb->contexts[SAM_RNAME].inst |= CTX_INST_NO_VB1_SORT; 
+        vb->contexts[SAM_RNEXT].inst |= CTX_INST_NO_VB1_SORT;
+    }
+
+    COPY_TIMER (seg_initialize);
+}
+
+void bam_zip_finalize (void)
+{
+    FREE (header_ref_contigs);
+    FREE (header_ref_contigs_len);
+    header_n_ref = 0;
+}
+
 void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t sam_flag, PosType this_pos)
 {
     bool segment_unmapped = (sam_flag & 0x4);
@@ -83,7 +163,7 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t s
     PosType last_pos = segment_unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
     uint16_t reg2bin = bam_reg2bin (this_pos-1, (last_pos+1) -1); // zero-based, half-closed half-open [start,end)
 
-    if (!is_bam || (last_pos <= MAX_POS_SAM && reg2bin == bin))
+    if (!is_bam || (last_pos <= MAX_POS_BAM && reg2bin == bin))
         seg_by_did_i (vb, ((char []){ SNIP_SPECIAL, SAM_SPECIAL_BIN }), 2, SAM_BAM_BIN, is_bam ? sizeof (uint16_t) : 0)
     
     else {
@@ -100,8 +180,8 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t s
 
 static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
-    ASSERT (ref_id >= -1 && ref_id < (int32_t)header_contigs.len, "Error in bam_seg_ref_id: vb=%u line_i=%u: encountered ref_id=%d but header has only %u contigs",
-            vb->vblock_i, vb->line_i, ref_id, (uint32_t)header_contigs.len);
+    ASSERT (ref_id >= -1 && ref_id < (int32_t)header_n_ref, "Error in bam_seg_ref_id: vb=%u line_i=%u: encountered ref_id=%d but header has only %u contigs",
+            vb->vblock_i, vb->line_i, ref_id, header_n_ref);
 
     // get snip and snip_len
     DECLARE_SNIP;
@@ -111,9 +191,8 @@ static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, i
             snip_len = 1;
         }
         else {
-            RefContig *rc = ENT (RefContig, header_contigs, ref_id);
-            snip = ENT (char, header_contigs_dict, rc->char_index);
-            snip_len = rc->snip_len;
+            snip = header_ref_contigs[ref_id];
+            snip_len = header_ref_contigs_len[ref_id];
         }
     }
     else { 
@@ -324,7 +403,6 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     // note: pos can have a value even if ref_id=-1 (RNAME="*") - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     seg_pos_field (vb_, SAM_POS, SAM_POS, false, 0, 0, this_pos, sizeof (uint32_t)); // POS
-    sam_seg_verify_pos (vb_, this_pos);
 
     seg_integer (vb, SAM_MAPQ, mapq, true); // MAPQ
 

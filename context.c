@@ -354,8 +354,8 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
     return node_index_if_new;
 }
 
-// ZIP only: overlay and/or copy the current state of the global context to the vb, ahead of compressing this vb.
-void ctx_clone_ctx (VBlock *vb)
+// ZIP only: overlay and/or copy the current state of the global contexts to the vb, ahead of segging this vb.
+void ctx_clone (VBlock *vb)
 {
     unsigned z_num_contexts = __atomic_load_n (&z_file->num_contexts, __ATOMIC_RELAXED);
 
@@ -370,13 +370,15 @@ void ctx_clone_ctx (VBlock *vb)
         Context *vb_ctx = &vb->contexts[did_i];
         Context *zf_ctx = &z_file->contexts[did_i];
 
-        ASSERT (zf_ctx->mutex_initialized, "Error: expected zf_ctx->mutex_initialized for did_i=%u", did_i);
+        // case: this context doesn't really exist (happens when incrementing num_contexts when adding RNAME and RNEXT in ctx_copy_ref_contigs_to_zf)
+        if (!zf_ctx->mutex_initialized) continue;
+
         ctx_lock (vb, &zf_ctx->mutex, "zf_ctx", did_i);
 
         if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this dict_id
 
             // overlay the global dict and nodes - these will not change by this (or any other) VB
-            //fprintf (stderr,  ("ctx_clone_ctx: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dict_id_printable (zf_ctx->dict_id).id, vb->vblock_i, did_i);
+            //fprintf (stderr,  ("ctx_clone: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dict_id_printable (zf_ctx->dict_id).id, vb->vblock_i, did_i);
             buf_overlay (vb, &vb_ctx->ol_dict, &zf_ctx->dict, "ctx->ol_dict", did_i);   
             buf_overlay (vb, &vb_ctx->ol_nodes, &zf_ctx->nodes, "ctx->ol_nodes", did_i);   
 
@@ -403,7 +405,7 @@ void ctx_clone_ctx (VBlock *vb)
 
     vb->num_contexts = z_num_contexts;
 
-    COPY_TIMER (ctx_clone_ctx);
+    COPY_TIMER (ctx_clone);
 }
 
 static void ctx_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictId dict_id, DidIType *dict_id_to_did_i_map)
@@ -421,22 +423,17 @@ static void ctx_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictI
         dict_id_to_did_i_map[dict_id.map_key] = did_i;
 }
 
-static Context *ctx_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx); // forward declaration
-
 // ZIP I/O thread: 
 // 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference FASTA CONTIG
 //    dictionary as the chrom dictionary of the new file
 // 2. in SAM, DENOVO: after creating loaded_contigs from SQ records, we copy them to the RNAME dictionary
-void ctx_copy_reference_contig_to_chrom_ctx (DidIType dst_did_i)
+void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs_buf, ConstBufferP contigs_dict_buf)
 {
-    ConstBufferP ref_contigs, ref_config_dict;
-    ref_contigs_get (&ref_config_dict, &ref_contigs);
-
     // note: in REF_INTERNAL it is possible that there are no contigs - unaligned SAM
-    if (flag.reference == REF_INTERNAL && !ref_contigs->len) return;
+    if (flag.reference == REF_INTERNAL && (!contigs_buf || !contigs_buf->len)) return;
 
-    ASSERT0 (buf_is_allocated (ref_contigs) && buf_is_allocated (ref_config_dict),
-             "Error in ctx_copy_reference_contig_to_chrom_ctx: expecting ref_contigs and ref_config_dict to be allocated");
+    ASSERT0 (buf_is_allocated (contigs_buf) && buf_is_allocated (contigs_dict_buf),
+             "Error in ctx_copy_ref_contigs_to_zf: expecting contigs and contigs_dict to be allocated");
     
     Context *zf_ctx = &z_file->contexts[dst_did_i];
 
@@ -449,15 +446,15 @@ void ctx_copy_reference_contig_to_chrom_ctx (DidIType dst_did_i)
     ((char*)zf_ctx->name)[DICT_ID_LEN] = 0;
 
     // copy reference dict
-    ARRAY (RefContig, contigs, *ref_contigs);
+    ARRAY (RefContig, contigs, *contigs_buf);
 
-    buf_copy (evb, &zf_ctx->dict, ref_config_dict, 0,0,0, "z_file->contexts->dict");
+    buf_copy (evb, &zf_ctx->dict, contigs_dict_buf, 0,0,0, "z_file->contexts->dict");
     buf_set_overlayable (&zf_ctx->dict);
 
     // build nodes from reference word_list
-    buf_alloc (evb, &zf_ctx->nodes, sizeof (CtxNode) * ref_contigs->len, 1, "z_file->contexts->nodes");
+    buf_alloc (evb, &zf_ctx->nodes, sizeof (CtxNode) * contigs_buf->len, 1, "z_file->contexts->nodes");
     buf_set_overlayable (&zf_ctx->nodes);
-    zf_ctx->nodes.len = ref_contigs->len;
+    zf_ctx->nodes.len = contigs_buf->len;
 
     for (unsigned i=0 ; i < zf_ctx->nodes.len; i++) {
         CtxNode *node = ENT (CtxNode, zf_ctx->nodes, i);
@@ -469,6 +466,8 @@ void ctx_copy_reference_contig_to_chrom_ctx (DidIType dst_did_i)
     
     // allocate and populate hash from zf_ctx->nodes
     hash_alloc_global (zf_ctx, zf_ctx->nodes.len);
+
+    z_file->num_contexts = MAX (z_file->num_contexts, dst_did_i);
 }
 
 void ctx_initialize_for_zip (void)

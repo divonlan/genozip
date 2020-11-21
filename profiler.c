@@ -40,7 +40,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(md5);
     ADD(lock_mutex_zf_ctx);
     ADD(ctx_merge_in_vb_ctx_one_dict_id);
-    ADD(ctx_clone_ctx);
+    ADD(ctx_clone);
     ADD(ctx_dict_build_word_lists);
     ADD(aligner_best_match);
     ADD(aligner_get_match_len);
@@ -117,7 +117,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (write, 1);
         PRINT (bgzf_io_thread, 1);
         fprintf (stderr, "GENOZIP compute threads %u\n", ms(p->compute));
-        PRINT (ctx_clone_ctx, 1);
+        PRINT (ctx_clone, 1);
         PRINT (seg_all_data_lines, 1);
         PRINT (aligner_best_match, 2);
         PRINT (aligner_get_match_len, 3);

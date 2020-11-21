@@ -15,10 +15,14 @@ COMPRESSOR_CALLBACK(sam_zip_u2)
 COMPRESSOR_CALLBACK(sam_zip_bd_bi)
 extern void sam_zip_initialize (void);
 extern bool sam_zip_is_unaligned_line (const char *line, int len);
-extern bool sam_inspect_txt_header (BufferP txt_header);
+
+// HEADER stuff
+extern bool sam_header_inspect (BufferP txt_header);
+extern void sam_header_get_contigs (ConstBufferP *contigs_dict, ConstBufferP *contigs);
 
 // SEG Stuff
 extern void sam_seg_initialize (VBlockP vb);
+extern void sam_header_finalize (void);
 extern void sam_seg_finalize (VBlockP vb);
 extern const char *sam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern uint32_t sam_seg_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
@@ -35,7 +39,6 @@ extern int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern void txtheader_bam2sam (BufferP txt);
 extern void bam_read_vblock (VBlockP vb);
 extern void bam_seg_initialize (VBlockP vb);
-extern void bam_zip_finalize (void);
 extern const char *bam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 
 // SAM-to-FASTQ stuff

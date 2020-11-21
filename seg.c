@@ -137,7 +137,7 @@ WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str
 
     // don't allow adding chroms if const_chroms (except "*")
     ASSSEG (!is_new || !flag.const_chroms || (chrom_str_len == 1 && chrom_str[0] == '*'), 
-            chrom_str, "Error: contig '%.*s' appears in file, but is missing in the reference file and file header", chrom_str_len, chrom_str);
+            chrom_str, "Error: contig '%.*s' appears in file, but is missing in the %s header", chrom_str_len, chrom_str, dt_name (txt_file->data_type));
             
     random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_str, chrom_str_len);
 

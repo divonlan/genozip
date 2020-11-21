@@ -45,9 +45,43 @@ static const char optional_sep_by_type[2][256] = { { // compressing from SAM
         ['B']=CI_NATIVE_NEXT                                                      // reconstruct array and then \t seperator if SAM and no seperator for BAM
 } };
 
-// ----------------------
-// Compressor callbacks
-// ----------------------
+static Buffer SQ_chroms = EMPTY_BUFFER; // names of chroms read from header
+
+// called by I/O thread (zip_initialize callback)
+void sam_zip_initialize (void)
+{
+    // if there is no external reference provided, then we create our internal one, and store it
+    // (if an external reference IS provided, the user can decide whether to store it or not, with --store-reference)
+    if (flag.reference == REF_NONE) flag.reference = REF_INTERNAL;
+
+    // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
+    if (!flag.reference || flag.reference == REF_INTERNAL) ref_initialize_ranges (RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
+
+    // if we're compressing against a reference or file contains SQ records - the file can not have RNAME chroms beyond those
+    flag.const_chroms |= flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE;
+    
+    // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
+    random_access_alloc_ra_buf (evb, 0);
+}
+
+static void sam_header_add_contig (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
+{
+    // add chrom to tp list (we will add to context in sam_seg_initialize)
+    buf_alloc_more (evb, &SQ_chroms, chrom_name_len+1, 50000, char, 2, "SQ_chroms");
+    buf_add (&SQ_chroms, chrom_name, chrom_name_len);
+    NEXTENT (char, SQ_chroms) = 0;
+
+    // if we're using a reference - verify that SQ is in the reference
+    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
+        ref_contigs_get_ref_chrom (chrom_name, chrom_name_len, last_pos, WORD_INDEX_NONE);
+}
+
+bool sam_header_inspect (BufferP txt_header)
+{    
+    *AFTERENT (char, *txt_header) = 0; // nul-terminate as required by sam_iterate_SQ_lines
+    sam_iterate_SQ_lines (txt_header->data, sam_header_add_contig, NULL);
+    return true;
+}
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
 void sam_zip_qual (VBlock *vb, uint32_t vb_line_i, char **line_qual_data, uint32_t *line_qual_len, uint32_t maximum_len) 
@@ -117,10 +151,6 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
     *line_data = FIRSTENT (char, vb->bd_bi_line);
 }   
 
-// ----------------------
-// Seg stuff
-// ----------------------
-
 void sam_seg_initialize (VBlock *vb)
 {
     START_TIMER;
@@ -148,6 +178,20 @@ void sam_seg_initialize (VBlock *vb)
     stats_set_consolidation (vb, SAM_E2_Z, 4, SAM_2NONREF, SAM_N2ONREFX, SAM_2GPOS, SAM_S2TRAND);
 
     codec_acgt_comp_init (vb);
+
+    // add chrom data read from SQ records in header to RNAME dictionary
+    // TO DO - we needlessly re-do this in every VB. It would be better to do this from the I/O thread
+    // for any compute threads (potentially in a sam_zip_read_one_vb) similar to ctx_copy_ref_contigs_to_zf
+    // the challenge is to merge these with the contigs from the reference. This is not very important
+    // as usually this takes < 1% of the time of seg_all_data_lines
+    if (SQ_chroms.len) {
+        for (char *chrom=FIRSTENT (char, SQ_chroms); chrom < AFTERENT (char, SQ_chroms); chrom += strlen (chrom) + 1) {
+            ctx_evaluate_snip_seg (vb, rname_ctx, chrom, strlen(chrom), NULL);
+            ctx_evaluate_snip_seg (vb, rnext_ctx, chrom, strlen(chrom), NULL);
+        }
+
+        flag.const_chroms = true; // the file cannot have a chrom not already in the RNAME dictionary
+    }
 
     COPY_TIMER (seg_initialize);
 }
@@ -240,16 +284,6 @@ void sam_seg_finalize (VBlockP vb)
     container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2FQ], &top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 }
 
-void sam_seg_verify_pos (VBlock *vb, PosType this_pos)
-{
-    if (flag.reference == REF_INTERNAL && !buf_is_allocated (&header_contigs)) return;
-
-    PosType max_pos = (flag.reference == REF_INTERNAL) ? ENT (RefContig, header_contigs, vb->chrom_node_index)->max_pos
-                                                       : ENT (RefContig, loaded_contigs, vb->chrom_node_index)->max_pos;
-    ASSERT (this_pos <= max_pos, "Error POS=%"PRId64" is beyond the size of '%.*s' which is %"PRId64". In vb=%u line_i=%u", 
-            this_pos, vb->chrom_name_len, vb->chrom_name, max_pos, vb->vblock_i, vb->line_i);
-}
-
 // TLEN - 3 cases: 
 // 1. if a non-zero value that is the negative of the previous line - a SNIP_DELTA & "-" (= value negation)
 // 2. else, tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as SNIP_SPECIAL & tlen-pnext_pos_delta-seq_len
@@ -327,6 +361,7 @@ static inline int sam_seg_get_next_subitem (const char *str, int str_len, char s
 void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uint32_t seq_len, PosType pos, const char *cigar, 
                         unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes)
 {
+//SQBITMAP.00001.local SQBITMAP.local differ: byte 372722, line 1    
     START_TIMER;
 
     Context *bitmap_ctx = &vb->contexts[bitmap_did];
@@ -369,9 +404,9 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     Range *range = ref_seg_get_locked_range ((VBlockP)vb, pos, vb->ref_consumed, seq, &lock);
 
     // Cases where we don't consider the refernce and just copy the seq as-is
-    if (!range || // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
+    if (!range || // 1. (denovo:) case reference range is NULL as the hash entry for this range is unfortunately already occupied by another range
                   // 2. (loaded:) case contig doesn't exist in the reference
-        (cigar[0] == '*' && cigar[1] == 0)) { // case: there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
+        (cigar[0] == '*' && cigar[1] == 0)) { // 3. in case there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
 
         buf_add (&nonref_ctx->local, seq, seq_len);
         
@@ -1147,8 +1182,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     GET_NEXT_ITEM ("POS");
     PosType this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, false, field_start, field_len, 0, field_len+1);
-    sam_seg_verify_pos (vb_, this_pos);
-    
+
     random_access_update_pos (vb_, SAM_POS);
 
     SEG_NEXT_ITEM (SAM_MAPQ);

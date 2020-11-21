@@ -459,7 +459,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     return 0;
 }
 
-// output the word_index of RNAME, which is verified in ref_contigs_verify_identical_chrom during seg
+// output the word_index of RNAME, which is verified in ref_contigs_get_ref_chrom during seg
 // to be the same as the reference id 
 TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
 {

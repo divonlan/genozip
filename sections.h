@@ -261,6 +261,9 @@ typedef struct RefContig {
     Md5Hash M5;
 } RefContig; 
 
+// the data of SEC_REF_ALT_CHROMS
+typedef struct { WordIndex user_file_chrom, alt_chrom_in_ref_file; } AltChrom;
+
 #pragma pack()
 
 // zip stuff

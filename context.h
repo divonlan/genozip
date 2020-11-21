@@ -176,7 +176,7 @@ extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vb_ctx, con
 extern WordIndex ctx_get_next_snip (VBlockP vb, Context *ctx, uint8_t ctx_flags, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
 extern const char *ctx_peek_next_snip (VBlockP vb, Context *ctx);
 extern WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
-extern void ctx_clone_ctx (VBlockP vb);
+extern void ctx_clone (VBlockP vb);
 extern CtxNode *ctx_node_vb_do (const Context *ctx, WordIndex node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern CtxNode *ctx_node_zf_do (const Context *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
@@ -232,7 +232,7 @@ extern void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
 typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
 extern void ctx_read_all_dictionaries (ReadChromeType read_chrom);
 extern void ctx_compress_dictionaries (void);
-extern void ctx_copy_reference_contig_to_chrom_ctx (DidIType dst_did_i);
+extern void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs, ConstBufferP contigs_dict);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 

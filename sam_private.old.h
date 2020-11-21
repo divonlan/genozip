@@ -52,8 +52,6 @@ typedef VBlockSAM *VBlockSAMP;
 
 #define DATA_LINE(i) ENT (ZipDataLineSAM, vb->lines, i)
 
-#define MAX_POS_SAM ((PosType)0x7fffffff)
-
 #define CIGAR_DIGIT              1
 #define CIGAR_CONSUMES_QUERY     2
 #define CIGAR_CONSUMES_REFERENCE 4
@@ -78,6 +76,5 @@ extern void sam_iterate_SQ_lines (const char *txt_header, RefContigsIteratorCall
 extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, const char **value, unsigned *value_len);
 extern uint16_t bam_reg2bin (int32_t first_pos_0, int32_t last_pos_0);
 extern void bam_seg_bin (VBlockSAM *vb, uint16_t bin, uint16_t flag, PosType this_pos);
-extern void sam_seg_verify_pos (VBlockP vb, PosType this_pos);
 
 #endif

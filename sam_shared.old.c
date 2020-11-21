@@ -118,3 +118,36 @@ uint16_t bam_reg2bin (int32_t first_pos_0, int32_t last_pos_0)
     if (first_pos_0>>26 == last_pos_0>>26) return ((1<<3 )-1)/7 + (first_pos_0>>26);
     return 0;
 }
+
+// call a callback for each SQ line (contig). Note: callback function is the same as ref_contigs_iterate
+void sam_iterate_SQ_lines (const char *txt_header, // nul-terminated string
+                           RefContigsIteratorCallback callback, void *callback_param)
+{
+    const char *line = txt_header;
+
+    while (1) {
+        line = strchr (line, '@');
+        if (!line) break;
+
+        if (line[1] == 'S' && line[2] == 'Q') { // this test will always be in the buffer - possible in the overflow area
+            char *newline = strchr (line, '\n');
+            *newline = 0;
+
+            // line looks something like: @SQ\tSN:chr10\tLN:135534747 (no strict order between SN and LN and there could be more parameters)
+            const char *chrom_name   = strstr (line, "SN:"); 
+            const char *last_pos_str = strstr (line, "LN:"); 
+
+            if (chrom_name && last_pos_str) {
+                unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
+                PosType last_pos = (PosType)strtoull (&last_pos_str[3], NULL, 10);
+                callback (&chrom_name[3], chrom_name_len, last_pos, callback_param);
+            }
+
+            line = newline+1;
+
+            *newline = '\n'; // restore
+        }
+        else 
+            line++;
+    }
+}

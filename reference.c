@@ -609,7 +609,7 @@ static inline uint32_t ref_range_id_by_hash (VBlockP vb, uint32_t range_i)
 
 static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, const char *field /* used for ASSSEG */, RefLock *lock)  
 {
-    uint32_t range_i = pos2range_i (pos); // range within chromosome 
+    uint32_t range_i = pos2range_i (pos); // range within contig 
 
     // case: we're asking for the same range as the previous one (for example, subsequent line in a sorted SAM)
     if (vb && vb->prev_range && vb->prev_range_chrom_node_index == vb->chrom_node_index && vb->prev_range_range_i == range_i) {
@@ -672,16 +672,27 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
         return vb->prev_range;
     }
 
+    // test to see if this contig is in the reference
     if (!flag.reading_reference) { // segging VCF or SAM with external reference
 
-        // if the chrom is not in the reference and it is numeric only, attempt to change it eg "22"->"chr22"
-        uint32_t num_contigs = ref_contigs_num_contigs();
-        if (vb->chrom_node_index >= num_contigs) 
-            vb->chrom_node_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, vb->chrom_node_index); // change temporarily just for ref_range_id_by_word_index()
+        // case: we have a header - we just look at header contigs
+        if (has_header_contigs) {
+            if (ENT (RefContig, header_contigs, vb->chrom_node_index)->chrom_index == WORD_INDEX_NONE) 
+                return NULL; // not in reference
+        }
 
-        // case: the contig is not in the reference - we will just consider it an unaligned line 
-        // (we already gave a warning for this in ref_contigs_verify_identical_chrom, so no need for another one)
-        if (vb->chrom_node_index >= num_contigs) return NULL;
+        // case: we don't have a header - reference contigs occupy the CHROM nodes first, and after any non-reference chroms
+        else { 
+            uint32_t num_contigs = ref_contigs_num_contigs();
+
+            // chrom is not in the reference as is, test if it is in the reference using an alternative name (eg "22"->"chr22")
+            if (vb->chrom_node_index >= num_contigs) 
+                vb->chrom_node_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, vb->chrom_node_index); // change temporarily just for ref_range_id_by_word_index()
+
+            // case: the contig is not in the reference - we will just consider it an unaligned line 
+            // (we already gave a warning for this in ref_contigs_get_ref_chrom, so no need for another one)
+            if (vb->chrom_node_index >= num_contigs) return NULL;
+        }
     }
 
     ASSSEG (vb->chrom_node_index < ranges.len, field, "Error in ref_seg_get_locked_range: vb->chrom_node_index=%u expected to be smaller than ranges.len=%u", 
@@ -1030,10 +1041,8 @@ void ref_compress_ref (void)
         buf_is_allocated (&z_file->contexts[CHROM].dict)) // did we have an aligned lines? (to do: this test is not enough)
         ref_finalize_denovo_ranges(); // assignes chroms; sorts ranges by chrom, pos; gets rid of unused ranges
 
-    if (ranges.param != RT_MAKE_REF) {
+    if (ranges.param != RT_MAKE_REF)
         ref_contigs_compress(); // also assigns gpos to de-novo ranges 
-        zfile_output_processed_vb (evb); 
-    }
 
     // copy already-compressed SEQ sections from the genozip reference file, but only such sections that are almost entirely
     // covered by ranges with is_accessed=true. we mark these ranges affected as is_accessed=false.
@@ -1075,7 +1084,6 @@ void ref_compress_ref (void)
         qsort (ranges.data, ranges.len, sizeof (Range), ref_contigs_range_sorter);
 
         ref_contigs_compress(); 
-        zfile_output_processed_vb (evb); 
     }
 }
 
