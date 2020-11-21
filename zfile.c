@@ -439,7 +439,7 @@ int32_t zfile_read_section_do (File *file,
     // check that we received the section type we expect, 
     char s[30];
     ASSERT (expected_sec_type == header->section_type || 
-            (expected_sec_type == SEC_GENOZIP_HEADER && header->flags == SEC_GENOZIP_HEADER), // in v2-5, the section_type field was located where flags is now
+            (expected_sec_type == SEC_GENOZIP_HEADER && (SectionType)header->sub_codec == SEC_GENOZIP_HEADER), // in v2-5, the section_type field was located where sub_codec is now
             "Error: Unexpected section type when reading %s: expecting %s, found %s sl(expecting)=(offset=%s, dict_id=%s)",
             z_name, st_name(expected_sec_type), st_name(header->section_type), 
             sl ? str_uint_commas (sl->offset, s) : "N/A", sl ? err_dict_id (sl->dict_id) : "N/A");
@@ -532,7 +532,7 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
     // for unsupported version<=5 files.
     uint32_t sizeof_genozip_header = MIN (sizeof (SectionHeaderGenozipHeader),
                                           (uint32_t)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));
-    
+printf ("code: %u actual:%u\n",(unsigned)sizeof (SectionHeaderGenozipHeader),(uint32_t)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));    
     zfile_read_section_do (z_file, evb, 0, &evb->z_data, "genozip_header", SEC_GENOZIP_HEADER, &dummy_sl, sizeof_genozip_header);
 
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;

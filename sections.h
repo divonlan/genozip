@@ -69,7 +69,7 @@ typedef struct SectionHeader {
     uint32_t     data_encrypted_len;   // = data_compressed_len + padding if encrypted, 0 if not
     uint32_t     data_compressed_len;
     uint32_t     data_uncompressed_len;
-    uint32_t     vblock_i;             // VB with in file starting from 1 ; 0 for Txt Header
+    uint32_t     vblock_i;             // VB with in file starting from 1 ; 0 for non-VB sections
     SectionType  section_type;         // 1 byte
     Codec        codec;                // 1 byte - primary codec in which this section is compressed
     Codec        sub_codec;            // 1 byte - sub codec, in case primary codec invokes another codec
