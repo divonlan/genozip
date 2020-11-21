@@ -252,7 +252,8 @@ typedef struct File {
     int64_t txt_data_size_single;      // txt_file: size of the txt data. ZIP: if its a plain txt file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
-    int64_t txt_data_so_far_bind;      // z_file & ZIP only: txt data represented in the GENOZIP data written so far for all VCFs
+    int64_t txt_data_so_far_bind;      // z_file & ZIP only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
+    int64_t txt_disk_so_far_bind;      // z_file & ZIP only: compressed (with txt_file.codec - eg bgzf) txt data represented in the GENOZIP data written so far for all bound files
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
                                        // txt_file: number of lines in single txt file
 

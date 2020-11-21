@@ -17,6 +17,7 @@
 #include "zfile.h"
 #include "version.h"
 #include "arch.h"
+#include "codec.h"
 
 static int *count_per_section = NULL;
 
@@ -119,6 +120,7 @@ static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
                     sbl[parent].z_size    += sbl[child].z_size;  
                     sbl[parent].pc_of_txt += sbl[child].pc_of_txt;
                     sbl[parent].pc_of_z   += sbl[child].pc_of_z;  
+
                     sbl[child] = (StatsByLine){ .my_did_i = DID_I_NONE, .st_did_i = DID_I_NONE };
                 }
             }
@@ -177,7 +179,7 @@ static void stats_consolidate_related (StatsByLine *sbl, unsigned num_stats, con
     va_end (args);
 }
 
-static void stats_output_stats (StatsByLine *s, unsigned num_stats, 
+static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_ratio,
                                 int64_t all_txt_size, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
     char s1[20], s2[20];
@@ -188,15 +190,15 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats,
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
             bufprintf (evb, &z_file->stats_buf_1, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-                       s->name, str_size (s->txt_size, s1), s->pc_of_txt, str_size (s->z_size, s2), s->pc_of_z, 
-                       (double)s->txt_size / (double)s->z_size);
+                       s->name, str_size ((double)s->txt_size / txt_ratio, s1), s->pc_of_txt, str_size (s->z_size, s2), s->pc_of_z, 
+                       ((double)s->txt_size / txt_ratio) / (double)s->z_size);
     
     bufprintf (evb, &z_file->stats_buf_1, "TOTAL           "
                 "%9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-                str_size (all_txt_size, s1), all_pc_of_txt, str_size (all_z_size, s2), all_pc_of_z, all_comp_ratio);
+                str_size ((double)all_txt_size / txt_ratio, s1), all_pc_of_txt, str_size (all_z_size, s2), all_pc_of_z, all_comp_ratio / txt_ratio);
 }
 
-static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
+static void stats_output_STATS (StatsByLine *s, unsigned num_stats, double txt_ratio,
                                 int64_t all_txt_size, int64_t all_uncomp_dict, int64_t all_comp_dict, int64_t all_comp_b250, int64_t all_comp_data, 
                                 int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
@@ -218,16 +220,20 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
                         PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
                         s->hash, s->pc_hash_occupancy, // Up to here - these don't appear in the total
                         s->uncomp_dict, s->comp_dict, s->comp_b250, s->comp_data, str_size (s->z_size, s2), 
-                        str_size (s->txt_size, s1), (double)s->txt_size / (double)s->z_size, s->pc_of_txt, s->pc_of_z);
+                        str_size ((double)s->txt_size / txt_ratio, s1), ((double)s->txt_size / txt_ratio) / (double)s->z_size, s->pc_of_txt, s->pc_of_z);
 
     bufprintf (evb, &z_file->stats_buf_2, "TOTAL                                                                               "
                 "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
                 str_size (all_uncomp_dict, s1), str_size (all_comp_dict, s2),  str_size (all_comp_b250, s3), 
-                str_size (all_comp_data, s4),   str_size (all_z_size, s5), str_size (all_txt_size, s6), 
-                all_comp_ratio, all_pc_of_txt, all_pc_of_z);
+                str_size (all_comp_data, s4),   str_size (all_z_size, s5), str_size ((double)all_txt_size / txt_ratio, s6), 
+                all_comp_ratio / txt_ratio, all_pc_of_txt, all_pc_of_z);
+
+    if (txt_ratio != 1)
+        bufprintf (evb, &z_file->stats_buf_2, "\nNote: The source file was compressed was %s. txt sizes were calculated by applying the observed source file-wide compression ratio to the uncompressed txt data\n", 
+                   codec_name (txt_file->codec));
 }
 
-// generate the stats text - all sections except genozip header and the stats section itself 
+// generate the stats text - all sections except genozip header and the two stats sections 
 void stats_compress (void)
 {
     stats_show_file_metadata(&z_file->stats_buf_1);
@@ -243,12 +249,14 @@ void stats_compress (void)
     #define SEC(i) (i<0 ? -(i)-1 : SEC_NONE) // i to section type
     #define ST_NAME(st) (&st_name(st)[4]) // cut off "SEC_" 
 
+    double txt_ratio = (double)z_file->txt_data_so_far_bind / (double)z_file->txt_disk_so_far_bind; // source compression, eg BGZF
+
     for (int i=-NUM_SEC_TYPES; i < (int)z_file->num_contexts; i++) { // sections go into -1 to -NUM_SEC_TYPES (see SEC())
+
+        Context *ctx = (i>=0) ? &z_file->contexts[i] : NULL;
 
         if (SEC(i) == SEC_DICT || SEC(i) == SEC_B250 || SEC(i) == SEC_LOCAL) continue; // these are covered by indiviual contexts
 
-        Context *ctx = (i>=0) ? &z_file->contexts[i] : NULL;
-   
         int64_t dict_compressed_size, b250_compressed_size, local_compressed_size;
         stats_get_sizes (ctx ? ctx->dict_id : DICT_ID_NONE, SEC(i), 
                          &dict_compressed_size, &b250_compressed_size, &local_compressed_size);
@@ -309,7 +317,8 @@ void stats_compress (void)
 
     // long form stats from --show-STATS    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
-    stats_output_STATS (sbl, num_stats, all_txt_size, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_data, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
+    stats_output_STATS (sbl, num_stats, txt_ratio,
+                        all_txt_size, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_data, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
     
     // consolidates stats of child contexts into the parent one
     stats_consolidate_ctxs (sbl, num_stats);
@@ -326,7 +335,7 @@ void stats_compress (void)
 
     // short form stats from --show-stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
-    stats_output_stats (sbl, num_stats, all_txt_size, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
+    stats_output_stats (sbl, num_stats, txt_ratio, all_txt_size, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
 
     stats_check_count (all_z_size);
 

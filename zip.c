@@ -280,6 +280,7 @@ static void zip_update_txt_counters (VBlock *vb)
     z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all bound files in this z_file
     z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
     z_file->txt_data_so_far_bind             += (int64_t)vb->vb_data_size;
+    z_file->txt_disk_so_far_bind             += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
@@ -413,6 +414,7 @@ void zip_prepopulate_contig_data (void)
         if (!contigs && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) 
             ref_contigs_get (&contigs_dict, &contigs);
 
+        ctx_initialize_primary_field_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
         ctx_copy_ref_contigs_to_zf (CHROM, contigs, contigs_dict); 
 
         if (z_file->data_type == DT_SAM || z_file->data_type == DT_BAM)
