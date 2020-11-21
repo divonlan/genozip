@@ -110,6 +110,10 @@ static void sam_header_add_contig (const char *chrom_name, unsigned chrom_name_l
         .chrom_index = ref_chrom
     };
 
+    if (flag.show_txt_contigs) 
+        fprintf (stderr, "index=%u \"%.*s\" LN=%"PRId64" ref_chrom_index=%u snip_len=%u\n", 
+                 (unsigned)header_contigs.len-1, chrom_name_len, chrom_name, last_pos, ref_chrom, chrom_name_len);
+
     // add to header_contigs_dict
     buf_add (&header_contigs_dict, chrom_name, chrom_name_len);
     NEXTENT (char, header_contigs_dict) = 0; // nul-termiante
@@ -153,6 +157,8 @@ bool sam_header_inspect (BufferP txt_header)
     buf_alloc (evb, &header_contigs_dict, ranges_data.dict_len, 1, "header_contigs_dict"); 
     
     (IS_BAM ? bam_iterate_SQ_lines : sam_iterate_SQ_lines) (txt_header->data, sam_header_add_contig, NULL);
+
+    if (flag.show_txt_contigs && exe_type == EXE_GENOCAT) exit_ok;
 
     // If we have a header with SQ lines in SAM, and always in BAM, all RNAME values must be defined in the header
     flag.const_chroms = (command == ZIP) && (IS_BAM || header_contigs.len); 

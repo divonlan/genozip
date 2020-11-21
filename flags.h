@@ -52,7 +52,7 @@ typedef struct {
     int show_memory, show_dict, show_b250, show_headers, show_aliases,
         show_index, show_gheader, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_ref_alts,
-        show_codec, show_containers, show_alleles, show_bgzf,
+        show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         debug_progress, show_hash, debug_memory, show_vblocks, show_threads,
         test_seg;
     char *dump_section, *show_is_set, *show_time;

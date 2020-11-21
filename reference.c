@@ -668,7 +668,7 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
     }
 
     // test to see if this contig is in the reference
-    WordIndex ref_index;
+    WordIndex ref_index=WORD_INDEX_NONE;
     if (!flag.reading_reference) { // segging VCF or SAM with external reference
 
         // case: we have a header - we lookup the reference contig matching vb->chrom_node_index in header_contigs

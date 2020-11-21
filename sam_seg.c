@@ -244,10 +244,10 @@ void sam_seg_verify_pos (VBlock *vb, PosType this_pos)
 {
     if (flag.reference == REF_INTERNAL && !buf_is_allocated (&header_contigs)) return;
 
-    PosType max_pos = (flag.reference == REF_INTERNAL) ? ENT (RefContig, header_contigs, vb->chrom_node_index)->max_pos
-                                                       : ENT (RefContig, loaded_contigs, vb->chrom_node_index)->max_pos;
-    ASSERT (this_pos <= max_pos, "Error POS=%"PRId64" is beyond the size of '%.*s' which is %"PRId64". In vb=%u line_i=%u", 
-            this_pos, vb->chrom_name_len, vb->chrom_name, max_pos, vb->vblock_i, vb->line_i);
+    PosType max_pos = (has_header_contigs) ? ENT (RefContig, header_contigs, vb->chrom_node_index)->max_pos
+                                           : ENT (RefContig, loaded_contigs, vb->chrom_node_index)->max_pos;
+    ASSERT (this_pos <= max_pos, "Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%u chrom_node_index=%d", 
+            this_pos, vb->chrom_name_len, vb->chrom_name, max_pos, vb->vblock_i, vb->line_i, vb->chrom_node_index);
 }
 
 // TLEN - 3 cases: 

@@ -182,6 +182,8 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-ref-alts   Show the details of the file contigs that are mapped to a different contig name in the reference (eg '22' -> 'chr22'). When used with genocat, only this data is shown, not the file contents",
     "",
+    "   ZUC  --show-txt-contigs (SAM, BAM) Show the details of the contigs appearing the file header (SQ lines). When used with genocat, only this data is shown, not the file contents",
+    "",
     "   ZUC  --show-gheader    Show the content of the genozip header (which also includes the list of all sections in the file). When used with genocat, only the genozip header is shown, not the file contents",
     "",
     "   ZUC  --show-vblocks    Show vblock headers as they are read / written",
