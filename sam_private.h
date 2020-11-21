@@ -76,7 +76,7 @@ extern void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *s
 extern const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
 extern void sam_iterate_SQ_lines (const char *txt_header, RefContigsIteratorCallback callback, void *callback_param);
 extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, const char **value, unsigned *value_len);
-extern uint16_t bam_reg2bin (int32_t first_pos_0, int32_t last_pos_0);
+extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void bam_seg_bin (VBlockSAM *vb, uint16_t bin, uint16_t flag, PosType this_pos);
 extern void sam_seg_verify_pos (VBlockP vb, PosType this_pos);
 

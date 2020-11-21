@@ -157,7 +157,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
             bool segment_unmapped = (flag & 0x4);
             PosType last_pos = segment_unmapped ? pos : (pos + vb_sam->ref_consumed - 1);
             
-            uint16_t bin = bam_reg2bin (pos - 1, (last_pos+1) -1); // zero-based, half-closed half-open [start,end)
+            uint16_t bin = bam_reg2bin (pos, last_pos); // zero-based, half-closed half-open [start,end)
             alignment->bin = LTEN16 (bin); // override the -1 previously set by the translator
         }
     }

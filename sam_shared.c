@@ -109,8 +109,16 @@ void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len,
 
 // calculate bin given an alignment covering [first_pos_0,last_pos_0) (0-based positions, half-closed, half-open)
 // code adapted from https://samtools.github.io/hts-specs/SAMv1.pdf section 5.3
-uint16_t bam_reg2bin (int32_t first_pos_0, int32_t last_pos_0)
+uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos)
 {
+    int32_t first_pos_0 = first_pos - 1; // -1 to make it 0-based
+    int32_t last_pos_0  = last_pos  - 1; // -1 to make it 0-based
+
+    // Note: I found actual files where the bin was calculated by "last_pos_0=last_pos-2" but other actuals files are
+    // according to the formula above (or maybe I am missing something?)
+    // THIS SHOULD NEVER BE CORRECTED - as SAM_SPECIAL_BIN snips out there in the wild rely on this formula (even if incorrect)
+    // to reconstruct (in sam_piz_special_CIGAR)
+
     if (first_pos_0>>14 == last_pos_0>>14) return ((1<<15)-1)/7 + (first_pos_0>>14);
     if (first_pos_0>>17 == last_pos_0>>17) return ((1<<12)-1)/7 + (first_pos_0>>17);
     if (first_pos_0>>20 == last_pos_0>>20) return ((1<<9 )-1)/7 + (first_pos_0>>20);

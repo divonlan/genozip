@@ -66,7 +66,8 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
             if (l_seq != seq_len_by_cigar) continue;
         }
 
-        // TODO - add aln->bin calculation to increase confidence
+        // Note: we don't use add aln->bin calculation because in some files we've seen data that doesn't
+        // agree with our formula. see comment in bam_reg2bin
 
         // all tests passed - this is indeed an alignment
         return vb->txt_data.len - (*i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
@@ -81,18 +82,20 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t s
     bool is_bam = IS_BAM;
 
     PosType last_pos = segment_unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
-    uint16_t reg2bin = bam_reg2bin (this_pos-1, (last_pos+1) -1); // zero-based, half-closed half-open [start,end)
+    uint16_t reg2bin = bam_reg2bin (this_pos, last_pos); // zero-based, half-closed half-open [start,end)
 
     if (!is_bam || (last_pos <= MAX_POS_SAM && reg2bin == bin))
         seg_by_did_i (vb, ((char []){ SNIP_SPECIAL, SAM_SPECIAL_BIN }), 2, SAM_BAM_BIN, is_bam ? sizeof (uint16_t) : 0)
     
     else {
+#ifdef DEBUG // we show this warning only in DEBUG because I found actual files that have edge cases that don't work with our formula (no harm though)
         static bool warning_shown = false;
         if (!warning_shown) { 
             WARN ("FYI: bad bin value in vb=%u vb->line_i=%u: this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
                   vb->vblock_i, vb->line_i, this_pos, vb->ref_consumed, sam_flag, last_pos, bin, reg2bin);
             warning_shown = true;
         }
+#endif
         seg_integer (vb, SAM_BAM_BIN, bin, is_bam);
         vb->contexts[SAM_BAM_BIN].flags = CTX_FL_STORE_INT;
     }
