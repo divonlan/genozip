@@ -189,7 +189,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 #define CTX_FL_STORE_FLOAT  ((SectionFlags)0x02) // after reconstruction of a snip, store it in ctx.last_value as double
 #define CTX_FL_STORE_INDEX  ((SectionFlags)0x03) // after reconstruction of a snip, the b250 word_index in ctx.last_value
 #define CTX_FL_PAIRED       ((SectionFlags)0x04) // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-//#define CTX_FL_CONTAINER    ((SectionFlags)0x08) // (canceled in 8.1 - files compressed with 8.0 will have alls containers have this flag)
+//#define CTX_FL_CONTAINER    ((SectionFlags)0x08) // (canceled in 9 - files compressed with 8.0 will have alls containers have this flag)
 #define CTX_FL_COPY_PARAM   ((SectionFlags)0x10) // copy ctx.b250/local.param from SectionHeaderCtx.param
 #define CTX_FL_ALL_THE_SAME ((SectionFlags)0x20) // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
 

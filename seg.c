@@ -472,6 +472,10 @@ void seg_compound_field (VBlock *vb,
                          unsigned nonoptimized_len, // if non-zero, we don't account for the string given, instead, only for this amount (+add_for_eol)
                          unsigned add_for_eol) // account for characters beyond the component seperators
 {
+    // we use nodes.param in D?ESC contexts to track whether all snips in in this VB are the same
+    // defaults to 0 (the same) and we set it to 1 if we encounter a different one
+    #define not_all_the_same nodes.param 
+
     const char *snip = field;
     unsigned snip_len = 0;
     unsigned num_double_sep = 0;
@@ -505,13 +509,15 @@ void seg_compound_field (VBlock *vb,
                 delta_snip[0] = SNIP_SELF_DELTA;
 
                 PosType delta = this_value - sf_ctx->last_value.i;
-                // note: if delta is 0 (inc. first line) - store just the snip, so that if the entire b250 is the same, it
-                // can be removed
-                if (delta) {
+
+                // note: if all the snips so far in this VB are the same - store just the snip, so that if the 
+                // entire b250 is the same, it can be removed
+                if (delta || sf_ctx->not_all_the_same) {
                     snip_len = 1 + str_int (delta, &delta_snip[1]);
                     snip = delta_snip;
 
                     sf_ctx->flags |= CTX_FL_STORE_INT;
+                    sf_ctx->not_all_the_same = true;
                 }
 
                 sf_ctx->last_value.i = this_value;
