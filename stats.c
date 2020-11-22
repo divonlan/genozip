@@ -113,8 +113,8 @@ static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
 
         // case: we might consolidate to this context
         if (sbl[parent].my_did_i != DID_I_NONE && sbl[parent].st_did_i == DID_I_NONE)  {
-
             for (unsigned child=0; child < num_stats; child++) {
+
                 if (sbl[parent].my_did_i  == sbl[child].st_did_i) {
                     sbl[parent].txt_size  += sbl[child].txt_size;
                     sbl[parent].z_size    += sbl[child].z_size;  
@@ -144,7 +144,7 @@ void stats_set_consolidation (VBlock *vb, DidIType parent, unsigned num_deps, ..
     va_end (args);
 }
 
-static void stats_consolidate_related (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, unsigned num_deps, ...)
+static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, unsigned num_deps, ...)
 {
     va_list args;
     va_start (args, num_deps);
@@ -323,13 +323,13 @@ void stats_compress (void)
     // consolidates stats of child contexts into the parent one
     stats_consolidate_ctxs (sbl, num_stats);
     
-    stats_consolidate_related (sbl, num_stats, "Reference", 5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
+    stats_consolidate_non_ctx (sbl, num_stats, "Reference", 5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS));
 
-    stats_consolidate_related (sbl, num_stats, "Other", 15, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
+    stats_consolidate_non_ctx (sbl, num_stats, "Other", 16, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
                                TOPLEVEL, "TOP2BAM", "TOP2FQ", "TOP2VCF", "LINEMETA", "CONTIG",
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
-                               ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER));
+                               ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
 
     // consolidate SAM arrays
 

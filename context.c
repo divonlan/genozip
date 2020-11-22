@@ -557,10 +557,13 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     zf_ctx->num_new_entries_prev_merged_vb = vb_ctx->nodes.len; // number of new words in this dict from this VB
     zf_ctx->num_singletons += vb_ctx->num_singletons; // add singletons created by seg (i.e. SNIP_LOOKUP_* in b250, and snip in local)
 
+    if (vb_ctx->st_did_i != DID_I_NONE) 
+        zf_ctx->st_did_i = vb_ctx->st_did_i; // we assign stats consolidation, but never revert back to DID_I_NONE
+
     // we assign VB a codec from zf_ctx, if not already assigned by Seg. See comment in zip_assign_best_codec
     if (!vb_ctx->lcodec) vb_ctx->lcodec = zf_ctx->lcodec;
     if (!vb_ctx->bcodec) vb_ctx->bcodec = zf_ctx->bcodec;
-
+    
     if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // nothing yet for this dict_id
  
     if (!buf_is_allocated (&zf_ctx->dict)) {
