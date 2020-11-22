@@ -160,11 +160,23 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
         }
         else {
             block_uncomp_len = (uint32_t)bgzf_read_block (txt_file, AFTERENT (uint8_t, vb->compressed), &block_comp_len, false);
+            
+            // check for corrupt data - at this point we've already confirm the file is BGZF so not expecting a different block
+            if (block_uncomp_len == BGZF_BLOCK_GZIP_NOT_BGZIP || block_uncomp_len == BGZF_BLOCK_IS_NOT_GZIP) {
+                // dump to file
+                char dump_fn[strlen(txt_name)+100];
+                sprintf (dump_fn, "%s.vb-%u.bad-bgzf.bad-offset-0x%X", txt_name, vb->vblock_i, (uint32_t)vb->compressed.len);
+                Buffer dump_buffer = vb->compressed; // a copy
+                dump_buffer.len   += block_comp_len; // compressed size
+                file_put_buffer (dump_fn, &dump_buffer, 1);
 
+                ABORT ("Error in txtfile_read_block_bgzf: Invalid BGZF block in vb=%u block_comp_len=%u. Entire BGZF data of this vblock dumped to %s, bad block stats at offset 0x%X",
+                       vb->vblock_i, block_comp_len, dump_fn, (uint32_t)vb->compressed.len)
+            }
             // case EOF - verify the BGZF end of file marker
             if (!block_uncomp_len) {
-                ASSERT (block_comp_len == BGZF_EOF_LEN && !memcmp (AFTERENT (uint8_t, vb->compressed), BGZF_EOF, BGZF_EOF_LEN),
-                        "Error: unexpected premature end of bgzf-compressed file %s", txt_name);
+                // Note: usually we expect block_comp_len == BGZF_EOF_LEN and the last BGZF_EOF_LEN bytes in vb->compressed to be
+                // BGZF_EOF, but we have observed real world files that don't have the EOF block, so we don't test for it
                 txt_file->is_eof = true;
                 break;
             }

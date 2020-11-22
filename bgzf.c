@@ -69,7 +69,7 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     BgzfHeader *h = (BgzfHeader *)block;
 
     *block_size = bgzf_fread (file, h, sizeof (struct BgzfHeader)); // read the header
-    if (! *block_size) return BGZF_BLOCK_IS_NOT_GZIP;
+    if (! *block_size) return 0; // EOF without an EOF block
 
     if (*block_size < 12) {
         ASSERT0 (soft_fail, "Error in bgzf_read_block: block_size read is < 12"); // less than the minimal gz block header size
@@ -125,8 +125,6 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 {
     if (bb->is_decompressed) return; // already decompressed - nothing to do
 
-//if (vb->vblock_i==4405) fprintf (stderr, "\nbb->txt_index=%u bb->txt_size=%u  xxx %s\n", bb->txt_index, bb->txt_size, buf_desc (&vb->compressed));
-
     BgzfHeader *h = (BgzfHeader *)ENT (char, vb->compressed, bb->compressed_index);
 
     // verify that entire block is within vb->compressed
@@ -162,9 +160,11 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 void bgzf_uncompress_vb (VBlock *vb)
 {
     START_TIMER;
-//if (vb->vblock_i==4405) fprintf (stderr, "xxx vb->bgzf_blocks.len=%u\n", (int)vb->bgzf_blocks.len);
-    for (uint32_t block_i=0; block_i < vb->bgzf_blocks.len ; block_i++) 
-        bgzf_uncompress_one_block (vb, ENT (BgzfBlockZip, vb->bgzf_blocks, block_i));
+
+    for (uint32_t block_i=0; block_i < vb->bgzf_blocks.len ; block_i++) {
+        BgzfBlockZip *bb = ENT (BgzfBlockZip, vb->bgzf_blocks, block_i);
+        bgzf_uncompress_one_block (vb, bb);
+    }
 
     buf_free (&vb->compressed); // now that we are finished decompressing we can free it
 
