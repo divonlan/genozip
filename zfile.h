@@ -14,6 +14,8 @@ extern bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size,
 
 extern void zfile_compress_genozip_header (Md5Hash single_component_md5);
 
+LocalGetLineCB *zfile_get_local_data_callback (DataType dt, ContextP ctx);
+
 extern void zfile_compress_section_data_codec (VBlockP vb, SectionType section_type, 
                                              BufferP section_data, LocalGetLineCB callback, uint32_t total_len, 
                                              Codec codec);

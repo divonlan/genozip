@@ -268,7 +268,7 @@ uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
     return comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
-static LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
+LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
 {
     static struct { DataType dt; const uint64_t *dict_id_num; LocalGetLineCB *func; } callbacks[] = LOCAL_GET_LINE_CALLBACKS;
 
@@ -532,7 +532,7 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
     // for unsupported version<=5 files.
     uint32_t sizeof_genozip_header = MIN (sizeof (SectionHeaderGenozipHeader),
                                           (uint32_t)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));
-printf ("code: %u actual:%u\n",(unsigned)sizeof (SectionHeaderGenozipHeader),(uint32_t)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));    
+
     zfile_read_section_do (z_file, evb, 0, &evb->z_data, "genozip_header", SEC_GENOZIP_HEADER, &dummy_sl, sizeof_genozip_header);
 
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
@@ -547,11 +547,11 @@ printf ("code: %u actual:%u\n",(unsigned)sizeof (SectionHeaderGenozipHeader),(ui
                 z_name, header->genozip_version, header->genozip_version);
 
     // in version 7, we canceled backward compatability with v6
-    ASSERTGOTO (header->genozip_version >= 7, "Skipping %s: it was compressed with version 6 of genozip.\nIt may be uncompressed with genozip versions 6",
+    ASSERTGOTO (header->genozip_version >= 7, "Skipping %s: it was compressed with version 6 of genozip. It may be uncompressed with genozip version 6",
                 z_name);
 
     // in version 8, we canceled backward compatability with v7
-    ASSERTGOTO (header->genozip_version >= 8, "Skipping %s: it was compressed with version 7 of genozip.\nIt may be uncompressed with genozip versions 7",
+    ASSERTGOTO (header->genozip_version >= 8, "Skipping %s: it was compressed with version 7 of genozip. It may be uncompressed with genozip version 7",
                 z_name);
 
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 

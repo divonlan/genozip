@@ -177,7 +177,7 @@ Codec codec_assign_best_codec (VBlockP vb,
         default: ASSERT0 (data, "Error in codec_assign_best_codec: no data");
     }
 
-    if (data->len < MIN_LEN_FOR_COMPRESSION || !data->data || // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
+    if (data->len < MIN_LEN_FOR_COMPRESSION ||  // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
         *selected_codec != CODEC_UNKNOWN) goto done; // if already selected - don't assign
      
     // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
@@ -204,8 +204,10 @@ Codec codec_assign_best_codec (VBlockP vb,
 
         if (*selected_codec == CODEC_NONE) tests[t].size = data->len;
         else {
+            LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
+
             uint64_t z_data_before = vb->z_data.len;
-            zfile_compress_section_data_codec (vb, SEC_NONE, data, 0, 0, *selected_codec);
+            zfile_compress_section_data_codec (vb, SEC_NONE, callback ? NULL : data, callback, data->len, *selected_codec);
             tests[t].size = vb->z_data.len - z_data_before;
         }
                                                            
