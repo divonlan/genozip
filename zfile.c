@@ -80,7 +80,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
                       SEC_TAB "created=\"%.*s\" ref=\"%.*s\"\n",
                  h->genozip_version, encryption_name (h->encryption_type), dt_name (BGEN16 (h->data_type)), 
                  BGEN64 (h->uncompressed_data_size), BGEN64 (h->num_items_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
-                 md5_display (h->md5_hash_bound), md5_display (h->ref_file_md5), FILE_METADATA_LEN, h->created, REF_FILENAME_LEN, h->ref_filename);
+                 md5_display (h->md5_hash_bound).s, md5_display (h->ref_file_md5).s, FILE_METADATA_LEN, h->created, REF_FILENAME_LEN, h->ref_filename);
         PRINT;
     }
 
@@ -89,7 +89,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         sprintf (str, SEC_TAB "txt_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u md5_single=%s md5_header=%s\n" 
                       SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) txt_filename=\"%.*s\"\n",
                  BGEN64 (h->txt_data_size), BGEN64 (h->num_lines), BGEN32 (h->max_lines_per_vb), 
-                 md5_display (h->md5_hash_single), md5_display (h->md5_header), 
+                 md5_display (h->md5_hash_single).s, md5_display (h->md5_header).s, 
                  codec_name (h->codec), h->codec_args[0], h->codec_args[1], h->codec_args[2], TXT_FILENAME_LEN, h->txt_filename);
         PRINT;
     }
@@ -98,7 +98,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
         sprintf (str, SEC_TAB "first_line=%u lines=%u longest_line=%u vb_data_size=%u z_data_bytes=%u md5_hash_so_far=%s\n",
                  BGEN32 (h->first_line), BGEN32 (h->num_lines), BGEN32 (h->longest_line_len), BGEN32 (h->vb_data_size), 
-                 BGEN32 (h->z_data_bytes), md5_display (h->md5_hash_so_far));
+                 BGEN32 (h->z_data_bytes), md5_display (h->md5_hash_so_far).s);
         PRINT;
     }
 
@@ -621,7 +621,7 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
 
         if (flag.show_reference && !md5_is_zero (header->ref_file_md5)) {
             fprintf (stderr, "%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
-                     z_name, header->ref_filename, md5_display (header->ref_file_md5));
+                     z_name, header->ref_filename, md5_display (header->ref_file_md5).s);
             if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
         }
 
@@ -634,8 +634,8 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
                     "THE UNCOMPRESSED FILE WILL BE DIFFERENT THAN ORIGINAL FILE\n"
                     "Reference you are using now: %s MD5=%s\n"
                     "Reference used to compress the file: %s MD5=%s\n", 
-                    z_name, ref_filename, md5_display (ref_md5), 
-                    header->ref_filename, md5_display (header->ref_file_md5));
+                    z_name, ref_filename, md5_display (ref_md5).s, 
+                    header->ref_filename, md5_display (header->ref_file_md5).s);
         }
 
         // case: this file requires an external reference, but command line doesn't include --reference - attempt to use the

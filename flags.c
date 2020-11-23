@@ -116,6 +116,7 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         #define _sA {"show-aliases",  no_argument,       &flag.show_aliases,     1 }  
         #define _sc {"show-codec",    no_argument,       &flag.show_codec,       1 }  
         #define _sb {"show-bgzf",     no_argument,       &flag.show_bgzf,        1 }
+        #define _s5 {"show-md5",      no_argument,       &flag.show_md5,         1 }
         #define _dS {"test-seg",      no_argument,       &flag.test_seg,         1 }  
         #define _dm {"debug-memory",  no_argument,       &flag.debug_memory,     1 }  
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
@@ -123,10 +124,10 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR, _sC, _hC, _rA, _rS, _me, _sA, _sc, _sI, _gt,          _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _hC, _rA, _rS,           _sA,      _sI,      _cn,     _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _hC, _rA, _rS,           _sA,      _sI,      _cn,     _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                                                          _u,     _p, _e,                                                                                                                              _st, _sm,                                   _dm,                                                                                                                                                             _b, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR, _sC, _hC, _rA, _rS, _me,      _s5, _sA, _sc, _sI, _gt,          _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _hC, _rA, _rS,           _s5, _sA,      _sI,      _cn,     _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _hC, _rA, _rS,           _s5, _sA,      _sI,      _cn,     _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                                                          _u,     _p, _e,                                                                                                                              _st, _sm,                                   _dm,                                                                                                                                              _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -151,32 +152,31 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
                 command=c; 
                 break;
 
-            case 'i' : file_set_input_type (optarg); break;
-            case 'I' : file_set_input_size (optarg); break;
-            case 'c' : flag.to_stdout        = 1      ; break;
-            case 'F' : flag.fast          = 1      ; break;
-            case 'z' : flag.bgzf          = 1      ; break;
-            case 'f' : flag.force         = 1      ; break;
-            case '^' : flag.replace       = 1      ; break;
-            case 'q' : flag.quiet         = 1      ; break;
-            case 'Q' : option_noisy       = 1      ; break;
-            case '9' : flag.optimize      = 1      ; break;
-            case 'w' : flag.show_stats    = 1      ; break;
-            case 'W' : flag.show_stats    = 2      ; break;
-            case '2' : flag.pair    = PAIR_READ_1  ; break;
-            case 't' : flag.test          = 1      ; break; 
-            case 'b' : flag.bytes         = 1      ; break;         
-                       // fall through for genocat -r
-            case 'r' : flag.regions       = 1      ; regions_add     (optarg); break;
-            case 's' : flag.samples       = 1      ; vcf_samples_add (optarg); break;
+            case 'i' : file_set_input_type (optarg) ; break;
+            case 'I' : file_set_input_size (optarg) ; break;
+            case 'c' : flag.to_stdout     = 1       ; break;
+            case 'F' : flag.fast          = 1       ; break;
+            case 'z' : flag.bgzf          = 1       ; break;
+            case 'f' : flag.force         = 1       ; break;
+            case '^' : flag.replace       = 1       ; break;
+            case 'q' : flag.quiet         = 1       ; break;
+            case 'Q' : option_noisy       = 1       ; break;
+            case '9' : flag.optimize      = 1       ; break;
+            case 'w' : flag.show_stats    = 1       ; break;
+            case 'W' : flag.show_stats    = 2       ; break;
+            case '2' : flag.pair    = PAIR_READ_1   ; break;
+            case 't' : flag.test          = 1       ; break; 
+            case 'b' : flag.bytes         = 1       ; break;         
+            case 'r' : flag.regions       = 1       ; regions_add     (optarg); break;
+            case 's' : flag.samples       = 1       ; vcf_samples_add (optarg); break;
             case 'e' : flag.reference     = REF_EXTERNAL  ; ref_set_reference (optarg); break;
             case 'E' : flag.reference     = REF_EXT_STORE ; ref_set_reference (optarg); break;
-            case 'm' : flag.md5           = 1      ; break;
+            case 'm' : flag.md5           = 1       ; break;
             case 'u' : flag.unbind    = optarg ? optarg : "" ; break; // unbind with or without a prefix
             case '\1': flag.show_time = optarg ? optarg : "" ; break; // show_time with or without a specific member of ProfilerRec
-            case 'G' : flag.drop_genotypes= 1      ; break;
-            case 'H' : flag.no_header     = 1      ; break;
-            case '1' : flag.header_one    = 1      ; break;
+            case 'G' : flag.drop_genotypes= 1       ; break;
+            case 'H' : flag.no_header     = 1       ; break;
+            case '1' : flag.header_one    = 1       ; break;
             case '@' : flag.threads_str   = optarg  ; break;
             case 'o' : flag.out_filename  = optarg  ; break;
             case 'g' : flag.grep          = optarg  ; break;
@@ -404,7 +404,15 @@ void flags_update_piz_one_file (void)
     if (flag.out_dt == DT_BCF) flag.bgzf=0;
 
     // BAM or GENOZIP_FL_BGZF imply bgzf, unless user specifically asked for plain or we're outputting to stdout
-    if ((flag.out_dt == DT_BAM || (z_file->flags & GENOZIP_FL_BGZF)) && (!flag.plain && !flag.to_stdout)) flag.bgzf=true;   
+    if ((flag.out_dt == DT_BAM || (z_file->flags & GENOZIP_FL_BGZF)) && (!flag.plain && !flag.to_stdout)) 
+        flag.bgzf=true;   
 
-    flag.do_translate = dt_get_translation().is_alt_toplevel;
+    // Note: BAM is stored as binary SAM, so do_translate=true for BAM->BAM , but false for BAM->SAM
+    flag.do_translate = dt_get_translation().is_alt_toplevel; 
+
+    // Check if the reconstructed data type is the same as the source data type
+    bool is_binary = (z_file->flags & GENOZIP_FL_TXT_IS_BIN);
+    flag.reconstruct_as_src = (flag.out_dt == DT_SAM            && z_file->data_type==DT_SAM && !is_binary) || 
+                              (flag.out_dt == DT_BAM            && z_file->data_type==DT_SAM && is_binary ) ||
+                              (flag.out_dt == z_file->data_type && z_file->data_type!=DT_SAM);
 }

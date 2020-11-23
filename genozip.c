@@ -266,7 +266,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
         bufprintf (evb, &str_buf, item_format, dt_name (dt), num_lines_str, 
                    z_size_str, txt_size_str, ratio < 100, ratio, 
-                   md5_display (md5_hash_bound),
+                   md5_display (md5_hash_bound).s,
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
                    z_filename, created);

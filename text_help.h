@@ -209,6 +209,8 @@ static const char *help_genozip_developer[] = {
     "   Z    --show-codec      Genozip tests for the best codec when it first encounters a new type of data. See the results",    
     "",
     "   ZUC  --show-bgzf       Show bgzf blocks as they are being compressed or decompressed",    
+    "",
+    "   ZUC  --show-md5        Show MD5 updates",    
 };
 
 static const char *help_genounzip[] = {

@@ -19,14 +19,18 @@ char *str_tolower (const char *in, char *out /* out allocated by caller - can be
     return startout;
 }
 
-char char_to_printable (char c) 
+Printable char_to_printable (char c) 
 {
     switch ((uint8_t)c) {
-        case 32 ... 127 : return c   ; // printable ASCII
+        case 32 ... 127 : return (Printable) { .s = {c, 0} }; // printable ASCII
         case '\t'       : 
         case '\n'       : 
-        case '\r'       : return ' ' ; // whitespace
-        default         : return '?' ; // unprintable
+        case '\r'       : return (Printable) { .s = {' ', 0} }; // whitespace
+        default         : { // unprintable - output eg \xf 
+            Printable p;
+            sprintf (p.s, "\\x%x", (uint8_t)c);
+            return p;
+        }
     }
 }
 

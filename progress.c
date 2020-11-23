@@ -158,7 +158,7 @@ void progress_finalize_component (const char *status)
 #define FINALIZE(format, ...) { \
     char s[500]; \
     sprintf (s, format, __VA_ARGS__);  \
-    if (!md5_is_zero (md5)) sprintf (&s[strlen(s)], "\tMD5 = %s", md5_display (md5)); \
+    if (!md5_is_zero (md5) && flag.md5) sprintf (&s[strlen(s)], "\tMD5 = %s", md5_display (md5).s); \
     progress_finalize_component (s);  \
 }
 

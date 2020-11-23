@@ -225,11 +225,11 @@ void sam_seg_finalize (VBlockP vb)
         .num_items = 7,
         .items     = { { (DictId)dict_id_fields[SAM_RNAME],    DID_I_NONE, { CI_TRANS_NOR } }, // needed for reconstructing seq 
                        { (DictId)dict_id_fields[SAM_POS],      DID_I_NONE, { CI_TRANS_NOR } }, // needed for reconstructing seq
-                       { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, { CI_TRANS_NOR } }, // need to know if seq is reverse complemented
+                       { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, { CI_TRANS_NOR } }, // need to know if seq is reverse complemented & if it is R2
                        { (DictId)dict_id_fields[SAM_CIGAR],    DID_I_NONE, { CI_TRANS_NOR } }, // needed for reconstructing seq
                        { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, "\n" }, 
                        { (DictId)dict_id_fields[SAM_SQBITMAP], DID_I_NONE, "\n", SAM2FASTQ_SEQ  }, 
-                       { (DictId)dict_id_fields[SAM_QUAL],     DID_I_NONE, "\n", SAM2FASTQ_QUAL },
+                       { (DictId)dict_id_fields[SAM_QUAL],     DID_I_NONE, "\n", SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
                      }
     };
 

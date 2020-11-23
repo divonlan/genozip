@@ -193,11 +193,11 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
     fprintf (stderr, "  num_items_bound: %"PRIu64"\n", BGEN64 (header->num_items_bound));
     fprintf (stderr, "  num_sections: %u\n",            num_sections);
     fprintf (stderr, "  num_components: %u\n",          BGEN32 (header->num_components));
-    fprintf (stderr, "  md5_hash_bound: %s\n",          md5_display (header->md5_hash_bound));
+    fprintf (stderr, "  md5_hash_bound: %s\n",          md5_display (header->md5_hash_bound).s);
     fprintf (stderr, "  created: %*s\n",                -FILE_METADATA_LEN, header->created);
-    fprintf (stderr, "  license_hash: %s\n",            md5_display (header->license_hash));
+    fprintf (stderr, "  license_hash: %s\n",            md5_display (header->license_hash).s);
     fprintf (stderr, "  reference filename: %*s\n",     -REF_FILENAME_LEN, header->ref_filename);
-    fprintf (stderr, "  reference file hash: %s\n",     md5_display (header->ref_file_md5));
+    fprintf (stderr, "  reference file hash: %s\n",     md5_display (header->ref_file_md5).s);
 
     fprintf (stderr, "  sections:\n");
 

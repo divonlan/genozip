@@ -6,11 +6,7 @@
 #ifndef MD5_INCLUDED
 #define MD5_INCLUDED
 
-#ifndef _MSC_VER // Microsoft compiler
-#include <inttypes.h>
-#else
-#include "compatibility/visual_c_stdint.h"
-#endif
+#include "genozip.h"
 
 // Md5Hash must be packed as it appears in a Section in the Genozip file format (will only be meaningful on CPUs with more than 128 bit though...)
 #pragma pack(1) 
@@ -35,10 +31,12 @@ typedef struct {
 } Md5Context;
 #define MD5CONTEXT_NONE (Md5Context){ .lo=0, .hi=0, .buffer.words = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, .initialized=false }
 
-extern Md5Hash md5_do (const void *data, unsigned len);
-extern void md5_update (Md5Context *ctx, const void *data, unsigned len);
+extern Md5Hash md5_do (const void *data, uint32_t len);
+extern void md5_update (Md5Context *ctx, ConstBufferP buf);
 extern Md5Hash md5_finalize (Md5Context *ctx);
-extern const char *md5_display (Md5Hash digest);
+
+typedef struct { char s[34]; } MD5Display;
+extern MD5Display md5_display (Md5Hash digest);
 extern Md5Hash md5_snapshot (const Md5Context *ctx);
 extern void md5_display_ctx (const Md5Context *ctx); // for debugging
 

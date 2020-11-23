@@ -493,8 +493,8 @@ static void piz_uncompress_one_vb (VBlock *vb)
     if (vb->bgzf_blocks.len) bgzf_compress_vb (vb);
 
     // calculate the MD5 contribution of this VB to the single file and bound files, and the MD5 snapshot of this VB
-    if (!md5_is_zero (vb->md5_hash_so_far)) txtfile_md5_one_vb (vb); 
-
+    if (!md5_is_zero (vb->md5_hash_so_far) && flag.reconstruct_as_src) 
+        txtfile_md5_one_vb (vb); 
 
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
@@ -639,7 +639,7 @@ static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
     char s[200]; 
 
     if (md5_is_zero (original_file_digest)) { 
-        sprintf (s, "MD5 = %s", md5_display (decompressed_file_digest));
+        sprintf (s, "MD5 = %s", md5_display (decompressed_file_digest).s);
         progress_finalize_component (s); 
     }
 
@@ -647,7 +647,7 @@ static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
 
         if (flag.md5) { 
             sprintf (s, "MD5 = %s verified as identical to the original %s", 
-                        md5_display (decompressed_file_digest), dt_name (txt_file->data_type));
+                        md5_display (decompressed_file_digest).s, dt_name (txt_file->data_type));
             progress_finalize_component (s); 
         }
     }
@@ -655,13 +655,13 @@ static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
     else if (flag.test) {
         progress_finalize_component ("FAILED!!!");
         ABORT ("Error: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",
-                md5_display (original_file_digest), md5_display (decompressed_file_digest));
+                md5_display (original_file_digest).s, md5_display (decompressed_file_digest).s);
     }
 
     else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file
-                    "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
-                    txt_file->name, md5_display (decompressed_file_digest), dt_name (txt_file->data_type), 
-                    md5_display (original_file_digest));
+                 "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
+                 txt_file->name, md5_display (decompressed_file_digest).s, dt_name (txt_file->data_type), 
+                 md5_display (original_file_digest).s);
 
     return decompressed_file_digest;
 }
@@ -782,7 +782,7 @@ no_more_data:
 
     // verifies bgzf reconstructed file against codec_args    
 
-    // verifies reconstructed file against MD5 (if compressed with --md5 or ) and/or codec_args (if bgzf)
+    // verifies reconstructed file against MD5 (if compressed with --md5 or --test) and/or codec_args (if bgzf)
     Md5Hash decompressed_file_digest = piz_one_file_verify_md5 (original_file_digest);
 
     if (flag.unbind) file_close (&txt_file, true); // close this component file

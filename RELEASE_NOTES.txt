@@ -236,6 +236,7 @@ Functionality:
     --show-txt-contigs - shows contigs from the SAM/BAM header (SQ lines)
     --unbind in genols (new flag) - shows the components of bound files
     --show-dict and show-b250 now accept an optional paramter + removed --show-one-dict and --show-one-b250
+    --show-md5 show md5 updates
 Compression improvements:
 - For b250 sections that have all the same entry - store the entry only once. If the entry is word_index=0, drop the section
 - Improvements in codec assignment algorithm, and use it for dictionary and some other section types in addition to b250 and local
