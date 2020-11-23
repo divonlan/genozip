@@ -1085,11 +1085,12 @@ static void ctx_dict_read_one_vb (VBlockP vb)
     
     zfile_read_section (z_file, vb, dict_sl->vblock_i, &vb->z_data, "z_data", SEC_DICT, dict_sl);    
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
+    // note: header is NULL if this dicionary is skipped
 
-    vb->fragment_len = BGEN32 (header->h.data_uncompressed_len);
+    vb->fragment_len = header ? BGEN32 (header->h.data_uncompressed_len) : 0;
 
     // new context
-    if (!dict_ctx || header->dict_id.num != dict_ctx->dict_id.num) {
+    if (header && (!dict_ctx || header->dict_id.num != dict_ctx->dict_id.num)) {
         dict_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, header->dict_id);
 
         // in v9+ same-dict fragments are consecutive in the file, and all but the last are FRAGMENT_SIZE or a bit less, allowing pre-allocation
@@ -1112,11 +1113,13 @@ static void ctx_dict_read_one_vb (VBlockP vb)
         buf_set_overlayable (&dict_ctx->dict);
     }
 
-    vb->fragment_ctx         = dict_ctx;
-    vb->fragment_start       = ENT (char, dict_ctx->dict, dict_ctx->dict.len);
-    dict_ctx->word_list.len += BGEN32 (header->num_snips);
-    dict_ctx->dict.len      += vb->fragment_len;
-
+    if (header) {
+        vb->fragment_ctx         = dict_ctx;
+        vb->fragment_start       = ENT (char, dict_ctx->dict, dict_ctx->dict.len);
+        dict_ctx->word_list.len += header ? BGEN32 (header->num_snips) : 0;
+        dict_ctx->dict.len      += vb->fragment_len;
+    }
+    
 done: 
     // note: in cases we just "goto" here, no data is read, and a thread is needlessly created to decompress it
     // this is because the vb_i of the section needs to match the vb_i of the thread

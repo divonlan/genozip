@@ -29,9 +29,21 @@ void vcf_header_initialize (void)
 
 bool vcf_inspect_txt_header (Buffer *txt_header)
 {
-    if (command != ZIP) return true;
+    if (command == ZIP)
+        return vcf_header_set_globals (txt_file->name, txt_header, true);
     
-    return vcf_header_set_globals (txt_file->name, txt_header, true);
+    else { 
+        if (!(flag.show_headers && exe_type == EXE_GENOCAT)) 
+            vcf_header_set_globals(z_file->name, &evb->txt_data, false);
+
+        if (flag.drop_genotypes) 
+            vcf_header_trim_header_line (&evb->txt_data); // drop FORMAT and sample names
+
+        if (flag.header_one) 
+            vcf_header_keep_only_last_line (&evb->txt_data);  // drop lines except last (with field and samples name)
+
+        return true;
+    }
 }
 
 bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bool soft_fail)

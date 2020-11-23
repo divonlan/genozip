@@ -180,8 +180,9 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     // mid-way through test causing a buffer to have an inconsiset state and for buf_test_overflows to therefore report an error
     buf_test_overflows(evb, "dispatcher_finish"); 
 
-    // free memory allocations that assume subsequent files will have the same number of samples.
-    // (we assume this if the files are being bound). don't bother freeing (=same time) if this is the last file, unless we're going to test and need the memory
+    // free memory allocations between files, when compressing multiple non-bound files or 
+    // decompressing multiple files. 
+    // don't bother freeing (=save time) if this is the last file, unless we're going to test and need the memory
     if (!flag.bind && (!dd->is_last_file || flag.test)) {
         vb_cleanup_memory(); 
         vb_release_vb (evb);

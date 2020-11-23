@@ -350,12 +350,12 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     // grow buffer to accommodate the BAM header fixed size and text (inc. nul terminator)
     buf_alloc (evb, txtheader_buf, 12 + txtheader_buf->len + 1, 1, "txt_data");
 
-    // nul-terminate text - required by sam_iterate_SQ_lines - but without enlengthening buffer
+    // nul-terminate text - required by sam_foreach_SQ_line - but without enlengthening buffer
     *AFTERENT (char, *txtheader_buf) = 0;
 
     // n_ref = count SQ lines in text
     uint32_t n_ref=0;
-    sam_iterate_SQ_lines (txtheader_buf->data, txtheader_sam2bam_count_sq, &n_ref);
+    sam_foreach_SQ_line (txtheader_buf->data, txtheader_sam2bam_count_sq, &n_ref);
 
     // we can't convert to BAM if its a SAM file without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
     // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
@@ -386,7 +386,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
 
     // option 1: copy reference information from SAM SQ lines, if available
     if (from_SQ) 
-        sam_iterate_SQ_lines (text, txtheader_sam2bam_ref_info, txtheader_buf);
+        sam_foreach_SQ_line (text, txtheader_sam2bam_ref_info, txtheader_buf);
 
     // option 2: copy reference information from ref_contigs if available - i.e. if pizzed with external or stored reference
     else if (ref_num_loaded_contigs()) 

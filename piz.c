@@ -702,11 +702,15 @@ bool piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
 
     // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --unbind, 
     static DataType data_type = DT_NONE; 
+    bool no_more_headers = false;
 
     if (unbind_component_i == 0) {
 
         data_type = piz_read_global_area (&original_file_digest);
-        if (data_type == DT_NONE || flag.reading_reference) goto finish; // reference file has no VBs
+        if (data_type == DT_NONE || flag.reading_reference) {
+            no_more_headers = true; // reference file has no VBs
+            goto finish; 
+        }
 
         sl_ent = NULL; // reset
 
@@ -757,6 +761,7 @@ bool piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
             }
 
             else { // we're done (concatenating: no more VBs in the entire file ; unbinding: no more VBs in our component)
+                no_more_headers = true;
 no_more_data:            
                 sl_ent--; // re-read in next call to this function if unbinding
                 dispatcher_set_input_exhausted (dispatcher, true);
@@ -790,11 +795,16 @@ no_more_data:
     if (!flag.test) progress_finalize_component_time ("Done", decompressed_file_digest);
 
 finish:
-    // in unbind mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here
-    if (!flag.unbind) {
+    // case: we're done with reconstructing this z_file - either concatenated, or this was the last component unbound
+    if (no_more_headers) {
         if (dispatcher) dispatcher_finish (&dispatcher, NULL);
-    } else
+    } 
+    
+    // case: we're unbinding and still have more components - we continue with the same dispatcher in the next component.
+    else
         dispatcher_pause (dispatcher);
+
+    DT_FUNC (z_file, piz_finalize)();
 
     return true;
 }

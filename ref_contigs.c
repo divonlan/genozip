@@ -426,7 +426,7 @@ const RefContig *ref_contigs_get_contig (WordIndex chrom_index, bool soft_fail)
     return rc;
 }
 
-// call a callback for each accessed contig. Note: callback function is the same as sam_iterate_SQ_lines
+// call a callback for each accessed contig. Note: callback function is the same as sam_foreach_SQ_line
 void ref_contigs_iterate (RefContigsIteratorCallback callback, void *callback_param)
 {
     ARRAY (RefContig, rc, loaded_contigs);

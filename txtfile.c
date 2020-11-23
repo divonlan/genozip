@@ -690,26 +690,17 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
     // now get the text of the txt header itself
     if (!show_headers_only)
         zfile_uncompress_section (evb, header, &evb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
-
-    if (z_file->data_type == DT_VCF) {
-
-        if (!show_headers_only) vcf_header_set_globals(z_file->name, &evb->txt_data, false);
-
-        if (flag.drop_genotypes) vcf_header_trim_header_line (&evb->txt_data); // drop FORMAT and sample names
-
-        if (flag.header_one) vcf_header_keep_only_last_line (&evb->txt_data);  // drop lines except last (with field and samples name)
-    }
     
     if (!evb->txt_data.len) goto done; // case: this txt file has no header - we're done
 
-    DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
-
-    // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
-    DtTranslation trans = dt_get_translation();
-    if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
-
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
     if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.genocat_info_only) {
+
+        DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
+
+        // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
+        DtTranslation trans = dt_get_translation();
+        if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
         bool test_md5 = !md5_is_zero (header->md5_header) && flag.reconstruct_as_src;
 

@@ -182,14 +182,15 @@ for file in ${files[@]}; do
     $genounzip $arg1 ${file1}.genozip ${file2}.genozip -t || exit 1
     rm -f $file1 $file2 ${file1}.genozip ${file2}.genozip
 
-    test_header "$file - bind & unbind"
+    test_header "$file - bind & unbind (2 files with 2 components each)"
     file1=copy1.$file
     file2=copy2.$file
     cp -f $file $file1
     cat $file | sed 's/PRFX/FILE2/g' > $file2
     $genozip $arg1 $file1 $file2 -ft -o $output || exit 1
-    $genounzip $arg1 $output -u -t || exit 1
-    rm -f $file1 $file2
+    cp -f $output 2.$output
+    $genounzip $arg1 $output 2.$output -u -t || exit 1
+    rm -f $file1 $file2 $output 2.$output
 
     test_header "$file --optimize - NOT checking correctness, just that it doesn't crash"
     $genozip $arg1 $file -f --optimize -o $output || exit 1
