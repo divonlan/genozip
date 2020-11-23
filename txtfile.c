@@ -329,7 +329,6 @@ static Md5Hash txtfile_read_header (bool is_first_txt)
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
     #define HEADER_BLOCK (256*1024) // we have no idea how big the header will be... read this much at time
     while ((header_len = (DT_FUNC (txt_file, is_header_done)())) < 0) { // we might have data here from txtfile_test_data
-
         ASSERT (bytes_read, "Error in txtfile_read_header: %s: %s file too short - unexpected end-of-file", txt_name, dt_name(txt_file->data_type));
 
         buf_alloc_more (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
@@ -361,9 +360,10 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
     ASSERT (*i >= 0 && *i < vb->txt_data.len, "Error in def_unconsumed: *i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
-    for (; *i >= (int32_t)first_i; (*i)--) 
+    for (; *i >= (int32_t)first_i; (*i)--) {
         if (vb->txt_data.data[*i] == '\n') 
             return vb->txt_data.len-1 - *i;
+    }
 
     return -1; // cannot find \n in the data starting first_i
 }

@@ -313,7 +313,6 @@ extern File *z_file, *txt_file;
 
 // methods
 extern File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
-extern File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type);
 extern void file_close (FileP *file_p, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END

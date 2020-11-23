@@ -51,7 +51,7 @@ static void gtshark_check_pipe_for_errors (char *data, FILE *fp, uint32_t vb_i, 
 static bool codec_gtshark_run (uint32_t vb_i, const char *command, 
                                const char *filename_1, const char *filename_2) 
 {
-    StreamP gtshark = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0,
+    StreamP gtshark = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                      "To use the --gtshark option",
                                      "gtshark", command, filename_1, filename_2, NULL);
 

@@ -215,7 +215,7 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
     sprintf (reason, "To output a %s file", file_exts[file->type]);
     output_compressor = stream_create (0, 0, 0, global_max_memory_per_vb, 
                                        redirected_stdout_file, // output is redirected unless flag.to_stdout
-                                       0, reason,
+                                       0, false, reason,
                                        exec_name, 
                                        stdout_option, // either to the terminal or redirected to output file
                                        "--threads", threads_str,
@@ -244,7 +244,7 @@ static const char *file_samtools_no_PG (void)
         // Tested on samtools 1.11: The normal way to see help is "samtools help view" however it fails if stdin is not the terminal. 
         // Instead, we use samtools view with an invalid option "--junk". This *sometimes* shows the help, and sometimes
         // just shows one line "samtools view:". We overcome this by repeating if the response is not long enough.
-        StreamP samtools = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, "To read/write CRAM files",
+        StreamP samtools = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, "To read/write CRAM files",
                                           "samtools", "view", "--junk", NULL);
         usleep (50000 * i); // wait for samtools
 
@@ -301,13 +301,12 @@ static bool file_open_txt_read (File *file)
     file_get_codecs_by_txt_ft (file->data_type, file->type, READ, &file->codec);
     
     switch (file->codec) { 
-        case CODEC_NONE:
-            file->file = file->is_remote ? url_open (NULL, file->name) : fopen (file->name, READ);
-            break;
-
-        case CODEC_GZ:
-        case CODEC_BGZF: {
-            file->file = (FILE *)(file->is_remote ? url_open (NULL, file->name) : fopen (file->name, "rb"));
+        case CODEC_GZ:   // we test the first few bytes of the file to differentiate between NONE, GZ and BGZIP
+        case CODEC_BGZF: 
+        case CODEC_NONE: {
+            file->file = file->is_remote  ? url_open (NULL, file->name)  : 
+                         file->redirected ? fdopen (STDIN_FILENO,  "rb") :
+                                            fopen (file->name, READ);
             ASSERT (file->file, "Error in file_open_txt_read: failed to open %s: %s", file->name, strerror (errno));
 
             // read the first potential BGZF block to test if this is GZ or BGZF
@@ -350,6 +349,9 @@ static bool file_open_txt_read (File *file)
                 FILE *url_fp = url_open (NULL, file->name);
                 file->file = BZ2_bzdopen (fileno(url_fp), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
             }
+            else if (file->redirected) 
+                file->file = BZ2_bzdopen (STDIN_FILENO, READ);
+            
             else
                 file->file = BZ2_bzopen (file->name, READ);  // for local files we decompress ourselves   
             break;
@@ -357,6 +359,7 @@ static bool file_open_txt_read (File *file)
         case CODEC_XZ:
             input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,     // url
+                                                file->redirected,
                                                 "To uncompress an .xz file", "xz",       // reason, exec_name
                                                 file->is_remote ? SKIP_ARG : file->name, // local file name 
                                                 "--threads=8", "--decompress", "--keep", "--stdout", 
@@ -368,6 +371,7 @@ static bool file_open_txt_read (File *file)
         case CODEC_ZIP:
             input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,     // url
+                                                file->redirected,
                                                 "To uncompress a .zip file", "unzip",    // reason, exec_name
                                                 "-p", // must be before file name
                                                 file->is_remote ? SKIP_ARG : file->name, // local file name 
@@ -376,28 +380,28 @@ static bool file_open_txt_read (File *file)
             file->file = stream_from_stream_stdout (input_decompressor);
             break;
 
-        case CODEC_BCF:
-        case CODEC_BAM: 
-        case CODEC_CRAM: {
-            bool bam =  (file->codec == CODEC_BAM);
-            bool cram = (file->codec == CODEC_CRAM);
-
-            char reason[100];
-            sprintf (reason, "To compress a %s file", file_exts[file->type]);
-
+        case CODEC_BCF: {
             input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,         // url                                        
-                                                reason, 
-                                                (bam || cram) ? "samtools" : "bcftools", // exec_name
-                                                "view", 
-                                                "--threads", "8", // in practice, samtools is able to consume 1.3 cores
-                                                (bam || cram) ? "-OSAM" : "-Ov",
+                                                file->redirected,
+                                                "To compress a BCF file", 
+                                                "bcftools", "view", "--threads", "8", "-Ov",
                                                 file->is_remote ? SKIP_ARG : file->name,    // local file name 
-                                                (bam || cram) ? "-h" : "--no-version", // BAM: include header
-                                                                                        // BCF: do not append version and command line to the header
-                                                (bam || cram) ? (file_samtools_no_PG() ? "--no-PG" : "-h") : NULL,  // don't add a PG line to the header (just repeat -h if this is an older samtools without --no-PG - no harm)
-                                                cram ? ref_get_cram_ref() : NULL,
+                                                "--no-version", // BCF: do not append version and command line to the header
                                                 NULL);
+            file->file = stream_from_stream_stdout (input_decompressor);
+            break;
+        }
+
+        case CODEC_CRAM: {
+            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+                                                file->is_remote ? file->name : NULL,      // url                                        
+                                                file->redirected,
+                                                "To compress a CRAM file", 
+                                                "samtools", "view", "-OSAM", "--threads", "8", "-h", // in practice, samtools is able to consume 1.3 cores
+                                                file_samtools_no_PG() ? "--no-PG" : "-h", // don't add a PG line to the header (just repeat -h if this is an older samtools without --no-PG - no harm)
+                                                file->is_remote ? SKIP_ARG : file->name,  // local file name 
+                                                ref_get_cram_ref(), NULL);
             file->file = stream_from_stream_stdout (input_decompressor);
             break;
         }
@@ -445,9 +449,7 @@ static bool file_open_txt_write (File *file)
     switch (file->codec) { 
         case CODEC_GZ   :
         case CODEC_BGZF : 
-        case CODEC_NONE : file->file = fopen (file->name, WRITE); break;
-        //case CODEC_GZ   :
-        //case CODEC_BGZF : file_redirect_output_to_stream (file, "bgzip", "--stdout", NULL, NULL); break;
+        case CODEC_NONE : file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
         case CODEC_BCF  : file_redirect_output_to_stream (file, "bcftools", "view", "-Ob", NULL); break;
         case CODEC_BAM  : file_redirect_output_to_stream (file, "samtools", "view", "-OBAM",  file_samtools_no_PG()); break;
         case CODEC_CRAM : file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", file_samtools_no_PG()); break;
@@ -508,6 +510,8 @@ static bool file_open_z (File *file)
     // for READ, set data_type
     if (file->mode == READ) {
 
+        ASSERT0 (file->name, "Error in file_open_z: cannot redirect genozip files from stdin");
+
         if (!file_has_ext (file->name, GENOZIP_EXT)) {
             if (flag.multiple_files) 
                 RETURNW (false, true, "Skipping %s - it doesn't have a .genozip extension", file_printname (file))
@@ -524,8 +528,8 @@ static bool file_open_z (File *file)
         file->data_type = file_get_dt_by_z_ft (file->type); // if we will verify this is correct in zfile_read_genozip_header
     }
     else { // WRITE or WRITEREAD - data_type is already set by file_open
-        ASSINP (file_has_ext (file->name, GENOZIP_EXT), "%s: file %s must have a " GENOZIP_EXT " extension", 
-                              global_cmd, file_printname (file));
+        ASSINP (file->redirected || file_has_ext (file->name, GENOZIP_EXT), 
+                "%s: file %s must have a " GENOZIP_EXT " extension", global_cmd, file_printname (file));
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
         // uses the --output option, he is unrestricted in the choice of a file name
         file->type = file_get_z_ft_by_txt_in_ft (file->data_type, txt_file->type); 
@@ -536,7 +540,7 @@ static bool file_open_z (File *file)
     ASSERT (!file->is_remote, "Error: it is not possible to access remote genozip files; when attempting to open %s", file->name);
     
     if (!flag.test_seg)
-        file->file = fopen (file->name, file->mode);
+        file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, file->mode);
 
     file_initialize_z_file_data (file);
 
@@ -545,25 +549,27 @@ static bool file_open_z (File *file)
 
 File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
 {
-    ASSINP0 (filename, "Error in file_open: filename is null");
-
-    //File *file = (File *)CALLOC (sizeof(File) + (((mode == READ || mode == WRITEREAD) && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
     File *file = (File *)CALLOC (sizeof(File));
 
-    file->supertype = supertype;
-    file->is_remote = url_is_url (filename);
-    bool file_exists;
+    file->supertype  = supertype;
+    file->is_remote  = filename && url_is_url (filename);
+    file->redirected = !filename;
+    file->mode       = mode;
+
+    bool file_exists = false;
 
     // is_remote is only possible in READ mode
     ASSINP (mode == READ || !file->is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
 
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
     const char *error = NULL;
+    
     if (file->is_remote) {
         error = url_get_status (filename, &file_exists, &url_file_size); // accessing is expensive - get existance and size in one call
         if (url_file_size >= 0) file->disk_size = (uint64_t)url_file_size;
     }
-    else {
+    
+    else if (!file->redirected) {
         file_exists = (access (filename, F_OK) == 0);
         error = strerror (errno);
         if (file_exists && mode == READ) file->disk_size = file_get_size (filename);
@@ -575,23 +581,38 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         return NULL; 
     }
 
-    ASSINP (mode != READ || file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
+    if (!file->redirected) {
 
-    if ((mode == WRITE || mode == WRITEREAD) && file_exists && !flag.force && !(supertype==TXT_FILE && flag.test))
-        file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
+        ASSINP (mode != READ || file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
+    
+        if ((mode == WRITE || mode == WRITEREAD) && file_exists && !flag.force && !(supertype==TXT_FILE && flag.test))
+            file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
-    // copy filename 
-    unsigned fn_size = strlen (filename) + 1; // inc. \0
-    file->name = MALLOC (fn_size);
-    memcpy (file->name, filename, fn_size);
+        // copy filename 
+        unsigned fn_size = strlen (filename) + 1; // inc. \0
+        file->name = MALLOC (fn_size);
+        memcpy (file->name, filename, fn_size);
 
-    file->mode = mode;
+        if (mode==READ || data_type != DT_NONE) // if its NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
+            file->type = file_get_type (file->name, true);
 
-    if (mode==READ || data_type != DT_NONE) // if its NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
-        file->type = file_get_type (file->name, true);
+        if (mode == WRITE || mode == WRITEREAD) 
+            file->data_type = data_type; // for READ, data_type is set by file_open_*
+    }
+    else if (mode==READ) {  // stdin
+        file->type  = stdin_type; 
+        file->data_type = file_get_data_type (stdin_type, true);
+        
+        if (supertype == TXT_FILE)
+            file_get_codecs_by_txt_ft (file->data_type, file->type, READ, &file->codec);
+    }
+    else { // stdout
+        file->data_type = data_type; 
+        file->type = txt_out_ft_by_dt[data_type][0];
+    }
 
-    if (file->mode == WRITE || file->mode == WRITEREAD) 
-        file->data_type = data_type; // for READ, data_type is set by file_open_*
+    if (mode==READ)
+        file->basename = file_basename (file->name, false, FILENAME_STDIN, NULL, 0);
 
     bool success=false;
     switch (supertype) {
@@ -604,8 +625,8 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
     return file;
 }
-
-File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type /* only used for WRITE */)
+/*
+File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type)
 {
     ASSINP (mode==WRITE || stdin_type != UNKNOWN_FILE_TYPE, 
             "%s: to redirect from standard input use --input (or -i) with one of the supported file types:%s", 
@@ -623,7 +644,9 @@ File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_
     if (mode==READ) {
         file->data_type = file_get_data_type (stdin_type, true);
         file->type  = stdin_type; 
-        file->codec = CODEC_NONE;
+        
+        if (supertype == TXT_FILE)
+            file_get_codecs_by_txt_ft (file->data_type, file->type, READ, &file->codec);
     }
     else { // WRITE
         file->data_type = data_type;
@@ -637,7 +660,7 @@ File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_
     
     return file;
 }
-
+*/
 void file_close (File **file_p, 
                  bool cleanup_memory) // optional - used to destroy buffers in the file is closed NOT near the end of the execution, eg when dealing with unbinding bound files
 {
