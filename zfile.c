@@ -423,7 +423,7 @@ int32_t zfile_read_section_do (File *file,
     }
 
     ASSERT (is_magical, "Error in zfile_read_section: corrupt data (magic is wrong) when attempting to read section=%s dict_id=%s of vblock_i=%u component=%u in file %s", 
-            st_name (expected_sec_type), sl ? err_dict_id (sl->dict_id) : "(no sl)", vb->vblock_i, z_file->num_txt_components_so_far, z_name);
+            st_name (expected_sec_type), sl ? dis_dict_id (sl->dict_id).s : "(no sl)", vb->vblock_i, z_file->num_txt_components_so_far, z_name);
 
     uint32_t compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
@@ -437,12 +437,11 @@ int32_t zfile_read_section_do (File *file,
     int32_t remaining_data_len = (int32_t)data_len - (int32_t)(bytes_read - header_size); 
     
     // check that we received the section type we expect, 
-    char s[30];
     ASSERT (expected_sec_type == header->section_type || 
             (expected_sec_type == SEC_GENOZIP_HEADER && (SectionType)header->sub_codec == SEC_GENOZIP_HEADER), // in v2-5, the section_type field was located where sub_codec is now
             "Error: Unexpected section type when reading %s: expecting %s, found %s sl(expecting)=(offset=%s, dict_id=%s)",
             z_name, st_name(expected_sec_type), st_name(header->section_type), 
-            sl ? str_uint_commas (sl->offset, s) : "N/A", sl ? err_dict_id (sl->dict_id) : "N/A");
+            sl ? str_uint_commas (sl->offset).s : "N/A", sl ? dis_dict_id (sl->dict_id).s : "N/A");
 
     ASSERT (compressed_offset == header_size || expected_sec_type == SEC_GENOZIP_HEADER || // we allow SEC_GENOZIP_HEADER of other sizes, for older versions
             "Error: invalid header when reading %s - expecting compressed_offset to be %u but found %u. section_type=%s", 

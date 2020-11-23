@@ -534,14 +534,13 @@ void txtfile_write_one_vblock (VBlockP vb)
     else
         txtfile_write_to_disk (&vb->txt_data);
 
-    char s1[20], s2[20];
-
     ASSERTW (vb->txt_data.len == vb->vb_data_size || // files are the same size, expected
              exe_type == EXE_GENOCAT ||              // many genocat flags modify the output file, so don't compare
              !dt_get_translation().is_src_dt,        // we are translating between data types - the source and target txt files have different sizes
              "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
              vb->vblock_i, (uint32_t)vb->lines.len, vb->first_line,
-             str_uint_commas (vb->vb_data_size, s1), dt_name (txt_file->data_type), str_uint_commas (vb->txt_data.len, s2), 
+             str_uint_commas (vb->vb_data_size).s, dt_name (txt_file->data_type), 
+             str_uint_commas (vb->txt_data.len).s, 
              (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
 
     COPY_TIMER (write);

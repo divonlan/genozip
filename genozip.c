@@ -180,7 +180,6 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     static bool first_file = true;
     static unsigned files_listed=0, files_ignored=0;
     static int64_t total_uncompressed_len=0, total_compressed_len=0;
-    char z_size_str[20], txt_size_str[20], num_lines_str[20];
 
     const unsigned FILENAME_WIDTH = 40;
 
@@ -200,16 +199,12 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
         if (files_listed > 1) {
             double ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
-            if (flag.bytes) {
-                str_int (total_compressed_len, z_size_str);
-                str_int (total_uncompressed_len, txt_size_str);
-                bufprintf (evb, &str_buf, foot_format_bytes, z_size_str, txt_size_str, ratio < 100, ratio);
-            }
-            else {
-                str_size(total_compressed_len, z_size_str);
-                str_size(total_uncompressed_len, txt_size_str);
-                bufprintf (evb, &str_buf, foot_format, z_size_str, txt_size_str, ratio < 100, ratio);
-            }
+            if (flag.bytes) 
+                bufprintf (evb, &str_buf, foot_format_bytes, str_int_s (total_compressed_len).s, 
+                           str_int_s (total_uncompressed_len).s, ratio < 100, ratio)
+            else 
+                bufprintf (evb, &str_buf, foot_format, str_size(total_compressed_len).s, 
+                           str_size(total_uncompressed_len).s, ratio < 100, ratio);
         }
         
         ASSERTW (!files_ignored, "Ignored %u file%s that %s not have a " GENOZIP_EXT " extension", 
@@ -244,33 +239,23 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     double ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
     
-    str_uint_commas (num_lines, num_lines_str);
-    
     // TODO: have an option to print ref_file_name and ref_file_md5
 
     DataType dt = (z_file->data_type == DT_SAM && (z_file->flags & GENOZIP_FL_TXT_IS_BIN)) ? DT_BAM : z_file->data_type;
 
-    if (flag.bytes) {
-        str_int (z_file->disk_size, z_size_str);
-        str_int (txt_data_size, txt_size_str);
-    
-        bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), num_lines_str, 
-                   z_size_str, txt_size_str, ratio < 100, ratio, 
+    if (flag.bytes) 
+        bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_uint_commas (num_lines).s, 
+                   str_int_s (z_file->disk_size).s, str_int_s (txt_data_size).s, ratio < 100, ratio, 
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
-                   z_filename);
-    }
-    else {
-        str_size (z_file->disk_size, z_size_str);
-        str_size (txt_data_size, txt_size_str);
-    
-        bufprintf (evb, &str_buf, item_format, dt_name (dt), num_lines_str, 
-                   z_size_str, txt_size_str, ratio < 100, ratio, 
+                   z_filename)
+    else 
+        bufprintf (evb, &str_buf, item_format, dt_name (dt), str_uint_commas (num_lines).s,
+                   str_size (z_file->disk_size).s, str_size (txt_data_size).s, ratio < 100, ratio, 
                    md5_display (md5_hash_bound).s,
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
                    z_filename, created);
-    }
 
     total_compressed_len   += z_file->disk_size;
     total_uncompressed_len += txt_data_size;
@@ -286,11 +271,11 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             zfile_read_section_header (evb, sl_ent->offset, sl_ent->vblock_i, SEC_TXT_HEADER);
 
             SectionHeaderTxtHeader *header = FIRSTENT (SectionHeaderTxtHeader, evb->compressed);
-            str_size (BGEN64 (header->txt_data_size), txt_size_str);
-            str_uint_commas (BGEN64 (header->num_lines), num_lines_str);
             
             num_lines_count += BGEN64 (header->num_lines);
-            bufprintf (evb, &str_buf, item_format, "", num_lines_str, "", txt_size_str, 0, 0.0, md5_display (header->md5_hash_single), "", "",
+            bufprintf (evb, &str_buf, item_format, "", str_uint_commas (BGEN64 (header->num_lines)).s, "", 
+                       str_size (BGEN64 (header->txt_data_size)).s, 
+                       0, 0.0, md5_display (header->md5_hash_single), "", "",
                        -(int)FILENAME_WIDTH, header->txt_filename, "");
 
             buf_free (&evb->compressed);

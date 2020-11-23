@@ -225,7 +225,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
 
     // note: bd and bi use their own next_local to retrieve data from bdbi_ctx. the actual index
     // in bdbi_ctx.local is calculated given the interlacing
-    ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, err_dict_id (ctx->dict_id));
+    ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, dis_dict_id (ctx->dict_id).s);
 
     char *dst        = AFTERENT (char, vb->txt_data);
     const char *src  = ENT (char, bdbi_ctx->local, ctx->next_local * 2);

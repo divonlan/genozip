@@ -43,9 +43,8 @@ void codec_free (VBlock *vb, void *addr)
             return;
         }
 
-    char addr_str[POINTER_STR_LEN];
     ABORT ("Error: codec_free failed to find buffer to free. vb_i=%d addr=%s", 
-           vb->vblock_i, str_pointer (addr, addr_str));
+           vb->vblock_i, str_pointer (addr).s);
 }
 
 void codec_free_all (VBlock *vb)
@@ -73,7 +72,7 @@ static void codec_uncompress_error (VBlock *vb, Codec codec,
 static void codec_reconstruct_error (VBlockP vb, Codec codec, ContextP ctx)
 {
     ABORT ("Error in piz_reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction", 
-           err_dict_id (ctx->dict_id), codec_name (codec));
+           dis_dict_id (ctx->dict_id).s, codec_name (codec));
 }
 
 static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)

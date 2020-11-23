@@ -362,7 +362,7 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     }
 
     else ABORT("Error in piz_reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
-                ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, err_dict_id (ctx->dict_id));
+                ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 

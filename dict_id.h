@@ -91,7 +91,7 @@ extern bool dict_id_is_match (DictId template, DictId candidate);
 
 extern const char *dict_id_display_type (DataType dt, DictId dict_id);
 
-// print the dict_id - NOT thread safe, for use in execution-termination messages
-extern const char *err_dict_id (DictId dict_id);
+typedef struct { char s[DICT_ID_LEN+1]; } DisplayPrintId;
+extern DisplayPrintId dis_dict_id (DictId dict_id);
 
 #endif

@@ -492,7 +492,7 @@ void seg_compound_field (VBlock *vb,
         
             // process the subfield that just ended
             Context *sf_ctx = ctx_get_ctx (vb, con.items[con.num_items].dict_id);
-            ASSERT (sf_ctx, "Error in seg_compound_field: sf_ctx for %s is NULL", err_dict_id (con.items[con.num_items].dict_id));
+            ASSERT (sf_ctx, "Error in seg_compound_field: sf_ctx for %s is NULL", dis_dict_id (con.items[con.num_items].dict_id).s);
 
             sf_ctx->st_did_i = field_ctx->did_i;
 
@@ -691,10 +691,9 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 
     ASSERT (vb->txt_data.len, "Error in seg_estimate_num_lines for vb=%u: txt_data is empty", vb->vblock_i); 
 
-    char s[30];
     ASSSEG (newlines==newlines_per_dt_line || len < vb->txt_data.len, vb->txt_data.data, 
             "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
-            str_uint_commas (global_max_memory_per_vb, s));
+            str_uint_commas (global_max_memory_per_vb).s);
 
     return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
 }
@@ -730,10 +729,9 @@ static void seg_verify_file_size (VBlock *vb)
             fprintf (stderr, "%s: %u\n", ctx->name, (uint32_t)ctx->txt_len);
         }
         
-        char s1[30], s2[30];
         ABOSEG (vb->txt_data.data, "Error while verifying reconstructed vblock size: "
                 "reconstructed_vb_size=%s (calculated bottoms-up) but vb->vb_data_size=%s (calculated tops-down) (diff=%d)", 
-                str_uint_commas (reconstructed_vb_size, s1), str_uint_commas (vb->vb_data_size, s2), 
+                str_uint_commas (reconstructed_vb_size).s, str_uint_commas (vb->vb_data_size).s, 
                 (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
     }
 }

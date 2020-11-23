@@ -293,9 +293,9 @@ const char *dict_id_display_type (DataType dt, DictId dict_id)
 }
 
 // print the dict_id - NOT thread safe, for use in execution-termination messages
-const char *err_dict_id (DictId dict_id)
+DisplayPrintId dis_dict_id (DictId dict_id)
 {
-    static char s[DICT_ID_LEN+1];
-    sprintf (s, "%.*s", DICT_ID_LEN, dict_id.num ? (char*)dict_id_printable(dict_id).id : "<null>");
+    DisplayPrintId s;
+    sprintf (s.s, "%.*s", DICT_ID_LEN, dict_id.num ? (char*)dict_id_printable(dict_id).id : "<null>");
     return s;
 }

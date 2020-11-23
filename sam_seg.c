@@ -562,7 +562,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
     for (uint32_t i=0; i < field_len; sa_oa.repeats++) {
 
         ASSSEG (sa_oa.repeats <= CONTAINER_MAX_REPEATS, field, "Error in sam_seg_SA_or_OA_field - exceeded maximum repeats allowed (%u) while parsing %s",
-                CONTAINER_MAX_REPEATS, err_dict_id (subfield_dict_id));
+                CONTAINER_MAX_REPEATS, dis_dict_id (subfield_dict_id).s);
 
         DO_SSF (rname,  ','); // these also do sanity checks
         DO_SSF (pos,    ','); 
@@ -597,7 +597,7 @@ error:
     // format - we just store as a normal subfield
     // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
     ASSSEG (!sa_oa.repeats, field, "Invalid format in repeat #%u of field %s. snip: %.*s",
-            sa_oa.repeats+1, err_dict_id (subfield_dict_id), field_len, field);
+            sa_oa.repeats+1, dis_dict_id (subfield_dict_id).s, field_len, field);
 
     seg_by_dict_id (vb, field, sizeof(field_len), subfield_dict_id, field_len + 1 /* 1 for \t in SAM and \0 in BAM */); 
 }
