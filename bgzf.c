@@ -222,7 +222,7 @@ void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
 {
     ARRAY (uint16_t, isizes, txt_file->bgzf_isizes);
     #define next_isize txt_file->bgzf_isizes.param // during PIZ, we use bgzf_isizes.param as "next" - iterator on bgzf_isizes
-    
+     
     // if we don't have isize (either source is not BGZF, or compressed with --optimize, or data-modifying piz options, or v8)
     // create our own isizes just for this vb
     if (!txt_file->bgzf_isizes.len) {

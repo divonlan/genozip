@@ -455,7 +455,7 @@ static bool file_open_txt_write (File *file)
         
         // case: not .gz and not BAM - use the default plain file format
         else { 
-            file->type = txt_out_ft_by_dt[file->data_type][0]; 
+            file->type = txt_out_ft_by_dt[file->data_type][0];  
             ASSINP (!flag.bgzf, "%s: using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz", global_cmd);
         }
     }
