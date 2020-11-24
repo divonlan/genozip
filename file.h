@@ -296,7 +296,8 @@ typedef struct File {
     uint32_t num_txt_components_so_far;
 
     Buffer bgzf_isizes;                // TXT file: the isizes of the bgzf blocks in which this txt file is compressed (in BGEN16)
-
+    bool bgzf_has_eof_block;
+    
     // stats strings (z_file only)
     Buffer stats_buf_1, stats_buf_2;
 

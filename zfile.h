@@ -16,11 +16,11 @@ extern void zfile_compress_genozip_header (Md5Hash single_component_md5);
 
 LocalGetLineCB *zfile_get_local_data_callback (DataType dt, ContextP ctx);
 
-extern void zfile_compress_section_data_codec (VBlockP vb, SectionType section_type, 
-                                             BufferP section_data, LocalGetLineCB callback, uint32_t total_len, 
-                                             Codec codec);
+extern void zfile_compress_section_data_ex (VBlockP vb, SectionType section_type, 
+                                            BufferP section_data, LocalGetLineCB callback, uint32_t total_len, 
+                                            Codec codec, SectionFlags flags);
 #define zfile_compress_section_data(vb, section_type, section_data) \
-    zfile_compress_section_data_codec ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2)
+    zfile_compress_section_data_ex ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2, 0)
 
 extern uint32_t zfile_compress_b250_data  (VBlockP vb, ContextP ctx);
 extern uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_size);

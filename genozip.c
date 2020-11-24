@@ -241,7 +241,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     // TODO: have an option to print ref_file_name and ref_file_md5
 
-    DataType dt = (z_file->data_type == DT_SAM && (z_file->flags & GENOZIP_FL_TXT_IS_BIN)) ? DT_BAM : z_file->data_type;
+    DataType dt = (z_file->data_type == DT_SAM && (z_file->flags & SEC_GENOZIP_HEADER_FL_TXT_IS_BIN)) ? DT_BAM : z_file->data_type;
 
     if (flag.bytes) 
         bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_uint_commas (num_lines).s, 
@@ -344,7 +344,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     if (!zfile_read_genozip_header (0,0,0,0)) goto done; 
 
     // if we're genocatting a BAM file, output it as a SAM unless user requested otherwise
-    if (z_file->data_type == DT_SAM && (z_file->flags & GENOZIP_FL_TXT_IS_BIN) && flag.out_dt==-1 && exe_type == EXE_GENOCAT)
+    if (z_file->data_type == DT_SAM && (z_file->flags & SEC_GENOZIP_HEADER_FL_TXT_IS_BIN) && flag.out_dt==-1 && exe_type == EXE_GENOCAT)
         flag.out_dt = DT_SAM;
 
     // if this is a bound file, and we don't have --unbind or --force, we ask the user
@@ -465,7 +465,7 @@ static void main_genozip_open_z_file (char **z_filename)
 
     // note on BCF and CRAM: we used bcftools/samtools as an external compressor, so that genozip sees the text,
     // not binary, data of these files - the same as if the file were compressed with eg bz2
-    if (z_file->data_type == DT_BAM) z_file->flags |= GENOZIP_FL_TXT_IS_BIN; // compressed file is stored in binary form, and sizes are of the binary file
+    if (z_file->data_type == DT_BAM) z_file->flags |= SEC_GENOZIP_HEADER_FL_TXT_IS_BIN; // compressed file is stored in binary form, and sizes are of the binary file
 }
 
 static void main_genozip (const char *txt_filename, 

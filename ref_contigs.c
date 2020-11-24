@@ -153,7 +153,7 @@ void ref_contigs_compress (void)
     COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
 
     created_contigs.len *= sizeof (RefContig);
-    zfile_compress_section_data_codec (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, CODEC_BSC); 
+    zfile_compress_section_data_ex (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, CODEC_BSC, 0); 
 
     buf_free (&created_contigs);
 }
@@ -450,7 +450,7 @@ PosType ref_contigs_get_genome_size (void)
     // note: gpos can exceed MAX_GPOS if compressed with REF_INTERNAL (and will, if there are a lot of tiny contigs
     // to which we grant 1M gpos space) - this is ok because denovo doesn't use gpos, rather the POS from the SAM alighment
 
-    ASSERT ((rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS) || (z_file->flags & GENOZIP_FL_REF_INTERNAL),
+    ASSERT ((rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS) || (z_file->flags & SEC_GENOZIP_HEADER_FL_REF_INTERNAL),
             "Error in ref_contigs_get_genome_size: gpos=%"PRId64" out of range 0-%"PRId64,
             rc_with_largest_gpos->gpos, MAX_GPOS);
 

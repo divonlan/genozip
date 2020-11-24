@@ -19,7 +19,7 @@ typedef struct BgzfBlockZip {
 } BgzfBlockZip;
 
 typedef struct BgzfBlockPiz {
-    uint32_t txt_index, txt_size; // index of uncompressed block within vb->txt_data. The first block doesn't necessarily have index=0 bc there could be passed-down data
+    int32_t txt_index, txt_size; // index of uncompressed block within vb->txt_data. The first block index will be negative if there is passed-down unconsumed data
 } BgzfBlockPiz;
 
 //---------
