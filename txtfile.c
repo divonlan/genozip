@@ -273,7 +273,7 @@ void txtfile_md5_one_vb (VBlock *vb)
 
             // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
             if (!md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far)) {
-
+                
                 // dump bad vb to disk
                 WARN ("MD5 of reconstructed vblock=%u (%s) differs from original file (%s).\n"
                     "Bad reconstructed vblock has been dumped to: %s\n"
@@ -348,7 +348,7 @@ static Md5Hash txtfile_read_header (bool is_first_txt)
         md5_update (&z_file->md5_ctx_single, &evb->txt_data);
     }
 
-    Md5Hash header_md5 = md5_snapshot (&z_file->md5_ctx_single);
+    Md5Hash header_md5 = flag.md5 ? md5_snapshot (&z_file->md5_ctx_single) : MD5HASH_NONE;
 
     COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
 
@@ -715,13 +715,14 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
         else
             txtfile_write_to_disk (&evb->txt_data);
 
-        if (test_md5) {
-            Md5Hash reconstructed_header_len = md5_do (evb->txt_data.data, evb->txt_data.len);
-
-            if (!md5_is_equal (reconstructed_header_len, header->md5_header)) {
+        if (test_md5 &&
+            z_file->genozip_version >= 9) {  // backward compatability: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity will be discovered though on the whole-file MD5 so no harm in skipping this.
+            Md5Hash reconstructed_header_digest = md5_do (evb->txt_data.data, evb->txt_data.len);
+            
+            if (!md5_is_equal (reconstructed_header_digest, header->md5_header)) {
                 WARN ("MD5 of reconstructed %s header (%s) differs from original file (%s)\n"
-                      "Bad reconstructed vblock has been dumped to: %s\n",
-                      dt_name (z_file->data_type), md5_display (reconstructed_header_len).s, md5_display (header->md5_header).s,
+                      "Bad reconstructed header has been dumped to: %s\n",
+                      dt_name (z_file->data_type), md5_display (reconstructed_header_digest).s, md5_display (header->md5_header).s,
                       txtfile_dump_vb (evb, z_name));
             }
         }
