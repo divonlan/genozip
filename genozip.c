@@ -369,12 +369,9 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         txt_filename = txtfile_piz_get_filename (z_filename, "", true);
 
     // open output txt file (except if unbinding or outputting to stdout)
-    if (txt_filename) {
+    if (txt_filename || flag.to_stdout) {
         ASSERT0 (!txt_file, "Error: txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
         txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag.out_dt);
-    }
-    else if (flag.to_stdout) { 
-        txt_file = file_open_redirect (WRITE, TXT_FILE, flag.out_dt); // open stdout
     }
     else if (flag.unbind) {
         // do nothing - the component files will be opened by txtfile_genozip_to_txt_header()
@@ -382,8 +379,6 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     else {
         ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
-
-    z_file->basename = file_basename (z_filename, false, FILENAME_STDIN, NULL, 0); // memory freed in file_close
     
     // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
     uint32_t component_i=0;
@@ -412,7 +407,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     // is we have a loaded reference and it is no longer needed, unload it now, to free the memory for the testing process
     if (is_last_file) ref_unload_reference (true);
 
-    StreamP test = stream_create (0, 0, 0, 0, 0, 0, 
+    StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",
                                   exec_name, "--decompress", "--test", z_filename,
                                   flag.quiet       ? "--quiet"        : SKIP_ARG,
@@ -434,6 +429,45 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
 }
 
+static void main_genozip_open_z_file (char **z_filename)
+{
+    DataType z_data_type = txt_file->data_type;
+
+    if (!(*z_filename) && !flag.to_stdout) {
+        bool is_url = url_is_url (txt_file->name);
+        const char *basename = is_url ? file_basename (txt_file->name, false, "", 0,0) : NULL;
+        const char *local_txt_filename = basename ? basename : txt_file->name;
+
+        unsigned fn_len = strlen (local_txt_filename);
+        *z_filename = (char *)MALLOC (fn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
+
+        // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
+        const char *genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (txt_file->data_type, txt_file->type)];
+
+        if (file_has_ext (local_txt_filename, file_exts[txt_file->type]))
+            sprintf (*z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_txt_filename, genozip_ext); 
+        else 
+            sprintf (*z_filename, "%s%s", local_txt_filename, genozip_ext); 
+
+        FREE (basename);
+    }
+    else if (flag.to_stdout) { // stdout
+#ifdef _WIN32
+        // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
+        ASSINP (isatty(1), "%s: redirecting binary output is not supported on Windows, use --output instead", global_cmd);
+#endif
+        ASSINP (flag.force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
+
+        ASSERT0 (!flag.pair, "Error: cannot uncompress both paired end files while redirecting the output");
+    } 
+
+    z_file = file_open (*z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, z_data_type);
+
+    // note on BCF and CRAM: we used bcftools/samtools as an external compressor, so that genozip sees the text,
+    // not binary, data of these files - the same as if the file were compressed with eg bz2
+    if (z_file->data_type == DT_BAM) z_file->flags |= GENOZIP_FL_TXT_IS_BIN; // compressed file is stored in binary form, and sizes are of the binary file
+}
+
 static void main_genozip (const char *txt_filename, 
                           char *z_filename,
                           bool is_first_file, bool is_last_file,
@@ -447,74 +481,26 @@ static void main_genozip (const char *txt_filename,
             "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
 
     // get input file
-    if (txt_filename) {
-        
-        if (!txt_file) // open the file - possibly already open from main_load_reference
-            txt_file = file_open (txt_filename, READ, TXT_FILE, DT_NONE); 
+    if (!txt_file) // open the file - possibly already open from main_load_reference
+        txt_file = file_open (txt_filename, READ, TXT_FILE, DT_NONE); 
 
-        // skip this file if its size is 0
-        RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
+    // skip this file if its size is 0
+    RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
 
-        if (!txt_file->file) goto done; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
-    }
-    else {  // stdin
-        if (!txt_file) // possibly already open from main_load_reference
-            txt_file = file_open_redirect (READ, TXT_FILE, DT_NONE); 
-        flag.to_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
-    }
+    flag.to_stdout = !txt_filename && !z_filename; // implicit setting of stdout by using stdin, unless -o was used
+
+    if (!txt_file->file) goto done; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
 
     stats_add_txt_name (txt_name);
 
     ASSERT0 (flag.bind || !z_file, "Error: expecting z_file to be NULL in non-bound mode");
 
-    DataType z_data_type = txt_file->data_type;
-
     // get output FILE
-    if (!flag.to_stdout) {
-
-        if (!z_file) { // skip if we're the second file onwards in bind mode - nothing to do
-
-            if (!z_filename) {
-                bool is_url = url_is_url (txt_filename);
-                const char *basename = is_url ? file_basename (txt_filename, false, "", 0,0) : NULL;
-                const char *local_txt_filename = basename ? basename : txt_filename;
-
-                unsigned fn_len = strlen (local_txt_filename);
-                z_filename = (char *)MALLOC (fn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
-
-                // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
-                const char *genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (txt_file->data_type, txt_file->type)];
-
-                if (file_has_ext (local_txt_filename, file_exts[txt_file->type]))
-                    sprintf (z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_txt_filename,
-                             genozip_ext); 
-                else 
-                    sprintf (z_filename, "%s%s", local_txt_filename, genozip_ext); 
-
-                FREE (basename);
-            }
-
-            z_file = file_open (z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, z_data_type);
-
-            // note on BCF and CRAM: we used bcftools/samtools as an external compressor, so that genozip sees the text,
-            // not binary, data of these files - the same as if the file were compressed with eg bz2
-            if (z_file->data_type == DT_BAM) z_file->flags |= GENOZIP_FL_TXT_IS_BIN; // compressed file is stored in binary form, and sizes are of the binary file
-        }
-    }
-    else if (flag.to_stdout) { // stdout
-#ifdef _WIN32
-        // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
-        ASSINP (isatty(1), "%s: redirecting binary output is not supported on Windows, use --output instead", global_cmd);
-#endif
-        ASSINP (flag.force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
-
-        z_file = file_open_redirect (WRITE, Z_FILE, z_data_type);
-    } 
-    else ABORT0 ("Error: No output channel");
+    if (!z_file)  // skip if we're the second file onwards in bind mode - nothing to do
+        main_genozip_open_z_file (&z_filename);
     
     flags_update_zip_one_file();
 
-    txt_file->basename = file_basename (txt_filename, false, FILENAME_STDIN, NULL, 0);
     zip_one_file (txt_file->basename, is_last_file);
 
     if (flag.show_stats && (!flag.bind || is_last_file)) stats_display();
@@ -600,7 +586,7 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
     if (!flag.ref_use_aligner && dt==DT_SAM && primary_command==ZIP) {
 
         // open here instead of in main_genozip
-        txt_file = filename ? file_open (filename, READ, TXT_FILE, 0) : file_open_redirect (READ, TXT_FILE, DT_NONE);
+        txt_file = file_open (filename, READ, TXT_FILE, 0);
 
         // use the aligner if over 5 of the 100 first lines of the file are unaligned
         flag.ref_use_aligner = txt_file && txt_file->file && txtfile_test_data ('@', 100, 0.05, sam_zip_is_unaligned_line); 

@@ -1119,7 +1119,7 @@ static void ctx_dict_read_one_vb (VBlockP vb)
         dict_ctx->word_list.len += header ? BGEN32 (header->num_snips) : 0;
         dict_ctx->dict.len      += vb->fragment_len;
     }
-    
+
 done: 
     // note: in cases we just "goto" here, no data is read, and a thread is needlessly created to decompress it
     // this is because the vb_i of the section needs to match the vb_i of the thread

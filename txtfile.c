@@ -329,7 +329,6 @@ static Md5Hash txtfile_read_header (bool is_first_txt)
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
     #define HEADER_BLOCK (256*1024) // we have no idea how big the header will be... read this much at time
     while ((header_len = (DT_FUNC (txt_file, is_header_done)())) < 0) { // we might have data here from txtfile_test_data
-
         ASSERT (bytes_read, "Error in txtfile_read_header: %s: %s file too short - unexpected end-of-file", txt_name, dt_name(txt_file->data_type));
 
         buf_alloc_more (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
@@ -361,9 +360,10 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
     ASSERT (*i >= 0 && *i < vb->txt_data.len, "Error in def_unconsumed: *i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
-    for (; *i >= (int32_t)first_i; (*i)--) 
+    for (; *i >= (int32_t)first_i; (*i)--) {
         if (vb->txt_data.data[*i] == '\n') 
             return vb->txt_data.len-1 - *i;
+    }
 
     return -1; // cannot find \n in the data starting first_i
 }
@@ -375,7 +375,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
 
     // case: the data is BGZF-compressed in vb->compressed, except for passed down data from prev VB        
     // uncompress one block at a time to see if its sufficient. usually, one block is enough
-    if (vb->compressed.len)
+    if (txt_file->codec == CODEC_BGZF && vb->compressed.len)
         for (int block_i=vb->bgzf_blocks.len-1; block_i >= 0; block_i--) {
             BgzfBlockZip *bb = ENT (BgzfBlockZip, vb->bgzf_blocks, block_i);
             bgzf_uncompress_one_block (vb, bb);
@@ -445,7 +445,8 @@ void txtfile_read_vblock (VBlock *vb)
 
     // make sure file isn't truncated - if we reached EOF there should be no data to be passed up   
     ASSERT (!passed_up_len || !txt_file->is_eof,
-            "Error: input file %s ends abruptly after reading %" PRIu64 " bytes in vb=%u", txt_name, vb->txt_data.len, vb->vblock_i);
+            "Error: input file %s ends abruptly after reading %" PRIu64 " bytes in vb=%u ft=%s dt=%s", 
+            txt_name, vb->txt_data.len, vb->vblock_i, ft_name (txt_file->type), dt_name (txt_file->data_type));
 
     // if we have some unconsumed data, pass it up to the next vb
     if (passed_up_len) {

@@ -45,20 +45,9 @@ static const char *libdeflate_error (int err)
 // ZIP SIDE - decompress BGZF-compressed file and prepare BGZF section
 //--------------------------------------------------------------------
 
-// unfortunately, we can't use fread(), since file_open_txt_read, who calls us, might later try to open the file
-// with gzdopen which then gzread uses read() - causing skipping of the data that already is read into fread() buffers
-// here, we read the amount of data requested, unless EOF is encountered first
-static uint32_t bgzf_fread (File *file, void *dst_buf, uint32_t count)
+static inline uint32_t bgzf_fread (File *file, void *dst_buf, uint32_t count)
 {
-    uint32_t bytes=0;
-    while (bytes < count) {
-        uint32_t bytes_once = read (fileno((FILE *)file->file), &((char*)dst_buf)[bytes], count - bytes);
-        if (!bytes_once) return bytes;  // EOF
-
-        bytes += bytes_once;
-    }
-
-    return bytes; // == count
+    return fread (dst_buf, 1, count, (FILE *)file->file);
 }
 
 // reads and validates a BGZF block, and returns the uncompressed size, or, in case of soft_fail:
@@ -91,8 +80,9 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     *block_size = LTEN16 (h->bsize) + 1;
     
     uint32_t body_size = *block_size - sizeof (struct BgzfHeader);
-    ASSERT (bgzf_fread (file, h+1, body_size) == body_size, 
-            "Error in bgzf_read_block: failed to read body of BGZF block in %s: %s", file->name, strerror (errno));
+    uint32_t bytes = bgzf_fread (file, h+1, body_size);
+    ASSERT (bytes == body_size, "Error in bgzf_read_block: failed to read body of BGZF block in %s - expecting %u bytes but read %u: %s", 
+            file->name, body_size, bytes, strerror (errno));
 
     uint32_t isize_lt32 = *(uint32_t *)&block[*block_size - 4];
     uint32_t isize = LTEN32 (isize_lt32); // 0...65536 per spec
