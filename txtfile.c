@@ -578,8 +578,6 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
         case CODEC_XZ:   ratio = is_no_ht_vcf ? 171 : 12.7; break;
 
-        case CODEC_BAM:  ratio = 7; break;
-
         case CODEC_CRAM: ratio = 9; break;
 
         case CODEC_ZIP:  ratio = 3; break;
@@ -684,8 +682,12 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
 
     // get SEC_BGZF data if needed
     if (flag.bgzf) {
-        bgzf_read_and_uncompress_isizes (sl);     
-        header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_read_and_uncompress_isizes
+
+        // load the source file isize if we have it and we are attempting to reconstruct an unmodifed file identical to the source
+        if (!flag.data_modified) 
+            bgzf_load_isizes (sl);     
+
+        header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_load_isizes
     }
 
     // now get the text of the txt header itself
@@ -707,7 +709,7 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
 
         if (test_md5) md5_update (&txt_file->md5_ctx_bound, &evb->txt_data);
 
-        if (flag.bgzf) {
+        if (flag.bgzf) { // compress the header with BGZF if needed
             bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
             bgzf_compress_vb (evb);
             bgzf_write_to_disk (evb);
@@ -716,7 +718,7 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
             txtfile_write_to_disk (&evb->txt_data);
 
         if (test_md5 &&
-            z_file->genozip_version >= 9) {  // backward compatability: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity will be discovered though on the whole-file MD5 so no harm in skipping this.
+            z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
             Md5Hash reconstructed_header_digest = md5_do (evb->txt_data.data, evb->txt_data.len);
             
             if (!md5_is_equal (reconstructed_header_digest, header->md5_header)) {
@@ -757,7 +759,7 @@ const char *txtfile_piz_get_filename (const char *orig_name,const char *prefix, 
     char *txt_filename = (char *)MALLOC(fn_len + 10);
 
     #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
-        ((z_file->data_type==(from) && flag.out_dt==(to) && strcmp (&txt_filename[fn_len-genozip_ext_len-strlen(ext)], (ext))) ? (int)strlen(ext) : 0) 
+        ((z_file->data_type==(from) && flag.out_dt==(to) && !strcmp (&txt_filename[fn_len-genozip_ext_len-strlen(ext)], (ext))) ? (int)strlen(ext) : 0) 
 
     // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
     int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_BAM,   ".sam") +
@@ -770,7 +772,7 @@ const char *txtfile_piz_get_filename (const char *orig_name,const char *prefix, 
     sprintf ((char *)txt_filename, "%s%.*s%s%s", prefix,
                 fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
                 old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
-                (flag.bgzf && flag.out_dt != DT_BAM) ? ".gz" : ""); // add .gz if --bgzip (except in BAM where it is implicit)
+                (flag.bgzf && flag.out_dt != DT_BAM) ? ".gz" : ""); // add .gz if --bgzf (except in BAM where it is implicit)
 
     return txt_filename;
 }

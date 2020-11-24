@@ -8,27 +8,17 @@
             "name": "Run Debug",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/genozip-debug.exe",
-            //"program": "${workspaceFolder}/genounzip-debug.exe",
+            //"program": "${workspaceFolder}/genozip-debug.exe",
+            "program": "${workspaceFolder}/genounzip-debug.exe",
             //"program": "${workspaceFolder}/genocat-debug.exe",
             //"program": "${workspaceFolder}/genozip-opt.exe",
             //"program": "${workspaceFolder}/genozip.exe",
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             
-            //"args": ["td/test.transfly-sorted.sam","td/test.transfly.fq","td/test.transfly-unsorted.sam","-edata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip","-fm"],
-            //"args": ["ALL.chr22.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.genozip"],
-            //"args": ["d:\\My-DNA/Dante/GFX0241869.bam","-fmojunk.genozip"],
-            //"args": ["data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip","--test"],
-            //"args": ["test-file-unaligned.sam.genozip", "-ftecopy.test-file-ref.fa.ref.genozip" ]
-            //"args": ["test-file-unaligned.sam", "-fmecopy.test-file-ref.fa.ref.genozip" ]
-            //"args": ["HJ3GHDRXX_1_191121_FD09254826_Homo-sapiens_CTGAAGCT-TAATCTTA_R_191112_RAYTOB_DNA_M001_R1.fastq.gz", "HJ3GHDRXX_1_191121_FD09254826_Homo-sapiens_CTGAAGCT-TAATCTTA_R_191112_RAYTOB_DNA_M001_R2.fastq.gz", "-fmojunk.genozip"]
-            //"args": ["test-file.sam.genozip", "-fojunk.sam.bz2"]
-            //"args": ["-f", "bug9.sam", "-Edata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip"]
-            //"args": ["bug.sam", "-Edata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip","-f"]
-            "args": ["bug.fq.gz", "-f@1"]
-            //"args": ["junk.bam.genozip", "-t@1"],
-            //"args": ["d:\\My-DNA\\Dante\\GFX0241869.bam", "-fod:\\My-DNA\\GFX0241869.v9.bam.genozip"],
+            "args": ["junk.genozip", "-fm" ,"--show-bgz"],
+            //"args": ["junk.fq.gz", "-fm", "--show-bgzf"],
+
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

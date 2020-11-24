@@ -21,7 +21,7 @@ const DtTranslation dt_get_translation (void)
     static DtTranslation translations[] = TRANSLATIONS;
     #define NUM_TRANSLATIONS (sizeof (translations) / sizeof (translations[0]))
 
-    bool i_am_binary = !!(z_file->flags & GENOZIP_FL_TXT_IS_BIN);
+    bool i_am_binary = !!(z_file->flags & SEC_GENOZIP_HEADER_FL_TXT_IS_BIN);
 
     for (unsigned i=0; i < NUM_TRANSLATIONS; i++)
         if (translations[i].src_z_non_bin_dt == z_file->data_type &&

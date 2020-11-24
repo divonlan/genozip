@@ -38,7 +38,7 @@
 #define SAM_GENOZIP_   ".sam" GENOZIP_EXT
 
 // BAM
-#define BAM_           ".bam" // can be bgzip-compressed or not
+#define BAM_           ".bam" // can be bgzf-compressed or not
 #define BAM_GENOZIP_   ".bam.genozip" 
 
 // BCF
@@ -295,7 +295,10 @@ typedef struct File {
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
     uint32_t num_txt_components_so_far;
 
+    // stuff reading and writing txt files compressed with BGZF
     Buffer bgzf_isizes;                // TXT file: the isizes of the bgzf blocks in which this txt file is compressed (in BGEN16)
+    bool bgzf_has_eof_block;           // TXT file: true if file has an BGZF_EOF block
+    int32_t bzgf_passed_down_len;      // TXT file PIZ only
 
     // stats strings (z_file only)
     Buffer stats_buf_1, stats_buf_2;

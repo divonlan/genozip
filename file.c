@@ -29,7 +29,7 @@ File *z_file   = NULL;
 File *txt_file = NULL;
 
 static StreamP input_decompressor  = NULL; // bcftools or xz, unzip or samtools - only one at a time
-static StreamP output_compressor   = NULL; // bgzip, samtools, bcftools
+static StreamP output_compressor   = NULL; // samtools (for cram), bcftools
 
 static FileType stdin_type = UNKNOWN_FILE_TYPE; // set by the --input command line option
 
@@ -322,14 +322,12 @@ static bool file_open_txt_read (File *file)
             uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
             uint32_t block_size;
 
-            // don't buffer reads when reading the test bgzf block, bc if it turns out to be GZIP we will do gzdopen
-            // discarding the internal FILE buffer 
+            // we can't use libc read buffer unfortunately, because when reading the test bgzf block, if it turns out to be GZIP 
+            // we will do gzdopen discarding the internal FILE buffer. We also cannot use setvbuf after the file is already partly read (?).
             // TO DO: this doesn't work over a pipe - so we can't pipe-in non-BGZF GZIP files (bug 243)
             setvbuf (file->file, 0, _IONBF, 0); 
 
             int32_t bgzf_uncompressed_size = bgzf_read_block (file, block, &block_size, true);
-
-            setvbuf (file->file, 0, _IOFBF, BUFSIZ); // allocate normal internal fread buffer upon next read
 
             // case: this is indeed a bgzf - we put the still-compressed data in vb->compressed for later consumption
             // is txtfile_read_block_bgzf
@@ -445,21 +443,31 @@ static bool file_open_txt_write (File *file)
 
         // case: output file has a .gz extension (eg the user did "genounzip xx.vcf.genozip -o yy.gz")
         if ((file_has_ext (file->name, ".gz") || file_has_ext (file->name, ".bgz")) &&  
-            file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
+             file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
             
             file->type = txt_out_ft_by_dt[file->data_type][1]; 
             flag.bgzf = true;
         }
+
+        // case: BAM
+        else if (file->data_type == DT_BAM) 
+            file->type = BAM; // flag.bgzf already set in flags_update_piz_one_file
         
-        // case: not .gz - use the default plain file format
+        // case: not .gz and not BAM - use the default plain file format
         else { 
             file->type = txt_out_ft_by_dt[file->data_type][0]; 
-            ASSINP (!flag.bgzf, "%s: using --output in combination with --bgzip, requires the output filename to end with .gz or .bgz", global_cmd);
+            ASSINP (!flag.bgzf, "%s: using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz", global_cmd);
         }
     }
 
     // get the codec    
     file_get_codecs_by_txt_ft (file->data_type, file->type, WRITE, &file->codec);
+    
+    // decompressing as compressed BGZF format
+    if (file->codec == CODEC_GZ || file->codec == CODEC_BGZF) {
+        file->codec = CODEC_BGZF; // we always write gzip format output with BGZF
+        flag.bgzf   = true;
+    }
 
     // don't actually open the output file if we're just testing in genounzip or PIZing a reference file
     if (flag.test || flag.reading_reference) return true;
@@ -470,10 +478,9 @@ static bool file_open_txt_write (File *file)
         case CODEC_BGZF : 
         case CODEC_NONE : file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
         case CODEC_BCF  : file_redirect_output_to_stream (file, "bcftools", "view", "-Ob", NULL); break;
-        case CODEC_BAM  : file_redirect_output_to_stream (file, "samtools", "view", "-OBAM",  file_samtools_no_PG()); break;
         case CODEC_CRAM : file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", file_samtools_no_PG()); break;
 
-        default         : ABORT ("%s: invalid filename extension for %s files: %s", global_cmd, dt_name (file->data_type), file->name);
+        default         : ABORT ("%s: invalid filename extension for %s files: %s. Please use --output to set another name", global_cmd, dt_name (file->data_type), file->name);
     }
 
     return file->file != 0;
@@ -661,9 +668,14 @@ void file_close (File **file_p,
     
     if (file->file) {
 
-        if (file->mode == WRITE && file->supertype == TXT_FILE && file->codec == CODEC_BGZF)
+        if (file->mode == WRITE && file->supertype == TXT_FILE && file->codec == CODEC_BGZF && file->bgzf_has_eof_block) {
             ASSERT (fwrite (BGZF_EOF, BGZF_EOF_LEN, 1, (FILE *)file->file), "Failed to write BGZF EOF to %s: %s", file->name, strerror (errno)); 
+        
+            if (flag.show_bgzf)
+                fprintf (stderr, "%-7s vb=%u   EOF\n", "IO", 0);
+
             // proceed to FCLOSE below     
+        }
 
         if (file->mode == READ && (file->codec == CODEC_GZ))
             ASSERTW (!gzclose_r((gzFile)file->file), "%s: warning: failed to close file: %s", global_cmd, file_printname (file))

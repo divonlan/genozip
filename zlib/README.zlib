@@ -7,5 +7,5 @@ The modifications are as follows:
 1) removad files that are not needed by this project
 2) change z_stream.total_in from uLong to z_off64_t
 3) added a counter z_stream.total_ever_in - counting the total number of bytes in, even across inflateReset
-   that occurs when gzip blocks are deflated separately and concatenated, as in the bgzip format
+   that occurs when gzip blocks are deflated separately and concatenated, as in the BGZF format
 4) added the function gzconsumed64

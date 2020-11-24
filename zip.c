@@ -63,7 +63,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
     if (flag.make_reference)
         progress_finalize_component_time ("Done", md5);
 
-    // when compressing BAM report only ratio2 (compresstion against bgzipped BAM - we don't care about the underlying non-bgzipped BAM)
+    // when compressing BAM report only ratio2 (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     else if (z_file->data_type == DT_BAM) 
             progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio2, md5);
 

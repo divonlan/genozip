@@ -36,7 +36,7 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         #define _Q  {"noisy",         no_argument,       &option_noisy,          1 }
         #define _DL {"replace",       no_argument,       &flag.replace,          1 }
         #define _V  {"version",       no_argument,       &command, VERSION         }
-        #define _z  {"bgzip",         no_argument,       &flag.bgzf,             1 }
+        #define _z  {"bgzf",          no_argument,       &flag.bgzf,             1 }
         #define _z0 {"plain",         no_argument,       &flag.plain,            1 }
         #define _zb {"bam",           no_argument,       &flag.out_dt,           DT_BAM }
         #define _zB {"BAM",           no_argument,       &flag.out_dt,           DT_BAM }
@@ -297,7 +297,7 @@ void flags_update (unsigned num_files, char **filenames, const bool *is_short)
     // some genozip flags are allowed only in combination with --decompress 
     if (exe_type == EXE_GENOZIP && command == ZIP) {
         char s[20]; 
-        ASSINP (!flag.bgzf,        "%s: option %s can only be used if --decompress is used too", global_cmd, OT("bgzip", "z"));
+        ASSINP (!flag.bgzf,        "%s: option %s can only be used if --decompress is used too", global_cmd, OT("bgzf", "z"));
         ASSINP (flag.out_dt == DT_NONE, "%s: option --%s can only be used if --decompress is used too", global_cmd, str_tolower (dt_name (flag.out_dt), s));
         ASSINP (!flag.unbind,       "%s: option %s can only be used if --decompress is used too", global_cmd, OT("unbind", "u"));
         ASSINP (!flag.show_aliases, "%s: option --show_aliases can only be used if --decompress is used too", global_cmd);
@@ -382,11 +382,12 @@ void flags_update_zip_one_file (void)
 {
 }
 
+// PIZ: called after opening z_file and reading the header before opening txt_file
 void flags_update_piz_one_file (void)
 {
     // handle native binary formats (BAM). note on BCF and CRAM: we used bcftools/samtools as an external 
     // compressor, so that genozip sees the text, not binary, data of these files - the same as if the file were compressed with eg bz2
-    if (command == PIZ && flag.out_dt == DT_NONE && (z_file->flags & GENOZIP_FL_TXT_IS_BIN)) {
+    if (command == PIZ && flag.out_dt == DT_NONE && (z_file->flags & SEC_GENOZIP_HEADER_FL_TXT_IS_BIN)) {
         if (z_file->data_type == DT_SAM) 
             // genounzip of a SAM genozip file with is_binary outputs BAM unless the user overrides with --sam or --fastq
             flag.out_dt = DT_BAM;
@@ -395,24 +396,31 @@ void flags_update_piz_one_file (void)
 
     // in case translating from SAM.genozip to BAM
     // is this correct ??????
-    if (flag.out_dt == DT_BAM) z_file->flags |= GENOZIP_FL_TXT_IS_BIN; // reconstructed file is in binary form
+    if (flag.out_dt == DT_BAM) z_file->flags |= SEC_GENOZIP_HEADER_FL_TXT_IS_BIN; // reconstructed file is in binary form
     
     if (flag.out_dt == DT_NONE) 
         flag.out_dt = z_file->data_type;
 
-    // .bcf will be bgzipped by bcftools, ignore --bgzip flag as we don't need an additional bgzip step
+    // .bcf will be bgzipped by bcftools, ignore --bgzf flag as we don't need an additional bgzf step
     if (flag.out_dt == DT_BCF) flag.bgzf=0;
 
-    // BAM or GENOZIP_FL_BGZF imply bgzf, unless user specifically asked for plain or we're outputting to stdout
-    if ((flag.out_dt == DT_BAM || (z_file->flags & GENOZIP_FL_BGZF)) && (!flag.plain && !flag.to_stdout)) 
+    // BAM or SEC_GENOZIP_HEADER_FL_BGZF imply bgzf, unless user specifically asked for plain or we're outputting to stdout
+    if ((flag.out_dt == DT_BAM || (z_file->flags & SEC_GENOZIP_HEADER_FL_BGZF)) && (!flag.plain && !flag.to_stdout)) 
         flag.bgzf=true;   
 
     // Note: BAM is stored as binary SAM, so do_translate=true for BAM->BAM , but false for BAM->SAM
     flag.do_translate = dt_get_translation().is_alt_toplevel; 
 
     // Check if the reconstructed data type is the same as the source data type
-    bool is_binary = (z_file->flags & GENOZIP_FL_TXT_IS_BIN);
+    bool is_binary = (z_file->flags & SEC_GENOZIP_HEADER_FL_TXT_IS_BIN);
     flag.reconstruct_as_src = (flag.out_dt == DT_SAM            && z_file->data_type==DT_SAM && !is_binary) || 
                               (flag.out_dt == DT_BAM            && z_file->data_type==DT_SAM && is_binary ) ||
                               (flag.out_dt == z_file->data_type && z_file->data_type!=DT_SAM);
+
+    // true if the output file of genounzip or genocat will NOT be identical to the source file as recorded in z_file
+    // note: this does not account for changes to the data done at the compression stage with --optimize
+    flag.data_modified = !flag.reconstruct_as_src || // translating to another data
+                         (z_file->num_components > 1 && !flag.unbind) || // concatenating
+                         flag.header_one || flag.no_header || flag.header_only || // data-modifying genocat options
+                         flag.regions || flag.samples || flag.drop_genotypes || flag.gt_only || flag.sequential;
 }

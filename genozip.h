@@ -104,7 +104,9 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_DOMQ    = 13, // compress SAM/FASTQ quality scores, if dominated by a single character
     CODEC_GTSHARK = 14, // compress VCF haplotype matrix with gtshark
     // external compressors (used by executing an external application)
-    CODEC_BGZF=20, CODEC_XZ=21, CODEC_BCF=22, CODEC_BAM=23, CODEC_CRAM=24, CODEC_ZIP=25,  
+    CODEC_BGZF=20, CODEC_XZ=21, CODEC_BCF=22, 
+    V8_CODEC_BAM=23,    // in v8 BAM was a codec which was compressed using samtools as external compressor. since v9 it is a full data type, and no longer a codec.
+    CODEC_CRAM=24, CODEC_ZIP=25,  
 
     NUM_CODECS
 } Codec; 

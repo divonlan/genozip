@@ -13,6 +13,7 @@ typedef struct {
     // genozip options that affect the compressed file
     int vblock, gtshark, fast, make_reference, md5;
 
+    // ZIP: data modifying optinos
     int optimize, optimize_sort, optimize_PL, optimize_GL, optimize_GP, optimize_VQSLOD,  // optimize flags
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC;
     
@@ -25,7 +26,7 @@ typedef struct {
     int plain, bgzf, out_dt;
     char *unbind;
 
-    // genocat options for showing only a subset of the file 
+    // PIZ: data-modifying genocat options for showing only a subset of the file 
     int header_one, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential;
     char *grep;
@@ -70,7 +71,9 @@ typedef struct {
          do_translate,       // PIZ: decompression requires translation to another data type
          genocat_info_only,  // User requested to genocat with only metadata to be shown, not file contents
          multiple_files,     // Command line includes multiple files
-         reconstruct_as_src; // the reconstructed data type is the same as the source data type
+         reconstruct_as_src, // the reconstructed data type is the same as the source data type
+         data_modified;      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
+
     uint64_t stdin_size;
 } Flags;
 

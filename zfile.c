@@ -318,10 +318,10 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
 // compress section - two options for input data - 
 // 1. contiguous data in section_data 
 // 2. line by line data - by providing a callback + total_len
-void zfile_compress_section_data_codec (VBlock *vb, SectionType section_type, 
-                                        Buffer *section_data,          // option 1 - compress contiguous data
-                                        LocalGetLineCB callback, uint32_t total_len, // option 2 - compress data one line at a time
-                                        Codec codec)
+void zfile_compress_section_data_ex (VBlock *vb, SectionType section_type, 
+                                     Buffer *section_data,          // option 1 - compress contiguous data
+                                     LocalGetLineCB callback, uint32_t total_len, // option 2 - compress data one line at a time
+                                     Codec codec, SectionFlags flags)
 {
     SectionHeader header = (SectionHeader){
         .magic                 = BGEN32 (GENOZIP_MAGIC),
@@ -329,7 +329,8 @@ void zfile_compress_section_data_codec (VBlock *vb, SectionType section_type,
         .data_uncompressed_len = BGEN32 (section_data ? section_data->len : total_len),
         .compressed_offset     = BGEN32 (sizeof(header)),
         .codec                 = codec,
-        .vblock_i              = BGEN32 (vb->vblock_i)
+        .vblock_i              = BGEN32 (vb->vblock_i),
+        .flags                 = flags
     };
 
     if (flag.show_time) codec_show_time (vb, st_name (section_type), NULL, codec);
@@ -565,7 +566,7 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
     if (txt_file)// txt_file is still NULL in case of --1d
-        txt_file->data_type = (data_type == DT_SAM) && (z_file->flags & GENOZIP_FL_TXT_IS_BIN) ? DT_BAM : data_type;
+        txt_file->data_type = (data_type == DT_SAM) && (z_file->flags & SEC_GENOZIP_HEADER_FL_TXT_IS_BIN) ? DT_BAM : data_type;
 
     ASSERT (header->encryption_type != ENC_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
             "Error: password provided, but file %s is not encrypted", z_name);
@@ -678,9 +679,9 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
     header.h.codec                 = CODEC_BZ2;
     header.h.flags                 = z_file->flags |
-                                     (flag.reference == REF_INTERNAL ? GENOZIP_FL_REF_INTERNAL : 0) |
-                                     (flag.ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0) |
-                                     (txt_file->codec == CODEC_BGZF  ? GENOZIP_FL_BGZF         : 0);
+                                     (flag.reference == REF_INTERNAL ? SEC_GENOZIP_HEADER_FL_REF_INTERNAL : 0) |
+                                     (flag.ref_use_aligner           ? SEC_GENOZIP_HEADER_FL_ALIGNER      : 0) |
+                                     (txt_file->codec == CODEC_BGZF  ? SEC_GENOZIP_HEADER_FL_BGZF         : 0);
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)z_data_type);
     header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;

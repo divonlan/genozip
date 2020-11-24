@@ -645,7 +645,7 @@ static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
 
     else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
-        if (flag.md5) { 
+        if (flag.test) { 
             sprintf (s, "MD5 = %s verified as identical to the original %s", 
                         md5_display (decompressed_file_digest).s, dt_name (txt_file->data_type));
             progress_finalize_component (s); 

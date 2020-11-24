@@ -19,7 +19,7 @@ typedef struct BgzfBlockZip {
 } BgzfBlockZip;
 
 typedef struct BgzfBlockPiz {
-    uint32_t txt_index, txt_size; // index of uncompressed block within vb->txt_data. The first block doesn't necessarily have index=0 bc there could be passed-down data
+    int32_t txt_index, txt_size; // index of uncompressed block within vb->txt_data. The first block index will be negative if there is passed-down unconsumed data
 } BgzfBlockPiz;
 
 //---------
@@ -37,7 +37,7 @@ extern void bgzf_compress_bgzf_section (void);
 // PIZ side
 //---------
 
-extern void bgzf_read_and_uncompress_isizes (ConstSectionListEntryP sl_ent);
+extern bool bgzf_load_isizes (ConstSectionListEntryP sl_ent);
 extern void bgzf_calculate_blocks_one_vb (VBlockP vb, uint32_t vb_txt_data_len);
 extern void bgzf_compress_vb (VBlockP vb);
 extern void bgzf_write_to_disk (VBlockP vb);

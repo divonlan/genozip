@@ -77,10 +77,13 @@ typedef struct SectionHeader {
 } SectionHeader; 
 
 // flags written to SectionHeaderGenozipHeader.h.flags allowing Seg to communicate instructions to Piz
-#define GENOZIP_FL_REF_INTERNAL ((SectionFlags)0x01)  // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
-#define GENOZIP_FL_ALIGNER      ((SectionFlags)0x02)  // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
-#define GENOZIP_FL_TXT_IS_BIN   ((SectionFlags)0x04)  // Source file is binary (BAM)
-#define GENOZIP_FL_BGZF         ((SectionFlags)0x08)  // Reconstruct as BGZF (user may override) (determined by the last component)
+#define SEC_GENOZIP_HEADER_FL_REF_INTERNAL ((SectionFlags)0x01)  // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
+#define SEC_GENOZIP_HEADER_FL_ALIGNER      ((SectionFlags)0x02)  // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
+#define SEC_GENOZIP_HEADER_FL_TXT_IS_BIN   ((SectionFlags)0x04)  // Source file is binary (BAM)
+#define SEC_GENOZIP_HEADER_FL_BGZF         ((SectionFlags)0x08)  // Reconstruct as BGZF (user may override) (determined by the last component)
+
+#define SEC_BGZF_FL_HAS_EOF_BLOCK          ((SectionFlags)0x01)  // in addition to the blocks in this section, there is also an EOF block
+
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
