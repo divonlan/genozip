@@ -295,10 +295,11 @@ typedef struct File {
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
     uint32_t num_txt_components_so_far;
 
-    // stuff reading and writing txt files compressed with BGZF
-    Buffer bgzf_isizes;                // TXT file: the isizes of the bgzf blocks in which this txt file is compressed (in BGEN16)
-    bool bgzf_has_eof_block;           // TXT file: true if file has an BGZF_EOF block
-    int32_t bzgf_passed_down_len;      // TXT file PIZ only
+    // TXT file: stuff reading and writing txt files compressed with BGZF
+    Buffer bgzf_isizes;                // of the bgzf blocks in which this txt file is compressed (in BGEN16)
+    BgzfFlags bgzf_flags;              // correspond to SectionHeader.flags in SEC_BGZF
+    uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
+    int32_t bzgf_passed_down_len;      // PIZ: bytes at the end of the VB too small for one bgzf block passed to the next block
 
     // stats strings (z_file only)
     Buffer stats_buf_1, stats_buf_2;

@@ -673,7 +673,9 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
 
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
-    //txt_file->codec                = header->codec; // we ignore header->codec for now
+    
+    if (txt_file->codec == CODEC_BGZF)
+        memcpy (txt_file->bgzf_signature, header->codec_info, 3);
     
     if (is_first_txt || flag.unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);
@@ -684,8 +686,16 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
     if (flag.bgzf) {
 
         // load the source file isize if we have it and we are attempting to reconstruct an unmodifed file identical to the source
+        bool loaded = false;
         if (!flag.data_modified) 
-            bgzf_load_isizes (sl);     
+            loaded = bgzf_load_isizes (sl);     
+
+        // case: we're creating our own BGZF blocks
+        if (!loaded)
+            txt_file->bgzf_flags = (BgzfFlags){ // case: we're creating our own BGZF blocks
+                .f.has_eof_block = true, // add an EOF block at the end
+                .f.libdeflate_level = BGZF_COMP_LEVEL_DEFAULT 
+            };
 
         header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_load_isizes
     }

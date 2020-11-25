@@ -95,7 +95,7 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
         NEXTENT (uint16_t, file->bgzf_isizes) = BGEN16 ((uint16_t)(isize - 1)); // -1 to make the range 0..65535
     }
     else 
-        txt_file->bgzf_has_eof_block = true;
+        txt_file->bgzf_flags.f.has_eof_block = true;
     
     return isize;
 }
@@ -113,8 +113,7 @@ void bgzf_compress_bgzf_section (void)
     // and even produce an error. that's why we test.
     Codec codec = codec_assign_best_codec (evb, NULL, &txt_file->bgzf_isizes, SEC_BGZF);
 
-    zfile_compress_section_data_ex (evb, SEC_BGZF, &txt_file->bgzf_isizes, NULL, 0, codec,
-                                    txt_file->bgzf_has_eof_block ? SEC_BGZF_FL_HAS_EOF_BLOCK : 0);
+    zfile_compress_section_data_ex (evb, SEC_BGZF, &txt_file->bgzf_isizes, NULL, 0, codec, txt_file->bgzf_flags.flags);
 
     txt_file->bgzf_isizes.len /= sizeof (uint16_t); // restore
 }
@@ -142,8 +141,8 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 
     enum libdeflate_result ret = 
         libdeflate_deflate_decompress (vb->libdeflate, 
-                                       h+1, bb->comp_size - sizeof(*h),   // compressed
-                                       ENT (char, vb->txt_data, bb->txt_index), bb->txt_size, NULL); // uncompressed
+                                       h+1, bb->comp_size - sizeof(BgzfHeader) - sizeof (BgzfFooter), // compressed
+                                       ENT (char, vb->txt_data, bb->txt_index), bb->txt_size, NULL);  // uncompressed
 
     ASSERT (ret == LIBDEFLATE_SUCCESS, "Error in bgzf_uncompress_vb: libdeflate_deflate_decompress failed: %s", libdeflate_error(ret));
 
@@ -173,6 +172,48 @@ void bgzf_uncompress_vb (VBlock *vb)
     }
 }
 
+// ZIP: tests a BGZF block against libdeflate's level 0-9 (even though libdeflate as 13 levels, bgzip exposes only 10)
+// returns the level 0-12 if detected, or BGZF_COMP_LEVEL_UNKNOWN if not
+// NOTE: even if we detected the level based on the first block - its not certain that the file was compressed with this level
+// and we still might get it wrong. This is because multiple levels might result in the same compression for this block, but
+// maybe not for other blocks in the file.
+uint8_t bgzf_get_compression_level (const char *filename, const uint8_t *comp_block, uint32_t comp_block_size, uint32_t uncomp_block_size)
+{
+    static const int comp_levels[] = { 6, 9, 8, 7, 5, 4, 3, 2, 1, 0, 12, 11, 10 }; // test in the order of likelihood of observing them
+
+    // ignore the header and footer of the block
+    comp_block      += sizeof (BgzfHeader);
+    comp_block_size -= sizeof (BgzfHeader) + sizeof (BgzfFooter);
+
+    // decompress block
+    if (!evb->libdeflate) evb->libdeflate = libdeflate_alloc_decompressor();
+
+    uint8_t uncomp_block[uncomp_block_size]; // at most 64K - fits on stack
+    enum libdeflate_result ret = 
+        libdeflate_deflate_decompress (evb->libdeflate, comp_block, comp_block_size, uncomp_block, uncomp_block_size, NULL);
+
+    ASSERT (ret == LIBDEFLATE_SUCCESS, "Error: unable to read file %s. It appears to be compressed with BGZF, however decompression failed: %s", filename, libdeflate_error(ret));
+
+    // now, re-compress with each level until the compressed size matches
+    uint8_t recomp_block[BGZF_MAX_BLOCK_SIZE]; 
+
+    for (int level_i=0; level_i < sizeof (comp_levels) / sizeof (comp_levels[0]); level_i++) { 
+        int level = comp_levels[level_i];
+        void *compressor = libdeflate_alloc_compressor (level);
+        uint32_t recomp_size = (uint32_t)libdeflate_deflate_compress (compressor, uncomp_block, uncomp_block_size, recomp_block, BGZF_MAX_BLOCK_SIZE);
+
+        libdeflate_free_compressor (compressor);
+
+        if (recomp_size == comp_block_size && !memcmp (comp_block, recomp_block, comp_block_size)) {
+            if (flag.show_bgzf) fprintf (stderr, "File %s: Identified as compressed with libdeflate level %u\n", filename, level);
+            return level; // this still might be wrong, see comment in function header ^
+        }       
+    }
+  
+    if (flag.show_bgzf) fprintf (stderr, "File %s: Could not idetify libdeflate compression level\n", filename);
+    return BGZF_COMP_LEVEL_UNKNOWN;
+}
+
 //---------
 // PIZ SIDE
 //---------
@@ -180,7 +221,7 @@ void bgzf_uncompress_vb (VBlock *vb)
 bool bgzf_load_isizes (const SectionListEntry *sl_ent) 
 {
     // skip passed all VBs of this component, and read SEC_BGZF - the last section of the component - if it exists
-    // but stop if we encounter another component before seeing the BGZF
+    // but stop if we encounter the next component's SEC_TXT_HEADER before seeing the BGZF
     if (!sections_get_next_section_of_type2 (&sl_ent, SEC_BGZF, SEC_TXT_HEADER, false, false) // updates sl_ent, but its a local var, doesn't affect our caller
         || sl_ent->section_type == SEC_TXT_HEADER)
         return false; // this component doesn't contain a BGZF section
@@ -188,7 +229,11 @@ bool bgzf_load_isizes (const SectionListEntry *sl_ent)
     int32_t offset = zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_BGZF, sl_ent);
 
     SectionHeader *header = (SectionHeader *)ENT (char, evb->z_data, offset);
-    txt_file->bgzf_has_eof_block = (header->flags & SEC_BGZF_FL_HAS_EOF_BLOCK);
+    txt_file->bgzf_flags.flags = header->flags;
+
+    // if we don't know the compression level, go with the default
+    if (txt_file->bgzf_flags.f.libdeflate_level == BGZF_COMP_LEVEL_UNKNOWN)
+        txt_file->bgzf_flags.f.libdeflate_level = BGZF_COMP_LEVEL_DEFAULT;
 
     zfile_uncompress_section (evb, header, &txt_file->bgzf_isizes, "txt_file->bgzf_isizes", 0, SEC_BGZF);
     txt_file->bgzf_isizes.len /= 2;
@@ -211,8 +256,6 @@ static void bgzf_create_isizes (VBlock *vb, uint32_t vb_txt_data_len)
             .txt_index = index, 
             .txt_size  = MIN (BGZF_CREATED_BLOCK_SIZE, vb_txt_data_len - index) 
         };
-
-    txt_file->bgzf_has_eof_block = true; // add an EOF block at the end
 }
 
 // I/O thread ahead of dispatching - calculate the BGZF blocks within this VB that need to be compressed by
@@ -260,13 +303,9 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
 {
     START_TIMER;
 
-    // use level 6 - same as samtools and bgzip default level. if we're lucky (same gzip library and user used default level),
-    // we will reconstruct precisely even at the .gz level
-    #define BGZF_DEFAULT_COMPRESSION_LEVEL 6 
-    
     #define BGZF_MAX_CDATA_SIZE (BGZF_MAX_BLOCK_SIZE - sizeof (BgzfHeader) - sizeof (BgzfFooter))
 
-    if (!vb->libdeflate) vb->libdeflate = libdeflate_alloc_compressor (BGZF_DEFAULT_COMPRESSION_LEVEL);
+    if (!vb->libdeflate) vb->libdeflate = libdeflate_alloc_compressor (txt_file->bgzf_flags.f.libdeflate_level);
 
     buf_alloc_more (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, 0, char, 1.2, "compressed");
 
@@ -381,7 +420,8 @@ void bgzf_write_to_disk (VBlock *vb)
 
     // Step 2. Write all the "middle" blocks of this VB, compressed by bgzf_compress_vb, currently in vb->compressed, to disk
     if (vb->compressed.len) {
-        if (!flag.test) file_write (txt_file, vb->compressed.data, vb->compressed.len);
+        if (!flag.test) 
+            file_write (txt_file, vb->compressed.data, vb->compressed.len);
 
         txt_file->txt_data_so_far_single += vb->compressed.uncomp_size;
         txt_file->disk_so_far            += vb->compressed.len; // evb->compressed.len;
@@ -400,4 +440,31 @@ void bgzf_write_to_disk (VBlock *vb)
         buf_alloc_more (evb, &txt_file->unconsumed_txt, last_data_len, 0, char, 0, "txt_file->unconsumed_txt");
         buf_add (&txt_file->unconsumed_txt, ENT (char, vb->txt_data, last_data_index), last_data_len);
     }
+}
+
+void bgzf_write_finalize (File *file)
+{
+    // write EOF block if needed
+    if (file->bgzf_flags.f.has_eof_block) {
+        if (!flag.test) file_write (file, BGZF_EOF, BGZF_EOF_LEN);
+        file->disk_so_far += BGZF_EOF_LEN;
+    
+        if (flag.show_bgzf) fprintf (stderr, "%-7s vb=%u   EOF\n", "IO", 0);
+    }
+
+    // if we attempted to reconstruct the BGZF lock to the original file's bgzf_isizes - warn if we were unlucky and failed
+    if (file->bgzf_isizes.len) {
+        uint8_t signature[3];
+        bgzf_sign (file->disk_so_far, signature);
+
+        ASSERTW (!memcmp (signature, file->bgzf_signature, 3), 
+                 "FYI: %s was recompressed with BGZF (.gz). However, it seems that the original file was compressed with a different compression library than genozip uses, resulting in a slightly different level of compression. Rest assured that the actual data is identical.", file->name);
+    }
+}
+
+void bgzf_sign (uint64_t disk_size, uint8_t *signature)
+{
+    signature[0] = (disk_size      ) & 0xff; // LSB of size
+    signature[1] = (disk_size >> 8 ) & 0xff;
+    signature[2] = (disk_size >> 16) & 0xff;
 }

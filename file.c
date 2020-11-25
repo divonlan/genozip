@@ -338,6 +338,8 @@ static bool file_open_txt_read (File *file)
                 evb->compressed.param = bgzf_uncompressed_size; // pass uncompressed size in param
                 buf_add (&evb->compressed, block, block_size);
                 
+                file->bgzf_flags.f.libdeflate_level = 
+                    bgzf_get_compression_level (file->name, block, block_size, (uint32_t)bgzf_uncompressed_size);
             }
 
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
@@ -668,14 +670,9 @@ void file_close (File **file_p,
     
     if (file->file) {
 
-        if (file->mode == WRITE && file->supertype == TXT_FILE && file->codec == CODEC_BGZF && file->bgzf_has_eof_block) {
-            ASSERT (fwrite (BGZF_EOF, BGZF_EOF_LEN, 1, (FILE *)file->file), "Failed to write BGZF EOF to %s: %s", file->name, strerror (errno)); 
-        
-            if (flag.show_bgzf)
-                fprintf (stderr, "%-7s vb=%u   EOF\n", "IO", 0);
-
-            // proceed to FCLOSE below     
-        }
+        // finalize a BGZF-compressed reconstructed txt file
+        if (file->mode == WRITE && file->supertype == TXT_FILE && file->codec == CODEC_BGZF)
+            bgzf_write_finalize (file);         
 
         if (file->mode == READ && (file->codec == CODEC_GZ))
             ASSERTW (!gzclose_r((gzFile)file->file), "%s: warning: failed to close file: %s", global_cmd, file_printname (file))

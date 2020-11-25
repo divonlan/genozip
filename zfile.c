@@ -27,6 +27,7 @@
 #include "dict_id.h"
 #include "reference.h"
 #include "dispatcher.h"
+#include "bgzf.h"
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
@@ -90,7 +91,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
                       SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) txt_filename=\"%.*s\"\n",
                  BGEN64 (h->txt_data_size), BGEN64 (h->num_lines), BGEN32 (h->max_lines_per_vb), 
                  md5_display (h->md5_hash_single).s, md5_display (h->md5_header).s, 
-                 codec_name (h->codec), h->codec_args[0], h->codec_args[1], h->codec_args[2], TXT_FILENAME_LEN, h->txt_filename);
+                 codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], TXT_FILENAME_LEN, h->txt_filename);
         PRINT;
     }
 
@@ -777,11 +778,8 @@ void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool i
     header.md5_header              = header_md5;
     
     // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
-    if (txt_file->codec == CODEC_BGZF) {
-        header.codec_args[0] = (txt_file->disk_size      ) & 0xff; // LSB of size
-        header.codec_args[1] = (txt_file->disk_size >> 8 ) & 0xff;
-        header.codec_args[2] = (txt_file->disk_size >> 16) & 0xff;
-    }
+    if (txt_file->codec == CODEC_BGZF) 
+        bgzf_sign (txt_file->disk_size, header.codec_info);
         
     file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);
     file_remove_codec_ext (header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
