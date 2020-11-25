@@ -46,7 +46,7 @@ typedef union {
     AdlerContext adler_ctx;
 } DigestContext;
 
-extern void digest_initialize (bool reset_vb_count);
+extern void digest_initialize (void);
 extern Digest digest_finalize (DigestContext *ctx, const char *msg);
 extern void digest_update (DigestContext *ctx, ConstBufferP buf, const char *msg);
 extern Digest digest_do (const void *data, uint32_t len);

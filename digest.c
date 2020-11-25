@@ -20,10 +20,10 @@ static uint32_t vb_digest_last=0; // last vb to be MD5ed
 #define IS_ADLER ((command == ZIP) ? !flag.md5 : z_file->flags.genozip_header.adler)
 #define DIGEST_NAME (IS_ADLER ? "Adler32" : "MD5")
 
-void digest_initialize (bool reset_vb_count)
+void digest_initialize (void)
 {
     mutex_initialize (vb_digest_mutex);
-    if (reset_vb_count) vb_digest_last = 0;
+    if (!z_file->num_txt_components_so_far) vb_digest_last = 0; // reset if we're starting a new z_file
 }
 
 Digest digest_finalize (DigestContext *ctx, const char *msg)

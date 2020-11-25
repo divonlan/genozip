@@ -545,7 +545,7 @@ void txtfile_header_initialize(void)
 bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 {    
     Digest header_digest = DIGEST_NONE;
-    digest_initialize (!z_file->num_txt_components_so_far); // reset if we're starting a new z_file
+    digest_initialize(); 
 
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
@@ -585,7 +585,7 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
 {
     bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
 
-    digest_initialize (!unbind_component_i);
+    digest_initialize();
 
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
