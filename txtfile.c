@@ -288,8 +288,8 @@ static Digest txtfile_read_header (bool is_first_txt)
     txt_file->txt_data_so_far_single = evb->txt_data.len = header_len; // trim
 
     // md5 header - always digest_ctx_single, digest_ctx_bound only if first component 
-    if (flag.bind && is_first_txt) digest_update (&z_file->digest_ctx_bound, &evb->txt_data);
-    digest_update (&z_file->digest_ctx_single, &evb->txt_data);
+    if (flag.bind && is_first_txt) digest_update (&z_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
+    digest_update (&z_file->digest_ctx_single, &evb->txt_data, "txt_header:digest_ctx_single");
 
     Digest header_digest = digest_snapshot (&z_file->digest_ctx_single);
 
@@ -652,9 +652,9 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
         if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
         bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
-                           !flag.data_modified; // no point calculating digest if we know already the file will be different
+                           flag.reconstruct_as_src; // no point calculating digest if we know already the file will be different
 
-        if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data);
+        if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
 
         if (flag.bgzf) { // compress the header with BGZF if needed
             bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);

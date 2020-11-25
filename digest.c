@@ -26,13 +26,13 @@ void digest_initialize (bool reset_vb_count)
     if (reset_vb_count) vb_digest_last = 0;
 }
 
-Digest digest_finalize (DigestContext *ctx)
+Digest digest_finalize (DigestContext *ctx, const char *msg)
 {
     Digest digest = IS_ADLER ? (Digest)BGEN32 (ctx->adler_ctx.adler) 
                              : md5_finalize (&ctx->md5_ctx);
 
     if (flag.show_digest) 
-        fprintf (stderr, "%s finalize: %s\n", DIGEST_NAME, digest_display (digest).s);
+        fprintf (stderr, "%s finalize %s: %s\n", DIGEST_NAME, msg, digest_display (digest).s);
 
     return digest;
 }
@@ -55,7 +55,7 @@ Digest digest_do (const void *data, uint32_t len)
         return md5_do (data, len);
 }
 
-void digest_update (DigestContext *ctx, const Buffer *buf)
+void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
 {
     if (IS_ADLER) {
         if (!ctx->initialized) {
@@ -74,7 +74,7 @@ void digest_update (DigestContext *ctx, const Buffer *buf)
     }
 
     if (flag.show_digest) 
-        fprintf (stderr, "%s update (len=%"PRIu64"): %s\n", DIGEST_NAME, buf->len, digest_display (digest_snapshot (ctx)).s);
+        fprintf (stderr, "%s update %s (len=%"PRIu64"): %s\n", DIGEST_NAME, msg, buf->len, digest_display (digest_snapshot (ctx)).s);
 }
 
 // ZIP: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
@@ -92,8 +92,8 @@ void digest_one_vb (VBlock *vb)
 
     if (command == ZIP) {
         // MD5 of all data up to and including this VB is just the total MD5 of the file so far (as there is no unconsumed data)
-        if (flag.bind) digest_update (&z_file->digest_ctx_bound, &vb->txt_data);
-        digest_update (&z_file->digest_ctx_single, &vb->txt_data);
+        if (flag.bind) digest_update (&z_file->digest_ctx_bound, &vb->txt_data, "vb:digest_ctx_bound");
+        digest_update (&z_file->digest_ctx_single, &vb->txt_data, "vb:digest_ctx_single");
 
         // take a snapshot of MD5 as per the end of this VB - this will be used to test for errors in piz after each VB  
         vb->digest_so_far = digest_snapshot (flag.bind ? &z_file->digest_ctx_bound : &z_file->digest_ctx_single);
@@ -102,7 +102,7 @@ void digest_one_vb (VBlock *vb)
     else { // PIZ
         static bool failed = false; // note: when testing multiple files, if a file fails the test, we don't test subsequent files, so no need to reset this variable
 
-        digest_update (&txt_file->digest_ctx_bound, &vb->txt_data);
+        digest_update (&txt_file->digest_ctx_bound, &vb->txt_data, "vb:digest_ctx_bound");
 
         // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
         // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file

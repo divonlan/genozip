@@ -637,7 +637,7 @@ static Digest piz_one_file_verify_md5 (Digest original_file_digest)
 {
     if (digest_is_zero (original_file_digest) || flag.genocat_info_only) return DIGEST_NONE; // file was not compressed with --md5 or --test
 
-    Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bound file
+    Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound, "file:digest_ctx_bound"); // z_file might be a bound file - this is the MD5 of the entire bound file
     char s[200]; 
 
     if (digest_is_zero (original_file_digest)) { 

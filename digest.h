@@ -47,8 +47,8 @@ typedef union {
 } DigestContext;
 
 extern void digest_initialize (bool reset_vb_count);
-extern Digest digest_finalize (DigestContext *ctx);
-extern void digest_update (DigestContext *ctx, ConstBufferP buf);
+extern Digest digest_finalize (DigestContext *ctx, const char *msg);
+extern void digest_update (DigestContext *ctx, ConstBufferP buf, const char *msg);
 extern Digest digest_do (const void *data, uint32_t len);
 extern Digest digest_snapshot (const DigestContext *ctx);
 extern void digest_one_vb (VBlockP vb);

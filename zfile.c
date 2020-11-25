@@ -833,7 +833,7 @@ bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header,
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
     curr_header->num_lines        = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
-    curr_header->digest_single    = digest_finalize (&z_file->digest_ctx_single);
+    curr_header->digest_single    = digest_finalize (&z_file->digest_ctx_single, "component:digest_ctx_single");
 
     *md5 = curr_header->digest_single;
 

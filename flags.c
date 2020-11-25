@@ -334,7 +334,7 @@ void flags_update (unsigned num_files, char **filenames, const bool *is_short)
     // override these ^ if user chose to be --noisy
     if (option_noisy) flag.quiet=false;
 
-    if (flag.test) flag.md5=true; // test implies md5
+    if (command == ZIP && flag.test) flag.md5=true; // test implies md5
 
     // default values, if not overridden by the user
     if (!flag.vblock) vb_set_global_max_memory_per_vb (flag.fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 

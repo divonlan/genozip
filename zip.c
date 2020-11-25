@@ -558,7 +558,7 @@ finish:
     zip_display_compression_ratio (dispatcher, flag.bind ? DIGEST_NONE : single_component_digest, is_last_file || !flag.bind); // Done for reference + final compression ratio calculation
     
     if (flag.bind && z_file->num_txt_components_so_far > 1 && is_last_file) 
-        progress_concatenated_md5 (dt_name (z_file->data_type), digest_finalize (&z_file->digest_ctx_bound));
+        progress_concatenated_md5 (dt_name (z_file->data_type), digest_finalize (&z_file->digest_ctx_bound, "file:digest_ctx_bound"));
 
     z_file->disk_size              = z_file->disk_so_far;
     z_file->txt_data_so_far_single = 0;
