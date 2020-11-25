@@ -231,7 +231,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
 
-    Md5Hash md5_hash_bound; 
+    Digest md5_hash_bound; 
     uint64_t txt_data_size, num_lines;
     char created[FILE_METADATA_LEN];
     if (!zfile_read_genozip_header (&md5_hash_bound, &txt_data_size, &num_lines, created))
@@ -252,7 +252,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     else 
         bufprintf (evb, &str_buf, item_format, dt_name (dt), str_uint_commas (num_lines).s,
                    str_size (z_file->disk_size).s, str_size (txt_data_size).s, ratio < 100, ratio, 
-                   md5_display (md5_hash_bound).s,
+                   digest_display_ex (md5_hash_bound, DD_MD5_IF_MD5).s,
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
                    z_filename, created);
@@ -275,7 +275,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             num_lines_count += BGEN64 (header->num_lines);
             bufprintf (evb, &str_buf, item_format, "", str_uint_commas (BGEN64 (header->num_lines)).s, "", 
                        str_size (BGEN64 (header->txt_data_size)).s, 
-                       0, 0.0, md5_display (header->md5_hash_single), "", "",
+                       0, 0.0, digest_display_ex (header->digest_single, DD_MD5_IF_MD5), "", "",
                        -(int)FILENAME_WIDTH, header->txt_filename, "");
 
             buf_free (&evb->compressed);

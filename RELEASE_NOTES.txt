@@ -222,7 +222,10 @@ Functionality:
 - Native compression of BAM (no longer use samtools for BAM)
 - Framework supports file translations SAM->BAM, BAM->SAM, SAM/BAM->FASTQ
 - Native reading and writing of BGZF data
-- When decompressing a file that was originally compressed with BGZF (eg BAM, fq.gz...) - the BGZF blocks are reconstructed.
+- When decompressing a file that was originally compressed with BGZF (eg BAM, fq.gz...) - the BGZF blocks are reconstructed,
+  with an attempt to guess the original compression level
+- File is now always verified - if md5 is not selected, then Adler32 is used
+
 - New / changed flags: 
     --sam (new flag) --fastq for genounzip/genocat - to allow SAM/BAM to be reconstructed as SAM, BAM or FASTQ
     --vcf (new flag) genounzip/genocat - reconstruct a 23andMe file as a VCF
@@ -236,7 +239,8 @@ Functionality:
     --show-txt-contigs - shows contigs from the SAM/BAM header (SQ lines)
     --unbind in genols (new flag) - shows the components of bound files
     --show-dict and show-b250 now accept an optional paramter + removed --show-one-dict and --show-one-b250
-    --show-md5 show md5 updates
+    --show-digest show (md5 or Adler32) updates
+
 Compression improvements:
 - For b250 sections that have all the same entry - store the entry only once. If the entry is word_index=0, drop the section
 - Improvements in codec assignment algorithm, and use it for dictionary and some other section types in addition to b250 and local

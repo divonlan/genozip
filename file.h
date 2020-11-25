@@ -258,8 +258,9 @@ typedef struct File {
                                        // txt_file: number of lines in single txt file
 
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
-    Md5Context md5_ctx_bound;          // md5 context of txt file. in bound mode - of the resulting bound txt file
-    Md5Context md5_ctx_single;         // used only in bound mode - md5 of the single txt component
+    DigestContext digest_ctx_bound;    // md5 context of txt file. in bound mode - of the resulting bound txt file
+    DigestContext digest_ctx_single;   // used only in bound mode - md5 of the single txt component
+    
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
 
     // Used for READING GENOZIP files
@@ -311,9 +312,6 @@ typedef struct File {
     Buffer unconsumed_txt;             // excess data read from the txt file - moved to the next VB
 
 } File;
-
-// globals
-extern File *z_file, *txt_file; 
 
 // methods
 extern File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);

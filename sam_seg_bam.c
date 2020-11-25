@@ -5,7 +5,7 @@
 
 #include "genozip.h"
 #include "profiler.h"
-#include "md5.h"
+#include "digest.h"
 #include "buffer.h"
 #include "vblock.h"
 #include "txtfile.h"

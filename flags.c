@@ -116,7 +116,7 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         #define _sA {"show-aliases",  no_argument,       &flag.show_aliases,     1 }  
         #define _sc {"show-codec",    no_argument,       &flag.show_codec,       1 }  
         #define _sb {"show-bgzf",     no_argument,       &flag.show_bgzf,        1 }
-        #define _s5 {"show-md5",      no_argument,       &flag.show_md5,         1 }
+        #define _s5 {"show-digest",   no_argument,       &flag.show_digest,         1 }
         #define _dS {"test-seg",      no_argument,       &flag.test_seg,         1 }  
         #define _dm {"debug-memory",  no_argument,       &flag.debug_memory,     1 }  
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
@@ -327,7 +327,7 @@ void flags_update (unsigned num_files, char **filenames, const bool *is_short)
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag.show_dict || flag.show_b250 || flag.show_headers || flag.show_threads || flag.show_bgzf ||
-        flag.dict_id_show_one_b250.num || flag.dict_id_show_one_dict.num || flag.show_reference ||
+        flag.dict_id_show_one_b250.num || flag.dict_id_show_one_dict.num || flag.show_reference || flag.show_digest ||
         flag.show_alleles || flag.show_vblocks || flag.show_codec || (flag.show_index && command==PIZ))
         flag.quiet=true; // don't show progress
 

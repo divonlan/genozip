@@ -24,15 +24,13 @@
 #include "codec.h"
 #include "bgzf.h"
 #include "mutex.h"
+#include "digest.h"
 #include "zlib/zlib.h"
 
 static bool is_first_txt = true; 
 static uint32_t total_bound_txt_headers_len = 0;
 
-MUTEX (vb_md5_mutex);   // ZIP: used for serializing MD5ing of VBs
-static uint32_t vb_md5_last=0; // last vb to be MD5ed 
-
-static const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext) 
+const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext) 
 {
     char *dump_filename = MALLOC (strlen (base_name) + 100); // we're going to leak this allocation
     sprintf (dump_filename, "%s.vblock-%u.start-%"PRIu64".len-%u.%s", 
@@ -239,59 +237,6 @@ static uint32_t txtfile_read_block (VBlock *vb, uint32_t max_bytes,
     return bytes_read;
 }
 
-// ZIP: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
-void txtfile_md5_one_vb (VBlock *vb)
-{
-    // wait for our turn
-    while (1) {
-        mutex_lock (vb_md5_mutex);
-        if (vb_md5_last == vb->vblock_i - 1) break; // its our turn now
-
-        // not our turn, wait 10ms and try again
-        mutex_unlock (vb_md5_mutex);
-        usleep (10000);
-    }
-
-    if (command == ZIP) {
-        // MD5 of all data up to and including this VB is just the total MD5 of the file so far (as there is no unconsumed data)
-        if (flag.bind) md5_update (&z_file->md5_ctx_bound, &vb->txt_data);
-        md5_update (&z_file->md5_ctx_single, &vb->txt_data);
-
-        // take a snapshot of MD5 as per the end of this VB - this will be used to test for errors in piz after each VB  
-        vb->md5_hash_so_far = md5_snapshot (flag.bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
-    }
-    
-    else {
-        static bool failed = false; // note: when testing multiple files, if a file fails the test, we don't test subsequent files, so no need to reset this variable
-
-        md5_update (&txt_file->md5_ctx_bound, &vb->txt_data);
-
-        // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
-        // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
-        if (!failed && !flag.unbind && !md5_is_zero (vb->md5_hash_so_far)) {
-            Md5Hash piz_hash_so_far = md5_snapshot (&txt_file->md5_ctx_bound);
-
-            // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-            if (!md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far)) {
-                
-                // dump bad vb to disk
-                WARN ("MD5 of reconstructed vblock=%u (%s) differs from original file (%s).\n"
-                    "Bad reconstructed vblock has been dumped to: %s\n"
-                    "To see the same data in the original file:\n"
-                    "   %s %s | head -c %"PRIu64" | tail -c %u > %s",
-                    vb->vblock_i, md5_display (piz_hash_so_far).s, md5_display (vb->md5_hash_so_far).s, txtfile_dump_vb (vb, z_name),
-                    codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
-                    vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len, txtfile_dump_filename (vb, z_name, "good"));
-
-                failed = true; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
-            }
-        }
-    }
-
-    vb_md5_last++; // next please
-    mutex_unlock (vb_md5_mutex);
-}
-
 // default callback from DataTypeProperties.is_header_done: 
 // returns header length if header read is complete + sets lines.len, 0 if complete but not existant, -1 not complete yet 
 int32_t def_is_header_done (void)
@@ -317,7 +262,7 @@ int32_t def_is_header_done (void)
 }
 
 // ZIP I/O thread: returns the hash of the header
-static Md5Hash txtfile_read_header (bool is_first_txt)
+static Digest txtfile_read_header (bool is_first_txt)
 {
     START_TIMER;
 
@@ -342,17 +287,15 @@ static Md5Hash txtfile_read_header (bool is_first_txt)
 
     txt_file->txt_data_so_far_single = evb->txt_data.len = header_len; // trim
 
-    // md5 header - always md5_ctx_single, md5_ctx_bound only if first component 
-    if (flag.md5) {
-        if (flag.bind && is_first_txt) md5_update (&z_file->md5_ctx_bound, &evb->txt_data);
-        md5_update (&z_file->md5_ctx_single, &evb->txt_data);
-    }
+    // md5 header - always digest_ctx_single, digest_ctx_bound only if first component 
+    if (flag.bind && is_first_txt) digest_update (&z_file->digest_ctx_bound, &evb->txt_data);
+    digest_update (&z_file->digest_ctx_single, &evb->txt_data);
 
-    Md5Hash header_md5 = flag.md5 ? md5_snapshot (&z_file->md5_ctx_single) : MD5HASH_NONE;
+    Digest header_digest = digest_snapshot (&z_file->digest_ctx_single);
 
     COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
 
-    return header_md5;
+    return header_digest;
 }
 
 // default "unconsumed" function file formats where we need to read whole \n-ending lines. returns the unconsumed data length
@@ -601,16 +544,13 @@ void txtfile_header_initialize(void)
 // ZIP: reads txt header and writes its compressed form to the GENOZIP file
 bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 {    
-    Md5Hash header_md5 = MD5HASH_NONE;
-
-    // intialize MD5 stuff
-    mutex_initialize (vb_md5_mutex);
-    if (!z_file->num_txt_components_so_far) vb_md5_last = 0; // reset if we're starting a new z_file
+    Digest header_digest = DIGEST_NONE;
+    digest_initialize (!z_file->num_txt_components_so_far); // reset if we're starting a new z_file
 
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
     if (DTPT(txt_header_required) == HDR_MUST || DTPT (txt_header_required) == HDR_OK)
-        header_md5 = txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
+        header_digest = txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
     
     *txt_line_i += (uint32_t)evb->lines.len;
 
@@ -625,7 +565,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     if (z_file && !flag.test_seg)       
         // we always write the txt_header section, even if we don't actually have a header, because the section
         // header contains the data about the file
-        zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
+        zfile_write_txt_header (&evb->txt_data, header_digest, is_first_txt); // we write all headers in bound mode too, to support --unbind
 
     // for stats: combined length of txt headers in this bound file, or only one file if not bound
     if (!flag.bind) total_bound_txt_headers_len=0;
@@ -641,15 +581,11 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 }
 
 // PIZ: reads the txt header from the genozip file and outputs it to the reconstructed txt file
-void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_component_i, Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
+void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_component_i, Digest *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
 {
     bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
 
-    // initialize md5 stuff
-    if (unbind_component_i == 0) {
-        mutex_initialize (vb_md5_mutex);
-        vb_md5_last = 0;
-    }
+    digest_initialize (!unbind_component_i);
 
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
@@ -680,7 +616,7 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
     if (is_first_txt || flag.unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);
 
-    if (flag.unbind) *digest = header->md5_hash_single; // override md5 from genozip header
+    if (flag.unbind) *digest = header->digest_single; // override md5 from genozip header
 
     // get SEC_BGZF data if needed
     if (flag.bgzf) {
@@ -715,9 +651,10 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
         DtTranslation trans = dt_get_translation();
         if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
-        bool test_md5 = !md5_is_zero (header->md5_header) && flag.reconstruct_as_src;
+        bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
+                           !flag.data_modified; // no point calculating digest if we know already the file will be different
 
-        if (test_md5) md5_update (&txt_file->md5_ctx_bound, &evb->txt_data);
+        if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data);
 
         if (flag.bgzf) { // compress the header with BGZF if needed
             bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
@@ -727,14 +664,13 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
         else
             txtfile_write_to_disk (&evb->txt_data);
 
-        if (test_md5 &&
-            z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
-            Md5Hash reconstructed_header_digest = md5_do (evb->txt_data.data, evb->txt_data.len);
+        if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
+            Digest reconstructed_header_digest = digest_do (evb->txt_data.data, evb->txt_data.len);
             
-            if (!md5_is_equal (reconstructed_header_digest, header->md5_header)) {
-                WARN ("MD5 of reconstructed %s header (%s) differs from original file (%s)\n"
-                      "Bad reconstructed header has been dumped to: %s\n",
-                      dt_name (z_file->data_type), md5_display (reconstructed_header_digest).s, md5_display (header->md5_header).s,
+            if (!digest_is_equal (reconstructed_header_digest, header->digest_header)) {
+                WARN ("%s of reconstructed %s header (%s) differs from original file (%s)\n"
+                      "Bad reconstructed header has been dumped to: %s\n", digest_name(),
+                      dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
                       txtfile_dump_vb (evb, z_name));
             }
         }

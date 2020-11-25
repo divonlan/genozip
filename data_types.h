@@ -7,7 +7,7 @@
 #define DATA_TYPES_INCLUDED
 
 #include "genozip.h"
-#include "md5.h"
+#include "digest.h"
 #include "sections.h"
 #include "flags.h"
 

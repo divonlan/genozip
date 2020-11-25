@@ -9,7 +9,7 @@
 #include <pthread.h>
 #include "genozip.h"
 #include "buffer.h"
-#include "md5.h"
+#include "digest.h"
 #include "bit_array.h"
 
 // reference sequences - one per range of 1MB. ranges (chrom, pos) are mapped here with a hash function. In the rare case two unrelated ranges
@@ -61,7 +61,7 @@ extern void ref_load_external_reference (bool display, bool is_last_file);
 extern void ref_load_stored_reference (void);
 extern bool ref_is_reference_loaded (void);
 extern void ref_set_reference (const char *filename);
-extern void ref_set_ref_file_info (Md5Hash md5, const char *fasta_name);
+extern void ref_set_ref_file_info (Digest md5, const char *fasta_name);
 extern void ref_unload_reference (bool force_clean_all);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed);
@@ -108,7 +108,7 @@ extern void ref_print_bases_region (FILE *file, ConstBitArrayP bitarr, ConstBitA
 
 // globals
 extern const char *ref_filename;
-extern Md5Hash ref_md5;
+extern Digest ref_md5;
 extern Buffer ref_stored_ra;
 extern Buffer loaded_contigs, header_contigs, header_contigs_dict;
 extern bool has_header_contigs;

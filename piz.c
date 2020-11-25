@@ -30,6 +30,7 @@
 #include "codec.h"
 #include "container.h"
 #include "bgzf.h"
+#include "flags.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new lacon_pos
 // Special values:
@@ -467,7 +468,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     vb->first_line       = BGEN32 (header->first_line);      
     vb->lines.len        = BGEN32 (header->num_lines);       
     vb->longest_line_len = BGEN32 (header->longest_line_len);
-    vb->md5_hash_so_far  = header->md5_hash_so_far;
+    vb->digest_so_far  = header->digest_so_far;
 
     // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every vcf component
@@ -494,8 +495,8 @@ static void piz_uncompress_one_vb (VBlock *vb)
     if (vb->bgzf_blocks.len) bgzf_compress_vb (vb);
 
     // calculate the MD5 contribution of this VB to the single file and bound files, and the MD5 snapshot of this VB
-    if (!md5_is_zero (vb->md5_hash_so_far) && flag.reconstruct_as_src) 
-        txtfile_md5_one_vb (vb); 
+    if (!digest_is_zero (vb->digest_so_far) && flag.reconstruct_as_src) 
+        digest_one_vb (vb); 
 
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
@@ -519,7 +520,7 @@ static void piz_read_all_ctxs (VBlock *vb, const SectionListEntry **next_sl)
 }
 
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
-static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
+static DataType piz_read_global_area (Digest *original_file_digest) // out
 {
     bool success = zfile_read_genozip_header (original_file_digest, 0, 0, 0);
     
@@ -632,23 +633,23 @@ static bool piz_read_one_vb (VBlock *vb)
     return ok_to_compute;
 }
 
-static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
+static Digest piz_one_file_verify_md5 (Digest original_file_digest)
 {
-    if (md5_is_zero (original_file_digest) || flag.genocat_info_only) return MD5HASH_NONE; // file was not compressed with --md5 or --test
+    if (digest_is_zero (original_file_digest) || flag.genocat_info_only) return DIGEST_NONE; // file was not compressed with --md5 or --test
 
-    Md5Hash decompressed_file_digest = md5_finalize (&txt_file->md5_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bound file
+    Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bound file
     char s[200]; 
 
-    if (md5_is_zero (original_file_digest)) { 
-        sprintf (s, "MD5 = %s", md5_display (decompressed_file_digest).s);
+    if (digest_is_zero (original_file_digest)) { 
+        sprintf (s, "%s = %s", digest_name(), digest_display (decompressed_file_digest).s);
         progress_finalize_component (s); 
     }
 
-    else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
+    else if (digest_is_equal (decompressed_file_digest, original_file_digest)) {
 
         if (flag.test) { 
-            sprintf (s, "MD5 = %s verified as identical to the original %s", 
-                        md5_display (decompressed_file_digest).s, dt_name (txt_file->data_type));
+            sprintf (s, "%s = %s verified as identical to the original %s", 
+                        digest_name(), digest_display (decompressed_file_digest).s, dt_name (txt_file->data_type));
             progress_finalize_component (s); 
         }
     }
@@ -656,13 +657,13 @@ static Md5Hash piz_one_file_verify_md5 (Md5Hash original_file_digest)
     else if (flag.test) {
         progress_finalize_component ("FAILED!!!");
         ABORT ("Error: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",
-                md5_display (original_file_digest).s, md5_display (decompressed_file_digest).s);
+                digest_display (original_file_digest).s, digest_display (decompressed_file_digest).s);
     }
 
-    else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file
+    else ASSERT (digest_is_zero (original_file_digest), // its ok if we decompressed only a partial file
                  "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
-                 txt_file->name, md5_display (decompressed_file_digest).s, dt_name (txt_file->data_type), 
-                 md5_display (original_file_digest).s);
+                 txt_file->name, digest_display (decompressed_file_digest).s, dt_name (txt_file->data_type), 
+                 digest_display (original_file_digest).s);
 
     return decompressed_file_digest;
 }
@@ -699,7 +700,7 @@ bool piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
     static const SectionListEntry *sl_ent = NULL; // preserve for unbinding multiple files
 
     // read genozip header
-    Md5Hash original_file_digest;
+    Digest original_file_digest;
 
     // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --unbind, 
     static DataType data_type = DT_NONE; 
@@ -715,7 +716,7 @@ bool piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
 
         sl_ent = NULL; // reset
 
-        ASSERT (!flag.test || !md5_is_zero (original_file_digest), 
+        ASSERT (!flag.test || !digest_is_zero (original_file_digest), 
                 "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5 or --test", z_name);
 
         if (flag.test || flag.md5) 
@@ -789,7 +790,7 @@ no_more_data:
     // verifies bgzf reconstructed file against codec_args    
 
     // verifies reconstructed file against MD5 (if compressed with --md5 or --test) and/or codec_args (if bgzf)
-    Md5Hash decompressed_file_digest = piz_one_file_verify_md5 (original_file_digest);
+    Digest decompressed_file_digest = piz_one_file_verify_md5 (original_file_digest);
 
     if (flag.unbind) file_close (&txt_file, true); // close this component file
 

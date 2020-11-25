@@ -30,7 +30,7 @@ endif
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
 MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
-          zip.c piz.c seg.c zfile.c aligner.c flags.c \
+          zip.c piz.c seg.c zfile.c aligner.c flags.c digest.c\
 		  reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c  \
 		  vcf_piz.c vcf_seg.c vcf_shared.c vcf_samples.c vcf_header.c \
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
@@ -54,7 +54,7 @@ LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 BSC_SRCS   = bsc/divsufsort.c bsc/adler32.c bsc/bwt.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/qlfc_model.c bsc/qlfc.c
 
 DEFLATE_SRCS = libdeflate/deflate_compress.c libdeflate/deflate_decompress.c libdeflate/utils.c libdeflate/x86_cpu_features.c \
-             libdeflate/arm_cpu_features.c libdeflate/crc32.c
+             libdeflate/arm_cpu_features.c libdeflate/crc32.c libdeflate/adler32.c
 
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 

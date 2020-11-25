@@ -7,7 +7,7 @@
 #define SECTIONS_INCLUDED
 
 #include "genozip.h"
-#include "md5.h"
+#include "digest.h"
 
 // note: the numbering of the sections cannot be modified, for backward compatibility
 typedef enum __attribute__ ((__packed__)) { // 1 byte
@@ -72,6 +72,7 @@ typedef union BgzfFlags {
         uint8_t aligner          : 1; // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
         uint8_t txt_is_bin       : 1; // Source file is binary (BAM)
         uint8_t bgzf             : 1; // Reconstruct as BGZF (user may override) (determined by the last component)
+        uint8_t adler            : 1; // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
     } genozip_header;
 
     struct FlagsBgzf {
@@ -114,14 +115,14 @@ typedef struct {
     uint64_t num_items_bound;         // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
     uint32_t num_components;          // number of txt bound components in this file (1 if no binding)
-    Md5Hash  md5_hash_bound;          // md5 of original txt file, or 0s if no hash was calculated. if this is a binding - this is the md5 of the entire bound file.
+    Digest digest_bound;
     uint8_t  password_test[16];       // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
     char created[FILE_METADATA_LEN];  // nul-terminated metadata
-    Md5Hash  license_hash;            // MD5(license_num)
+    Digest license_hash;              // MD5(license_num)
 #define REF_FILENAME_LEN 256
     char ref_filename[REF_FILENAME_LEN]; // external reference filename, null-terimated. ref_filename[0]=0 if there is no external reference.
-    Md5Hash ref_file_md5;             // SectionHeaderGenozipHeader.md5_hash_bound of the reference FASTA genozip file
+    Digest ref_file_md5;             // SectionHeaderGenozipHeader.digest_bound.md5 of the reference FASTA genozip file
 } SectionHeaderGenozipHeader;
 
 // this footer appears AFTER the genozip header data, facilitating reading the genozip header in reverse from the end of the file
@@ -139,8 +140,8 @@ typedef struct {
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     Codec    codec;            // codec of original txt file (none, bgzf, gz, bz2...)
     uint8_t  codec_info[3];    // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
-    Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
-    Md5Hash  md5_header;       // MD5 of header
+    Digest  digest_single;     // digest of original single txt file. non-0 only if this genozip file is a result of binding. MD5 if --md5 or Adler32 otherwise. 0 if compressed in v8 without --md5. 
+    Digest  digest_header;     // MD5 or Adler32 of header
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
 } SectionHeaderTxtHeader; 
@@ -153,7 +154,7 @@ typedef struct {
     uint32_t vb_data_size;     // size of vblock as it appears in the source file 
     uint32_t z_data_bytes;     // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len; // length of the longest line in this vblock 
-    Md5Hash  md5_hash_so_far;   // partial calculation of MD5 up to and including this VB 
+    Digest   digest_so_far;    // partial calculation of MD5 or Adler32 up to and including this VB 
 } SectionHeaderVbHeader; 
 
 typedef struct {
@@ -271,7 +272,7 @@ typedef struct RefContig {
     char rl[32];
     uint64_t gi;
     uint64_t LN;
-    Md5Hash M5;
+    Digest M5;
 } RefContig; 
 
 // the data of SEC_REF_ALT_CHROMS

@@ -12,7 +12,7 @@
 #include "vblock.h"
 #include "file.h"
 #include "reference.h"
-#include "md5.h"
+#include "digest.h"
 #include "bgzf.h"
 
 // pool of VBs allocated based on number of threads
@@ -42,7 +42,7 @@ void vb_release_vb (VBlock *vb)
     vb->ht_matrix_ctx = NULL;
     vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
-    vb->md5_hash_so_far = MD5HASH_NONE;
+    vb->digest_so_far = DIGEST_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
     vb->fragment_ctx = 0;
     vb->fragment_codec = 0;

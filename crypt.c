@@ -99,15 +99,15 @@ static void crypt_generate_aes_key (VBlock *vb,
     buf_add (&vb->spiced_pw, &sec_type_byte, sizeof (uint8_t));
     buf_add (&vb->spiced_pw, &is_header_byte, sizeof (uint8_t));
     buf_add (&vb->spiced_pw, salt, salt_len);
-    Md5Hash salty_hash = md5_do (vb->spiced_pw.data, vb->spiced_pw.len);
+    Digest salty_hash = md5_do (vb->spiced_pw.data, vb->spiced_pw.len);
 
     // add some pepper
     buf_add (&vb->spiced_pw, pepper, pepper_len);
-    Md5Hash peppered_hash = md5_do (vb->spiced_pw.data, vb->spiced_pw.len);
+    Digest peppered_hash = md5_do (vb->spiced_pw.data, vb->spiced_pw.len);
 
     // get hash
-    memcpy (aes_key, salty_hash.bytes, sizeof(Md5Hash)); // first half of key
-    memcpy (aes_key + sizeof(Md5Hash), peppered_hash.bytes, sizeof(Md5Hash)); // 2nd half of key
+    memcpy (aes_key, salty_hash.bytes, sizeof(Digest)); // first half of key
+    memcpy (aes_key + sizeof(Digest), peppered_hash.bytes, sizeof(Digest)); // 2nd half of key
 
     buf_free (&vb->spiced_pw);
 }
@@ -143,7 +143,7 @@ void crypt_pad (uint8_t *data, uint32_t data_len, uint32_t padding_len)
 
     // use md5 to generate non-trival padding - the hash of the last 100 bytes of data
     uint32_t src_len = MIN (data_len, 100);
-    Md5Hash hash = md5_do (&data[data_len-src_len], src_len);
+    Digest hash = md5_do (&data[data_len-src_len], src_len);
     
     memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
 }

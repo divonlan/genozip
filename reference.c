@@ -61,7 +61,7 @@ static char *ref_fasta_name = NULL;
 
 // globals
 const char *ref_filename = NULL; // filename of external reference file
-Md5Hash ref_md5 = MD5HASH_NONE;
+Digest ref_md5 = DIGEST_NONE;
 
 #define CHROM_GENOME 0
 #define CHROM_NAME_GENOME "GENOME"
@@ -1100,7 +1100,7 @@ void ref_set_reference (const char *filename)
 }
 
 // called when loading an external reference
-void ref_set_ref_file_info (Md5Hash md5, const char *fasta_name)
+void ref_set_ref_file_info (Digest md5, const char *fasta_name)
 {
     ref_md5 = md5;
 

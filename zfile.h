@@ -8,11 +8,11 @@
 
 #include "genozip.h"
 #include "sections.h"
-#include "md5.h"
+#include "digest.h"
 
-extern bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64_t *num_items_bound, char *created);
+extern bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_t *num_items_bound, char *created);
 
-extern void zfile_compress_genozip_header (Md5Hash single_component_md5);
+extern void zfile_compress_genozip_header (Digest single_component_digest);
 
 LocalGetLineCB *zfile_get_local_data_callback (DataType dt, ContextP ctx);
 
@@ -43,8 +43,8 @@ extern void *zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t or
 
 extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
 
-extern void zfile_write_txt_header (BufferP vcf_header_text, Md5Hash header_md5, bool is_first_vcf);
-extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
+extern void zfile_write_txt_header (BufferP vcf_header_text, Digest header_md5, bool is_first_vcf);
+extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Digest *md5);
 
 // These two are for all data types except VCF, that has its own
 extern void zfile_compress_vb_header (VBlockP vb);

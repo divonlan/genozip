@@ -162,16 +162,11 @@ void md5_initialize (Md5Context *ctx)
 }
 
 // data must be aligned on 32-bit boundary
-static void md5_update_do (Md5Context *ctx, const void *data, uint32_t len)
+void md5_update (Md5Context *ctx, const void *data, uint32_t len)
 {
     START_TIMER;
 
     if (!len) return; // nothing to do
-    const uint32_t save_len = len;
-
-    //printf ("MD5 %u bytes: %.*s\n", len, len, (char*)data);
-    
-    if (!ctx->initialized) md5_initialize (ctx);
 
     uint32_t    saved_lo;
     uint32_t    used;
@@ -206,22 +201,14 @@ static void md5_update_do (Md5Context *ctx, const void *data, uint32_t len)
 
     memcpy (ctx->buffer.bytes, data, len);
 
-    if (flag.show_md5) 
-        fprintf (stderr, "MD5 update (len=%u): %s\n", save_len, md5_display (md5_snapshot (ctx)).s);
-
 finish:
-    //fprintf (stderr, "%s md5_update snapshot: %s\n", primary_command == ZIP ? "ZIP" : "PIZ", md5_display (md5_snapshot (ctx)));
+    //fprintf (stderr, "%s md5_update snapshot: %s\n", primary_command == ZIP ? "ZIP" : "PIZ", digest_display (digest_snapshot (ctx)));
     //md5_display_ctx (ctx);
     COPY_TIMER_VB (evb, md5);
     return;
 }
 
-void md5_update (Md5Context *ctx, const Buffer *buf)
-{
-    md5_update_do (ctx, buf->data, buf->len);
-}
-
-static Md5Hash md5_finalize_do (Md5Context *ctx, bool is_snapshot)
+Digest md5_finalize (Md5Context *ctx)
 {
     START_TIMER;
 
@@ -248,53 +235,25 @@ static Md5Hash md5_finalize_do (Md5Context *ctx, bool is_snapshot)
     ctx->buffer.words[15] = LTEN32 (ctx->hi);
 
     md5_transform (ctx, ctx->buffer.bytes, 64);
-    Md5Hash digest = { .words = { LTEN32 (ctx->a), LTEN32 (ctx->a), LTEN32 (ctx->c), LTEN32 (ctx->d) } };
+    Digest digest = { .words = { LTEN32 (ctx->a), LTEN32 (ctx->a), LTEN32 (ctx->c), LTEN32 (ctx->d) } };
 
     memset (ctx, 0, sizeof (Md5Context)); // return to its pre-initialized state, should it be used again
 
     COPY_TIMER_VB (evb, md5);
 
-    if (flag.show_md5 && !is_snapshot) 
-        fprintf (stderr, "MD5 finalize: %s\n", md5_display (digest).s);
-
     return digest;
 }
 
-Md5Hash md5_finalize (Md5Context *ctx)
-{
-    return md5_finalize_do (ctx, false);
-}
-
 // note: data must be aligned to the 32bit boundary (its accessed as uint32_t*)
-Md5Hash md5_do (const void *data, uint32_t len)
+Digest md5_do (const void *data, uint32_t len)
 {
     Md5Context ctx;
     memset (&ctx, 0, sizeof(Md5Context));
 
-    md5_update_do (&ctx, data, len);
+    md5_initialize (&ctx);
+    
+    md5_update (&ctx, data, len);
 
     return md5_finalize (&ctx);
 }
 
-// get hash of data so far, without finalizing
-Md5Hash md5_snapshot (const Md5Context *ctx)
-{
-    // make a copy of ctx, and finalize it, keeping the original copy unfinalized
-    Md5Context ctx_copy = *ctx;
-    return md5_finalize_do (&ctx_copy, true);
-}
-
-MD5Display md5_display (const Md5Hash digest)
-{
-    MD5Display dis;
-
-    const uint8_t *b = digest.bytes; 
-    
-    if (!md5_is_zero (digest))
-        sprintf (dis.s, "%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", 
-                 b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
-    else
-        sprintf (dis.s, "N/A                             ");
-    
-    return dis;
-}

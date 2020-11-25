@@ -92,6 +92,9 @@ extern uint32_t global_max_threads, global_max_memory_per_vb;
 extern const char *global_cmd;            // set once in main()
 extern ExeType exe_type;
 
+// global files (declared in file.c)
+extern FileP z_file, txt_file; 
+
 // IMPORTANT: This is part of the genozip file format. Also update codec.h/codec_args
 // If making any changes, update arrays in 1. codec.h 2. txtfile_estimate_txt_data_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte

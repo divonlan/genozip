@@ -149,7 +149,7 @@ adler32_avx512bw_chunk(const __m512i *p, const __m512i *const end,
 	/* Add the counters to the real s1 and s2 */
 	ADLER32_FINISH_VEC_CHUNK_512(s1, s2, v_s1, v_s2);
 }
-#  include "../adler32_vec_template.h"
+#  include "adler32_vec_template.h"
 #endif /* AVX-512BW implementation */
 
 /* AVX2 implementation: like the AVX-512BW one, but does 32 bytes at a time */
@@ -213,7 +213,7 @@ adler32_avx2_chunk(const __m256i *p, const __m256i *const end, u32 *s1, u32 *s2)
 	/* Add the counters to the real s1 and s2 */
 	ADLER32_FINISH_VEC_CHUNK_256(s1, s2, v_s1, v_s2);
 }
-#  include "../adler32_vec_template.h"
+#  include "adler32_vec_template.h"
 #endif /* AVX2 implementation */
 
 /* SSE2 implementation */
@@ -306,7 +306,7 @@ adler32_sse2_chunk(const __m128i *p, const __m128i *const end, u32 *s1, u32 *s2)
 	/* Add the counters to the real s1 and s2 */
 	ADLER32_FINISH_VEC_CHUNK_128(s1, s2, v_s1, v_s2);
 }
-#  include "../adler32_vec_template.h"
+#  include "adler32_vec_template.h"
 #endif /* SSE2 implementation */
 
 #ifdef DISPATCH

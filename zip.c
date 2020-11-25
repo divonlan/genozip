@@ -31,7 +31,7 @@
 #include "strings.h"
 #include "bgzf.h"
 
-static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, bool is_final_component)
+static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bool is_final_component)
 {
     double z_bytes   = (double)z_file->disk_so_far;
     double txt_bytes = (double)z_file->txt_data_so_far_bind;
@@ -283,7 +283,7 @@ static void zip_update_txt_counters (VBlock *vb)
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
-static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_component_md5)
+static void zip_write_global_area (Dispatcher dispatcher, Digest single_component_digest)
 {
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
     if (DTPZ(has_random_access)) 
@@ -317,7 +317,7 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
     stats_compress();
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
-    zfile_compress_genozip_header (single_component_md5);    
+    zfile_compress_genozip_header (single_component_digest);    
 }
 
 // entry point for compute thread
@@ -330,7 +330,7 @@ static void zip_compress_one_vb (VBlock *vb)
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     // calculate the MD5 contribution of this VB to the single file and bound files, and the MD5 snapshot of this VB
-    if (flag.md5 && !flag.make_reference) txtfile_md5_one_vb (vb); 
+    if (!flag.make_reference) digest_one_vb (vb); 
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
@@ -541,9 +541,9 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 
     // go back and update some fields in the txt header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
-    Md5Hash single_component_md5 = MD5HASH_NONE;
+    Digest single_component_digest = DIGEST_NONE;
     if (z_file && !flag.test_seg && !z_file->redirected && txt_header_header_pos >= 0) 
-        success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
+        success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_digest);
 
     // write the BGZF section containing BGZF block sizes, if this txt file is compressed with BGZF
     bgzf_compress_bgzf_section();
@@ -553,18 +553,18 @@ finish:
     z_file->txt_disk_so_far_bind  += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
     if ((is_last_file || !flag.bind) && !flag.test_seg)
-        zip_write_global_area (dispatcher, single_component_md5);
+        zip_write_global_area (dispatcher, single_component_digest);
 
-    zip_display_compression_ratio (dispatcher, flag.bind ? MD5HASH_NONE : single_component_md5, is_last_file || !flag.bind); // Done for reference + final compression ratio calculation
+    zip_display_compression_ratio (dispatcher, flag.bind ? DIGEST_NONE : single_component_digest, is_last_file || !flag.bind); // Done for reference + final compression ratio calculation
     
-    if (flag.md5 && flag.bind && z_file->num_txt_components_so_far > 1 && is_last_file) 
-        progress_concatenated_md5 (dt_name (z_file->data_type), md5_finalize (&z_file->md5_ctx_bound));
+    if (flag.bind && z_file->num_txt_components_so_far > 1 && is_last_file) 
+        progress_concatenated_md5 (dt_name (z_file->data_type), digest_finalize (&z_file->digest_ctx_bound));
 
     z_file->disk_size              = z_file->disk_so_far;
     z_file->txt_data_so_far_single = 0;
     evb->z_data.len                = 0;
     evb->z_next_header_i           = 0;
-    memset (&z_file->md5_ctx_single, 0, sizeof (Md5Context));
+    memset (&z_file->digest_ctx_single, 0, sizeof (z_file->digest_ctx_single));
 
     prev_file_first_vb_i = first_vb_i;
     dispatcher_finish (&dispatcher, &prev_file_last_vb_i);

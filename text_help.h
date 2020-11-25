@@ -60,7 +60,7 @@ static const char *help_genozip[] = {
     "",
     "   -p --password     <password>. Password-protected - encrypted with 256-bit AES",
     "",
-    "   -m --md5          Calculate the MD5 hash of the original textual file (vcf, sam...). When the resulting file is decompressed, this MD5 will be compared to the MD5 of the textual decompressed file. This also enables using 'genounzip --test' and viewing the MD5 with genols.",
+    "   -m --md5          Calculate the MD5 digest of the original textual file (vcf, sam...) instead of Adler32. The MD5 is also viewable with genols.",
     "                     Note: for compressed files, e.g. myfile.vcf.gz or myfile.bam, the MD5 calculated is that of the original, uncompressed textual file - myfile.vcf or myfile.sam respectively.",
     "",
     "   -I --input-size   <file size in bytes> genozip configures its internal data structures to optimize execution speed based on the file size. When redirecting the input file with < or |, genozip cannot determine its size, and this might result in slower execution. This problem can be overcome by using this flag to inform genozip of the file size",    
@@ -210,7 +210,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-bgzf       Show bgzf blocks as they are being compressed or decompressed",    
     "",
-    "   ZUC  --show-md5        Show MD5 updates",    
+    "   ZUC  --show-digest     Show digest (MD5 or Adler32) updates",    
 };
 
 static const char *help_genounzip[] = {
@@ -262,14 +262,14 @@ static const char *help_genounzip[] = {
     "",
     "   -p --password     <password>. Provide password to access file(s) that were compressed with --password",
     "",
-    "   -m --md5          Show the MD5 hash of the decompressed file. Note: If the file was originally compressed with --md5, genounzip always verifies that the MD5 of the original file is identical to the MD5 of the decompressed file, even without this option.",
-    "                     Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. ",
+    "   -m --md5          Show the digest of the decompressed file - MD5 if the file was compressed with --md5 or --test and Adler32 if not.",
+    "                     Note: for compressed files, e.g. myfile.vcf.gz, the digest calculated is that of the original, uncompressed file. ",
     "",
     "   -q --quiet        Don't show the progress indicator or warnings",    
     "",
     "   -Q --noisy        The --quiet is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings",    
     "",
-    "   -t --test         Decompress in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting decompressed file to that of the original file. Works only if the file was compressed with --md5",
+    "   -t --test         Decompress in memory (i.e. without writing the decompressed file to disk) and use the digest (MD5 or Adler32) to verify that the resulting decompressed file is identical to the original file.",
     "",
     "   -@ --threads      <number>. Specify the maximum number of threads. By default, genozip uses all the threads it needs to maximize usage of all available cores",
 #if !defined _WIN32 && !defined __APPLE__ // not relevant for personal computers

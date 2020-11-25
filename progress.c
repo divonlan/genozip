@@ -5,6 +5,7 @@
 
 #include <time.h>
 #include "genozip.h"
+#include "file.h"
 #include "progress.h"
 #include "profiler.h" // for TimeSpecType
 #include "flags.h"
@@ -158,16 +159,16 @@ void progress_finalize_component (const char *status)
 #define FINALIZE(format, ...) { \
     char s[500]; \
     sprintf (s, format, __VA_ARGS__);  \
-    if (!md5_is_zero (md5) && flag.md5) sprintf (&s[strlen(s)], "\tMD5 = %s", md5_display (md5).s); \
+    if (!digest_is_zero (md5) && flag.md5) sprintf (&s[strlen(s)], "\t%s = %s", digest_name(), digest_display (md5).s); \
     progress_finalize_component (s);  \
 }
 
-void progress_finalize_component_time (const char *status, Md5Hash md5)
+void progress_finalize_component_time (const char *status, Digest md5)
 {
     FINALIZE ("%s (%s)", status, progress_ellapsed_time (false));
 }
 
-void progress_finalize_component_time_ratio (const char *me, double ratio, Md5Hash md5)
+void progress_finalize_component_time_ratio (const char *me, double ratio, Digest md5)
 {
     if (component_name)
         FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time (false), me, ratio)
@@ -175,7 +176,7 @@ void progress_finalize_component_time_ratio (const char *me, double ratio, Md5Ha
         FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
 }
 
-void progress_finalize_component_time_ratio_better (const char *me, double ratio, const char *better_than, double ratio_than, Md5Hash md5)
+void progress_finalize_component_time_ratio_better (const char *me, double ratio, const char *better_than, double ratio_than, Digest md5)
 {
     if (component_name) 
         FINALIZE ("Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 
@@ -185,7 +186,7 @@ void progress_finalize_component_time_ratio_better (const char *me, double ratio
                   progress_ellapsed_time (false), me, ratio, better_than, ratio_than)
 }
 
-void progress_concatenated_md5 (const char *me, Md5Hash md5)
+void progress_concatenated_md5 (const char *me, Digest md5)
 {
     ASSERT0 (!component_name, "Error in progress_concatenated_md5: expecting component_name=NULL");
 
