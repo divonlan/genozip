@@ -201,6 +201,8 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
         if (uncompress) bgzf_uncompress_one_block (vb, LASTENT (BgzfBlockZip, vb->bgzf_blocks));  
     }
 
+    if (uncompress) buf_free (&evb->compressed); 
+
     return this_uncomp_len;
 #undef param
 }
@@ -279,8 +281,6 @@ static Digest txtfile_read_header (bool is_first_txt)
         buf_alloc_more (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
         bytes_read = txtfile_read_block (evb, evb->txt_data.len + HEADER_BLOCK, true);
     }
-
-    buf_free (&evb->compressed); // in case it was bgzf-compressed
 
     // the excess data is for the next vb to read 
     buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, header_len, 0, "txt_file->unconsumed_txt");
