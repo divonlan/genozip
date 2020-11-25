@@ -105,22 +105,22 @@ void fasta_seg_initialize (VBlockFAST *vb)
 
     if (!flag.make_reference) {
 
-        vb->contexts[FASTA_LINEMETA].inst = CTX_INST_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
+        vb->contexts[FASTA_LINEMETA].no_stons = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
         
         codec_acgt_comp_init ((VBlockP)vb);
 
         if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
-            vb->contexts[FASTA_NONREF].inst |= CTX_INST_NO_CALLBACK; // override callback if we are segmenting to a reference
+            vb->contexts[FASTA_NONREF].no_callback = true; // override callback if we are segmenting to a reference
 
             // in --stats, consolidate stats into SQBITMAP
             stats_set_consolidation ((VBlockP)vb, FASTA_SQBITMAP, 4, FASTA_NONREF, FASTA_NONREF_X, FASTA_GPOS, FASTA_STRAND);
         }
     }
     else { // make-reference
-        vb->contexts[FASTA_CONTIG].inst |= CTX_INST_NO_VB1_SORT; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference
+        vb->contexts[FASTA_CONTIG].no_vb1_sort = true; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference
     }
 
-    vb->contexts[FASTA_CONTIG].inst |= CTX_INST_NO_STONS; // needs b250 node_index for reference
+    vb->contexts[FASTA_CONTIG].no_stons = true; // needs b250 node_index for reference
 
     COPY_TIMER (seg_initialize);
 }
@@ -130,7 +130,7 @@ void fasta_seg_finalize (VBlockP vb)
     // top level snip
     Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = CON_FL_TOPLEVEL,
+        .is_toplevel = true,
         .num_items = 2,
         .items     = { { (DictId)dict_id_fields[FASTA_LINEMETA], DID_I_NONE, ""   },
                        { (DictId)dict_id_fields[FASTA_EOL],      DID_I_NONE, ""   } }

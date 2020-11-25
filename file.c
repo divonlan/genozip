@@ -70,15 +70,13 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 }
 
 // get codec by txt file type
-static void file_get_codecs_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode, Codec *codec)
+static Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode)
 {
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
-        if (txt_in_ft_by_dt[dt][i].in == txt_ft) {
-            if (codec) *codec         = txt_in_ft_by_dt[dt][i].codec;
-            return;
-        }
+        if (txt_in_ft_by_dt[dt][i].in == txt_ft) 
+            return txt_in_ft_by_dt[dt][i].codec;
 
-    if (*codec) *codec = (mode == WRITE ? CODEC_NONE : CODEC_UNKNOWN);
+    return (mode == WRITE ? CODEC_NONE : CODEC_UNKNOWN);
 }
 
 DataType file_get_dt_by_z_ft (FileType z_ft)
@@ -307,7 +305,7 @@ static bool file_open_txt_read (File *file)
     if (file_open_txt_read_test_valid_dt (file)) return true; // skip this file
 
     // open the file, based on the codec
-    file_get_codecs_by_txt_ft (file->data_type, file->type, READ, &file->codec);
+    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, READ);
     
     switch (file->codec) { 
         case CODEC_GZ:   // we test the first few bytes of the file to differentiate between NONE, GZ and BGZIP
@@ -338,7 +336,7 @@ static bool file_open_txt_read (File *file)
                 evb->compressed.param = bgzf_uncompressed_size; // pass uncompressed size in param
                 buf_add (&evb->compressed, block, block_size);
                 
-                file->bgzf_flags.f.libdeflate_level = 
+                file->bgzf_flags.libdeflate_level = 
                     bgzf_get_compression_level (file->name, block, block_size, (uint32_t)bgzf_uncompressed_size);
             }
 
@@ -463,7 +461,7 @@ static bool file_open_txt_write (File *file)
     }
 
     // get the codec    
-    file_get_codecs_by_txt_ft (file->data_type, file->type, WRITE, &file->codec);
+    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, WRITE);
     
     // decompressing as compressed BGZF format
     if (file->codec == CODEC_GZ || file->codec == CODEC_BGZF) {
@@ -632,13 +630,19 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         file->type  = stdin_type; 
         file->data_type = file_get_data_type (stdin_type, true);
 
-        // We currently only support plain and BGZF data piped in - see bug 243
-        ASSERT (file->type == txt_in_ft_by_dt[file->data_type][0].in || // plain
-                file->type == txt_in_ft_by_dt[file->data_type][1].in,   // .gz
-                "%s: genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension)", global_cmd);
+        Codec codec = file_get_codec_by_txt_ft (file->data_type, file->type, READ);
+        if (supertype == TXT_FILE) file->codec = codec;
 
-        if (supertype == TXT_FILE)
-            file_get_codecs_by_txt_ft (file->data_type, file->type, READ, &file->codec);
+
+        // Notes 1. We currently only support plain and BGZF data piped in - see bug 243
+        // 2. On Windows, we can't pipe binary files, bc Windows converts \n to \r\n
+        // 3. The codec at this point is what the user declared in -i (we haven't tested for gz yet)
+#ifdef _WIN32 
+        ASSERT (codec == CODEC_NONE, "%s: genozip on Windows supports piping in only plain (uncompressed) data", global_cmd);
+#else
+        ASSERT (codec == CODEC_NONE || codec == CODEC_BGZF, 
+                "%s: genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension)", global_cmd);
+#endif
     }
     else { // stdout
         file->data_type = data_type; 

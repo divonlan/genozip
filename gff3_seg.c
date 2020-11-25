@@ -20,8 +20,8 @@
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlock *vb)
 {
-    vb->contexts[GFF3_SEQID].inst = CTX_INST_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[GFF3_ATTRS].inst = CTX_INST_NO_STONS;
+    vb->contexts[GFF3_SEQID].no_stons = true; // needs b250 node_index for random access
+    vb->contexts[GFF3_ATTRS].no_stons = true;
 }
 
 void gff3_seg_finalize (VBlockP vb)
@@ -29,7 +29,7 @@ void gff3_seg_finalize (VBlockP vb)
     // top level snip
     Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = CON_FL_TOPLEVEL,
+        .is_toplevel = true,
         .num_items = 10,
         .items     = { { (DictId)dict_id_fields[GFF3_SEQID],  DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[GFF3_SOURCE], DID_I_NONE, "\t" },
@@ -156,7 +156,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_Variant_effect) {
         static const Container Variant_effect = {
             .num_items   = 4, 
-            .flags       = CON_FL_DROP_FINAL_ITEM_SEP,
+            .drop_final_item_sep = true,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="V0arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="V1arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -170,7 +170,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_sift_prediction) {
         static const Container sift_prediction = {
             .num_items   = 4, 
-            .flags       = CON_FL_DROP_FINAL_ITEM_SEP,
+            .drop_final_item_sep = true,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="S0iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="S1iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -184,7 +184,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_polyphen_prediction) {
         static const Container polyphen_prediction = {
             .num_items   = 4, 
-            .flags       = CON_FL_DROP_FINAL_ITEM_SEP,
+            .drop_final_item_sep = true,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="P1olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -198,7 +198,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_variant_peptide) {
         static const Container variant_peptide = {
             .num_items   = 3, 
-            .flags       = CON_FL_DROP_FINAL_ITEM_SEP,
+            .drop_final_item_sep = true,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="v0arPep" }, .seperator = {' '}, .did_i = DID_I_NONE }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
                              { .dict_id={.id="v1arPep" }, .seperator = {' '}, .did_i = DID_I_NONE },

@@ -19,11 +19,11 @@
 #include "container.h"
 #include "stats.h"
 
-static const char optional_field_store_flag[256] = {
-    ['c']=CTX_FL_STORE_INT, ['C']=CTX_FL_STORE_INT, 
-    ['s']=CTX_FL_STORE_INT, ['S']=CTX_FL_STORE_INT,
-    ['i']=CTX_FL_STORE_INT, ['I']=CTX_FL_STORE_INT,
-    ['f']=CTX_FL_STORE_FLOAT
+static const enum StoreType optional_field_store_flag[256] = {
+    ['c']=STORE_INT, ['C']=STORE_INT, 
+    ['s']=STORE_INT, ['S']=STORE_INT,
+    ['i']=STORE_INT, ['I']=STORE_INT,
+    ['f']=STORE_FLOAT
 };
 
 static const char optional_sep_by_type[2][256] = { { // compressing from SAM
@@ -127,21 +127,21 @@ void sam_seg_initialize (VBlock *vb)
 
     // note: all numeric fields needs STORE_INT to be reconstructable to BAM (possibly already set)
     // via the translators set in the SAM_TOP2BAM Container
-    vb->contexts[SAM_SQBITMAP].ltype  = LT_BITMAP;
-    vb->contexts[SAM_SQBITMAP].inst   = CTX_INST_LOCAL_ALWAYS;
-    vb->contexts[SAM_TLEN].flags      = CTX_FL_STORE_INT;
-    vb->contexts[SAM_MAPQ].flags      = CTX_FL_STORE_INT;
-    vb->contexts[SAM_FLAG].flags      = CTX_FL_STORE_INT;
-    vb->contexts[SAM_PNEXT].flags     = CTX_FL_STORE_INT;
-    vb->contexts[SAM_STRAND].ltype    = LT_BITMAP;
-    vb->contexts[SAM_GPOS].ltype      = LT_UINT32;
-    vb->contexts[SAM_GPOS].flags      = CTX_FL_STORE_INT;
+    vb->contexts[SAM_SQBITMAP].ltype    = LT_BITMAP;
+    vb->contexts[SAM_SQBITMAP].local_always = true;
+    vb->contexts[SAM_TLEN].flags.store  = STORE_INT;
+    vb->contexts[SAM_MAPQ].flags.store  = STORE_INT;
+    vb->contexts[SAM_FLAG].flags.store  = STORE_INT;
+    vb->contexts[SAM_PNEXT].flags.store = STORE_INT;
+    vb->contexts[SAM_STRAND].ltype      = LT_BITMAP;
+    vb->contexts[SAM_GPOS].ltype        = LT_UINT32;
+    vb->contexts[SAM_GPOS].flags.store  = STORE_INT;
 
     Context *rname_ctx = &vb->contexts[SAM_RNAME];
     Context *rnext_ctx = &vb->contexts[SAM_RNEXT];
 
-    rname_ctx->flags = rnext_ctx->flags = CTX_FL_STORE_INDEX; // when reconstructing BAM, we output the word_index instead of the string
-    rname_ctx->inst  = rnext_ctx->inst  = CTX_INST_NO_STONS;  // BAM reconstruction needs RNAME, RNEXT word indices. also needed for random access.
+    rname_ctx->flags.store = rnext_ctx->flags.store = STORE_INDEX; // when reconstructing BAM, we output the word_index instead of the string
+    rname_ctx->no_stons = rnext_ctx->no_stons = true;  // BAM reconstruction needs RNAME, RNEXT word indices. also needed for random access.
 
     // in --stats, consolidate stats 
     stats_set_consolidation (vb, SAM_SQBITMAP, 4, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND);
@@ -155,20 +155,16 @@ void sam_seg_initialize (VBlock *vb)
 void sam_seg_finalize (VBlockP vb)
 {
     // for qual data - select domqual compression if possible, or fallback 
-    if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) {
+    if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) 
         vb->contexts[SAM_QUAL].ltype  = LT_SEQUENCE; 
-        vb->contexts[SAM_QUAL].inst   = 0; // don't inherit from previous file 
-    }
 
-    if (!codec_domq_comp_init (vb, SAM_U2_Z, sam_zip_u2)) {
+    if (!codec_domq_comp_init (vb, SAM_U2_Z, sam_zip_u2)) 
         vb->contexts[SAM_U2_Z].ltype  = LT_SEQUENCE; 
-        vb->contexts[SAM_U2_Z].inst   = 0; // don't inherit from previous file 
-    }
 
     // top level snip - reconstruction as SAM
     Container top_level_sam = { 
         .repeats   = vb->lines.len,
-        .flags     = CON_FL_TOPLEVEL,
+        .is_toplevel = true,
         .num_items = 13,
         .items     = { { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, "\t" },
@@ -192,7 +188,7 @@ void sam_seg_finalize (VBlockP vb)
     // Translation (a feature of Container): items reconstruct their data and then call a translation function to translate it to the desired format
     Container top_level_bam = { 
         .repeats   = vb->lines.len,
-        .flags     = CON_FL_TOPLEVEL,
+        .is_toplevel = true,
         .num_items = 13,
         .items     = { { (DictId)dict_id_fields[SAM_RNAME],    DID_I_NONE, { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
                        { (DictId)dict_id_fields[SAM_POS],      DID_I_NONE, { CI_TRANS_NOR | CI_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
@@ -221,7 +217,8 @@ void sam_seg_finalize (VBlockP vb)
     // top level snip - reconstruction as FASTQ
     Container top_level_fastq = { 
         .repeats   = vb->lines.len,
-        .flags     = CON_FL_TOPLEVEL | CON_FL_FILTER_REPEATS, // filter - drop non-primary chimeric reads and reads without QUAL data
+        .is_toplevel = true,
+        .filter_repeats = true,  // drop non-primary chimeric reads and reads without QUAL data
         .num_items = 7,
         .items     = { { (DictId)dict_id_fields[SAM_RNAME],    DID_I_NONE, { CI_TRANS_NOR } }, // needed for reconstructing seq 
                        { (DictId)dict_id_fields[SAM_POS],      DID_I_NONE, { CI_TRANS_NOR } }, // needed for reconstructing seq
@@ -545,7 +542,6 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
     static const Container container_SA_OA = {
         .repeats     = 0, 
         .num_items   = 6, 
-        .flags       = 0,
         .repsep      = {0,0},
         .items       = { { .dict_id = {.id="@RNAME" }, .seperator = {','}, .did_i = DID_I_NONE},  // we don't mix with primary as primary is often sorted, and mixing will ruin its b250 compression
                          { .dict_id = {.id="@POS"   }, .seperator = {','}, .did_i = DID_I_NONE},  // we don't mix with primary as these are local-stored random numbers anyway - no advantage for mixing, and it would obscure the stats
@@ -610,7 +606,6 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
     static const Container container_XA = {
         .repeats     = 0, 
         .num_items   = 5, 
-        .flags       = 0,
         .repsep      = {0,0},
         .items       = { { .dict_id = {.id="@RNAME"  }, .seperator = {','}, .did_i = DID_I_NONE },
                          { .dict_id = {.id="@STRAND" }, .seperator = { 0 }, .did_i = DID_I_NONE },
@@ -800,7 +795,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
     Context *container_ctx     = ctx_get_ctx (vb, dict_id);
 
     Container con = { .num_items = 2, 
-                      .flags     = CON_FL_DROP_FINAL_ITEM_SEP, 
+                      .drop_final_item_sep = true,
                       .repsep    = {0,0}, 
                       .items     = { { .translator = SAM2BAM_ARRAY_SELF, .did_i = DID_I_NONE },  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
                                      { .seperator = {0, ','},            .did_i = DID_I_NONE } } // item[1] is actual array item
@@ -821,7 +816,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
     
     Context *element_ctx      = ctx_get_ctx (vb, con.items[1].dict_id);
     element_ctx->st_did_i     = container_ctx->did_i;
-    element_ctx->flags        = optional_field_store_flag[(uint8_t)value[0]];
+    element_ctx->flags.store  = optional_field_store_flag[(uint8_t)value[0]];
 
     for (con.repeats=0; con.repeats < CONTAINER_MAX_REPEATS && str_len > 0; con.repeats++) { // str_len will be -1 after last number
 
@@ -911,7 +906,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 
         // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
         Context *this_ctx  = ctx_get_ctx (vb, dict_id);
-        this_ctx->inst     = CTX_INST_NO_STONS; 
+        this_ctx->no_stons = true; 
         this_ctx->st_did_i = ctx->did_i; 
 
         const char special_snip[2] = { SNIP_SPECIAL, SAM_SPECIAL_BDBI };
@@ -968,7 +963,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
     if (optional_field_store_flag[(uint8_t)sam_type]) {
         Context *ctx;
         if ((ctx = ctx_get_existing_ctx (vb, dict_id)))
-            ctx->flags |= optional_field_store_flag[(uint8_t)sam_type];
+            ctx->flags.store = optional_field_store_flag[(uint8_t)sam_type];
     }
  
     return dict_id;

@@ -23,11 +23,11 @@ void vcf_seg_initialize (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    vb->contexts[VCF_CHROM] .inst = CTX_INST_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[VCF_FORMAT].inst = CTX_INST_NO_STONS;
-    vb->contexts[VCF_INFO]  .inst = CTX_INST_NO_STONS;
+    vb->contexts[VCF_CHROM] .no_stons = true; // needs b250 node_index for random access
+    vb->contexts[VCF_FORMAT].no_stons = true;
+    vb->contexts[VCF_INFO]  .no_stons = true;
 
-    ctx_get_ctx (vb, dict_id_FORMAT_GT)->inst = CTX_INST_NO_STONS; // we store the GT matrix in local, so cannot accomodate singletons
+    ctx_get_ctx (vb, dict_id_FORMAT_GT)->no_stons = true; // we store the GT matrix in local, so cannot accomodate singletons
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_nodes.len;
@@ -49,7 +49,7 @@ void vcf_seg_finalize (VBlockP vb_)
     // top level snip
     Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = CON_FL_TOPLEVEL,
+        .is_toplevel = true,
         .num_items = 10,
         .items     = { { (DictId)dict_id_fields[VCF_CHROM],   DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[VCF_POS],     DID_I_NONE, "\t" },
@@ -153,8 +153,10 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
     ASSSEG0 (field_len >= 2, field_start, "Error: missing or invalid FORMAT field");
 
     Container format_mapper = (Container){ 
-        .flags     = CON_FL_DROP_FINAL_REPEAT_SEP | CON_FL_FILTER_ITEMS | CON_FL_FILTER_REPEATS,
-        .repsep    = "\t"
+        .drop_final_repeat_sep = true,
+        .filter_items          = true,
+        .filter_repeats        = true,
+        .repsep                = "\t"
     };
 
     dl->has_haplotype_data = (str[0] == 'G' && str[1] == 'T' && (str[2] == ':' || field_len==2)); // GT field in FORMAT columns - must always appear first per VCF spec (if at appears)
@@ -254,8 +256,8 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         vb->an_len = *this_value_len;
         vb->is_an_before_ac = (vb->ac == NULL);
         Context *ctx = ctx_get_ctx(vb, dict_id);
-        ctx->flags |= CTX_FL_STORE_INT;
-        ctx->inst  |= CTX_INST_NO_STONS;
+        ctx->flags.store = STORE_INT;
+        ctx->no_stons = true;
     }
 
     else if (dict_id.num == dict_id_INFO_AF) { 
@@ -263,8 +265,8 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         vb->af_len = *this_value_len;
         vb->is_af_before_ac = (vb->ac == NULL);     
         Context *ctx = ctx_get_ctx(vb, dict_id);
-        ctx->flags |= CTX_FL_STORE_FLOAT;
-        ctx->inst  |= CTX_INST_NO_STONS;
+        ctx->flags.store = STORE_FLOAT;
+        ctx->no_stons = true;
     }
 
     // finalization of this INFO field
@@ -294,7 +296,7 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
                                              '0' + (char)vb->is_af_before_ac };
 
                     Context *ctx = ctx_get_ctx (vb, dict_id_INFO_AC);
-                    ctx->inst |= CTX_INST_NO_STONS;
+                    ctx->no_stons = true;
                     seg_by_ctx ((VBlockP)vb, special_snip, sizeof(special_snip), ctx, vb->ac_len, NULL);
                 }
             }
@@ -310,8 +312,8 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
 
 static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
 {
-    ctx->flags |= CTX_FL_STORE_INT;
-    ctx->inst  |= CTX_INST_NO_STONS;
+    ctx->flags.store = STORE_INT;
+    ctx->no_stons = true;
 
     int64_t ps_value=0;
     if (str_get_int (cell, cell_len, &ps_value) && ps_value == ctx->last_value.i) // same as previous line
@@ -348,7 +350,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
 {
     // the GT field is represented as a Container, with a single item repeating as required by poidy, and the seperator 
     // determined by the phase
-    MiniContainer gt = { .repeats=1, .num_items=1, .flags=CON_FL_DROP_FINAL_REPEAT_SEP };
+    MiniContainer gt = { .repeats=1, .num_items=1, .drop_final_repeat_sep=true };
     gt.items[0] = (ContainerItem){ .dict_id = (DictId)dict_id_FORMAT_GT_HT, .did_i = DID_I_NONE };
     unsigned save_cell_len = cell_len;
 

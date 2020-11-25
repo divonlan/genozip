@@ -692,9 +692,9 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
 
         // case: we're creating our own BGZF blocks
         if (!loaded)
-            txt_file->bgzf_flags = (BgzfFlags){ // case: we're creating our own BGZF blocks
-                .f.has_eof_block = true, // add an EOF block at the end
-                .f.libdeflate_level = BGZF_COMP_LEVEL_DEFAULT 
+            txt_file->bgzf_flags = (struct FlagsBgzf){ // case: we're creating our own BGZF blocks
+                .has_eof_block = true, // add an EOF block at the end
+                .libdeflate_level = BGZF_COMP_LEVEL_DEFAULT 
             };
 
         header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_load_isizes

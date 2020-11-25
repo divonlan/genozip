@@ -63,6 +63,35 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
 
+// goes into SectionHeader.flags
+typedef union BgzfFlags {  
+    uint8_t flags;
+
+    struct FlagsGenozipHeader {
+        uint8_t ref_internal     : 1; // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
+        uint8_t aligner          : 1; // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
+        uint8_t txt_is_bin       : 1; // Source file is binary (BAM)
+        uint8_t bgzf             : 1; // Reconstruct as BGZF (user may override) (determined by the last component)
+    } genozip_header;
+
+    struct FlagsBgzf {
+        uint8_t has_eof_block    : 1;
+        uint8_t libdeflate_level : 4; // 0-12, 15 means unknown
+    } bgzf;
+
+    struct FlagsCtx {
+        uint8_t store            : 2; // after reconstruction of a snip, store it in ctx.last_value
+        uint8_t paired           : 1; // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
+        uint8_t v8_container     : 1; // (canceled in 9 - files compressed with 8.0 will have alls containers have this flag)
+        uint8_t copy_param       : 1; // copy ctx.b250/local.param from SectionHeaderCtx.param
+        uint8_t all_the_same     : 1; // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
+    } ctx;
+} SectionFlags;
+
+enum __attribute__ ((__packed__)) StoreType { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX }; // values for SectionFlags.ctx.store
+
+#define SECTION_FLAGS_NONE ((SectionFlags){ .flags = 0 })
+
 typedef struct SectionHeader {
     uint32_t     magic; 
     uint32_t     compressed_offset;    // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
@@ -73,14 +102,8 @@ typedef struct SectionHeader {
     SectionType  section_type;         // 1 byte
     Codec        codec;                // 1 byte - primary codec in which this section is compressed
     Codec        sub_codec;            // 1 byte - sub codec, in case primary codec invokes another codec
-    SectionFlags flags;                // CTX_FL_*
+    SectionFlags flags;                
 } SectionHeader; 
-
-// flags written to SectionHeaderGenozipHeader.h.flags allowing Seg to communicate instructions to Piz
-#define SEC_GENOZIP_HEADER_FL_REF_INTERNAL ((SectionFlags)0x01)  // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
-#define SEC_GENOZIP_HEADER_FL_ALIGNER      ((SectionFlags)0x02)  // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
-#define SEC_GENOZIP_HEADER_FL_TXT_IS_BIN   ((SectionFlags)0x04)  // Source file is binary (BAM)
-#define SEC_GENOZIP_HEADER_FL_BGZF         ((SectionFlags)0x08)  // Reconstruct as BGZF (user may override) (determined by the last component)
 
 typedef struct {
     SectionHeader h;
@@ -185,21 +208,10 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "COD", 0,   1,  0,     0                        }, \
 }
 
-// flags written to SectionHeaderCtx.h.flags allowing Seg to communicate instructions to Piz
-#define CTX_FL_STORE_INT    ((SectionFlags)0x01) // after reconstruction of a snip, store it in ctx.last_value as int64_t (eg because they are a basis for a delta calculation)
-#define CTX_FL_STORE_FLOAT  ((SectionFlags)0x02) // after reconstruction of a snip, store it in ctx.last_value as double
-#define CTX_FL_STORE_INDEX  ((SectionFlags)0x03) // after reconstruction of a snip, the b250 word_index in ctx.last_value
-#define CTX_FL_PAIRED       ((SectionFlags)0x04) // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-//#define CTX_FL_CONTAINER    ((SectionFlags)0x08) // (canceled in 9 - files compressed with 8.0 will have alls containers have this flag)
-#define CTX_FL_COPY_PARAM   ((SectionFlags)0x10) // copy ctx.b250/local.param from SectionHeaderCtx.param
-#define CTX_FL_ALL_THE_SAME ((SectionFlags)0x20) // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
-
-#define ctx_store_flag(flags) ((flags) & 0x3)
-
 typedef struct {
     SectionHeader h;
     LocalType ltype; // used by SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
-    uint8_t param;   // goes into ctx.b250/local.param if flags contains CTX_FL_COPY_PARAM
+    uint8_t param;   // goes into ctx.b250/local.param if flags.copy_param
     uint8_t ffu[2];
     DictId dict_id;           
 } SectionHeaderCtx;         
@@ -261,15 +273,6 @@ typedef struct RefContig {
     uint64_t LN;
     Md5Hash M5;
 } RefContig; 
-
-typedef union BgzfFlags { // goes into header.flags in SEC_BGZF
-    struct {
-        uint8_t has_eof_block    : 1;
-        uint8_t libdeflate_level : 4; // 0-12, 15 means unknown
-        uint8_t unused           : 3;
-    } f;
-    uint8_t flags;
-} BgzfFlags;
 
 // the data of SEC_REF_ALT_CHROMS
 typedef struct { WordIndex txt_chrom, ref_chrom; } AltChrom; 

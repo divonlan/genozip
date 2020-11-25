@@ -253,7 +253,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 
     // case: we're the 2nd of the pair - the bit represents whether this strand is equal to the pair's strand (expecting
     // it to be 1 in most cases - making the bitmap highly compressible)
-    if (gpos_ctx->inst & CTX_INST_PAIR_LOCAL) {
+    if (gpos_ctx->pair_local) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
         buf_add_bit (&strand_ctx->local, is_forward == pair_is_forward);
@@ -268,7 +268,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     
     // case: we're the 2nd of the pair - store a delta if its small enough, or a lookup from local if not
     bool store_local = true;
-    if (gpos_ctx->inst & CTX_INST_PAIR_LOCAL) {
+    if (gpos_ctx->pair_local) {
 
         ASSERT (buf_is_allocated (&gpos_ctx->pair), "Error in aligner_seg_seq vb_i=%u: expecting gpos_ctx->pair to be allocated", vb->vblock_i);
         

@@ -138,17 +138,17 @@ void fastq_seg_initialize (VBlockFAST *vb)
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
         vb->contexts[FASTQ_STRAND].ltype = LT_BITMAP;
         vb->contexts[FASTQ_GPOS  ].ltype = LT_UINT32;
-        vb->contexts[FASTQ_GPOS  ].flags = CTX_FL_STORE_INT;
+        vb->contexts[FASTQ_GPOS  ].flags.store = STORE_INT;
     }
 
     vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
-    vb->contexts[FASTQ_SQBITMAP].inst  = CTX_INST_LOCAL_ALWAYS;
+    vb->contexts[FASTQ_SQBITMAP].local_always = true;
 
     codec_acgt_comp_init ((VBlockP)vb);
 
      if (flag.pair == PAIR_READ_2) {
-        vb->contexts[FASTQ_GPOS]  .inst   = CTX_INST_PAIR_LOCAL;
-        vb->contexts[FASTQ_STRAND].inst   = CTX_INST_PAIR_LOCAL; 
+        vb->contexts[FASTQ_GPOS]  .pair_local = true;
+        vb->contexts[FASTQ_STRAND].pair_local = true;
 
         piz_uncompress_all_ctxs ((VBlockP)vb, vb->pair_vb_i);
 
@@ -167,15 +167,15 @@ void fastq_seg_initialize (VBlockFAST *vb)
 void fastq_seg_finalize (VBlockP vb)
 {
     // for qual data - select domqual compression if possible, or fallback 
-    if (!codec_domq_comp_init (vb, FASTQ_QUAL, fastq_zip_qual)) {
+    if (!codec_domq_comp_init (vb, FASTQ_QUAL, fastq_zip_qual)) 
         vb->contexts[FASTQ_QUAL].ltype  = LT_SEQUENCE; // might be overridden by codec_domq_compress
-        vb->contexts[FASTQ_QUAL].inst   = 0; // don't inherit from previous file 
-    }
 
     // top level snip
     Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = CON_FL_TOPLEVEL | CON_FL_FILTER_ITEMS | CON_FL_FILTER_REPEATS,
+        .is_toplevel = true,
+        .filter_items = true,
+        .filter_repeats = true,
         .num_items = 7,
         .items     = { { (DictId)dict_id_fields[FASTQ_DESC],     DID_I_NONE, ""  },
                        { (DictId)dict_id_fields[FASTQ_E1L],      DID_I_NONE, ""  }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
@@ -243,7 +243,7 @@ bool fastq_piz_read_one_vb (VBlockP vb, ConstSectionListEntryP sl)
     ARRAY (const unsigned, section_index, vb->z_section_headers);
     for (uint32_t sec_i=1; sec_i < vb->z_section_headers.len; sec_i++) {
         SectionHeaderCtx *header = (SectionHeaderCtx *)ENT (char, vb->z_data, section_index[sec_i]);
-        if (header->h.flags & CTX_FL_PAIRED) {
+        if (header->h.flags.ctx.paired) {
             uint32_t prev_file_first_vb_i, prev_file_last_vb_i;
             sections_get_prev_file_vb_i (sl, &prev_file_first_vb_i, &prev_file_last_vb_i);
 

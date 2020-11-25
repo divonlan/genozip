@@ -48,7 +48,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
     // case: unaligned sequence - pos is 0 
     if (!pos || (vb->chrom_name_len==1 && vb->chrom_name[0]=='*')) {
         // case: compressed with a reference, using our aligner
-        if (z_file->flags & SEC_GENOZIP_HEADER_FL_ALIGNER) {
+        if (z_file->flags.genozip_header.aligner) {
             aligner_reconstruct_seq ((VBlockP)vb, bitmap_ctx, vb->seq_len, false);
             nonref_ctx->next_local = ROUNDUP_TO_NEAREST_4 (nonref_ctx->next_local);
         }
@@ -148,9 +148,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
         RECONSTRUCT (vb_sam->textual_cigar.data, vb_sam->textual_cigar.len * sizeof (uint32_t));
         buf_free (&vb_sam->textual_cigar);
 
-        // if BIN is SAM_SPECIAL_BIN, CTX_INST_SEMAPHORE is set by bam_piz_special_BIN - a signal to us to calculate
-        if (vb->contexts[SAM_BAM_BIN].inst & CTX_INST_SEMAPHORE) {
-            vb->contexts[SAM_BAM_BIN].inst &= ~CTX_INST_SEMAPHORE; // reset;
+        // if BIN is SAM_SPECIAL_BIN, inst.semaphone is set by bam_piz_special_BIN - a signal to us to calculate
+        if (vb->contexts[SAM_BAM_BIN].semaphore) {
+            vb->contexts[SAM_BAM_BIN].semaphore = false;
 
             uint16_t flag = vb->contexts[SAM_FLAG].last_value.i;
             PosType pos   = vb->contexts[SAM_POS ].last_value.i;
@@ -176,7 +176,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
 // Case 2: BIN is an textual integer snip - its BIN.last_value will be set as normal and transltor will reconstruct it
 SPECIAL_RECONSTRUCTOR (bam_piz_special_BIN)
 {
-    ctx->inst |= CTX_INST_SEMAPHORE; // signal to sam_piz_special_CIGAR to calculate
+    ctx->semaphore = true; // signal to sam_piz_special_CIGAR to calculate
     return false; // no new value
 }
 
@@ -360,7 +360,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     // we can't convert to BAM if its a SAM file without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
     // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
     // analysis. Better give an error here than create confusion downstream.
-    ASSERT (n_ref || !(z_file->flags & SEC_GENOZIP_HEADER_FL_REF_INTERNAL), 
+    ASSERT (n_ref || !z_file->flags.genozip_header.ref_internal, 
             "Error: Failed to convert %s from SAM to BAM: genounzip requires that either the SAM header has SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or the file was genozipped with --reference or --REFERENCE", z_name);
 
     // if no SQ lines - get lines from loaded contig (will be available only if file was compressed with --reference or --REFERENCE)
@@ -474,7 +474,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
     else if (ctx->did_i != CHROM && snip_len == 1 && *snip == '=') 
         RECONSTRUCT_BIN32 (vb->contexts[CHROM].last_value.i)
 
-    // otherwise - output the word_index which was stored here because of CTX_FL_STORE_INDEX set in seg 
+    // otherwise - output the word_index which was stored here because of flags.store=STORE_INDEX set in seg 
     else     
         RECONSTRUCT_BIN32 (ctx->last_value.i); 
     

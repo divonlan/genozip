@@ -206,7 +206,7 @@ Codec codec_assign_best_codec (VBlockP vb,
             LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
 
             uint64_t z_data_before = vb->z_data.len;
-            zfile_compress_section_data_ex (vb, SEC_NONE, callback ? NULL : data, callback, data->len, *selected_codec, 0);
+            zfile_compress_section_data_ex (vb, SEC_NONE, callback ? NULL : data, callback, data->len, *selected_codec, SECTION_FLAGS_NONE);
             tests[t].size = vb->z_data.len - z_data_before;
         }
                                                            

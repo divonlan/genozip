@@ -97,7 +97,7 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t s
         }
 #endif
         seg_integer (vb, SAM_BAM_BIN, bin, is_bam);
-        vb->contexts[SAM_BAM_BIN].flags = CTX_FL_STORE_INT;
+        vb->contexts[SAM_BAM_BIN].flags.store = STORE_INT;
     }
 }
 

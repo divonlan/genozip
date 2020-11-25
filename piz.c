@@ -42,7 +42,7 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
                                            bool reconstruct) 
 {
     ASSERT (delta_snip, "Error in piz_reconstruct_from_delta: delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    ASSERT (ctx_store_flag (base_ctx->flags) == CTX_FL_STORE_INT, "Error in piz_reconstruct_from_delta: attempting calculate delta from a base of \"%s\", but this context doesn't have CTX_FL_STORE_INT",
+    ASSERT (base_ctx->flags.store == STORE_INT, "Error in piz_reconstruct_from_delta: attempting calculate delta from a base of \"%s\", but this context doesn't have STORE_INT",
             base_ctx->name);
 
     if (delta_snip_len == 1 && delta_snip[0] == '-')
@@ -165,7 +165,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     LastValueType new_value = {0};
     bool have_new_value = false;
     Context *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
-    uint8_t store_type = ctx_store_flag (snip_ctx->flags);
+    enum StoreType store_type = snip_ctx->flags.store;
 
     switch (snip[0]) {
 
@@ -201,7 +201,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     }
     case SNIP_PAIR_LOOKUP:
-        ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags, &snip_ctx->pair_b250_iter, &snip, &snip_len);
+        ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags.all_the_same, &snip_ctx->pair_b250_iter, &snip, &snip_len);
         piz_reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len, reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
         break;
 
@@ -246,19 +246,19 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     
     case SNIP_DONT_STORE:
-        store_type = 0; // override CTX_FL_STORE_* and fall through
+        store_type = STORE_NONE; // override store and fall through
         snip++; snip_len--;
         
     default: {
         if (reconstruct) RECONSTRUCT (snip, snip_len); // simple reconstruction
 
         switch (store_type) {
-            case CTX_FL_STORE_INT: 
+            case STORE_INT: 
                 // store the value only if the snip in its entirety is a reconstructable integer (eg NOT "21A", "-0", "012" etc)
                 have_new_value = str_get_int (snip, snip_len, &new_value.i);
                 break;
 
-            case CTX_FL_STORE_FLOAT: {
+            case STORE_FLOAT: {
                 char *after;
                 new_value.d = strtod (snip, &after); // allows negative values
 
@@ -267,7 +267,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
                 have_new_value = (after == snip + snip_len);
                 break;
             }
-            case CTX_FL_STORE_INDEX:
+            case STORE_INDEX:
                 new_value.i = word_index;
                 have_new_value = (word_index != WORD_INDEX_NONE);
                 break;
@@ -386,20 +386,21 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
             Context *ctx = ctx_get_ctx (vb, header->dict_id); // creates the context
 
             // case: in ZIP & we are PAIR_2, reading PAIR_1 info - save flags, ltype, lcodec to restore later
-            uint8_t save_flags=0; LocalType save_ltype=0; Codec save_lcodec=0;
+            struct FlagsCtx save_flags={}; LocalType save_ltype=0; Codec save_lcodec=0;
             if (pair_vb_i && command == ZIP) { save_flags=ctx->flags; save_ltype=ctx->ltype; save_lcodec=ctx->lcodec; }
             
-            ctx->flags |= header->h.flags;
+            *(uint8_t*)&ctx->flags |= header->h.flags.flags; // ??? is |= really needed? or is assignment sufficient?
+
             ctx->ltype  = header->ltype;
             if (is_local) ctx->lcodec = header->h.codec;
 
-            // case: in PIZ: CTX_FL_PAIRED appears on the sections the "pair 2" VB (that come first in section_index)
-            if ((ctx->flags & CTX_FL_PAIRED) && !pair_vb_i) 
+            // case: in PIZ: flags.paired appears on the sections the "pair 2" VB (that come first in section_index)
+            if (ctx->flags.paired && !pair_vb_i) 
                 pair_vb_i = fastq_get_pair_vb_i (vb);
 
             bool is_pair_section = (BGEN32 (header->h.vblock_i) == pair_vb_i); // is this a section of "pair 1" 
             
-            if (is_pair_section) ctx->pair_flags = header->h.flags;            
+            if (is_pair_section) ctx->pair_flags = header->h.flags.ctx;            
 
             Buffer *target_buf = is_local ? &ctx->local : &ctx->b250;
 
@@ -428,7 +429,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
             if      (is_pair_section) adjust_lens (ctx->pair)
             else if (is_local)        adjust_lens (ctx->local);
 
-            if (header->h.flags & CTX_FL_COPY_PARAM)
+            if (header->h.flags.ctx.copy_param)
                 target_buf->param = header->param;
 
             // restore

@@ -7,6 +7,7 @@
 #define CONTAINER_INCLUDED
 
 #include "genozip.h"
+#include "sections.h"
 
 #pragma pack(1)
 #define CONTAINER_MAX_PREFIXES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
@@ -43,12 +44,11 @@ typedef struct Container {
     uint8_t num_items;    // 1 to MAX_CONTAINER_ITEMS
 
     // container flags
-    #define CON_FL_DROP_FINAL_ITEM_SEP   0x01
-    #define CON_FL_DROP_FINAL_REPEAT_SEP 0x02
-    #define CON_FL_FILTER_REPEATS        0x04
-    #define CON_FL_FILTER_ITEMS          0x08
-    #define CON_FL_TOPLEVEL              0x10
-    uint8_t flags;
+    uint8_t drop_final_item_sep   : 1;
+    uint8_t drop_final_repeat_sep : 1;
+    uint8_t filter_repeats        : 1;
+    uint8_t filter_items          : 1;
+    uint8_t is_toplevel           : 1;
     
     char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
     ContainerItem items[MAX_SUBFIELDS];
@@ -58,7 +58,14 @@ typedef struct Container {
 typedef struct MiniContainer {
     uint32_t repeats;     // number of "repeats" (array elements)
     uint8_t num_items;    // must be 1
-    SectionFlags flags;
+
+    // container flags
+    uint8_t drop_final_item_sep   : 1;
+    uint8_t drop_final_repeat_sep : 1;
+    uint8_t filter_repeats        : 1;
+    uint8_t filter_items          : 1;
+    uint8_t is_toplevel           : 1;
+
     char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
     ContainerItem items[1];
 } MiniContainer;

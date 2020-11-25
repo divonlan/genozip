@@ -51,8 +51,8 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         if (has_ltype) ltype = lt_desc[header_ctx->ltype].name;
     }
 
-    if (header->flags) 
-        str_int (header->flags, flags);
+    if (header->flags.flags) 
+        str_int (header->flags.flags, flags);
 
     char str[1000];
     #define PRINT if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else printf ("%s", str)
@@ -62,7 +62,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
              is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
              st_name(header->section_type), 
              -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
-             header->flags ? "flg=" : "", flags, 
+             header->flags.flags ? "flg=" : "", flags, 
              has_ltype ? "type=" : "", ltype, 
              has_param ? "prm=" : "", param, 
              codec_name (header->codec), codec_name (header->sub_codec),
@@ -254,6 +254,9 @@ static void zfile_get_metadata(char *metadata)
 
 uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
 {
+    struct FlagsCtx flags = ctx->flags; // make a copy
+    flags.paired = ctx->pair_b250;
+
     SectionHeaderCtx header = (SectionHeaderCtx) { 
         .h.magic                 = BGEN32 (GENOZIP_MAGIC),
         .h.section_type          = SEC_B250,
@@ -261,11 +264,11 @@ uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
         .h.codec                 = ctx->bcodec == CODEC_UNKNOWN ? CODEC_BZ2 : ctx->bcodec,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .h.flags                 = ctx->flags | ((ctx->inst & CTX_INST_PAIR_B250) ? CTX_FL_PAIRED : 0), 
+        .h.flags.ctx             = flags,
         .dict_id                 = ctx->dict_id,
         .ltype                   = ctx->ltype
     };
-    
+
     return comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
@@ -274,7 +277,7 @@ LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
     static struct { DataType dt; const uint64_t *dict_id_num; LocalGetLineCB *func; } callbacks[] = LOCAL_GET_LINE_CALLBACKS;
 
     for (unsigned i=0; i < sizeof(callbacks)/sizeof(callbacks[0]); i++)
-        if (callbacks[i].dt == dt && *callbacks[i].dict_id_num == ctx->dict_id.num && !(ctx->inst & CTX_INST_NO_CALLBACK)) 
+        if (callbacks[i].dt == dt && *callbacks[i].dict_id_num == ctx->dict_id.num && !ctx->no_callback) 
             return callbacks[i].func;
 
     return NULL;
@@ -285,9 +288,9 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
 {   
     vb->has_non_agct = false;
     
-    SectionFlags flags = ctx->flags | 
-                         ((ctx->inst & CTX_INST_PAIR_LOCAL)  ? CTX_FL_PAIRED     : 0) |
-                         ((ctx->inst & CTX_INST_LOCAL_PARAM) ? CTX_FL_COPY_PARAM : 0);
+    struct FlagsCtx flags = ctx->flags; // make a copy
+    flags.paired     = ctx->pair_local;
+    flags.copy_param = ctx->local_param;
                     
     uint32_t uncompressed_len = ctx->local.len * lt_desc[ctx->ltype].width;
     
@@ -303,10 +306,10 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
         .h.codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_BZ2 : ctx->lcodec, // if codec has not been decided yet, fall back on BZ2
         .h.sub_codec             = ctx->lsubcodec_piz ? ctx->lsubcodec_piz : codec_args[ctx->lcodec].sub_codec,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .h.flags                 = flags,
+        .h.flags.ctx             = flags,
         .dict_id                 = ctx->dict_id,
         .ltype                   = ctx->ltype,
-        .param                   = (flags & CTX_FL_COPY_PARAM) ? (uint8_t)ctx->local.param : 0
+        .param                   = flags.copy_param ? (uint8_t)ctx->local.param : 0
     };
 
     LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
@@ -567,7 +570,7 @@ bool zfile_read_genozip_header (Md5Hash *digest, uint64_t *txt_data_size, uint64
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
     if (txt_file)// txt_file is still NULL in case of --1d
-        txt_file->data_type = (data_type == DT_SAM) && (z_file->flags & SEC_GENOZIP_HEADER_FL_TXT_IS_BIN) ? DT_BAM : data_type;
+        txt_file->data_type = (data_type == DT_SAM) && z_file->flags.genozip_header.txt_is_bin ? DT_BAM : data_type;
 
     ASSERT (header->encryption_type != ENC_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
             "Error: password provided, but file %s is not encrypted", z_name);
@@ -679,10 +682,13 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
     header.h.codec                 = CODEC_BZ2;
-    header.h.flags                 = z_file->flags |
-                                     (flag.reference == REF_INTERNAL ? SEC_GENOZIP_HEADER_FL_REF_INTERNAL : 0) |
-                                     (flag.ref_use_aligner           ? SEC_GENOZIP_HEADER_FL_ALIGNER      : 0) |
-                                     (txt_file->codec == CODEC_BGZF  ? SEC_GENOZIP_HEADER_FL_BGZF         : 0);
+    header.h.flags                 = z_file->flags;
+    header.h.flags.genozip_header  = (struct FlagsGenozipHeader) {
+        .txt_is_bin   = z_file->flags.genozip_header.txt_is_bin,
+        .ref_internal = (flag.reference == REF_INTERNAL),
+        .aligner      = (flag.ref_use_aligner > 0),
+        .bgzf         = (txt_file->codec == CODEC_BGZF)
+    };
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)z_data_type);
     header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;

@@ -166,7 +166,7 @@ WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned sn
 }
 
 // PIZ only (uses word_list): returns word index, and advances the iterator
-WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, uint8_t ctx_flags,
+WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same,
                              SnipIterator *override_iterator,   // if NULL, defaults to ctx->iterator
                              const char **snip, uint32_t *snip_len) // optional out 
 {
@@ -193,7 +193,7 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, uint8_t ctx_flags,
     ASSERT (override_iterator || iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), "Error while reconstrucing line %u vb_i=%u: iterator for %s reached end of data",
             vb->line_i, vb->vblock_i, ctx->name);
             
-    word_index = base250_decode (&iterator->next_b250, !(ctx_flags & CTX_FL_ALL_THE_SAME));  // if this line has no non-GT subfields, it will not have a ctx 
+    word_index = base250_decode (&iterator->next_b250, !all_the_same);  // if this line has no non-GT subfields, it will not have a ctx 
 
     // case: a Container item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
     if (word_index == WORD_INDEX_MISSING_SF) {
@@ -238,7 +238,7 @@ const char *ctx_peek_next_snip (VBlock *vb, Context *ctx)
 
     const char *snip;
     uint32_t snip_len;
-    ctx_get_next_snip (vb, ctx, ctx->flags, NULL, &snip, &snip_len);
+    ctx_get_next_snip (vb, ctx, ctx->flags.all_the_same, NULL, &snip, &snip_len);
     
     ctx->iterator = save; // restore
 
@@ -258,7 +258,7 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
     // 2. we insert it to ol_dict instead of dict - i.e. it doesn't get written the dict section
     // 3. we move it to the local section of this vb
     // 4. we set the word_index of its nodes to be the word_index of the SNIP_LOOKUP snip
-    bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == LT_TEXT) && !(vb_ctx->inst & CTX_INST_NO_STONS)); // is singleton in this VB
+    bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == LT_TEXT) && !vb_ctx->no_stons); // is singleton in this VB
 
     // attempt to get the node from the hash table
     WordIndex node_index = hash_global_get_entry (zf_ctx, snip, snip_len, is_singleton_in_vb ? HASH_NEW_OK_SINGLETON_IN_VB : HASH_NEW_OK_NOT_SINGLETON, node);
@@ -287,7 +287,7 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
 
     // case: vb singleton turns out to be a global singleton - we add it to local and return the SNIP_LOOKUP node
     // instead of the singleton node (which is guaranteed to be non-singleton, and hence >= 0)
-    // note: local is dedicated to singletons and contains nothing else, since CTX_INST_NO_STONS is not set
+    // note: local is dedicated to singletons and contains nothing else, since inst.no_stons is not set
     if (node_index < 0) {
         seg_add_to_local_text (merging_vb, vb_ctx, snip, snip_len, 0);
         
@@ -436,7 +436,7 @@ void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs_buf, C
              "Error in ctx_copy_ref_contigs_to_zf: expecting contigs and contigs_dict to be allocated");
     
     Context *zf_ctx = &z_file->contexts[dst_did_i];
-    zf_ctx->inst = CTX_INST_NO_STONS;
+    zf_ctx->no_stons = true;
     mutex_initialize (zf_ctx->mutex);
 
     // copy reference dict
@@ -820,7 +820,7 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
 
         Context *ctx = &vb->contexts[did_i];
 
-        if (ctx->inst & CTX_INST_NO_VB1_SORT) continue;
+        if (ctx->no_vb1_sort) continue;
         
         // prepare sorter array containing indices into ctx->nodes. We are going to sort it rather than sort nodes directly
         // as the b250 data contains node indices into ctx->nodes.
@@ -914,11 +914,15 @@ void ctx_free_context (Context *ctx)
     ctx->last_delta = 0;
     ctx->last_value.i = 0;
     ctx->last_line_i = 0;
-    ctx->did_i = ctx->flags = ctx->inst = 0;
+    ctx->did_i = 0; 
     ctx->ltype = 0;
+    ctx->flags = (struct FlagsCtx){};
     ctx->lcodec = ctx->bcodec = 0;
     memset ((char*)ctx->name, 0, sizeof(ctx->name));
     mutex_destroy (ctx->mutex);
+
+    ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback =
+    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->semaphore = 0;
 }
 
 // Called by file_close ahead of freeing File memory containing contexts

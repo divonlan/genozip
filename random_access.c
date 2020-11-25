@@ -423,6 +423,6 @@ void random_access_compress (Buffer *ra_buf, SectionType sec_type, const char *m
     BGEN_random_access (ra_buf); // make ra_buf into big endian
 
     ra_buf->len *= sizeof (RAEntry); // change len to count bytes
-    zfile_compress_section_data_ex (evb, sec_type, ra_buf, 0,0, CODEC_LZMA, 0); // ra data compresses better with LZMA than BZLIB
+    zfile_compress_section_data_ex (evb, sec_type, ra_buf, 0,0, CODEC_LZMA, SECTION_FLAGS_NONE); // ra data compresses better with LZMA than BZLIB
     ra_buf->len /= sizeof (RAEntry); // restore
 }

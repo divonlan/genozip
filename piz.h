@@ -31,7 +31,7 @@ extern void piz_reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_i
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
 
 // gets snip, snip_len from b250 data
-#define LOAD_SNIP(did_i) ctx_get_next_snip ((VBlockP)vb, &vb->contexts[(did_i)], (vb->contexts[(did_i)].flags & CTX_FL_ALL_THE_SAME), NULL, &snip, &snip_len); 
+#define LOAD_SNIP(did_i) ctx_get_next_snip ((VBlockP)vb, &vb->contexts[(did_i)], vb->contexts[(did_i)].flags.all_the_same, NULL, &snip, &snip_len); 
 
 #define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (char*)(s), (len))
 #define RECONSTRUCT1(c) NEXTENT (char, vb->txt_data) = c

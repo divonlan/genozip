@@ -24,7 +24,8 @@
 
 void me23_seg_initialize (VBlock *vb)
 {
-    vb->contexts[ME23_CHROM].inst = CTX_INST_NO_STONS | CTX_INST_NO_VB1_SORT; // needs b250 node_index for random access ; needs to be in original order to reconstruct VCF header when translating
+    vb->contexts[ME23_CHROM].no_stons = true;
+    vb->contexts[ME23_CHROM].no_vb1_sort = true;
     vb->contexts[ME23_GENOTYPE].ltype = LT_SEQUENCE;
 }
 
@@ -33,7 +34,7 @@ void me23_seg_finalize (VBlockP vb)
     // top level snip
     Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = CON_FL_TOPLEVEL,
+        .is_toplevel = true,
         .num_items = 5,
         .items     = { { (DictId)dict_id_fields[ME23_ID],       DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[ME23_CHROM],    DID_I_NONE, "\t" },
@@ -46,7 +47,7 @@ void me23_seg_finalize (VBlockP vb)
 
     Container top_level_to_vcf = { 
         .repeats   = vb->lines.len,
-        .flags     = CON_FL_TOPLEVEL,
+        .is_toplevel = true,
         .num_items = 5,
         .items     = { { (DictId)dict_id_fields[ME23_CHROM],    DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[ME23_POS],      DID_I_NONE, "\t" },

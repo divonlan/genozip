@@ -86,7 +86,6 @@ typedef uint8_t DidIType;   // index of a context in vb->contexts or z_file->con
 typedef uint64_t CharIndex;   // index within dictionary
 typedef int32_t WordIndex;    // used for word and node indices
 typedef int64_t PosType;      // used for position coordinate within a genome
-typedef uint8_t SectionFlags; // used for section-type specific flags, transferred from zip to piz via SectionHeader.flags
 
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads, global_max_memory_per_vb;

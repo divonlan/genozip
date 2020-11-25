@@ -30,7 +30,7 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, Container *con,
                                  const char *prefixes, unsigned prefixes_len, // a container-wide prefix (may be empty), followed (or not) by one prefix per item. Each prefixes is terminated by CON_PREFIX_SEP.
                                  unsigned add_bytes)
 {
-    ctx->inst  |= CTX_INST_NO_STONS; // we need the word index to for container caching
+    ctx->no_stons = true; // we need the word index to for container caching
 
     // con=NULL means MISSING Container (see container_reconstruct_do)
     if (!con) return seg_by_ctx (vb, NULL, 0, ctx, 0, NULL); 
@@ -77,25 +77,25 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
     #define IS_CI_SET(flag) (CI_ITEM_HAS_FLAG (item) && ((uint8_t)item->seperator[0] & ~(uint8_t)0x80 & flag))
 
     TimeSpecType profiler_timer={0}; 
-    if (flag.show_time && (con->flags & CON_FL_TOPLEVEL)) 
+    if (flag.show_time && con->is_toplevel) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, con, &prefixes, &prefixes_len); 
 
-    ASSERT (DTP (container_filter) || (!(con->flags & CON_FL_FILTER_REPEATS) && !(con->flags & CON_FL_FILTER_ITEMS)), 
+    ASSERT (DTP (container_filter) || (!con->filter_repeats && !con->filter_items), 
             "Error: data_type=%s doesn't support container_filter, despite being specified in the Container", dt_name (vb->data_type));
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip
-        if (con->flags & CON_FL_TOPLEVEL) {
+        if (con->is_toplevel) {
             vb->line_i = vb->first_line + rep_i;
             vb->line_start = vb->txt_data.len;
             vb->dont_show_curr_line = false; 
         }
     
-        if ((con->flags & CON_FL_FILTER_REPEATS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, -1))) continue; // repeat is filtered out
+        if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, -1))) continue; // repeat is filtered out
 
         const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
         uint32_t item_prefixes_len = prefixes_len;
@@ -103,7 +103,7 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
         for (unsigned i=0; i < con->num_items; i++) {
             const ContainerItem *item = &con->items[i];
 
-            if ((con->flags & CON_FL_FILTER_ITEMS) && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
+            if (con->filter_items && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
 
             if (flag.show_containers && (item->did_i != DID_I_NONE || item->dict_id.num)) // show container reconstruction 
                 fprintf (stderr, "Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
@@ -147,25 +147,25 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
                 vb->txt_data.len += (uint8_t)item->seperator[1];
         }
 
-        if (rep_i+1 < con->repeats || !(con->flags & CON_FL_DROP_FINAL_REPEAT_SEP)) {
+        if (rep_i+1 < con->repeats || !con->drop_final_repeat_sep) {
             if (con->repsep[0]) RECONSTRUCT1 (con->repsep[0]);
             if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
         }
 
         // in top level: after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
-        if ((con->flags & CON_FL_TOPLEVEL) && vb->dont_show_curr_line) 
+        if (con->is_toplevel && vb->dont_show_curr_line) 
             vb->txt_data.len = vb->line_start; 
     }
 
     // remove final seperator, if we need to
-    if (con->flags & CON_FL_DROP_FINAL_ITEM_SEP) {
+    if (con->drop_final_item_sep) {
         const ContainerItem *item = &con->items[con->num_items-1]; // last item
 
         vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (flag.do_translate ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
                                                    : (!!item->seperator[0] + !!item->seperator[1]);
     }
 
-    if (con->flags & CON_FL_TOPLEVEL)   
+    if (con->is_toplevel)   
         COPY_TIMER (piz_reconstruct_vb);
 }
 

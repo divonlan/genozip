@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 output=test-output.genozip
 

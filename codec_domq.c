@@ -71,7 +71,7 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
     for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
         if (char_counter[c] > threshold) {
             qual_ctx->local.param = c;
-            qual_ctx->inst    = CTX_INST_LOCAL_PARAM;
+            qual_ctx->local_param = true;
             qual_ctx->ltype   = LT_CODEC;
             qual_ctx->lcodec  = CODEC_DOMQ;
 
@@ -190,7 +190,7 @@ bool codec_domq_compress (VBlock *vb,
         ((SectionHeaderCtx *)header)->ltype = LT_SEQUENCE; // not LD_CODEC any more
         header->codec     = sub_codec;
         header->sub_codec = CODEC_UNKNOWN;
-        header->flags    &= ~CTX_FL_COPY_PARAM; // cancel flag
+        header->flags.ctx.copy_param = 0; // cancel flag
         buf_free (qual_buf);
         buf_free (qdomruns_buf);
         return compress (vb, header, NULL, uncompressed_len, callback, compressed, compressed_len, soft_fail);

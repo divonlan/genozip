@@ -20,7 +20,7 @@ extern void zfile_compress_section_data_ex (VBlockP vb, SectionType section_type
                                             BufferP section_data, LocalGetLineCB callback, uint32_t total_len, 
                                             Codec codec, SectionFlags flags);
 #define zfile_compress_section_data(vb, section_type, section_data) \
-    zfile_compress_section_data_ex ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2, 0)
+    zfile_compress_section_data_ex ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2, SECTION_FLAGS_NONE)
 
 extern uint32_t zfile_compress_b250_data  (VBlockP vb, ContextP ctx);
 extern uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_size);

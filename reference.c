@@ -1247,8 +1247,7 @@ static void ref_allocate_loaded_genome (void)
     // but our CHROM contexts also includes alternate chrom names that aren't in the original reference that appear after the reference
     // chroms. we need to make sure ranges.len does not include alternate chroms as that's how we know a chrom is alternate in ref_piz_get_range
     // 3. in case loading from a reference file, the number of contigs will match the number of chroms, so no issues.
-    ranges.len = (z_file->flags & SEC_GENOZIP_HEADER_FL_REF_INTERNAL) ? z_file->contexts[CHROM].word_list.len :
-                                                             ref_contigs_num_contigs();
+    ranges.len = z_file->flags.genozip_header.ref_internal ? z_file->contexts[CHROM].word_list.len : ref_contigs_num_contigs();
 
     buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges");     
     buf_zero (&ranges);

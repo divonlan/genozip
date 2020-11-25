@@ -172,10 +172,10 @@ PosType seg_pos_field (VBlock *vb,
     Context *snip_ctx = &vb->contexts[snip_did_i];
     Context *base_ctx = &vb->contexts[base_did_i];
 
-    snip_ctx->inst  |= CTX_INST_NO_STONS;
-    base_ctx->flags |= CTX_FL_STORE_INT;
+    snip_ctx->no_stons = true;
+    base_ctx->flags.store = STORE_INT;
 
-    base_ctx->inst  |= CTX_INST_NO_STONS;
+    base_ctx->no_stons = true;
 
     if (pos_str)
         this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
@@ -291,7 +291,7 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
     }
 
     Context *ctx = ctx_get_ctx (vb, dict_id);
-    ctx->inst  |= CTX_INST_NO_STONS;
+    ctx->no_stons = true;
     ctx->ltype  = LT_UINT32;
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
@@ -317,7 +317,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
     const int info_field   = DTF(info);
     const char *field_name = DTF(names)[info_field];
 
-    Container con = { .repeats=1, .num_items=0, .repsep={0,0}, .flags=CON_FL_DROP_FINAL_ITEM_SEP };
+    Container con = { .repeats=1, .num_items=0, .repsep={0,0}, .drop_final_item_sep=true };
 
     const char *this_name = info_str, *this_value = NULL;
     int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
@@ -430,9 +430,8 @@ WordIndex vcf_seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, 
     unsigned snip_len;
     seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, true, (int32_t)delta, snip, &snip_len);
 
-    //ctx      ->inst  |= CTX_INST_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
-    other_ctx->inst  |= CTX_INST_NO_STONS;
-    other_ctx->flags |= CTX_FL_STORE_INT;
+    other_ctx->no_stons = true;
+    other_ctx->flags.store = STORE_INT;
 
     return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, value_len, NULL);
 
@@ -516,14 +515,14 @@ void seg_compound_field (VBlock *vb,
                     snip_len = 1 + str_int (delta, &delta_snip[1]);
                     snip = delta_snip;
 
-                    sf_ctx->flags |= CTX_FL_STORE_INT;
+                    sf_ctx->flags.store = STORE_INT;
                     sf_ctx->not_all_the_same = true;
                 }
 
                 sf_ctx->last_value.i = this_value;
             }
             else if (flag.pair == PAIR_READ_1)
-                sf_ctx->inst |= CTX_INST_NO_STONS; // prevent singletons, so pair-2 can compare to us
+                sf_ctx->no_stons = true; // prevent singletons, so pair-2 can compare to us
             
             // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
             // i.e. its already in the dictionary and hash table - so no resources wasted
@@ -542,9 +541,9 @@ void seg_compound_field (VBlock *vb,
                     // for pairing to word with SNIP_DELTA, if we have SNIP_PAIR_LOOKUP then all previous lines
                     // this VB must have been SNIP_PAIR_LOOKUP as well. Therefore, the first time we encounter an
                     // inequality - we stop the pairing going forward till the end of this VB
-                    !(sf_ctx->inst & CTX_INST_STOP_PAIRING)) {
+                    !sf_ctx->stop_pairing) {
                     
-                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250, !(sf_ctx->pair_flags & CTX_FL_ALL_THE_SAME));  
+                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250, !sf_ctx->pair_flags.all_the_same);  
                     
                     if (pair_word_index == WORD_INDEX_ONE_UP) 
                         pair_word_index = sf_ctx->pair_b250_iter.prev_word_index + 1;
@@ -555,15 +554,15 @@ void seg_compound_field (VBlock *vb,
                     // rather than the snip (as replaced in ctx_evaluate_snip_merge), therefore this condition will fail. This is quite
                     // rare, so not worth handling this case
                     if (word_index == pair_word_index) {
-                        sf_ctx->inst |= CTX_INST_PAIR_B250;
+                        sf_ctx->pair_b250 = true;
                         static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
                         word_index = ctx_evaluate_snip_seg ((VBlockP)vb, sf_ctx, lookup_pair_snip, 1, NULL);
                     } else
                         // To improve: currently, pairing stops at the first non-match
-                        sf_ctx->inst |= CTX_INST_STOP_PAIRING;                
+                        sf_ctx->stop_pairing = true;
                 }
                 else
-                    sf_ctx->inst |= CTX_INST_STOP_PAIRING;
+                    sf_ctx->stop_pairing = true;
             }
 
             NEXTENT (uint32_t, sf_ctx->node_i) = word_index;

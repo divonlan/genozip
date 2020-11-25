@@ -36,7 +36,7 @@
 #define SNIP_PAIR_DELTA          '\x7'   // The value is a uint32_t which is a result of the equivalent value in the paired file + the delta value (when using --pair)
 #define SNIP_SPECIAL             '\x8'   // Special algorithm followed by ID of the algorithm 
 #define SNIP_REDIRECTION         '\xB'   // Get the data from another dict_id (can be in b250, local...)
-#define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding CTX_FL_STORE_INT)
+#define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding flags.store)
 
 #define DECLARE_SNIP const char *snip=NULL; uint32_t snip_len=0
 
@@ -56,19 +56,6 @@ typedef struct { // initialize with ctx_init_iterator()
     const uint8_t *next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
     WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
 } SnipIterator;
-
-// ZIP-only instructions NOT written to the genozip file
-#define CTX_INST_NO_STONS     ((uint8_t)0x01) // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
-#define CTX_INST_PAIR_LOCAL   ((uint8_t)0x02) // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_LOCAL
-#define CTX_INST_PAIR_B250    ((uint8_t)0x04) // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_B250
-#define CTX_INST_STOP_PAIRING ((uint8_t)0x08) // this is the 2nd file of a pair - don't use SNIP_PAIR_LOOKUP/DELTA anymore until the end of this VB
-#define CTX_INST_NO_CALLBACK  ((uint8_t)0x10) // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
-#define CTX_INST_LOCAL_PARAM  ((uint8_t)0x20) // copy local.param to SectionHeaderCtx
-#define CTX_INST_NO_VB1_SORT  ((uint8_t)0x40) // don't sort the dictionary in ctx_sort_dictionaries_vb_1
-#define CTX_INST_LOCAL_ALWAYS ((uint8_t)0x80) // always create a local section in zfile, even if it is empty 
-
-// PIZ-only instructions
-#define CTX_INST_SEMAPHORE    ((uint8_t)0x01) // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
 
 // SIGNED NUMBERS ARE NOT UNTEST YET! NOT USE YET BY ANY SEG
 // for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
@@ -91,13 +78,13 @@ typedef struct Context {
     DidIType did_i;            // the index of this ctx within the array vb->contexts
     DidIType st_did_i;         // in --stats, consolidate this context into st_did_i
     LocalType ltype;           // LT_* - type of local data - included in the section header
-    SectionFlags flags;        // CTX_FL_* - flags to be included in section header (8 bits)
-    SectionFlags pair_flags;   // Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
+    struct FlagsCtx flags;     // flags to be included in section header
+    struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // The buffer of b250 data containing indices (in b250) to word_list. 
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
-    Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if CTX_INST_PAIR_B250 or CTX_INST_PAIR_LOCAL is set)
+    Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if inst.pair_b250 or inst.pair_local is set)
     SnipIterator pair_b250_iter; // Iterator on pair, if it contains b250 data
 
     // ----------------------------
@@ -113,7 +100,19 @@ typedef struct Context {
     // settings
     Codec lcodec, bcodec;      // codec used to compress local and b250
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
-    uint8_t inst;              // instructions for seg/zip - ORed CTX_INST_ values
+
+    // ZIP-only instructions NOT written to the genozip file
+    int no_stons     : 1; // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
+    int pair_local   : 1; // this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_LOCAL
+    int pair_b250    : 1; // this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
+    int stop_pairing : 1; // this is the 2nd file of a pair - don't use SNIP_PAIR_LOOKUP/DELTA anymore until the end of this VB
+    int no_callback  : 1; // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
+    int local_param  : 1; // copy local.param to SectionHeaderCtx
+    int no_vb1_sort  : 1; // don't sort the dictionary in ctx_sort_dictionaries_vb_1
+    int local_always : 1; // always create a local section in zfile, even if it is empty 
+
+    // PIZ-only instructions
+    int semaphore    : 1; // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
 
     // hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
@@ -173,7 +172,7 @@ static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (
 static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
 extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
-extern WordIndex ctx_get_next_snip (VBlockP vb, Context *ctx, uint8_t ctx_flags, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
+extern WordIndex ctx_get_next_snip (VBlockP vb, Context *ctx, bool all_the_same, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
 extern const char *ctx_peek_next_snip (VBlockP vb, Context *ctx);
 extern WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
 extern void ctx_clone (VBlockP vb);

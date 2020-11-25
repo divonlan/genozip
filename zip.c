@@ -156,15 +156,15 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
             // 3) the one snip is SELF_DELTA
             if (base250_decode ((const uint8_t **)&ctx->b250.data, false) == 0 && 
                 !ctx->local.len &&
-                !ctx->flags &&
+                ! (*(uint8_t *)&ctx->flags) &&
                 *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) // word_index=0 is the first word in the dictionary
                 return true; 
 
             ctx->b250.len = base250_len (ctx->b250.data);
-            ctx->flags |= CTX_FL_ALL_THE_SAME;  // set flag
+            ctx->flags.all_the_same = true;
         }
         else
-            ctx->flags &= ~CTX_FL_ALL_THE_SAME; // reset flag
+            ctx->flags.all_the_same = false;
     }
 
     if (show) {
@@ -225,7 +225,7 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
         if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
         // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
-        if ((ctx->inst & CTX_INST_NO_STONS) || ctx->ltype != LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
+        if (ctx->no_stons || ctx->ltype != LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
 
         buf_move (vb, &ctx->local, vb, &ctx->dict);
         buf_free (&ctx->nodes);
@@ -255,7 +255,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
             }
         }
 
-        if (ctx->local.len || (ctx->inst & CTX_INST_LOCAL_ALWAYS)) { 
+        if (ctx->local.len || ctx->local_always) { 
 
             if (dict_id_printable (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
                 ctx_dump_binary (vb, ctx, true);
