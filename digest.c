@@ -17,7 +17,7 @@
 MUTEX (vb_digest_mutex);   // ZIP: used for serializing MD5ing of VBs
 static uint32_t vb_digest_last=0; // last vb to be MD5ed 
 
-#define IS_ADLER ((command == ZIP) ? !flag.md5 : z_file->flags.genozip_header.adler)
+#define IS_ADLER ((command == ZIP) ? !flag.md5 : z_file->z_flags.adler)
 #define DIGEST_NAME (IS_ADLER ? "Adler32" : "MD5")
 
 void digest_initialize (void)

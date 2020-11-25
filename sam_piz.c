@@ -48,7 +48,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
     // case: unaligned sequence - pos is 0 
     if (!pos || (vb->chrom_name_len==1 && vb->chrom_name[0]=='*')) {
         // case: compressed with a reference, using our aligner
-        if (z_file->flags.genozip_header.aligner) {
+        if (z_file->z_flags.aligner) {
             aligner_reconstruct_seq ((VBlockP)vb, bitmap_ctx, vb->seq_len, false);
             nonref_ctx->next_local = ROUNDUP_TO_NEAREST_4 (nonref_ctx->next_local);
         }
@@ -360,7 +360,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     // we can't convert to BAM if its a SAM file without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
     // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
     // analysis. Better give an error here than create confusion downstream.
-    ASSERT (n_ref || !z_file->flags.genozip_header.ref_internal, 
+    ASSERT (n_ref || !z_file->z_flags.ref_internal, 
             "Error: Failed to convert %s from SAM to BAM: genounzip requires that either the SAM header has SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or the file was genozipped with --reference or --REFERENCE", z_name);
 
     // if no SQ lines - get lines from loaded contig (will be available only if file was compressed with --reference or --REFERENCE)

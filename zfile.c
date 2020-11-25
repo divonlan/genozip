@@ -119,6 +119,13 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
                  h->num_layers, h->layer_i, h->layer_bits, BGEN32 (h->start_in_layer)); 
         PRINT;
     }
+    
+    else if (header->section_type == SEC_BGZF) {
+        SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
+        sprintf (str, SEC_TAB "libdeflate_level=%u has_eof=%u\n",
+                 h->h.flags.bgzf.libdeflate_level, h->h.flags.bgzf.has_eof_block); 
+        PRINT;
+    }
 }
 
 static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_data)
@@ -479,8 +486,8 @@ void *zfile_read_section_header (VBlockP vb, uint64_t offset,
                          (expected_sec_type != SEC_GENOZIP_HEADER) &&
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
         
-    ASSERT (!vb->compressed.len, "Error in zfile_read_section_header vb_i=%u expected_sec_type=%s: expecting vb->compressed to be free, but its not",
-            vb->vblock_i, st_name (expected_sec_type));
+    ASSERT (!vb->compressed.len, "Error in zfile_read_section_header vb_i=%u expected_sec_type=%s: expecting vb->compressed to be free, but it's not: %s",
+            vb->vblock_i, st_name (expected_sec_type), buf_desc (&vb->compressed));
     
     buf_alloc (evb, &vb->compressed, header_size, 4, "compressed"); 
 
@@ -571,7 +578,7 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
     if (txt_file)// txt_file is still NULL in case of --1d
-        txt_file->data_type = (data_type == DT_SAM) && z_file->flags.genozip_header.txt_is_bin ? DT_BAM : data_type;
+        txt_file->data_type = (data_type == DT_SAM) && z_file->z_flags.txt_is_bin ? DT_BAM : data_type;
 
     ASSERT (header->encryption_type != ENC_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
             "Error: password provided, but file %s is not encrypted", z_name);
@@ -595,7 +602,7 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
     if (z_file->num_components < 2) flag.unbind = 0; // override user's --unbind if file has only 1 component
 
     z_file->genozip_version   = header->genozip_version;
-    z_file->flags             = header->h.flags;
+    z_file->z_flags           = header->h.flags.genozip_header;
     if (digest) *digest       = header->digest_bound; 
     if (txt_data_size) *txt_data_size = BGEN64 (header->uncompressed_data_size);
     if (num_items_bound) *num_items_bound = BGEN64 (header->num_items_bound); 
@@ -683,9 +690,8 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
     header.h.codec                 = CODEC_BZ2;
-    header.h.flags                 = z_file->flags;
     header.h.flags.genozip_header  = (struct FlagsGenozipHeader) {
-        .txt_is_bin   = z_file->flags.genozip_header.txt_is_bin,
+        .txt_is_bin   = z_file->z_flags.txt_is_bin,
         .ref_internal = (flag.reference == REF_INTERNAL),
         .aligner      = (flag.ref_use_aligner > 0),
         .bgzf         = (txt_file->codec == CODEC_BGZF),

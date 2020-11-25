@@ -469,7 +469,7 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
         if (has_vb_ready_to_compute && has_free_thread) 
             dispatcher_compute (dispatcher, zip_compress_one_vb);
-
+        
         // PRIORITY 2: output completed vbs, so they can be released and re-used
         else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
                  (has_vb_ready_to_compute && !has_free_thread)) {   // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete

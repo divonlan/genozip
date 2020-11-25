@@ -266,7 +266,7 @@ typedef struct File {
     // Used for READING GENOZIP files
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
 
-    SectionFlags flags;                // genozip file flags as read from SectionHeaderGenozipHeader.h.flags
+    struct FlagsGenozipHeader z_flags; // genozip file flags as read from SectionHeaderGenozipHeader.h.flags
     uint32_t num_components;           // set from genozip header
     uint32_t num_copied_ref_sections;  // number of SEC_REFERENCE sections with vblock_i==0 (a result of being created with ref_copy_one_compressed_section)
      
