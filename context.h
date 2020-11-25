@@ -92,27 +92,27 @@ typedef struct Context {
     // ----------------------------
     Buffer ol_dict;            // VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
                                // zfile: singletons are stored here
-    Buffer ol_nodes;             // MTF nodes - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
+    Buffer ol_nodes;           // MTF nodes - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
                                // zfile: nodes of singletons
-    Buffer nodes;                // array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
-    Buffer node_i;              // contains 32bit indices into the ctx->nodes - this is an intermediate step before generating b250 or genotype_data 
+    Buffer nodes;              // array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
+    Buffer node_i;             // contains 32bit indices into the ctx->nodes - this is an intermediate step before generating b250 or genotype_data 
     
     // settings
     Codec lcodec, bcodec;      // codec used to compress local and b250
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
 
     // ZIP-only instructions NOT written to the genozip file
-    int no_stons     : 1; // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
-    int pair_local   : 1; // this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_LOCAL
-    int pair_b250    : 1; // this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
-    int stop_pairing : 1; // this is the 2nd file of a pair - don't use SNIP_PAIR_LOOKUP/DELTA anymore until the end of this VB
-    int no_callback  : 1; // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
-    int local_param  : 1; // copy local.param to SectionHeaderCtx
-    int no_vb1_sort  : 1; // don't sort the dictionary in ctx_sort_dictionaries_vb_1
-    int local_always : 1; // always create a local section in zfile, even if it is empty 
+    bool no_stons;             // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
+    bool pair_local;           // this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_LOCAL
+    bool pair_b250;            // this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
+    bool stop_pairing;         // this is the 2nd file of a pair - don't use SNIP_PAIR_LOOKUP/DELTA anymore until the end of this VB
+    bool no_callback;          // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
+    bool local_param;          // copy local.param to SectionHeaderCtx
+    bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
+    bool local_always;         // always create a local section in zfile, even if it is empty 
 
     // PIZ-only instructions
-    int semaphore    : 1; // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
+    bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
 
     // hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
