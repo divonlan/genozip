@@ -717,7 +717,7 @@ bool piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
         sl_ent = NULL; // reset
 
         ASSERT (!flag.test || !digest_is_zero (original_file_digest), 
-                "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5 or --test", z_name);
+                "Error testing %s: --test cannot be used with this file, as it was not compressed (in genozip v8) with --md5 or --test", z_name);
 
         if (flag.test || flag.md5) 
             ASSERT0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
