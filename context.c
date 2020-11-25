@@ -392,6 +392,7 @@ void ctx_clone (VBlock *vb)
 
         vb_ctx->did_i    = did_i;
         vb_ctx->dict_id  = zf_ctx->dict_id;
+        vb_ctx->st_did_i = zf_ctx->st_did_i;
         // note: lcodec and bcodec are inherited in merge (see comment in zip_assign_best_codec)
 
         memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
