@@ -359,6 +359,17 @@ static bool file_open_txt_read (File *file)
                 buf_add (&evb->compressed, block, block_size);
             }
 
+            // Notes 1. We currently only support plain and BGZF data piped in - see bug 243
+            // 2. On Windows, we can't pipe binary files, bc Windows converts \n to \r\n
+            // 3. The codec at this point is what the user declared in -i (we haven't tested for gz yet)
+#ifdef _WIN32 
+            ASSERT (!file->redirected || file->codec == CODEC_NONE, 
+                    "%s: genozip on Windows supports piping in only plain (uncompressed) data", global_cmd);
+#else
+            ASSERT (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF, 
+                    "%s: genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension) (codec=%s)", 
+                    global_cmd, codec_name (file->codec));
+#endif
             break;
         }
         case CODEC_BZ2:
@@ -632,17 +643,6 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
         Codec codec = file_get_codec_by_txt_ft (file->data_type, file->type, READ);
         if (supertype == TXT_FILE) file->codec = codec;
-
-
-        // Notes 1. We currently only support plain and BGZF data piped in - see bug 243
-        // 2. On Windows, we can't pipe binary files, bc Windows converts \n to \r\n
-        // 3. The codec at this point is what the user declared in -i (we haven't tested for gz yet)
-#ifdef _WIN32 
-        ASSERT (codec == CODEC_NONE, "%s: genozip on Windows supports piping in only plain (uncompressed) data", global_cmd);
-#else
-        ASSERT (codec == CODEC_NONE || codec == CODEC_BGZF, 
-                "%s: genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension)", global_cmd);
-#endif
     }
     else { // stdout
         file->data_type = data_type; 

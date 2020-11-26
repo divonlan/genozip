@@ -327,7 +327,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     // note: pos can have a value even if ref_id=-1 (RNAME="*") - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     seg_pos_field (vb_, SAM_POS, SAM_POS, false, 0, 0, this_pos, sizeof (uint32_t)); // POS
-    sam_seg_verify_pos (vb_, this_pos);
+    if (ref_id >= 0) sam_seg_verify_pos (vb_, this_pos);
 
     seg_integer (vb, SAM_MAPQ, mapq, true); // MAPQ
 

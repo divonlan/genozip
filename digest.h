@@ -63,7 +63,8 @@ extern const char *digest_name (void);
 #define digest_is_equal(digest1,digest2) ((digest1).ulls[0] == (digest2).ulls[0] && (digest1).ulls[1] == (digest2).ulls[1])
 
 #define md5_is_zero(digest) (!(digest).ulls[0] && !(digest).ulls[1])
-#define digest_is_zero(digest) (command == PIZ && z_file->genozip_version < 9 && md5_is_zero(digest))
+#define v8_digest_is_zero(digest) (command == PIZ && z_file->genozip_version < 9 && md5_is_zero(digest))
+#define digest_is_zero md5_is_zero
 
 // backward compatability note: in v8 files compressed without --md5 or --test, we had no digest. starting v9, we have Adler32
 

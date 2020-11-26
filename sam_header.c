@@ -56,7 +56,7 @@ void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string
 
 // call a callback for each SQ line (contig). Note: callback function is the same as ref_contigs_iterate
 static void bam_foreach_SQ_line (const char *txt_header, // binary BAM header
-                                  RefContigsIteratorCallback callback, void *callback_param)
+                                 RefContigsIteratorCallback callback, void *callback_param)
 {
     uint32_t next=0;
 
@@ -78,7 +78,7 @@ static void bam_foreach_SQ_line (const char *txt_header, // binary BAM header
     return;
 
 incomplete_header:
-    ABORT0 ("Error in bam_foreach_SQ_line: incomplete BAM header");
+    ABORT ("Error in bam_foreach_SQ_line: incomplete BAM header (next=%u)", next);
 }   
 
 void sam_header_get_contigs (ConstBufferP *contigs_dict, ConstBufferP *contigs)

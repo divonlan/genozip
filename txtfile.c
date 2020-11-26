@@ -624,7 +624,8 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
 
         // load the source file isize if we have it and we are attempting to reconstruct an unmodifed file identical to the source
         bool loaded = false;
-        if (!flag.data_modified) 
+        if (!flag.data_modified &&   
+            (z_file->num_components == 1 || flag.unbind))  // not concatenating multiple files
             loaded = bgzf_load_isizes (sl);     
 
         // case: we're creating our own BGZF blocks
@@ -646,14 +647,14 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
     // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
     if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.genocat_info_only) {
 
-        DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
+        DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
 
         // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
         DtTranslation trans = dt_get_translation();
         if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
         bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
-                           flag.reconstruct_as_src; // no point calculating digest if we know already the file will be different
+                           !flag.data_modified; // no point calculating digest if we know already the file will be different
 
         if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
 
@@ -668,12 +669,11 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
         if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
             Digest reconstructed_header_digest = digest_do (evb->txt_data.data, evb->txt_data.len);
             
-            if (!digest_is_equal (reconstructed_header_digest, header->digest_header)) {
-                WARN ("%s of reconstructed %s header (%s) differs from original file (%s)\n"
-                      "Bad reconstructed header has been dumped to: %s\n", digest_name(),
-                      dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
-                      txtfile_dump_vb (evb, z_name));
-            }
+            ASSERTW (flag.data_modified || digest_is_equal (reconstructed_header_digest, header->digest_header),
+                     "%s of reconstructed %s header (%s) differs from original file (%s)\n"
+                     "Bad reconstructed header has been dumped to: %s\n", digest_name(),
+                     dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
+                     txtfile_dump_vb (evb, z_name));
         }
     }
 

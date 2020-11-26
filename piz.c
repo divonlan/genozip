@@ -492,10 +492,10 @@ static void piz_uncompress_one_vb (VBlock *vb)
     piz_reconstruct_from_ctx (vb, trans.toplevel, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
-    if (vb->bgzf_blocks.len) bgzf_compress_vb (vb);
+    if (flag.bgzf) bgzf_compress_vb (vb);
 
     // calculate the MD5 contribution of this VB to the single file and bound files, and the MD5 snapshot of this VB
-    if (!digest_is_zero (vb->digest_so_far) && flag.reconstruct_as_src) 
+    if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified) 
         digest_one_vb (vb); 
 
 done:
@@ -635,7 +635,7 @@ static bool piz_read_one_vb (VBlock *vb)
 
 static Digest piz_one_file_verify_md5 (Digest original_file_digest)
 {
-    if (digest_is_zero (original_file_digest) || flag.genocat_info_only) return DIGEST_NONE; // file was not compressed with --md5 or --test
+    if (v8_digest_is_zero (original_file_digest) || flag.genocat_info_only || flag.data_modified) return DIGEST_NONE; // we can't calculate the digest for some reason
 
     Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound, "file:digest_ctx_bound"); // z_file might be a bound file - this is the MD5 of the entire bound file
     char s[200]; 
@@ -700,7 +700,7 @@ bool piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
     static const SectionListEntry *sl_ent = NULL; // preserve for unbinding multiple files
 
     // read genozip header
-    Digest original_file_digest;
+    Digest original_file_digest = DIGEST_NONE;
 
     // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --unbind, 
     static DataType data_type = DT_NONE; 
@@ -787,9 +787,7 @@ no_more_data:
         }
     }
 
-    // verifies bgzf reconstructed file against codec_args    
-
-    // verifies reconstructed file against MD5 (if compressed with --md5 or --test) and/or codec_args (if bgzf)
+    // verifies reconstructed file against MD5 (if compressed with --md5 or --test) or Adler2 and/or codec_args (if bgzf)
     Digest decompressed_file_digest = piz_one_file_verify_md5 (original_file_digest);
 
     if (flag.unbind) file_close (&txt_file, true); // close this component file

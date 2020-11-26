@@ -43,6 +43,7 @@ mac/scripts/*
 *.gvf*
 *.gff3*
 !test/*
+test/*.genozip
 !backward-compatibility-test/*
 *bug*
 *stackdump

@@ -10,7 +10,9 @@ cmp_2_files() {
 
 test_header() {
     sep="=======================================================================================================\n"
-    printf "\n${sep}TESTING ${FUNCNAME[1]} $1 \n${sep}"
+    printf "\n${sep}TESTING ${FUNCNAME[2]}: "
+    echo $1 | tr "\\\\" "/" # \ -> \\ coming from $path string on Windows
+    printf "$sep"
 }
 
 test_count_genocat_lines() {
@@ -26,9 +28,6 @@ test_count_genocat_lines() {
 
 test_standard()  # $1 genozip args $2 genounzip args $3... filenames 
 {
-    rm -f test/*.genozip
-    test_header "genozip $*"
-
     local zip_args=( $1 )
     local unzip_args=( $2 )
     local args=( "$@" )
@@ -57,6 +56,8 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         local single_output=1
     fi
 
+    test_header "genozip $arg1 ${zip_args[@]} ${files[@]}" # after COPY, NOPREFIX and CONCAT modifications occurred
+    
     if (( ${#files[@]} == 1 || $single_output )); then # test with Adler32, unless caller specifies --md5
         $genozip $arg1 ${zip_args[@]} ${files[@]} -o $output -f || exit 1
         $genounzip $arg1 ${unzip_args[@]} $output -t || exit 1
@@ -74,28 +75,21 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         fi
     fi
 
-    rm -f test/*.genozip ${copies[@]}
+    local list=`ls test/*.genozip ${copies[@]}`
+    rm -f ${list/test\/basic-ref.ref.genozip}
 }
 
 test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
-    local file=test/$1
     test_header "$1 - redirected from stdin"
+    local file=test/$1
     local args=( "$@" )
     cat $file | $genozip $arg1 ${args[@]:1} --test --force --output $output --input-type ${file#*.} - || exit 1
     rm -f $output
 }
 
-test_eval() { # $1=filename $2=eval expression
-    local file=test/$1
-    eval `echo $2 | sed 's/FILE/$file/g'` > $1.eval
-    test_header "$1 $2"
-    $genozip $arg1 $1.eval -ft -o $output || exit 1
-    rm -f $output $1.eval
-}
-
 test_unix_style() {  # $1=filename  ; optional $2=rm
-    local file=test/$1
     test_header "$1 - basic test - Unix-style end-of-line"
+    local file=test/$1
 
     if [ ! -f $file ] ; then echo "$1: File $file not found"; exit 1; fi
 
@@ -106,8 +100,8 @@ test_unix_style() {  # $1=filename  ; optional $2=rm
 }
 
 test_windows_style() {  # $1=filename 
-    local file=test/$1
     test_header "$1 - Window-style end-of-line"
+    local file=test/$1
 
     if [ ! -f $file ] ; then echo "$1: File $file not found"; exit 1; fi
 
@@ -121,8 +115,8 @@ test_windows_style() {  # $1=filename
 test_stdout()
 {
     if [ -z "$is_windows" ]; then # windows can't redirect binary data
-        local file=test/$1
         test_header "$$1 - redirecting stdout"
+        local file=test/$1
         $genozip $arg1 ${file} --stdout > $output || exit 1
         $genounzip $arg1 $output -f || exit 1
         cmp_2_files $file $output
@@ -132,8 +126,8 @@ test_stdout()
 
 test_multi_bound()
 {
-    local file=test/$1
     test_header "$1 - bind & unbind (2 files with 2 components each)"
+    local file=test/$1
     local file1=test/copy1.$1
     local file2=test/copy2.$1
     cp -f $file $file1
@@ -147,19 +141,19 @@ test_multi_bound()
 
 test_optimize()
 {
-    local file=test/$1
     test_header "$1 --optimize - NOT checking correctness, just that it doesn't crash"
+    local file=test/$1
     $genozip $arg1 $file -f --optimize -o $output || exit 1
 }
 
 test_translate_bam_to_sam() # $1 bam file 
 {
+    test_header "$1 - translate BAM to SAM"
+
     local bam=test/$1
     local sam=${bam%.bam}.sam
     if [ ! -f $bam ] ; then echo "$bam: File not found"; exit 1; fi
     if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
-
-    test_header "$1 - translate BAM to SAM"
 
     $genozip $arg1 -f $bam -o $output  || exit 1
     $genocat $output > copy.sam  || exit 1
@@ -169,15 +163,15 @@ test_translate_bam_to_sam() # $1 bam file
 
 test_translate_sam_to_bam() # $1 bam file 
 {
+    test_header "$1 - translate SAM to BAM"
+
     local bam=test/$1
     local sam=${bam%.bam}.sam
     if [ ! -f $bam ] ; then echo "$bam: File not found"; exit 1; fi
     if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
 
-    test_header "$1 - translate SAM to BAM"
-
     $genozip $arg1 -f $sam -o $output  || exit 1
-    $genounzip $output --bam -o copy.bam   || exit 1
+    $genounzip $output --bam -fo copy.bam   || exit 1
     cmp_2_files $bam copy.bam
     rm -f copy.bam $output
 }
@@ -207,7 +201,7 @@ batch_basic()
         
         test_unix_style $file
         test_windows_style $file
-        test_standard "NOPREFIX" " " file://${path}test/$file
+        test_standard "NOPREFIX CONCAT" " " file://${path}test/$file
         test_standard "-p123" "--password 123" $file
         test_redirected $file
         test_stdout $file
@@ -224,7 +218,7 @@ batch_precompressed()
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
-        test_standard "NOPREFIX" " " file://${path}test/$file
+        test_standard "NOPREFIX CONCAT" " " file://${path}test/$file
         test_standard "-p123" "--password 123" $file
     done
 }
@@ -236,7 +230,7 @@ batch_bgzf()
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
-        test_standard "NOPREFIX" " " file://${path}$file
+        test_standard "NOPREFIX CONCAT" " " file://${path}test/$file
         test_standard "-p123" "--password 123" $file
         if [ -z "$is_windows" ]; then # windows can't redirect binary data
             test_redirected $file
@@ -249,14 +243,14 @@ batch_bgzf()
 # files represent cases that cannot be written into the test files because they would conflict
 batch_special_algs()
 {
-    local files=(basic-domqual.fq basic-domqual.sam basic-unaligned.sam)
+    local files=(basic-domqual.fq basic-domqual.sam basic-unaligned.sam basic-no-samples.vcf)
     local file
     for file in ${files[@]}; do
-        test_unix_style $file
-        test_standard "-p123" "-p 123" $file
-        test_standard "COPY" " " $file
-        test_multi_bound $file
-        test_optimize $file
+        test_unix_style $file                # standard
+        test_standard "-p123" "-p 123" $file # encrypted
+        test_standard "COPY" " " $file       # multiple files unbound
+        test_multi_bound $file               # multiple files bound
+        test_optimize $file                  # optimize - only compress to see that it doesn't error
     done
 }
 
@@ -264,7 +258,7 @@ batch_special_algs()
 batch_translate_bam_sam()
 {
     # note: we have these files in both sam and bam versions generated with samtools
-    local files=(test/test.NA12878.chr22.1x.bam test/test.m64136_200621_234916.ccs.10k.bam test/test.GFX0241869.bam)
+    local files=(test.NA12878.chr22.1x.bam test.m64136_200621_234916.ccs.10k.bam test.GFX0241869.bam)
     local file
     for file in ${files[@]}; do
         test_translate_bam_to_sam $file
@@ -275,20 +269,22 @@ batch_translate_bam_sam()
 batch_genocat_tests()
 {
     # FASTA genocat tests
-    test_count_genocat_lines basic.fa "--sequential" 9
-    test_count_genocat_lines basic.fa "--header-only" 3
-    test_count_genocat_lines basic.fa "--header-one" 3
-    test_count_genocat_lines basic.fa "--no-header" 15
-    test_count_genocat_lines basic.fa "--no-header --sequential" 6
-    test_count_genocat_lines basic.fa "--grep cytochrome" 6
-    test_count_genocat_lines basic.fa "--grep cytochrome --sequential " 2
-    test_count_genocat_lines basic.fa "--grep cytochrome --sequential --no-header " 1
+    local file=test/basic.fa
+    test_count_genocat_lines $file "--sequential" 9
+    test_count_genocat_lines $file "--header-only" 3
+    test_count_genocat_lines $file "--header-one" 3
+    test_count_genocat_lines $file "--no-header" 15
+    test_count_genocat_lines $file "--no-header --sequential" 6
+    test_count_genocat_lines $file "--grep cytochrome" 6
+    test_count_genocat_lines $file "--grep cytochrome --sequential " 2
+    test_count_genocat_lines $file "--grep cytochrome --sequential --no-header " 1
 
     # FASTQ genocat tests
-    test_count_genocat_lines basic.fq "--header-only" `grep @ basic.fq | wc -l` 
-    test_count_genocat_lines basic.fq "--header-one" `grep @ basic.fq | wc -l`
-    test_count_genocat_lines basic.fq "--grep line5" 4
-    test_count_genocat_lines basic.fq "--grep line5 --header-only" 1
+    file=test/basic.fq
+    test_count_genocat_lines $file "--header-only" `grep @ $file | wc -l` 
+    test_count_genocat_lines $file "--header-one" `grep @ $file | wc -l`
+    test_count_genocat_lines $file "--grep line5" 4
+    test_count_genocat_lines $file "--grep line5 --header-only" 1
 }
 
 batch_backward_compatability()
@@ -303,7 +299,8 @@ batch_backward_compatability()
 batch_real_world_subsets()
 {
     echo "subsets (~3 VBs) or real world files"
-    test_standard "-m" " " test/test.*
+    rm -f test/*.genozip
+    test_standard "-m" " " `(cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* test.*vcf* test.*gvf* test.*txt*)`
 }
 
 batch_misc_cases()
@@ -311,24 +308,36 @@ batch_misc_cases()
     # Test binding SAM files with lots of contigs (no reference)
     echo "binding SAM files with lots of contigs (no reference)"
     test_multi_bound test.transfly-unsorted.sam
+}
+
+batch_unix_only_cases()
+{
+    if [ -n "$is_windows" ]; then return; fi
 
     # VCF gtshark test
     test_standard --gtshark " " basic.vcf
 
-    # VCF without samples
-    echo "basic.vcf without FORMAT or samples"
-    test_eval basic.vcf "cut -f1-8 FILE"
+    # CRAM hg19
+    echo "CRAM" 
+    test_standard "-E$hg19" " " test.GFX0241869.cram   
+
+    # BCF
+    echo "BCF"
+    test_standard " " " " test.GFX0241869.filtered.snp.bcf    
 }
 
-batch_small_reference()
+batch_make_reference()
 {
+    rm -f test/*.genozip
+
     # Making a reference
     echo "Making a reference"
-    file=basic-ref.fa 
-    $genozip $arg1 --make-reference $file --force -o copy.${file}.ref.genozip || exit 1
+    local fa_file=test/basic-ref.fa 
+    local ref_file=test/basic-ref.ref.genozip
+    $genozip $arg1 --make-reference $fa_file --force -o $ref_file || exit 1
 
-    ref="--reference copy.${file}.ref.genozip"
-    REF="--REFERENCE copy.${file}.ref.genozip"
+    local ref="--reference $ref_file"
+    local REF="--REFERENCE $ref_file"
 
     echo "unaligned SAM with --reference"
     test_standard "$ref" "$ref" basic-unaligned.sam 
@@ -345,10 +354,10 @@ batch_small_reference()
     echo "unaligned SAM with --REFERENCE - from stdin"
     test_redirected basic-unaligned.sam "$REF"
 
-    rm -f copy.${file}.ref.genozip $output
+    rm -f $ref_file $output
 }
 
-batch_real_reference()
+batch_reference()
 {
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
@@ -381,7 +390,8 @@ output=test/output.genozip
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
 
-hg19=data/hg19.p13.plusMT.full_analysis_set.ref.genozip
+#hg19=data/hg19.p13.plusMT.full_analysis_set.ref.genozip
+hg19=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 
 arg1=$1
@@ -434,8 +444,9 @@ batch_genocat_tests
 batch_backward_compatability
 batch_real_world_subsets
 batch_misc_cases
-batch_small_reference
-batch_real_reference
+batch_unix_only_cases
+batch_reference
+batch_make_reference
 
 printf "\nALL GOOD!\n"
 

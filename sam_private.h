@@ -12,7 +12,7 @@
 
 #define BAM_MAGIC "BAM\1" // first 4 characters of a BAM file
 
-#define IS_BAM (txt_file->data_type==DT_BAM)
+#define IS_BAM ((command==ZIP ? txt_file : z_file)->data_type==DT_BAM)
 
 typedef struct {
     uint32_t qual_data_start, u2_data_start, bdbi_data_start[2]; // start within vb->txt_data

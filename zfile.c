@@ -79,12 +79,16 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 #define SEC_TAB "            ++  "
     if (header->section_type == SEC_GENOZIP_HEADER) {
         SectionHeaderGenozipHeader *h = (SectionHeaderGenozipHeader *)header;
-        sprintf (str, SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u digest_bound=%s md5ref=%s \n" 
-                      SEC_TAB "created=\"%.*s\" ref=\"%.*s\"\n",
+        struct FlagsGenozipHeader f = h->h.flags.genozip_header;
+        sprintf (str, SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u digest_bound=%s\n" 
+                      SEC_TAB "ref_internal=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u ref=\"%.*s\" md5ref=%s\n"
+                      SEC_TAB "created=\"%.*s\"\n",
                  h->genozip_version, encryption_name (h->encryption_type), dt_name (BGEN16 (h->data_type)), 
                  BGEN64 (h->uncompressed_data_size), BGEN64 (h->num_items_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
-                 digest_display (h->digest_bound).s, digest_display_ex (h->ref_file_md5, DD_MD5).s, FILE_METADATA_LEN, 
-                 h->created, REF_FILENAME_LEN, h->ref_filename);
+                 digest_display (h->digest_bound).s, 
+                 f.ref_internal, f.aligner, f.txt_is_bin, f.bgzf, f.adler,
+                 REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
+                 FILE_METADATA_LEN, h->created);
         PRINT;
     }
 

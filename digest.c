@@ -106,7 +106,7 @@ void digest_one_vb (VBlock *vb)
 
         // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
         // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
-        if (!failed && !flag.unbind && !digest_is_zero (vb->digest_so_far)) {
+        if (!failed && !flag.unbind && !v8_digest_is_zero (vb->digest_so_far)) {
             Digest piz_hash_so_far = digest_snapshot (&txt_file->digest_ctx_bound);
 
             // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it

@@ -387,16 +387,12 @@ void flags_update_piz_one_file (void)
 {
     // handle native binary formats (BAM). note on BCF and CRAM: we used bcftools/samtools as an external 
     // compressor, so that genozip sees the text, not binary, data of these files - the same as if the file were compressed with eg bz2
-    if (command == PIZ && flag.out_dt == DT_NONE && z_file->z_flags.txt_is_bin) {
+    if (flag.out_dt == DT_NONE && z_file->z_flags.txt_is_bin) {
         if (z_file->data_type == DT_SAM) 
-            // genounzip of a SAM genozip file with is_binary outputs BAM unless the user overrides with --sam or --fastq
-            flag.out_dt = DT_BAM;
+            // genounzip of a SAM genozip file with is_binary is determined here unless the user overrides with --sam or --fastq
+            flag.out_dt = (exe_type == EXE_GENOCAT ? DT_SAM : DT_BAM);
         // future binary data types here
     }
-
-    // in case translating from SAM.genozip to BAM
-    // is this correct ??????
-    if (flag.out_dt == DT_BAM) z_file->z_flags.txt_is_bin = true; // reconstructed file is in binary form
     
     if (flag.out_dt == DT_NONE) 
         flag.out_dt = z_file->data_type;
@@ -405,7 +401,7 @@ void flags_update_piz_one_file (void)
     if (flag.out_dt == DT_BCF) flag.bgzf=0;
 
     // BAM or z_flags.bgzf imply bgzf, unless user specifically asked for plain or we're outputting to stdout (except we do read in genocat --show-headers)
-    if ((flag.out_dt == DT_BAM || z_file->z_flags.bgzf) && (!flag.plain && (!flag.to_stdout || (flag.show_headers && exe_type == EXE_GENOCAT)))) 
+    if ((flag.out_dt == DT_BAM || (z_file->z_flags.bgzf && exe_type != EXE_GENOCAT)) && (!flag.plain && (!flag.to_stdout || (flag.show_headers && exe_type == EXE_GENOCAT)))) 
         flag.bgzf=true;   
 
     // Note: BAM is stored as binary SAM, so do_translate=true for BAM->BAM , but false for BAM->SAM
@@ -420,7 +416,6 @@ void flags_update_piz_one_file (void)
     // true if the output file of genounzip or genocat will NOT be identical to the source file as recorded in z_file
     // note: this does not account for changes to the data done at the compression stage with --optimize
     flag.data_modified = !flag.reconstruct_as_src || // translating to another data
-                         (z_file->num_components > 1 && !flag.unbind) || // concatenating
-                         flag.header_one || flag.no_header || flag.header_only || // data-modifying genocat options
+                         flag.header_one || flag.no_header || flag.header_only || flag.grep || // data-modifying genocat options
                          flag.regions || flag.samples || flag.drop_genotypes || flag.gt_only || flag.sequential;
 }
