@@ -243,6 +243,8 @@ static const char *help_genounzip[] = {
     "      --sam          (SAM and BAM only) Output as SAM",
     "                     Note: this option is implicit if --output specifies a filename ending with .sam",
     "",
+    "      --no-PG        (SAM and BAM only) When converting a file from SAM to BAM or vice versa, Genozip normally adds a @PG line in the header. With this option, it doesn't",
+    "",
     "      --fastq        (SAM and BAM only) Output as FASTQ",
     "                     Note: this option is implicit if --output specifies a filename ending with .fq or .fastq",
     "",

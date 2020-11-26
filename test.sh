@@ -1,9 +1,12 @@
 #!/bin/bash 
 
 cmp_2_files() {
-    if (( `$md5 $1 ${2%.*} | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
+#    if (( `$md5 $1 ${2%.*} | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
+
+    if (( `$md5 $1 $2 | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
         echo "MD5 comparison FAILED:"
-        $md5 $1 ${2%.*}
+#        $md5 $1 ${2%.*}
+        $md5 $1 $2
         exit 1
     fi
 }
@@ -28,6 +31,9 @@ test_count_genocat_lines() {
 
 test_standard()  # $1 genozip args $2 genounzip args $3... filenames 
 {
+    local list=`ls test/*.genozip ${copies[@]}`
+    rm -f ${list/test\/basic-ref.ref.genozip} *.bad
+
     local zip_args=( $1 )
     local unzip_args=( $2 )
     local args=( "$@" )
@@ -75,7 +81,7 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         fi
     fi
 
-    local list=`ls test/*.genozip ${copies[@]}`
+    list=`ls test/*.genozip ${copies[@]}`
     rm -f ${list/test\/basic-ref.ref.genozip}
 }
 
@@ -152,13 +158,14 @@ test_translate_bam_to_sam() # $1 bam file
 
     local bam=test/$1
     local sam=${bam%.bam}.sam
+    local copy=test/copy.sam
     if [ ! -f $bam ] ; then echo "$bam: File not found"; exit 1; fi
     if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
 
     $genozip $arg1 -f $bam -o $output  || exit 1
-    $genocat $output > copy.sam  || exit 1
-    cmp_2_files $sam copy.sam
-    rm -f copy.sam $output
+    $genocat $arg1 $output --no-PG > $copy  || exit 1
+    cmp_2_files $sam $copy
+    rm -f $copy $output
 }
 
 test_translate_sam_to_bam() # $1 bam file 
@@ -167,13 +174,18 @@ test_translate_sam_to_bam() # $1 bam file
 
     local bam=test/$1
     local sam=${bam%.bam}.sam
+    local new_bam=test/copy_new.bam
+    local new_sam=test/copy_new.sam
     if [ ! -f $bam ] ; then echo "$bam: File not found"; exit 1; fi
     if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
 
     $genozip $arg1 -f $sam -o $output  || exit 1
-    $genounzip $output --bam -fo copy.bam   || exit 1
-    cmp_2_files $bam copy.bam
-    rm -f copy.bam $output
+    $genounzip $arg1 $output --bam --no-PG -fo $new_bam || exit 1
+    
+    # we compare the BAMs on a textual basis as the original BAM might be produced with a different version
+    samtools view --no-PG -h $new_bam > $new_sam || exit 1
+    cmp_2_files $sam $new_sam
+    rm -f $new_sam $new_bam $output
 }
 
 test_backward_compatability()
@@ -262,7 +274,10 @@ batch_translate_bam_sam()
     local file
     for file in ${files[@]}; do
         test_translate_bam_to_sam $file
-        test_translate_sam_to_bam $file
+
+        if [ -z "$is_windows" ]; then 
+            test_translate_sam_to_bam $file
+        fi
     done
 }
 
@@ -434,19 +449,20 @@ else
     md5=md5sum 
 fi
 
-batch_minimal
-batch_basic
-batch_precompressed
-batch_bgzf
-batch_special_algs
-batch_translate_bam_sam
-batch_genocat_tests
-batch_backward_compatability
-batch_real_world_subsets
-batch_misc_cases
-batch_unix_only_cases
-batch_reference
-batch_make_reference
+start=6
+if (( $start <=  1 )); then batch_minimal                  ; fi
+if (( $start <=  2 )); then batch_basic                    ; fi
+if (( $start <=  3 )); then batch_precompressed            ; fi
+if (( $start <=  4 )); then batch_bgzf                     ; fi
+if (( $start <=  5 )); then batch_special_algs             ; fi
+if (( $start <=  6 )); then batch_translate_bam_sam        ; fi
+if (( $start <=  7 )); then batch_genocat_tests            ; fi
+if (( $start <=  8 )); then batch_backward_compatability   ; fi
+if (( $start <=  9 )); then batch_real_world_subsets       ; fi
+if (( $start <= 10 )); then batch_misc_cases               ; fi
+if (( $start <= 11 )); then batch_unix_only_cases          ; fi
+if (( $start <= 12 )); then batch_reference                ; fi
+if (( $start <= 13 )); then batch_make_reference           ; fi
 
 printf "\nALL GOOD!\n"
 

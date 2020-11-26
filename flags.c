@@ -85,6 +85,8 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         #define _1  {"header-one",    no_argument,       &flag.header_one,       1 }
         #define _GT {"GT-only",       no_argument,       &flag.gt_only,          1 }
         #define _Gt {"gt-only",       no_argument,       &flag.gt_only,          1 }
+        #define _PG {"no-PG",         no_argument,       &flag.no_pg,            1 }
+        #define _pg {"no-pg",         no_argument,       &flag.no_pg,            1 }
         #define _fs {"sequential",    no_argument,       &flag.sequential,       1 }  
         #define _rg {"register",      no_argument,       &flag.do_register,      1 }
         #define _ss {"show-stats",    no_argument,       &flag.show_stats,       1 } 
@@ -124,10 +126,10 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR, _sC, _hC, _rA, _rS, _me,      _s5, _sA, _sc, _sI, _gt,          _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _hC, _rA, _rS,           _s5, _sA,      _sI,      _cn,     _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _hC, _rA, _rS,           _s5, _sA,      _sI,      _cn,     _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                                                          _u,     _p, _e,                                                                                                                              _st, _sm,                                   _dm,                                                                                                                                              _b, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR, _sC, _hC, _rA, _rS, _me,      _s5, _sA, _sc, _sI, _gt,                    _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _hC, _rA, _rS,           _s5, _sA,      _sI,      _cn, _pg, _PG,     _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _hC, _rA, _rS,           _s5, _sA,      _sI,      _cn, _pg, _PG,     _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                                                          _u,     _p, _e,                                                                                                                              _st, _sm,                                   _dm,                                                                                                                                                        _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -400,8 +402,11 @@ void flags_update_piz_one_file (void)
     // .bcf will be bgzipped by bcftools, ignore --bgzf flag as we don't need an additional bgzf step
     if (flag.out_dt == DT_BCF) flag.bgzf=0;
 
-    // BAM or z_flags.bgzf imply bgzf, unless user specifically asked for plain or we're outputting to stdout (except we do read in genocat --show-headers)
-    if ((flag.out_dt == DT_BAM || (z_file->z_flags.bgzf && exe_type != EXE_GENOCAT)) && (!flag.plain && (!flag.to_stdout || (flag.show_headers && exe_type == EXE_GENOCAT)))) 
+    // Case were we set flag.bgzf even if the user didn't explicitly ask for it with --bgzf
+    // note: another case not cover here is when the output file type is GZ or BGZ or BAM - handled in file_open_txt_write
+    if (!flag.plain && // user didn't not explicitly tell us to refrain from BGZF
+        (z_file->z_flags.bgzf && exe_type != EXE_GENOCAT) && // source file had BGZF 
+        (!flag.to_stdout || (flag.show_headers && exe_type == EXE_GENOCAT))) // we are outputing to a disk file OR user asked to see the headers (so we want to show her BGZF too)
         flag.bgzf=true;   
 
     // Note: BAM is stored as binary SAM, so do_translate=true for BAM->BAM , but false for BAM->SAM

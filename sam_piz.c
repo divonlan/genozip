@@ -4,6 +4,11 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <math.h>
+#include <libdeflate.h>
+#include <time.h>
+#if defined __APPLE__ 
+#include "compatibility/mac_gettime.h"
+#endif
 #include "sam_private.h"
 #include "seg.h"
 #include "context.h"
@@ -303,6 +308,20 @@ finish:
 // Translator functions for reconstructing SAM data into BAM format
 //-----------------------------------------------------------------
 
+// add @PG line
+static inline void txtheader_sam_add_PG (Buffer *txtheader_buf)
+{
+    if (flag.no_pg) return; // user specified --no-PG
+
+    TimeSpecType tb;
+    clock_gettime (CLOCK_REALTIME, &tb);
+
+    uint32_t unique_id = libdeflate_adler32 (1, &tb, sizeof (tb));
+
+    bufprintf (evb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:%s\n", 
+               unique_id, GENOZIP_URL, GENOZIP_CODE_VERSION, command_line);
+}
+
 // PIZ I/O thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
 TXTHEADER_TRANSLATOR (txtheader_bam2sam)
 {
@@ -311,6 +330,8 @@ TXTHEADER_TRANSLATOR (txtheader_bam2sam)
     uint32_t l_text = GET_UINT32 (ENT (char, *txtheader_buf, 4));
     memcpy (txtheader_buf->data, ENT (char, *txtheader_buf, 8), l_text);
     txtheader_buf->len = l_text;
+    
+    txtheader_sam_add_PG (txtheader_buf);
 }
 
 static void txtheader_sam2bam_count_sq (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
@@ -371,11 +392,11 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     buf_alloc_more (evb, txtheader_buf, n_ref * 100 + (50 + strlen (command_line)) , 0, char, 1, 0);
 
     // add PG
-    bufprintf (evb, txtheader_buf, "@PG\tID:genozip\tPN:genozip\tVN:%s\tCL:%s\n", GENOZIP_CODE_VERSION, command_line);
+    txtheader_sam_add_PG (txtheader_buf);
 
     // construct magic, l_text, text and n_ref fields of BAM header
     char *text = txtheader_buf->data + 8;
-    uint32_t l_text  = txtheader_buf->len;
+    uint32_t l_text = txtheader_buf->len;
     ASSERT (txtheader_buf->len <= INT32_MAX, "Error: cannot convert to BAM because SAM header length (%"PRIu64" bytes) exceeds BAM format maximum of %u", txtheader_buf->len, INT32_MAX);
 
     memmove (text, txtheader_buf->data, l_text);                          // text
