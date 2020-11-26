@@ -331,8 +331,8 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
     // test remaining txt_data including passed-down data from previous VB
     passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, 0, &i);
 
-    ASSERT (passed_up_len >= 0, "Error in txtfile_get_unconsumed_to_pass_up: failed to find a single complete line in the entire vb in vb=%u. VB dumped: %s", 
-            vb->vblock_i, txtfile_dump_vb (vb, txt_name));
+    ASSERT (passed_up_len >= 0, "Error in txtfile_get_unconsumed_to_pass_up: failed to find a single complete line in the entire vb in vb=%u data_type=%s codec=%s. VB dumped: %s", 
+            vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec), txtfile_dump_vb (vb, txt_name));
 
 done:
     return (uint32_t)passed_up_len;
@@ -352,6 +352,7 @@ void txtfile_read_vblock (VBlock *vb)
     buf_alloc (vb, &vb->txt_data, global_max_memory_per_vb, 1, "txt_data");    
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
+    uint64_t passed_down_len = txt_file->unconsumed_txt.len;
     if (buf_is_allocated (&txt_file->unconsumed_txt)) {
         buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, 0 ,0 ,0, "txt_data");
         buf_free (&txt_file->unconsumed_txt);
@@ -383,7 +384,7 @@ void txtfile_read_vblock (VBlock *vb)
     if (always_uncompress) buf_free (&vb->compressed); // tested by txtfile_get_unconsumed_to_pass_up
 
     // callback to decide what part of txt_data to pass up to the next VB (usually partial lines, but sometimes more)
-    if (!passed_up_len && vb->txt_data.len) 
+    if (!passed_up_len && vb->txt_data.len > passed_down_len) 
         passed_up_len = txtfile_get_unconsumed_to_pass_up (vb);
 
     // make sure file isn't truncated - if we reached EOF there should be no data to be passed up   
