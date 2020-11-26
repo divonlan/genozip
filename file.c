@@ -474,10 +474,11 @@ static bool file_open_txt_write (File *file)
     // get the codec    
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, WRITE);
     
-    // decompressing as compressed BGZF format
-    if (file->codec == CODEC_GZ || file->codec == CODEC_BGZF) {
-        file->codec = CODEC_BGZF; // we always write gzip format output with BGZF
-        flag.bgzf   = true;
+    // set to bgzf if the file type (derived from the filename) implies it, UNLESS the user overrides with --plain
+    // we don't handle the case of DT_BAM here - it has already been handled in flags_update_piz_one_file
+    if ((file->codec == CODEC_GZ || file->codec == CODEC_BGZF) && file->data_type != DT_BAM) { 
+        file->codec = flag.plain ? CODEC_NONE : CODEC_BGZF; // we always write gzip format output with BGZF
+        flag.bgzf   = !flag.plain;
     }
 
     // don't actually open the output file if we're just testing in genounzip or PIZing a reference file
