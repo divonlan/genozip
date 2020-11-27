@@ -12,6 +12,7 @@
 #include "base250.h"
 #include "sections.h"
 #include "bit_array.h"
+#include "mutex.h"
 
 #define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on nodes.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
 
@@ -138,8 +139,7 @@ typedef struct Context {
     // ----------------------------
     // ZIP in z_file only
     // ----------------------------
-    pthread_mutex_t mutex;     // Context in z_file (only) is protected by a mutex 
-    bool mutex_initialized;
+    Mutex mutex;               // Context in z_file (only) is protected by a mutex 
     
     // ----------------------------
     // PIZ only fields

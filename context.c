@@ -3,17 +3,6 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-/*
-zip:
-    1) during segregate - build ctx_context + dictionary for each dict_id
-
-    2) during generate - convert snips in vcf to indexes into ctx->nodes
-
-    3) merge back into the main (z_file) dictionaries - we use thread synchronization to make
-    sure this happens in the sequencial order of variant blocks. this merging will also
-    causes update of the word and char indices in ctx->nodes
-*/
-
 #include <errno.h>
 #include "genozip.h"
 #include "profiler.h"
@@ -41,35 +30,20 @@ zip:
 
 #define INITIAL_NUM_NODES 10000
 
-MUTEX (wait_for_vb_1_mutex);
-
-static inline void ctx_lock_do (VBlock *vb, pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
-{
-    //printf ("thread %u vb_i=%u LOCKING %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->vblock_i, name, param, func, code_line);
-    mutex_lock (*mutex);
-    //printf ("thread %u vb_i=%u LOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->vblock_i, name, param, func, code_line);
-}
-#define ctx_lock(vb, mutex, name, param) ctx_lock_do (vb, mutex, __FUNCTION__, __LINE__, name, param)
-
-static inline void ctx_unlock_do (VBlock *vb, pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
-{
-    mutex_unlock (*mutex);
-    //printf ("thread %u vb_i=%u UNLOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->vblock_i, name, param, func, code_line);
-}
-#define ctx_unlock(vb, mutex, name, param) ctx_unlock_do (vb, mutex, __FUNCTION__, __LINE__, name, param)
+static Mutex wait_for_vb_1_mutex = {};
 
 void ctx_vb_1_lock (VBlockP vb)
 {
     ASSERT0 (vb->vblock_i == 1, "Error: Only vb_i=1 can call ctx_vb_1_lock");
 
-    ctx_lock (vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
+    mutex_lock (wait_for_vb_1_mutex);
 }
 
 void ctx_vb_1_unlock (VBlockP vb)
 {
     ASSERT0 (vb->vblock_i == 1, "Error: Only vb_i=1 can call ctx_vb_1_unlock");
 
-    ctx_unlock (vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
+    mutex_unlock (wait_for_vb_1_mutex);
 }
 
 // ZIP: add a snip to the dictionary the first time it is encountered in the VCF file.
@@ -371,9 +345,9 @@ void ctx_clone (VBlock *vb)
         Context *zf_ctx = &z_file->contexts[did_i];
 
         // case: this context doesn't really exist (happens when incrementing num_contexts when adding RNAME and RNEXT in ctx_copy_ref_contigs_to_zf)
-        if (!zf_ctx->mutex_initialized) continue;
+        if (!zf_ctx->mutex.initialized) continue;
 
-        ctx_lock (vb, &zf_ctx->mutex, "zf_ctx", did_i);
+        mutex_lock (zf_ctx->mutex);
 
         if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this dict_id
 
@@ -401,7 +375,7 @@ void ctx_clone (VBlock *vb)
         
         ctx_init_iterator (vb_ctx);
 
-        ctx_unlock (vb, &zf_ctx->mutex, "zf_ctx", did_i);
+        mutex_unlock (zf_ctx->mutex);
     }
 
     vb->num_contexts = z_num_contexts;
@@ -422,6 +396,10 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
     
     if (dict_id_to_did_i_map[dict_id.map_key] == DID_I_NONE)
         dict_id_to_did_i_map[dict_id.map_key] = did_i;
+
+    bool is_zf_ctx = z_file && (ctx - z_file->contexts) >= 0 && (ctx - z_file->contexts) <= (sizeof(z_file->contexts)/sizeof(z_file->contexts[0]));
+
+    if (is_zf_ctx) mutex_initialize (ctx->mutex);
 }
 
 // ZIP I/O thread: 
@@ -438,7 +416,6 @@ void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs_buf, C
     
     Context *zf_ctx = &z_file->contexts[dst_did_i];
     zf_ctx->no_stons = true;
-    mutex_initialize (zf_ctx->mutex);
 
     // copy reference dict
     ARRAY (RefContig, contigs, *contigs_buf);
@@ -490,7 +467,7 @@ static Context *ctx_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
     // adding a new dictionary is proctected by a mutex. note that z_file->num_contexts is accessed by other threads
     // without mutex proction when searching for a dictionary - that's why we update it at the end, after the new
     // zf_ctx is set up with the new dict_id (ready for another thread to search it)
-    ctx_lock (merging_vb, &z_file->dicts_mutex, "dicts_mutex", 0);
+    mutex_lock (z_file->dicts_mutex);
 
     // check if another thread raced and created this dict before us
     Context *zf_ctx = ctx_get_zf_ctx (vb_ctx->dict_id);
@@ -514,7 +491,7 @@ static Context *ctx_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
     __atomic_store_n (&z_file->num_contexts, z_file->num_contexts+1, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_i
 
 finish:
-    ctx_unlock (merging_vb, &z_file->dicts_mutex, "dicts_mutex", 0);
+    mutex_unlock (z_file->dicts_mutex);
     return zf_ctx;
 }
 
@@ -524,14 +501,14 @@ void ctx_commit_codec_to_zf_ctx (VBlock *vb, Context *vb_ctx, bool is_lcodec)
     ASSERT (zf_ctx, "Error in ctx_commit_codec_to_zf_ctx: zf_ctx is missing for %s in vb=%u", vb_ctx->name, vb->vblock_i); // zf_ctx is expected to exist as this is called after merge
 
     { START_TIMER; 
-      ctx_lock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
+      mutex_lock (zf_ctx->mutex);
       COPY_TIMER_VB (vb, lock_mutex_zf_ctx);  
     }
 
     if (is_lcodec) zf_ctx->lcodec = vb_ctx->lcodec;
     else           zf_ctx->bcodec = vb_ctx->bcodec;
 
-    ctx_unlock (vb, &zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
+    mutex_unlock (zf_ctx->mutex);
 }
 
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
@@ -541,12 +518,12 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 {
     Context *vb_ctx = &merging_vb->contexts[did_i];
 
-    // get the ctx or create a new one. note: ctx_add_new_zf_ctx() must be called before ctx_lock() because it locks the z_file mutex (avoid a deadlock)
+    // get the ctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
     Context *zf_ctx  = ctx_get_zf_ctx (vb_ctx->dict_id);
     if (!zf_ctx) zf_ctx = ctx_add_new_zf_ctx (merging_vb, vb_ctx); 
 
     { START_TIMER; 
-      ctx_lock (merging_vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
+      mutex_lock (zf_ctx->mutex);
       COPY_TIMER_VB (merging_vb, lock_mutex_zf_ctx);  
     }
 
@@ -601,7 +578,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
 finish:
     COPY_TIMER_VB (merging_vb, ctx_merge_in_vb_ctx_one_dict_id)
-    ctx_unlock (merging_vb, &zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
+    mutex_unlock (zf_ctx->mutex);
 }
 
 // ZIP only: merge new words added in this vb into the z_file.contexts, and compresses dictionaries.
@@ -613,8 +590,8 @@ void ctx_merge_in_vb_ctx (VBlock *merging_vb)
     // arbitrary order. at the end of this function, vb_i releases the mutex it locked along time ago,
     // while the other vbs wait for vb_1 by attempting to lock the mutex
     if (merging_vb->vblock_i != 1) {
-        ctx_lock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", merging_vb->vblock_i);
-        ctx_unlock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", merging_vb->vblock_i);
+        mutex_lock (wait_for_vb_1_mutex);
+        mutex_unlock (wait_for_vb_1_mutex);
     }
     
     ctx_verify_field_ctxs (merging_vb); // this was useful in the past to catch nasty thread issues

@@ -163,13 +163,3 @@ const char *arch_get_distribution (void)
     else return "github";
 }
 
-// initialize mutex, if its not initialized already
-void mutex_initialize_do (const char *name, pthread_mutex_t *mutex, bool *initialized)
-{
-    if (*initialized) return;
-
-    unsigned ret = pthread_mutex_init (mutex, NULL);
-    ASSERT (!ret, "Error: pthread_mutex_init failed for %s: %s", name, strerror (ret));
-
-    *initialized = true;
-}

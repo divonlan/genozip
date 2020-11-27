@@ -21,22 +21,22 @@
 // -----------
 // mutex stuff
 // -----------
-#define MUTEX(name) \
-    static pthread_mutex_t name; \
-    static bool name##_initialized = false;
+typedef struct Mutex {
+    pthread_mutex_t mutex;
+    const char *name, *initialized, *lock_func;
+} Mutex;
 
-#define mutex_initialize(name) { if (! name##_initialized) { \
-                                    int ret; ASSERT (!(ret = pthread_mutex_init (&name, 0)), "Error: pthread_mutex_init failed for %s: %s", #name, strerror (ret)); \
-                                    name##_initialized = true;  \
-                               } }
+void mutex_initialize_do (MutexP mutex, const char *name, const char *func);
+#define mutex_initialize(mutex) mutex_initialize_do (&mutex, #mutex, __FUNCTION__)
 
-#define mutex_destroy(name) if (name##_initialized) { pthread_mutex_destroy (&name); name##_initialized = false; }
+void mutex_destroy_do (MutexP mutex, const char *func);
+#define mutex_destroy(mutex) mutex_destroy_do (&mutex, __FUNCTION__)
 
-#define mutex_lock(m)   { int ret = pthread_mutex_lock (&m); \
-                          ASSERT (!ret, "Error in %s: pthread_mutex_lock failed: %s", __FUNCTION__, strerror (ret)); }
+void mutex_lock_do (MutexP mutex, const char *func);
+#define mutex_lock(mutex) mutex_lock_do (&mutex, __FUNCTION__)
 
-#define mutex_unlock(m) { int ret = pthread_mutex_unlock (&m); \
-                          ASSERT (!ret, "Error in %s: pthread_mutex_unlock failed: %s", __FUNCTION__, strerror (ret)); }
+void mutex_unlock_do (MutexP mutex, const char *func, uint32_t line);
+#define mutex_unlock(mutex) mutex_unlock_do (&mutex, __FUNCTION__, __LINE__)
 
 // -----------
 // spinlock stuff

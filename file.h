@@ -16,6 +16,7 @@
 #include "context.h"
 #include "aes.h"
 #include "data_types.h"
+#include "mutex.h"
 
 // REFERENCE file - only appears in .genozip format
 #define REF_GENOZIP_   ".ref" GENOZIP_EXT
@@ -280,8 +281,7 @@ typedef struct File {
     uint8_t txt_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
-    pthread_mutex_t dicts_mutex;
-    bool dicts_mutex_initialized;      // this mutex protects contexts and num_contexts from concurrent adding of a new dictionary
+    Mutex dicts_mutex;                 // this mutex protects contexts and num_contexts from concurrent adding of a new dictionary
     DidIType num_contexts;             // length of populated subfield_ids and mtx_ctx;
     
     DidIType dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 

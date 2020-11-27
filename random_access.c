@@ -13,7 +13,7 @@
 #include "mutex.h"
 #include "zfile.h"
 
-MUTEX (ra_mutex);
+static Mutex ra_mutex = {};
 
 #define RA_UNKNOWN_CHROM_SKIP_POS 1
 

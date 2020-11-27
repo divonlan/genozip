@@ -10,15 +10,15 @@
 
 #define GENOME_BASES_PER_MUTEX (1 << 16) // 2^16 = 64K
 
-static pthread_mutex_t *genome_muteces = NULL; // one spinlock per 16K bases - protects genome->is_set
+static Mutex *genome_muteces = NULL; // one spinlock per 16K bases - protects genome->is_set
 static uint32_t genome_num_muteces=0;
 
 static void ref_lock_initialize_do (uint32_t num_muteces)
 {
     genome_num_muteces = num_muteces;
-    genome_muteces = CALLOC (num_muteces * sizeof (pthread_mutex_t));
+    genome_muteces = CALLOC (num_muteces * sizeof (Mutex));
     for (unsigned i=0; i < num_muteces; i++)
-        pthread_mutex_init (&genome_muteces[i], NULL);
+        mutex_initialize (genome_muteces[i]);
 }
 
 void ref_lock_initialize_loaded_genome (void) 
@@ -35,7 +35,7 @@ void ref_lock_free (void)
 {
     if (genome_muteces) {
         for (unsigned i=0; i < genome_num_muteces; i++)
-            pthread_mutex_destroy (&genome_muteces[i]);
+            mutex_destroy (genome_muteces[i]);
 
         FREE (genome_muteces);
         genome_num_muteces = 0;

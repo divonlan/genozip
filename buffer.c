@@ -25,7 +25,7 @@
 
 static const unsigned overhead_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
 
-MUTEX (overlay_mutex); // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
+static Mutex overlay_mutex = {}; // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
@@ -419,7 +419,7 @@ uint64_t buf_alloc_do (VBlock *vb,
 
         // special handling if we have an overlaying buffer
         if (buf->overlayable) {
-            pthread_mutex_lock (&overlay_mutex);
+            mutex_lock (overlay_mutex);
             uint16_t *overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
 
             char *old_data = buf->data;
@@ -450,7 +450,7 @@ uint64_t buf_alloc_do (VBlock *vb,
                 buf_init (buf, new_memory, new_size, old_size, func, code_line, name);
             }
             buf->overlayable = true; // renew this, as it was reset by buf_init
-            pthread_mutex_unlock (&overlay_mutex);
+            mutex_unlock (overlay_mutex);
         }
 
         else { // non-overlayable buffer - regular realloc without mutex
@@ -507,7 +507,7 @@ void buf_overlay_do (VBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf, cons
     overlaid_buf->param       = param;
 
     // full buffer overlay - copy len too and update overlay counter
-    pthread_mutex_lock (&overlay_mutex);
+    mutex_lock (overlay_mutex);
 
     overlaid_buf->size = regular_buf->size;
     overlaid_buf->len  = regular_buf->len;
@@ -515,7 +515,7 @@ void buf_overlay_do (VBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf, cons
     uint16_t *overlay_count = (uint16_t*)(regular_buf->data + regular_buf->size + sizeof(uint64_t));
     (*overlay_count)++; // counter of users of this memory
 
-    pthread_mutex_unlock (&overlay_mutex);
+    mutex_unlock (overlay_mutex);
 }
 
 // free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
@@ -532,7 +532,7 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 
             if (buf->overlayable) {
 
-                pthread_mutex_lock (&overlay_mutex);
+                mutex_lock (overlay_mutex);
                 overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
 
                 if (*overlay_count > 1) { // current overlays exist - abandon memory - leave it to the overlaid buffer(s) which will free() this memory when they're done with it
@@ -545,7 +545,7 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
                 }
                 // if no overlay exists then we just keep .memory and reuse it in future allocations
 
-                pthread_mutex_unlock (&overlay_mutex);            
+                mutex_unlock (overlay_mutex);            
             }
             
             buf->data        = NULL; 
@@ -558,10 +558,10 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
             break;
 
         case BUF_OVERLAY:
-            pthread_mutex_lock (&overlay_mutex);
+            mutex_lock (overlay_mutex);
             overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
             (*overlay_count)--;
-            pthread_mutex_unlock (&overlay_mutex);            
+            mutex_unlock (overlay_mutex);            
 
             // we are the last user - we can free the memory now.
             // do this outside of the mutex - free is a system call and can take some time.
@@ -615,9 +615,9 @@ void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
     
         uint16_t overlay_count = 1;
         if (buf->overlayable) {
-            pthread_mutex_lock (&overlay_mutex);
+            mutex_lock (overlay_mutex);
             overlay_count = (*(uint16_t*)(buf->data + buf->size + sizeof(uint64_t)));
-            pthread_mutex_unlock (&overlay_mutex);            
+            mutex_unlock (overlay_mutex);            
         }
 
         ASSERT (overlay_count==1, "Error: cannot destroy buffer %s because it is currently overlaid", buf->name);

@@ -462,7 +462,7 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
-start=9
+start=1
 if (( $start <=  1 )); then batch_minimal                  ; fi
 if (( $start <=  2 )); then batch_basic                    ; fi
 if (( $start <=  3 )); then batch_precompressed            ; fi

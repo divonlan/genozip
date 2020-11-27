@@ -14,7 +14,7 @@
 #include "codec.h"
 #include "txtfile.h"
 
-MUTEX (vb_digest_mutex);   // ZIP: used for serializing MD5ing of VBs
+static Mutex vb_digest_mutex = {};   // ZIP: used for serializing MD5ing of VBs
 static uint32_t vb_digest_last=0; // last vb to be MD5ed 
 
 #define IS_ADLER ((command == ZIP) ? !flag.md5 : z_file->z_flags.adler)

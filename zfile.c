@@ -134,7 +134,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
 static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_data)
 {
-    MUTEX (show_b250_mutex); // protect so compute thread's outputs don't get mix
+    static Mutex show_b250_mutex = {}; // protect so compute thread's outputs don't get mix
 
     SectionHeaderCtx *header = (SectionHeaderCtx *)section_header_p;
 

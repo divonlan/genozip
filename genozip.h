@@ -60,6 +60,7 @@ typedef const struct BitArray *ConstBitArrayP;
 typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
 typedef union LastValueType *LastValueTypeP;
+typedef struct Mutex *MutexP;
 
 typedef void BgEnBufFunc (BufferP buf);
 typedef BgEnBufFunc (*BgEnBuf);
