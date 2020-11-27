@@ -476,8 +476,7 @@ static bool file_open_txt_write (File *file)
         (file->data_type == DT_BAM && file_get_data_type (file->type, true) == DT_SAM))
     {
         flag.out_dt = file->data_type = (file->data_type == DT_SAM) ? DT_BAM : DT_SAM;
-        flag.reconstruct_as_src = false;
-        flag.data_modified = true;
+        flags_update_piz_one_file (); // update flags accordingly
     }
 
     // get the codec    

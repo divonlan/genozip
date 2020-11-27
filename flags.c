@@ -390,9 +390,15 @@ void flags_update_piz_one_file (void)
     // handle native binary formats (BAM). note on BCF and CRAM: we used bcftools/samtools as an external 
     // compressor, so that genozip sees the text, not binary, data of these files - the same as if the file were compressed with eg bz2
     if (flag.out_dt == DT_NONE && z_file->z_flags.txt_is_bin) {
-        if (z_file->data_type == DT_SAM) 
-            // genounzip of a SAM genozip file with is_binary is determined here unless the user overrides with --sam or --fastq
-            flag.out_dt = (exe_type == EXE_GENOCAT ? DT_SAM : DT_BAM);
+        if (z_file->data_type == DT_SAM) {
+            // PIZ of a SAM genozip file with is_binary (i.e. BAM) is determined here unless the user overrides with --sam or --fastq
+            if (exe_type == EXE_GENOCAT) {
+                flag.out_dt = DT_SAM;
+                flag.no_pg  = true; // if a user is genocatting a BAM file, we don't add @PG (only when he genounzips it)
+            }
+            else
+                flag.out_dt = DT_BAM;
+        }
         // future binary data types here
     }
     
