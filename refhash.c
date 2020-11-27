@@ -60,7 +60,10 @@ static uint32_t next_task_layer = 0;
 static uint32_t next_task_start_within_layer = 0;
 
 // lookup table for base complement
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winitializer-overrides"
 const char complement[256] =  { [0 ...255]=4, ['A']='T', ['C']='G', ['G']='C', ['T']='A' }; // complement A,C,G,T, others are 4
+#pragma clang diagnostic pop
 
 // ------------------------------------------------------
 // stuff related to creating the refhash

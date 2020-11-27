@@ -29,7 +29,7 @@ typedef struct {
 
 extern Base250 base250_encode (WordIndex n);
 extern WordIndex base250_decode (const uint8_t **str_p, bool advance); // decodes and advances str_p
-#define base250_len(data) ((*(data) < 250) ? 4 : 1)
+#define base250_len(data) ((*(uint8_t *)(data) < 250) ? 4 : 1)
 #define base250_copy(dst, b250) memcpy (dst, (b250).encoded.numerals, base250_len((b250).encoded.numerals))
 
 #endif
