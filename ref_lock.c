@@ -7,18 +7,28 @@
 #include "mutex.h"
 #include "ref_private.h"
 #include "buffer.h"
+#include "flags.h"
 
 #define GENOME_BASES_PER_MUTEX (1 << 16) // 2^16 = 64K
 
 static Mutex *genome_muteces = NULL; // one spinlock per 16K bases - protects genome->is_set
 static uint32_t genome_num_muteces=0;
+static char *genome_mutex_names = NULL;
 
 static void ref_lock_initialize_do (uint32_t num_muteces)
 {
+    #define GM_NAME "genome_muteces[%u]"
+    #define GM_NAME_LEN 24
     genome_num_muteces = num_muteces;
     genome_muteces = CALLOC (num_muteces * sizeof (Mutex));
-    for (unsigned i=0; i < num_muteces; i++)
-        mutex_initialize (genome_muteces[i]);
+    genome_mutex_names = MALLOC (GM_NAME_LEN * num_muteces);
+
+    bool create_names = flag.show_mutex && !strncmp (GM_NAME, flag.show_mutex, 8); // only bother to create names if --show-mutex to this mutex
+
+    for (unsigned i=0; i < num_muteces; i++) {
+        if (create_names) sprintf (&genome_mutex_names[i*GM_NAME_LEN], GM_NAME, i);
+        mutex_initialize_do (&genome_muteces[i], create_names ? &genome_mutex_names[i*GM_NAME_LEN] : GM_NAME, __FUNCTION__);
+    }
 }
 
 void ref_lock_initialize_loaded_genome (void) 
@@ -39,6 +49,8 @@ void ref_lock_free (void)
 
         FREE (genome_muteces);
         genome_num_muteces = 0;
+
+        FREE (genome_mutex_names);
     }
 }
 

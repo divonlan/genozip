@@ -209,6 +209,8 @@ static const char *help_genozip_developer[] = {
     "   ZUC  --show-bgzf       Show bgzf blocks as they are being compressed or decompressed",    
     "",
     "   ZUC  --show-digest     Show digest (MD5 or Adler32) updates",    
+    "",
+    "   ZUC  --show-mutex      <mutex-name> Shows locks and unlocks of a particular mutex",    
 };
 
 static const char *help_genounzip[] = {

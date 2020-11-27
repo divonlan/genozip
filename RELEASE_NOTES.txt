@@ -240,6 +240,7 @@ Functionality:
     --show-containers (new flag) for genounzip/genocat - show flow of container reconstruction
     --show-time can now accept an optional argument eg. --show-time=compressor
     --show-txt-contigs - shows contigs from the SAM/BAM header (SQ lines)
+    --show-mutex - shows locks and unlocks of a particular mutex
     --unbind in genols (new flag) - shows the components of bound files
     --show-dict and show-b250 now accept an optional paramter + removed --show-one-dict and --show-one-b250
     --show-digest show (md5 or Adler32) updates
