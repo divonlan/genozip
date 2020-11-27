@@ -429,11 +429,11 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
 }
 
-static void main_genozip_open_z_file (char **z_filename)
+static void main_genozip_open_z_file_write (char **z_filename)
 {
     DataType z_data_type = txt_file->data_type;
 
-    if (!(*z_filename) && !flag.to_stdout) {
+    if (! *z_filename) {
         bool is_url = url_is_url (txt_file->name);
         const char *basename = is_url ? file_basename (txt_file->name, false, "", 0,0) : NULL;
         const char *local_txt_filename = basename ? basename : txt_file->name;
@@ -451,15 +451,6 @@ static void main_genozip_open_z_file (char **z_filename)
 
         FREE (basename);
     }
-    else if (flag.to_stdout) { // stdout
-#ifdef _WIN32
-        // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
-        ASSINP (isatty(1), "%s: redirecting binary output is not supported on Windows, use --output instead", global_cmd);
-#endif
-        ASSINP (flag.force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
-
-        ASSERT0 (!flag.pair, "Error: cannot uncompress both paired end files while redirecting the output");
-    } 
 
     z_file = file_open (*z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, z_data_type);
 
@@ -497,7 +488,7 @@ static void main_genozip (const char *txt_filename,
 
     // get output FILE
     if (!z_file)  // skip if we're the second file onwards in bind mode - nothing to do
-        main_genozip_open_z_file (&z_filename);
+        main_genozip_open_z_file_write (&z_filename);
     
     flags_update_zip_one_file();
 

@@ -46,8 +46,6 @@ static const char *help_genozip[] = {
     "",
     "                     This flag should be used when redirecting input data with a < or |, or if the input file type cannot be determined by its file name",
     "",
-    "   -c --stdout       Send output to standard output instead of a file",    
-    "",
     "   -f --force        Force overwrite of the output file, or force writing " GENOZIP_EXT " data to standard output",    
     "",
     "   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged",    

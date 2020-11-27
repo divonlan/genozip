@@ -461,7 +461,7 @@ static bool file_open_txt_write (File *file)
         }
 
         // case: BAM
-        if (file->data_type == DT_BAM) 
+        else if (file->data_type == DT_BAM) 
             file->type = BAM; // flag.bgzf already set in flags_update_piz_one_file
         
         // case: not .gz and not BAM - use the default plain file format

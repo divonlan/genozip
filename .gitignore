@@ -33,6 +33,7 @@ mac/scripts/*
 !.gitkeep
 .DS_Store
 *.vcf*
+*.bcf*
 *.sam*
 *.bam
 *.fastq*

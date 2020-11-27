@@ -37,8 +37,11 @@ typedef struct {
     int bytes;
 
     // options affecting the software interaction (but not the file contents)
-    int force, quiet, to_stdout, replace, do_register,
-        test; // implies md5
+    int force, quiet, 
+        to_stdout,   // redirect txt output upon decompression to stdout 
+        replace, 
+        do_register,
+        test;        // implies md5
     char *threads_str, *out_filename;
 
     enum { REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference

@@ -310,10 +310,12 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     uint32_t n_ref=0;
     sam_foreach_SQ_line (txtheader_buf->data, txtheader_sam2bam_count_sq, &n_ref);
 
-    // we can't convert to BAM if its a SAM file without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
+    // we can't convert to BAM if its a SAM file with aligned reads but without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
     // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
-    // analysis. Better give an error here than create confusion downstream.
-    ASSERT (n_ref || !z_file->z_flags.ref_internal, 
+    // analysis. Better give an error here than create confusion downstream. 
+    ASSERT (n_ref ||  // has SQ records
+            !z_file->z_flags.ref_internal || // has external reference
+            z_file->contexts[SAM_POS].word_list.len==1, // has only one POS word = "Delta 0" = unaligned SAM that doesn't need contigs 
             "Error: Failed to convert %s from SAM to BAM: genounzip requires that either the SAM header has SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or the file was genozipped with --reference or --REFERENCE", z_name);
 
     // if no SQ lines - get lines from loaded contig (will be available only if file was compressed with --reference or --REFERENCE)
