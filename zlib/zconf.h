@@ -389,6 +389,7 @@
 
 #if !defined(__MACTYPES__)
 #ifndef BYTE_DEFINED // also defined (identically) in lzma.7zTypes.h --divon
+#define BYTE_DEFINED
 typedef unsigned char Byte;
 #endif
 

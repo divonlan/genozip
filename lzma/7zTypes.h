@@ -66,6 +66,7 @@ typedef int WRes;
 #endif
 
 #ifndef BYTE_DEFINED // also defined (identically) in zlib/zconf.h --divon
+#define BYTE_DEFINED
 typedef unsigned char Byte;
 #endif
 typedef short Int16;
