@@ -112,9 +112,6 @@ typedef struct Context {
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
     bool local_always;         // always create a local section in zfile, even if it is empty 
 
-    // PIZ-only instructions
-    bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
-
     // hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and the rest of linked to them by linked list
@@ -151,6 +148,9 @@ typedef struct Context {
     uint32_t last_line_i;      // PIZ only: the last line_i this ctx was encountered
     LastValueType last_value;  // PIZ only: last value from which to conduct a delta. 
     int64_t last_delta;        // PIZ only: last delta value calculated
+
+    // PIZ-only instructions
+    bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
 
     // Container cache 
     Buffer con_cache;       // An array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
