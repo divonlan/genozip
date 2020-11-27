@@ -65,7 +65,10 @@ typedef int WRes;
 #define RINOK(x) { int __result__ = (x); if (__result__ != 0) return __result__; }
 #endif
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wtypedef-redefinition" // also defined (identically) in zlib/zconf.h --divon
 typedef unsigned char Byte;
+#pragma clang diagnostic pop
 typedef short Int16;
 typedef unsigned short UInt16;
 
