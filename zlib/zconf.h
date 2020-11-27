@@ -388,14 +388,10 @@
 #endif
 
 #if !defined(__MACTYPES__)
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wtypedef-redefinition" // also defined (identically) in zlib/zconf.h --divon
+#ifndef BYTE_DEFINED // also defined (identically) in lzma.7zTypes.h --divon
+typedef unsigned char Byte;
 #endif
-typedef unsigned char  Byte;  /* 8 bits */
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
+
 #endif
 typedef unsigned int   uInt;  /* 16 bits or more */
 typedef unsigned long  uLong; /* 32 bits or more */
