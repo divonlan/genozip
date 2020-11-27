@@ -116,8 +116,8 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
             int32_t reconstructed_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
-                bool reconstruct = (flag.out_dt == z_file->data_type) || // not translating Or...
-                                   !IS_CI_SET (CI_TRANS_NOR);            // no prohibition on reconstructing when translating
+                bool reconstruct = !flag.do_translate ||      // not translating Or...
+                                   !IS_CI_SET (CI_TRANS_NOR); // no prohibition on reconstructing when translating
                 reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, 0, reconstruct);
 
                 // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item

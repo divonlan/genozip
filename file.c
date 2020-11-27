@@ -452,7 +452,7 @@ static bool file_open_txt_write (File *file)
     // check if type derived from file name is supported, and if not - set it to plain or .gz
     if (file_get_data_type (file->type, false) == DT_NONE) {
 
-        // case: output file has a .gz extension (eg the user did "genounzip xx.vcf.genozip -o yy.gz")
+        // case: output file has a .gz extension not necessarily related to a file type (eg file.gz rather than file.vcf.gz)
         if ((file_has_ext (file->name, ".gz") || file_has_ext (file->name, ".bgz")) &&  
              file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
             
@@ -461,7 +461,7 @@ static bool file_open_txt_write (File *file)
         }
 
         // case: BAM
-        else if (file->data_type == DT_BAM) 
+        if (file->data_type == DT_BAM) 
             file->type = BAM; // flag.bgzf already set in flags_update_piz_one_file
         
         // case: not .gz and not BAM - use the default plain file format
@@ -469,6 +469,15 @@ static bool file_open_txt_write (File *file)
             file->type = txt_out_ft_by_dt[file->data_type][0];  
             ASSINP (!flag.bgzf, "%s: using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz", global_cmd);
         }
+    }
+
+    // equivalent to --sam / --bam - the user requested translation SAM<-->BAM by specifying a .bam or .sam* output filename
+    if ((file->data_type == DT_SAM && file->type == BAM) ||
+        (file->data_type == DT_BAM && file_get_data_type (file->type, true) == DT_SAM))
+    {
+        flag.out_dt = file->data_type = (file->data_type == DT_SAM) ? DT_BAM : DT_SAM;
+        flag.reconstruct_as_src = false;
+        flag.data_modified = true;
     }
 
     // get the codec    

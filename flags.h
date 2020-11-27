@@ -23,7 +23,9 @@ typedef struct {
     int pair; // unfortunately we can't rely on enum being sizeof(int)
 
     // genounzip options
-    int plain, bgzf, out_dt;
+    int plain,  // set by --plain only - under so circumstances should we output BGZF
+        bgzf,   // can be set by --bgzf, or by various other conditions
+        out_dt; // used to indicate the desired dt of the output txt - consumed by file_open, and thereafter equal to txt_file->data_type
     char *unbind;
 
     // PIZ: data-modifying genocat options for showing only a subset of the file 
