@@ -354,7 +354,9 @@ batch_unix_only_cases()
     if [ -n "$is_windows" ]; then return; fi
 
     # VCF gtshark test
-    test_standard --gtshark " " basic.vcf
+    if `command -v gtshark >& /dev/null`; then
+        test_standard --gtshark " " basic.vcf
+    fi
 
     # CRAM hg19
     echo "CRAM" 
@@ -433,7 +435,12 @@ is_mac=`uname|grep -i Darwin`
 hg19=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 
-arg1=$1
+if (( $# < 1 )); then
+    echo "Usage: tesh.sh <start-test> [optional-genozip-arg]"
+    exit 0
+fi
+
+arg1=$2 # optional arg for genozip/genounzip
 
 # debug
 is_debug=`echo $1|grep debug`
@@ -476,7 +483,7 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
-start=1
+start=$1
 if (( $start <=  1 )); then batch_minimal                  ; fi
 if (( $start <=  2 )); then batch_basic                    ; fi
 if (( $start <=  3 )); then batch_precompressed            ; fi
