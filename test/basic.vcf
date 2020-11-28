@@ -23,7 +23,7 @@
 ##co= 17. Format and info subfield names that exceed 8 characters (DictId size)
 ##co= 18. Lines with different ploidy types: HAPLO, PHASED, NOT_PHASED and MIXED 
 ##co= 19. No FORMAT and samples in a line, despite file having samples
-##co= 20. Extreme POS values (0 and ‭2147483647‬ == 0x7fffffff)
+##co= 20. Extreme POS values (1 and ‭2147483647‬ == 0x7fffffff)
 ##co= 21. ID - numeric, non-numeric, partial-numeric, numeric 10+ digits, leading 0
 ##co= 22. Optimization - FORMAT subfields GL,GP,PL and INFO subfield VQSLOD
 ##co= 23. DP and MIN_DP - FORMAT subfields - case when they're identical and case when not
@@ -38,7 +38,7 @@
 ##contig=<ID=12>
 ##contig=<ID=13>
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Person1	Person2	Person3	Person4	Person5
-12	0	rs1	G	A	100	PASS	I12345678=A;AC=1;AN=2;AF=0.5;I2=a	GT:GL:GP:PL	1:-0.5999,-.1111,-.2222:-0.995,-0.1234578,-2.999:300,500,2	0:-0.995,-0.1234578,-2.999	0	17	18
+12	1	rs1	G	A	100	PASS	I12345678=A;AC=1;AN=2;AF=0.5;I2=a	GT:GL:GP:PL	1:-0.5999,-.1111,-.2222:-0.995,-0.1234578,-2.999:300,500,2	0:-0.995,-0.1234578,-2.999	0	17	18
 1	207237234	rs123	GAGCA	A	100	UNIQ1	I12345678=A;AN=2;AF=0.5;AC=1;DP=5	GT:DP:MIN_DP:GL	0|0:5:5:0,-.1,-2.	10|4:6:7	0|.	1	10|4
 13	207237235	no;numbers	T	TCCCC	100	UNIQ2	I2=a;NOVALUE;AN=2;AF=0.5;AC=2;I3=x;VQSLOD=-4.19494	GT	./99	0|.|2	0|.|11	10|4|55	10|4|55
 13	14	12345678	AACGC	CGAG	100	UNIQ3	ZZ=a;Info3	ABCDEFGHJ:GL	xx
