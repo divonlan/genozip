@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash 
 
 TESTDIR=test
 OUTDIR=$TESTDIR/tmp
@@ -41,23 +41,22 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
     local zip_args=( $1 )
     local unzip_args=( $2 )
     local args=( "$@" )
-    local files=() # ${args[@]:2} )
 
     local copies=()
     if [[ ${zip_args[0]} == "COPY" ]]; then
         zip_args=( ${zip_args[@]:1} ) # remove COPY
-        for file in ${files[@]}; do 
+        for file in ${args[@]:2}; do 
             cp $TESTDIR/$file $OUTDIR/copy.$file
             copies+=( $OUTDIR/copy.$file )
             args+=( tmp/copy.$file ) # adding the test/ prefix in a sec
         done
     fi
 
+    local files=( ${args[@]:2} )
     if [[ ${zip_args[0]} == "NOPREFIX" ]]; then
         zip_args=( ${zip_args[@]:1} ) # remove NOPREFIX
-        files=( ${args[@]:2} )
     else
-        files=("${files[@]/#/${TESTDIR}}")
+        files=( "${files[@]/#/${TESTDIR}/}" )
     fi
 
     local single_output=0
@@ -236,9 +235,12 @@ batch_precompressed()
     local files=(basic-gzip.sam.gz basic-bz2.sam.bz2 basic-xz.sam.xz basic-nobgzip.bam) 
     local file
     for file in ${files[@]}; do
-        test_standard " " " " $file
-        test_standard "NOPREFIX CONCAT" " " file://${path}${TESTDIR}/$file
-        test_standard "-p123" "--password 123" $file
+
+        if [ -x "$(command -v xz)" -o "${file##*.}" != xz ] ; then # skip .xz files if xz is not installed
+            test_standard " " " " "$file"
+            test_standard "NOPREFIX CONCAT" " " file://${path}${TESTDIR}/$file
+            test_standard "-p123" "--password 123" $file
+        fi
     done
 }
 
