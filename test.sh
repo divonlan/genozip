@@ -135,14 +135,20 @@ test_stdout()
     cleanup
 }
 
-test_multi_bound()
+test_multi_bound() # $1=filename $2=REPLACE (optional)
 {
     test_header "$1 - bind & unbind (2 files with 2 components each)"
     local file=$TESTDIR/$1
     local file1=$OUTDIR/copy1.$1
     local file2=$OUTDIR/copy2.$1
+
     cp -f $file $file1
-    cat $file | sed 's/PRFX/FILE2/g' > $file2
+    if [[ $2 == "REPLACE" ]]; then
+        cat $file | sed 's/PRFX/FILE2/g' > $file2
+    else
+        cp -f $file $file2
+    fi
+
     $genozip $arg1 $file1 $file2 -ft -o $output || exit 1 # test as bound
     local output2=$OUTDIR/output2.genozip
     cp -f $output $output2
@@ -224,7 +230,7 @@ batch_basic()
         test_redirected $file
         test_stdout $file
         test_standard "COPY" " " $file
-        test_multi_bound $file
+        test_multi_bound $file REPLACE # REPLAEC to adjust the contig name for .fa as we can't have two contigs with the same name
         test_optimize $file
     done
 }
