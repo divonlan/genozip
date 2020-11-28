@@ -88,8 +88,16 @@ static int bsc_unbwt_mergedTL_serial(void *vb, unsigned char * restrict T, unsig
 
 static int bsc_unbwt_biPSI_serial(void *vb, unsigned char * restrict T, unsigned int * restrict P, int n, int index)
 {
-    int bucket[ALPHABET_SIZE * ALPHABET_SIZE] = { 0 };
-    unsigned short fastbits[1 + (1 << BWT_NUM_FASTBITS)];
+    int *bucket;
+    if (!(bucket = (int *)bsc_zero_malloc(vb, ALPHABET_SIZE * ALPHABET_SIZE * sizeof(int))))
+        return LIBBSC_NOT_ENOUGH_MEMORY;
+
+    unsigned short *fastbits;
+    if (!(fastbits = (unsigned short *)bsc_malloc(vb,(1 + (1 << BWT_NUM_FASTBITS)) * sizeof(unsigned short)))) {
+        return LIBBSC_NOT_ENOUGH_MEMORY;
+        bsc_free(vb, bucket);
+    }
+
     int count[ALPHABET_SIZE] = { 0 };
 
     int shift = 0; while ((n >> shift) > (1 << BWT_NUM_FASTBITS)) shift++;
@@ -162,6 +170,7 @@ static int bsc_unbwt_biPSI_serial(void *vb, unsigned char * restrict T, unsigned
 
     T[n - 1] = (unsigned char)lastc;
 
+    bsc_free(vb, fastbits); bsc_free(vb, bucket);
     return LIBBSC_NO_ERROR;
 }
 
