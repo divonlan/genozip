@@ -200,6 +200,21 @@ test_translate_sam_to_bam() # $1 bam file
     cleanup
 }
 
+# note: only runs it to see that it doesn't crash, doesn't validate results
+test_translate_sambam_to_fastq() # $1 sam or bam file 
+{
+    test_header "$1 - translate SAM/BAM to FASTQ"
+
+    local sambam=$TESTDIR/$1
+    local fastq=$OUTDIR/copy.fastq.gz
+    if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
+
+    $genozip $arg1 -f $sambam -o $output  || exit 1
+    $genounzip $arg1 $output -fo $fastq   || exit 1
+
+    cleanup
+}
+
 test_backward_compatability()
 {
     test_header "$1 - backward compatability test"
@@ -295,6 +310,9 @@ batch_translate_bam_sam()
         if command -v samtools &> /dev/null; then # test_translate_sam_to_bam requires samtools
             test_translate_sam_to_bam $file
         fi
+
+        test_translate_sambam_to_fastq $file
+        test_translate_sambam_to_fastq ${file%.bam}.sam
     done
 }
 
