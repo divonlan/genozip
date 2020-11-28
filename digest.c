@@ -114,7 +114,7 @@ void digest_one_vb (VBlock *vb)
 uint8_t *b=vb->digest_so_far.bytes;
 printf ("XXXX  vb->digest_so_far %2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x\n", 
 b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
-uint8_t *b=piz_hash_so_far.bytes;
+b=piz_hash_so_far.bytes;
 printf ("XXXX  vb->digest_so_far %2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x\n", 
 b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
 
