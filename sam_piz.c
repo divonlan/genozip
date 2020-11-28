@@ -137,7 +137,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
     }
 
     // BAM - output vb->textual_cigar generated in sam_analyze_cigar
-    else {
+    else if (flag.out_dt == DT_BAM) {
         // now we have the info needed to reconstruct bin, l_read_name, n_cigar_op and l_seq
         BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
         alignment->l_read_name = AFTERENT (char, vb->txt_data) - alignment->read_name;
@@ -160,7 +160,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
             alignment->bin = LTEN16 (bin); // override the -1 previously set by the translator
         }
     }
-
+    
+    else if (flag.out_dt == DT_FASTQ) {
+        // only analyze, but don't reconstruct CIGAR in FASTQ
+    }
+    
     vb_sam->last_cigar = snip;
 
     if (flag.regions && vb->chrom_node_index != WORD_INDEX_NONE && vb->contexts[SAM_POS].last_value.i && 
@@ -512,6 +516,17 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
             reconstructed[reconstructed_len-1-i] = tmp;
         }
     }
+
+    return 0;
+}
+
+// emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
+TRANSLATOR_FUNC (sam_piz_sam2fastq_FLAG)
+{
+    uint16_t flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+
+    if (flag & 0x40) RECONSTRUCT ("1\n", 2); // usually R1
+    if (flag & 0x80) RECONSTRUCT ("2\n", 2); // usually R2
 
     return 0;
 }

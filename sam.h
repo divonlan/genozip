@@ -113,12 +113,14 @@ TRANSLATOR (SAM, BAM,   14, OPTIONAL,   sam_piz_sam2bam_OPTIONAL)   // set block
 TRANSLATOR (SAM, BAM,   15, OPTIONAL_SELF, sam_piz_sam2bam_OPTIONAL_SELF) // transform prefixes in Optional Container from SAM to BAM format 
 TRANSLATOR (SAM, FASTQ, 16, SEQ,        sam_piz_sam2fastq_SEQ)      // reverse-complement the sequence if needed, and drop if "*"
 TRANSLATOR (SAM, FASTQ, 17, QUAL,       sam_piz_sam2fastq_QUAL)     // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
-#define NUM_SAM_TRANS   18 // including "none"
+TRANSLATOR (SAM, FASTQ, 18, FLAG,       sam_piz_sam2fastq_FLAG)     // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
+
+#define NUM_SAM_TRANS   19 // including "none"
 #define SAM_TRANSLATORS { NULL /* none */, container_translate_I8, container_translate_U8, container_translate_LTEN_I16, \
                           container_translate_LTEN_U16, container_translate_LTEN_I32, container_translate_LTEN_U32, \
                           sam_piz_sam2bam_FLOAT, sam_piz_sam2bam_ARRAY_SELF, sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, \
                           sam_piz_sam2bam_QUAL, sam_piz_sam2bam_TLEN, sam_piz_sam2bam_OPTIONAL, sam_piz_sam2bam_OPTIONAL_SELF, \
-                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL }
+                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG }
 
 TXTHEADER_TRANSLATOR (txtheader_bam2sam);
 TXTHEADER_TRANSLATOR (txtheader_sam2bam);

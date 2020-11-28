@@ -479,6 +479,15 @@ static bool file_open_txt_write (File *file)
         flags_update_piz_one_file (); // update flags accordingly
     }
 
+    // equivalent to --fastq - the user requested translation by specifying a .fastq* or .fq* output filename
+    if ((file->data_type == DT_SAM || file->data_type == DT_BAM) &&
+        file_get_data_type (file->type, true) == DT_FASTQ)
+    {
+        flag.out_dt = file->data_type = DT_FASTQ;
+        flags_update_piz_one_file (); // update flags accordingly
+        flag.bgzf = false; // ignore flag derived from z_file, and get the codec from the fastq file extension below
+    }
+
     // get the codec    
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, WRITE);
     

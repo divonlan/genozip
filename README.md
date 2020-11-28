@@ -49,7 +49,7 @@ Notes:<br>
 1. genozip can compress with or without a reference - using a reference often achieves much better compression<br>
 2. SAM/BAM - compression of aligned or unaligned SAM/BAM files is possible. Sorting makes no difference<br>
 3. Long reads - compression of long reads (Pac Bio / Nanopore) achieves signficantly better results when compressing an aligned BAM vs an unaligned BAM or FASTQ<br>
-4. Compression of BAM and CRAM (but not SAM) files requires samtools to be installed<br>
+4. Compression of CRAM (but not SAM or BAM) files requires samtools to be installed<br>
 5. Use --REFERENCE instead of --reference to store the relevant parts of the reference file as part of the compressed file itself, which will then allow decompression with genounzip without need of the reference file.<br>
 <br>
 <b><i>Compressing and uncompressing paired-end reads with --pair - better than compressing FASTQs individually</i></b><br>
