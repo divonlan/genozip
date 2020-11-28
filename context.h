@@ -212,14 +212,10 @@ extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 extern void ctx_verify_field_ctxs_do (VBlockP vb, const char *func, uint32_t code_line);
 #define ctx_verify_field_ctxs(vb) ctx_verify_field_ctxs_do(vb, __FUNCTION__, __LINE__);
 
-extern void ctx_initialize_for_zip (void);
 extern void ctx_update_stats (VBlockP vb);
 extern void ctx_free_context (Context *ctx);
 extern void ctx_destroy_context (Context *ctx);
 extern void ctx_map_aliases (VBlockP vb);
-
-extern void ctx_vb_1_lock (VBlockP vb);
-extern void ctx_vb_1_unlock (VBlockP vb);
 extern CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index);
 extern const char *ctx_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);

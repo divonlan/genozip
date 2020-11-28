@@ -30,22 +30,6 @@
 
 #define INITIAL_NUM_NODES 10000
 
-static Mutex wait_for_vb_1_mutex = {};
-
-void ctx_vb_1_lock (VBlockP vb)
-{
-    ASSERT0 (vb->vblock_i == 1, "Error: Only vb_i=1 can call ctx_vb_1_lock");
-
-    mutex_lock (wait_for_vb_1_mutex);
-}
-
-void ctx_vb_1_unlock (VBlockP vb)
-{
-    ASSERT0 (vb->vblock_i == 1, "Error: Only vb_i=1 can call ctx_vb_1_unlock");
-
-    mutex_unlock (wait_for_vb_1_mutex);
-}
-
 // ZIP: add a snip to the dictionary the first time it is encountered in the VCF file.
 // the dictionary will be written to GENOZIP and used to reconstruct the MTF during decompression
 typedef enum { DICT_VB, DICT_ZF, DICT_ZF_SINGLETON } DictType;
@@ -399,7 +383,7 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
 
     bool is_zf_ctx = z_file && (ctx - z_file->contexts) >= 0 && (ctx - z_file->contexts) <= (sizeof(z_file->contexts)/sizeof(z_file->contexts[0]));
 
-    if (is_zf_ctx) mutex_initialize (ctx->mutex);
+    if (is_zf_ctx && command == ZIP) mutex_initialize (ctx->mutex);
 }
 
 // ZIP I/O thread: 
@@ -440,11 +424,6 @@ void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs_buf, C
     hash_alloc_global (zf_ctx, zf_ctx->nodes.len);
 
     z_file->num_contexts = MAX (z_file->num_contexts, dst_did_i+1);
-}
-
-void ctx_initialize_for_zip (void)
-{
-    mutex_initialize (wait_for_vb_1_mutex);
 }
 
 // find the z_file context that corresponds to dict_id. It could be possibly a different did_i
@@ -585,14 +564,6 @@ finish:
 void ctx_merge_in_vb_ctx (VBlock *merging_vb)
 {
     START_TIMER;
-
-    // vb_i=1 goes first, as it has the sorted dictionaries, other vbs can go in
-    // arbitrary order. at the end of this function, vb_i releases the mutex it locked along time ago,
-    // while the other vbs wait for vb_1 by attempting to lock the mutex
-    if (merging_vb->vblock_i != 1) {
-        mutex_lock (wait_for_vb_1_mutex);
-        mutex_unlock (wait_for_vb_1_mutex);
-    }
     
     ctx_verify_field_ctxs (merging_vb); // this was useful in the past to catch nasty thread issues
 

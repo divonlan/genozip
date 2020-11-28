@@ -31,6 +31,8 @@
 #include "strings.h"
 #include "bgzf.h"
 
+static Mutex wait_for_vb_1_mutex = {};
+
 static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bool is_final_component)
 {
     double z_bytes   = (double)z_file->disk_so_far;
@@ -360,6 +362,12 @@ static void zip_compress_one_vb (VBlock *vb)
 
     zfile_compress_vb_header (vb); // vblock header
 
+    // vb_i=1 merges first, as it has the sorted dictionaries, other vbs can go in arbitrary order. 
+    if (vb->vblock_i != 1) {
+        mutex_lock (wait_for_vb_1_mutex);
+        mutex_unlock (wait_for_vb_1_mutex);
+    }
+
     // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section().
     // writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
@@ -371,7 +379,7 @@ static void zip_compress_one_vb (VBlock *vb)
     // These codecs will be committed to zf_ctx so that subsequent VBs inherit it during their merge
     zip_assign_best_codec (vb);
 
-    if (vb->vblock_i == 1) ctx_vb_1_unlock(vb); 
+    if (vb->vblock_i == 1) mutex_unlock (wait_for_vb_1_mutex); // locked in zip_one_file
 
     // merge in random access - IF it is used
     if (DTP(has_random_access)) 
@@ -449,8 +457,6 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 
     DT_FUNC (txt_file, zip_initialize)();
 
-    ctx_initialize_for_zip();
-
     // copy contigs from reference or SAM/BAM header to CHROM (and RNEXT too, for SAM/BAM)
     zip_prepopulate_contig_data();
 
@@ -515,6 +521,14 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
             if (read_txt) {
                 if (flag.show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);            
                 txtfile_read_vblock (next_vb);
+
+                // if this is vb=1, we lock the mutex here in the I/O thread before any compute threads start running.
+                // this will cause vb>=2 to block on merge, until vb=1 has completed its merge and unlocked it in zip_compress_one_vb()
+                if (next_vb->vblock_i == 1) {
+                    mutex_initialize (wait_for_vb_1_mutex);
+                    mutex_lock (wait_for_vb_1_mutex); 
+                }
+
                 if (flag.show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
             }
 

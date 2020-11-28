@@ -412,11 +412,7 @@ void txtfile_read_vblock (VBlock *vb)
 
     if (DTPT(zip_read_one_vb)) DTPT(zip_read_one_vb)(vb);
 
-    // if this is vb=1, we lock the mutex here in the I/O thread before any compute threads start running.
-    // this will cause vb>=2 to block on merge, until vb=1 has completed its merge and unlocked it in zip_compress_one_vb()
-    if (vb->vblock_i == 1) ctx_vb_1_lock(vb); 
-
-    COPY_TIMER (txtfile_read_vblock);
+   COPY_TIMER (txtfile_read_vblock);
 }
 
 // read num_lines of the txtfile (after the header), and call test_func for each line. true iff the proportion of lines
