@@ -351,8 +351,6 @@ batch_misc_cases()
 
 batch_external_tools()
 {
-    if [ -n "$is_windows" ]; then return; fi
-
     # VCF gtshark test
     if `command -v gtshark >& /dev/null`; then
         test_standard --gtshark " " basic.vcf
@@ -435,7 +433,6 @@ output=${OUTDIR}/output.genozip
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
 
-#hg19=data/hg19.p13.plusMT.full_analysis_set.ref.genozip
 hg19=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 
