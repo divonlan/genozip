@@ -57,7 +57,7 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         zip_args=( ${zip_args[@]:1} ) # remove NOPREFIX
         files=( ${args[@]:2} )
     else
-        mapfile -t -d $'\0' files < <(printf "$TESTDIR/%s\0" "${args[@]:2}")
+        files=("${files[@]/#/${TESTDIR}}")
     fi
 
     local single_output=0
