@@ -117,7 +117,7 @@ static void main_sigsegv_handler (int sig)
         exit (1);
     }
 
-    print_call_stack(); //this is useless - doesn't print function names
+    print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
     abort();
 }
 #endif
