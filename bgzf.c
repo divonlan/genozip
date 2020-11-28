@@ -63,13 +63,13 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     if (! *block_size) return 0; // EOF without an EOF block
 
     if (*block_size < 12) {
-        ASSERT0 (soft_fail, "Error in bgzf_read_block: block_size read is < 12"); // less than the minimal gz block header size
+        ASSERT (soft_fail, "Error in bgzf_read_block: file %s appears truncated - it ends with a partial gzip block header", file->basename); // less than the minimal gz block header size
         return BGZF_BLOCK_IS_NOT_GZIP;
     } 
 
     // case: this is not a GZ / BGZF block at all (see: https://tools.ietf.org/html/rfc1952)
     if (h->id1 != 31 || h->id2 != 139) {
-        ASSERT (soft_fail, "Error: expecting %s to be compressed with gzip format, but it is not", file->name);
+        ASSERT (soft_fail, "Error: expecting %s to be compressed with gzip format, but it is not", file->basename);
         return BGZF_BLOCK_IS_NOT_GZIP;
     }
 
@@ -79,7 +79,7 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
 #endif
     // case: this is GZIP block that is NOT a valid BGZF block (see: https://samtools.github.io/hts-specs/SAMv1.pdf)
     if (!(*block_size == 18 && h->cm==8 && h->flg==4 && h->si1==66 && h->si2==67)) {
-        ASSERT (soft_fail, "Error in bgzf_read_block: invalid BGZF block while reading %s", file->name);
+        ASSERT (soft_fail, "Error in bgzf_read_block: invalid BGZF block while reading %s", file->basename);
         return BGZF_BLOCK_GZIP_NOT_BGZIP;
     }
 
@@ -88,7 +88,7 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     uint32_t body_size = *block_size - sizeof (struct BgzfHeader);
     uint32_t bytes = bgzf_fread (file, h+1, body_size);
     ASSERT (bytes == body_size, "Error in bgzf_read_block: failed to read body of BGZF block in %s - expecting %u bytes but read %u: %s", 
-            file->name, body_size, bytes, strerror (errno));
+            file->basename, body_size, bytes, strerror (errno));
 
     uint32_t isize_lt32 = *(uint32_t *)&block[*block_size - 4];
     uint32_t isize = LTEN32 (isize_lt32); // 0...65536 per spec
