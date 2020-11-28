@@ -91,11 +91,11 @@ void digest_one_vb (VBlock *vb)
     }
 
     if (command == ZIP) {
-        // MD5 of all data up to and including this VB is just the total MD5 of the file so far (as there is no unconsumed data)
+        // digest of all data up to and including this VB is just the total digest of the file so far (as there is no unconsumed data)
         if (flag.bind) digest_update (&z_file->digest_ctx_bound, &vb->txt_data, "vb:digest_ctx_bound");
         digest_update (&z_file->digest_ctx_single, &vb->txt_data, "vb:digest_ctx_single");
 
-        // take a snapshot of MD5 as per the end of this VB - this will be used to test for errors in piz after each VB  
+        // take a snapshot of digest as per the end of this VB - this will be used to test for errors in piz after each VB  
         vb->digest_so_far = digest_snapshot (flag.bind ? &z_file->digest_ctx_bound : &z_file->digest_ctx_single);
     }
     
@@ -104,14 +104,20 @@ void digest_one_vb (VBlock *vb)
 
         digest_update (&txt_file->digest_ctx_bound, &vb->txt_data, "vb:digest_ctx_bound");
 
-        // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
-        // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
+        // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
+        // note: we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
         if (!failed && !flag.unbind && !v8_digest_is_zero (vb->digest_so_far)) {
             Digest piz_hash_so_far = digest_snapshot (&txt_file->digest_ctx_bound);
 
             // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
             if (!digest_is_equal (vb->digest_so_far, piz_hash_so_far)) {
-                
+uint8_t *b=vb->digest_so_far.bytes;
+printf ("XXXX  vb->digest_so_far %2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x\n", 
+b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+uint8_t *b=piz_hash_so_far.bytes;
+printf ("XXXX  vb->digest_so_far %2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x\n", 
+b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+
                 // dump bad vb to disk
                 WARN ("%s of reconstructed vblock=%u (%s) differs from original file (%s).\n"
                       "Bad reconstructed vblock has been dumped to: %s\n"
