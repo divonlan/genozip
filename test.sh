@@ -332,8 +332,14 @@ batch_real_world_subsets()
 {
     rm -f $TESTDIR/*.genozip # unfortunately, these go to TESTDIR not OUTDIR
 
+    if [ -x "$(command -v xz)" ] ; then # xz available
+        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* test.*vcf* test.*gvf* test.*txt*` )
+    else
+        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* test.*vcf* test.*gvf* test.*txt*|grep -v xz` )
+    fi
+    
     echo "subsets (~3 VBs) or real world files"
-    test_standard "-m" " " `(cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* test.*vcf* test.*gvf* test.*txt*)`
+    test_standard "-m" " " ${files[@]}
 }
 
 batch_misc_cases()
@@ -470,7 +476,7 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
-start=1
+start=9
 if (( $start <=  1 )); then batch_minimal                  ; fi
 if (( $start <=  2 )); then batch_basic                    ; fi
 if (( $start <=  3 )); then batch_precompressed            ; fi
