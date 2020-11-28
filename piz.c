@@ -494,7 +494,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
     if (flag.bgzf) bgzf_compress_vb (vb);
 
-    // calculate the MD5 contribution of this VB to the single file and bound files, and the MD5 snapshot of this VB
+    // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
     if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified) 
         digest_one_vb (vb); 
 
@@ -656,14 +656,14 @@ static Digest piz_one_file_verify_md5 (Digest original_file_digest)
     
     else if (flag.test) {
         progress_finalize_component ("FAILED!!!");
-        ABORT ("Error: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",
-                digest_display (original_file_digest).s, digest_display (decompressed_file_digest).s);
+        ABORT ("Error: %s of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",
+               digest_name(), digest_display (original_file_digest).s, digest_display (decompressed_file_digest).s);
     }
 
     else ASSERT (digest_is_zero (original_file_digest), // its ok if we decompressed only a partial file
-                 "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
+                 "File integrity error: %s of decompressed file %s is %s, but the original %s file's was %s", 
                  txt_file->name, digest_display (decompressed_file_digest).s, dt_name (txt_file->data_type), 
-                 digest_display (original_file_digest).s);
+                 digest_name(), digest_display (original_file_digest).s);
 
     return decompressed_file_digest;
 }

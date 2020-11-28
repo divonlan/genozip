@@ -28,7 +28,7 @@ void digest_initialize (void)
 
 Digest digest_finalize (DigestContext *ctx, const char *msg)
 {
-    Digest digest = IS_ADLER ? (Digest)BGEN32 (ctx->adler_ctx.adler) 
+    Digest digest = IS_ADLER ? (Digest) { .words = { BGEN32 (ctx->adler_ctx.adler) } }
                              : md5_finalize (&ctx->md5_ctx);
 
     if (flag.show_digest) 
@@ -43,14 +43,14 @@ Digest digest_snapshot (const DigestContext *ctx)
     // make a copy of ctx, and finalize it, keeping the original copy unfinalized
     DigestContext ctx_copy = *ctx;
 
-    return IS_ADLER ? (Digest)BGEN32 (ctx_copy.adler_ctx.adler) 
+    return IS_ADLER ? (Digest) { .words = { BGEN32 (ctx_copy.adler_ctx.adler) } }
                     : md5_finalize (&ctx_copy.md5_ctx);
 }
 
 Digest digest_do (const void *data, uint32_t len)
 {
     if (IS_ADLER)
-        return (Digest)BGEN32 (libdeflate_adler32 (1, data, len));
+        return (Digest) { .words = { BGEN32 (libdeflate_adler32 (1, data, len)) } };
     else
         return md5_do (data, len);
 }
@@ -107,14 +107,14 @@ void digest_one_vb (VBlock *vb)
         // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
         // note: we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
         if (!failed && !flag.unbind && !v8_digest_is_zero (vb->digest_so_far)) {
-            Digest piz_hash_so_far = digest_snapshot (&txt_file->digest_ctx_bound);
+            Digest piz_digest_so_far = digest_snapshot (&txt_file->digest_ctx_bound);
 
             // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-            if (!digest_is_equal (vb->digest_so_far, piz_hash_so_far)) {
+            if (!digest_is_equal (vb->digest_so_far, piz_digest_so_far)) {
 uint8_t *b=vb->digest_so_far.bytes;
 printf ("XXXX  vb->digest_so_far %2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x\n", 
 b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
-b=piz_hash_so_far.bytes;
+b=piz_digest_so_far.bytes;
 printf ("XXXX  vb->digest_so_far %2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x\n", 
 b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
 
@@ -123,7 +123,7 @@ b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12],
                       "Bad reconstructed vblock has been dumped to: %s\n"
                       "To see the same data in the original file:\n"
                       "   %s %s | head -c %"PRIu64" | tail -c %u > %s", DIGEST_NAME,
-                      vb->vblock_i, digest_display (piz_hash_so_far).s, digest_display (vb->digest_so_far).s, txtfile_dump_vb (vb, z_name),
+                      vb->vblock_i, digest_display (piz_digest_so_far).s, digest_display (vb->digest_so_far).s, txtfile_dump_vb (vb, z_name),
                       codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
                       vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len, txtfile_dump_filename (vb, z_name, "good"));
 

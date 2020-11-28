@@ -331,7 +331,7 @@ static void zip_compress_one_vb (VBlock *vb)
     if (txt_file->codec == CODEC_BGZF) 
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
-    // calculate the MD5 contribution of this VB to the single file and bound files, and the MD5 snapshot of this VB
+    // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
     if (!flag.make_reference) digest_one_vb (vb); 
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
