@@ -69,7 +69,7 @@ void main_exit (bool show_stack, bool is_error)
 {
     im_in_main_exit = true;
 
-    if (false /* show_stack */) print_call_stack(); //this is useless - doesn't print function names
+    if (show_stack) print_call_stack(); //this is useless - doesn't print function names
 
     buf_test_overflows_all_vbs("exit_on_error");
 
@@ -107,7 +107,7 @@ static void main_sigsegv_handler (int sig)
     // note: during exit_on_error, we close z_file which might cause compute threads access z_file fields to 
     // throw a segmentation fault. we don't show it in this case, as we have already displayed the error itself
     if (!im_in_main_exit) 
-        fprintf (stderr, "\nError: Segmentation fault\n");
+        fprintf (stderr, "\nError: %s\n", strsignal (sig));
 
     // busy-wait for exit_on_error to complete before exiting cleanly
     else {
@@ -117,7 +117,7 @@ static void main_sigsegv_handler (int sig)
         exit (1);
     }
 
-    //print_call_stack(); //this is useless - doesn't print function names
+    print_call_stack(); //this is useless - doesn't print function names
     abort();
 }
 #endif
@@ -650,6 +650,7 @@ int main (int argc, char **argv)
     str_tolower (argv[0], argv[0]);
 #else
     signal (SIGSEGV, main_sigsegv_handler);   // segmentation fault handler
+    signal (SIGBUS,  main_sigsegv_handler);    // bus error handler
 #endif
 
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;

@@ -92,7 +92,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
     dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
 }
 
-#define SAFE_ASSIGN(reg,addr,char_val) /* we are careful to evaluate addr, char_val only once, less they contain eg ++ */ \
+#define SAFE_ASSIGN(reg,addr,char_val) /* we are careful to evaluate addr, char_val only once, lest they contain eg ++ */ \
     char *__addr##reg = (char*)(addr); \
     char __save##reg = *__addr##reg; \
     *__addr##reg = (char_val);
