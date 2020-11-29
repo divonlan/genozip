@@ -34,6 +34,7 @@ extern void sam_piz_reconstruct_vb ();
 extern void sam_piz_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
 
 // BAM Stuff
+extern void bam_seg_initialize (VBlockP vb);
 extern int32_t bam_is_header_done (void);
 extern int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern void txtheader_bam2sam (BufferP txt);

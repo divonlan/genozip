@@ -20,6 +20,26 @@
 #include "flags.h"
 #include "profiler.h"
 
+// set an estimated number of lines, so that seg_all_data_lines doesn't call seg_estimate_num_lines which
+// won't work for BAM as it scans for newlines. Then proceed to sam_seg_initialize
+void bam_seg_initialize (VBlock *vb)
+{
+#   define NUM_LINES_IN_TEST 10 // take an average of this number of lines
+
+    uint32_t next=0, line_i=0;
+    while (next < vb->txt_data.len && line_i < NUM_LINES_IN_TEST) {
+        uint32_t block_size_lten;
+        memcpy (&block_size_lten, ENT (char, vb->txt_data, next), sizeof (uint32_t)); // block_size is not word-aligned
+        next += LTEN32 (block_size_lten) + 4; // block_len excludes the block_len field length itself (4)
+        line_i++;
+    }
+
+    // estimated number of BAM alignments in the VB, based on the average length of the first few
+    vb->lines.len = line_i ? (vb->txt_data.len / (next / line_i)) : 0;
+
+    sam_seg_initialize (vb);
+}
+
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 // if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
 int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)

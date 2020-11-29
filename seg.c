@@ -712,7 +712,8 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 
     // allocate more to the node_i buffer of the fields, which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
-        buf_alloc_more_zero (vb, &vb->contexts[f].node_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
+        if (buf_is_allocated (&vb->contexts[f].node_i))
+            buf_alloc_more_zero (vb, &vb->contexts[f].node_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
 }
 
 static void seg_verify_file_size (VBlock *vb)
@@ -746,23 +747,21 @@ void seg_all_data_lines (VBlock *vb)
 
     ctx_verify_field_ctxs (vb);
     
-    uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
  
-    // allocate lines
-    if (vb->lines.len) { // counted by txt vblock reader - for example: bam
-        buf_alloc (vb, &vb->lines, vb->lines.len * sizeof_line, 1.2, "lines");
-    }
-    else {
-        buf_alloc (vb, &vb->lines, seg_estimate_num_lines(vb) * sizeof_line, 1.2, "lines");
-        vb->lines.len = vb->lines.size / sizeof_line;
-    }
-    buf_zero (&vb->lines);
-
     // allocate the node_i for the fields which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
         buf_alloc (vb, &vb->contexts[f].node_i, vb->lines.len * sizeof (uint32_t), 1, "contexts->node_i");
     
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
+
+    // get estimated number of lines, if we haven't already (eg in bam_seg_initialize)
+    if (!vb->lines.len)
+        vb->lines.len = seg_estimate_num_lines(vb);
+
+    // allocate lines
+    uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
+    buf_alloc (vb, &vb->lines, vb->lines.len * sizeof_line, 1.2, "lines");
+    buf_zero (&vb->lines);
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
