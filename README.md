@@ -15,7 +15,7 @@
 <br>
 (also available on <b>Conda</b> and <b>Docker Hub</b>)<br>
 <br>
-<b>genozip</b> is a compressor for genomic files - while it can compress any file, it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
+<b>genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties specific to genomic data to compress better. It is also a lot faster than gzip.<br>
 <br>
@@ -23,7 +23,7 @@ It achieves x2 to x5 better compression ratios than gzip because it leverages so
 <br>
 The compression is lossless - the decompressed file is 100% identical to the original file.<br>
 Notes: <br>
-1. Losslessness is relative to the underlying textual file - for example, when compressing a .bam or a .fq.gz file - the losslessness is relative to the underlying SAM or FASTQ file respectively<br>
+1. Losslessness is relative to the underlying textual file - for example, when compressing a .bam or a .fq.gz file - the losslessness is relative to the underlying uncompressed BAM or FASTQ file respectively<br>
 2. The one exception is when using the --optimize option which is lossy (see --help for details)<br>
 <br>
 The command line options are similar to gzip and samtools/bcftools, so if you are familiar with these, it works pretty much the same. To get started, try: <b>genozip</b> --help<br>
@@ -46,7 +46,7 @@ The command line options are similar to gzip and samtools/bcftools, so if you ar
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> *  &nbsp&nbsp&nbsp←compresses all files in the current directory<br>
 <br>
 Notes:<br>
-1. genozip can compress with or without a reference - using a reference often achieves much better compression<br>
+1. genozip can compress with or without a reference - using a reference achieves much better compression when compressing FASTQ or unaligned SAM/BAM, and modestly better compression in other cases<br>
 2. SAM/BAM - compression of aligned or unaligned SAM/BAM files is possible. Sorting makes no difference<br>
 3. Long reads - compression of long reads (Pac Bio / Nanopore) achieves signficantly better results when compressing an aligned BAM vs an unaligned BAM or FASTQ<br>
 4. Compression of CRAM (but not SAM or BAM) files requires samtools to be installed<br>
@@ -67,11 +67,11 @@ my-sam-outputing-method | <b>genozip</b> - --input sam --output <i>mysample.sam.
 <b>genocat</b> --samples SMPL1,SMPL2 <i>mysamples.vcf.genozip</i>&nbsp&nbsp&nbsp←displays 2 samples<br>
 <b>genocat</b> --grep August-10 <i>myfasta.fa.genozip</i>&nbsp&nbsp&nbsp←displays contigs/reads that have "August-10" in the header<br>
 Notes:<br>
-1. --regions works with VCF, SAM/BAM, FASTA ; --grep works with FASTQ, FASTA ; --samples works with VCF<br>
+1. --regions works with VCF, SAM/BAM, FASTA, 23andMe, GVF and reference files ; --grep works with FASTQ, FASTA ; --samples works with VCF<br>
 2. There is no need for a separate indexing step or index file<br>
 3. Many more options (see --help for full list): --no-header ; --header-only ; --sequential ; --list-chroms ; --drop-genotypes ; --GT-only<br>
 <br>
-<b><i>Binding mutiple files into a single genozip file & unbinding:</i></b><br>
+<b><i>Binding mutiple files into a single genozip file and unbinding:</i></b><br>
 <b>genozip</b> <i>*.fq.gz</i> -o <i>all-samples.fq.genozip</i>&nbsp&nbsp&nbsp←binds all .fq.gz files in the current directory<br>
 <b>genounzip</b> <i>my-project.fq.genozip</i> --unbind <br>
 <br>
@@ -85,9 +85,16 @@ Notes:<br>
 <b>genozip</b> <i>file.vcf</i> --password <i>abc</i> <br>
 <b>genounzip</b> <i>file.vcf.genozip</i> --password <i>abc</i> <br>
 <br>
+<b><i>Converting SAM/BAM to FASTQ:</i></b><br>
+<b>genounzip</b> <i>file.bam.genozip</i> --fastq<br>
+<br>
+<b><i>Converting 23andMe to VCF:</i></b><br>
+<b>genounzip</b> <i>genome_mydata-Full.txt.genozip</i> --vcf -e GRCh37.ref.genozip<br>
+<br>
 <b><i>Calculating the MD5 of the underlying textual file (also included in </i>--test<i>):</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>
 <b>genounzip</b> <i>file.vcf.genozip</i> --md5 <br>
+<b>genols</b> <i>file.vcf.genozip</i><br>
 <br>
 <b><i>Compressing and then verifying that the compressed file decompresses correctly:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --test <br>
