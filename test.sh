@@ -94,7 +94,7 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
     test_header "$1 - redirected from stdin"
     local file=$TESTDIR/$1
     local args=( "$@" )
-    cat $file | $genozip $arg1 ${args[@]:1} --test --force --output $output --input-type ${file#*.} - || exit 1
+    cat $file | $genozip $arg1 ${args[@]:1} --test --force --output $output --input ${file#*.} - || exit 1
     cleanup
 }
 

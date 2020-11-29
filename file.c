@@ -96,26 +96,30 @@ FileType file_get_z_ft_by_dt (DataType dt)
 }
 
 // possible arguments for --input
-static char *file_compressible_extensions (bool plain_only)
+char *file_compressible_extensions (bool plain_only)
 {
     static char s[1000] = {0};
         
     for (DataType dt=1; dt < NUM_DATATYPES; dt++) { // start from 1, excluding DT_REFERENCE
-        if (dt == DT_GNRIC || 
-            (plain_only && dt == DT_ME23)) // for --input extensions, we don't support --input txt
-            continue;
+        
+        if (dt == DT_GNRIC || dt == DT_ME23) continue;
 
         if (plain_only) 
             sprintf (&s[strlen(s)], "%s ", &file_exts[txt_in_ft_by_dt[dt][0].in][1]);
     
         else {
-            sprintf (&s[strlen (s)], "\n%s: ", dt_name (dt));
+            sprintf (&s[strlen (s)], "\n%-8s: ", dt_name (dt));
 
             for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
                 sprintf (&s[strlen(s)], "%s ", &file_exts[txt_in_ft_by_dt[dt][i].in][1]);
         }
     }
 
+    if (plain_only)
+        sprintf (&s[strlen(s)], "23andme generic ");
+    else
+        sprintf (&s[strlen(s)], "\n23andMe : 23andme 23andme.zip"
+                                "\nOther   : generic");
     return s;
 }
 
@@ -183,6 +187,9 @@ void file_set_input_type (const char *type_str)
 
     if (!strcmp (ext, ".23andme")) 
         stdin_type = ME23;
+
+    else if (!strcmp (ext, ".23andme.zip")) 
+        stdin_type = ME23_ZIP;
 
     else if (!strcmp (ext, ".generic"))
         stdin_type = GNRIC;
@@ -298,7 +305,7 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
                     "%s: cannot compress %s because it is already compressed", global_cmd, file_printname(file));
 
             if (file->redirected)
-                ABORT ("%s: to pipe data in, please use --input (or -i) to specify its type, which can be one of the following: %s23andme generic", 
+                ABORT ("%s: to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", 
                         global_cmd, file_compressible_extensions (true))
             else
                 ABORT ("%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
@@ -322,7 +329,12 @@ static bool file_open_txt_read (File *file)
 
     // open the file, based on the codec
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, READ);
-    
+
+#ifdef _WIN32 
+    ASSERT (!file->redirected || file->codec == CODEC_NONE, 
+            "%s: genozip on Windows supports piping in only plain (uncompressed) data", global_cmd);
+#endif
+
     switch (file->codec) { 
         case CODEC_GZ:   // we test the first few bytes of the file to differentiate between NONE, GZ and BGZIP
         case CODEC_BGZF: 

@@ -217,11 +217,12 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 
 9.0.0
 Functionality:
-- Backwards compatible with v8 - v8-compressed files can be read by v9
-- Framework supports binary source files
-- Native compression of BAM (no longer use samtools for BAM)
-- Framework supports file translations SAM->BAM, BAM->SAM, SAM/BAM->FASTQ
+- Native compression of BAM (no longer using samtools for BAM)
 - Native reading and writing of BGZF data
+- New data type: "generic" for compressing any file beyond our supported genomic formats
+- Framework supports file translations SAM->BAM, BAM->SAM, SAM/BAM->FASTQ, 23andM3->VCF
+- Framework supports binary source files
+- Backwards compatible with v8 - v8-compressed files can be read by v9
 - When decompressing a file that was originally compressed with BGZF (eg BAM, fq.gz...) - the BGZF blocks are reconstructed,
   with an attempt to guess the original compression level
 - File is now always verified - if md5 is not selected, then Adler32 is used
@@ -245,11 +246,14 @@ Functionality:
     --show-dict and show-b250 now accept an optional paramter + removed --show-one-dict and --show-one-b250
     --show-digest show (md5 or Adler32) updates
     --stdout - flag canceled for compression (genozip), available for decompression (genounzip, genocat, genozip -d)
-
+    --input - renamed from --input-type
+    
 Compression improvements:
 - For b250 sections that have all the same entry - store the entry only once. If the entry is word_index=0, drop the section
 - Improvements in codec assignment algorithm, and use it for dictionary and some other section types in addition to b250 and local
 - 30% improvment in dictionary size of disk due to consolidation of fragments and codec assignment.
 - Multi-threaded decompression of dictionaries.
+- Speed improvements by having bsc and zlib use libdeflate's version of adler32 and crc32
+
 Cleanup:
 - removed support for Visual C compiler

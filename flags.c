@@ -23,12 +23,12 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
     // process command line options
     while (1) {
 
-        #define _i  {"input-type",    required_argument, 0, 'i'                    }
+        #define _i  {"input",         required_argument, 0, 'i'                    }
         #define _I  {"stdin-size",    required_argument, 0, 'I'                    }
-        #define _c  {"stdout",        no_argument,       &flag.to_stdout,           1 }
+        #define _c  {"stdout",        no_argument,       &flag.to_stdout,        1 }
         #define _d  {"decompress",    no_argument,       &command, PIZ             }
         #define _f  {"force",         no_argument,       &flag.force,            1 }
-        #define _h  {"help",          no_argument,       &command, HELP            }
+        #define _h  {"help",          optional_argument, 0, 'h'                    }
         #define _l  {"list",          no_argument,       &command, LIST            }
         #define _L1 {"license",       no_argument,       &command, LICENSE         } // US spelling
         #define _L2 {"licence",       no_argument,       &command, LICENSE         } // British spelling
@@ -149,8 +149,11 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
         is_short[c] = (option_index == -1); // true if user provided a short option - eg -c rather than --stdout
 
         switch (c) {
+            case HELP:
+                flag.help = optarg; // fall through
+
             case PIZ : case LIST : case LICENSE : 
-            case VERSION  : case HELP :
+            case VERSION :
                 ASSINP (command<0 || command==c, "%s: can't have both -%c and -%c", global_cmd, command, c); 
                 command=c; 
                 break;

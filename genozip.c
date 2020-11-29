@@ -125,13 +125,22 @@ static void main_sigsegv_handler (int sig)
 
 static void main_print_help (bool explicit)
 {
-    static const char **texts[NUM_EXE_TYPES+1] = {help_genozip, help_genounzip, help_genols, help_genocat, help_genozip_developer}; // same order as ExeType
+    static const char **texts[NUM_EXE_TYPES] = {help_genozip, help_genounzip, help_genols, help_genocat }; // same order as ExeType
     static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat), sizeof(help_genozip_developer)};
     
     if (flag.force) exe_type = NUM_EXE_TYPES; // -h -f shows developer help
 
-    str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
-                    flag.force ? "                          " : "                     ",  "\n", 0);
+    if (flag.help && !strcmp (flag.help, "dev")) 
+        str_print_text (help_genozip_developer, sizeof(help_genozip_developer) / sizeof(char*), 
+                        "                          ",  "\n", 0);
+
+    else if (flag.help && !strcmp (flag.help, "input")) 
+        fprintf (stderr, "Supported file types for --input:\n%s\n", file_compressible_extensions (false));
+    
+    else
+        str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
+                        "                     ",  "\n", 0);
+    
     str_print_text (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
 
 // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
@@ -435,9 +444,12 @@ static void main_genozip_open_z_file_write (char **z_filename)
     DataType z_data_type = txt_file->data_type;
 
     if (! *z_filename) {
+
+        ASSINP (txt_file->name, "%s: please use --output to specify the output filename (with a .genozip extension)", global_cmd);
+
         bool is_url = url_is_url (txt_file->name);
         const char *basename = is_url ? file_basename (txt_file->name, false, "", 0,0) : NULL;
-        const char *local_txt_filename = basename ? basename : txt_file->name;
+        const char *local_txt_filename = basename ? basename : txt_file->name; 
 
         unsigned fn_len = strlen (local_txt_filename);
         *z_filename = (char *)MALLOC (fn_len + 30); // add enough the genozip extension e.g. 23andme.genozip

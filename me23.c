@@ -19,6 +19,21 @@
 #include "version.h"
 
 //-----------------------------------------
+// Header functions for 23andMe files
+//-----------------------------------------
+
+bool me23_header_inspect (BufferP txt_header)
+{
+    buf_alloc_more (evb, txt_header, 1, 0, char, 0, 0); // make room for \0
+    *AFTERENT (char, *txt_header) = 0; // nul-terminate for strstr
+
+    ASSINP (strstr (txt_header->data, "23andMe"), "%s: file %s is missing a 23andMe header and thus not identified as a 23andMe file", 
+            global_cmd, txt_name);
+
+    return true;
+}
+
+//-----------------------------------------
 // Segmentation functions for 23andMe files
 //-----------------------------------------
 

@@ -15,7 +15,7 @@
 <br>
 (also available on <b>Conda</b> and <b>Docker Hub</b>)<br>
 <br>
-<b>genozip</b> is a compressor for genomic files - it compresses FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --input --help').<br>
+<b>genozip</b> is a compressor for genomic files - while it can compress any file, it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties specific to genomic data to compress better. It is also a lot faster than gzip.<br>
 <br>
