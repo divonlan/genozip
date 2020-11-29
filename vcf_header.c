@@ -29,10 +29,24 @@ void vcf_header_initialize (void)
 
 bool vcf_inspect_txt_header (Buffer *txt_header)
 {
-    return vcf_header_set_globals (txt_file->name, txt_header);
+    if (command == ZIP)
+        return vcf_header_set_globals (txt_file->name, txt_header, true);
+    
+    else { 
+        if (!(flag.show_headers && exe_type == EXE_GENOCAT)) 
+            vcf_header_set_globals(z_file->name, &evb->txt_data, false);
+
+        if (flag.drop_genotypes) 
+            vcf_header_trim_header_line (&evb->txt_data); // drop FORMAT and sample names
+
+        if (flag.header_one) 
+            vcf_header_keep_only_last_line (&evb->txt_data);  // drop lines except last (with field and samples name)
+
+        return true;
+    }
 }
 
-bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
+bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bool soft_fail)
 {
     static const char *vcf_header_line_filename = NULL; // file from which the header line was taken
 
@@ -54,24 +68,26 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
         
             // if first vcf file - copy the header to the global
             if (!buf_is_allocated (&vcf_header_line)) {
-                buf_copy (evb, &vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "vcf_header_line", 0);
+                buf_copy (evb, &vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "vcf_header_line");
                 vcf_header_line_filename = filename;
             }
 
             // ZIP only: subsequent files - if we're in bound mode just compare to make sure the header is the same
-            else if (flag_bind && 
+            else if (flag.bind && 
                      (vcf_header->len-i != vcf_header_line.len || memcmp (vcf_header_line.data, &vcf_header->data[i], vcf_header_line.len))) {
 
-                fprintf (stderr, "%s: skipping %s: it has a different VCF header line than %s, see below:\n"
-                                 "========= %s =========\n"
-                                 "%.*s"
-                                 "========= %s ==========\n"
-                                 "%.*s"
-                                 "=======================================\n", 
-                         global_cmd, filename, vcf_header_line_filename,
-                         vcf_header_line_filename, (uint32_t)vcf_header_line.len, vcf_header_line.data,
-                         filename, (uint32_t)vcf_header->len-i, &vcf_header->data[i]);
-                return false;
+                WARN ("%s: skipping %s: it has a different VCF header line than %s, see below:\n"
+                      "========= %s =========\n"
+                      "%.*s"
+                      "========= %s ==========\n"
+                      "%.*s"
+                      "=======================================\n", 
+                      global_cmd, filename, vcf_header_line_filename,
+                      vcf_header_line_filename, (uint32_t)vcf_header_line.len, vcf_header_line.data,
+                      filename, (uint32_t)vcf_header->len-i, &vcf_header->data[i]);
+                
+                if (soft_fail) return false;
+                else           exit_on_error (false);
             }
 
             //count samples
@@ -84,7 +100,7 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
             ASSERT (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
 
             // if --samples is used, update vcf_header and vcf_num_displayed_samples
-            if (flag_samples) samples_digest_vcf_header (vcf_header);
+            if (flag.samples) samples_digest_vcf_header (vcf_header);
 
             return true; 
         }

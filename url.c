@@ -35,9 +35,9 @@ static void url_do_curl (const char *url, bool head,
                          char *error, unsigned *error_len,
                          const char *reason) // optional text in case curl execution fails
 {
-    curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0,
+    curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                           reason ? reason : "To read from a URL",
-                          "curl", url, 
+                          "curl", url,
                           head ? "--head" : NULL,
                           NULL); // not silent - we want to collect errors
 
@@ -83,7 +83,7 @@ static int url_do_curl_head (const char *url,
                              char *stdout_data, unsigned *stdout_len,
                              char *stderr_data, unsigned *stderr_len)
 {
-    curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0,
+    curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                           "To compress files from a URL",
                           "curl", "--head", url, NULL); // not silent - we want to collect errors
 
@@ -167,7 +167,7 @@ const char *url_get_status (const char *url, bool *file_exists, int64_t *file_si
 }
 
 
-// reads a string response from a URL, returns a null-terminated string and the number of characters (excluding \0)
+// reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0)
 uint32_t url_read_string (const char *url, char *data, uint32_t data_size,
                           const char *reason) // optional text in case curl execution fails
 {
@@ -192,7 +192,7 @@ FILE *url_open (StreamP parent_stream, const char *url)
 {
     ASSERT0 (!curl, "Error url_open failed because curl is already running");
 
-    curl = stream_create (parent_stream, global_max_memory_per_vb, 0, 0, 0, 0, 
+    curl = stream_create (parent_stream, global_max_memory_per_vb, 0, 0, 0, 0, 0,
                           "To compress files from a URL", "curl", "--silent", url, NULL);
     return stream_from_stream_stdout (curl);
 }

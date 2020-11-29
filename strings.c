@@ -9,25 +9,44 @@
 #include <sys/ioctl.h>
 #endif
 
-void str_to_lowercase (char *s)
+char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */)
 {
-    // lowercase argv[0] to allow case-insensitive comparison in Windows
-    for (; *s; s++) 
-        if (IS_CLETTER (*s))
-            *s += 'a' - 'A';
+    char *startout = out;
+
+    for (; *in; in++, out++) 
+        *out = (*in >= 'A' && *in <= 'Z') ? *in + 32 : *in;
+    
+    return startout;
 }
 
-char *str_size (uint64_t size, char *str /* out */)
+StrText char_to_printable (char c) 
 {
-    if      (size > (1LL << 50)) sprintf (str, "%3.1lf PB", ((double)size) / (double)(1LL << 50));
-    else if (size > (1LL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1LL << 40));
-    else if (size > (1LL << 30)) sprintf (str, "%3.1lf GB", ((double)size) / (double)(1LL << 30));
-    else if (size > (1LL << 20)) sprintf (str, "%3.1lf MB", ((double)size) / (double)(1LL << 20));
-    else if (size > (1LL << 10)) sprintf (str, "%3.1lf KB", ((double)size) / (double)(1LL << 10));
-    else if (size > 0          ) sprintf (str, "%3d B"    ,     (int)size)                       ;
-    else                         sprintf (str, "-"                       )                       ;
+    switch ((uint8_t)c) {
+        case 32 ... 127 : return (StrText) { .s = {c, 0} }; // printable ASCII
+        case '\t'       : 
+        case '\n'       : 
+        case '\r'       : return (StrText) { .s = {' ', 0} }; // whitespace
+        default         : { // unprintable - output eg \xf 
+            StrText p;
+            sprintf (p.s, "\\x%x", (uint8_t)c);
+            return p;
+        }
+    }
+}
 
-    return str; // for convenience so caller can use in printf directly
+StrText str_size (uint64_t size)
+{
+    StrText s;
+
+    if      (size > (1LL << 50)) sprintf (s.s, "%3.1lf PB", ((double)size) / (double)(1LL << 50));
+    else if (size > (1LL << 40)) sprintf (s.s, "%3.1lf TB", ((double)size) / (double)(1LL << 40));
+    else if (size > (1LL << 30)) sprintf (s.s, "%3.1lf GB", ((double)size) / (double)(1LL << 30));
+    else if (size > (1LL << 20)) sprintf (s.s, "%3.1lf MB", ((double)size) / (double)(1LL << 20));
+    else if (size > (1LL << 10)) sprintf (s.s, "%3.1lf KB", ((double)size) / (double)(1LL << 10));
+    else if (size > 0          ) sprintf (s.s, "%3d B"    ,     (int)size)                       ;
+    else                         sprintf (s.s, "-"                       )                       ;
+
+    return s;
 }
 
 // returns length
@@ -62,6 +81,13 @@ unsigned str_int (int64_t n, char *str /* out */)
     return len;
 }
 
+StrText str_int_s (int64_t n)
+{
+    StrText s;
+    str_int (n, s.s);
+    return s;
+}
+
 // similar to strtoull, except it rejects numbers that are shorter than str_len, or that their reconstruction would be different
 // the the original string
 bool str_get_int (const char *str, unsigned str_len, int64_t *value)
@@ -91,12 +117,14 @@ bool str_get_int (const char *str, unsigned str_len, int64_t *value)
     return true;
 }
 
-char *str_uint_commas (int64_t n, char *str /* out */)
+StrText str_uint_commas (int64_t n)
 {
+    StrText s;
+
     unsigned len = 0, orig_len=0;
 
     if (n==0) {
-        str[0] = '0';
+        s.s[0] = '0';
         len = 1;
     }
     else {
@@ -108,22 +136,25 @@ char *str_uint_commas (int64_t n, char *str /* out */)
             n /= 10;
         }
         // now reverse it
-        for (int i=0; i < len; i++) str[i] = rev[len-i-1];
+        for (int i=0; i < len; i++) s.s[i] = rev[len-i-1];
     }
 
-    str[len] = '\0'; // string terminator
-    return str;
+    s.s[len] = '\0'; // string terminator
+    return s;
 }
 
-#define POINTER_STR_LEN 19
-char *str_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/)
+StrText str_pointer (const void *p)
 {
-#ifdef _MSC_VER
-    sprintf (str, "0x%I64x", (uint64_t)p);
-#else
-    sprintf (str, "0x%"PRIx64, (uint64_t)p);
-#endif
-    return str;
+    StrText s;
+    sprintf (s.s, "0x%"PRIx64, (uint64_t)p);
+    return s;
+}
+
+bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last_c)
+{
+    for (; str_len ; str++, str_len--)
+        if (*str < first_c || *str > last_c) return false;
+    return true;
 }
 
 const char *type_name (unsigned item, 
@@ -148,12 +179,14 @@ void str_print_null_seperated_data (const char *data, unsigned len, bool add_new
             continue; // skip character and following separator
         }
 
-        if      (data[i] >= 32)   fputc (data[i], stderr);
-        else if (data[i] == 0)    fputc (' ', stderr); // snip separator
-        else if (data[i] == '\t') fwrite ("\\t", 1, 2, stderr);
-        else if (data[i] == '\n') fwrite ("\\n", 1, 2, stderr);
-        else if (data[i] == '\r') fwrite ("\\r", 1, 2, stderr);
-        else                      fprintf (stderr, "\\x%x", data[i]);
+        switch (data[i]) {
+            case 32 ... 127 : fputc (data[i], stderr);      break;
+            case 0          : fputc (' ', stderr);          break; // snip separator
+            case '\t'       : fwrite ("\\t", 1, 2, stderr); break;
+            case '\n'       : fwrite ("\\n", 1, 2, stderr); break;
+            case '\r'       : fwrite ("\\r", 1, 2, stderr); break;
+            default         : fprintf (stderr, "\\x%x", data[i]);
+        }
     }
     
     if (add_newline) fputc ('\n', stderr);

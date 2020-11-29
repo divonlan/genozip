@@ -70,8 +70,7 @@ static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip
     // lower pipe size requested to the maximum allowed system size (fcntl will return EPERM if size is larger than limit)
     FILE *pipe_max_size_file = fopen ("/proc/sys/fs/pipe-max-size", "rb");
     if (pipe_max_size_file) {
-        char max_pipe_size_str[30];
-        memset (max_pipe_size_str, 0, 30);
+        char max_pipe_size_str[30] = {};
         size_t bytes = fread (max_pipe_size_str, 1, 29, pipe_max_size_file);
         if (bytes) pipe_size = MIN (pipe_size, atoi (max_pipe_size_str));
         FCLOSE (pipe_max_size_file, "pipe_max_size_file");
@@ -217,7 +216,10 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
 #endif
 
 StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint32_t from_stream_stderr, uint32_t to_stream_stdin,
-                       FILE *redirect_stdout_file, const char *input_url_name, const char *reason,
+                       FILE *redirect_stdout_file, 
+                       const char *input_url_name, // input to exec is coming from a URL
+                       bool input_stdin,           // input to exec is coming from stdin 
+                       const char *reason,
                        const char *exec_name, ...)
 {
     ASSERT0 (!from_stream_stdout || !redirect_stdout_file, "Error in stream_create: cannot redirect child output to both genozip and a file");
@@ -253,23 +255,26 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
 
     ASSERT (!arg, "Error: too many arguments - max is %u", MAX_ARGC-1); // MAX_ARGC-1 real args and last must be NULL
 
-    FILE *url_input_pipe = NULL;
-    if (input_url_name) url_input_pipe = url_open (stream, input_url_name);
+    FILE *input_pipe = NULL;
+    if (input_url_name) 
+        input_pipe = url_open (stream, input_url_name);
+    else if (input_stdin)
+        input_pipe = fdopen (STDIN_FILENO,  "rb");
 
     // execute the child in a separate process
     stream->pid = stream_exec_child (from_stream_stdout ? stream_stdout_to_genozip : NULL, 
                                      from_stream_stderr ? stream_stderr_to_genozip : NULL, 
                                      to_stream_stdin    ? genozip_to_stream_stdin  : NULL, 
                                      redirect_stdout_file,
-                                     url_input_pipe,
+                                     input_pipe,
                                      argc, (char * const *)argv,
                                      reason); 
 
     if (redirect_stdout_file) 
         FCLOSE (redirect_stdout_file, "redirect_stdout_file"); // the child has this file open, we don't need it
 
-    if (url_input_pipe) 
-        FCLOSE (url_input_pipe, "url_input_pipe"); // the child has this pipe open, we don't need it
+    if (input_pipe) 
+        FCLOSE (input_pipe, "input_pipe"); // the child has this pipe open, we don't need it
 
     // store our side of the pipe, and close the side used by the child
     if (from_stream_stdout) {
@@ -293,7 +298,9 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
 void stream_close_pipes (Stream *stream)
 {
     // fclose and fail silently (pipes might be gone already after we killed the counter part process?)
-    if (stream->from_stream_stdout) FCLOSE (stream->from_stream_stdout, "stream->from_stream_stdout"); // BUG here: fclose fails in Windows, core-dumps in Linux
+    
+    // BUG here: fclose fails in Windows, core-dumps in Linux - looks like it already closed - commented out for now.
+    //if (stream->from_stream_stdout) FCLOSE (stream->from_stream_stdout, "stream->from_stream_stdout"); 
     if (stream->from_stream_stderr) FCLOSE (stream->from_stream_stderr, "stream->from_stream_stderr");
     if (stream->to_stream_stdin)    FCLOSE (stream->to_stream_stdin,    "stream->from_stream_stderr");
 }
@@ -354,7 +361,7 @@ FILE *stream_to_stream_stdin    (Stream *stream) { return stream->to_stream_stdi
 
 void stream_abort_if_cannot_run (const char *exec_name, const char *reason)
 {
-    StreamP stream = stream_create (0, 1024, 1024, 0, 0, 0, reason, exec_name, NULL); // will abort if cannot run
+    StreamP stream = stream_create (0, 1024, 1024, 0, 0, 0, 0, reason, exec_name, NULL); // will abort if cannot run
 
 // in Windows, the main process fails to CreateProcess and exits. In Unix, it is the child process that 
 // fails to execv, and exits and code 99. The main process catches it in stream_wait_for_exit, and exits.

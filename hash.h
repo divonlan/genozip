@@ -18,7 +18,7 @@ extern WordIndex hash_global_get_entry (ContextP zf_ctx, const char *snip, unsig
 
 extern WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vb_ctx,
                                          const char *snip, unsigned snip_len, 
-                                         WordIndex new_mtf_i_if_no_old_one,
+                                         WordIndex new_node_i_if_no_old_one,
                                          MtfNodeP *node);
 
 #endif

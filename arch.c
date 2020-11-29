@@ -34,14 +34,7 @@ void arch_initialize(void)
              "Error: Unsupported C type lengths, check compiler options");
     
     // verify endianity is as expected
-    uint16_t test_endianity = 0x0102;
-#if defined __LITTLE_ENDIAN__
-    ASSERT0 (*(uint8_t*)&test_endianity==0x02, "Error: expected CPU to be Little Endian but it is not");
-#elif defined __BIG_ENDIAN__
-    ASSERT0 (*(uint8_t*)&test_endianity==0x01, "Error: expected CPU to be Big Endian but it is not");
-#else
-#error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
-#endif
+    arch_get_endianity();
 
 // Verify that this Windows is 64 bit
 #ifdef _WIN32
@@ -56,6 +49,21 @@ void arch_initialize(void)
     ASSERT0 (sizeof (LocalType)      ==1, "Error: expecting sizeof (LocalType)==1");
 
     io_thread_id = pthread_self();
+}
+
+const char *arch_get_endianity (void)
+{
+    // verify endianity is as expected
+    uint16_t test_endianity = 0x0102;
+#if defined __LITTLE_ENDIAN__
+    ASSERT0 (*(uint8_t*)&test_endianity==0x02, "Error: expected CPU to be Little Endian but it is not");
+    return "little";
+#elif defined __BIG_ENDIAN__
+    ASSERT0 (*(uint8_t*)&test_endianity==0x01, "Error: expected CPU to be Big Endian but it is not");
+    return "big";
+#else
+#error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
+#endif    
 }
 
 bool arch_am_i_io_thread (void)
@@ -155,13 +163,3 @@ const char *arch_get_distribution (void)
     else return "github";
 }
 
-// initialize mutex, if its not initialized already
-void mutex_initialize_do (const char *name, pthread_mutex_t *mutex, bool *initialized)
-{
-    if (*initialized) return;
-
-    unsigned ret = pthread_mutex_init (mutex, NULL);
-    ASSERT (!ret, "Error: pthread_mutex_init failed for %s: %s", name, strerror (ret));
-
-    *initialized = true;
-}

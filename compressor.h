@@ -7,10 +7,7 @@
 #define COMPRESSOR_INCLUDED
 
 #include "genozip.h"
-#include "data_types.h"
 #include "codec.h"
-
-#define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
 
 extern uint32_t comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,
                                SectionHeaderP header, 

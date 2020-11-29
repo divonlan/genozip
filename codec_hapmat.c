@@ -26,12 +26,15 @@ typedef struct {
 
 void codec_hapmat_comp_init (VBlock *vb)
 {
-    vb->ht_matrix_ctx         = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT);
+    vb->ht_matrix_ctx         = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
     vb->ht_matrix_ctx->ltype  = LT_CODEC;
     vb->ht_matrix_ctx->lcodec = CODEC_HAPM;
 
-    vb->hapmat_index_ctx         = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
+    vb->hapmat_index_ctx         = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
     vb->hapmat_index_ctx->ltype  = LT_UINT32;
+
+    // in --stats, consolidate stats into GT
+    vb->ht_matrix_ctx->st_did_i = vb->hapmat_index_ctx->st_did_i = ctx_get_ctx (vb, dict_id_FORMAT_GT)->did_i;
 }
 
 static int sort_by_alt_allele_comparator(const void *p, const void *q)  
@@ -52,8 +55,7 @@ static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlock *vb)
 {
     START_TIMER; 
 
-    buf_alloc (vb, &vb->hapmat_helper_index_buf, vb->num_haplotypes_per_line * sizeof(HaploTypeSortHelperIndex), 0,
-               "hapmat_helper_index_buf", vb->vblock_i);
+    buf_alloc (vb, &vb->hapmat_helper_index_buf, vb->num_haplotypes_per_line * sizeof(HaploTypeSortHelperIndex), 0, "hapmat_helper_index_buf");
     buf_zero (&vb->hapmat_helper_index_buf);
     ARRAY (HaploTypeSortHelperIndex, helper_index, vb->hapmat_helper_index_buf);
 
@@ -78,7 +80,6 @@ static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlock *vb)
 
 static void codec_hapmat_compress_one_array (VBlockP vb, uint32_t ht_i, 
                                              char **line_data_1, uint32_t *line_data_len_1,
-                                             char **line_data_2, uint32_t *line_data_len_2,
                                              uint32_t unused_maximum_len)
 {
     uint32_t orig_col_i = ENT (HaploTypeSortHelperIndex, vb->hapmat_helper_index_buf, ht_i)->index_in_original_line; 
@@ -93,10 +94,7 @@ static void codec_hapmat_compress_one_array (VBlockP vb, uint32_t ht_i,
     *line_data_1 = (char *)column;
     *line_data_len_1 = vb->hapmat_one_array.len;
 
-    *line_data_2 = NULL;
-    *line_data_len_2 = 0;
-
-    if (flag_show_alleles)
+    if (flag.show_alleles)
         printf ("Col %-2u : %.*s\n", orig_col_i, (int)vb->hapmat_one_array.len, column);
 }
 
@@ -112,7 +110,7 @@ static void codec_hapmap_compress_build_index (VBlock *vb, HaploTypeSortHelperIn
     // create a permutation index for the vblock
     // we populate the hapmat_hapmat_index_ctx local, and it will be written after us, as the context is create after the hapmat_ctx 
     buf_alloc (vb, &vb->hapmat_index_ctx->local, vb->num_haplotypes_per_line * sizeof(uint32_t), 
-               0, "context->local", vb->hapmat_index_ctx->did_i);
+               0, "context->local");
     vb->hapmat_index_ctx->local.len = vb->num_haplotypes_per_line;
     
     ARRAY (uint32_t, hp_index, vb->hapmat_index_ctx->local);
@@ -141,9 +139,9 @@ bool codec_hapmat_compress (VBlock *vb,
     qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
 
     vb->hapmat_one_array.len = vb->lines.len;
-    buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array", 0);
+    buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array");
     
-    if (flag_show_alleles) 
+    if (flag.show_alleles) 
         printf ("\nAfter transpose and sorting:\n");
 
     // compress the matrix one column at a time, by the order of helper index
@@ -164,6 +162,12 @@ bool codec_hapmat_compress (VBlock *vb,
 
     if (!success) return false; // soft fail (if it was hard fail, compress() already failed)
 
+    // since codecs were already assigned to contexts before compression of all contexts begun, but
+    // we just created this context now, we assign a codec manually
+    // BUG: I can't this to work... reconstruction failed. no idea why. bug 215.
+    //codec_assign_best_codec (vb, vb->hapmat_index_ctx, NULL, SEC_LOCAL, vb->num_haplotypes_per_line * sizeof(uint32_t));
+    vb->hapmat_index_ctx->lcodec = CODEC_BSC; // in the mean time, until bug 215 is fixed
+
     COPY_TIMER (compressor_hapmat);
 
     return true;
@@ -181,8 +185,8 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb)
     uint32_t num_haplotypes_per_line = vb->num_haplotypes_per_line = (uint32_t)(vb->ht_matrix_ctx->local.len / vb->lines.len);
 
     vb->hapmat_one_array.len = num_haplotypes_per_line + 7; // +7 because depermuting_loop works on a word (32/64 bit) boundary
-    buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array", vb->vblock_i);
-    buf_alloc (vb, &vb->hapmat_columns_data, sizeof (char *) * vb->hapmat_one_array.len, 1, "hapmat_columns_data", 0); // realloc for exact size (+15 is padding for 64b operations)
+    buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array");
+    buf_alloc (vb, &vb->hapmat_columns_data, sizeof (char *) * vb->hapmat_one_array.len, 1, "hapmat_columns_data"); // realloc for exact size (+15 is padding for 64b operations)
 
     // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
     // note: haplotype columns are permuted only within their own sample block
@@ -193,7 +197,7 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb)
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
     // note: txt_file->max_lines_per_vb will be zero if genozip file was created by redirecting output
-    buf_alloc (vb, &vb->hapmat_column_of_zeros, MAX (txt_file->max_lines_per_vb, vb->lines.len), 1, "hapmat_column_of_zeros", 0);
+    buf_alloc (vb, &vb->hapmat_column_of_zeros, MAX (txt_file->max_lines_per_vb, vb->lines.len), 1, "hapmat_column_of_zeros");
     buf_zero (&vb->hapmat_column_of_zeros);
 
     for (uint32_t ht_i = 0; ht_i < num_haplotypes_per_line; ht_i++) 
@@ -208,7 +212,7 @@ static inline void codec_hapmat_piz_get_one_line (VBlock *vb)
 {
     START_TIMER;
 
-    if (flag_samples) buf_zero (&vb->hapmat_one_array); // if we're not filling in all samples, initialize to 0;
+    if (flag.samples) buf_zero (&vb->hapmat_one_array); // if we're not filling in all samples, initialize to 0;
 
     ARRAY (const char *, hapmat_columns_data, vb->hapmat_columns_data); 
     uint32_t ht_i_after = vb->num_haplotypes_per_line; // automatic variable - faster
@@ -241,7 +245,7 @@ static inline void codec_hapmat_piz_get_one_line (VBlock *vb)
 #endif
     }
 
-    if (flag_show_alleles)
+    if (flag.show_alleles)
         printf ("Line %-2u : %.*s\n", vb_line_i, (int)vb->hapmat_one_array.len, vb->hapmat_one_array.data);
 
     COPY_TIMER (codec_hapmat_piz_get_one_line);
@@ -269,15 +273,20 @@ void codec_hapmat_reconstruct (VBlock *vb, Codec codec, Context *ctx)
     while (ht == '*' && vb->hapmat_one_array.len < vb->num_haplotypes_per_line)
         ht = *ENT(uint8_t, vb->hapmat_one_array, vb->hapmat_one_array.len++);
 
-    if (ht == '.' || IS_DIGIT(ht)) 
-        RECONSTRUCT1 (ht);
-    
-    else if (ht == '*') 
-        ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u)", 
-               vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len)
-    
-    else { // allele 10 to 99 (ascii 58 to 147)
-        RECONSTRUCT_INT (ht - '0');
+    switch (ht) {
+        case '.': case '0' ... '9':
+            RECONSTRUCT1 (ht); break;
+
+        case 58 ... 147: { // allele 10 to 99 (ascii 58 to 147)
+            RECONSTRUCT_INT (ht - '0'); break;
+        }
+        case '*':
+            ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: unexpected end of hapmat_one_array (len=%u) data in %s (ctx->local.len=%u)", 
+                vb->line_i, vb->vblock_i, (unsigned)vb->hapmat_one_array.len, ctx->name, (uint32_t)ctx->local.len);
+
+        default: 
+            ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: Invalid character found in decompressed HT array: '%c' (ASCII %u)", 
+                   vb->line_i, vb->vblock_i, ht, ht);
     }
 }
 

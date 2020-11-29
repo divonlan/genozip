@@ -9,7 +9,7 @@
 #include <pthread.h>
 #include "genozip.h"
 #include "buffer.h"
-#include "md5.h"
+#include "digest.h"
 #include "bit_array.h"
 
 // reference sequences - one per range of 1MB. ranges (chrom, pos) are mapped here with a hash function. In the rare case two unrelated ranges
@@ -61,7 +61,7 @@ extern void ref_load_external_reference (bool display, bool is_last_file);
 extern void ref_load_stored_reference (void);
 extern bool ref_is_reference_loaded (void);
 extern void ref_set_reference (const char *filename);
-extern void ref_set_ref_file_info (Md5Hash md5, const char *fasta_name);
+extern void ref_set_ref_file_info (Digest md5, const char *fasta_name);
 extern void ref_unload_reference (bool force_clean_all);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed);
@@ -70,24 +70,28 @@ extern Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_le
 extern void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos);
 extern void ref_print_is_set (const Range *r, PosType around_pos);
 extern const char *ref_get_cram_ref (void);
-extern void ref_output_vb (VBlockP vb);
 extern void ref_make_ref_init (void);
 extern void ref_generate_reverse_complement_genome (void);
 
 // contigs stuff
 extern void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs);
-extern void ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos);
+extern uint32_t ref_num_loaded_contigs (void);
+extern PosType ref_contigs_get_contig_length (const char *chrom_name, unsigned chrom_name_len);
+extern WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, WordIndex header_chrom);
 extern void ref_contigs_sort_chroms (void);
 extern void ref_contigs_load_contigs (void);
+
+typedef void (*RefContigsIteratorCallback)(const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param);
+extern void ref_contigs_iterate (RefContigsIteratorCallback callback, void *callback_param);
 
 // alt chroms stuff
 extern void ref_alt_chroms_load (void);
 extern void ref_alt_chroms_compress (void);
 
 #define ref_assert_nucleotide_available(range,pos) \
-    ASSERT (/* piz w stored ref */ (flag_reference == REF_STORED && ref_is_nucleotide_set ((range), pos2range_idx(pos))) ||  \
-            /* zip w ext ref    */ ((flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && ((pos) >= (range)->first_pos && (pos) <= (range)->last_pos)) || \
-            /* zip internal ref */ flag_reference == REF_INTERNAL, \
+    ASSERT (/* piz w stored ref */ (flag.reference == REF_STORED && ref_is_nucleotide_set ((range), pos2range_idx(pos))) ||  \
+            /* zip w ext ref    */ ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && ((pos) >= (range)->first_pos && (pos) <= (range)->last_pos)) || \
+            /* zip internal ref */ flag.reference == REF_INTERNAL, \
         "Error in %s:%u: reference is not set: chrom=%.*s pos=%"PRId64, __FUNCTION__, __LINE__, (range)->chrom_name_len, (range)->chrom_name, (pos))
 
 // note that the following work on idx and not pos! (idx is the index within the range)
@@ -104,9 +108,10 @@ extern void ref_print_bases_region (FILE *file, ConstBitArrayP bitarr, ConstBitA
 
 // globals
 extern const char *ref_filename;
-extern Md5Hash ref_md5;
+extern Digest ref_md5;
 extern Buffer ref_stored_ra;
-
+extern Buffer loaded_contigs, header_contigs, header_contigs_dict;
+extern bool has_header_contigs;
 extern Range genome, genome_rev;
 extern PosType genome_size;
 

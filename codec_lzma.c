@@ -63,15 +63,13 @@ static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_
 
         instream->callback (instream->vb, instream->line_i, 
                             &instream->next_in_1, &instream->avail_in_1,
-                            &instream->next_in_2, &instream->avail_in_2,
                             instream->avail_in);
 
         instream->line_i++;
     }
 
-    ASSERT (instream->avail_in_1 + instream->avail_in_2 <= instream->avail_in, 
-            "Expecting avail_in_1=%u + avail_in_2=%u <= avail_in=%u but avail_in_1+avail_in_2=%u",
-            instream->avail_in_1, instream->avail_in_2, instream->avail_in, instream->avail_in_1+instream->avail_in_2);
+    ASSERT (instream->avail_in_1 <= instream->avail_in, "Expecting avail_in_1=%u <= avail_in=%u",
+            instream->avail_in_1, instream->avail_in);
             
     uint32_t bytes_served_1 = MIN (instream->avail_in_1, *size);
     if (bytes_served_1) {
@@ -80,15 +78,8 @@ static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_
         instream->avail_in_1 -= bytes_served_1;
     }
 
-    uint32_t bytes_served_2 = MIN (instream->avail_in_2, *size - bytes_served_1);
-    if (bytes_served_2) {    
-        memcpy (buf + bytes_served_1, instream->next_in_2, bytes_served_2);
-        instream->next_in_2  += bytes_served_2;
-        instream->avail_in_2 -= bytes_served_2;
-    }
-
-    *size = bytes_served_1 + bytes_served_2;
-    instream->avail_in -= bytes_served_1 + bytes_served_2;
+    *size = bytes_served_1;
+    instream->avail_in -= bytes_served_1;
 
     return SZ_OK;
 }
@@ -108,11 +99,11 @@ static size_t codec_lzma_data_out_callback (const ISeqOutStream *p, const void *
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
-                         const char *uncompressed,    // option 1 - compress contiguous data
-                         uint32_t *uncompressed_len,
-                         LocalGetLineCB callback,     // option 2 - compress data one line at a time
-                         char *compressed, uint32_t *compressed_len /* in/out */, 
-                         bool soft_fail)
+                          const char *uncompressed,    // option 1 - compress contiguous data
+                          uint32_t *uncompressed_len,
+                          LocalGetLineCB callback,     // option 2 - compress data one line at a time
+                          char *compressed, uint32_t *compressed_len /* in/out */, 
+                          bool soft_fail)
 {
     START_TIMER;
     ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};

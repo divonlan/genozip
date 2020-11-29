@@ -146,8 +146,8 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
     // in case of --fast, we check only 1/5 of the bases, and we are content with a match (not searching any further) if it 
     // has at most 10 SNPs. On our test file, this reduced the number of calls to aligner_get_match_len by about 4X, 
     // at the cost of the compressed file being about 11% larger
-    uint32_t density = (flag_fast ? 5 : 1);
-    uint32_t max_snps_for_perfection = (flag_fast ? 10 : 2);
+    uint32_t density = (flag.fast ? 5 : 1);
+    uint32_t max_snps_for_perfection = (flag.fast ? 10 : 2);
 
     // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
     for (uint32_t i=0; i < seq_len; i += density) {    
@@ -240,20 +240,20 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 
     // allocate bitmaps - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it + param must be 0
     buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-               buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
+               buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local"); 
 
     buf_alloc (vb, &strand_ctx->local, MAX (nonref_ctx->local.len + sizeof (int64_t), roundup_bits2bytes64 (vb->lines.len)), CTX_GROWTH, 
-               buf_is_allocated (&strand_ctx->local) ? NULL : "context->local", 0); 
+               buf_is_allocated (&strand_ctx->local) ? NULL : "context->local"); 
 
-    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
-    buf_alloc (vb, &gpos_ctx->local,   MAX (nonref_ctx->local.len + sizeof (uint32_t), vb->lines.len * sizeof (uint32_t)), CTX_GROWTH, "context->local", gpos_ctx->did_i); 
+    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local"); 
+    buf_alloc (vb, &gpos_ctx->local,   MAX (nonref_ctx->local.len + sizeof (uint32_t), vb->lines.len * sizeof (uint32_t)), CTX_GROWTH, "context->local"); 
 
     bool is_forward, is_all_ref;
     PosType gpos = aligner_best_match ((VBlockP)vb, seq, seq_len, &is_forward, &is_all_ref);
 
     // case: we're the 2nd of the pair - the bit represents whether this strand is equal to the pair's strand (expecting
     // it to be 1 in most cases - making the bitmap highly compressible)
-    if (gpos_ctx->inst & CTX_INST_PAIR_LOCAL) {
+    if (gpos_ctx->pair_local) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
         buf_add_bit (&strand_ctx->local, is_forward == pair_is_forward);
@@ -268,7 +268,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     
     // case: we're the 2nd of the pair - store a delta if its small enough, or a lookup from local if not
     bool store_local = true;
-    if (gpos_ctx->inst & CTX_INST_PAIR_LOCAL) {
+    if (gpos_ctx->pair_local) {
 
         ASSERT (buf_is_allocated (&gpos_ctx->pair), "Error in aligner_seg_seq vb_i=%u: expecting gpos_ctx->pair to be allocated", vb->vblock_i);
         
@@ -301,14 +301,14 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     }
 
     // lock region of reference to protect is_set
-    RefLock lock = (flag_reference == REF_EXT_STORE) ? ref_lock (gpos, seq_len) : REFLOCK_NONE;
+    RefLock lock = (flag.reference == REF_EXT_STORE) ? ref_lock (gpos, seq_len) : REFLOCK_NONE;
 
     // shortcut if we have a full reference match
     if (is_all_ref) {
         bit_array_set_region (bitmap, bitmap_ctx->next_local, seq_len); // all bases match the reference
         bitmap_ctx->next_local += seq_len;
         
-        if (flag_reference == REF_EXT_STORE) 
+        if (flag.reference == REF_EXT_STORE) 
             bit_array_set_region (&genome.is_set, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
 
         goto done;
@@ -331,7 +331,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
             if (seq_base == ref_base) {
                 
                 // TO DO: replace this with bit_array_or_with (dst, start, len, src, start) (dst=is_set, src=bitmap) (bug 174)
-                if (flag_reference == REF_EXT_STORE) 
+                if (flag.reference == REF_EXT_STORE) 
                     bit_array_set (&genome.is_set, ref_i); // we will need this ref to reconstruct
 
                 use_reference = true;
@@ -378,7 +378,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
             is_forward = NEXTLOCALBIT (strand_ctx) ? is_forward_pair_1 : !is_forward_pair_1;
 
             // gpos: reconstruct, then cancel the reconstruction and just use last_value
-            int32_t reconstructed_len = piz_reconstruct_from_ctx (vb, gpos_ctx->did_i, 0);
+            int32_t reconstructed_len = piz_reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, true);
             vb->txt_data.len -= reconstructed_len; // roll back reconstruction
             gpos = gpos_ctx->last_value.i;
         }

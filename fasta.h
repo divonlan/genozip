@@ -8,6 +8,9 @@
 
 #include "genozip.h"
 
+// Txtfile stuff
+extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
+
 // ZIP Stuff
 COMPRESSOR_CALLBACK(fasta_zip_seq)
 extern void ref_make_create_range (VBlockP vb);
@@ -19,7 +22,7 @@ extern const char *fasta_seg_txt_line();
 
 // PIZ Stuff
 extern void fasta_piz_initialize (void);
-extern bool fasta_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
+extern bool fasta_piz_read_one_vb (VBlockP vb, ConstSectionListEntryP sl);
 extern void fasta_piz_reconstruct_vb(); // no parameter - implicit casting of VBlockP
 extern bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 

@@ -34,8 +34,8 @@
 #define roundup_bits2words64(bits) (((bits)+63)/64)
 #define roundup_bits2bytes64(bits) (roundup_bits2words64(bits)*8)
 
-// Round a number up to the nearest number that is a power of two
-#define roundup2pow(x) (1UL << (64 - leading_zeros(x)))
+// Round a number up to the nearest number that is a power of two (fixed by Divon)
+#define roundup2pow(x) (__builtin_popcountll(x)==1 ? (x) : (1UL << (64 - leading_zeros(x))))
 
 #define rot32(x,r) (((x)<<(r)) | ((x)>>(32-(r))))
 #define rot64(x,r) (((x)<<(r)) | ((x)>>(64-(r))))
@@ -174,13 +174,13 @@ typedef struct BitArray
 // Basics: Constructor, destructor, get length, resize
 //
 
-// Allocate using existing struct
 static inline void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) // divon
 {
   if (bitarr->num_of_bits % 64)
     bitarr->words[bitarr->num_of_words-1] &= bitmask64 (bitarr->num_of_bits % 64); 
 }
 
+// Allocate using existing struct
 extern BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits);
 extern void bit_array_dealloc(BitArray* bitarr);
 
@@ -383,7 +383,7 @@ extern char* bit_array_to_str_rev(const BitArray* bitarr, char* str);
 
 // Get a string representations for a given region, using given on/off
 // characters.
-// Note: does not null-terminate
+// Note: does not nul-terminate
 extern void bit_array_to_substr(const BitArray* bitarr,
                          bit_index_t start, bit_index_t length,
                          char* str, char on, char off, char left_to_right);

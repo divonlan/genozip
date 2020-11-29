@@ -11,6 +11,8 @@
 #include "genozip.h"
 #include "data_types.h"
 
+#define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
+
 typedef bool CodecCompress (VBlockP vb, 
                             SectionHeader *header,       // in / out
                             const char *uncompressed,   // option 1 - compress contiguous data
@@ -30,9 +32,10 @@ typedef uint32_t CodecEstSizeFunc (Codec codec, uint64_t uncompressed_len);
 typedef void CodecReconstruct (VBlockP vb, Codec codec, ContextP ctx);
 
 typedef struct {
-    bool             is_simple; // a simple codec is one that is compressed into a single section in one step
+    bool             is_simple;  // a simple codec is one that is compressed into a single section in one step
     const char       *name;
-    const char       *ext; // extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
+    const char       *ext;       // extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
+    const char       *viewer;    // command line to view a file of this type
     CodecCompress    *compress;
     CodecUncompress  *uncompress;
     CodecReconstruct *reconstruct;
@@ -40,38 +43,41 @@ typedef struct {
     Codec            sub_codec;  // for complex codecs that invokes another codec
 } CodecArgs;
 
+#define NA0 "N/A"
 #define NA1 codec_compress_error
 #define NA2 codec_uncompress_error
 #define NA3 codec_reconstruct_error
 #define NA4 codec_est_size_default
 #define USE_SUBCODEC NULL
+
 #define CODEC_ARGS { /* aligned with Codec defined in genozip.h */ \
-    { 1, "N/A",  "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 1, "NONE", "+",      codec_none_compress,   codec_none_uncompress, NA3,                    codec_none_est_size }, \
-    { 1, "GZ",   "+.gz",   NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 1, "BZ2",  "+.bz",   codec_bz2_compress,    codec_bz2_uncompress,  NA3,                    NA4                 }, \
-    { 1, "LZMA", "+",      codec_lzma_compress,   codec_lzma_uncompress, NA3,                    NA4                 }, \
-    { 1, "BSC",  "+",      codec_bsc_compress,    codec_bsc_uncompress,  NA3,                    codec_bsc_est_size  }, \
-    { 0, "FFU6", "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "FFU7", "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "FFU8", "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "FFU9", "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "ACGT", "+",      codec_acgt_compress,   codec_acgt_uncompress, NA3,                    USE_SUBCODEC,       CODEC_LZMA /* NONREF   */ }, \
-    { 0, "XCGT", "+",      USE_SUBCODEC,          codec_xcgt_uncompress, NA3,                    USE_SUBCODEC,       CODEC_BZ2  /* NONREF_X */ }, \
-    { 0, "HAPM", "+",      codec_hapmat_compress, USE_SUBCODEC,          codec_hapmat_reconstruct, USE_SUBCODEC,     CODEC_BZ2  /* GT_HT    */ }, \
-    { 0, "DOMQ", "+",      codec_domq_compress,   USE_SUBCODEC,          codec_domq_reconstruct, USE_SUBCODEC,       CODEC_BSC  /* QUAL     */ }, \
-    { 0, "GTSH", "+",      codec_gtshark_compress, codec_gtshark_uncompress, codec_gtshark_reconstruct, NA4,         }, \
-    { 0, "FF15", "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "FF16", "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "FF17", "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "FF18", "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "FF19", "+",      NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "BGZ",  "+.bgz",  NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "XZ",   "+.xz",   NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "BCF",  "-.bcf",  NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "BAM",  "-.bam",  NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "CRAM", "-.cram", NA1,                   NA2,                   NA3,                    NA4                 }, \
-    { 0, "ZIP",  "+.zip",  NA1,                   NA2,                   NA3,                    NA4                 }, \
+/*  simp name    ext       viewer         compress               uncompress             reconstruct             est_size            sub_codec */ \
+    { 1, "N/A",  "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 1, "NONE", "+",      "cat",         codec_none_compress,   codec_none_uncompress, NA3,                    codec_none_est_size }, \
+    { 1, "GZ",   "+.gz",   "gunzip -c",   NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 1, "BZ2",  "+.bz2",  "bzip2 -d -c", codec_bz2_compress,    codec_bz2_uncompress,  NA3,                    NA4                 }, \
+    { 1, "LZMA", "+",      NA0,           codec_lzma_compress,   codec_lzma_uncompress, NA3,                    NA4                 }, \
+    { 1, "BSC",  "+",      NA0,           codec_bsc_compress,    codec_bsc_uncompress,  NA3,                    codec_bsc_est_size  }, \
+    { 0, "FFU6", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "FFU7", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "FFU8", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "FFU9", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "ACGT", "+",      NA0,           codec_acgt_compress,   codec_acgt_uncompress, NA3,                    USE_SUBCODEC,       CODEC_LZMA /* NONREF   */ }, \
+    { 0, "XCGT", "+",      NA0,           USE_SUBCODEC,          codec_xcgt_uncompress, NA3,                    USE_SUBCODEC,       CODEC_BZ2  /* NONREF_X */ }, \
+    { 0, "HAPM", "+",      NA0,           codec_hapmat_compress, USE_SUBCODEC,          codec_hapmat_reconstruct, USE_SUBCODEC,     CODEC_BZ2  /* GT_HT    */ }, \
+    { 0, "DOMQ", "+",      NA0,           codec_domq_compress,   USE_SUBCODEC,          codec_domq_reconstruct, USE_SUBCODEC,       CODEC_BSC  /* QUAL     */ }, \
+    { 0, "GTSH", "+",      NA0,           codec_gtshark_compress, codec_gtshark_uncompress, codec_gtshark_reconstruct, NA4,         }, \
+    { 0, "FF15", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "FF16", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "FF17", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "FF18", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "FF19", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "BGZF", "+.gz",   "gunzip -c",   NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "XZ",   "+.xz",   "xz -d -c",    NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "BCF",  "-.bcf",  "bcftools view", NA1,                 NA2,                   NA3,                    NA4                 }, \
+    { 0, "BAM",  "-.bam",  "samtools view -h --threads 2", NA1,  NA2,                   NA3,                    NA4                 }, \
+    { 0, "CRAM", "-.cram", "samtools view -h --threads 2", NA1,  NA2,                   NA3,                    NA4                 }, \
+    { 0, "ZIP",  "+.zip",  "unzip -p",    NA1,                   NA2,                   NA3,                    NA4                 }, \
 }
 
 extern CodecArgs codec_args[NUM_CODECS];
@@ -92,6 +98,10 @@ extern const char *codec_name (Codec codec);
 extern void *codec_alloc (VBlockP vb, int size, double grow_at_least_factor);
 extern void codec_free (VBlockP vb, void *addr);
 extern void codec_free_all (VBlockP vb);
+extern void codec_show_time (VBlockP vb, const char *name, const char *subname, Codec codec);
+
+#define CODEC_ASSIGN_SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
+extern Codec codec_assign_best_codec (VBlockP vb, ContextP ctx, BufferP non_ctx_data, SectionType st);
 
 // ACGT stuff
 extern const uint8_t acgt_encode[256];
@@ -112,7 +122,7 @@ extern void codec_hapmat_piz_calculate_columns (VBlockP vb);
 extern void codec_gtshark_comp_init (VBlockP vb);
 
 // DOMQ stuff
-extern bool codec_domq_comp_init (VBlockP vb, LocalGetLineCB callback);
+extern bool codec_domq_comp_init (VBlockP vb, DidIType qual_did_i, LocalGetLineCB callback);
 
 // BZ2 stuff
 extern uint64_t BZ2_consumed (void *bz_file); // a hacky addition to bzip2

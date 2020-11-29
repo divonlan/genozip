@@ -26,19 +26,23 @@ Base250 base250_encode (WordIndex n) // number to encode
     return result;
 }
 
-WordIndex base250_decode (const uint8_t **str)
+WordIndex base250_decode (const uint8_t **str, bool advance)
 {
+    #define ADVANCE(n) if (advance) *str += n
+
     ASSERT0 (*str, "Error in base250_decode: *str is NULL");
 
     switch ((*str)[0]) {
-        case BASE250_MOST_FREQ0: (*str)++; return 0;
-        case BASE250_MOST_FREQ1: (*str)++; return 1;
-        case BASE250_MOST_FREQ2: (*str)++; return 2;
-        case BASE250_ONE_UP:     (*str)++; return WORD_INDEX_ONE_UP;
-        case BASE250_EMPTY_SF:   (*str)++; return WORD_INDEX_EMPTY_SF;
-        case BASE250_MISSING_SF: (*str)++; return WORD_INDEX_MISSING_SF;
-        default : 
-            *str += 4;
-            return (*str)[-4] * 16777216 + (*str)[-3] * 65536 + (*str)[-2] * 256 + (*str)[-1]; // careful not to use BGEN32 as string might not be aligned to word boundary
+        case BASE250_MOST_FREQ0: ADVANCE(1); return 0;
+        case BASE250_MOST_FREQ1: ADVANCE(1); return 1;
+        case BASE250_MOST_FREQ2: ADVANCE(1); return 2;
+        case BASE250_ONE_UP:     ADVANCE(1); return WORD_INDEX_ONE_UP;
+        case BASE250_EMPTY_SF:   ADVANCE(1); return WORD_INDEX_EMPTY_SF;
+        case BASE250_MISSING_SF: ADVANCE(1); return WORD_INDEX_MISSING_SF;
+        default : {
+            WordIndex value = (*str)[0] * 16777216 + (*str)[1] * 65536 + (*str)[2] * 256 + (*str)[3]; // careful not to use BGEN32 as string might not be aligned to word boundary
+            ADVANCE(4);
+            return value;
+        }
     }
 }

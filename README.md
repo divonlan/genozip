@@ -15,7 +15,7 @@
 <br>
 (also available on <b>Conda</b> and <b>Docker Hub</b>)<br>
 <br>
-<b>genozip</b> is a compressor for genomic files - it compresses FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --input --help').<br>
+<b>genozip</b> is a compressor for genomic files - while it can compress any file, it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties specific to genomic data to compress better. It is also a lot faster than gzip.<br>
 <br>
@@ -49,7 +49,7 @@ Notes:<br>
 1. genozip can compress with or without a reference - using a reference often achieves much better compression<br>
 2. SAM/BAM - compression of aligned or unaligned SAM/BAM files is possible. Sorting makes no difference<br>
 3. Long reads - compression of long reads (Pac Bio / Nanopore) achieves signficantly better results when compressing an aligned BAM vs an unaligned BAM or FASTQ<br>
-4. Compression of BAM and CRAM (but not SAM) files requires samtools to be installed<br>
+4. Compression of CRAM (but not SAM or BAM) files requires samtools to be installed<br>
 5. Use --REFERENCE instead of --reference to store the relevant parts of the reference file as part of the compressed file itself, which will then allow decompression with genounzip without need of the reference file.<br>
 <br>
 <b><i>Compressing and uncompressing paired-end reads with --pair - better than compressing FASTQs individually</i></b><br>

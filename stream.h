@@ -16,7 +16,7 @@ typedef struct stream_ *StreamP;
 #define DEFAULT_PIPE_SIZE 65536
 #define SKIP_ARG ((const char *)-1)
 extern StreamP stream_create (StreamP parent_stream, uint32_t from_stream, uint32_t from_stream_stderr, uint32_t to_stream, 
-                              FILE *redirect_stdout_file, const char *input_url_name, const char *reason,
+                              FILE *redirect_stdout_file, const char *input_url_name, bool input_stdin, const char *reason,
                               const char *exec_name, ...);
 
 extern void stream_close_pipes (StreamP stream);

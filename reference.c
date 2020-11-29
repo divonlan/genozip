@@ -10,7 +10,6 @@
 #include "strings.h"
 #include "dict_id.h"
 #include "dispatcher.h"
-#include "zip.h"
 #include "zfile.h"
 #include "endianness.h"
 #include "random_access.h"
@@ -56,14 +55,13 @@ typedef struct {
     PosType first_bit, len;
 } RegionToSet;
 
-static SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-static uint32_t ref_range_cursor = 0;
+static const SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
 static char *ref_fasta_name = NULL;
 
 // globals
 const char *ref_filename = NULL; // filename of external reference file
-Md5Hash ref_md5 = MD5HASH_NONE;
+Digest ref_md5 = DIGEST_NONE;
 
 #define CHROM_GENOME 0
 #define CHROM_NAME_GENOME "GENOME"
@@ -71,14 +69,14 @@ Md5Hash ref_md5 = MD5HASH_NONE;
 #define CHROM_GENOME_REV 1
 #define CHROM_NAME_GENOME_REV "GENOME_REV"
 
-#define ref_is_range_used(r) ((r)->ref.num_of_bits && ((r)->is_set.num_of_bits || flag_make_reference))
+#define ref_is_range_used(r) ((r)->ref.num_of_bits && ((r)->is_set.num_of_bits || flag.make_reference))
 
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void ref_unload_reference (bool force_clean_all)
 {
     // in case of REF_EXTERNAL/REF_EXT_STORE, we keep the reference for other files on the command line
     // note: in PIZ we never cleanup external references as they can never change (the user can only specify one --reference)
-    if ((flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && !force_clean_all) {  
+    if ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && !force_clean_all) {  
         
         // zip sets 1 to nucleotides used. we clear it for the next file.
         if (primary_command == ZIP)
@@ -87,7 +85,7 @@ void ref_unload_reference (bool force_clean_all)
         // REF_EXT_STORE compacts ranges. We recover them from the copy
         if (buf_is_allocated (&genome_ref_copy)) { // won't be allocated if we are compressing only one file or if not REF_EXT_STORE
             memcpy (genome.ref.words, genome_ref_copy.data, genome.ref.num_of_words * sizeof (word_t));
-            buf_copy (evb, &ranges, &ranges_copy, sizeof (Range), 0, 0, "ranges", 0);
+            buf_copy (evb, &ranges, &ranges_copy, sizeof (Range), 0, 0, "ranges");
         }
     }
 
@@ -228,11 +226,8 @@ static Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
     ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "Error in ref_get_range_by_chrom: chrom=%d out of range - ctx->word_list.len=%u",
             chrom, (uint32_t)ctx->word_list.len);
 
-    // if chrom is not in reference, get the reference chrom to which it is mapped (eg. 'chr22' -> '22')
-    //chrom = buf_is_allocated (&z_file->alt_chrom_map) ? *ENT (WordIndex, z_file->alt_chrom_map, chrom) : chrom; <--- need reverse lookup - file chrom by alt chrom
-
     uint32_t chrom_name_len;
-    mtf_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom, chrom_name, &chrom_name_len);
+    ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom, chrom_name, &chrom_name_len);
     Range *r = ENT (Range, ranges, chrom); // in PIZ, we have one range per chrom
 
     return r;
@@ -249,16 +244,16 @@ static void ref_print_bases (FILE *file, const BitArray *bitarr,
 
     if (is_forward)
         for (bit_index_t i=start_base*2; i < (start_base + num_of_bases)*2; i+=2) {
-            if (!flag_sequential && (i-start_base*2) % (BASES_PER_LINE*2) == 0)
+            if (!flag.sequential && (i-start_base*2) % (BASES_PER_LINE*2) == 0)
                 fprintf (stderr, "%8"PRIu64": ", i/2);
             fputc (fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)], file);
-            if (!flag_sequential && ((i-start_base*2) % (BASES_PER_LINE*2) == 2*(BASES_PER_LINE-1))) fputc ('\n', file);
+            if (!flag.sequential && ((i-start_base*2) % (BASES_PER_LINE*2) == 2*(BASES_PER_LINE-1))) fputc ('\n', file);
         }
     
     else 
         for (int64_t i=(start_base+num_of_bases-1)*2; i >= start_base*2; i-=2) { // signed type
             fputc (rev[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)], file);
-            if (!flag_sequential && (((start_base+num_of_bases-1)*2-i) % (BASES_PER_LINE*2) == (BASES_PER_LINE-1)*2)) fputc ('\n', file);
+            if (!flag.sequential && (((start_base+num_of_bases-1)*2-i) % (BASES_PER_LINE*2) == (BASES_PER_LINE-1)*2)) fputc ('\n', file);
         }
     
     fputc ('\n', file);
@@ -308,8 +303,8 @@ static void ref_uncompress_one_range (VBlockP vb)
     
     bool is_compacted = (header->h.section_type == SEC_REF_IS_SET); // we have a SEC_REF_IS_SET if  SEC_REFERENCE was compacted
 
-    if (flag_show_reference && primary_command == PIZ && r)  // in ZIP, we show the compression of SEC_REFERENCE into z_file, not the uncompression of the reference file
-        fprintf (stderr, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u Bytes=%u\n", 
+    if (flag.show_reference && primary_command == PIZ && r)  // in ZIP, we show the compression of SEC_REFERENCE into z_file, not the uncompression of the reference file
+        fprintf (stderr, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
                 vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
                 BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
@@ -318,7 +313,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     //    needed from the reference for pizzing (so we don't store the others)
     //    note: in case of ZIP with REF_INTERNAL, we CLEAR the bits in ref_seg_get_locked_range
     // case 2: PIZ, reading an uncompacted (i.e. complete) reference section - which is always the case when
-    //    reading an external reference and sometimes when reading an stored one - we SET all the bits as they are valid for pizzing
+    //    reading an external reference and sometimes when reading a stored one - we SET all the bits as they are valid for pizzing
     //    we do this in ref_load_stored_reference AFTER all the SEC_REFERENCE/SEC_REF_IS_SEC sections are uncompressed,
     //    so that in case this was an REF_EXT_STORE compression, we first copy the contig-wide IS_SET sections (case 3) 
     //    (which will have 0s in the place of copied FASTA sections), and only after do we set these regions to 1.
@@ -354,14 +349,14 @@ static void ref_uncompress_one_range (VBlockP vb)
         buf_free (&vb->compressed);
 
         // display contents of is_set if user so requested
-        if (flag_show_is_set && !strcmp (chrom_name, flag_show_is_set)) 
+        if (flag.show_is_set && !strcmp (chrom_name, flag.show_is_set)) 
             ref_print_is_set (r, -1);
 
         // prepare for uncompressing the next section - which is the SEC_REFERENCE
         header = (SectionHeaderReference *)&vb->z_data.data[*ENT (uint32_t, vb->z_section_headers, 1)];
 
-        if (flag_show_reference && primary_command == PIZ && r) 
-            fprintf (stderr, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u Bytes=%u\n", 
+        if (flag.show_reference && primary_command == PIZ && r) 
+            fprintf (stderr, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
                     vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
                     BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
@@ -379,7 +374,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     else {
         ASSERT (uncomp_len == roundup_bits2bytes64 (ref_sec_len*2), "Error: uncomp_len=%u inconsistent with ref_len=%"PRId64, uncomp_len, ref_sec_len); 
 
-        if (primary_command == ZIP && flag_reference == REF_EXT_STORE) { // initialization of is_set - case 1
+        if (primary_command == ZIP && flag.reference == REF_EXT_STORE) { // initialization of is_set - case 1
             RefLock lock = ref_lock (sec_start_gpos, ref_sec_len);
             bit_array_clear_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is cleared
             ref_unlock (lock);
@@ -442,7 +437,7 @@ finish:
 
 static void ref_read_one_range (VBlockP vb)
 {
-    if (!sections_get_next_section_of_type (&sl_ent, &ref_range_cursor, SEC_REFERENCE, SEC_REF_IS_SET) || // no more reference sections
+    if (!sections_get_next_section_of_type2 (&sl_ent, SEC_REFERENCE, SEC_REF_IS_SET, true, false) || // no more reference sections
         ((sl_ent+1)->offset - sl_ent->offset) == sizeof (SectionHeaderReference)) // final, header-only section sometimes exists (see ref_compress_ref)
         return; // we're done
     
@@ -456,7 +451,7 @@ static void ref_read_one_range (VBlockP vb)
     // if the user specified --regions, check if this ref range is needed
     bool range_is_included = true;
     RAEntry *ra = NULL;
-    if (flag_regions) {
+    if (flag.regions) {
         if (vb->vblock_i > ref_stored_ra.len) return; // we're done - no more ranges to read, per random access (this is the empty section)
 
         ra = ENT (RAEntry, ref_stored_ra, vb->vblock_i-1);
@@ -468,13 +463,12 @@ static void ref_read_one_range (VBlockP vb)
 
     if (range_is_included) { 
 
-        buf_alloc (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers", 2); // room for 2 section headers  
+        buf_alloc (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers"); // room for 2 section headers  
 
         ASSERT0 (vb->z_section_headers.len < 2, "Error in ref_read_one_range: unexpected 3rd recursive entry");
 
         int32_t section_offset = 
-            zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, "z_data", 
-                                sizeof(SectionHeaderReference), sl_ent->section_type, sl_ent);    
+            zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, "z_data", sl_ent->section_type, sl_ent);    
 
         ASSERT (section_offset != EOF, "Error in ref_read_one_range: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
 
@@ -491,48 +485,47 @@ static void ref_read_one_range (VBlockP vb)
     if (sl_ent->section_type == SEC_REF_IS_SET) 
         ref_read_one_range (vb);
 
-    if (flag_show_headers && exe_type == EXE_GENOCAT) 
+    if (flag.show_headers && exe_type == EXE_GENOCAT) 
         vb->z_data.len = 0; // roll back if we're only showing headers
 
     vb->ready_to_dispatch = true; // to simplify the code, we will dispatch the thread even if we skip the data, but we will return immediately. 
 }
 
 // PIZ: loading a reference stored in the genozip file - this could have been originally stored as REF_INTERNAL or REF_EXT_STORE
-// or this could be a .ref.genozip file (called from load_external->piz_dispatcher)
+// or this could be a .ref.genozip file (called from load_external->piz_one_file)
 void ref_load_stored_reference (void)
 {
     ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
     
-    if (!(flag_show_headers && exe_type == EXE_GENOCAT)) {
+    if (!(flag.show_headers && exe_type == EXE_GENOCAT)) {
         random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
         
-        if (flag_reading_reference) {
-            buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra", 0);
-            buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list", 0);
+        if (flag.reading_reference) {
+            buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra");
+            buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list");
         }
 
         ref_initialize_ranges (RT_LOADED);
         
         sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-        ref_range_cursor = 0;
 
         spin_initialize (region_to_set_list_spin);
-        buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list", 0);
+        buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list");
     }
     
     // decompress reference using Dispatcher
-    bool external = flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE;
+    bool external = flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE;
     dispatcher_fan_out_task (external ? ref_filename     : z_file->basename, 
                              external ? PROGRESS_MESSAGE : PROGRESS_NONE, 
                              external ? "Reading reference file..." : NULL, 
-                             flag_test, 
+                             flag.test, false,
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NULL);
 
-    if (flag_show_ref_seq) 
+    if (flag.show_ref_seq) 
         ref_show_sequence();
-        
+
     // now we can safely set the is_set regions originating from non-compacted ranges. we couldn't do it before, because
     // copied-from-FASTA ranges appear first in the genozip file, and after them could be compacted ranges that originate
     // from a full-contig range in EXT_STORE, whose regions copied-from-FASTA are 0s.
@@ -611,7 +604,7 @@ static inline uint32_t ref_range_id_by_hash (VBlockP vb, uint32_t range_i)
 
 static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, const char *field /* used for ASSSEG */, RefLock *lock)  
 {
-    uint32_t range_i = pos2range_i (pos); // range within chromosome 
+    uint32_t range_i = pos2range_i (pos); // range within contig 
 
     // case: we're asking for the same range as the previous one (for example, subsequent line in a sorted SAM)
     if (vb && vb->prev_range && vb->prev_range_chrom_node_index == vb->chrom_node_index && vb->prev_range_range_i == range_i) {
@@ -631,7 +624,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, const ch
         if ((range->range_i != range_i || vb->chrom_name_len != range->chrom_name_len || memcmp (vb->chrom_name, range->chrom_name, vb->chrom_name_len))) {
             *lock = ref_unlock (*lock);
 
-            ASSERTW (!flag_test_seg, "Warning: ref range contention: chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
+            ASSERTW (!flag.test_seg, "Warning: ref range contention: chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
                      vb->chrom_name_len, vb->chrom_name, (uint32_t)pos); // only show this in --test-seg
 
             range = NULL;  // no soup for you
@@ -674,22 +667,41 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
         return vb->prev_range;
     }
 
-    if (!flag_reading_reference) { // segging VCF or SAM with external reference
+    // test to see if this contig is in the reference
+    WordIndex ref_index=WORD_INDEX_NONE;
+    if (!flag.reading_reference) { // segging VCF or SAM with external reference
 
-        // if the chrom is not in the reference and it is numeric only, attempt to change it eg "22"->"chr22"
-        uint32_t num_contigs = ref_contigs_num_contigs();
-        if (vb->chrom_node_index >= num_contigs) 
-            vb->chrom_node_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, vb->chrom_node_index); // change temporarily just for ref_range_id_by_word_index()
+        // case: we have a header - we lookup the reference contig matching vb->chrom_node_index in header_contigs
+        // as the header chroms occupy the beginnin of context[CHROM] which might not be the same as the reference chroms
+        if (has_header_contigs) {
+            ref_index = ENT (RefContig, header_contigs, vb->chrom_node_index)->chrom_index;
+            if (ref_index == WORD_INDEX_NONE) 
+                return NULL; // not in reference
+        }
 
-        // case: the contig is not in the reference - we will just consider it an unaligned line 
-        // (we already gave a warning for this in ref_contigs_verify_identical_chrom, so no need for another one)
-        if (vb->chrom_node_index >= num_contigs) return NULL;
+        // case: we don't have a header - reference contigs occupy the CHROM nodes first, and after any non-reference chroms
+        else { 
+            uint32_t num_contigs = ref_contigs_num_contigs();
+
+            // case: chrom is part of the reference (same index)
+            if (vb->chrom_node_index < num_contigs) 
+                ref_index = vb->chrom_node_index; 
+            
+            // case: chrom is not in the reference as is, test if it is in the reference using an alternative name (eg "22"->"chr22")
+            else {
+                ref_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, vb->chrom_node_index); // change temporarily just for ref_range_id_by_word_index()
+
+                // case: the contig is not in the reference - we will just consider it an unaligned line 
+                // (we already gave a warning for this in ref_contigs_get_ref_chrom, so no need for another one)
+                if (ref_index >= num_contigs) return NULL;
+            }
+        }
     }
 
-    ASSSEG (vb->chrom_node_index < ranges.len, field, "Error in ref_seg_get_locked_range: vb->chrom_node_index=%u expected to be smaller than ranges.len=%u", 
-            vb->chrom_node_index, (uint32_t)ranges.len);
+    ASSSEG (ref_index < ranges.len, field, "Error in ref_seg_get_locked_range: ref_index=%u expected to be smaller than ranges.len=%u", 
+            ref_index, (uint32_t)ranges.len);
 
-    Range *range = ENT (Range, ranges, vb->chrom_node_index);
+    Range *range = ENT (Range, ranges, ref_index);
     PosType gpos = range->gpos + (pos - range->first_pos);
 
     *lock = ref_lock (gpos, seq_len);
@@ -713,23 +725,18 @@ Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, cons
     // sanity checks
     ASSSEG0 (vb->chrom_name, field, "Error in ref_seg_get_locked_range: vb->chrom_name=NULL");
 
-    uint32_t save_chrom_index = vb->chrom_node_index; // might temporarily change with alt chrom names
-    
-    Range *range = NULL;
     switch (ranges.param) {
-        case RT_DENOVO : range = ref_seg_get_locked_range_denovo (vb, pos, field, lock); break;
-        case RT_LOADED : range = ref_seg_get_locked_range_loaded (vb, pos, seq_len, field, lock); break;
-        default        : ABORT ("Error in ref_seg_get_locked_range: invalid ranges.param=%"PRId64, ranges.param);
+        case RT_DENOVO : return ref_seg_get_locked_range_denovo (vb, pos, field, lock);
+        case RT_LOADED : return ref_seg_get_locked_range_loaded (vb, pos, seq_len, field, lock);
+        default        : ABORT ("Error in ref_seg_get_locked_range: invalid ranges.param=%"PRId64, ranges.param); return 0;
     }
-
-    vb->chrom_node_index = save_chrom_index; // restore
-    return range; // returning locked range
 }
 
 // ----------------------------------------------
 // Compressing ranges into SEC_REFERENCE sections
 // ----------------------------------------------
 
+// ZIP I/O thread
 static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, SectionListEntry **sl)
 {
     // get section list entry from ref_file_section_list - which will be used by zfile_read_section to seek to the correct offset
@@ -741,10 +748,9 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 
     static Buffer ref_seq_section = EMPTY_BUFFER;
 
-    RESET_FLAG (flag_show_headers);
-    zfile_read_section (ref_file, evb, ra->vblock_i, &ref_seq_section, "ref_seq_section", 
-                        sizeof (SectionHeaderReference), SEC_REFERENCE, *sl);
-    RESTORE_FLAG (flag_show_headers);
+    RESET_FLAG (show_headers);
+    zfile_read_section (ref_file, evb, ra->vblock_i, &ref_seq_section, "ref_seq_section", SEC_REFERENCE, *sl);
+    RESTORE_FLAG (show_headers);
 
     SectionHeaderReference *header = (SectionHeaderReference *)ref_seq_section.data;
 
@@ -754,6 +760,10 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
     // some minor changes to the header...
     header->h.vblock_i  = 0; // we don't belong to any VB and there is no encryption of external ref
 
+    // "manually" add the reference section to the section list - normally it is added in comp_compress()
+    sections_add_to_list (evb, &header->h);
+    sections_list_concat (evb); // must be called before disk_so_far is updated
+
     // Write header and body of the reference to z_file
     // Note on encryption: reference sections originating from an external reference are never encrypted - not
     // by us here, and not in the source reference fasta (because with disallow --make-reference in combination with --password)
@@ -761,14 +771,11 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
     file_write (z_file, ref_seq_section.data, ref_seq_section.len);
     COPY_TIMER_VB (evb, write);
 
-    // "manually" add the reference section to the section list - normally it is added in comp_compress()
-    sections_add_to_list (evb, &header->h);
-
     z_file->disk_so_far += ref_seq_section.len;   // length of GENOZIP data writen to disk
 
-    if (flag_show_reference) {
+    if (flag.show_reference) {
         Context *ctx = &z_file->contexts[CHROM];
-        MtfNode *node = ENT (MtfNode, ctx->mtf, BGEN32 (header->chrom_word_index));
+        CtxNode *node = ENT (CtxNode, ctx->nodes, BGEN32 (header->chrom_word_index));
         fprintf (stderr, "Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
                  ref_filename, BGEN32 (header->chrom_word_index), 
                  ENT (char, ctx->dict, node->char_index), 
@@ -783,8 +790,8 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 // ZIP copying parts of external reference to fine - called by I/O thread from zip_write_global_area->ref_compress_ref
 static void ref_copy_compressed_sections_from_reference_file (void)
 {
-    ASSERT (primary_command == ZIP && flag_reference == REF_EXT_STORE, 
-            "Error in ref_copy_compressed_sections_from_reference_file: not expecting to be here: primary_command=%u flag_reference=%u", primary_command, flag_reference);
+    ASSERT (primary_command == ZIP && flag.reference == REF_EXT_STORE, 
+            "Error in ref_copy_compressed_sections_from_reference_file: not expecting to be here: primary_command=%u flag.reference=%u", primary_command, flag.reference);
 
     File *ref_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);
 
@@ -896,7 +903,7 @@ static void ref_compress_one_range (VBlockP vb)
     Range *r = vb->range; // will be NULL if we're being asked to write a final, empty section
 
     // remove flanking regions, and if beneficial also compact it further by removing unused nucleotides 
-    bool is_compacted = flag_make_reference ? false : ref_compact_ref (r, vb->range_num_set_bits); // true if it is compacted beyong just the flanking regions
+    bool is_compacted = flag.make_reference ? false : ref_compact_ref (r, vb->range_num_set_bits); // true if it is compacted beyong just the flanking regions
 
     SectionHeaderReference header = { .h.vblock_i          = BGEN32 (vb->vblock_i),
                                       .h.magic             = BGEN32 (GENOZIP_MAGIC),
@@ -919,7 +926,7 @@ static void ref_compress_one_range (VBlockP vb)
         header.num_bases               = BGEN32 ((uint32_t)ref_size (r)); // full length, after flanking regions removed
         comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, (char *)r->is_set.words, NULL);
 
-        if (flag_show_reference && r) 
+        if (flag.show_reference && r) 
             fprintf (stderr, "vb_i=%u Compressing SEC_REF_IS_SET chrom=%u (%.*s) gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
                     vb->vblock_i, BGEN32 (header.chrom_word_index), r->chrom_name_len, r->chrom_name,
                     BGEN64 (header.gpos), BGEN64 (header.pos), BGEN32 (header.num_bases), 
@@ -936,7 +943,7 @@ static void ref_compress_one_range (VBlockP vb)
     header.num_bases               = r ? BGEN32 (r->ref.num_of_bits / 2) : 0; // less than ref_size(r) if compacted
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NULL);
 
-    if (flag_show_reference && r) 
+    if (flag.show_reference && r) 
         fprintf (stderr, "vb_i=%u Compressing SEC_REFERENCE chrom=%u (%.*s) %s gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
                  vb->vblock_i, BGEN32 (header.chrom_word_index), r->chrom_name_len, r->chrom_name, is_compacted ? "compacted " : "",
                  BGEN64 (header.gpos), BGEN64 (header.pos), BGEN32 (header.num_bases), 
@@ -953,15 +960,10 @@ static void ref_compress_one_range (VBlockP vb)
     }
 
     // insert this range sequence into the ref_hash (included in the reference file, for use to compress of FASTQ, unaligned SAM and FASTA)
-    if (flag_make_reference)
+    if (flag.make_reference)
         refhash_calc_one_range (r, ISLASTENT (ranges, r) ? NULL : r+1);
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
-}
-
-void ref_output_vb (VBlockP vb) 
-{ 
-    zip_output_processed_vb (vb, &vb->section_list_buf, false, PD_REFERENCE_DATA); 
 }
 
 // compress the reference - one section at the time, using Dispatcher to do them in parallel 
@@ -1034,36 +1036,35 @@ void ref_compress_ref (void)
 {
     if (!buf_is_allocated (&ranges)) return;
 
-    if (ranges.param == RT_DENOVO)
+    if ((ranges.param == RT_DENOVO) &&
+        buf_is_allocated (&z_file->contexts[CHROM].dict)) // did we have an aligned lines? (to do: this test is not enough)
         ref_finalize_denovo_ranges(); // assignes chroms; sorts ranges by chrom, pos; gets rid of unused ranges
 
-    if (ranges.param != RT_MAKE_REF) {
+    if (ranges.param != RT_MAKE_REF)
         ref_contigs_compress(); // also assigns gpos to de-novo ranges 
-        zip_output_processed_vb (evb, &evb->section_list_buf, false, PD_REFERENCE_DATA); 
-    }
 
     // copy already-compressed SEQ sections from the genozip reference file, but only such sections that are almost entirely
     // covered by ranges with is_accessed=true. we mark these ranges affected as is_accessed=false.
     if (ranges.param == RT_LOADED)
         ref_copy_compressed_sections_from_reference_file ();
 
-    buf_alloc (evb, &ref_stored_ra, sizeof (RAEntry) * ranges.len, 1, "ref_stored_ra", 0);
+    buf_alloc (evb, &ref_stored_ra, sizeof (RAEntry) * ranges.len, 1, "ref_stored_ra");
     ref_stored_ra.len = 0; // re-initialize, in case we read the external reference into here
     
     spin_initialize (ref_stored_ra_spin);
 
     // compression of reference doesn't output % progress
-    SAVE_FLAG (flag_quiet);
-    if (flag_show_reference) flag_quiet = true; // show references instead of progress
+    SAVE_FLAGS;
+    if (flag.show_reference) flag.quiet = true; // show references instead of progress
 
     // proceed to compress all ranges that have still have data in them after copying
     uint32_t num_vbs_dispatched = 
-        dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing reference...", false, 
-                                 flag_make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
+        dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing reference...", false, false,
+                                 flag.make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
-                                 ref_output_vb);
+                                 zfile_output_processed_vb);
 
-    RESTORE_FLAG (flag_quiet);
+    RESTORE_FLAGS;
     
     // SAM require at least one reference section, but if the SAM is unaligned, there will be none - create one empty section
     // (this will also happen if SAM has just only reference section, we will just needlessly write another tiny section - no harm)
@@ -1082,7 +1083,6 @@ void ref_compress_ref (void)
         qsort (ranges.data, ranges.len, sizeof (Range), ref_contigs_range_sorter);
 
         ref_contigs_compress(); 
-        zip_output_processed_vb (evb, &evb->section_list_buf, false, PD_REFERENCE_DATA); 
     }
 }
 
@@ -1100,7 +1100,7 @@ void ref_set_reference (const char *filename)
 }
 
 // called when loading an external reference
-void ref_set_ref_file_info (Md5Hash md5, const char *fasta_name)
+void ref_set_ref_file_info (Digest md5, const char *fasta_name)
 {
     ref_md5 = md5;
 
@@ -1124,7 +1124,7 @@ static void ref_display_ref (void)
         printf ("%.*s\n", r->chrom_name_len, r->chrom_name);
 
         // case: normal sequence
-        if (flag_reference == REF_EXTERNAL)
+        if (flag.reference == REF_EXTERNAL)
             for (PosType pos=display_first_pos; pos <= display_last_pos; pos++)
                 fputc (ref_get_nucleotide (r, pos - r->first_pos), stdout);
 
@@ -1168,7 +1168,7 @@ static void ref_reverse_compliment_genome_do (VBlock *vb)
 void ref_generate_reverse_complement_genome (void)
 {
     START_TIMER;
-    dispatcher_fan_out_task (NULL, PROGRESS_NONE, 0, false, 
+    dispatcher_fan_out_task (NULL, PROGRESS_NONE, 0, false, false,
                                 ref_reverse_compliment_genome_prepare, 
                                 ref_reverse_compliment_genome_do, 
                                 NULL);
@@ -1177,19 +1177,19 @@ void ref_generate_reverse_complement_genome (void)
 
 static void ref_save_genome_copy_if_needed (bool is_last_file)
 {
-    if (flag_reference != REF_EXT_STORE) return; // relevant only for REF_EXT_STORE
+    if (flag.reference != REF_EXT_STORE) return; // relevant only for REF_EXT_STORE
 
     ASSERT0 (genome.ref.words, "Error in ref_save_genome_copy_if_needed: genome.ref is not allocated");
 
     // make a copy of genome and ranges
     if (!is_last_file && !buf_is_allocated (&genome_ref_copy)) {
-        buf_alloc (evb, &genome_ref_copy, genome.ref.num_of_words * sizeof (word_t), 1, "genome_ref_copy", 0);
+        buf_alloc (evb, &genome_ref_copy, genome.ref.num_of_words * sizeof (word_t), 1, "genome_ref_copy");
         BitArray *bar = buf_get_bitarray (&genome_ref_copy);
         bar->num_of_bits  = genome.ref.num_of_bits;
         bar->num_of_words = genome.ref.num_of_words;
 
         // copy initial state of ranges, before they are modifed by compacting
-        buf_copy (evb, &ranges_copy, &ranges, sizeof (Range), 0, 0, "ranges_copy", 0);
+        buf_copy (evb, &ranges_copy, &ranges, sizeof (Range), 0, 0, "ranges_copy");
     }
 }
 
@@ -1202,67 +1202,34 @@ bool ref_is_reference_loaded (void)
 void ref_load_external_reference (bool display, bool is_last_file)
 {
     ASSERT0 (ref_filename, "Error: ref_filename is NULL");
+    SAVE_FLAGS;
 
-    flag_reading_reference = true; // tell file.c and fasta.c that this is a reference
+    flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
 
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
-        
-    // save and reset flags that are intended to operate on the compressed file rather than the reference file
-    RESET_FLAG (flag_test);
-    RESET_FLAG (flag_unbind);
-    RESET_FLAG (flag_md5);
-    RESET_FLAG (flag_show_time);
-    RESET_FLAG (flag_show_memory);
-    RESET_FLAG (flag_show_stats);
-    RESET_FLAG (flag_no_header);
-    RESET_FLAG (flag_header_one);
-    RESET_FLAG (flag_header_only);
-    RESET_FLAG (flag_grep);
-    RESET_FLAG (flag_regions);
-    RESET_FLAG (flag_show_index);
-    RESET_FLAG (flag_show_dict);
-    RESET_FLAG (flag_show_b250);
-    RESET_FLAG (flag_show_ref_contigs);
-    RESET_FLAG (dict_id_show_one_b250);
-    RESET_FLAG (dict_id_show_one_dict);
-    RESET_FLAG (dump_one_b250_dict_id);
-    RESET_FLAG (dump_one_local_dict_id);
-    RESET_FLAG (flag_list_chroms);
-    TEMP_FLAG (command, PIZ);
 
-    bool piz_successful = piz_dispatcher (true, false);
+    // save and reset flags that are intended to operate on the compressed file rather than the reference file
+    flag.test = flag.md5 = flag.show_memory = flag.show_stats= flag.no_header =
+    flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict = 
+    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = 0;
+    flag.grep = flag.show_time = flag.unbind = 0;
+    flag.dict_id_show_one_b250 = flag.dict_id_show_one_dict = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE;
+
+    TEMP_VALUE (command, PIZ);
+
+    bool piz_successful = piz_one_file (0, false);
     ASSERT (piz_successful, "Error: failed to uncompress reference file %s", ref_filename);
 
     // recover globals
-    flag_reading_reference = false;
-    RESTORE_FLAG (command);
-    RESTORE_FLAG (flag_test);
-    RESTORE_FLAG (flag_unbind);
-    RESTORE_FLAG (flag_md5);
-    RESTORE_FLAG (flag_show_time);
-    RESTORE_FLAG (flag_show_memory);
-    RESTORE_FLAG (flag_show_stats);
-    RESTORE_FLAG (flag_no_header);
-    RESTORE_FLAG (flag_header_one);
-    RESTORE_FLAG (flag_header_only);
-    RESTORE_FLAG (flag_grep);
-    RESTORE_FLAG (flag_regions);
-    RESTORE_FLAG (flag_show_index);
-    RESTORE_FLAG (flag_show_dict);
-    RESTORE_FLAG (flag_show_b250);
-    RESTORE_FLAG (flag_show_ref_contigs);
-    RESTORE_FLAG (dict_id_show_one_b250);
-    RESTORE_FLAG (dict_id_show_one_dict);
-    RESTORE_FLAG (dump_one_b250_dict_id);
-    RESTORE_FLAG (dump_one_local_dict_id);
-    RESTORE_FLAG (flag_list_chroms);
+    RESTORE_VALUE (command);
+    RESTORE_FLAGS;
 
     file_close (&z_file, false);
     file_close (&txt_file, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
 
     // If we're zipping a FASTQ or unaligned SAM, create a reverse-complement genome too
-    if (flag_ref_use_aligner && primary_command == ZIP) 
+    if (flag.ref_use_aligner && primary_command == ZIP) 
         ref_generate_reverse_complement_genome();
 
     ref_save_genome_copy_if_needed (is_last_file);
@@ -1280,12 +1247,12 @@ static void ref_allocate_loaded_genome (void)
     // but our CHROM contexts also includes alternate chrom names that aren't in the original reference that appear after the reference
     // chroms. we need to make sure ranges.len does not include alternate chroms as that's how we know a chrom is alternate in ref_piz_get_range
     // 3. in case loading from a reference file, the number of contigs will match the number of chroms, so no issues.
-    ranges.len = (z_file->flags & GENOZIP_FL_REF_INTERNAL) ? z_file->contexts[CHROM].word_list.len :
-                                                             ref_contigs_num_contigs();
+    ranges.len = z_file->z_flags.ref_internal ? z_file->contexts[CHROM].word_list.len : ref_contigs_num_contigs();
 
-    buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges", RT_LOADED); 
+    buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges");     
     buf_zero (&ranges);
-    
+    ranges.param = RT_LOADED;
+
     for (uint32_t range_id=0; range_id < ranges.len; range_id++) 
         ENT (Range, ranges, range_id)->range_id = range_id;
 
@@ -1300,7 +1267,7 @@ static void ref_allocate_loaded_genome (void)
     bit_array_clear_all (&genome.ref); // make sure the gaps between the contigs are zero as "matches" can covered gaps as well
 
     // we don't need is_set if we're compressing with REF_EXTERNAL 
-    bool has_is_set = primary_command == PIZ || (primary_command == ZIP && flag_reference == REF_EXT_STORE);
+    bool has_is_set = primary_command == PIZ || (primary_command == ZIP && flag.reference == REF_EXT_STORE);
     if (has_is_set) {
         bit_array_alloc (&genome.is_set, genome_size); 
         bit_array_clear_all (&genome.is_set); 
@@ -1350,9 +1317,9 @@ static void ref_create_contig_ranges_for_loaded_genome (void)
 
         r->chrom = chrom_index;      
         
-        if (flag_reference == REF_STORED) {
+        if (flag.reference == REF_STORED) {
             Context *ctx = &z_file->contexts[CHROM];
-            mtf_get_snip_by_word_index (&ctx->word_list, &ctx->dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
+            ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
         }
         else
             ref_contigs_get_chrom_snip (r->chrom, &r->chrom_name, &r->chrom_name_len);
@@ -1377,7 +1344,8 @@ void ref_initialize_ranges (RangesType ranges_type)
 
         ranges.len = REF_NUM_DENOVO_RANGES;
     
-        buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges", RT_DENOVO); 
+        buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges"); 
+        ranges.param = RT_DENOVO;
         buf_zero (&ranges);
         ref_lock_initialize_denovo_genome();
     }
@@ -1448,6 +1416,16 @@ const char *ref_get_cram_ref (void)
     if (samtools_T_option) goto done; // already calculated
 
     ASSINP (ref_filename, "%s: when compressing a CRAM file, --reference or --REFERENCE must be specified", global_cmd);
+
+    // if we're attempting to open a cram file, just to check whether it is aligned (in main_load_reference),
+    // then we haven't loaded the reference file yet, and hence we don't know ref_fasta_name.
+    // in that case, we will just load the reference file's header
+    z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
+    flag.reading_reference=true;
+    zfile_read_genozip_header (0, 0, 0, 0);
+    flag.reading_reference=false;
+    file_close (&z_file, true);
+
 
     ASSINP (ref_fasta_name, "%s: cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",
             global_cmd, ref_filename, REF_FILENAME_LEN-1);

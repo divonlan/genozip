@@ -23,18 +23,18 @@ void vcf_seg_initialize (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    vb->contexts[VCF_CHROM] .inst = CTX_INST_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[VCF_FORMAT].inst = CTX_INST_NO_STONS;
-    vb->contexts[VCF_INFO]  .inst = CTX_INST_NO_STONS;
+    vb->contexts[VCF_CHROM] .no_stons = true; // needs b250 node_index for random access
+    vb->contexts[VCF_FORMAT].no_stons = true;
+    vb->contexts[VCF_INFO]  .no_stons = true;
 
-    mtf_get_ctx (vb, dict_id_FORMAT_GT)->inst = CTX_INST_NO_STONS; // we store the GT matrix in local, so cannot accomodate singletons
+    ctx_get_ctx (vb, dict_id_FORMAT_GT)->no_stons = true; // we store the GT matrix in local, so cannot accomodate singletons
 
     // room for already existing FORMATs from previous VBs
-    vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_mtf.len;
-    buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Structured), 1.2, "format_mapper_buf", 0);
+    vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_nodes.len;
+    buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf");
     buf_zero (&vb->format_mapper_buf);
 
-    if (flag_gtshark) codec_gtshark_comp_init (vb_);
+    if (flag.gtshark) codec_gtshark_comp_init (vb_);
     else              codec_hapmat_comp_init  (vb_);
 }             
 
@@ -47,9 +47,9 @@ void vcf_seg_finalize (VBlockP vb_)
         vcf_seg_complete_missing_lines (vb);
 
     // top level snip
-    Structured top_level = { 
+    Container top_level = { 
         .repeats   = vb->lines.len,
-        .flags     = STRUCTURED_TOPLEVEL,
+        .is_toplevel = true,
         .num_items = 10,
         .items     = { { (DictId)dict_id_fields[VCF_CHROM],   DID_I_NONE, "\t" },
                        { (DictId)dict_id_fields[VCF_POS],     DID_I_NONE, "\t" },
@@ -63,9 +63,9 @@ void vcf_seg_finalize (VBlockP vb_)
                        { (DictId)dict_id_fields[VCF_EOL],     DID_I_NONE, ""   } }
     };
     
-    seg_structured_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
+    container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
 
-    if (flag_show_alleles && vb->ht_matrix_ctx) {
+    if (flag.show_alleles && vb->ht_matrix_ctx) {
         printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_matrix_ctx->local.len);
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++)
@@ -79,7 +79,7 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
     char new_ref=0, new_alt=0;
 
     // if we have a reference, we use it
-    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
+    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
         PosType pos = vb->contexts[VCF_POS].last_value.i;
 
         RefLock lock;
@@ -92,7 +92,7 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
         if (vcf_ref == ref) new_ref = '-'; // this should always be the case...
         if (vcf_alt == ref) new_alt = '-'; 
 
-        if (flag_reference == REF_EXT_STORE)
+        if (flag.reference == REF_EXT_STORE)
             bit_array_set (&range->is_set, index_within_range);
 
         ref_unlock (lock);
@@ -152,9 +152,11 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
     ASSSEG0 (field_len >= 2, field_start, "Error: missing or invalid FORMAT field");
 
-    Structured format_mapper = (Structured){ 
-        .flags     = STRUCTURED_DROP_FINAL_REPEAT_SEP | STRUCTURED_FILTER_ITEMS | STRUCTURED_FILTER_REPEATS,
-        .repsep    = "\t"
+    Container format_mapper = (Container){ 
+        .drop_final_repeat_sep = true,
+        .filter_items          = true,
+        .filter_repeats        = true,
+        .repsep                = "\t"
     };
 
     dl->has_haplotype_data = (str[0] == 'G' && str[1] == 'T' && (str[2] == ':' || field_len==2)); // GT field in FORMAT columns - must always appear first per VCF spec (if at appears)
@@ -168,7 +170,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         DictId dict_id = vcf_seg_get_format_subfield (&str, (unsigned *)&len);
         last_item = (str[-1] == '\t' || str[-1] == '\n');
 
-        format_mapper.items[format_mapper.num_items++] = (StructuredItem) {
+        format_mapper.items[format_mapper.num_items++] = (ContainerItem) {
             .dict_id   = dict_id,
             .seperator = { last_item ? 0 : ':' },
             .did_i     = DID_I_NONE, // seg always puts NONE, PIZ changes it
@@ -187,18 +189,18 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
     uint32_t node_index = seg_by_did_i_ex (vb, snip, field_len+2, VCF_FORMAT, field_len + 1 /* \t or \n */, &is_new);
 
-    dl->format_mtf_i = node_index;
+    dl->format_node_i = node_index;
 
     if (is_new) {
         ASSERT (node_index == vb->format_mapper_buf.len, 
                 "Error: node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
-        buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Structured), 2, "format_mapper_buf", 0);
+        buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf");
     }    
 
-    Structured *st = ENT (Structured, vb->format_mapper_buf, node_index);
-    if (is_new || !st->num_items) // assign if not already assigned. 
-        *st = format_mapper; 
+    Container *con = ENT (Container, vb->format_mapper_buf, node_index);
+    if (is_new || !con->num_items) // assign if not already assigned. 
+        *con = format_mapper; 
 }
 
 static inline bool vcf_seg_test_svlen (VBlockVCF *vb, const char *svlen_str, unsigned svlen_str_len)
@@ -217,7 +219,7 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
     unsigned optimized_snip_len;
 
     // Optimize VQSLOD
-    if (flag_optimize_VQSLOD && (dict_id.num == dict_id_INFO_VQSLOD) &&
+    if (flag.optimize_VQSLOD && (dict_id.num == dict_id_INFO_VQSLOD) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
         
         vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;
@@ -227,20 +229,20 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
 
     // POS and END share the same delta stream - the next POS will be a delta vs this END)
     else if (dict_id.num == dict_id_INFO_END) {
-        seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, *this_value, *this_value_len, false); // END is an alias of POS
+        seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, *this_value, *this_value_len, 0, *this_value_len); // END is an alias of POS
         return false; // do not add to dictionary/b250 - we already did it
     }
 
     // if SVLEN is negative, it is expected to be minus the delta between END and POS
     else if (dict_id.num == dict_id_INFO_SVLEN && vcf_seg_test_svlen (vb, *this_value, *this_value_len)) {
-        Context *ctx = mtf_get_ctx (vb, dict_id_INFO_SVLEN);
+        Context *ctx = ctx_get_ctx (vb, dict_id_INFO_SVLEN);
         seg_by_ctx ((VBlockP)vb, (char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }, 2, ctx, *this_value_len, NULL);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
     // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample)
     else if (dict_id.num == dict_id_INFO_DP) 
-        mtf_get_ctx (vb_, dict_id)->last_value.i = atoi (*this_value);
+        ctx_get_ctx (vb_, dict_id)->last_value.i = atoi (*this_value);
 
     // in case of AC, AN and AF - we store the values, and we postpone handling AC to the finalization
     else if (dict_id.num == dict_id_INFO_AC) { 
@@ -253,18 +255,18 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         vb->an = *this_value; 
         vb->an_len = *this_value_len;
         vb->is_an_before_ac = (vb->ac == NULL);
-        Context *ctx = mtf_get_ctx(vb, dict_id);
-        ctx->flags |= CTX_FL_STORE_INT;
-        ctx->inst  |= CTX_INST_NO_STONS;
+        Context *ctx = ctx_get_ctx(vb, dict_id);
+        ctx->flags.store = STORE_INT;
+        ctx->no_stons = true;
     }
 
     else if (dict_id.num == dict_id_INFO_AF) { 
         vb->af = *this_value; 
         vb->af_len = *this_value_len;
         vb->is_af_before_ac = (vb->ac == NULL);     
-        Context *ctx = mtf_get_ctx(vb, dict_id);
-        ctx->flags |= CTX_FL_STORE_FLOAT;
-        ctx->inst  |= CTX_INST_NO_STONS;
+        Context *ctx = ctx_get_ctx(vb, dict_id);
+        ctx->flags.store = STORE_FLOAT;
+        ctx->no_stons = true;
     }
 
     // finalization of this INFO field
@@ -293,8 +295,8 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
                                              '0' + (char)vb->is_an_before_ac,
                                              '0' + (char)vb->is_af_before_ac };
 
-                    Context *ctx = mtf_get_ctx (vb, dict_id_INFO_AC);
-                    ctx->inst |= CTX_INST_NO_STONS;
+                    Context *ctx = ctx_get_ctx (vb, dict_id_INFO_AC);
+                    ctx->no_stons = true;
                     seg_by_ctx ((VBlockP)vb, special_snip, sizeof(special_snip), ctx, vb->ac_len, NULL);
                 }
             }
@@ -310,8 +312,8 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
 
 static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
 {
-    ctx->flags |= CTX_FL_STORE_INT;
-    ctx->inst  |= CTX_INST_NO_STONS;
+    ctx->flags.store = STORE_INT;
+    ctx->no_stons = true;
 
     int64_t ps_value=0;
     if (str_get_int (cell, cell_len, &ps_value) && ps_value == ctx->last_value.i) // same as previous line
@@ -346,10 +348,10 @@ static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigne
 
 static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataLineVCF *dl, const char *cell, unsigned cell_len, unsigned sample_i)
 {
-    // the GT field is represented as a Structured, with a single item repeating as required by poidy, and the seperator 
+    // the GT field is represented as a Container, with a single item repeating as required by poidy, and the seperator 
     // determined by the phase
-    MiniStructured gt = { .repeats=1, .num_items=1, .flags=STRUCTURED_DROP_FINAL_REPEAT_SEP };
-    gt.items[0] = (StructuredItem){ .dict_id = (DictId)dict_id_FORMAT_GT_HT, .did_i = DID_I_NONE };
+    MiniContainer gt = { .repeats=1, .num_items=1, .drop_final_repeat_sep=true };
+    gt.items[0] = (ContainerItem){ .dict_id = (DictId)dict_id_FORMAT_GT_HT, .did_i = DID_I_NONE };
     unsigned save_cell_len = cell_len;
 
     // update repeats according to ploidy, and separator according to phase
@@ -431,11 +433,11 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     // shortcut if we have the same ploidy and phase as previous GT
     if (gt.repeats == vb->gt_prev_ploidy && gt.repsep[0] == vb->gt_prev_phase) {
 
-        buf_alloc (vb, &ctx->mtf_i, MAX (vb->lines.len, ctx->mtf_i.len + 1) * sizeof (uint32_t),
-                   CTX_GROWTH, "contexts->mtf_i", ctx->did_i);
+        buf_alloc (vb, &ctx->node_i, MAX (vb->lines.len, ctx->node_i.len + 1) * sizeof (uint32_t),
+                   CTX_GROWTH, "contexts->node_i");
 
-        WordIndex node_index = *LASTENT (uint32_t, ctx->mtf_i);
-        NEXTENT (uint32_t, ctx->mtf_i) = node_index;
+        WordIndex node_index = *LASTENT (uint32_t, ctx->node_i);
+        NEXTENT (uint32_t, ctx->node_i) = node_index;
         ctx->txt_len += save_cell_len;
 
         return node_index;
@@ -443,7 +445,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     else {
         vb->gt_prev_ploidy = gt.repeats;
         vb->gt_prev_phase  = gt.repsep[0];
-        return seg_structured_by_ctx ((VBlockP)vb, ctx, (Structured *)&gt, 0, 0, save_cell_len); 
+        return container_seg_by_ctx ((VBlockP)vb, ctx, (Container *)&gt, 0, 0, save_cell_len); 
     }
 }
 
@@ -457,7 +459,34 @@ static inline unsigned seg_snip_len_tnc (const char *snip, bool *has_13)
     return s - snip - *has_13;
 }
 
-static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Structured *samples, uint32_t sample_i,
+// a comma-separated array - each element goes into its own item context, single repeat (somewhat similar to compound, but 
+// intended for simple arrays - just comma separators, no delta between lines or optimizations)
+#define MAX_HETERO_ARRAY_ITEMS 36
+static WordIndex vcf_seg_hetero_array_field (VBlock *vb, DictId dict_id, const char *value, int value_len)
+{   
+    Container con = seg_initialize_container_array (vb, dict_id, false);    
+
+    for (con.num_items=0; con.num_items < MAX_HETERO_ARRAY_ITEMS && value_len > 0; con.num_items++) { // value_len will be -1 after last number
+
+        const char *snip = value;
+        for (; value_len && *value != ','; value++, value_len--) {};
+
+        unsigned number_len = (unsigned)(value - snip);
+
+        if (con.num_items == MAX_HETERO_ARRAY_ITEMS-1) // final permitted repeat - take entire remaining string
+            number_len += value_len;
+
+        if (value_len > 0) con.items[con.num_items].seperator[0] = ','; 
+        seg_by_dict_id (vb, snip, number_len, con.items[con.num_items].dict_id, number_len + (value_len>0 /* has comma */));
+        
+        value_len--; // skip comma
+        value++;
+    }
+
+    return container_seg_by_dict_id (vb, dict_id, (Container *)&con, 0);
+}
+
+static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Container *samples, uint32_t sample_i,
                                 const char *cell, // beginning of sample, also beginning of first "cell" (subfield)
                                 unsigned sample_len,  // not including the \t or \n 
                                 bool is_vcf_string,
@@ -472,12 +501,12 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Structured *s
         // move next to the beginning of the subfield data, if there is any
         unsigned cell_len = end_of_sample ? 0 : seg_snip_len_tnc (cell, has_13);
         DictId dict_id = samples->items[sf].dict_id;
-        Context *ctx = mtf_get_ctx (vb, dict_id);
+        Context *ctx = ctx_get_ctx (vb, dict_id);
 
         // just initialize DP stuff, we're going to seg DP a bit later
         if (cell && ctx->dict_id.num == dict_id_FORMAT_DP) {
             dp_ctx = ctx;
-            info_dp_ctx = mtf_get_existing_ctx ((VBlockP)vb, dict_id_INFO_DP);
+            info_dp_ctx = ctx_get_existing_ctx ((VBlockP)vb, dict_id_INFO_DP);
             ctx->last_value.i = atoi (cell); // an integer terminated by : \t or \n
         }
 
@@ -496,15 +525,15 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Structured *s
         else if (dict_id.num == dict_id_FORMAT_GT)
             node_index = vcf_seg_FORMAT_GT (vb, ctx, dl, cell, cell_len, sample_i);
 
-        else if (flag_optimize_PL && dict_id.num == dict_id_FORMAT_PL && 
+        else if (flag.optimize_PL && dict_id.num == dict_id_FORMAT_PL && 
             optimize_vcf_pl (cell, cell_len, optimized_snip, &optimized_snip_len)) 
             EVAL_OPTIMIZED
 
-        else if (flag_optimize_GL && dict_id.num == dict_id_FORMAT_GL &&
+        else if (flag.optimize_GL && dict_id.num == dict_id_FORMAT_GL &&
             optimize_vector_2_sig_dig (cell, cell_len, optimized_snip, &optimized_snip_len))
             EVAL_OPTIMIZED
     
-        else if (flag_optimize_GP && dict_id.num == dict_id_FORMAT_GP && 
+        else if (flag.optimize_GP && dict_id.num == dict_id_FORMAT_GP && 
             optimize_vector_2_sig_dig (cell, cell_len, optimized_snip, &optimized_snip_len))
             EVAL_OPTIMIZED
 
@@ -524,7 +553,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Structured *s
             node_index = vcf_seg_delta_vs_other ((VBlockP)vb, ctx, dp_ctx, cell, cell_len, -1);
 
         else if (dict_id.num == dict_id_FORMAT_AD || dict_id.num == dict_id_FORMAT_ADALL) 
-            node_index = seg_hetero_array_field ((VBlockP)vb, dict_id, cell, cell_len);
+            node_index = vcf_seg_hetero_array_field ((VBlockP)vb, dict_id, cell, cell_len);
 
         else
             node_index = seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
@@ -546,11 +575,11 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Structured *s
 static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, const char *next_field, 
                                     bool *has_13)
 {
-    // Structured for samples - we have:
+    // Container for samples - we have:
     // - repeats as the number of samples in the line (<= vcf_num_samples)
     // - num_items as the number of FORMAT subfields (inc. GT)
 
-    Structured samples = *ENT (Structured, vb->format_mapper_buf, dl->format_mtf_i); // make a copy of the template
+    Container samples = *ENT (Container, vb->format_mapper_buf, dl->format_node_i); // make a copy of the template
 
     const char *field_start;
     unsigned field_len=0, num_colons=0;
@@ -581,7 +610,7 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
         }
     }
     
-    seg_structured_by_ctx ((VBlockP)vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
+    container_seg_by_ctx ((VBlockP)vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
 
     if (vb->ht_matrix_ctx)
         vb->ht_matrix_ctx->local.len = (vb->line_i+1) * vb->num_haplotypes_per_line;
@@ -609,10 +638,10 @@ static void vcf_seg_complete_missing_lines (VBlockVCF *vb)
 
 /* segment a VCF line into its fields:
    fields CHROM->FORMAT are normal contexts
-   all samples go into the SAMPLES context, which is a Structured
+   all samples go into the SAMPLES context, which is a Container
    Haplotype and phase data are stored in a separate buffers + a SNIP_SPECIAL in the GT context 
 */
-const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
+const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
@@ -628,7 +657,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     seg_chrom_field (vb_, field_start, field_len);
 
     GET_NEXT_ITEM ("POS");
-    seg_pos_field (vb_, VCF_POS, VCF_POS, false, field_start, field_len, true);
+    seg_pos_field (vb_, VCF_POS, VCF_POS, false, field_start, field_len, 0, field_len+1);
     
     // POS <= 0 not expected in a VCF file
     ASSERTW (vb->contexts[VCF_POS].last_value.i > 0, "Warning: invalid POS=%"PRId64" value in vb_i=%u vb_line_i=%u: line will be compressed, but not indexed", 

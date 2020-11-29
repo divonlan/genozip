@@ -34,13 +34,16 @@ requirements:
     - {{posix}}sed               # [win]
     - {{posix}}coreutils         # [win]
     - bzip2
+    - libdeflate
   host:
     - {{native}}gcc-libs         # [win]
     - bzip2
+    - libdeflate
   run:
     - {{native}}gcc-libs         # [win]
     - bzip2
     - curl
+    - libdeflate
 
 test:
 #  source_files: 

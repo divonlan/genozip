@@ -8,6 +8,10 @@
 
 #include "genozip.h"
 
+// Txtfile stuff
+extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
+extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_len);
+
 // ZIP Stuff
 extern void fastq_zip_initialize (void);
 extern void fastq_zip_read_one_vb (VBlockP vb);
@@ -19,8 +23,8 @@ extern void fastq_seg_finalize();
 extern const char *fastq_seg_txt_line();
 
 // PIZ Stuff
-extern bool fastq_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
-extern bool fastq_piz_filter (VBlockP vb, DictId dict_id, ConstStructuredP st, unsigned fastq_record_i, int item_i);
+extern bool fastq_piz_read_one_vb (VBlockP vb, ConstSectionListEntryP sl);
+CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 extern void fastq_piz_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len);
 
@@ -31,7 +35,6 @@ extern unsigned fast_vb_zip_dl_size (void);
 
 // file pairing (--pair) stuff
 extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t first_vb_i_of_pair_1, uint32_t last_vb_i_of_pair_1);
-extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_len);
 extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
 
 #define FASTQ_DICT_ID_ALIASES 

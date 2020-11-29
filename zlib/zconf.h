@@ -388,7 +388,11 @@
 #endif
 
 #if !defined(__MACTYPES__)
-typedef unsigned char  Byte;  /* 8 bits */
+#ifndef BYTE_DEFINED // also defined (identically) in lzma.7zTypes.h --divon
+#define BYTE_DEFINED
+typedef unsigned char Byte;
+#endif
+
 #endif
 typedef unsigned int   uInt;  /* 16 bits or more */
 typedef unsigned long  uLong; /* 32 bits or more */
