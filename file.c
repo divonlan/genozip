@@ -1015,7 +1015,8 @@ void file_remove_codec_ext (char *filename, FileType ft)
     unsigned codec_ext_len = strlen (codec_ext);
     unsigned fn_len = strlen (filename);
 
-    ASSERT (fn_len > codec_ext_len, "Error in file_remove_codec_ext: expecting fn_len=%u > codec_ext_len=%u", fn_len, codec_ext_len)
+    ASSERT (fn_len > codec_ext_len, "Error in file_remove_codec_ext: for filename=%s: expecting fn_len=%u > codec_ext_len=%u", 
+            filename, fn_len, codec_ext_len)
 
     filename[fn_len-codec_ext_len] = 0; // shorten string
 }
