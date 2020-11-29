@@ -88,7 +88,7 @@ typedef struct z_stream_s {
     uInt     avail_in;  /* number of bytes available at next_in */
 
     z_off64_t total_in;  /* total number of input bytes read so far */ // modified by Divon Lan (was: uLong)
-    uLongLong total_ever_in; /* total number of input bytes ever - across concatenated gzip sections (as in bgzip). added by Divon Lan */
+    uLongLong total_ever_in; /* total number of input bytes ever - across concatenated gzip sections (as in BGZF). added by Divon Lan */
     Bytef    *next_out; /* next output byte will go here */
     uInt     avail_out; /* remaining free space at next_out */
     uLong    total_out; /* total number of bytes output so far */
@@ -1652,6 +1652,12 @@ ZEXTERN int ZEXPORT gzclose_w OF((gzFile file));
    decompression code will be included the application when linking to a static
    zlib library.
 */
+
+/* Added by Divon - adds a 18 bytes of compressed data to the in stream, which will 
+be consumed next, instead of reading from disk
+ */
+#define INJECTION_SIZE 18
+ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection, uInt injection_size));
 
 ZEXTERN const char * ZEXPORT gzerror OF((gzFile file, int *errnum));
 /*

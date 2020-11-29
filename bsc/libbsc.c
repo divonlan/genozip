@@ -38,10 +38,10 @@ See also the bsc and libbsc web site:
 #include <stdlib.h>
 #include <string.h>
 #include <memory.h>
+#include <libdeflate.h>
 
 #include "platform.h"
 #include "libbsc.h"
-#include "adler32.h"
 #include "bwt.h"
 #include "lzp.h"
 #include "coder.h"
@@ -67,7 +67,7 @@ void *bsc_zero_malloc (void *vb, size_t size)
 
 int bsc_store(void *vb, const unsigned char * input, unsigned char * output, int n, int features)
 {
-    unsigned int adler32_data = bsc_adler32(input, n, features);
+    unsigned int adler32_data = libdeflate_adler32 (1, input, n);
 
     memmove(output + LIBBSC_HEADER_SIZE, input, n);
     *(int *)(output +  0) = n + LIBBSC_HEADER_SIZE;
@@ -76,7 +76,7 @@ int bsc_store(void *vb, const unsigned char * input, unsigned char * output, int
     *(int *)(output + 12) = 0;
     *(int *)(output + 16) = adler32_data;
     *(int *)(output + 20) = adler32_data;
-    *(int *)(output + 24) = bsc_adler32(output, 24, features);
+    *(int *)(output + 24) = libdeflate_adler32(1, output, 24);
     return n + LIBBSC_HEADER_SIZE;
 }
 
@@ -115,7 +115,7 @@ static int bsc_compress_inplace (void *vb, unsigned char * data, int n, int lzpH
         return bsc_store(vb, data, data, n, features);
     }
 
-    unsigned int adler32_data = bsc_adler32(data, n, features);
+    unsigned int adler32_data = libdeflate_adler32 (1, data, n);
 
     int lzSize = n;
     if (mode != (mode & 0xff))
@@ -179,8 +179,8 @@ static int bsc_compress_inplace (void *vb, unsigned char * data, int n, int lzpH
         *(int *)(data +  8) = mode;
         *(int *)(data + 12) = index;
         *(int *)(data + 16) = adler32_data;
-        *(int *)(data + 20) = bsc_adler32(data + LIBBSC_HEADER_SIZE, result, features);
-        *(int *)(data + 24) = bsc_adler32(data, 24, features);
+        *(int *)(data + 20) = libdeflate_adler32 (1, data + LIBBSC_HEADER_SIZE, result);
+        *(int *)(data + 24) = libdeflate_adler32 (1, data, 24);
         return result + LIBBSC_HEADER_SIZE;
     }
 
@@ -277,9 +277,9 @@ int bsc_compress (void *vb, const unsigned char * input, unsigned char * output,
         *(int *)(output +  4) = n;
         *(int *)(output +  8) = mode;
         *(int *)(output + 12) = index;
-        *(int *)(output + 16) = bsc_adler32(input, n, features);
-        *(int *)(output + 20) = bsc_adler32(output + LIBBSC_HEADER_SIZE, result, features);
-        *(int *)(output + 24) = bsc_adler32(output, 24, features);
+        *(int *)(output + 16) = libdeflate_adler32 (1, input, n);
+        *(int *)(output + 20) = libdeflate_adler32 (1, output + LIBBSC_HEADER_SIZE, result);
+        *(int *)(output + 24) = libdeflate_adler32 (1, output, 24);
         return result + LIBBSC_HEADER_SIZE;
     }
 
@@ -293,7 +293,7 @@ int bsc_block_info (void *vb, const unsigned char * blockHeader, int headerSize,
         return LIBBSC_UNEXPECTED_EOB;
     }
 
-    if (*(unsigned int *)(blockHeader + 24) != bsc_adler32(blockHeader, 24, features))
+    if (*(unsigned int *)(blockHeader + 24) != libdeflate_adler32 (1, blockHeader, 24))
     {
         return LIBBSC_DATA_CORRUPT;
     }
@@ -371,7 +371,7 @@ static int bsc_decompress_inplace (void *vb, unsigned char * data, int inputSize
         return LIBBSC_UNEXPECTED_EOB;
     }
 
-    if (*(unsigned int *)(data + 20) != bsc_adler32(data + LIBBSC_HEADER_SIZE, blockSize - LIBBSC_HEADER_SIZE, features))
+    if (*(unsigned int *)(data + 20) != libdeflate_adler32 (1, data + LIBBSC_HEADER_SIZE, blockSize - LIBBSC_HEADER_SIZE))
     {
         return LIBBSC_DATA_CORRUPT;
     }
@@ -436,12 +436,12 @@ static int bsc_decompress_inplace (void *vb, unsigned char * data, int inputSize
             {
                 return result;
             }
-            return result == dataSize ? (adler32_data == bsc_adler32(data, dataSize, features) ? LIBBSC_NO_ERROR : LIBBSC_DATA_CORRUPT) : LIBBSC_DATA_CORRUPT;
+            return result == dataSize ? (adler32_data == libdeflate_adler32 (1, data, dataSize) ? LIBBSC_NO_ERROR : LIBBSC_DATA_CORRUPT) : LIBBSC_DATA_CORRUPT;
         }
         return LIBBSC_NOT_ENOUGH_MEMORY;
     }
 
-    return lzSize == dataSize ? (adler32_data == bsc_adler32(data, dataSize, features) ? LIBBSC_NO_ERROR : LIBBSC_DATA_CORRUPT) : LIBBSC_DATA_CORRUPT;
+    return lzSize == dataSize ? (adler32_data == libdeflate_adler32 (1, data, dataSize) ? LIBBSC_NO_ERROR : LIBBSC_DATA_CORRUPT) : LIBBSC_DATA_CORRUPT;
 }
 
 int bsc_decompress (void *vb, const unsigned char * input, int inputSize, unsigned char * output, int outputSize, int features)
@@ -467,7 +467,7 @@ int bsc_decompress (void *vb, const unsigned char * input, int inputSize, unsign
         return LIBBSC_UNEXPECTED_EOB;
     }
 
-    if (*(unsigned int *)(input + 20) != bsc_adler32(input + LIBBSC_HEADER_SIZE, blockSize - LIBBSC_HEADER_SIZE, features))
+    if (*(unsigned int *)(input + 20) != libdeflate_adler32 (1, input + LIBBSC_HEADER_SIZE, blockSize - LIBBSC_HEADER_SIZE))
     {
         return LIBBSC_DATA_CORRUPT;
     }
@@ -523,12 +523,12 @@ int bsc_decompress (void *vb, const unsigned char * input, int inputSize, unsign
             {
                 return result;
             }
-            return result == dataSize ? (adler32_data == bsc_adler32(output, dataSize, features) ? LIBBSC_NO_ERROR : LIBBSC_DATA_CORRUPT) : LIBBSC_DATA_CORRUPT;
+            return result == dataSize ? (adler32_data == libdeflate_adler32 (1, output, dataSize) ? LIBBSC_NO_ERROR : LIBBSC_DATA_CORRUPT) : LIBBSC_DATA_CORRUPT;
         }
         return LIBBSC_NOT_ENOUGH_MEMORY;
     }
 
-    return lzSize == dataSize ? (adler32_data == bsc_adler32(output, dataSize, features) ? LIBBSC_NO_ERROR : LIBBSC_DATA_CORRUPT) : LIBBSC_DATA_CORRUPT;
+    return lzSize == dataSize ? (adler32_data == libdeflate_adler32 (1, output, dataSize) ? LIBBSC_NO_ERROR : LIBBSC_DATA_CORRUPT) : LIBBSC_DATA_CORRUPT;
 }
 
 /*-------------------------------------------------*/

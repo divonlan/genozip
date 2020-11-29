@@ -65,7 +65,10 @@ typedef int WRes;
 #define RINOK(x) { int __result__ = (x); if (__result__ != 0) return __result__; }
 #endif
 
+#ifndef BYTE_DEFINED // also defined (identically) in zlib/zconf.h --divon
+#define BYTE_DEFINED
 typedef unsigned char Byte;
+#endif
 typedef short Int16;
 typedef unsigned short UInt16;
 

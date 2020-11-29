@@ -41,22 +41,22 @@
 // This is typically with Illumina binning and "normal" samples where most scores are F
 // but might apply with other technologies too, including in combination with our optimize-QUAL
 // Returns the character that appears more than 50% of the sample lines tested, or -1 if there isn't one.
-bool codec_domq_comp_init (VBlock *vb, LocalGetLineCB callback)
+bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callback)
 {
 #   define DOMQUAL_THREADSHOLD_DOM_OF_TOTAL 0.5 // minimum % - doms of of total to trigger domqual
 #   define DOMQUAL_THREADSHOLD_NUM_CHARS 5      // not worth it if less than this (and will fail in SAM with 1)
 #   define DOMQUAL_LINE_SAMPLE_LEN 500          // we don't need more than this to find the dom (in case of long reads of 10s of thousands)
 #   define NUM_LINES_IN_SAMPLE 5
 
-    Context *qual_ctx = &vb->contexts[DTF(qual)];
+    Context *qual_ctx = &vb->contexts[qual_did_i];
     qual_ctx->lcodec = CODEC_UNKNOWN; // cancel possible inheritence from previous VB
 
     uint32_t char_counter[256] = { 0 };
     uint32_t total_len = 0;
     for (uint32_t line_i=0; line_i < MIN (NUM_LINES_IN_SAMPLE, vb->lines.len); line_i++) {   
-        char *qual_data, *unused;
-        uint32_t qual_data_len, unused_len;
-        callback (vb, line_i, &qual_data, &qual_data_len, &unused, &unused_len, CALLBACK_NO_SIZE_LIMIT);
+        char *qual_data;
+        uint32_t qual_data_len;
+        callback (vb, line_i, &qual_data, &qual_data_len, CALLBACK_NO_SIZE_LIMIT);
     
         if (qual_data_len > DOMQUAL_LINE_SAMPLE_LEN) qual_data_len = DOMQUAL_LINE_SAMPLE_LEN; 
     
@@ -71,12 +71,13 @@ bool codec_domq_comp_init (VBlock *vb, LocalGetLineCB callback)
     for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
         if (char_counter[c] > threshold) {
             qual_ctx->local.param = c;
-            qual_ctx->inst    = CTX_INST_LOCAL_PARAM;
+            qual_ctx->local_param = true;
             qual_ctx->ltype   = LT_CODEC;
             qual_ctx->lcodec  = CODEC_DOMQ;
 
-            Context *domqruns_ctx = qual_ctx + 1;
-            domqruns_ctx->ltype   = LT_UINT8;
+            Context *domqruns_ctx  = qual_ctx + 1;
+            domqruns_ctx->ltype    = LT_UINT8;
+            domqruns_ctx->st_did_i = qual_ctx->did_i;
             return true;
         }
 
@@ -106,53 +107,54 @@ bool codec_domq_compress (VBlock *vb,
 
     ASSERT0 (!uncompressed && callback, "Error in codec_domq_compress: only callback option is supported");
 
-    Context *qual_ctx = &vb->contexts[DTF(qual)];
+    SectionHeaderCtx *local_header = (SectionHeaderCtx *)header;
+    Context *qual_ctx = ctx_get_existing_ctx (vb, local_header->dict_id);
+    Context *qdomruns_ctx = qual_ctx + 1;
 
     const char dom = qual_ctx->local.param;
     ASSERT0 (dom, "Error in codec_domq_compress: dom is not set");
 
     Buffer *qual_buf     = &qual_ctx->local;
-    Buffer *qdomruns_buf = &(qual_ctx+1)->local;
+    Buffer *qdomruns_buf = &qdomruns_ctx->local;
 
     // this is usually enough, but might not be in some edge cases
     // note: qual_buf->len is the total length of all qual lines
-    buf_alloc (vb, qual_buf, qual_buf->len / 5, 1, "context->local", dom); // dom goes into param, and eventually into SectionHeaderCtx.local_param
-    buf_alloc (vb, qdomruns_buf, qual_buf->len / 10, 1, "context->local", (qual_ctx+1)->did_i);
+    buf_alloc (vb, qual_buf, qual_buf->len / 5, 1, "context->local"); 
+    qual_buf->param = dom; // dom goes into param, and eventually into SectionHeaderCtx.local_param
+
+    buf_alloc (vb, qdomruns_buf, qual_buf->len / 10, 1, "context->local");
 
     qual_buf->len = 0; 
     uint32_t runlen = 0;
     
     for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {   
-        char *qual[2] = {};
-        uint32_t qual_len[2] = {};
-        callback (vb, line_i, &qual[0], &qual_len[0], &qual[1], &qual_len[1], CALLBACK_NO_SIZE_LIMIT);
+        char *qual = 0;
+        uint32_t qual_len = 0;
+        callback (vb, line_i, &qual, &qual_len, CALLBACK_NO_SIZE_LIMIT);
 
         // grow if needed
-        buf_alloc_more (vb, qual_buf, 2 * (qual_len[0] + qual_len[1]), 0, char, 1.5); // theoretical worst case is 2 characters (added NO_DOMS) per each original character
-        buf_alloc_more (vb, qdomruns_buf, qual_len[0] + qual_len[1], 0, uint8_t, 1.5);
+        buf_alloc_more (vb, qual_buf, 2 * qual_len, 0, char, 1.5, 0); // theoretical worst case is 2 characters (added NO_DOMS) per each original character
+        buf_alloc_more (vb, qdomruns_buf, qual_len, 0, uint8_t, 1.5, 0);
 
-        for (uint32_t side=0; side < 2; side++) {
+        if (!qual) continue;
 
-            if (!qual[side]) continue;
-
-            for (uint32_t i=0; i < qual_len[side]; i++) {    
-                if (qual[side][i] == dom) 
-                    runlen++;
-                
-                else {
-                    // this non-dom value terminates a run of doms
-                    if (runlen) {
-                        codec_domq_add_runs (qdomruns_buf, runlen);
-                        runlen = 0;
-                    }
-
-                    // this non-dom does not terminate a run of doms - add NO_DOMs to indicate the missing dom run
-                    else 
-                        NEXTENT (char, *qual_buf) = NO_DOMS;
-
-                    // add the non-dom character
-                    NEXTENT (char, *qual_buf) = qual[side][i];
+        for (uint32_t i=0; i < qual_len; i++) {    
+            if (qual[i] == dom) 
+                runlen++;
+            
+            else {
+                // this non-dom value terminates a run of doms
+                if (runlen) {
+                    codec_domq_add_runs (qdomruns_buf, runlen);
+                    runlen = 0;
                 }
+
+                // this non-dom does not terminate a run of doms - add NO_DOMs to indicate the missing dom run
+                else 
+                    NEXTENT (char, *qual_buf) = NO_DOMS;
+
+                // add the non-dom character
+                NEXTENT (char, *qual_buf) = qual[i];
             }
         }
     }
@@ -173,6 +175,11 @@ bool codec_domq_compress (VBlock *vb,
 
     // case: all good - compress the QUAL context; the DOMQRUNS will be compressed after us, as its the subsequent context.
     if (*compressed_len >= min_required_compressed_len) {
+
+        // since codecs were already assigned to contexts before compression of all contexts begun, but
+        // we just created this context now, we assign a codec manually
+        codec_assign_best_codec (vb, qdomruns_ctx, NULL, SEC_LOCAL);
+
         *uncompressed_len = (uint32_t)qual_buf->len;
         return compress (vb, header, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);
     }
@@ -183,7 +190,7 @@ bool codec_domq_compress (VBlock *vb,
         ((SectionHeaderCtx *)header)->ltype = LT_SEQUENCE; // not LD_CODEC any more
         header->codec     = sub_codec;
         header->sub_codec = CODEC_UNKNOWN;
-        header->flags    &= ~CTX_FL_COPY_PARAM; // cancel flag
+        header->flags.ctx.copy_param = 0; // cancel flag
         buf_free (qual_buf);
         buf_free (qdomruns_buf);
         return compress (vb, header, NULL, uncompressed_len, callback, compressed, compressed_len, soft_fail);

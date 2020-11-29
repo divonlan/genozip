@@ -1,3 +1,4 @@
+
 // ------------------------------------------------------------------
 //   genozip.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
@@ -11,11 +12,7 @@
 #include <execinfo.h>
 #include <signal.h>
 #endif
-#ifndef _MSC_VER // Microsoft compiler
 #include <getopt.h>
-#else
-#include "compatibility/visual_c_getopt.h"
-#endif
 
 #include "genozip.h"
 #include "text_help.h"
@@ -28,7 +25,6 @@
 #include "file.h"
 #include "vblock.h"
 #include "endianness.h"
-#include "regions.h"
 #include "vcf.h"
 #include "stream.h"
 #include "url.h"
@@ -51,40 +47,14 @@ ExeType exe_type;
 // primary_command vs command: primary_command is what the user typed on the command line. command is what is 
 // running now - for example, when ZIP is unzipping a reference, primary_command=ZIP and command=PIZ
 CommandType command = NO_COMMAND, primary_command = NO_COMMAND; 
+const char *command_line = NULL;
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file data
 
-// the flags - representing command line options - available globally
-int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
-    flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_multiple_files=0,
-    flag_show_b250=0, flag_show_stats=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
-    flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_best=0, flag_list_chroms=0,
-    flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
-    flag_show_vblocks=0, flag_vblock=0, flag_gt_only=0, flag_sequential=0, 
-    flag_debug_memory=0, flag_debug_progress=0, flag_test_seg=0,
-    flag_show_hash, flag_register=0, flag_genocat_info_only=0,
-    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, 
-    flag_ref_use_aligner=0, flag_show_codec_test=0, flag_gtshark=0,
-    flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
-    flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0, flag_optimize_DESC=0,
-    flag_show_ref_contigs=0, flag_show_ref_alts=0, flag_show_ref_seq=0,
-    flag_pair=NOT_PAIRED_END;
-
-ReferenceType flag_reference = REF_NONE;
-uint64_t flag_stdin_size = 0;
-char *flag_grep = NULL, *flag_show_is_set = NULL, *flag_unbind = NULL;
-
-DictId dict_id_show_one_b250  = DICT_ID_NONE,  // argument of --show-b250-one
-       dict_id_show_one_dict  = DICT_ID_NONE,  // argument of --show-dict-one
-       dump_one_b250_dict_id  = DICT_ID_NONE,  // argument of --dump-b250-one
-       dump_one_local_dict_id = DICT_ID_NONE;  // argument of --dump-local-one
-static char *threads_str  = NULL;
-static char *out_filename = NULL; // the filename specified in --output
-
 static void print_call_stack (void) 
 {
-#ifndef _WIN32
+#if ! defined _WIN32 && defined DEBUG
 #   define STACK_DEPTH 15
     void *array[STACK_DEPTH];
     size_t size = backtrace(array, STACK_DEPTH);
@@ -99,7 +69,7 @@ void main_exit (bool show_stack, bool is_error)
 {
     im_in_main_exit = true;
 
-    if (false /* show_stack */) print_call_stack(); //this is useless - doesn't print function names
+    if (show_stack) print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
 
     buf_test_overflows_all_vbs("exit_on_error");
 
@@ -107,7 +77,7 @@ void main_exit (bool show_stack, bool is_error)
     file_kill_external_compressors(); 
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
-    if (primary_command == ZIP && z_file && z_file->name && !flag_reading_reference) {
+    if (primary_command == ZIP && z_file && z_file->name && !flag.reading_reference) {
         char save_name[strlen (z_file->name)+1];
         strcpy (save_name, z_file->name);
 
@@ -137,7 +107,7 @@ static void main_sigsegv_handler (int sig)
     // note: during exit_on_error, we close z_file which might cause compute threads access z_file fields to 
     // throw a segmentation fault. we don't show it in this case, as we have already displayed the error itself
     if (!im_in_main_exit) 
-        fprintf (stderr, "\nError: Segmentation fault\n");
+        fprintf (stderr, "\nError: %s\n", strsignal (sig));
 
     // busy-wait for exit_on_error to complete before exiting cleanly
     else {
@@ -147,20 +117,30 @@ static void main_sigsegv_handler (int sig)
         exit (1);
     }
 
-    //print_call_stack(); //this is useless - doesn't print function names
+    print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
+
     abort();
 }
 #endif
 
 static void main_print_help (bool explicit)
 {
-    static const char **texts[NUM_EXE_TYPES+1] = {help_genozip, help_genounzip, help_genols, help_genocat, help_genozip_developer}; // same order as ExeType
+    static const char **texts[NUM_EXE_TYPES] = {help_genozip, help_genounzip, help_genols, help_genocat }; // same order as ExeType
     static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat), sizeof(help_genozip_developer)};
     
-    if (flag_force) exe_type = NUM_EXE_TYPES; // -h -f shows developer help
+    if (flag.force) exe_type = NUM_EXE_TYPES; // -h -f shows developer help
 
-    str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
-                    flag_force ? "                          " : "                     ",  "\n", 0);
+    if (flag.help && !strcmp (flag.help, "dev")) 
+        str_print_text (help_genozip_developer, sizeof(help_genozip_developer) / sizeof(char*), 
+                        "                          ",  "\n", 0);
+
+    else if (flag.help && !strcmp (flag.help, "input")) 
+        fprintf (stderr, "Supported file types for --input:\n%s\n", file_compressible_extensions (false));
+    
+    else
+        str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
+                        "                     ",  "\n", 0);
+    
     str_print_text (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
 
 // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
@@ -189,6 +169,17 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             return;
         }
 
+        char *last_c = (char *)&z_filename[strlen(z_filename)-1];
+        if (*last_c == '/' 
+#ifdef _WIN32
+            || *last_c == '\\'
+#endif
+            ) {
+            *last_c = 0; // remove trailing '/' or '\'
+            main_list_dir (z_filename);
+            return;
+        }
+ 
         // filename is a directory - show directory contents (but not recursively)
         if (!subdir && file_is_dir (z_filename)) {
             main_list_dir (z_filename);
@@ -199,13 +190,16 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     static bool first_file = true;
     static unsigned files_listed=0, files_ignored=0;
     static int64_t total_uncompressed_len=0, total_compressed_len=0;
-    char z_size_str[20], txt_size_str[20], num_lines_str[20];
 
     const unsigned FILENAME_WIDTH = 40;
 
-    const char *head_format = "\n%11s %10s %10s %6s %s  %*s %s\n";
-    const char *foot_format = "\nTotal:            %10s %10s %5.*fX\n";
-    const char *item_format = "%11s %10s %10s %5.*fX  %s  %s%s%*s %s\n";
+    const char *head_format = "\n%-5.5s %11s %10s %10s %6s %s  %*s %s\n";
+    const char *foot_format = "\nTotal:                  %10s %10s %5.*fX\n";
+    const char *item_format = "%-5.5s %11s %10s %10s %5.*fX  %s  %s%s%*s %s\n";
+
+    const char *head_format_bytes = "\n%-5.5s %11s %15s %15s %6s  %*s\n";
+    const char *foot_format_bytes = "\nTotal:            %15s %15s %5.*fX\n";
+    const char *item_format_bytes = "%-5.5s %11s %15s %15s %5.*fX  %s%s%*s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
@@ -213,11 +207,14 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     if (finalize) {
         if (files_listed > 1) {
-            str_size(total_compressed_len, z_size_str);
-            str_size(total_uncompressed_len, txt_size_str);
             double ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
-            bufprintf (evb, &str_buf, foot_format, z_size_str, txt_size_str, ratio < 100, ratio);
+            if (flag.bytes) 
+                bufprintf (evb, &str_buf, foot_format_bytes, str_int_s (total_compressed_len).s, 
+                           str_int_s (total_uncompressed_len).s, ratio < 100, ratio)
+            else 
+                bufprintf (evb, &str_buf, foot_format, str_size(total_compressed_len).s, 
+                           str_size(total_uncompressed_len).s, ratio < 100, ratio);
         }
         
         ASSERTW (!files_ignored, "Ignored %u file%s that %s not have a " GENOZIP_EXT " extension", 
@@ -227,7 +224,11 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     }
 
     if (first_file) {
-        bufprintf (evb, &str_buf, head_format, "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
+        if (flag.bytes) 
+            bufprintf (evb, &str_buf, head_format_bytes, "Type", "Records", "Compressed", "Original", "Factor", -(int)FILENAME_WIDTH, "Name")
+        else
+            bufprintf (evb, &str_buf, head_format, "Type", "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
+        
         first_file = false;
     }
     
@@ -239,47 +240,95 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
 
     z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
+
+    Digest md5_hash_bound; 
     uint64_t txt_data_size, num_lines;
-    Md5Hash md5_hash_bound, license_hash, ref_file_md5;
     char created[FILE_METADATA_LEN];
-    char ref_file_name[REF_FILENAME_LEN];
-    bool success = zfile_get_genozip_header (z_file, NULL, &txt_data_size, &num_lines, 
-                                             &md5_hash_bound, created, FILE_METADATA_LEN, &license_hash,
-                                             ref_file_name, REF_FILENAME_LEN, &ref_file_md5);
-    if (!success) goto finish;
+    if (!zfile_read_genozip_header (&md5_hash_bound, &txt_data_size, &num_lines, created))
+        goto finish;
 
     double ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
     
-    str_size (z_file->disk_size, z_size_str);
-    str_size (txt_data_size, txt_size_str);
-    str_uint_commas (num_lines, num_lines_str);
-    
     // TODO: have an option to print ref_file_name and ref_file_md5
-    
-    bufprintf (evb, &str_buf, item_format, num_lines_str, 
-               z_size_str, txt_size_str, ratio < 100, ratio, 
-               md5_display (md5_hash_bound),
-               (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
-               is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
-               z_filename, created);
-            
+
+    DataType dt = (z_file->data_type == DT_SAM && z_file->z_flags.txt_is_bin) ? DT_BAM : z_file->data_type;
+
+    if (flag.bytes) 
+        bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_uint_commas (num_lines).s, 
+                   str_int_s (z_file->disk_size).s, str_int_s (txt_data_size).s, ratio < 100, ratio, 
+                   (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
+                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
+                   z_filename)
+    else 
+        bufprintf (evb, &str_buf, item_format, dt_name (dt), str_uint_commas (num_lines).s,
+                   str_size (z_file->disk_size).s, str_size (txt_data_size).s, ratio < 100, ratio, 
+                   digest_display_ex (md5_hash_bound, DD_MD5_IF_MD5).s,
+                   (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
+                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
+                   z_filename, created);
+
     total_compressed_len   += z_file->disk_size;
     total_uncompressed_len += txt_data_size;
     
     files_listed++;
 
+    // if --unbind, OR if the user did genols on one file (not a directory), show bound components, if there are any
+    if (flag.unbind || (!flag.multiple_files && !recursive && z_file->num_components >= 2)) {
+        buf_add_string (evb, &str_buf, "Components:\n");
+        const SectionListEntry *sl_ent = NULL;
+        uint64_t num_lines_count=0;
+        while (sections_get_next_section_of_type (&sl_ent, SEC_TXT_HEADER, false, false)) {
+            zfile_read_section_header (evb, sl_ent->offset, sl_ent->vblock_i, SEC_TXT_HEADER);
+
+            SectionHeaderTxtHeader *header = FIRSTENT (SectionHeaderTxtHeader, evb->compressed);
+            
+            num_lines_count += BGEN64 (header->num_lines);
+            bufprintf (evb, &str_buf, item_format, "", str_uint_commas (BGEN64 (header->num_lines)).s, "", 
+                       str_size (BGEN64 (header->txt_data_size)).s, 
+                       0, 0.0, digest_display_ex (header->digest_single, DD_MD5_IF_MD5), "", "",
+                       -(int)FILENAME_WIDTH, header->txt_filename, "");
+
+            buf_free (&evb->compressed);
+        }
+
+        if (num_lines_count != num_lines)
+            buf_add_string (evb, &str_buf, "\nNote: the difference between the file's Records and the total of its components' is the number of lines of the 1st component's header\n");
+    }
     file_close (&z_file, false);
 
 finish:
     if (!recursive) {
-            buf_print (&str_buf, false);
-            buf_free (&str_buf);
+        buf_print (&str_buf, false);
+        buf_free (&str_buf);
     }
 }
-static void main_genounzip (const char *z_filename,
-                            const char *txt_filename, 
-                            bool is_last_file)
+
+// if this is a bound file, and we don't have --unbind or --force, we ask the user
+static void main_ask_about_unbind (void)
 {
+    if (!isatty(0) || !isatty(2)) return; // if we stdin or stderr is redirected - we cannot ask the user an interactive question
+    if (flag.test || flag.genocat_info_only) return; // other cases we don't ask test
+
+    fprintf (stderr, "\n%s: %s contains %u bound files. You may either:\n"
+                     "y) uncompress and unbind - retrieve the individual files (or use --unbind=<prefix> to add a prefix) ; or-\n"
+                     "n) uncompress to one large file\n"
+                     "Note: in the future, you may silence this question with --force\n\n", 
+                     global_cmd, z_name, z_file->num_components);
+        
+    // read all chars available on stdin, so that if we're processing multiple files - and we ask this question
+    // for a subsequent file later - we don't get left overs of this response
+    char read_buf[1000];
+    str_query_user ("Do you wish to unbind this file? ([y] or n) ", read_buf, sizeof(read_buf), str_verify_y_n, "Y");
+
+    if (read_buf[0] == 'Y') flag.unbind = ""; // unbind with no prefix
+    fprintf (stderr, "\n");
+}
+
+static void main_genounzip (const char *z_filename, const char *txt_filename, bool is_last_file)
+{
+    // save flag as it might be modified - so that next file has the same flags
+    SAVE_FLAGS;
+
     txtfile_header_initialize();
     
     // get input FILE
@@ -292,84 +341,71 @@ static void main_genounzip (const char *z_filename,
     ASSINP (!txt_filename || !url_is_url (txt_filename), 
             "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, txt_filename);
 
-    unsigned fn_len = strlen (z_filename);
-
     // skip this file if its size is 0
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
-    if (!txt_filename && (!flag_stdout || flag_bgzip || flag_bcf || flag_bam) && !flag_unbind) {
-        txt_filename = (char *)MALLOC(fn_len + 10);
-
-        // .vcf.genozip -> .vcf or .vcf.gz or .bcf ; .sam.genozip -> .sam or .bam or .sam.gz ; fastq.genozip -> .fastq or .fastq.gz
-        int genozip_ext_len = strlen (GENOZIP_EXT);
-        sprintf ((char *)txt_filename, "%.*s%s", 
-                 (int)(fn_len - genozip_ext_len) - 
-                    ((flag_bam && strcmp (&txt_filename[fn_len-genozip_ext_len-4], ".sam")) ? 4 : 0) - // remove .sam if .sam.genozip->.bam
-                    ((flag_bcf && strcmp (&txt_filename[fn_len-genozip_ext_len-4], ".vcf")) ? 4 : 0),  // remove .vcf if .vcf.genozip->.bcf                    
-                 z_filename,
-                 flag_bgzip ? ".gz" : flag_bam ? ".bam" : flag_bcf ? ".bcf" : "");    
-    }
-
     z_file = file_open (z_filename, READ, Z_FILE, DT_NONE);    
-    
-    // cases we pre-read the genozip header:
-    // 1) if we can't get the data type by the extension - get it from the genozip header
+
+    // read the genozip header:
+    // 1) verify the data type deduced from the file name, or set the data type if it wasn't deduced
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
-    if (z_file->data_type == DT_NONE || flag_reference != REF_EXTERNAL) 
-        zfile_read_genozip_header (NULL);
+    // 3) identify skip cases (DT_NONE returned) - empty file, unzip of a reference
+    // 4) reset flag.unbind if file contains only one component
+    if (!zfile_read_genozip_header (0,0,0,0)) goto done; 
+
+    // if we're genocatting a BAM file, output it as a SAM unless user requested otherwise
+    if (z_file->data_type == DT_SAM && z_file->z_flags.txt_is_bin && flag.out_dt==-1 && exe_type == EXE_GENOCAT)
+        flag.out_dt = DT_SAM;
+
+    // if this is a bound file, and we don't have --unbind or --force, we ask the user
+    if (z_file->num_components >= 2 && !flag.unbind && !flag.force)
+        main_ask_about_unbind();
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
-    if (flag_reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
-        ASSINP (flag_reference != REF_EXTERNAL || !flag_show_ref_seq, "%s: Error: --show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead", global_cmd);
+    if (flag.reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
+        ASSINP (flag.reference != REF_EXTERNAL || !flag.show_ref_seq, "%s: Error: --show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead", global_cmd);
 
-        if (!flag_genocat_info_only) {
-            SAVE_FLAG (z_file); // actually, read the reference first
+        if (!flag.genocat_info_only) {
+            SAVE_VALUE (z_file); // actually, read the reference first
             ref_load_external_reference (false, false /* parameter ignored for REF_EXTERNAL */);
-            RESTORE_FLAG (z_file);
+            RESTORE_VALUE (z_file);
         }
     }
 
-    // get output FILE 
-    if (txt_filename) {
-        ASSERT0 (!txt_file || flag_bind, "Error: txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
+    flags_update_piz_one_file();
+    
+    // set txt_filename from genozip file name (inc. extensions if translating or --bgzf)
+    if (!txt_filename && !flag.to_stdout && !flag.unbind) 
+        txt_filename = txtfile_piz_get_filename (z_filename, "", true);
 
-        if (!txt_file)  // in bound mode, for second file onwards, txt_file is already open
-            txt_file = file_open (txt_filename, WRITE, TXT_FILE, z_file->data_type);
+    // open output txt file (except if unbinding or outputting to stdout)
+    if (txt_filename || flag.to_stdout) {
+        ASSERT0 (!txt_file, "Error: txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
+        txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag.out_dt);
     }
-    else if (flag_stdout) { // stdout
-        txt_file = file_open_redirect (WRITE, TXT_FILE, z_file->data_type); // STDOUT
-    }
-    else if (flag_unbind) {
+    else if (flag.unbind) {
         // do nothing - the component files will be opened by txtfile_genozip_to_txt_header()
     }
     else {
         ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
     
-    z_file->basename = file_basename (z_filename, false, FILENAME_STDIN, NULL, 0); // memory freed in file_close
-    
-    // save flag as it might be modified by PIZ (for example, REF_STORED overriding REF_EXTERNAL)
-    SAVE_FLAG (flag_reference);
-
     // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
-    bool piz_successful;
-    unsigned num_components=0;
-    do {
-        piz_successful = piz_dispatcher (num_components==0, is_last_file);
-        if (piz_successful) num_components++;
-    } while (flag_unbind && piz_successful); 
+    uint32_t component_i=0;
+    while (piz_one_file (component_i, is_last_file) && flag.unbind) component_i++;
 
-    if (!flag_bind && !flag_stdout && !flag_unbind) 
-        // don't close the bound file - it will close with the process exits
-        // don't close in unbind mode - piz_dispatcher() opens and closes each component
-        // don't close stdout - in bound mode, we might still need it for the next file
+    if (!flag.to_stdout && !flag.unbind) {
+        // don't close stdout - we might still need it for the next file
+        // don't close in unbind mode - piz_one_file() opens and closes each component
         file_close (&txt_file, false); 
+    }
 
     file_close (&z_file, false);
 
-    RESTORE_FLAG (flag_reference);
+    if (flag.replace && txt_filename && z_filename) file_remove (z_filename, true); 
 
-    if (flag_replace && txt_filename && z_filename) file_remove (z_filename, true); 
+done:
+    RESTORE_FLAGS;
 }
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
@@ -381,26 +417,59 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     // is we have a loaded reference and it is no longer needed, unload it now, to free the memory for the testing process
     if (is_last_file) ref_unload_reference (true);
 
-    StreamP test = stream_create (0, 0, 0, 0, 0, 0, 
+    StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",
                                   exec_name, "--decompress", "--test", z_filename,
-                                  flag_quiet       ? "--quiet"       : SKIP_ARG,
-                                  password         ? "--password"    : SKIP_ARG,
-                                  password         ? password        : SKIP_ARG,
-                                  flag_show_memory ? "--show-memory" : SKIP_ARG,
-                                  flag_show_time   ? "--show-time"   : SKIP_ARG,
-                                  threads_str      ? "--threads"     : SKIP_ARG,
-                                  threads_str      ? threads_str     : SKIP_ARG,
-                                  flag_reference == REF_EXTERNAL ? "--reference" : SKIP_ARG,
-                                  flag_reference == REF_EXTERNAL ? ref_filename  : SKIP_ARG,
+                                  flag.quiet       ? "--quiet"        : SKIP_ARG,
+                                  password         ? "--password"     : SKIP_ARG,
+                                  password         ? password         : SKIP_ARG,
+                                  flag.show_memory ? "--show-memory"  : SKIP_ARG,
+                                  flag.show_time   ? "--show-time"    : SKIP_ARG,
+                                  flag.threads_str ? "--threads"      : SKIP_ARG,
+                                  flag.threads_str ? flag.threads_str : SKIP_ARG,
+                                  flag.reference == REF_EXTERNAL ? "--reference" : SKIP_ARG,
+                                  flag.reference == REF_EXTERNAL ? ref_filename  : SKIP_ARG,
                                   NULL);
 
     // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
     int exit_code = stream_wait_for_exit (test);
 
-    TEMP_FLAG (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
+    TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
     ASSINP (!exit_code, "genozip test exited with status %d\n", exit_code);
-    RESTORE_FLAG (primary_command); // recover in case of more non-concatenated files
+    RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
+}
+
+static void main_genozip_open_z_file_write (char **z_filename)
+{
+    DataType z_data_type = txt_file->data_type;
+
+    if (! *z_filename) {
+
+        ASSINP (txt_file->name, "%s: please use --output to specify the output filename (with a .genozip extension)", global_cmd);
+
+        bool is_url = url_is_url (txt_file->name);
+        const char *basename = is_url ? file_basename (txt_file->name, false, "", 0,0) : NULL;
+        const char *local_txt_filename = basename ? basename : txt_file->name; 
+
+        unsigned fn_len = strlen (local_txt_filename);
+        *z_filename = (char *)MALLOC (fn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
+
+        // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
+        const char *genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (txt_file->data_type, txt_file->type)];
+
+        if (file_has_ext (local_txt_filename, file_exts[txt_file->type]))
+            sprintf (*z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_txt_filename, genozip_ext); 
+        else 
+            sprintf (*z_filename, "%s%s", local_txt_filename, genozip_ext); 
+
+        FREE (basename);
+    }
+
+    z_file = file_open (*z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, z_data_type);
+
+    // note on BCF and CRAM: we used bcftools/samtools as an external compressor, so that genozip sees the text,
+    // not binary, data of these files - the same as if the file were compressed with eg bz2
+    if (z_file->data_type == DT_BAM) z_file->z_flags.txt_is_bin = true; // compressed file is stored in binary form, and sizes are of the binary file
 }
 
 static void main_genozip (const char *txt_filename, 
@@ -408,87 +477,52 @@ static void main_genozip (const char *txt_filename,
                           bool is_first_file, bool is_last_file,
                           char *exec_name)
 {
+    SAVE_FLAGS;
+
     license_get(); // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
 
     ASSINP (!z_filename || !url_is_url (z_filename), 
             "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
 
     // get input file
-    if (txt_filename) {
-        
-        if (!txt_file) // open the file - possibly already open from main_load_reference
-            txt_file = file_open (txt_filename, READ, TXT_FILE, 0); 
+    if (!txt_file) // open the file - possibly already open from main_load_reference
+        txt_file = file_open (txt_filename, READ, TXT_FILE, DT_NONE); 
 
-        // skip this file if its size is 0
-        RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
+    // skip this file if its size is 0
+    RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
 
-        if (!txt_file->file) return; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
-    }
-    else {  // stdin
-        if (!txt_file) // possibly already open from main_load_reference
-            txt_file = file_open_redirect (READ, TXT_FILE, DT_NONE); 
-        flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
-    }
+    flag.to_stdout = !txt_filename && !z_filename; // implicit setting of stdout by using stdin, unless -o was used
+
+    if (!txt_file->file) goto done; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
 
     stats_add_txt_name (txt_name);
 
-    ASSERT0 (flag_bind || !z_file, "Error: expecting z_file to be NULL in non-bound mode");
+    ASSERT0 (flag.bind || !z_file, "Error: expecting z_file to be NULL in non-bound mode");
 
     // get output FILE
-    if (!flag_stdout) {
-
-        if (!z_file) { // skip if we're the second file onwards in bind mode - nothing to do
-
-            if (!z_filename) {
-                bool is_url = url_is_url (txt_filename);
-                const char *basename = is_url ? file_basename (txt_filename, false, "", 0,0) : NULL;
-                const char *local_txt_filename = basename ? basename : txt_filename;
-
-                unsigned fn_len = strlen (local_txt_filename);
-                z_filename = (char *)MALLOC (fn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
-
-                // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
-                const char *genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (txt_file->data_type, txt_file->type)];
-
-                if (file_has_ext (local_txt_filename, file_exts[txt_file->type]))
-                    sprintf (z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_txt_filename,
-                             genozip_ext); 
-                else 
-                    sprintf (z_filename, "%s%s", local_txt_filename, genozip_ext); 
-
-                FREE (basename);
-            }
-
-            z_file = file_open (z_filename, flag_pair ? WRITEREAD : WRITE, Z_FILE, txt_file->data_type);
-        }
-    }
-    else if (flag_stdout) { // stdout
-#ifdef _WIN32
-        // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
-        ASSINP (isatty(1), "%s: redirecting binary output is not supported on Windows, use --output instead", global_cmd);
-#endif
-        ASSINP (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
-
-        z_file = file_open_redirect (WRITE, Z_FILE, txt_file->data_type);
-    } 
-    else ABORT0 ("Error: No output channel");
+    if (!z_file)  // skip if we're the second file onwards in bind mode - nothing to do
+        main_genozip_open_z_file_write (&z_filename);
     
-    txt_file->basename = file_basename (txt_filename, false, FILENAME_STDIN, NULL, 0);
-    zip_dispatcher (txt_file->basename, is_last_file);
+    flags_update_zip_one_file();
 
-    if (flag_show_stats && (!flag_bind || is_last_file)) stats_display();
+    zip_one_file (txt_file->basename, is_last_file);
 
-    bool remove_txt_file = z_file && flag_replace && txt_filename;
+    if (flag.show_stats && (!flag.bind || is_last_file)) stats_display();
+
+    bool remove_txt_file = z_file && flag.replace && txt_filename;
 
     file_close (&txt_file, !is_last_file);
 
-    if ((is_last_file || !flag_bind) && !flag_stdout && z_file) 
+    if ((is_last_file || !flag.bind) && !flag.to_stdout && z_file) 
         file_close (&z_file, !is_last_file); 
 
     if (remove_txt_file) file_remove (txt_filename, true); 
 
     // test the compression, if the user requested --test
-    if (flag_test && (!flag_bind || is_last_file)) main_test_after_genozip (exec_name, z_filename, is_last_file);
+    if (flag.test && (!flag.bind || is_last_file)) main_test_after_genozip (exec_name, z_filename, is_last_file);
+
+done:
+    RESTORE_FLAGS;
 }
 
 static void main_list_dir(const char *dirname)
@@ -512,50 +546,13 @@ static void main_list_dir(const char *dirname)
     ASSINP0 (!ret, "Error: failed to chdir(..)");
 }
 
-static void main_warn_if_duplicates (int num_files, char **filenames)
-{
-    if (num_files <= 1) return; // nothing to do
-
-    # define BASENAME_LEN 256
-    char basenames[num_files * BASENAME_LEN];
-
-    for (unsigned i=0; i < num_files; i++)
-        file_basename (filenames[i], false, "", &basenames[i*BASENAME_LEN], BASENAME_LEN);
-
-    qsort (basenames, num_files, BASENAME_LEN, (int (*)(const void *, const void *))strcmp);
-
-    for (unsigned i=1; i < num_files; i++) 
-        ASSERTW (strncmp(&basenames[(i-1) * BASENAME_LEN], &basenames[i * BASENAME_LEN], BASENAME_LEN), 
-                 "Warning: two files with the same name '%s' - if you later unbind with 'genounzip --unbind %s', these files will overwrite each other", 
-                 &basenames[i * BASENAME_LEN], out_filename);
-}
-
-static DataType main_get_file_dt (const char *filename)
+static inline DataType main_get_file_dt (const char *filename)
 {   
-    DataType dt = DT_NONE;
-
-    if (command == ZIP) {
-        FileType ft = file_get_stdin_type(); // check for --input option
-
-        if (ft == UNKNOWN_FILE_TYPE) // no --input - get file type from filename
-            ft = file_get_type (filename, false);
-
-        dt = file_get_data_type (ft, true);
+    switch (command) {
+        case ZIP: return txtfile_get_file_dt (filename);
+        case PIZ: return zfile_get_file_dt (filename);
+        default : return DT_NONE;
     }
-
-    else if (command == PIZ) {
-        FileType ft = file_get_type (filename, false);
-        dt = file_get_dt_by_z_ft (ft);
-
-        // case: we don't know yet what file type this is - we need to read the genozip header to determine
-        if (dt == DT_NONE && filename) {
-            File *genozip_file = file_open (filename, READ, Z_FILE, DT_NONE);
-            zfile_get_genozip_header (genozip_file, &dt,0,0,0,0,0,0,0,0,0);
-            file_close (&genozip_file, false);
-        }
-    }
-
-    return dt;
 }
 
 static int main_sort_input_filenames (const void *fn1, const void *fn2)
@@ -576,366 +573,71 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
     return fn1 - fn2;
 }
 
-// if two filenames differ by one character only, which is '1' and '2', creates a combined filename with "1+2"
-static char *main_get_fastq_pair_filename (const char *fn1, const char *fn2)
-{
-    FileType ft1, ft2;
-    char *rn1, *rn2;
-
-    file_get_raw_name_and_type ((char *)fn1, &rn1, &ft1);
-    file_get_raw_name_and_type ((char *)fn2, &rn2, &ft2);
-    
-    unsigned len = strlen (rn1);
-    if (len != strlen (rn2)) return NULL;
-
-    int df = -1;
-    for (unsigned i=0; i < len; i++)
-        if (rn1[i] != rn2[i]) {
-            if (df >= 0) return NULL; // 2nd differing character
-            df = i;
-        }
-
-    if (!((rn1[df] == '1' && rn2[df] == '2') || (rn1[df] == '2' && rn2[df] == '1'))) return NULL; // one of them must be '1' and the other '2'
-
-    char *pair_fn = MALLOC (len+20);
-    sprintf (pair_fn, "%.*s1+2%s" FASTQ_GENOZIP_, df, rn1, &rn1[df+1]);
-    
-    return pair_fn;
-}
-
 static void main_load_reference (const char *filename, bool is_first_file, bool is_last_file)
 {
-    if (flag_reference != REF_EXTERNAL && flag_reference != REF_EXT_STORE) return;
+    if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE) return;
 
-    if (exe_type == EXE_GENOCAT && flag_show_stats) return; // we don't need the reference if we're just showing stats (ignore here if user provided it)
+    if (exe_type == EXE_GENOCAT && flag.show_stats) return; // we don't need the reference if we're just showing stats (ignore here if user provided it)
     
-    int old_flag_ref_use_aligner = flag_ref_use_aligner;
+    int old_ref_use_aligner = flag.ref_use_aligner;
     DataType dt = main_get_file_dt (filename);
-    flag_ref_use_aligner = (old_flag_ref_use_aligner || dt == DT_FASTQ || dt == DT_FASTA) && primary_command == ZIP;
+    flag.ref_use_aligner = (old_ref_use_aligner || dt == DT_FASTQ || dt == DT_FASTA) && primary_command == ZIP;
 
     // no need to load the reference if genocat just wants to see some sections (unless its genocat of the refernece file itself)
-    if (flag_genocat_info_only && dt != DT_REF) return;
+    if (flag.genocat_info_only && dt != DT_REF) return;
 
     // we also need the aligner if this is an unaligned SAM 
-    if (!flag_ref_use_aligner && dt==DT_SAM && primary_command==ZIP) {
+    if (!flag.ref_use_aligner && dt==DT_SAM && primary_command==ZIP) {
 
         // open here instead of in main_genozip
-        txt_file = filename ? file_open (filename, READ, TXT_FILE, 0) : file_open_redirect (READ, TXT_FILE, DT_NONE);
+        txt_file = file_open (filename, READ, TXT_FILE, 0);
 
         // use the aligner if over 5 of the 100 first lines of the file are unaligned
-        flag_ref_use_aligner = txt_file && txt_file->file && txtfile_test_data ('@', 100, 0.05, sam_zip_is_unaligned_line); 
+        flag.ref_use_aligner = txt_file && txt_file->file && txtfile_test_data ('@', 100, 0.05, sam_zip_is_unaligned_line); 
     }
 
-    RESET_FLAG (txt_file); // save and reset - for use by reference loader
+    RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
     if (is_first_file)
         ref_load_external_reference (false, is_last_file); // also loads refhash if needed
 
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
-    else if (!old_flag_ref_use_aligner && flag_ref_use_aligner) { 
+    else if (!old_ref_use_aligner && flag.ref_use_aligner) { 
         ref_generate_reverse_complement_genome();
         refhash_load_standalone();
     }
 
-    RESTORE_FLAG (txt_file);
+    RESTORE_VALUE (txt_file);
 }
 
-static void main_set_flags_from_command_line (int argc, char **argv, bool *is_short)
+static void main_copy_command_line (int argc, char **argv)
 {
-    // process command line options
-    while (1) {
+    unsigned len=0, pw_len=0;
+    const char *pw=0;
 
-        #define _i  {"input-type",    required_argument, 0, 'i'                    }
-        #define _I  {"stdin-size",    required_argument, 0, 'I'                    }
-        #define _c  {"stdout",        no_argument,       &flag_stdout,           1 }
-        #define _d  {"decompress",    no_argument,       &command, PIZ             }
-        #define _f  {"force",         no_argument,       &flag_force,            1 }
-        #define _h  {"help",          no_argument,       &command, HELP            }
-        #define _l  {"list",          no_argument,       &command, LIST            }
-        #define _L1 {"license",       no_argument,       &command, LICENSE         } // US spelling
-        #define _L2 {"licence",       no_argument,       &command, LICENSE         } // British spelling
-        #define _q  {"quiet",         no_argument,       &flag_quiet,            1 }
-        #define _Q  {"noisy",         no_argument,       &flag_noisy,            1 }
-        #define _DL {"replace",       no_argument,       &flag_replace,          1 }
-        #define _V  {"version",       no_argument,       &command, VERSION         }
-        #define _z  {"bgzip",         no_argument,       &flag_bgzip,            1 }
-        #define _zb {"bam",           no_argument,       &flag_bam,              1 }
-        #define _zB {"BAM",           no_argument,       &flag_bam,              1 }
-        #define _zc {"bcf",           no_argument,       &flag_bcf,              1 }
-        #define _m  {"md5",           no_argument,       &flag_md5,              1 }
-        #define _t  {"test",          no_argument,       &flag_test,             1 }
-        #define _fa {"fast",          no_argument,       &flag_fast,             1 }
-        #define _bs {"best",          no_argument,       &flag_best,             1 }
-        #define _9  {"optimize",      no_argument,       &flag_optimize,         1 } // US spelling
-        #define _99 {"optimise",      no_argument,       &flag_optimize,         1 } // British spelling
-        #define _9s {"optimize-sort", no_argument,       &flag_optimize_sort,    1 }
-        #define _9P {"optimize-PL",   no_argument,       &flag_optimize_PL,      1 }
-        #define _9G {"optimize-GL",   no_argument,       &flag_optimize_GL,      1 }
-        #define _9g {"optimize-GP",   no_argument,       &flag_optimize_GP,      1 }
-        #define _9V {"optimize-VQSLOD", no_argument,     &flag_optimize_VQSLOD,  1 }
-        #define _9Q {"optimize-QUAL", no_argument,       &flag_optimize_QUAL,    1 } 
-        #define _9f {"optimize-Vf",   no_argument,       &flag_optimize_Vf,      1 }
-        #define _9Z {"optimize-ZM",   no_argument,       &flag_optimize_ZM,      1 }
-        #define _9D {"optimize-DESC", no_argument,       &flag_optimize_DESC,    1 }
-        #define _gt {"gtshark",       no_argument,       &flag_gtshark,          1 } 
-        #define _pe {"pair",          no_argument,       &flag_pair,   PAIR_READ_1 } 
-        #define _th {"threads",       required_argument, 0, '@'                    }
-        #define _u  {"unbind",        optional_argument, 0, 'u'                    }
-        #define _o  {"output",        required_argument, 0, 'o'                    }
-        #define _p  {"password",      required_argument, 0, 'p'                    }
-        #define _B  {"vblock",        required_argument, 0, 'B'                    }
-        #define _r  {"regions",       required_argument, 0, 'r'                    }
-        #define _s  {"samples",       required_argument, 0, 's'                    }
-        #define _e  {"reference",     required_argument, 0, 'e'                    }
-        #define _E  {"REFERENCE",     required_argument, 0, 'E'                    }
-        #define _me {"make-reference",no_argument,       &flag_make_reference,   1 }
-        #define _g  {"grep",          required_argument, 0, 'g'                    }
-        #define _G  {"drop-genotypes",no_argument,       &flag_drop_genotypes,   1 }
-        #define _H1 {"no-header",     no_argument,       &flag_no_header,        1 }
-        #define _H0 {"header-only",   no_argument,       &flag_header_only,      1 }
-        #define _1  {"header-one",    no_argument,       &flag_header_one,       1 }
-        #define _GT {"GT-only",       no_argument,       &flag_gt_only,          1 }
-        #define _Gt {"gt-only",       no_argument,       &flag_gt_only,          1 }
-        #define _fs {"sequential",    no_argument,       &flag_sequential, 1 }  
-        #define _rg {"register",      no_argument,       &flag_register,         1 }
-        #define _ss {"show-stats",    no_argument,       &flag_show_stats,       1 } 
-        #define _SS {"SHOW-STATS",    no_argument,       &flag_show_stats,       2 } 
-        #define _sd {"show-dict",     no_argument,       &flag_show_dict,        1 } 
-        #define _d1 {"show-one-dict", required_argument, 0, '\3'                   }
-        #define _d2 {"show-dict-one", required_argument, 0, '\3'                   }
-        #define _lc {"list-chroms",   no_argument,       &flag_list_chroms,      1 } // identical to --show-one-dict for the CHROM dict of the data type
-        #define _s2 {"show-b250",     no_argument,       &flag_show_b250,        1 } 
-        #define _s5 {"show-one-b250", required_argument, 0, '\2'                   }
-        #define _s6 {"show-b250-one", required_argument, 0, '\2'                   }
-        #define _s7 {"dump-one-b250", required_argument, 0, '\5'                   }
-        #define _s8 {"dump-b250-one", required_argument, 0, '\5'                   }
-        #define _S7 {"dump-one-local",required_argument, 0, '\6'                   }
-        #define _S8 {"dump-local-one",required_argument, 0, '\6'                   }
-        #define _sa {"show-alleles",  no_argument,       &flag_show_alleles,     1 }
-        #define _st {"show-time",     no_argument,       &flag_show_time   ,     1 } 
-        #define _sm {"show-memory",   no_argument,       &flag_show_memory ,     1 } 
-        #define _sh {"show-headers",  no_argument,       &flag_show_headers,     1 } 
-        #define _si {"show-index",    no_argument,       &flag_show_index  ,     1 } 
-        #define _Si {"show-ref-index",no_argument,       &flag_show_ref_index,   1 } 
-        #define _Sh {"show-ref-hash" ,no_argument,       &flag_show_ref_hash,    1 } 
-        #define _sr {"show-gheader",  no_argument,       &flag_show_gheader,     1 }  
-        #define _sT {"show-threads",  no_argument,       &flag_show_threads,     1 }  
-        #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks,     1 }  
-        #define _sR {"show-reference",no_argument,       &flag_show_reference,   1 }  
-        #define _sC {"show-ref-contigs", no_argument,    &flag_show_ref_contigs, 1 }  
-        #define _rA {"show-ref-alts", no_argument,       &flag_show_ref_alts,    1 }  
-        #define _rS {"show-ref-seq",  no_argument,       &flag_show_ref_seq,     1 }  
-        #define _sI {"show-is-set",   required_argument, 0, '~',                   }  
-        #define _sA {"show-aliases",  no_argument,       &flag_show_aliases,     1 }  
-        #define _sc {"show-codec-test", no_argument,     &flag_show_codec_test,  1 }  
-        #define _dS {"test-seg",      no_argument,       &flag_test_seg,         1 }  
-        #define _dm {"debug-memory",  no_argument,       &flag_debug_memory,     1 }  
-        #define _dp {"debug-progress",no_argument,       &flag_debug_progress,   1 }  
-        #define _dh {"show-hash",     no_argument,       &flag_show_hash,        1 }  
-        #define _00 {0, 0, 0, 0                                                    }
+    for (int i=0; i < argc; i++)
+        len += strlen (argv[i]) + 1; // +1 for seperator (' ' or '\0')
 
-        typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sc, _sI, _gt, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zc, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _rA, _rS,           _sA,      _sI,      _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                        _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _rA, _rS,           _sA,      _sI,      _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                     _p, _e,                                                                                                                    _st, _sm,                                   _dm,                                                                                                                                                   _00 };
-        static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
+    command_line = CALLOC (len);
 
-        // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
-        static const char *short_options[NUM_EXE_TYPES] = { // same order as ExeType
-            "i:I:cdfhlLqQt^Vzm@:o:p:B:9wWFe:E:2zu", // genozip (note: includes some genounzip options to be used in combination with -d)
-            "czfhLqQt^V@:uo:p:me:wW",               // genounzip
-            "hLVp:qf",                              // genols
-            "hLV@:p:qQ1r:s:H1Go:fg:e:E:wW"          // genocat
-        };
+    if ((pw = crypt_get_password())) pw_len  = strlen (pw);
 
-        int option_index = -1;
-        int c = getopt_long (argc, argv, short_options[exe_type], long_options[exe_type], &option_index);
+    for (int i=0; i < argc; i++) {
 
-        if (c == -1) break; // no more options
+        unsigned arg_len = strlen (argv[i]);
 
-        is_short[c] = (option_index == -1); // true if user provided a short option - eg -c rather than --stdout
+        if (pw && !strcmp(argv[i], pw)) // "-p 123", "--pass 123" etc
+            sprintf ((char*)&command_line[strlen(command_line)], "***%s", (i < argc-1 ? " ": "")); // hide password
 
-        switch (c) {
-            case PIZ : case LIST : case LICENSE : 
-            case VERSION  : case HELP :
-                ASSINP (command<0 || command==c, "%s: can't have both -%c and -%c", global_cmd, command, c); 
-                command=c; 
-                break;
+        else if (pw && (arg_len >= pw_len + 2) &&  // check for -p123 or eg -fmp123
+                    !strcmp (&argv[i][arg_len-pw_len], pw) && // not air-tight test, but good enough (eg "-ofilenamep123" will incorrectly trigger)
+                    argv[i][0] == '-' &&
+                    argv[i][arg_len-pw_len-1] == 'p')
+            sprintf ((char*)&command_line[strlen(command_line)], "%.*s***%s", arg_len-pw_len, argv[i], (i < argc-1 ? " ": "")); // hide password
 
-            case 'i' : file_set_input_type (optarg); break;
-            case 'I' : file_set_input_size (optarg); break;
-            case 'c' : flag_stdout        = 1      ; break;
-            case 'F' : flag_fast          = 1      ; break;
-            case 'z' : flag_bgzip         = 1      ; break;
-            case 'f' : flag_force         = 1      ; break;
-            case '^' : flag_replace       = 1      ; break;
-            case 'q' : flag_quiet         = 1      ; break;
-            case 'Q' : flag_noisy         = 1      ; break;
-            case '9' : flag_optimize      = 1      ; break;
-            case 'w' : flag_show_stats    = 1      ; break;
-            case 'W' : flag_show_stats    = 2      ; break;
-            case '2' : flag_pair    = PAIR_READ_1  ; break;
-            case 't' : flag_test          = 1      ; break; 
-                       // fall through for genocat -r
-            case 'r' : flag_regions       = 1      ; regions_add     (optarg); break;
-            case 's' : flag_samples       = 1      ; vcf_samples_add (optarg); break;
-            case 'e' : flag_reference     = REF_EXTERNAL  ; ref_set_reference (optarg); break;
-            case 'E' : flag_reference     = REF_EXT_STORE ; ref_set_reference (optarg); break;
-            case 'm' : flag_md5           = 1      ; break;
-            case 'u' : flag_unbind = optarg ? optarg : "" ; break; // unbind with or without a prefix
-            case 'G' : flag_drop_genotypes= 1      ; break;
-            case 'H' : flag_no_header     = 1      ; break;
-            case '1' : flag_header_one    = 1      ; break;
-            case '@' : threads_str      = optarg   ; break;
-            case 'o' : out_filename     = optarg   ; break;
-            case 'g' : flag_grep        = optarg   ; break;
-            case '~' : flag_show_is_set = optarg   ; break;
-            case '\2' : dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
-            case '\5' : mtf_initialize_binary_dump (optarg, &dump_one_b250_dict_id,  "b250");  break;
-            case '\6' : mtf_initialize_binary_dump (optarg, &dump_one_local_dict_id, "local"); break;
-            case '\3' : dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); break;
-            case 'B' : vb_set_global_max_memory_per_vb (optarg); 
-                       flag_vblock = true;
-                       break;
-            case 'p' : crypt_set_password (optarg) ; break;
-
-            case 0   : // a long option - already handled; except for 'o' and '@'
-
-                if (long_options[exe_type][option_index].val == 'o') 
-                    out_filename = optarg;
-
-                if (long_options[exe_type][option_index].val == 'p') 
-                    crypt_set_password (optarg);
-
-                else if (long_options[exe_type][option_index].val == '@') 
-                    threads_str = optarg;
-
-                else 
-                    ASSINP (long_options[exe_type][option_index].flag != &command || 
-                            long_options[exe_type][option_index].val  == command ||
-                            command < 0, 
-                            "%s: can't have both --%s and -%c", global_cmd, long_options[exe_type][option_index].name, command);
-                break; 
-
-            case '?' : // unrecognized option - error message already displayed by libc
-            default  :
-                fprintf(stderr, "Usage: %s [OPTIONS] filename1 filename2...\nTry %s --help for more information.\n", global_cmd, global_cmd);
-                exit(1);  
-        }
+        else
+            sprintf ((char*)&command_line[strlen(command_line)], "%s%s", argv[i], (i < argc-1 ? " ": ""));
     }
-}
-
-static void main_process_flags (unsigned num_files, char **filenames, const bool *is_short)
-{
-    // check for incompatabilities between flags
-    #define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
-
-    ASSINP (!flag_stdout      || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
-    ASSINP (!flag_stdout      || !flag_unbind,                      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("unbind", "u"));
-    ASSINP (!flag_unbind      || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("unbind",  "u"), OT("output", "o"));
-    ASSINP (!flag_stdout      || !flag_replace,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
-
-    // if flag_md5 we need to seek back and update the md5 in the txt header section - this is not possible with flag_stdout
-    ASSINP (!flag_stdout      || !flag_md5,                         "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("md5", "m"));
-    ASSINP (!flag_test        || !out_filename || command != PIZ,   "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
-    ASSINP (!flag_test        || !flag_replace || command != PIZ,   "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
-    ASSINP (!flag_test        || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
-    ASSINP (!flag_header_only || !flag_no_header,                   "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
-    ASSINP (!flag_no_header   || !flag_header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
-    ASSINP (!flag_quiet       || !flag_noisy,                       "%s: option %s is incompatable with %s", global_cmd, OT("quiet", "q"), OT("noisy", "Q"));
-    ASSINP (!flag_test        || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
-    ASSINP (!flag_md5         || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
-    ASSINP (!flag_samples     || !flag_drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
-    ASSINP (!flag_best        || !flag_fast,                        "%s: option %s is incompatable with --best", global_cmd, OT("fast", "t"));
-    ASSINP (!flag_test        || !flag_make_reference,              "%s: option %s is incompatable with --make-reference", global_cmd, OT("test", "t"));
-    ASSINP (flag_reference != REF_EXTERNAL  || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
-    ASSINP (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
-    ASSINP (flag_reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "%s: option %s supported only for viewing the reference file itself", global_cmd, OT("REFERENCE", "E"));
-    ASSINP (flag_reference != REF_EXTERNAL  || !flag_show_ref_seq,  "%s: option %s is incompatable with --show-ref-seq: use genocat --show-ref-seq on the reference file itself instead", global_cmd, OT("reference", "e"));
-    ASSINP (!dump_one_b250_dict_id.num || !dump_one_local_dict_id.num, "%s: option --dump-one-b250 is incompatable with --dump-one-local", global_cmd);
-
-    // some genozip flags are allowed only in combination with --decompress 
-    if (exe_type == EXE_GENOZIP && command == ZIP) {
-        ASSINP (!flag_bgzip,        "%s: option %s can only be used if --decompress is used too", global_cmd, OT("bgzip", "z"));
-        ASSINP (!flag_bam,          "%s: option --flag_bam can only be used if --decompress is used too", global_cmd);
-        ASSINP (!flag_bcf,          "%s: option --flag_bcf can only be used if --decompress is used too", global_cmd);
-        ASSINP (!flag_unbind,       "%s: option %s can only be used if --decompress is used too", global_cmd, OT("unbind", "u"));
-        ASSINP (!flag_show_aliases, "%s: option --flag_show_aliases can only be used if --decompress is used too", global_cmd);
-        ASSINP (!flag_show_is_set,  "%s: option --flag_show_is_set can only be used if --decompress is used too", global_cmd);
-    }
-
-    // --paired_end: verify an even number of fastq files, --output, and --reference/--REFERENCE
-    if (flag_pair) {
-
-        for (unsigned i=0; i < num_files; i++)
-            ASSERT (main_get_file_dt (filenames[i]) == DT_FASTQ, "%s: when using %s, all input files are expected to be FASTQ files, but %s is not", global_cmd, OT("pair", "2"), filenames[i]);
-
-        // in case of a flag_pair with 2 files, in which --output is missing, we attempt to figure it out if possible
-        if (!out_filename && num_files == 2) 
-            out_filename = main_get_fastq_pair_filename (filenames[0], filenames[1]);
-
-        ASSINP (out_filename,       "%s: --output must be specified when using %s", global_cmd, OT("pair", "2"));
-        ASSINP (flag_reference,     "%s: either --reference or --REFERENCE must be specified when using %s", global_cmd, OT("pair", "2"));
-        ASSINP (num_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
-    }
-
-    // deal with final setting of flag_quiet that suppresses warnings 
-    
-    // don't show progress or warning when outputing to stdout (note: we are "quiet" even if output doesn't go to the terminal
-    // because often it will be piped and ultimately go the terminal)
-    if (flag_stdout) flag_quiet=true; 
-    
-    // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
-    if (flag_show_dict || flag_show_b250 || flag_show_headers || flag_show_threads ||
-        dict_id_show_one_b250.num || dict_id_show_one_dict.num || flag_show_reference ||
-        flag_show_alleles || flag_show_vblocks || flag_show_codec_test || (flag_show_index && command==PIZ))
-        flag_quiet=true; // don't show progress
-
-    // override these ^ if user chose to be --noisy
-    if (flag_noisy) flag_quiet=false;
-
-    if (flag_test) flag_md5=true; // test requires md5
-
-    // default values, if not overridden by the user
-    if (!flag_vblock) vb_set_global_max_memory_per_vb (flag_fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 
-
-    // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
-    // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.
-    if (flag_make_reference) {
-        ASSINP (!crypt_have_password(), "%s: option --make-reference is incompatable with %s", global_cmd, OT("password", "p"));
-
-        flag_md5 = true;
-        if (!flag_vblock) vb_set_global_max_memory_per_vb("1");
-
-        ASSINP (num_files <= 1, "%s: you can specify only one FASTA file when using --make-reference.\n"
-                "To create a reference from multiple FASTAs use something like this:\n"
-                "cat *.fa | %s --make-reference --input fasta --output myref.ref.genozip -", global_cmd, global_cmd);
-    }
-
-    // if --optimize was selected, all optimizations are turned on
-    if (flag_optimize)
-        flag_optimize_sort = flag_optimize_PL = flag_optimize_GL = flag_optimize_GP   = flag_optimize_VQSLOD = 
-        flag_optimize_QUAL = flag_optimize_Vf = flag_optimize_ZM = flag_optimize_DESC = true;
-    
-    // if any optimization flag is on, we turn on flag_optimize
-    if (flag_optimize_sort || flag_optimize_PL || flag_optimize_GL || flag_optimize_GP   || flag_optimize_VQSLOD ||
-        flag_optimize_QUAL || flag_optimize_Vf || flag_optimize_ZM || flag_optimize_DESC)
-        flag_optimize = true;
-
-    // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
-    // will overwrite each other if extracted with --unbind
-    if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (num_files, filenames);
-
-    flag_multiple_files = (num_files > 1);
-
-    flag_bind = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
-
-    // cases where genocat is used to view some information, but not the file contents
-    flag_genocat_info_only = exe_type == EXE_GENOCAT &&
-                             (flag_show_stats || flag_show_dict || flag_show_b250 || flag_list_chroms || dict_id_show_one_dict.num ||
-                              flag_show_index || dump_one_local_dict_id.num || dump_one_b250_dict_id.num || flag_show_headers ||
-                              flag_show_reference || flag_show_ref_contigs || flag_show_ref_index || flag_show_ref_hash || flag_show_ref_alts || flag_show_ref_seq);
 }
 
 void TEST()
@@ -945,6 +647,7 @@ void TEST()
     (void)!fread (data, 1, 14236798, fp); // (void)! to quieten compiler "warning: ignoring return value"
 }
 
+
 int main (int argc, char **argv)
 {
     arch_initialize();
@@ -952,14 +655,15 @@ int main (int argc, char **argv)
     vb_initialize_evb();
     random_access_initialize();
     codec_initialize();
-    
+
     //TEST();exit(0);
 
 #ifdef _WIN32
     // lowercase argv[0] to allow case-insensitive comparison in Windows
-    str_to_lowercase (argv[0]);
+    str_tolower (argv[0], argv[0]);
 #else
     signal (SIGSEGV, main_sigsegv_handler);   // segmentation fault handler
+    signal (SIGBUS,  main_sigsegv_handler);    // bus error handler
 #endif
 
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
@@ -970,7 +674,8 @@ int main (int argc, char **argv)
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
     bool is_short[256] = { 0 }; // indexed by character of short option.
-    main_set_flags_from_command_line (argc, argv, is_short);
+    flags_init_from_command_line (argc, argv, is_short);
+    main_copy_command_line (argc, argv); // can only be called after --password is processed
 
     // if command not chosen explicitly, use the default determined by the executable name
     if (command < 0) { 
@@ -980,16 +685,16 @@ int main (int argc, char **argv)
         // genozip with no input filename, no output filename, and no output or input redirection 
         // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
         // coming from a pipe. the user must use "-" to redirect from stdin
-        else if (command == -1 && optind == argc && !out_filename && 
+        else if (command == -1 && optind == argc && !flag.out_filename && 
                  (isatty(0) || arch_am_i_in_docker()) && isatty(1)) {
             // case: --register
-            if (flag_register) {
+            if (flag.do_register) {
                 license_get();
                 exit (0);
             }
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
-            if (exe_type == EXE_GENOCAT && flag_reference) 
+            if (exe_type == EXE_GENOCAT && flag.reference) 
                 ref_load_external_reference (true, true);
 
             // otherwise: show help
@@ -1000,20 +705,20 @@ int main (int argc, char **argv)
         }
 
         else if (exe_type == EXE_GENOUNZIP) command = PIZ;
-        else if (exe_type == EXE_GENOCAT) { command = PIZ; flag_stdout = !out_filename ; }
+        else if (exe_type == EXE_GENOCAT) { command = PIZ; flag.to_stdout = !flag.out_filename ; }
         else command = ZIP; // default 
     }
 
     unsigned num_files = argc - optind;
 
-    main_process_flags (num_files, &argv[optind], is_short);
+    flags_update (num_files, &argv[optind], is_short);
 
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
     qsort (&argv[optind], num_files, sizeof (argv[0]), main_sort_input_filenames);
     
     // determine how many threads we have - either as specified by the user, or by the number of cores
-    if (threads_str) {
-        int ret = sscanf (threads_str, "%u", &global_max_threads);
+    if (flag.threads_str) {
+        int ret = sscanf (flag.threads_str, "%u", &global_max_threads);
         ASSINP (ret == 1 && global_max_threads >= 1, "%s: %s requires an integer value of at least 1", global_cmd, OT("threads", "@"));
     }
     else global_max_threads = (double)arch_get_num_cores() * 1.4; // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
@@ -1034,20 +739,20 @@ int main (int argc, char **argv)
         ASSINP (next_input_file || command != PIZ, 
                 "%s: filename(s) required (redirecting from stdin is not possible)", global_cmd);
 
-        ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
+        ASSERTW (next_input_file || !flag.replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
 
         bool is_last_file = (file_i==num_files-1);
 
         main_load_reference (next_input_file, !file_i, is_last_file);
         
         switch (command) {
-            case ZIP  : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || is_last_file, argv[0]); break;
-            case PIZ  : main_genounzip (next_input_file, out_filename, is_last_file); break;           
+            case ZIP  : main_genozip (next_input_file, flag.out_filename, file_i==0, !next_input_file || is_last_file, argv[0]); break;
+            case PIZ  : main_genounzip (next_input_file, flag.out_filename, is_last_file); break;           
             case LIST : main_genols (next_input_file, false, NULL, false); break;
             default   : ABORT ("%s: unrecognized command %c", global_cmd, command);
         }
 
-        if (flag_pair) flag_pair = 3 - flag_pair; // alternate between PAIR_READ_1 and PAIR_READ_2
+        if (flag.pair) flag.pair = 3 - flag.pair; // alternate between PAIR_READ_1 and PAIR_READ_2
     }
 
     // if this is "list", finalize

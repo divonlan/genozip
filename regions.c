@@ -109,7 +109,7 @@ void regions_add (const char *region_str)
         char *one_rs = strtok_r (next_region_token, ",", &next_region_token);
         if (!one_rs) break;
 
-        buf_alloc (evb, &regions_buf, MAX (regions_buf.len + 1, 100), 2, "regions_buf", 0);
+        buf_alloc (evb, &regions_buf, MAX (regions_buf.len + 1, 100), 2, "regions_buf");
 
         char *after_colon;
         char *before_colon = strtok_r (one_rs, ":", &after_colon);
@@ -167,7 +167,7 @@ void regions_add (const char *region_str)
 // 2. for "all chrom" regions - include them in all chregs
 void regions_make_chregs (void)
 {
-    if (!flag_regions) return; // nothing to do
+    if (!flag.regions) return; // nothing to do
 
     ARRAY (Region, regions, regions_buf);
     Context *chrom_ctx = &z_file->contexts[CHROM];
@@ -181,7 +181,7 @@ void regions_make_chregs (void)
         
         int32_t chrom_word_index = WORD_INDEX_NONE; // All chromosomes, unless reg->chrom is defined
         if (reg->chrom) {
-            chrom_word_index = mtf_search_for_word_index (chrom_ctx, regions[i].chrom, strlen (regions[i].chrom));
+            chrom_word_index = ctx_search_for_word_index (chrom_ctx, regions[i].chrom, strlen (regions[i].chrom));
 
             // if the requested chrom does not exist in the file, we remove this region
             if (chrom_word_index == WORD_INDEX_NONE) continue;
@@ -192,7 +192,7 @@ void regions_make_chregs (void)
              chr_i         <= (chrom_word_index == WORD_INDEX_NONE ? num_chroms-1 : chrom_word_index);
              chr_i++) {
             
-            buf_alloc (evb, &chregs[chr_i], (++chregs[chr_i].len) * sizeof (Chreg), 2, "chregs", chr_i);
+            buf_alloc (evb, &chregs[chr_i], (++chregs[chr_i].len) * sizeof (Chreg), 2, "chregs");
             
             Chreg *chreg = LASTENT (Chreg, chregs[chr_i]);
             chreg->start_pos = reg->start_pos;
@@ -214,7 +214,7 @@ void regions_transform_negative_to_positive_complement()
 
     // initialize regions for each chr - to be the whole chr
     for (unsigned chr_i=0; chr_i < num_chroms; chr_i++) {
-        buf_alloc (evb, &chregs[chr_i], sizeof (Chreg), 1, "chregs", chr_i);
+        buf_alloc (evb, &chregs[chr_i], sizeof (Chreg), 1, "chregs");
         Chreg *chreg = ENT (Chreg, chregs[chr_i], 0);
         chreg->start_pos   = 0;
         chreg->end_pos     = MAX_POS;
@@ -247,8 +247,8 @@ void regions_transform_negative_to_positive_complement()
                 // case: negative is strictly within positive - split positive to the two flanking regions
                 else if (neg_chreg->start_pos > pos_chreg->start_pos && neg_chreg->end_pos < pos_chreg->end_pos) {
                     chregs[chr_i].len++;
-                    buf_alloc (evb, &chregs[chr_i], chregs[chr_i].len * sizeof (Chreg), 2, "chregs", chr_i);
-
+                    buf_alloc (evb, &chregs[chr_i], chregs[chr_i].len * sizeof (Chreg), 2, "chregs");
+                    
                     Chreg *new_pos_chreg = LASTENT (Chreg, chregs[chr_i]);
                     Chreg *pos_chreg = ENT (Chreg, chregs[chr_i], posreg_i); // update after realloc
 
@@ -277,7 +277,7 @@ void regions_transform_negative_to_positive_complement()
 bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos,
                                   char *intersection_array) // optional out
 {
-    if (!flag_regions) return true; // nothing to do
+    if (!flag.regions) return true; // nothing to do
 
     ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, 
             "Error in regions_is_range_included: chrom_word_index=%d out of range", chrom_word_index);
@@ -302,7 +302,7 @@ bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType min_pos, P
 bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos,
                                      PosType *intersect_min_pos, PosType *intersect_max_pos) // out
 {
-    if (!flag_regions) { // if no regions are specified, the entire range "intersects"
+    if (!flag.regions) { // if no regions are specified, the entire range "intersects"
         *intersect_min_pos = min_pos;
         *intersect_max_pos = max_pos;
         return true;

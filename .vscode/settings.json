@@ -44,7 +44,8 @@
         "deque": "c",
         "unordered_map": "c",
         "vector": "c",
-        "reference.h": "c"
+        "reference.h": "c",
+        "*.tcc": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

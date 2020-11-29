@@ -27,6 +27,8 @@ static inline bool dict_id_is_type_2(DictId dict_id) { return ((dict_id.id[0] >>
 
 
 static inline DictId dict_id_printable(DictId dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
+#define dict_id_print(dict_id) ((dict_id).num ? (char*)dict_id_printable(dict_id).id : "_NONE_") // must used with %.8s
+
 #define DICT_ID_NONE ((DictId)(uint64_t)0)
 
 typedef struct { DictId alias, dst; } DictIdAlias;
@@ -35,9 +37,6 @@ uint32_t dict_id_num_aliases;
 
 extern BufferP dict_id_create_aliases_buf (void);
 extern void dict_id_read_aliases (void) ;
-
-extern DictId dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
-extern DictId dump_one_b250_dict_id, dump_one_local_dict_id;// arguments of --dump-b250-one and --dump-local-one (defined in genozip.c)
 
 extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 
@@ -92,7 +91,7 @@ extern bool dict_id_is_match (DictId template, DictId candidate);
 
 extern const char *dict_id_display_type (DataType dt, DictId dict_id);
 
-// print the dict_id - NOT thread safe, for use in execution-termination messages
-extern const char *err_dict_id (DictId dict_id);
+typedef struct { char s[DICT_ID_LEN+1]; } DisplayPrintId;
+extern DisplayPrintId dis_dict_id (DictId dict_id);
 
 #endif

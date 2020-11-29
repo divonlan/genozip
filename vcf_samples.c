@@ -13,7 +13,7 @@ static bool cmd_is_negative_samples = false;
 
 // referring to samples in the vcf file
 char *vcf_samples_is_included;                // a bytemap indicating for each sample if it is included
-static char **vcf_sample_names;               // an array of char * to null-terminated names of samples 
+static char **vcf_sample_names;               // an array of char * to nul-terminated names of samples 
 static char *vcf_sample_names_data;           // vcf_sample_names point into here
 
 // called from genozip.c for processing the --samples flag
@@ -45,7 +45,7 @@ void vcf_samples_add  (const char *samples_str)
             }
         if (is_duplicate) continue; // skip duplicates "genocat -s sample1,sample2,sample1"
 
-        buf_alloc (evb, &cmd_samples_buf, MAX (cmd_samples_buf.len + 1, 100) * sizeof (char*), 2, "cmd_samples_buf", 0);
+        buf_alloc (evb, &cmd_samples_buf, MAX (cmd_samples_buf.len + 1, 100) * sizeof (char*), 2, "cmd_samples_buf");
 
         NEXTENT (char *, cmd_samples_buf) = one_sample;
     }
@@ -73,7 +73,7 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
 
         else if (vcf_header_buf->data[i] == '\n') { 
             bool header_matches_standard = !memcmp (&vcf_header_buf->data[i+1], standard, MIN (strlen (standard), vcf_header_buf->len-(i+1)));
-            if (!header_matches_standard) flag_samples = false;
+            if (!header_matches_standard) flag.samples = false;
             RETURNW0 (header_matches_standard,, "Warning: found non-standard VCF sample header line. Ingoring --samples");
 
             break;
@@ -117,7 +117,7 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
         ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", *ENT(char *, cmd_samples_buf, s));
 
     // if the user filtered out all samples, its equivalent of drop_genotypes
-    if (!vcf_num_displayed_samples) flag_drop_genotypes = true;
+    if (!vcf_num_displayed_samples) flag.drop_genotypes = true;
 
     //for (i=0; i<num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
 }

@@ -7,7 +7,7 @@
 #define VCF_INCLUDED
 
 #include "genozip.h"
-#include "md5.h"
+#include "digest.h"
 #include "sections.h"
 
 // default max number of samples in each sample block within a variant block. user configurable with --sblock
@@ -21,18 +21,18 @@
 #define VCF_MAX_ALLELE_VALUE 99 // the code currently allows for 2-digit alleles.
 
 // SEG stuff
-extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, bool *has_special_eol);
+extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void vcf_seg_initialize (VBlockP vb_);
 extern void vcf_seg_finalize (VBlockP vb_);
 
 // PIZ stuff
 extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
-extern bool vcf_piz_filter (VBlockP vb, DictId dict_id, ConstStructuredP st, unsigned rep, int item);
+CONTAINER_FILTER_FUNC (vcf_piz_filter);
 
 // VCF Header stuff
 extern void vcf_header_initialize (void);
 extern bool vcf_inspect_txt_header (BufferP txt_header);
-extern bool vcf_header_set_globals (const char *filename, BufferP vcf_header);
+extern bool vcf_header_set_globals (const char *filename, BufferP vcf_header, bool soft_fail);
 extern void vcf_header_trim_header_line (BufferP vcf_header_buf);
 extern void vcf_header_keep_only_last_line (BufferP vcf_header_buf);
 extern uint32_t vcf_header_get_num_samples (void);

@@ -9,6 +9,7 @@
 #include "file.h"
 #include "zfile.h"
 #include "sections.h"
+#include "vblock.h"
 
 // globals externed in dict_id.h and initialized in dict_id_initialize
 static Buffer dict_id_aliases_buf  = EMPTY_BUFFER;
@@ -85,6 +86,7 @@ void dict_id_initialize (DataType data_type)
 
     switch (data_type) { 
     case DT_VCF:
+    case DT_BCF:
         dict_id_FORMAT_GT     = dict_id_vcf_format_sf (dict_id_make ("GT", 2)).num;
         dict_id_FORMAT_GT_HT  = dict_id_vcf_format_sf (dict_id_make ("@HT", 3)).num; // different first 2 letters than GT, for lookup table
         dict_id_FORMAT_GT_HT_INDEX = dict_id_vcf_format_sf (dict_id_make ("@INDEXHT", 8)).num; // different first 2 letters
@@ -113,6 +115,7 @@ void dict_id_initialize (DataType data_type)
         break;
 
     case DT_SAM:
+    case DT_BAM:
         dict_id_OPTION_AM = sam_dict_id_optnl_sf (dict_id_make ("AM:i", 4)).num;
         dict_id_OPTION_AS = sam_dict_id_optnl_sf (dict_id_make ("AS:i", 4)).num;
         dict_id_OPTION_CC = sam_dict_id_optnl_sf (dict_id_make ("CC:Z", 4)).num;
@@ -222,7 +225,7 @@ Buffer *dict_id_create_aliases_buf (void)
 
     // build global alias reference, which will be immutable until the end of this z_file
     dict_id_aliases_buf.len = dict_id_num_aliases * sizeof (DictIdAlias);
-    buf_alloc (evb, &dict_id_aliases_buf, dict_id_aliases_buf.len, 1, "dict_id_aliases_buf", 0);
+    buf_alloc (evb, &dict_id_aliases_buf, dict_id_aliases_buf.len, 1, "dict_id_aliases_buf");
 
     DictIdAlias *next = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)
@@ -232,7 +235,7 @@ Buffer *dict_id_create_aliases_buf (void)
             next++;
         }
 
-    if (flag_show_aliases) dict_id_show_aliases();
+    if (flag.show_aliases) dict_id_show_aliases();
 
     return &dict_id_aliases_buf;
 }
@@ -240,19 +243,16 @@ Buffer *dict_id_create_aliases_buf (void)
 // PIZ I/O thread: read all dict_id aliaeses, if there are any
 void dict_id_read_aliases (void) 
 { 
-    if (!sections_seek_to (SEC_DICT_ID_ALIASES, true)) return; // no aliases section
-
-    static Buffer compressed_aliases = EMPTY_BUFFER;
+    if (!sections_get_next_section_of_type (NULL, SEC_DICT_ID_ALIASES, false, true)) return; // no aliases section
 
     buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
 
-    zfile_read_section (z_file, evb, 0, &compressed_aliases, "dict_id_aliases_buf", 
-                        sizeof(SectionHeader), SEC_DICT_ID_ALIASES, NULL);    
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_DICT_ID_ALIASES, NULL);    
 
-    SectionHeader *header = (SectionHeader *)compressed_aliases.data;
+    SectionHeader *header = (SectionHeader *)evb->z_data.data;
     zfile_uncompress_section (evb, header, &dict_id_aliases_buf, "dict_id_aliases_buf", 0, SEC_DICT_ID_ALIASES);
 
-    buf_destroy (&compressed_aliases);
+    buf_free (&evb->z_data);
 
     dict_id_aliases = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     dict_id_num_aliases = dict_id_aliases_buf.len / sizeof (DictIdAlias);
@@ -261,7 +261,7 @@ void dict_id_read_aliases (void)
         ASSERT0 (dict_id_aliases[i].dst.id[0] && dict_id_aliases[i].alias.id[0], 
                  "Error in dict_id_read_aliases: corrupted aliases buffer")
     
-    if (flag_show_aliases) dict_id_show_aliases();
+    if (flag.show_aliases) dict_id_show_aliases();
 }
 
 // template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id
@@ -293,9 +293,9 @@ const char *dict_id_display_type (DataType dt, DictId dict_id)
 }
 
 // print the dict_id - NOT thread safe, for use in execution-termination messages
-const char *err_dict_id (DictId dict_id)
+DisplayPrintId dis_dict_id (DictId dict_id)
 {
-    static char s[DICT_ID_LEN+1];
-    sprintf (s, "%.*s", DICT_ID_LEN, dict_id.num ? (char*)dict_id_printable(dict_id).id : "<null>");
+    DisplayPrintId s;
+    sprintf (s.s, "%.*s", DICT_ID_LEN, dict_id.num ? (char*)dict_id_printable(dict_id).id : "<null>");
     return s;
 }

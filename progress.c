@@ -5,8 +5,10 @@
 
 #include <time.h>
 #include "genozip.h"
+#include "file.h"
 #include "progress.h"
 #include "profiler.h" // for TimeSpecType
+#include "flags.h"
 #if defined __APPLE__ 
 #include "compatibility/mac_gettime.h"
 #endif
@@ -64,10 +66,10 @@ void progress_new_component (const char *new_component_name,
             test_mode = new_test_mode;
 
         // if !show_progress - we don't show the advancing %, but we still show the filename, done status, compression ratios etc
-        show_progress  = !flag_quiet && !!isatty(2);
+        show_progress  = !flag.quiet && !!isatty(2);
         component_name = new_component_name; 
 
-        if (!flag_quiet) {
+        if (!flag.quiet) {
             if (test_mode) 
                 fprintf (stderr, "testing: %s%s --test %s : ", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
                         new_component_name); 
@@ -81,7 +83,7 @@ void progress_new_component (const char *new_component_name,
 
 void progress_update (uint64_t sofar, uint64_t total, bool done)
 {
-    if (!show_progress && !flag_debug_progress) return; 
+    if (!show_progress && !flag.debug_progress) return; 
 
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
@@ -110,7 +112,7 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
             unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
             progress_human_time (secs, time_str);
 
-            if (!flag_debug_progress)
+            if (!flag.debug_progress)
                 sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
             else
                 sprintf (progress, "%u%% (%s) sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", (unsigned)percent, time_str, sofar, total, seconds_so_far);            
@@ -128,7 +130,7 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
 
 void progress_update_status (const char *status)
 {
-    if (flag_quiet) return;
+    if (flag.quiet) return;
 
     static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
     static const char *spaces = "                                                                                ";
@@ -137,7 +139,7 @@ void progress_update_status (const char *status)
 
     last_len = strlen (status);
 
-    if (flag_debug_progress) { // if we're debugging progress, show every status on its own line
+    if (flag.debug_progress) { // if we're debugging progress, show every status on its own line
         fprintf (stderr, "\n");
         last_len = 0;
     }
@@ -145,7 +147,7 @@ void progress_update_status (const char *status)
 
 void progress_finalize_component (const char *status)
 {
-    if (!flag_quiet) {
+    if (!flag.quiet) {
         progress_update_status (status);
         fprintf (stderr, "\n");
     }
@@ -157,16 +159,16 @@ void progress_finalize_component (const char *status)
 #define FINALIZE(format, ...) { \
     char s[500]; \
     sprintf (s, format, __VA_ARGS__);  \
-    if (!md5_is_zero (md5)) sprintf (&s[strlen(s)], "\tMD5 = %s", md5_display (md5)); \
+    if (!digest_is_zero (md5) && flag.md5) sprintf (&s[strlen(s)], "\t%s = %s", digest_name(), digest_display (md5).s); \
     progress_finalize_component (s);  \
 }
 
-void progress_finalize_component_time (const char *status, Md5Hash md5)
+void progress_finalize_component_time (const char *status, Digest md5)
 {
     FINALIZE ("%s (%s)", status, progress_ellapsed_time (false));
 }
 
-void progress_finalize_component_time_ratio (const char *me, double ratio, Md5Hash md5)
+void progress_finalize_component_time_ratio (const char *me, double ratio, Digest md5)
 {
     if (component_name)
         FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time (false), me, ratio)
@@ -174,7 +176,7 @@ void progress_finalize_component_time_ratio (const char *me, double ratio, Md5Ha
         FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
 }
 
-void progress_finalize_component_time_ratio_better (const char *me, double ratio, const char *better_than, double ratio_than, Md5Hash md5)
+void progress_finalize_component_time_ratio_better (const char *me, double ratio, const char *better_than, double ratio_than, Digest md5)
 {
     if (component_name) 
         FINALIZE ("Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 
@@ -184,7 +186,7 @@ void progress_finalize_component_time_ratio_better (const char *me, double ratio
                   progress_ellapsed_time (false), me, ratio, better_than, ratio_than)
 }
 
-void progress_concatenated_md5 (const char *me, Md5Hash md5)
+void progress_concatenated_md5 (const char *me, Digest md5)
 {
     ASSERT0 (!component_name, "Error in progress_concatenated_md5: expecting component_name=NULL");
 

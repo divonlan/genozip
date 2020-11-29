@@ -6,12 +6,14 @@
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
 // it means a block of lines from the text file. 
 
+#include <libdeflate.h>
 #include "genozip.h"
 #include "context.h"
 #include "vblock.h"
 #include "file.h"
 #include "reference.h"
-#include "md5.h"
+#include "digest.h"
+#include "bgzf.h"
 
 // pool of VBs allocated based on number of threads
 static VBlockPool *pool = NULL;
@@ -24,7 +26,7 @@ void vb_release_vb (VBlock *vb)
 {
     if (!vb) return; // nothing to release
 
-    vb->first_line = vb->vblock_i = vb->txt_data_next_offset = vb->num_haplotypes_per_line = 0;
+    vb->first_line = vb->vblock_i = vb->num_haplotypes_per_line = vb->fragment_len = vb->fragment_num_words = 0;
     vb->vb_data_size = vb->vb_data_read_size = vb->longest_line_len = vb->line_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
@@ -35,14 +37,15 @@ void vb_release_vb (VBlock *vb)
     vb->dont_show_curr_line = vb->has_non_agct = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
-    vb->chrom_name = NULL;
+    vb->chrom_name = vb->fragment_start = NULL;
     vb->prev_range = NULL;
     vb->ht_matrix_ctx = NULL;
     vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
-    vb->md5_hash_so_far = MD5HASH_NONE;
+    vb->digest_so_far = DIGEST_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
-    
+    vb->fragment_ctx = 0;
+    vb->fragment_codec = 0;
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
 
@@ -50,7 +53,6 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->ra_buf);
     buf_free(&vb->compressed);
     buf_free(&vb->txt_data);
-    buf_free(&vb->txt_data_spillover);
     buf_free(&vb->z_data);
     buf_free(&vb->z_section_headers);
     buf_free(&vb->spiced_pw);
@@ -62,10 +64,11 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->hapmat_columns_data);
     buf_free(&vb->hapmat_one_array);
     buf_free(&vb->hapmat_column_of_zeros);
+    buf_free(&vb->bgzf_blocks);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
-            mtf_free_context (&vb->contexts[i]);
+            ctx_free_context (&vb->contexts[i]);
 
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++)
         buf_free (&vb->codec_bufs[i]);
@@ -73,8 +76,8 @@ void vb_release_vb (VBlock *vb)
     vb->in_use = false; // released the VB back into the pool - it may now be reused
 
     // release data_type -specific fields
-    if (vb->data_type != DT_NONE && DTP(release_vb)) 
-        DTP(release_vb)(vb);
+    if (vb->data_type != DT_NONE) 
+        DT_FUNC (vb, release_vb)(vb);
 
     // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
     // vb->num_lines_alloced
@@ -82,7 +85,8 @@ void vb_release_vb (VBlock *vb)
     //                   we have logic in vb_get_vb() to update its vb_i
     // vb->num_sample_blocks : we keep this value as it is needed by vb_cleanup_memory, and it doesn't change
     //                         between VBs of a file or bound files.
-    // vb->data_type : type of this vb 
+    // vb->data_type   : type of this vb 
+    // vb->libdefalte  : an instance of libdeflate - no need to re-instantiate between VBs
 }
 
 void vb_destroy_vb (VBlockP *vb_p)
@@ -92,9 +96,9 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->ra_buf);
     buf_destroy (&vb->compressed);
     buf_destroy (&vb->txt_data);
-    buf_destroy (&vb->txt_data_spillover);
     buf_destroy (&vb->z_data);
     buf_destroy (&vb->z_section_headers);
+    buf_destroy (&vb->bgzf_blocks);
     buf_destroy (&vb->spiced_pw);
     buf_destroy (&vb->show_headers_buf);
     buf_destroy (&vb->show_b250_buf);
@@ -107,21 +111,24 @@ void vb_destroy_vb (VBlockP *vb_p)
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
-            mtf_destroy_context (&vb->contexts[i]);
+            ctx_destroy_context (&vb->contexts[i]);
 
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++)
         buf_destroy (&vb->codec_bufs[i]);
 
     // destory data_type -specific buffers
-    if (vb->data_type != DT_NONE && DTP(destroy_vb))
-        DTP(destroy_vb)(vb);
+    if (vb->data_type != DT_NONE)
+        DT_FUNC(vb, destroy_vb)(vb);
+
+    if (command == ZIP) libdeflate_free_decompressor (vb->libdeflate);
+    else                libdeflate_free_compressor   (vb->libdeflate);
 
     FREE (*vb_p);
 }
 
 void vb_create_pool (unsigned num_vbs)
 {
-    ASSERT (!pool || num_vbs==pool->num_vbs, 
+    ASSERT (!pool || num_vbs <= pool->num_vbs, 
             "Error: vb pool already exists, but with the wrong number of vbs - expected %u but it has %u", num_vbs, pool->num_vbs);
 
     if (!pool)  {
@@ -159,10 +166,12 @@ VBlock *vb_get_vb (unsigned vblock_i)
         }
         
         if (!pool->vb[vb_i]) { // VB is not allocated - allocate it
-            unsigned sizeof_vb = z_file && DTPZ(sizeof_vb) ? DTPZ(sizeof_vb)() : sizeof (VBlock);
+            unsigned sizeof_vb = command==ZIP ? (txt_file && DTPT(sizeof_vb) ? DTPT(sizeof_vb)() : sizeof (VBlock))
+                                              : (z_file   && DTPZ(sizeof_vb) ? DTPZ(sizeof_vb)() : sizeof (VBlock));
             pool->vb[vb_i] = CALLOC (sizeof_vb); 
             pool->num_allocated_vbs++;
-            pool->vb[vb_i]->data_type = z_file ? z_file->data_type : DT_NONE;
+            pool->vb[vb_i]->data_type = command==ZIP ? (txt_file ? txt_file->data_type : DT_NONE)
+                                                     : (z_file   ? z_file->data_type   : DT_NONE);
         }
 
         if (!pool->vb[vb_i]->in_use) break;
