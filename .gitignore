@@ -58,12 +58,11 @@ mac/.from_remote_timestamp
 mac/*.pkg
 fastq/*
 lzma/unused
-!backward-compatibility-test/*.genozip
-!backward-compatibility-test/*.vcf
 genome_*Full*
 unix-nl.*
 windows-nl.*
 test.*
+test/back-compat
 docs/*
 utils/*
 conda/README.md

@@ -385,6 +385,12 @@ batch_external_tools()
         echo "BCF"
         test_standard " " " " test.human2.filtered.snp.bcf    
     fi
+
+    # unzip
+    if `command -v unzip >& /dev/null`; then
+        echo "unzip"
+        test_standard " " " " test.genome_Full.zip    
+    fi
 }
 
 batch_make_reference()
@@ -513,7 +519,7 @@ if (( $start <=  7 )); then batch_genocat_tests            ; fi
 if (( $start <=  8 )); then batch_backward_compatability   ; fi
 if (( $start <=  9 )); then batch_real_world_subsets       ; fi
 if (( $start <= 10 )); then batch_misc_cases               ; fi
-if (( $start <= 11 )); then batch_external_tools          ; fi
+if (( $start <= 11 )); then batch_external_tools           ; fi
 if (( $start <= 12 )); then batch_reference                ; fi
 if (( $start <= 13 )); then batch_make_reference           ; fi
 
