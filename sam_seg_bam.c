@@ -28,9 +28,7 @@ void bam_seg_initialize (VBlock *vb)
 
     uint32_t next=0, line_i=0;
     while (next < vb->txt_data.len && line_i < NUM_LINES_IN_TEST) {
-        uint32_t block_size_lten;
-        memcpy (&block_size_lten, ENT (char, vb->txt_data, next), sizeof (uint32_t)); // block_size is not word-aligned
-        next += LTEN32 (block_size_lten) + 4; // block_len excludes the block_len field length itself (4)
+        next += 4 + GET_UINT32 (ENT (char, vb->txt_data, next)); // block_len excludes the block_len field length itself (4)
         line_i++;
     }
 
