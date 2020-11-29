@@ -57,7 +57,7 @@ BSC_SRCS   = bsc/divsufsort.c bsc/bwt.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/q
 DEFLATE_SRCS = libdeflate/deflate_compress.c libdeflate/deflate_decompress.c libdeflate/utils.c libdeflate/x86_cpu_features.c \
              libdeflate/arm_cpu_features.c libdeflate/crc32.c libdeflate/adler32.c
 
-CONDA_DEVS = Makefile .gitignore test-file.vcf 
+CONDA_DEVS = Makefile .gitignore 
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
