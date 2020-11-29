@@ -768,7 +768,7 @@ void seg_all_data_lines (VBlock *vb)
     for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
         uint32_t remaining_txt_len = AFTERENT (char, vb->txt_data) - field_start;
-        //if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
+        
         if (!remaining_txt_len) { // we're done
             vb->lines.len = vb->line_i; // update to actual number of lines
             break;
