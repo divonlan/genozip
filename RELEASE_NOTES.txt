@@ -213,7 +213,7 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 
 8.0.4
 - 10X improvement in --gtshark speed by moving to in-memory comms using fifo
-- fixed thread safety issue in bit_array.c 
+- fix thread safety issue in bit_array.c 
 
 9.0.0
 Functionality:
