@@ -800,8 +800,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, Digest header_md5, bool is
         bgzf_sign (txt_file->disk_size, header.codec_info);
         
     file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);
-    if (txt_file->redirected)
-        file_remove_codec_ext (header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
+    file_remove_codec_ext (header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
     
     static Buffer txt_header_buf = EMPTY_BUFFER;
 
