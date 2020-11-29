@@ -69,11 +69,11 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h generic.h \
              compatibility/mac_gettime.h  \
-			 zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
+			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/zlib.h zlib/zutil.h \
 			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
 			 lzma/Precomp.h lzma/Threads.h \
-			 bsc/adler32.h bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
+			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
 			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h
 			 
 ifeq ($(CC),cl) # Microsoft Visual C
