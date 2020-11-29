@@ -137,6 +137,10 @@ void sam_seg_initialize (VBlock *vb)
     vb->contexts[SAM_GPOS].ltype        = LT_UINT32;
     vb->contexts[SAM_GPOS].flags.store  = STORE_INT;
 
+    vb->contexts[SAM_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    vb->contexts[SAM_TOP2BAM].no_stons  = true;
+    vb->contexts[SAM_TOP2FQ].no_stons   = true;
+
     Context *rname_ctx = &vb->contexts[SAM_RNAME];
     Context *rnext_ctx = &vb->contexts[SAM_RNEXT];
 

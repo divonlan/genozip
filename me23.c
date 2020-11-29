@@ -42,6 +42,8 @@ void me23_seg_initialize (VBlock *vb)
     vb->contexts[ME23_CHROM].no_stons = true;
     vb->contexts[ME23_CHROM].no_vb1_sort = true;
     vb->contexts[ME23_GENOTYPE].ltype = LT_SEQUENCE;
+    vb->contexts[ME23_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    vb->contexts[ME23_TOP2VCF].no_stons  = true;
 }
 
 void me23_seg_finalize (VBlockP vb)

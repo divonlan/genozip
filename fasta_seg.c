@@ -121,6 +121,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
     }
 
     vb->contexts[FASTA_CONTIG].no_stons = true; // needs b250 node_index for reference
+    vb->contexts[FASTA_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 
     COPY_TIMER (seg_initialize);
 }

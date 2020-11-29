@@ -135,6 +135,8 @@ void fastq_seg_initialize (VBlockFAST *vb)
 {
     START_TIMER;
 
+    vb->contexts[FASTQ_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
         vb->contexts[FASTQ_STRAND].ltype = LT_BITMAP;
         vb->contexts[FASTQ_GPOS  ].ltype = LT_UINT32;

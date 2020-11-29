@@ -23,9 +23,10 @@ void vcf_seg_initialize (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    vb->contexts[VCF_CHROM] .no_stons = true; // needs b250 node_index for random access
-    vb->contexts[VCF_FORMAT].no_stons = true;
-    vb->contexts[VCF_INFO]  .no_stons = true;
+    vb->contexts[VCF_CHROM] .no_stons   = true; // needs b250 node_index for random access
+    vb->contexts[VCF_FORMAT].no_stons   = true;
+    vb->contexts[VCF_INFO]  .no_stons   = true;
+    vb->contexts[VCF_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 
     ctx_get_ctx (vb, dict_id_FORMAT_GT)->no_stons = true; // we store the GT matrix in local, so cannot accomodate singletons
 

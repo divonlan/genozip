@@ -130,7 +130,7 @@ typedef enum { FASTQ_CONTIG /* copied from reference */, FASTQ_DESC, FASTQ_E1L, 
 typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_DESC, FASTA_COMMENT, FASTA_SQBITMAP, FASTA_NONREF, FASTA_NONREF_X, FASTA_GPOS, FASTA_STRAND, FASTA_TOPLEVEL, NUM_FASTA_FIELDS } FastaFields;
 typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, NUM_GFF3_FIELDS } Gff3Fields;
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPLEVEL, ME23_TOP2VCF, NUM_ME23_FIELDS } Me23Fields;  
-typedef enum { GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GenericFields;
+typedef enum { GNRIC_DATA, GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GenericFields;
 
 #define MAX_NUM_FIELDS_PER_DATA_TYPE MAX ((int) NUM_REF_FIELDS,    \
                                      MAX ((int) NUM_VCF_FIELDS,    \
@@ -166,7 +166,7 @@ typedef struct DataTypeFields {
   {NUM_ME23_FIELDS,  ME23_POS,   -1,         -1,           ME23_EOL,  ME23_TOPLEVEL,  { "CHROM", "POS", "ID", "GENOTYPE", "EOL", TOPLEVEL, "TOP2VCF" } }, \
   {NUM_SAM_FIELDS,   SAM_POS,    -1,         SAM_NONREF,   SAM_EOL,   SAM_TOP2BAM,    { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "QUAL", "DOMQRUNS", "EOL", "BAM_BIN", TOPLEVEL, "TOP2BAM", "TOP2FQ", "E2:Z", "2NONREF", "N2ONREFX", "2GPOS", "S2TRAND", "U2:Z", "D2OMQRUN" } }, \
   {NUM_VCF_FIELDS,   VCF_POS,    VCF_INFO,   -1,           VCF_EOL,   VCF_TOPLEVEL,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL } }, \
-  {NUM_GNRIC_FIELDS, -1,        -1,          -1,           -1,        GNRIC_TOPLEVEL, { TOPLEVEL } }, \
+  {NUM_GNRIC_FIELDS, -1,        -1,          -1,           -1,        GNRIC_TOPLEVEL, { "DATA", TOPLEVEL } }, \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)
