@@ -204,7 +204,7 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
             vb_ctx->local_hash_prime = hash_next_size_up(500);
         break;
 
-    case DT_GNRIC : 
+    case DT_GENERIC : 
         vb_ctx->local_hash_prime = 1; // GNRIC_TOPLEVEL has only one snip
         break;
 

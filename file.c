@@ -102,7 +102,7 @@ char *file_compressible_extensions (bool plain_only)
         
     for (DataType dt=1; dt < NUM_DATATYPES; dt++) { // start from 1, excluding DT_REFERENCE
         
-        if (dt == DT_GNRIC || dt == DT_ME23) continue;
+        if (dt == DT_GENERIC || dt == DT_ME23) continue;
 
         if (plain_only) 
             sprintf (&s[strlen(s)], "%s ", &file_exts[txt_in_ft_by_dt[dt][0].in][1]);

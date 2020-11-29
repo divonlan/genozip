@@ -573,7 +573,7 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
 
-    if (z_file->data_type == DT_NONE) {
+    if (z_file->data_type == DT_NONE || z_file->data_type == DT_GENERIC) {
         z_file->data_type = data_type;
         z_file->type      = file_get_z_ft_by_dt (z_file->data_type);  
     }
