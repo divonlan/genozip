@@ -491,7 +491,7 @@ void *zfile_read_section_header (VBlockP vb, uint64_t offset,
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
         
     ASSERT (!vb->compressed.len, "Error in zfile_read_section_header vb_i=%u expected_sec_type=%s: expecting vb->compressed to be free, but it's not: %s",
-            vb->vblock_i, st_name (expected_sec_type), buf_desc (&vb->compressed));
+            vb->vblock_i, st_name (expected_sec_type), buf_desc (&vb->compressed).s);
     
     buf_alloc (evb, &vb->compressed, header_size, 4, "compressed"); 
 
@@ -929,7 +929,7 @@ void zfile_output_processed_vb (VBlock *vb)
 
 DataType zfile_get_file_dt (const char *filename)
 {
-    FileType ft = file_get_type (filename, false);
+    FileType ft = file_get_type (filename);
     DataType dt = file_get_dt_by_z_ft (ft);
 
     // case: we don't know yet what file type this is - we need to read the genozip header to determine

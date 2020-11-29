@@ -682,15 +682,17 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 {
 #   define NUM_LINES_IN_TEST 10 // take an average of this number of lines
     uint32_t len=0; 
-    unsigned newlines_per_dt_line = vb->data_type == DT_FASTQ ? 4 : 1;
-    int newlines=0; for (; newlines < newlines_per_dt_line * NUM_LINES_IN_TEST; newlines++, len++)
+
+    if (!DTP (line_height)) return 0; // this data type doesn't use textual lines
+
+    int newlines=0; for (; newlines < DTP (line_height) * NUM_LINES_IN_TEST; newlines++, len++)
         for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
 
     len /= NUM_LINES_IN_TEST; // average length of a line
 
     ASSERT (vb->txt_data.len, "Error in seg_estimate_num_lines for vb=%u: txt_data is empty", vb->vblock_i); 
 
-    ASSSEG (newlines==newlines_per_dt_line || len < vb->txt_data.len, vb->txt_data.data, 
+    ASSSEG (newlines==DTP (line_height) || len < vb->txt_data.len, vb->txt_data.data, 
             "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
             str_uint_commas (global_max_memory_per_vb).s);
 
@@ -739,8 +741,6 @@ static void seg_verify_file_size (VBlock *vb)
 void seg_all_data_lines (VBlock *vb)
 {
     START_TIMER;
-
-    ASSERT_DT_FUNC (vb, seg_txt_line);
 
     ctx_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
 

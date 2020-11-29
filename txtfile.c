@@ -688,7 +688,7 @@ DataType txtfile_get_file_dt (const char *filename)
     FileType ft = file_get_stdin_type(); // check for --input option
 
     if (ft == UNKNOWN_FILE_TYPE) // no --input - get file type from filename
-        ft = file_get_type (filename, false);
+        ft = file_get_type (filename);
 
     return file_get_data_type (ft, true);
 }

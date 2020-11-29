@@ -50,7 +50,8 @@ DataType file_get_data_type (FileType ft, bool is_input)
     // note: if make-reference, we scan the array from dt=0 (DT_REF), otherwise we ignore DT_REF
     for (DataType dt=!flag.make_reference; dt < NUM_DATATYPES; dt++) 
         for (unsigned i=0; (is_input ? txt_in_ft_by_dt[dt][i].in : txt_out_ft_by_dt[dt][i]); i++)
-            if ((is_input ? txt_in_ft_by_dt[dt][i].in : txt_out_ft_by_dt[dt][i]) == ft) return dt;
+            if ((is_input ? txt_in_ft_by_dt[dt][i].in : txt_out_ft_by_dt[dt][i]) == ft) 
+                return dt;
 
     return DT_NONE;
 }
@@ -76,7 +77,7 @@ static Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, FileMode mo
         if (txt_in_ft_by_dt[dt][i].in == txt_ft) 
             return txt_in_ft_by_dt[dt][i].codec;
 
-    return (mode == WRITE ? CODEC_NONE : CODEC_UNKNOWN);
+    return CODEC_NONE;
 }
 
 DataType file_get_dt_by_z_ft (FileType z_ft)
@@ -100,6 +101,10 @@ static char *file_compressible_extensions (bool plain_only)
     static char s[1000] = {0};
         
     for (DataType dt=1; dt < NUM_DATATYPES; dt++) { // start from 1, excluding DT_REFERENCE
+        if (dt == DT_GNRIC || 
+            (plain_only && dt == DT_ME23)) // for --input extensions, we don't support --input txt
+            continue;
+
         if (plain_only) 
             sprintf (&s[strlen(s)], "%s ", &file_exts[txt_in_ft_by_dt[dt][0].in][1]);
     
@@ -114,20 +119,25 @@ static char *file_compressible_extensions (bool plain_only)
     return s;
 }
 
-FileType file_get_type (const char *filename, bool enforce_23andme_name_format)
+FileType file_get_type (const char *filename)
 {
     if (!filename) return UNKNOWN_FILE_TYPE;
 
     // 23andme files have the format "genome_Firstname_Lastname_optionalversion_timestamp.txt" or .zip
-    if (enforce_23andme_name_format && file_has_ext (filename, ".txt")) 
-        return (strstr (filename, "genome") && strstr (filename, "Full")) ? ME23 : UNKNOWN_FILE_TYPE;
-    
-    if (enforce_23andme_name_format && file_has_ext (filename, ".zip")) 
-        return (strstr (filename, "genome") && strstr (filename, "Full")) ? ME23_ZIP : UNKNOWN_FILE_TYPE;
-    
-    for (FileType ft=UNKNOWN_FILE_TYPE+1; ft < AFTER_LAST_FILE_TYPE; ft++)
+    if (strstr (filename, "genome") && strstr (filename, "Full")) {
+        if (file_has_ext (filename, ".txt")) return ME23;
+        if (file_has_ext (filename, ".zip")) return ME23_ZIP;
+        if (file_has_ext (filename, ".txt.genozip")) return ME23_GENOZIP;
+    }
+
+    for (FileType ft=UNKNOWN_FILE_TYPE+1; ft < AFTER_LAST_FILE_TYPE; ft++) {
+
+        // files that end with .txt/.txt.genozip/.zip are not classified as ME23, we already handled ME23 above
+        if (ft == ME23 || ft == ME23_ZIP || ft == ME23_GENOZIP) continue; 
+
         if (file_has_ext (filename, file_exts[ft])) 
             return ft;
+    }
 
     return UNKNOWN_FILE_TYPE;
 }
@@ -146,7 +156,7 @@ void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *out_
     else 
         raw_name = &filename; // overwrite filename
 
-    FileType ft = file_get_type (filename, true);
+    FileType ft = file_get_type (filename);
     if (ft != UNKNOWN_FILE_TYPE) 
         (*raw_name)[len - strlen (file_exts[ft])] = 0;
 
@@ -171,7 +181,14 @@ void file_set_input_type (const char *type_str)
 
     str_tolower (ext, ext); // lower-case to allow case-insensitive --input argument (eg vcf or VCF)
 
-    stdin_type = file_get_type (ext, false); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
+    if (!strcmp (ext, ".23andme")) 
+        stdin_type = ME23;
+
+    else if (!strcmp (ext, ".generic"))
+        stdin_type = GNRIC;
+
+    else
+        stdin_type = file_get_type (ext); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
 
     if (file_get_data_type (stdin_type, true) != DT_NONE) return; // all good 
 
@@ -281,7 +298,7 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
                     "%s: cannot compress %s because it is already compressed", global_cmd, file_printname(file));
 
             if (file->redirected)
-                ABORT ("%s: to pipe data in, please use --input (or -i) to specify its type, which can be one of the following: %s", 
+                ABORT ("%s: to pipe data in, please use --input (or -i) to specify its type, which can be one of the following: %s23andme generic", 
                         global_cmd, file_compressible_extensions (true))
             else
                 ABORT ("%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
@@ -293,7 +310,6 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
 
     return false; // all good - no need to skip this file
 }
-
 static bool file_open_txt_read (File *file)
 {
     // if user provided the type with --input, we use that overriding the type derived from the file name
@@ -653,15 +669,15 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         file->name = MALLOC (fn_size);
         memcpy (file->name, filename, fn_size);
 
-        if (mode==READ || data_type != DT_NONE) // if its NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
-            file->type = file_get_type (file->name, true);
+        if (mode==READ || data_type != DT_NONE) // if its WRITE and DT_NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
+            file->type = file_get_type (file->name);
 
         if (mode == WRITE || mode == WRITEREAD) 
             file->data_type = data_type; // for READ, data_type is set by file_open_*
     }
     else if (mode==READ) {  // stdin
 
-        file->type  = stdin_type; 
+        file->type = stdin_type; 
         file->data_type = file_get_data_type (stdin_type, true);
 
         Codec codec = file_get_codec_by_txt_ft (file->data_type, file->type, READ);

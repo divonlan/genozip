@@ -54,7 +54,7 @@ uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file d
 
 static void print_call_stack (void) 
 {
-#ifndef _WIN32
+#if ! defined _WIN32 && defined DEBUG
 #   define STACK_DEPTH 15
     void *array[STACK_DEPTH];
     size_t size = backtrace(array, STACK_DEPTH);
@@ -69,7 +69,7 @@ void main_exit (bool show_stack, bool is_error)
 {
     im_in_main_exit = true;
 
-    if (show_stack) print_call_stack(); //this is useless - doesn't print function names
+    if (show_stack) print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
 
     buf_test_overflows_all_vbs("exit_on_error");
 
@@ -118,6 +118,7 @@ static void main_sigsegv_handler (int sig)
     }
 
     print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
+
     abort();
 }
 #endif

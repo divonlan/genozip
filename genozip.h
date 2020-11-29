@@ -70,7 +70,7 @@ typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPE
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
 typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF3=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
-               DT_BAM=7, DT_BCF=8, NUM_DATATYPES 
+               DT_BAM=7, DT_BCF=8, DT_GNRIC=9, NUM_DATATYPES 
              } DataType; 
         
 #pragma pack(1) // structures that are part of the genozip format are packed.
@@ -141,6 +141,7 @@ typedef _Bool bool;
 #define RESET_VALUE(flag) SAVE_VALUE(flag) ; flag=(typeof(flag))(uint64_t)0
 #define RESTORE_VALUE(flag) flag = save_##flag
 
+// returns true if new_value has been set
 #define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value, bool reconstruct)
 #define SPECIAL(dt,num,name,func) \
     extern SPECIAL_RECONSTRUCTOR(func); \

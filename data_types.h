@@ -10,15 +10,17 @@
 #include "digest.h"
 #include "sections.h"
 #include "flags.h"
+#include "reference.h"
+#include "txtfile.h"
 
+// data type files
 #include "vcf.h"
 #include "sam.h"
 #include "fastq.h"
 #include "fasta.h"
 #include "gff3.h"
 #include "me23.h"
-#include "reference.h"
-#include "txtfile.h"
+#include "generic.h"
 
 #define MAX_NUM_SPECIAL MAX ((int)NUM_VCF_SPECIAL, \
                         MAX ((int)NUM_SAM_SPECIAL, \
@@ -84,13 +86,14 @@ typedef struct DataTypeProperties {
 /*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  is_header_done       unconsumed        inspect_txt_header,     zip_initialize        zip_finalize      zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_finalize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            container_filter       num_special        special        num_trans       translators      release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
     { "REFERENCE", RA,  1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                fasta_unconsumed, NULL,                   ref_make_ref_init,    NULL,             NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               ref_make_create_range,    NULL,                  NULL,                NULL,                  NULL,                      NULL,                      NULL,                  0,                 {},            0,              {},              fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
     { "VCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', NULL,                NULL,             vcf_inspect_txt_header, NULL,                 NULL,             NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,        NUM_VCF_SPECIAL,   VCF_SPECIAL,   0,              {},              vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
-    { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', NULL,                NULL,             sam_header_inspect,     NULL,                 sam_header_finalize, NULL,                  sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,NULL,                     NULL,                  sam_header_finalize, NULL,                  sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   sam_piz_sam2fq_filter, NUM_SAM_SPECIAL,   SAM_SPECIAL,   NUM_SAM_TRANS,  SAM_TRANSLATORS, sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
+    { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', NULL,                NULL,             sam_header_inspect,     NULL,                 sam_header_finalize, NULL,               sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  sam_header_finalize, NULL,                  sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   sam_piz_sam2fq_filter, NUM_SAM_SPECIAL,   SAM_SPECIAL,   NUM_SAM_TRANS,  SAM_TRANSLATORS, sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
     { "FASTQ",   NO_RA, 4, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                fastq_unconsumed, NULL,                   fastq_zip_initialize, NULL,             fastq_zip_read_one_vb, fastq_seg_initialize, fastq_seg_txt_line, fastq_seg_finalize, NULL,                     NULL,                  NULL,                fastq_piz_read_one_vb, fastq_piz_is_skip_section, fastq_piz_reconstruct_seq, fastq_piz_filter,      0,                 {},            0,              {},              fast_vb_release_vb, NULL,                NULL,                   "Entries",         { "FIELD", "DESC",   "ERROR!" } }, \
     { "FASTA",   RA,    1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                fasta_unconsumed, NULL,                   NULL,                 NULL,             NULL,                  fasta_seg_initialize, fasta_seg_txt_line, fasta_seg_finalize, NULL,                     fasta_piz_initialize,  NULL,                fasta_piz_read_one_vb, fasta_piz_is_skip_section, NULL,                      NULL,                  NUM_FASTA_SPECIAL, FASTA_SPECIAL, 0,              {},              fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
     { "GVF",     RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                NULL,             NULL,                   NULL,                 NULL,             NULL,                  gff3_seg_initialize,  gff3_seg_txt_line,  gff3_seg_finalize,  NULL,                     NULL,                  NULL,                NULL,                  NULL,                      NULL,                      NULL,                  0,                 {},            0,              {},              NULL,               NULL,                NULL,                   "Sequences",       { "FIELD", "ATTRS",  "ITEMS"  } }, \
     { "23ANDME", RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                NULL,             NULL,                   NULL,                 NULL,             NULL,                  me23_seg_initialize,  me23_seg_txt_line,  me23_seg_finalize,  NULL,                     NULL,                  NULL,                NULL,                  NULL,                      NULL,                      NULL,                  0,                 {},            NUM_ME23_TRANS, ME23_TRANSLATORS,NULL,               NULL,                NULL,                   "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }, \
-    { "BAM",     RA,    0, sam_vb_size,  sam_vb_zip_dl_size,  HDR_MUST, -1,  bam_is_header_done,  bam_unconsumed,   sam_header_inspect,     NULL,                 sam_header_finalize, NULL,                  sam_seg_initialize,   bam_seg_txt_line,   sam_seg_finalize,NULL,                     NULL,                  sam_header_finalize, NULL,                  NULL,                      NULL,                      sam_piz_sam2fq_filter, NUM_SAM_SPECIAL,   SAM_SPECIAL,   NUM_SAM_TRANS,  SAM_TRANSLATORS, sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
+    { "BAM",     RA,    0, sam_vb_size,  sam_vb_zip_dl_size,  HDR_MUST, -1,  bam_is_header_done,  bam_unconsumed,   sam_header_inspect,     NULL,                 sam_header_finalize, NULL,               sam_seg_initialize,   bam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  sam_header_finalize, NULL,                  NULL,                      NULL,                      sam_piz_sam2fq_filter, NUM_SAM_SPECIAL,   SAM_SPECIAL,   NUM_SAM_TRANS,  SAM_TRANSLATORS, sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
     { "BCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', NULL,                NULL,             vcf_inspect_txt_header, NULL,                 NULL,             NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,        NUM_VCF_SPECIAL,   VCF_SPECIAL,   0,              {},              vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
+    { "GENERIC", NO_RA, 0, 0,            0,                   HDR_NONE, -1,  NULL,                NULL,             NULL,                   NULL,                 NULL,             NULL,                  NULL,                 NULL,               generic_seg_finalize,NULL,                    NULL,                  NULL,                NULL,                  NULL,                      NULL,                      NULL,                  NUM_GNRIC_SPECIAL, GNRIC_SPECIAL, 0,          {},              NULL,               NULL,                NULL,                   "N/A",             { "FIELD", "ERROR!", "ERROR!" } }, \
 }  
 #define DATA_TYPE_FUNCTIONS_DEFAULT /* only applicable to (some) functions */ \
     { "DEFAULT", 0,     0, 0,            0,                   0,        0,   def_is_header_done,  def_unconsumed,   0,                      0,                    0,                0,                     0,                    0,                  0,                  0,                        0,                     NULL,                0,                     0,                         0,                         0,                0,                 {},            0,             {},              0,                  0,                   0,                      "",                { }                             }
@@ -127,6 +130,7 @@ typedef enum { FASTQ_CONTIG /* copied from reference */, FASTQ_DESC, FASTQ_E1L, 
 typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_DESC, FASTA_COMMENT, FASTA_SQBITMAP, FASTA_NONREF, FASTA_NONREF_X, FASTA_GPOS, FASTA_STRAND, FASTA_TOPLEVEL, NUM_FASTA_FIELDS } FastaFields;
 typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, NUM_GFF3_FIELDS } Gff3Fields;
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPLEVEL, ME23_TOP2VCF, NUM_ME23_FIELDS } Me23Fields;  
+typedef enum { GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GenericFields;
 
 #define MAX_NUM_FIELDS_PER_DATA_TYPE MAX ((int) NUM_REF_FIELDS,    \
                                      MAX ((int) NUM_VCF_FIELDS,    \
@@ -134,7 +138,8 @@ typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPL
                                      MAX ((int) NUM_FASTQ_FIELDS,  \
                                      MAX ((int) NUM_FASTA_FIELDS,  \
                                      MAX ((int) NUM_GFF3_FIELDS,   \
-                                          (int) NUM_ME23_FIELDS     ))))))
+                                     MAX ((int) NUM_ME23_FIELDS,   \
+                                          (int) NUM_GNRIC_FIELDS )))))))
 
 #define MAX_DICTS (MAX_SUBFIELDS*2 + MAX_NUM_FIELDS_PER_DATA_TYPE)  
 //#if MAX_DICTS > 253 // 254 is for future use and 255 is DID_I_NONE
@@ -161,6 +166,7 @@ typedef struct DataTypeFields {
   {NUM_ME23_FIELDS,  ME23_POS,   -1,         -1,           ME23_EOL,  ME23_TOPLEVEL,  { "CHROM", "POS", "ID", "GENOTYPE", "EOL", TOPLEVEL, "TOP2VCF" } }, \
   {NUM_SAM_FIELDS,   SAM_POS,    -1,         SAM_NONREF,   SAM_EOL,   SAM_TOP2BAM,    { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "QUAL", "DOMQRUNS", "EOL", "BAM_BIN", TOPLEVEL, "TOP2BAM", "TOP2FQ", "E2:Z", "2NONREF", "N2ONREFX", "2GPOS", "S2TRAND", "U2:Z", "D2OMQRUN" } }, \
   {NUM_VCF_FIELDS,   VCF_POS,    VCF_INFO,   -1,           VCF_EOL,   VCF_TOPLEVEL,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL } }, \
+  {NUM_GNRIC_FIELDS, -1,        -1,          -1,           -1,        GNRIC_TOPLEVEL, { TOPLEVEL } }, \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)

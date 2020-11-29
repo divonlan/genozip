@@ -37,6 +37,7 @@ MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c lic
 		  fasta_seg.c fasta_piz.c fastq.c fast_shared.c \
 		  gff3_seg.c \
 		  me23.c \
+		  generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_none.c \
@@ -66,7 +67,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h \
 			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h\
 			 arch.h license.h data_types.h base64.h \
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h \
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/zlib.h zlib/zutil.h \

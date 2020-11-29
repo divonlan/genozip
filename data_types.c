@@ -39,6 +39,7 @@ const DtTranslation dt_get_translation (void)
 
 const char *dt_name (DataType dt)
 {
+    if (dt == DT_NONE) return "NONE";
     return type_name (dt, &dt_props[dt].name, NUM_DATATYPES);
 }
 
