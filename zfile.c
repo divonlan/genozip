@@ -37,36 +37,15 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 {
     if (flag.reading_reference) return; // don't show headers of reference file
     
-    DictId dict_id = {0};
-    char flags[10] = "", param[10] = "";
-    const char *ltype="";
-    bool has_ltype = (header->section_type == SEC_LOCAL);
-    bool has_param = (header->section_type == SEC_LOCAL || header->section_type == SEC_B250);
     bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
-    if (header->section_type == SEC_DICT) 
-        dict_id = ((SectionHeaderDictionary *)header)->dict_id;
-    
-    else if (header->section_type == SEC_LOCAL || header->section_type == SEC_B250) {
-        SectionHeaderCtx *header_ctx = (SectionHeaderCtx *)header;
-        dict_id = header_ctx->dict_id;
-        str_int (header_ctx->param, param);
-        if (has_ltype) ltype = lt_desc[header_ctx->ltype].name;
-    }
-
-    if (header->flags.flags) 
-        str_int (header->flags.flags, flags);
 
     char str[1000];
-    #define PRINT if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else printf ("%s", str)
+    #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else printf ("%s", str); } 
 
-    sprintf (str, "%c %s%-*"PRIu64" %-19s %*.*s %4s%-3s %5s%-3s %4s%-3s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x\n",
+    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x\n",
              rw, 
              is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
              st_name(header->section_type), 
-             -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
-             header->flags.flags ? "flg=" : "", flags, 
-             has_ltype ? "type=" : "", ltype, 
-             has_param ? "prm=" : "", param, 
              codec_name (header->codec), codec_name (header->sub_codec),
              BGEN32 (header->vblock_i), 
              BGEN32 (header->compressed_offset), 
@@ -77,7 +56,9 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     PRINT;
 
 #define SEC_TAB "            ++  "
-    if (header->section_type == SEC_GENOZIP_HEADER) {
+    
+    switch (header->section_type) {
+    case SEC_GENOZIP_HEADER: {
         SectionHeaderGenozipHeader *h = (SectionHeaderGenozipHeader *)header;
         struct FlagsGenozipHeader f = h->h.flags.genozip_header;
         sprintf (str, SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u digest_bound=%s\n" 
@@ -89,47 +70,76 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
                  f.ref_internal, f.aligner, f.txt_is_bin, f.bgzf, f.adler,
                  REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
                  FILE_METADATA_LEN, h->created);
-        PRINT;
+        break;
     }
 
-    else if (header->section_type == SEC_TXT_HEADER) {
+    case SEC_TXT_HEADER: {
         SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
         sprintf (str, SEC_TAB "txt_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u md5_single=%s digest_header=%s\n" 
                       SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) txt_filename=\"%.*s\"\n",
                  BGEN64 (h->txt_data_size), BGEN64 (h->num_lines), BGEN32 (h->max_lines_per_vb), 
                  digest_display (h->digest_single).s, digest_display (h->digest_header).s, 
                  codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], TXT_FILENAME_LEN, h->txt_filename);
-        PRINT;
+        break;
     }
 
-    else if (header->section_type == SEC_VB_HEADER) {
+    case SEC_VB_HEADER: {
         SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
         sprintf (str, SEC_TAB "first_line=%u lines=%u longest_line=%u vb_data_size=%u z_data_bytes=%u digest_so_far=%s\n",
                  BGEN32 (h->first_line), BGEN32 (h->num_lines), BGEN32 (h->longest_line_len), BGEN32 (h->vb_data_size), 
                  BGEN32 (h->z_data_bytes), digest_display (h->digest_so_far).s);
-        PRINT;
+        break;
     }
 
-    else if (header->section_type == SEC_REFERENCE || header->section_type == SEC_REF_IS_SET) {
+    case SEC_REFERENCE:
+    case SEC_REF_IS_SET: {
         SectionHeaderReference *h = (SectionHeaderReference *)header;
         sprintf (str, SEC_TAB "pos=%"PRIu64" gpos=%"PRIu64" num_bases=%u chrom_word_index=%u\n",
                  BGEN64 (h->pos), BGEN64 (h->gpos), BGEN32 (h->num_bases), BGEN32 (h->chrom_word_index)); 
-        PRINT;
+        break;
     }
     
-    else if (header->section_type == SEC_REF_HASH) {
+    case SEC_REF_HASH: {
         SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
         sprintf (str, SEC_TAB "num_layers=%u layer_i=%u layer_bits=%u start_in_layer=%u\n",
                  h->num_layers, h->layer_i, h->layer_bits, BGEN32 (h->start_in_layer)); 
-        PRINT;
+        break;
     }
     
-    else if (header->section_type == SEC_BGZF) {
+    case SEC_BGZF: {
         SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
         sprintf (str, SEC_TAB "libdeflate_level=%u has_eof=%u\n",
                  h->h.flags.bgzf.libdeflate_level, h->h.flags.bgzf.has_eof_block); 
-        PRINT;
+        break;
     }
+    
+    case SEC_B250: {
+        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
+        static const char *store[4] = { [STORE_NONE]="NONE", [STORE_INT]="INT", [STORE_FLOAT]="FLOAT", [STORE_INDEX]="INDEX"};
+
+        sprintf (str, SEC_TAB "%s param=%u store=%s paired=%u copy_param=%u all_the_same=%u\n",
+                 dis_dict_id (h->dict_id).s, h->param, store[h->h.flags.ctx.store], h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.all_the_same); 
+        break;
+    }
+
+    case SEC_LOCAL: {
+        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
+        sprintf (str, SEC_TAB "%s ltype=%s param=%u paired=%u copy_param=%u\n",
+                 dis_dict_id (h->dict_id).s, lt_desc[h->ltype].name, h->param, h->h.flags.ctx.paired, h->h.flags.ctx.copy_param); 
+        break;
+    }
+
+    case SEC_DICT: {
+        SectionHeaderDictionary *h = (SectionHeaderDictionary *)header;
+        sprintf (str, SEC_TAB "%s num_snips=%u\n", dis_dict_id (h->dict_id).s, BGEN32 (h->num_snips)); 
+        break;
+    }
+
+    default: 
+        str[0] = 0; 
+    }
+
+    if (str[0]) PRINT;
 }
 
 static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_data)

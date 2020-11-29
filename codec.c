@@ -153,7 +153,6 @@ Codec codec_assign_best_codec (VBlockP vb,
 {
     START_TIMER;
 
-    RESET_FLAG (show_headers);
     uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
     uint64_t save_z_data       = vb->z_data.len;
     bool is_local = (st == SEC_LOCAL);
@@ -235,7 +234,6 @@ done:
     // roll back
     vb->z_data.len = save_z_data;
     vb->section_list_buf.len = save_section_list; 
-    RESTORE_FLAG (show_headers);
 
     COPY_TIMER (codec_assign_best_codec);
 

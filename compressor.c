@@ -141,7 +141,8 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         header->section_type != SEC_NONE /* from codec_assign_best_codec */)
         sections_add_to_list (vb, header);
 
-    if (flag.show_headers) 
+    if (flag.show_headers &&
+        header->section_type != SEC_NONE) // not only testing from codec_assign_best_codec
         zfile_show_header (header, vb->vblock_i ? vb : NULL, z_data->len, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
 
     z_data->len += total_z_len;
