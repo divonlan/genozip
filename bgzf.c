@@ -1,6 +1,6 @@
 #include <errno.h>
 
-#include <libdeflate.h>
+#include "libdeflate/libdeflate.h"
 #include "bgzf.h"
 #include "endianness.h"
 #include "buffer.h"

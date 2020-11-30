@@ -3,7 +3,7 @@
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include <libdeflate.h>
+#include "libdeflate/libdeflate.h"
 #include "genozip.h"
 #include "digest.h"
 #include "buffer.h"

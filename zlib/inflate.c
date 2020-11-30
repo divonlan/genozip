@@ -80,7 +80,7 @@
  * The history for versions after 1.2.0 are in ChangeLog in zlib distribution.
  */
 
-#include <libdeflate.h>
+#include "libdeflate/libdeflate.h"
 #include "zutil.h"
 #include "inftrees.h"
 #include "inflate.h"

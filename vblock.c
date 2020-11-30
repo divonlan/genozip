@@ -6,7 +6,7 @@
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
 // it means a block of lines from the text file. 
 
-#include <libdeflate.h>
+#include "libdeflate/libdeflate.h"
 #include "genozip.h"
 #include "context.h"
 #include "vblock.h"

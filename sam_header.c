@@ -7,7 +7,7 @@
 // SAM / BAM header stuff
 // ----------------------
 
-#include <libdeflate.h>
+#include "libdeflate/libdeflate.h"
 #include <time.h>
 #if defined __APPLE__ 
 #include "compatibility/mac_gettime.h"
