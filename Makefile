@@ -75,7 +75,16 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
 			 lzma/Precomp.h lzma/Threads.h \
 			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
-			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h
+			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h \
+ 			 libdeflate/adler32_vec_template.h  libdeflate/crc32_table.h          libdeflate/unaligned.h \
+ 			 libdeflate/arm_adler32_impl.h      libdeflate/crc32_vec_template.h   libdeflate/x86_adler32_impl.h \
+ 			 libdeflate/arm_cpu_features.h      libdeflate/decompress_template.h  libdeflate/x86_cpu_features.h \
+			 libdeflate/arm_crc32_impl.h        libdeflate/deflate_compress.h     libdeflate/x86_crc32_impl.h \
+			 libdeflate/arm_matchfinder_impl.h  libdeflate/deflate_constants.h    libdeflate/x86_crc32_pclmul_template.h \
+			 libdeflate/bt_matchfinder.h        libdeflate/hc_matchfinder.h       libdeflate/x86_decompress_impl.h \
+			 libdeflate/common_defs.h           libdeflate/lib_common.h           libdeflate/x86_matchfinder_impl.h \
+			 libdeflate/compiler_gcc.h          libdeflate/libdeflate.h \
+			 libdeflate/cpu_features_common.h   libdeflate/matchfinder_common.h
 			 
 ifeq ($(CC),cl) # Microsoft Visual C
 	$(error Only the gcc compiler is currently supported)
