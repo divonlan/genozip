@@ -258,5 +258,5 @@ Compression improvements:
 Cleanup:
 - removed support for Visual C compiler
 
-9.0.1
+9.0.1, 9.0.2
 - minor bug fixes and improvements

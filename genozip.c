@@ -135,7 +135,7 @@ static void main_print_help (bool explicit)
     else if (flag.help && !strcmp (flag.help, "input")) 
         fprintf (stderr, "Supported file types for --input:\n%s\n", file_compressible_extensions (false));
     
-    else {
+    else 
         str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
                         "                     ",  "\n", 0);
     

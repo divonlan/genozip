@@ -15,7 +15,8 @@ LDFLAGS     += -lpthread -lm
 
 ifdef IS_CONDA 
 	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION=\"conda\"
-	LDFLAGS += -lbz2 -ldeflate # conda - dynamic linking with bz2 and deflate
+#	LDFLAGS += -lbz2 -ldeflate # conda - dynamic linking with bz2 and deflate
+	LDFLAGS += -lbz2 # conda - dynamic linking with bz2
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -108,7 +109,8 @@ ifndef IS_CONDA
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS)
 else 
 # conda - use packages for bzip2
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS)
+#C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS)
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(DEFLATE_SRCS)
 endif
 
 OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))
