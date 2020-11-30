@@ -239,25 +239,13 @@ decrement-version:
 	@echo "1. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
 	@echo "2. Copy the notes for the version from RELEASE NOTES"
 
-conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
+conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz README.md
 	@echo "Generating conda/meta.yaml"
-	@(  sed /__README_MD__/Q conda/meta.template.yaml ; \
-	    cat README.md | sed "s/<.\{1,3\}>//g"| sed "&nbsp/ /g" | grep -v "<!" | sed 's/^/    /' ; \
-		sed '0,/__README_MD__/d' conda/meta.template.yaml \
-	 ) | \
-		sed s/__SHA256__/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
-		sed s/__VERSION__/$(version)/g | \
-		grep -v "^#" \
-		> $@
+	@bash conda/generate_meta.sh > $@
 
-conda/README.md: conda/README.template.md html-to-md.sed
+conda/README.md: conda/README.template.md html-to-md.sed README.md
 	@echo "Generating conda/README.md"
-	@(  sed /__README_MD__/Q conda/README.template.md ; \
-	    ./html-to-md.sed README.md | grep -v "<!" ; \
-		sed '0,/__README_MD__/d' conda/README.template.md \
-	 ) | \
-		grep -v "^#" \
-		> $@
+	@bash conda/generate_README.sh > $@
 
 #CONDA_RECIPE_DIR = ../staged-recipes/recipes/genozip # initial stage-recipes step, keeping here for future reference
 CONDA_FEEDSTOCK  = ../genozip-feedstock
