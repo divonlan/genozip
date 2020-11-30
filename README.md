@@ -11,11 +11,11 @@
 <!-- 4. rendered as README.md in Docker Hub                                                               -->
 <!-- 5. converted to Markdown and embedded in conda/README.template.md to generate conda feedstock README -->
 <!--                                                                                                      -->
-<h1>genozip</h1><br>
+<h1>Genozip</h1><br>
 <br>
 (available on <b>Conda</b>, <b>Docker Hub</b> and https://github.com/divonlan/genozip)<br>
 <br>
-<b>genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
+<b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties specific to genomic data to compress better. It is also a lot faster than gzip.<br>
 <br>
@@ -46,7 +46,7 @@ The command line options are similar to gzip and samtools/bcftools, so if you ar
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> *  &nbsp&nbsp&nbsp←compresses all files in the current directory<br>
 <br>
 Notes:<br>
-1. genozip can compress with or without a reference - using a reference achieves much better compression when compressing FASTQ or unaligned SAM/BAM, and modestly better compression in other cases<br>
+1. Genozip can compress with or without a reference - using a reference achieves much better compression when compressing FASTQ or unaligned SAM/BAM, and modestly better compression in other cases<br>
 2. SAM/BAM - compression of aligned or unaligned SAM/BAM files is possible. Sorting makes no difference<br>
 3. Long reads - compression of long reads (Pac Bio / Nanopore) achieves signficantly better results when compressing an aligned BAM vs an unaligned BAM or FASTQ<br>
 4. Compression of CRAM (but not SAM or BAM) files requires samtools to be installed<br>
@@ -100,12 +100,12 @@ Notes:<br>
 <b>genozip</b> <i>file.vcf</i> --test <br>
 <br>
 <b><i>Citing</i></b><br>
-Do you find genozip useful? Please support continued development by citing:<br>
+Do you find Genozip useful? Please support continued development by citing:<br>
 Lan, D., et al. <i>Bioinformatics</i>, 36, 4091–4092, July 2020, https://doi.org/10.1093/bioinformatics/btaa290<br>
 <br> 
 Feature requests and bug reports: <b>bugs@genozip.com</b> <br>
 <br>
-<b>genozip</b> is free for non-commercial use. For a commercial license, please contact <b>sales@genozip.com</b> <br>
+<b>Genozip</b> is free for non-commercial use. For a commercial license, please contact <b>sales@genozip.com</b> <br>
 <br>
 Usage is subject to terms and conditions. The non-commercial license can be viewed with <b>genozip</b> --license<br>
 <br>
