@@ -197,6 +197,8 @@ int str_print_text (const char **text, unsigned num_lines,
                     const char *newline_separator, 
                     unsigned line_width /* 0=calcuate optimal */)
 {                       
+    ASSERT0 (text, "Error in str_print_text: text is NULL");
+    
     if (!line_width) {
 #ifdef _WIN32
         line_width = 120; // default width of cmd window in Windows 10

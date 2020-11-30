@@ -128,8 +128,6 @@ static void main_print_help (bool explicit)
     static const char **texts[NUM_EXE_TYPES] = {help_genozip, help_genounzip, help_genols, help_genocat }; // same order as ExeType
     static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat), sizeof(help_genozip_developer)};
     
-    if (flag.force) exe_type = NUM_EXE_TYPES; // -h -f shows developer help
-
     if (flag.help && !strcmp (flag.help, "dev")) 
         str_print_text (help_genozip_developer, sizeof(help_genozip_developer) / sizeof(char*), 
                         "                          ",  "\n", 0);
@@ -137,7 +135,7 @@ static void main_print_help (bool explicit)
     else if (flag.help && !strcmp (flag.help, "input")) 
         fprintf (stderr, "Supported file types for --input:\n%s\n", file_compressible_extensions (false));
     
-    else
+    else {
         str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
                         "                     ",  "\n", 0);
     
