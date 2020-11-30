@@ -23,8 +23,8 @@ It achieves x2 to x5 better compression ratios than gzip because it leverages so
 <br>
 The compression is lossless - the decompressed file is 100% identical to the original file.<br>
 Notes: <br>
-1. Losslessness is relative to the underlying textual file - for example, when compressing a .bam or a .fq.gz file - the losslessness is relative to the underlying uncompressed BAM or FASTQ file respectively<br>
-2. The one exception is when using the --optimize option which is lossy (see --help for details)<br>
+1. Losslessness when the original file is already compressed (with .gz, .bz2 or .xz as well as .bam) is relative to the underlying uncompressed file. If the original file was compressed with BGZF (as in BAM and most genomic files with a .gz extension) - genounzip will re-compresses the file with BGZF upon decompression (unless --plain is specified), and, further, it will attempt to recover the exact same BGZF compression as in the original file. However, sometimes exact-same BGZF compression is not possible due to different libraries used.<br>
+2. The one exception to Genozip's strict losslessness is when using the --optimize option which is lossy (see --help for details)<br>
 <br>
 The command line options are similar to gzip and samtools/bcftools, so if you are familiar with these, it works pretty much the same. To get started, try: <b>genozip</b> --help<br>
 <br>
