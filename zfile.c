@@ -531,16 +531,14 @@ void *zfile_read_section_header (VBlockP vb, uint64_t offset,
 // returns false if file should be skipped
 bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_t *num_items_bound, char *created) // optional outs
 {
-    bool success=false;
-
     // read the footer from the end of the file
     if (!file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, 2))
-        goto final; // likely an empty file 
+        goto error; // likely an empty file 
 
     SectionFooterGenozipHeader footer;
     int ret = fread (&footer, sizeof (footer), 1, (FILE *)z_file->file);
     ASSERTW (ret == 1, "Skipping empty file %s", z_name);
-    if (!ret) goto final;
+    if (!ret) goto error;
     
     // case: there is no genozip header. this can happen if the file was truncated (eg because compression did not complete)
     // note: this can also happen if the file is genozip v1, but I don't think there are any real v1 files in the wild
@@ -673,12 +671,14 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
             flag.reference = REF_EXTERNAL;
         }
     }
-    success = true;
      
-error: // for ASSERTGOTO
-final:
     buf_free (&evb->z_data);
-    return success;
+    return true;
+
+error: 
+    ASSERT0 (!flag.reading_reference, "Error: failed to read reference file");
+    buf_free (&evb->z_data);
+    return false;
 }
 
 void zfile_compress_genozip_header (Digest single_component_digest)
