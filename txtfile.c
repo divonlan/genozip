@@ -129,12 +129,10 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
 {
     #define uncomp_len param // we use vb->compress.param to hold the uncompressed length of the bgzf data in vb->compress
 
-    if (uncompress) buf_alloc (vb, &vb->txt_data, max_uncomp, 0, "txt_data");
-
     uint32_t block_comp_len, block_uncomp_len, this_uncomp_len=0;
     while (vb->compressed.uncomp_len < max_uncomp - BGZF_MAX_BLOCK_SIZE) {
 
-        buf_alloc (vb, &vb->compressed, MAX (max_uncomp/4, vb->txt_data.len + BGZF_MAX_BLOCK_SIZE), 1.5, "compressed")
+        buf_alloc_more (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, max_uncomp/4, char, 1.5, "compressed")
 
         // case: we have data passed to us from file_open_txt_read - handle it first
         if (!vb->txt_data.len && evb->compressed.len) {
@@ -177,10 +175,10 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
                 buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_uncomp / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
                 NEXTENT (BgzfBlockZip, vb->bgzf_blocks) = (BgzfBlockZip)
                     { .txt_index        = vb->txt_data.len, // after passed-down data and all previous blocks
-                    .compressed_index = vb->compressed.len,
-                    .txt_size         = block_uncomp_len,
-                    .comp_size        = block_comp_len,
-                    .is_decompressed  = false };           
+                      .compressed_index = vb->compressed.len,
+                      .txt_size         = block_uncomp_len,
+                      .comp_size        = block_comp_len,
+                      .is_decompressed  = false };           
 
                 vb->compressed.len   += block_comp_len;   // compressed size
             }
@@ -210,7 +208,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
 // performs a single I/O read operation - returns number of bytes read
 // data is placed in vb->txt_data, except if its BGZF and uncompress=false - compressed data is placed in vb->compressed
 static uint32_t txtfile_read_block (VBlock *vb, uint32_t max_bytes,
-                                    bool uncompress) // in BGZF, uncompress the data. ignored if not BGZF
+                                    bool uncompress) // in BGZF, whether to uncompress the data. ignored if not BGZF
 {
     START_TIMER;
 
@@ -274,12 +272,12 @@ static Digest txtfile_read_header (bool is_first_txt)
     uint32_t bytes_read=1 /* non-zero */;
 
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
-    #define HEADER_BLOCK (256*1024) // we have no idea how big the header will be... read this much at time
+    #define HEADER_BLOCK (256*1024) // we have no idea how big the header will be... read this much at a time
     while ((header_len = (DT_FUNC (txt_file, is_header_done)())) < 0) { // we might have data here from txtfile_test_data
         ASSERT (bytes_read, "Error in txtfile_read_header: %s: %s file too short - unexpected end-of-file", txt_name, dt_name(txt_file->data_type));
 
         buf_alloc_more (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
-        bytes_read = txtfile_read_block (evb, evb->txt_data.len + HEADER_BLOCK, true);
+        bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true);
     }
 
     // the excess data is for the next vb to read 
