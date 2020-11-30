@@ -351,6 +351,8 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
         //buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
         //        buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
         
+        ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspeciously high and might indicate a bug", seq_len);
+        
         buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
                    "context->local"); 
         

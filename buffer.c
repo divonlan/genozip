@@ -387,8 +387,8 @@ uint64_t buf_alloc_do (VBlock *vb,
     if (!requested_size) return 0; // nothing to do
 
 #define REQUEST_TOO_BIG_THREADSHOLD (4ULL*1024*1024*1024) // 4 GB
-    ASSERTW (requested_size < REQUEST_TOO_BIG_THREADSHOLD, "Warning: buf_alloc called from %s:%u requested %s. This is suspeciously high and might indicate a bug",
-             func, code_line, str_size (requested_size).s);
+    ASSERTW (requested_size < REQUEST_TOO_BIG_THREADSHOLD, "Warning: buf_alloc called from %s:%u requested %s. This is suspeciously high and might indicate a bug. buf=%s",
+             func, code_line, str_size (requested_size).s, buf_desc (buf).s);
 
     // sanity checks
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "Error in buf_alloc_do called from %s:%u: cannot buf_alloc an overlayed buffer. details: %s", 

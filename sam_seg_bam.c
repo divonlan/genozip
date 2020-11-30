@@ -33,7 +33,7 @@ void bam_seg_initialize (VBlock *vb)
     }
 
     // estimated number of BAM alignments in the VB, based on the average length of the first few
-    vb->lines.len = line_i ? (vb->txt_data.len / (next / line_i)) : 0;
+    vb->lines.len = line_i ? (1.2 * vb->txt_data.len / (next / line_i)) : 0;
 
     sam_seg_initialize (vb);
 }

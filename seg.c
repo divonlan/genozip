@@ -699,12 +699,13 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
     return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
 }
 
+// double the number of lines if we've run out of lines
 static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 {
     uint32_t num_old_lines = vb->lines.len;
     
     // note: sadly, we cannot use the normal Buffer macros here because each data_type has its own line type
-    buf_alloc (vb, &vb->lines, vb->lines.size + sizeof_line, 2, "lines");
+    buf_alloc (vb, &vb->lines, (vb->lines.len + 1) * sizeof_line, 2, "lines");
     
     memset (&vb->lines.data[num_old_lines * sizeof_line], 0, vb->lines.size - num_old_lines * sizeof_line);
     
@@ -760,7 +761,7 @@ void seg_all_data_lines (VBlock *vb)
 
     // allocate lines
     uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
-    buf_alloc (vb, &vb->lines, vb->lines.len * sizeof_line, 1.2, "lines");
+    buf_alloc (vb, &vb->lines, vb->lines.len * sizeof_line, 1, "lines");
     buf_zero (&vb->lines);
 
     const char *field_start = vb->txt_data.data;
