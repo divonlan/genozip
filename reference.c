@@ -61,7 +61,7 @@ static char *ref_fasta_name = NULL;
 
 // globals
 const char *ref_filename = NULL; // filename of external reference file
-Digest ref_md5 = DIGEST_NONE;
+Digest ref_md5 = {};
 
 #define CHROM_GENOME 0
 #define CHROM_NAME_GENOME "GENOME"
