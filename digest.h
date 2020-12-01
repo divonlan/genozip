@@ -21,7 +21,7 @@ typedef union {
     uint32_t adler_bgen; // Big Endian
 } Digest;
 
-#define DIGEST_NONE (Digest){ .ulls = { 0, 0 } }
+#define DIGEST_NONE (Digest){}
 
 #pragma pack()
 
