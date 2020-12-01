@@ -236,16 +236,18 @@ static const RAEntry *random_access_get_first_ra_of_vb (uint32_t vb_i, const RAE
 }
 
 // PIZ I/O thread: check if for the given VB,
-// the ranges in random access (from the file) overlap with the ranges in regions (from the command line -r or -R)
+// the ranges in random access (from the file) overlap with the ranges in regions (from the command line --regions)
 bool random_access_is_vb_included (uint32_t vb_i,
                                    Buffer *region_ra_intersection_matrix) // out - a bytemap - rows are ra's of this VB, columns are regions, a cell is 1 if there's an intersection
 {
-    if (!flag.regions) return true; // if no -r/-R was specified, all VBs are included
+    if (!flag.regions ||      // no --regions were specified
+        !z_file->ra_buf.len)  // this file has no RA data (eg unaligned SAM/BAM)
+        return true; // all VBs are included
 
-    ASSERT0 (region_ra_intersection_matrix, "Error: region_ra_intersection_matrix is NULL");
+    ASSERT0 (region_ra_intersection_matrix, "Error in random_access_is_vb_included: region_ra_intersection_matrix is NULL");
 
-    // allocate bytemap. note that it allocate in evb, and will be buf_moved to the vb after it is generated 
-    ASSERT (!buf_is_allocated (region_ra_intersection_matrix), "Error: expecting region_ra_intersection_matrix to be unallcoated vb_i=%u", vb_i);
+    // allocate bytemap. note that it allocated in evb, and will be buf_moved to the vb after it is generated 
+    ASSERT (!buf_is_allocated (region_ra_intersection_matrix), "Error in random_access_is_vb_included: expecting region_ra_intersection_matrix to be unallcoated vb_i=%u", vb_i);
 
     unsigned num_regions = regions_max_num_chregs();
     buf_alloc (evb, region_ra_intersection_matrix, z_file->ra_buf.len * num_regions, 1, "region_ra_intersection_matrix");

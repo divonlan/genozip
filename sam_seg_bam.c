@@ -347,6 +347,8 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     seg_pos_field (vb_, SAM_POS, SAM_POS, false, 0, 0, this_pos, sizeof (uint32_t)); // POS
     if (ref_id >= 0) sam_seg_verify_pos (vb_, this_pos);
 
+    random_access_update_pos (vb_, SAM_POS);
+
     seg_integer (vb, SAM_MAPQ, mapq, true); // MAPQ
 
     seg_integer (vb, SAM_FLAG, sam_flag, true); // FLAG
