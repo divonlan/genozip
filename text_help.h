@@ -320,7 +320,7 @@ static const char *help_genocat[] = {
     "   --show-reference  Show the name and MD5 of the reference file that needs to be provided to uncompress this file",    
     "",
     "Subsetting options (options resulting in partial display of the data):",    
-    "   --downsample      <rate> Show only one in every <rate> lines (or reads in the case of FASTQ)",
+    "   --downsample      <rate> Show only one in every <rate> lines (or reads in the case of FASTQ). Other subsetting options, if any, will be applied to the surviving lines only.",
     "",
     "   -r --regions      [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...]",
     "   VCF SAM FASTA     Show one or more regions of the file. Examples:",
