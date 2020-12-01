@@ -684,7 +684,8 @@ bool piz_dispatch_one_vb (Dispatcher dispatcher, const SectionListEntry *sl_ent)
     // read one VB's genozip data
     bool grepped_out = !piz_read_one_vb (next_vb);
 
-    if (grepped_out || (flag.show_headers && exe_type == EXE_GENOCAT)) 
+    if (grepped_out                                    || // this VB was filtered out by grep
+        (flag.show_headers && exe_type == EXE_GENOCAT))   // we're not reconstructing VBs at all - only showing headers
         dispatcher_abandon_next_vb (dispatcher); 
     else
         dispatcher_compute (dispatcher, piz_uncompress_one_vb);
@@ -748,8 +749,13 @@ bool piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
 
             bool another_header = sections_get_next_section_of_type2 (&sl_ent, SEC_TXT_HEADER, SEC_VB_HEADER, false, true);
 
-            if (another_header && sl_ent->section_type == SEC_VB_HEADER) 
+            if (another_header && sl_ent->section_type == SEC_VB_HEADER) {
+                
+                if (flag.one_vb && flag.one_vb != sl_ent->vblock_i) // we want only one VB, but not this one
+                    { sl_ent++; continue; }
+
                 header_only_file &= piz_dispatch_one_vb (dispatcher, sl_ent);  // function returns true if VB was skipped
+            } 
 
             else if (another_header && sl_ent->section_type == SEC_TXT_HEADER) { // 1st component or 2nd+ component and we're concatenating
 

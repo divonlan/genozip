@@ -32,6 +32,7 @@ typedef struct {
     int header_one, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential, no_pg;
     char *grep;
+    uint32_t one_vb, downsample;
 
     // genols options
     int bytes;

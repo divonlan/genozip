@@ -313,6 +313,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     static const uint8_t sam2bam_seq_map[256] = { ['=']=0x80, ['A']=0x81, ['C']=0x82, ['M']=0x83, ['G']=0x84, ['R']=0x85, ['S']=0x86, ['V']=0x87, 
                                                   ['T']=0x88, ['W']=0x89, ['Y']=0x8a, ['H']=0x8b, ['K']=0x8c, ['D']=0x8d, ['B']=0x8e, ['N']=0x8f };
     
+    if (vb->dont_show_curr_line) return 0; // sequence was not reconstructed - nothing to translate
+    
     static bool invalid_char_warning_shown = false; // we show this warning up to once per executipn
 
     BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
@@ -331,7 +333,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     for (uint32_t i=0; i < (l_seq+1)/2; i++, seq_after++, seq_before += 2) {
         uint8_t base[2] = { sam2bam_seq_map[(uint8_t)seq_before[0]], sam2bam_seq_map[(uint8_t)seq_before[1]] };
         
-        // check for invalid characters - issue warning (only once per executation), and make then into an 'N'
+        // check for invalid characters - issue warning (only once per execution), and make then into an 'N'
         for (unsigned b=0; b < 2; b++)
             if (!base[b] && !invalid_char_warning_shown && !(b==1 && (i+1)*2 > l_seq)) {
                 WARN ("Warning when converting SAM sequence data to BAM: invalid character encodered, it will be converted as 'N': '%c' (ASCII %u)", base[b], base[b]);

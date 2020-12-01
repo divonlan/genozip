@@ -12,6 +12,7 @@
 #include "regions.h"
 #include "mutex.h"
 #include "zfile.h"
+#include "strings.h"
 
 static Mutex ra_mutex = {};
 
@@ -249,11 +250,14 @@ bool random_access_is_vb_included (uint32_t vb_i,
     // allocate bytemap. note that it allocated in evb, and will be buf_moved to the vb after it is generated 
     ASSERT (!buf_is_allocated (region_ra_intersection_matrix), "Error in random_access_is_vb_included: expecting region_ra_intersection_matrix to be unallcoated vb_i=%u", vb_i);
 
+    const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
+    
+    // case: an entire VB without RA data while some other VBs do have. For example - a sorted SAM where unaligned reads are pushed to the end of the file
+    if (!ra) return false; // don't include this VB
+
     unsigned num_regions = regions_max_num_chregs();
     buf_alloc (evb, region_ra_intersection_matrix, z_file->ra_buf.len * num_regions, 1, "region_ra_intersection_matrix");
     buf_zero (region_ra_intersection_matrix);
-
-    const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
 
     bool vb_is_included = false;
     for (unsigned ra_i=0; ra->vblock_i == vb_i; ra_i++, ra++) {

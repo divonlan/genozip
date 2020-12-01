@@ -636,8 +636,11 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
     if (!show_headers_only)
         zfile_uncompress_section (evb, header, &evb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
     
-    // write txt header if not in bound mode, or, in bound mode, we write the txt header, only for the first genozip file
-    if ((is_first_txt || flag.unbind) && !flag.no_header && !flag.reading_reference && !flag.genocat_info_only) {
+    // write txt header if it is needed:
+    if ((is_first_txt || flag.unbind) &&              // this is the first component, or we are unbinding (all components get a header)
+        (!flag.no_header || flag.out_dt == DT_BAM) && // user didn't specify --no-header (or ignore the request if this is BAM)
+        !flag.reading_reference &&                    // nothing is written when reading a reference
+        !flag.genocat_info_only) {                    // nothing is written when we are just showing info
 
         if (evb->txt_data.len)
             DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value

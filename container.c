@@ -92,7 +92,9 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
         if (con->is_toplevel) {
             vb->line_i = vb->first_line + rep_i;
             vb->line_start = vb->txt_data.len;
-            vb->dont_show_curr_line = false; 
+
+            // show (or not) the line based on our downsampling rate
+            vb->dont_show_curr_line = flag.downsample && (vb->line_i % flag.downsample); 
         }
     
         if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, -1))) continue; // repeat is filtered out
@@ -118,6 +120,7 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
                 bool reconstruct = !flag.do_translate ||      // not translating Or...
                                    !IS_CI_SET (CI_TRANS_NOR); // no prohibition on reconstructing when translating
+
                 reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, 0, reconstruct);
 
                 // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item
