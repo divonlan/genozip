@@ -215,6 +215,21 @@ test_translate_sambam_to_fastq() # $1 sam or bam file
     cleanup
 }
 
+# note: only runs it to see that it doesn't crash, doesn't validate results
+test_translate_23andMe_to_vcf() # $1 23andMe file
+{
+    test_header "$1 - translate 23andMe to VCF"
+
+    local me23=$TESTDIR/$1
+    local vcf=$OUTDIR/copy.vcf.gz
+    if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
+
+    $genozip $arg1 -f $me23 -o $output  || exit 1
+    $genounzip $arg1 $output -fo $vcf -e $hg19  || exit 1
+
+    cleanup
+}
+
 test_backward_compatability()
 {
     test_header "$1 - backward compatability test"
@@ -296,8 +311,8 @@ batch_special_algs()
     done
 }
 
-# Test SAM<->BAM translation
-batch_translate_bam_sam()
+# Test translations
+batch_translations()
 {
     # note: we have these files in both sam and bam versions generated with samtools
     local files=(test.NA12878.chr22.1x.bam 
@@ -314,6 +329,8 @@ batch_translate_bam_sam()
         test_translate_sambam_to_fastq $file
         test_translate_sambam_to_fastq ${file%.bam}.sam
     done
+
+    test_translate_23andMe_to_vcf test.genome_Full.txt
 }
 
 batch_genocat_tests()
@@ -514,7 +531,7 @@ if (( $start <=  2 )); then batch_basic                    ; fi
 if (( $start <=  3 )); then batch_precompressed            ; fi
 if (( $start <=  4 )); then batch_bgzf                     ; fi
 if (( $start <=  5 )); then batch_special_algs             ; fi
-if (( $start <=  6 )); then batch_translate_bam_sam        ; fi
+if (( $start <=  6 )); then batch_translations             ; fi
 if (( $start <=  7 )); then batch_genocat_tests            ; fi
 if (( $start <=  8 )); then batch_backward_compatability   ; fi
 if (( $start <=  9 )); then batch_real_world_subsets       ; fi
