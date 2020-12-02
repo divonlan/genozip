@@ -63,10 +63,10 @@ my-sam-outputing-method | <b>genozip</b> - --input sam --output <i>mysample.sam.
 <br>
 <b><i>Lookups, downsampling and other subsets:</i></b><br>
 <b>genocat</b> --regions chr1:10000-20000 <i>mysamples.vcf.genozip</i>&nbsp&nbsp&nbsp←displays a specific region<br>
-<b>genocat</b> --regions ^Y,MT <i>mysamples.vcf.genozip</i>&nbsp&nbsp&nbsp←displays all chromosomes except Y and MT<br>
-<b>genocat</b> --regions -10000 <i>mysample.bam.genozip</i>&nbsp&nbsp&nbsp←displays positions up to 10000<br>
+<b>genocat</b> --regions ^Y,MT <i>mysample.bam.genozip</i>&nbsp&nbsp&nbsp←displays all alignments except Y and MT contigs<br>
+<b>genocat</b> --regions chrM <i>GRCh38.fa.genozip</i>&nbsp&nbsp&nbsp←displays the sequence of chrM<br>
 <b>genocat</b> --samples SMPL1,SMPL2 <i>mysamples.vcf.genozip</i>&nbsp&nbsp&nbsp←displays 2 samples<br>
-<b>genocat</b> --grep August-10 <i>myfasta.fa.genozip</i>&nbsp&nbsp&nbsp←displays contigs/reads that have "August-10" in the header<br>
+<b>genocat</b> --grep 1101:2392 <i>myreads.fq.genozip</i>&nbsp&nbsp&nbsp←displays reads that have "1101:2392" anywhere in the description<br>
 <b>genocat</b> --downsample 10 <i>mysample.fq.genozip</i>&nbsp&nbsp&nbsp←displays 1 in 10 reads<br>
 Notes:<br>
 1. --regions works with VCF, SAM/BAM, FASTA, 23andMe, GVF and reference files ; --grep works with FASTQ, FASTA ; --samples works with VCF ; --downsample works with all types<br>
