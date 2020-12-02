@@ -42,7 +42,8 @@ typedef struct {
         to_stdout,   // redirect txt output upon decompression to stdout 
         replace, 
         do_register,
-        test;        // implies md5
+        test,        // implies md5
+        index_txt;   // create an index
     char *threads_str, *out_filename;
 
     enum { REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference

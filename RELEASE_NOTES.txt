@@ -269,3 +269,6 @@ Cleanup:
 
 9.0.8-9
 - bug fixes
+
+9.0.10
+- Added the --index option for genounzip / genocat to create an index file alongside the decompressed file

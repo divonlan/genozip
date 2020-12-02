@@ -86,7 +86,7 @@ void main_exit (bool show_stack, bool is_error)
         if (!arch_am_i_io_thread()) 
             cancel_io_thread(); 
 
-        file_close (&z_file, false); // also frees file->name
+        file_close (&z_file, false, false); // also frees file->name
 
         // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
         // because it can't access a z_file filed after z_file is freed, and main_sigsegv_handler aborts
@@ -292,7 +292,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
         if (num_lines_count != num_lines)
             buf_add_string (evb, &str_buf, "\nNote: the difference between the file's Records and the total of its components' is the number of lines of the 1st component's header\n");
     }
-    file_close (&z_file, false);
+    file_close (&z_file, false, false);
 
 finish:
     if (!recursive) {
@@ -395,10 +395,10 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     if (!flag.to_stdout && !flag.unbind) {
         // don't close stdout - we might still need it for the next file
         // don't close in unbind mode - piz_one_file() opens and closes each component
-        file_close (&txt_file, false); 
+        file_close (&txt_file, flag.index_txt, false); 
     }
 
-    file_close (&z_file, false);
+    file_close (&z_file, false, false);
 
     if (flag.replace && txt_filename && z_filename) file_remove (z_filename, true); 
 
@@ -503,10 +503,10 @@ static void main_genozip (const char *txt_filename,
 
     bool remove_txt_file = z_file && flag.replace && txt_filename;
 
-    file_close (&txt_file, !is_last_file);
+    file_close (&txt_file, false, !is_last_file);
 
     if ((is_last_file || !flag.bind) && !flag.to_stdout && z_file) 
-        file_close (&z_file, !is_last_file); 
+        file_close (&z_file, false, !is_last_file); 
 
     if (remove_txt_file) file_remove (txt_filename, true); 
 

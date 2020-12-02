@@ -803,7 +803,7 @@ no_more_data:
     // verifies reconstructed file against MD5 (if compressed with --md5 or --test) or Adler2 and/or codec_args (if bgzf)
     Digest decompressed_file_digest = piz_one_file_verify_md5 (original_file_digest);
 
-    if (flag.unbind) file_close (&txt_file, true); // close this component file
+    if (flag.unbind) file_close (&txt_file, flag.index_txt, true); // close this component file (in non-unbind we close from main_genounzip)
 
     if (!flag.test) progress_finalize_component_time ("Done", decompressed_file_digest);
 

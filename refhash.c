@@ -300,8 +300,8 @@ void refhash_load_standalone (void)
 
     refhash_load();
 
-    file_close (&z_file, false);
-    file_close (&txt_file, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
+    file_close (&z_file, false, false);
+    file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
     
     RESTORE_FLAG (test);
     RESTORE_VALUE (command);

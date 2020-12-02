@@ -818,7 +818,7 @@ static void ref_copy_compressed_sections_from_reference_file (void)
         }
     }
 
-    file_close (&ref_file, false);
+    file_close (&ref_file, false, false);
 }
 
 // remove the unused parts of a range and the beginning and end of the range, and update first/last_pos.
@@ -1225,8 +1225,8 @@ void ref_load_external_reference (bool display, bool is_last_file)
     RESTORE_VALUE (command);
     RESTORE_FLAGS;
 
-    file_close (&z_file, false);
-    file_close (&txt_file, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
+    file_close (&z_file, false, false);
+    file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
 
     // If we're zipping a FASTQ or unaligned SAM, create a reverse-complement genome too
     if (flag.ref_use_aligner && primary_command == ZIP) 
@@ -1424,7 +1424,7 @@ const char *ref_get_cram_ref (void)
     flag.reading_reference=true;
     zfile_read_genozip_header (0, 0, 0, 0);
     flag.reading_reference=false;
-    file_close (&z_file, true);
+    file_close (&z_file, false, true);
 
 
     ASSINP (ref_fasta_name, "%s: cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",

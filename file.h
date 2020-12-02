@@ -328,7 +328,7 @@ typedef struct File {
 
 // methods
 extern File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
-extern void file_close (FileP *file_p, bool cleanup_memory /* optional */);
+extern void file_close (FileP *file_p, bool index_txt, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern uint64_t file_tell (File *file);

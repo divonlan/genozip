@@ -714,8 +714,37 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     return file;
 }
 
+// index file is it is a disk file of a type that can be indexed
+static void file_index_txt (const File *file)
+{
+    RETURNW (file->name,, "%s: cannot create an index file when output goes to stdout", global_cmd);
+
+    switch (file->data_type) {
+        case DT_SAM:
+        case DT_BAM: 
+            RETURNW (file->codec == CODEC_BGZF,, "%s: output file needs to be a .sam.gz or .bam to be indexed", global_cmd); 
+            stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "index", file->name, NULL); 
+            break;
+            
+        case DT_VCF: 
+            RETURNW (file->codec == CODEC_BGZF,, "%s: output file needs to be a .vcf.gz or .bcf to be indexed", global_cmd); 
+            stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "bcftools", "index", file->name, NULL); 
+            break;
+
+        case DT_FASTQ:
+        case DT_FASTA:
+            RETURNW (file->codec == CODEC_BGZF && file->codec == CODEC_NONE,, 
+                     "%s: To be indexed, the output file cannot be compressed with %s", global_cmd, codec_name (file->codec)); 
+            stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "faidx", file->name, NULL); 
+            break;
+
+        default: break; // we don't know how to create an index for other data types
+    }
+}
+
 void file_close (File **file_p, 
-                 bool cleanup_memory) // optional - used to destroy buffers in the file is closed NOT near the end of the execution, eg when dealing with unbinding bound files
+                 bool index_txt,      // true if we should also index the txt file after it is closed
+                 bool cleanup_memory) // true means destroy buffers - use if the closed is NOT near the end of the execution, eg when dealing with unbinding bound files
 {
     File *file = *file_p;
     *file_p = NULL;
@@ -743,6 +772,9 @@ void file_close (File **file_p,
         else 
             FCLOSE (file->file, file_printname (file));
     }
+
+    // create an index file using samtools, bcftools etc, if applicable
+    if (index_txt) file_index_txt (file);
 
     // free resources if we are NOT near the end of the execution. If we are at the end of the execution
     // it is faster to just let the process die

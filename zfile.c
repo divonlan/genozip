@@ -969,7 +969,7 @@ DataType zfile_get_file_dt (const char *filename)
 
         dt = (DataType)BGEN16 (header.data_type);
 
-        file_close (&file, false);
+        file_close (&file, false, false);
     }
 
 done:
