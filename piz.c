@@ -173,7 +173,6 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     // display the rest of the snip first, and then the lookup up text.
     case SNIP_LOOKUP:
     case SNIP_OTHER_LOOKUP: {
-
         if (snip[0] == SNIP_LOOKUP) 
             { snip++; snip_len--; }
         else 
@@ -184,21 +183,29 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         if (snip_len && base_ctx->ltype != LT_SEQUENCE && base_ctx->ltype != LT_BITMAP) 
             if (reconstruct) RECONSTRUCT (snip, snip_len);
         
-        if (base_ctx->ltype >= LT_INT8 && base_ctx->ltype <= LT_UINT64) {
-            new_value.i = piz_reconstruct_from_local_int (vb, base_ctx, 0, reconstruct);
-            have_new_value = true;
-        }
-
-        // case: the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
-        else if (base_ctx->ltype == LT_SEQUENCE) 
-            piz_reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
-
-        else if (base_ctx->ltype == LT_BITMAP) {
-            ASSERT_DT_FUNC (vb, reconstruct_seq);
-            DT_FUNC (vb, reconstruct_seq) (vb, base_ctx, snip, snip_len);
-        }
-        else piz_reconstruct_from_local_text (vb, base_ctx, reconstruct); // this will call us back recursively with the snip retrieved
+        switch (base_ctx->ltype) {
+            case LT_TEXT:
+                piz_reconstruct_from_local_text (vb, base_ctx, reconstruct); // this will call us back recursively with the snip retrieved
+                break;
                 
+            case LT_INT8 ...LT_UINT64:
+                new_value.i = piz_reconstruct_from_local_int (vb, base_ctx, 0, reconstruct);
+                have_new_value = true;
+                break;
+
+            // case: the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
+            case LT_SEQUENCE: 
+                piz_reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
+                break;
+                
+            case LT_BITMAP:
+                ASSERT_DT_FUNC (vb, reconstruct_seq);
+                DT_FUNC (vb, reconstruct_seq) (vb, base_ctx, snip, snip_len);
+                break;
+
+            default: ABORT ("Unsupported lt_type=%u for SNIP_LOOKUP or SNIP_OTHER_LOOKUP", base_ctx->ltype);
+        }
+
         break;
     }
     case SNIP_PAIR_LOOKUP:

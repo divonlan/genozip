@@ -11,6 +11,7 @@
 #include "mutex.h"
 #include "strings.h"
 #include "regions.h"
+#include "random_access.h"
 
 unsigned fast_vb_size (void) { return sizeof (VBlockFAST); }
 unsigned fast_vb_zip_dl_size (void) { return sizeof (ZipDataLineFAST); }
@@ -58,10 +59,19 @@ bool fast_piz_test_grep (VBlockFAST *vb)
     Context *desc_ctx =  &vb->contexts[vb->data_type == DT_FASTQ ? FASTQ_DESC : FASTA_DESC];
     desc_ctx->iterator.next_b250 = FIRSTENT (uint8_t, desc_ctx->b250); 
 
-    vb->line_i = vb->data_type == DT_FASTQ ? 4 * vb->first_line : vb->first_line;
+    uint32_t num_descs; // number of desciption lines in this VB
+    if (vb->data_type == DT_FASTQ) {
+        vb->line_i = 4 * vb->first_line;
+        num_descs = (uint32_t)vb->lines.len; // every read has a description line
+    }
+    else {
+        vb->line_i = vb->first_line;
+        num_descs = random_access_num_chroms_start_in_this_vb (vb->vblock_i);
+    }
 
-    while (desc_ctx->iterator.next_b250 < AFTERENT (uint8_t, desc_ctx->b250) ||
-           desc_ctx->next_local < desc_ctx->local.len) {
+    // iterate on all DESCs of this VB
+    for (uint32_t desc_i=0; desc_i < num_descs; desc_i++) { 
+
         piz_reconstruct_from_ctx (vb, desc_ctx->did_i, 0, true);
 
         *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string

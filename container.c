@@ -108,8 +108,8 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
             if (con->filter_items && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
 
             if (flag.show_containers && (item->did_i != DID_I_NONE || item->dict_id.num)) // show container reconstruction 
-                fprintf (stderr, "Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
-                            vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), 
+                fprintf (stderr, "VB=%u Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
+                            vb->vblock_i, vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), 
                             item->did_i != DID_I_NONE ? vb->contexts[item->did_i].name : "(DID_I_NONE)", 
                             vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 

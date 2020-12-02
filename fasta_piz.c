@@ -114,8 +114,6 @@ bool fasta_piz_initialize_contig_grepped_out (VBlockFAST *vb, bool does_vb_have_
         return 0;
     }
 
-    //bool ret = !prev_vb_last_contig_grepped_out;
-
     // we're continuing the contig in the previous VB - until DESC is encountered
     vb->contig_grepped_out = prev_vb_last_contig_grepped_out || // last contig of previous VB had last_desc_in_this_vb_matches_grep
                              (prev_vb_i + 1 < vb->vblock_i);    // previous VB was skipped in piz_one_file due to random_access_is_vb_included

@@ -27,6 +27,7 @@ extern bool random_access_is_vb_included (uint32_t vb_i, BufferP region_ra_inter
 extern int32_t random_access_get_last_included_vb_i (void);
 extern void random_access_get_first_chrom_of_vb (VBlockP vb, PosType *first_pos, PosType *last_pos);
 extern bool random_access_does_last_chrom_continue_in_next_vb (uint32_t vb_i);
+extern uint32_t random_access_num_chroms_start_in_this_vb (uint32_t vb_i);
 extern void random_access_alloc_ra_buf (VBlockP vb, WordIndex chrom_node_index);
 extern void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min_pos, PosType *max_pos);
 extern void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosType *min_pos, PosType *max_pos);

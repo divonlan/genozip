@@ -220,7 +220,7 @@ void random_access_finalize_entries (Buffer *ra_buf)
 // --------------------
 
 // PIZ: binary search for first entry of vb_i, using the fact that in random_access_finalize_entries (in ZIP) we sorted the entries by vb_i
-static const RAEntry *random_access_get_first_ra_of_vb (uint32_t vb_i, const RAEntry *first_ra, const RAEntry *last_ra)
+static const RAEntry *random_access_get_first_ra_of_vb_do (uint32_t vb_i, const RAEntry *first_ra, const RAEntry *last_ra)
 {
     if (first_ra > last_ra) return NULL; // vb_i not found
 
@@ -228,13 +228,14 @@ static const RAEntry *random_access_get_first_ra_of_vb (uint32_t vb_i, const RAE
     bool first_ra_in_vb = (mid_ra == FIRSTENT (RAEntry, z_file->ra_buf)) || (mid_ra->vblock_i != (mid_ra-1)->vblock_i);
 
     if (mid_ra->vblock_i < vb_i) 
-        return random_access_get_first_ra_of_vb (vb_i, mid_ra+1, last_ra);
+        return random_access_get_first_ra_of_vb_do (vb_i, mid_ra+1, last_ra);
 
     if (mid_ra->vblock_i > vb_i || !first_ra_in_vb)
-        return random_access_get_first_ra_of_vb (vb_i, first_ra, mid_ra-1);
+        return random_access_get_first_ra_of_vb_do (vb_i, first_ra, mid_ra-1);
 
     return mid_ra;
 }
+#define random_access_get_first_ra_of_vb(vb_i) random_access_get_first_ra_of_vb_do (vb_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf))
 
 // PIZ I/O thread: check if for the given VB,
 // the ranges in random access (from the file) overlap with the ranges in regions (from the command line --regions)
@@ -250,7 +251,7 @@ bool random_access_is_vb_included (uint32_t vb_i,
     // allocate bytemap. note that it allocated in evb, and will be buf_moved to the vb after it is generated 
     ASSERT (!buf_is_allocated (region_ra_intersection_matrix), "Error in random_access_is_vb_included: expecting region_ra_intersection_matrix to be unallcoated vb_i=%u", vb_i);
 
-    const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
+    const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i);
     
     // case: an entire VB without RA data while some other VBs do have. For example - a sorted SAM where unaligned reads are pushed to the end of the file
     if (!ra) return false; // don't include this VB
@@ -328,7 +329,7 @@ void random_access_get_first_chrom_of_vb (VBlockP vb, PosType *first_pos, PosTyp
     Context *ctx = &z_file->contexts[CHROM];
     ASSERT (ctx->word_list.len, "Error in random_access_get_first_chrom_of_vb: word_list of %s is empty", ctx->name);
 
-    const RAEntry *ra = random_access_get_first_ra_of_vb (vb->vblock_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
+    const RAEntry *ra = random_access_get_first_ra_of_vb (vb->vblock_i);
     ASSERT (ra, "Error in random_access_get_first_chrom_of_vb: vb_i=%u not found in random access index", vb->vblock_i);
 
     CtxWord *chrom_word  = ENT (CtxWord, ctx->word_list, ra->chrom_index);            
@@ -342,10 +343,26 @@ void random_access_get_first_chrom_of_vb (VBlockP vb, PosType *first_pos, PosTyp
 // FASTA PIZ
 bool random_access_does_last_chrom_continue_in_next_vb (uint32_t vb_i)
 {
-    const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i+1, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
+    const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i+1);
     if (!ra) return false; // vb_i is the last vb (there is no vb_i+1) - so it doesn't continue in the next vb...
 
     return ra->chrom_index == (ra-1)->chrom_index;
+}
+
+// FASTA PIZ - number of chroms in this VB, excluding one that started before
+uint32_t random_access_num_chroms_start_in_this_vb (uint32_t vb_i)
+{
+    const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i);
+    ASSERT (ra, "Error in random_access_num_chroms_start_in_this_vb: no ra for vb_i%u", vb_i);
+
+    // count the first RA if its its the first RA in the file OR it is the first RA with this chrom 
+    // (NOT a continuation of the chrom of the last RA of the previous VB)
+    int32_t count = (ra==FIRSTENT (RAEntry, z_file->ra_buf)) ? 1 : (ra-1)->chrom_index != ra->chrom_index;
+
+    for (ra=ra+1; ra < AFTERENT (RAEntry, z_file->ra_buf) && ra->vblock_i == vb_i; ra++) 
+        count++; // count all additional chroms starting in this VB
+
+    return count;
 }
 
 // Called by PIZ I/O thread (piz_read_global_area) and ZIP I/O thread (zip_write_global_area)
@@ -395,7 +412,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
 
 void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosType *min_pos, PosType *max_pos)
 {
-    const RAEntry *ra = random_access_get_first_ra_of_vb (vblock_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
+    const RAEntry *ra = random_access_get_first_ra_of_vb (vblock_i);
 
     *chrom_index = ra->chrom_index;
     *min_pos     = ra->min_pos;
