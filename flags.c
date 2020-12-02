@@ -305,7 +305,6 @@ static void flags_test_conflicts (void)
     ASSINP (flag.reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "%s: option %s supported only for viewing the reference file itself", global_cmd, OT("REFERENCE", "E"));
     ASSINP (flag.reference != REF_EXTERNAL  || !flag.show_ref_seq,  "%s: option %s is incompatable with --show-ref-seq: use genocat --show-ref-seq on the reference file itself instead", global_cmd, OT("reference", "e"));
     ASSINP (!flag.dump_one_b250_dict_id.num || !flag.dump_one_local_dict_id.num, "%s: option --dump-one-b250 is incompatable with --dump-one-local", global_cmd);
-    ASSINP (flag.out_dt != DT_VCF || flag.reference,                "%s: --reference must be specified when translating 23andMe to VCF", global_cmd);
 
     // some genozip flags are allowed only in combination with --decompress 
     if (exe_type == EXE_GENOZIP && command == ZIP) {

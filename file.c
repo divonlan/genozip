@@ -512,6 +512,9 @@ static bool file_open_txt_write (File *file)
         flag.bgzf = false; // ignore flag derived from z_file, and get the codec from the output filename extension below
     }
 
+    if (z_file->data_type == DT_ME23 && flag.out_dt == DT_VCF)
+        ASSINP (flag.reference, "%s: --reference must be specified when translating 23andMe to VCF", global_cmd);
+
     // get the codec    
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, WRITE);
     
