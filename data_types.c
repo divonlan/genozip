@@ -15,7 +15,7 @@ DataTypeProperties dt_props [NUM_DATATYPES] = DATA_TYPE_PROPERTIES;
 DataTypeProperties dt_props_def             = DATA_TYPE_FUNCTIONS_DEFAULT;
 DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 
-// gets the toplevel and factor, and returns true if translating
+// PIZ: gets the toplevel and factor, and returns true if translating
 const DtTranslation dt_get_translation (void)
 {
     static DtTranslation translations[] = TRANSLATIONS;
@@ -35,6 +35,19 @@ const DtTranslation dt_get_translation (void)
                             .is_src_dt       = true, 
                             .src_z_is_binary = i_am_binary, 
                             .toplevel        = DTFZ(toplevel) };
+}
+
+// if file is_txt_binary - return the equivalent textual type, or just the type if not
+DataType dt_get_txt_dt (DataType dt)
+{
+    if (!dt_props[dt].is_binary) return dt;
+
+    for (DataType txt_dt=0; txt_dt < NUM_DATATYPES; txt_dt++)
+        if (dt_props[txt_dt].bin_type == dt)
+            return txt_dt;
+
+    ABORT ("Error in dt_get_txt_dt: cannot find textual type for binary data type %s", dt_name (dt));
+    return 0;
 }
 
 const char *dt_name (DataType dt)

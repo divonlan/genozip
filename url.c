@@ -47,7 +47,7 @@ static void url_do_curl (const char *url, bool head,
     *error_len = read (fileno (stream_from_stream_stderr (curl)), error, CURL_RESPONSE_LEN-1);
     error[*error_len] = '\0'; // terminate string
 
-    int curl_exit_code = stream_close (&curl, STREAM_WAIT_FOR_PROCESS);
+    int curl_exit_code = stream_close (&curl, STREAM_DONT_WAIT_FOR_PROCESS); // Don't wait for process - Google Forms call hangs if waiting
     if (!curl_exit_code) 
         return; // curl itself is good - we may have or not an error in "error" from the server
 

@@ -589,8 +589,8 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
         ASSERT (z_file->data_type == data_type, "Error: %s - file extension indicates this is a %s file, but according to its contents it is a %s", 
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
-    if (txt_file)// txt_file is still NULL in case of --1d
-        txt_file->data_type = (data_type == DT_SAM) && z_file->z_flags.txt_is_bin ? DT_BAM : data_type;
+    if (txt_file && header->h.flags.genozip_header.txt_is_bin)// txt_file is still NULL when called from main_genozip
+        txt_file->data_type = DTPZ (bin_type);
 
     ASSERT (header->encryption_type != ENC_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
             "Error: password provided, but file %s is not encrypted", z_name);
@@ -697,22 +697,19 @@ void zfile_compress_genozip_header (Digest single_component_digest)
 
     uint32_t num_sections = z_file->section_list_buf.len;
 
-    // BAM txt files result in SAM genozip files 
-    DataType z_data_type =  (z_file->data_type == DT_BAM ? DT_SAM : z_file->data_type);
-
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
     header.h.codec                 = CODEC_BZ2;
     header.h.flags.genozip_header  = (struct FlagsGenozipHeader) {
-        .txt_is_bin   = z_file->z_flags.txt_is_bin,
+        .txt_is_bin   = DTPT (is_binary),
         .ref_internal = (flag.reference == REF_INTERNAL),
         .aligner      = (flag.ref_use_aligner > 0),
         .bgzf         = (txt_file->codec == CODEC_BGZF),
         .adler        = !flag.md5
     };
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
-    header.data_type               = BGEN16 ((uint16_t)z_data_type);
+    header.data_type               = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
     header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
     header.uncompressed_data_size  = BGEN64 (z_file->txt_data_so_far_bind);
     header.num_items_bound         = BGEN64 (z_file->num_lines);

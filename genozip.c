@@ -249,7 +249,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     // TODO: have an option to print ref_file_name and ref_file_md5
 
-    DataType dt = (z_file->data_type == DT_SAM && z_file->z_flags.txt_is_bin) ? DT_BAM : z_file->data_type;
+    DataType dt = z_file->z_flags.txt_is_bin ? DTPZ (bin_type) : z_file->data_type;
 
     if (flag.bytes) 
         bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_uint_commas (num_lines).s, 
@@ -464,10 +464,6 @@ static void main_genozip_open_z_file_write (char **z_filename)
     }
 
     z_file = file_open (*z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, z_data_type);
-
-    // note on BCF and CRAM: we used bcftools/samtools as an external compressor, so that genozip sees the text,
-    // not binary, data of these files - the same as if the file were compressed with eg bz2
-    if (z_file->data_type == DT_BAM) z_file->z_flags.txt_is_bin = true; // compressed file is stored in binary form, and sizes are of the binary file
 }
 
 static void main_genozip (const char *txt_filename, 
@@ -476,8 +472,6 @@ static void main_genozip (const char *txt_filename,
                           char *exec_name)
 {
     SAVE_FLAGS;
-
-    license_get(); // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
 
     ASSINP (!z_filename || !url_is_url (z_filename), 
             "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
@@ -671,8 +665,7 @@ int main (int argc, char **argv)
     
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
-    bool is_short[256] = { 0 }; // indexed by character of short option.
-    flags_init_from_command_line (argc, argv, is_short);
+    flags_init_from_command_line (argc, argv);
     main_copy_command_line (argc, argv); // can only be called after --password is processed
 
     // if command not chosen explicitly, use the default determined by the executable name
@@ -709,7 +702,10 @@ int main (int argc, char **argv)
 
     unsigned num_files = argc - optind;
 
-    flags_update (num_files, &argv[optind], is_short);
+    // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
+    license_get(); 
+
+    flags_update (num_files, &argv[optind]);
 
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
     qsort (&argv[optind], num_files, sizeof (argv[0]), main_sort_input_filenames);

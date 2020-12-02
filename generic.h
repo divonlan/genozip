@@ -8,6 +8,7 @@
 
 #include "genozip.h"
 
+extern int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern void generic_seg_finalize (VBlockP vb);
 
 #define GNRIC_SPECIAL { generic_piz_TOPLEVEL }

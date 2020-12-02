@@ -499,21 +499,17 @@ static bool file_open_txt_write (File *file)
         }
     }
 
-    // equivalent to --sam / --bam - the user requested translation SAM<-->BAM by specifying a .bam or .sam* output filename
-    if ((file->data_type == DT_SAM && file->type == BAM) ||
-        (file->data_type == DT_BAM && file_get_data_type (file->type, true) == DT_SAM))
+    // implicit translation flags - eg. "genocat xx.bam.genozip -o xx.fq" implies --fastq
+    DataType dt_by_filename = file_get_data_type (file->type, true);
+    if ((file->data_type == DT_SAM  && dt_by_filename == DT_BAM  ) ||
+        (file->data_type == DT_BAM  && dt_by_filename == DT_SAM  ) ||
+        (file->data_type == DT_SAM  && dt_by_filename == DT_FASTQ) ||
+        (file->data_type == DT_BAM  && dt_by_filename == DT_FASTQ) ||
+        (file->data_type == DT_ME23 && dt_by_filename == DT_VCF  ) )
     {
-        flag.out_dt = file->data_type = (file->data_type == DT_SAM) ? DT_BAM : DT_SAM;
+        flag.out_dt = file->data_type = dt_by_filename;
         flags_update_piz_one_file (); // update flags accordingly
-    }
-
-    // equivalent to --fastq - the user requested translation by specifying a .fastq* or .fq* output filename
-    if ((file->data_type == DT_SAM || file->data_type == DT_BAM) &&
-        file_get_data_type (file->type, true) == DT_FASTQ)
-    {
-        flag.out_dt = file->data_type = DT_FASTQ;
-        flags_update_piz_one_file (); // update flags accordingly
-        flag.bgzf = false; // ignore flag derived from z_file, and get the codec from the fastq file extension below
+        flag.bgzf = false; // ignore flag derived from z_file, and get the codec from the output filename extension below
     }
 
     // get the codec    

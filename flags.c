@@ -15,10 +15,12 @@
 
 Flags flag = { .out_dt = DT_NONE };
 
+bool option_is_short[256] = { }; // indexed by character of short option.
+
 // command line options that get assigned to flags
 static int option_noisy=0, option_best=0;
 
-void flags_init_from_command_line (int argc, char **argv, bool *is_short)
+void flags_init_from_command_line (int argc, char **argv)
 {
     // process command line options
     while (1) {
@@ -148,7 +150,7 @@ void flags_init_from_command_line (int argc, char **argv, bool *is_short)
 
         if (c == -1) break; // no more options
 
-        is_short[c] = (option_index == -1); // true if user provided a short option - eg -c rather than --stdout
+        option_is_short[c] = (option_index == -1); // true if user provided a short option - eg -c rather than --stdout
 
         switch (c) {
             case HELP:
@@ -277,7 +279,7 @@ static void flags_warn_if_duplicates (int num_files, char **filenames)
                  &basenames[i * BASENAME_LEN], flag.out_filename);
 }
 
-void flags_update (unsigned num_files, char **filenames, const bool *is_short)
+static void flags_test_conflicts (void)
 {
     ASSINP (!flag.to_stdout   || !flag.out_filename,                "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
     ASSINP (!flag.to_stdout   || !flag.unbind,                      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("unbind", "u"));
@@ -303,7 +305,7 @@ void flags_update (unsigned num_files, char **filenames, const bool *is_short)
     ASSINP (flag.reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "%s: option %s supported only for viewing the reference file itself", global_cmd, OT("REFERENCE", "E"));
     ASSINP (flag.reference != REF_EXTERNAL  || !flag.show_ref_seq,  "%s: option %s is incompatable with --show-ref-seq: use genocat --show-ref-seq on the reference file itself instead", global_cmd, OT("reference", "e"));
     ASSINP (!flag.dump_one_b250_dict_id.num || !flag.dump_one_local_dict_id.num, "%s: option --dump-one-b250 is incompatable with --dump-one-local", global_cmd);
-    ASSINP (flag.out_dt != DT_VCF || flag.reference,                "%s: --reference must be specified when using --vcf", global_cmd);
+    ASSINP (flag.out_dt != DT_VCF || flag.reference,                "%s: --reference must be specified when translating 23andMe to VCF", global_cmd);
 
     // some genozip flags are allowed only in combination with --decompress 
     if (exe_type == EXE_GENOZIP && command == ZIP) {
@@ -314,6 +316,11 @@ void flags_update (unsigned num_files, char **filenames, const bool *is_short)
         ASSINP (!flag.show_aliases, "%s: option --show_aliases can only be used if --decompress is used too", global_cmd);
         ASSINP (!flag.show_is_set,  "%s: option --show_is_set can only be used if --decompress is used too", global_cmd);
     }
+}
+
+void flags_update (unsigned num_files, char **filenames)
+{
+    flags_test_conflicts();
 
     // --pair (ZIP only): verify an even number of fastq files, --output, and --reference/--REFERENCE
     if (flag.pair) {
@@ -396,23 +403,23 @@ void flags_update_zip_one_file (void)
 // PIZ: called after opening z_file and reading the header before opening txt_file
 void flags_update_piz_one_file (void)
 {
-    // handle native binary formats (BAM). note on BCF and CRAM: we used bcftools/samtools as an external 
-    // compressor, so that genozip sees the text, not binary, data of these files - the same as if the file were compressed with eg bz2
-    if (flag.out_dt == DT_NONE && z_file->z_flags.txt_is_bin) {
-        if (z_file->data_type == DT_SAM) {
-            // PIZ of a SAM genozip file with is_binary (i.e. BAM) is determined here unless the user overrides with --sam or --fastq
+    if (flag.out_dt == DT_NONE) {
+
+        // handle native binary formats (BAM). note on BCF and CRAM: we used bcftools/samtools as an external 
+        // compressor, so that genozip sees the text, not binary, data of these files - the same as if the file were compressed with eg bz2
+        if (z_file->z_flags.txt_is_bin) {
+            
+            // PIZ of a genozip file with is_binary (e.g. BAM) is determined here unless the user overrides with --sam or --fastq
             if (exe_type == EXE_GENOCAT) {
-                flag.out_dt = DT_SAM;
-                flag.no_pg  = true; // if a user is genocatting a BAM file, we don't add @PG (only when he genounzips it)
+                flag.out_dt = z_file->data_type; // output in textual format
+                flag.no_pg  = true; // if a user is genocatting a BAM file, we don't add @PG (only when he genounzips it) (flag is ignored if not BAM, so no harm)
             }
             else
-                flag.out_dt = DT_BAM;
+                flag.out_dt = DTPZ (bin_type);   // output in binary format
         }
-        // future binary data types here
+        else
+            flag.out_dt = z_file->data_type;
     }
-    
-    if (flag.out_dt == DT_NONE) 
-        flag.out_dt = z_file->data_type;
 
     // .bcf will be bgzipped by bcftools, ignore --bgzf flag as we don't need an additional bgzf step
     if (flag.out_dt == DT_BCF) flag.bgzf=0;
@@ -439,4 +446,6 @@ void flags_update_piz_one_file (void)
                          flag.header_one || flag.no_header || flag.header_only || flag.grep || // data-modifying genocat options
                          flag.regions || flag.samples || flag.drop_genotypes || flag.gt_only || flag.sequential || 
                          flag.one_vb || flag.downsample;
+
+    flags_test_conflicts(); // test again after updating flags
 }

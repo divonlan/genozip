@@ -93,10 +93,11 @@ extern Flags flag;
 #define RESTORE_FLAG(f) flag.f = save_##f
 
 // check for incompatabilities between flags
-#define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
+extern bool option_is_short[];
+#define OT(l,s) option_is_short[(int)s[0]] ? "-"s : "--"l
 
-extern void flags_init_from_command_line (int argc, char **argv, bool *is_short);
-extern void flags_update (unsigned num_files, char **filenames, const bool *is_short);
+extern void flags_init_from_command_line (int argc, char **argv);
+extern void flags_update (unsigned num_files, char **filenames);
 extern void flags_update_zip_one_file (void);
 extern void flags_update_piz_one_file (void);
 

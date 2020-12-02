@@ -8,6 +8,12 @@
 #include "buffer.h"
 #include "seg.h"
 
+// all data is always consumed
+int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
+{
+    return 0;
+}
+
 void generic_seg_finalize (VBlockP vb)
 {
     Context *data_ctx = &vb->contexts[GNRIC_DATA];
