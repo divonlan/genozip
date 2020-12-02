@@ -11,11 +11,12 @@
 <!-- 4. rendered as README.md in Docker Hub                                                               -->
 <!-- 5. converted to Markdown and embedded in conda/README.template.md to generate conda feedstock README -->
 <!--                                                                                                      -->
+<!-- To preview in Visual Studio Code: Ctrl+Shift+V with the "HTML Preview" extension                     -->
 <h1>Genozip</h1><br>
 <br>
 (available on <b>Conda</b>, <b>Docker Hub</b> and https://github.com/divonlan/genozip)<br>
 <br>
-<b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
+<b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. It can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties specific to genomic data to compress better. It is also a lot faster than gzip.<br>
 <br>
@@ -60,16 +61,17 @@ Notes:<br>
 <b>genocat</b> <i>mysample.sam.genozip</i> | samtools - .....<br>
 my-sam-outputing-method | <b>genozip</b> - --input sam --output <i>mysample.sam.genozip</i><br>
 <br>
-<b><i>Lookups:</i></b><br>
+<b><i>Lookups, downsampling and other subsets:</i></b><br>
 <b>genocat</b> --regions chr1:10000-20000 <i>mysamples.vcf.genozip</i>&nbsp&nbsp&nbsp←displays a specific region<br>
 <b>genocat</b> --regions ^Y,MT <i>mysamples.vcf.genozip</i>&nbsp&nbsp&nbsp←displays all chromosomes except Y and MT<br>
-<b>genocat</b> --regions -10000 <i>mysample.sam.genozip</i>&nbsp&nbsp&nbsp←displays positions up to 10000<br>
+<b>genocat</b> --regions -10000 <i>mysample.bam.genozip</i>&nbsp&nbsp&nbsp←displays positions up to 10000<br>
 <b>genocat</b> --samples SMPL1,SMPL2 <i>mysamples.vcf.genozip</i>&nbsp&nbsp&nbsp←displays 2 samples<br>
 <b>genocat</b> --grep August-10 <i>myfasta.fa.genozip</i>&nbsp&nbsp&nbsp←displays contigs/reads that have "August-10" in the header<br>
+<b>genocat</b> --downsample 10 <i>mysample.fq.genozip</i>&nbsp&nbsp&nbsp←displays 1 in 10 reads<br>
 Notes:<br>
-1. --regions works with VCF, SAM/BAM, FASTA, 23andMe, GVF and reference files ; --grep works with FASTQ, FASTA ; --samples works with VCF<br>
+1. --regions works with VCF, SAM/BAM, FASTA, 23andMe, GVF and reference files ; --grep works with FASTQ, FASTA ; --samples works with VCF ; --downsample works with all types<br>
 2. There is no need for a separate indexing step or index file<br>
-3. Many more options (see --help for full list): --no-header ; --header-only ; --sequential ; --list-chroms ; --drop-genotypes ; --GT-only<br>
+3. Many more options (see --help for full list): --no-header ; --header-only ; --header-one ; --sequential ; --list-chroms ; --drop-genotypes ; --GT-only<br>
 <br>
 <b><i>Binding mutiple files into a single genozip file and unbinding:</i></b><br>
 <b>genozip</b> <i>*.fq.gz</i> -o <i>all-samples.fq.genozip</i>&nbsp&nbsp&nbsp←binds all .fq.gz files in the current directory<br>
@@ -90,6 +92,9 @@ Notes:<br>
 <br>
 <b><i>Converting 23andMe to VCF:</i></b><br>
 <b>genounzip</b> <i>genome_mydata-Full.txt.genozip</i> --vcf -e GRCh37.ref.genozip<br>
+<br>
+<b><i>Generate a samtools/bcftools index file when uncompressing:</i></b><br>
+<b>genounzip</b> <i>file.bam.genozip</i> --index<br>
 <br>
 <b><i>Calculating the MD5 of the underlying textual file (also included in </i>--test<i>):</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>
