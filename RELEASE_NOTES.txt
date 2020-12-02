@@ -259,10 +259,13 @@ Cleanup:
 - removed support for Visual C compiler
 
 9.0.1-6
-- minor bug fixes and improvements
+- bug fixes and minor improvements
 
 9.0.7
 - New flags:
     genocat --downsample <rate> - show only one in every X lines (or reads)
     genocat --one-vb <vb>       - show data from a single VB
+- bug fixes
+
+9.0.8
 - bug fixes

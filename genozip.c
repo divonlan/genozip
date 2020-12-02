@@ -714,7 +714,7 @@ int main (int argc, char **argv)
     }
     else global_max_threads = (double)arch_get_num_cores() * 1.4; // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
     
-    // handle call commands except for ZIP, PIZ or LIST
+    // handle all commands except for ZIP, PIZ or LIST
     if (command == VERSION) { main_print_version();   return 0; }
     if (command == LICENSE) { license_display();      return 0; }
     if (command == HELP)    { main_print_help (true); return 0; }
