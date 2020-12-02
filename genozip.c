@@ -702,9 +702,6 @@ int main (int argc, char **argv)
 
     unsigned num_files = argc - optind;
 
-    // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
-    license_get(); 
-
     flags_update (num_files, &argv[optind]);
 
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
@@ -723,7 +720,10 @@ int main (int argc, char **argv)
     if (command == HELP)    { main_print_help (true); return 0; }
 
     primary_command = command; 
-    
+
+    // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
+    if (command == ZIP) license_get(); 
+
     for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
 
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin

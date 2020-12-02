@@ -242,10 +242,10 @@ decrement-version:
 .archive.tar.gz : increment-version $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
-	@git push 
-	@git tag genozip-$(version)
-	@git push origin genozip-$(version)
-	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --silent --location -o $@
+	@git push > /dev/null
+	@git tag genozip-$(version) > /dev/null
+	@git push origin genozip-$(version) > /dev/null
+	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --silent --location -o $@ > /dev/null
 	@echo GITHUB: go to here: https://github.com/divonlan/genozip/releases/new
 	@echo "1. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
 	@echo "2. Copy the notes for the version from RELEASE NOTES"
@@ -271,7 +271,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@cp conda/README.md $(CONDA_FEEDSTOCK)
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to branch genozip on my fork"
-	@(cd $(CONDA_FEEDSTOCK); git pull; git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push)
+	@(cd $(CONDA_FEEDSTOCK); git pull; git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push) > /dev/null
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com://conda-forge/genozip-feedstock master)
@@ -325,9 +325,9 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt 
 	@echo '  (5) Exit the UI (close the window)'
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
 	@echo 'Committing Windows installer and pushing to repo'
-	@(git stage windows/genozip.ifp $@ ; exit 0)
-	@(git commit -m windows_files_for_version_$(version) windows/genozip.ifp $@ ; exit 0)
-	@git push
+	@(git stage windows/genozip.ifp $@ ; exit 0) > /dev/null
+	@(git commit -m windows_files_for_version_$(version) windows/genozip.ifp $@ ; exit 0) > /dev/null
+	@git push > /dev/null
 	@rm -f arch.o # remove this arch.o which contains DISTRIBUTION
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
