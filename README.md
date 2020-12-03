@@ -18,7 +18,7 @@
 <br>
 <b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. It can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
 <br>
-The compression ratio depends on the data being compressed, and you can usually expect about a 1.5-4X ratio when compressing .bam and .fastq.gz files (i.e. compressing already-compressed files), and up to 200X when compressing an uncompressed high-sample-count .vcf file with only GT data.<br>
+The compression ratio depends on the data being compressed, and you can usually expect about a 1.5-3X ratio when compressing .bam, 2X-4X for .fastq.gz files (i.e. compressing already-compressed files), and up to 200X when compressing an uncompressed high-sample-count .vcf file with only GT data.<br>
 <br>
 <b>Sign up</b> to receive low-frequency updates related to Genozip: https://tinyurl.com/genozip<br>
 <br>
