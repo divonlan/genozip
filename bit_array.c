@@ -131,10 +131,8 @@ static inline char* _word_to_str(word_t word, char str[WORD_SIZE+1])
 
 // Used in debugging
 #ifdef DEBUG
-    #define DEBUG_PRINT(msg,...) //printf("[%s:%i] "msg, __FUNCTION__, __LINE__, ##__VA_ARGS__);
     #define DEBUG_VALIDATE(a) validate_bitarr((a), __FUNCTION__, __LINE__)
 #else
-    #define DEBUG_PRINT(msg,...)
     #define DEBUG_VALIDATE(a)
 #endif
 
@@ -967,8 +965,6 @@ static void _array_copy (BitArray* dst, bit_index_t dstindx,
     if (dst == src && srcindx > dstindx)
     {
         // Work left to right
-        DEBUG_PRINT("work left to right\n");
-
         for (i=0; i < num_of_full_words; i++)
         {
             word_t word = _get_word(src, srcindx+i*WORD_SIZE);
@@ -989,16 +985,11 @@ static void _array_copy (BitArray* dst, bit_index_t dstindx,
     else
     {
         // Work right to left
-        DEBUG_PRINT("work right to left\n");
-
         for(i = 0; i < num_of_full_words; i++)
         {
             word_t word = _get_word(src, srcindx+length-(i+1)*WORD_SIZE);
             _set_word(dst, dstindx+length-(i+1)*WORD_SIZE, word);
         }
-
-        DEBUG_PRINT("Copy %i,%i to %i\n", (int)srcindx, (int)bits_in_last_word,
-                                          (int)dstindx);
 
         if(bits_in_last_word > 0)
         {
