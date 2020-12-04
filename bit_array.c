@@ -138,7 +138,7 @@ static inline char* _word_to_str(word_t word, char str[WORD_SIZE+1])
     #define DEBUG_VALIDATE(a)
 #endif
 
-static void validate_bitarr (BitArray *arr, const char *file, int lineno)
+static inline void validate_bitarr (BitArray *arr, const char *file, int lineno)
 {
     // Verify that its allocated
     ASSERT (arr->type != BITARR_UNALLOCATED, "[%s:%i] bitarray is not allocated", file, lineno);
