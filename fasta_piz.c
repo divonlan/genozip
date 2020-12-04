@@ -26,8 +26,8 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     if (flag.reading_reference) return false;  // doesn't apply when using FASTA as a reference
 
-    // note that piz_read_global_area rewrites --header-only as flag.header_one
-    if (flag.header_one && 
+    // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
+    if (flag.header_only_fast && 
         (dict_id.num == dict_id_fields[FASTA_NONREF] || dict_id.num == dict_id_fields[FASTA_NONREF_X] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
         return true;
 
@@ -42,6 +42,21 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
 
     return false;
+}
+
+// filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat) and each toplevel item
+CONTAINER_FILTER_FUNC (fasta_piz_filter)
+{
+    VBlockFAST *fasta_vb = (VBlockFAST *)vb;
+
+    // if --phylip, don't reconstruct the EOL after DESC
+    if (flag.out_dt == DT_PHYLIP && 
+        dict_id.num == dict_id_fields[FASTA_TOPLEVEL] &&
+        item == 1 /* EOL */ && 
+        fasta_vb->last_line == FASTA_LINE_DESC) 
+        return false; 
+
+    return true; // show this item as normal
 }
 
 // remove trailing newline before SEQ lines in case of --sequential. Note that there might be more than one newline
@@ -69,7 +84,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
     if (fasta_vb->contig_grepped_out) vb->dont_show_curr_line = true;
 
     // in case of not showing the SEQ in the entire file - we can skip consuming it
-    if (flag.header_one) // note that piz_read_global_area rewrites --header-only as flag.header_one
+    if (flag.header_only_fast) // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
         vb->dont_show_curr_line = true;     
     else 
         piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, true);    
@@ -81,6 +96,8 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
           random_access_does_last_chrom_continue_in_next_vb (vb->vblock_i)) // and this sequence continues in the next VB 
         fasta_piz_remove_trailing_newlines (fasta_vb); // then: delete final newline if this VB ends with a 
 
+    fasta_vb->last_line = FASTA_LINE_SEQ;
+
     return false; // no new value
 }
 
@@ -88,14 +105,18 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_COMMENT)
 {
     VBlockFAST *fasta_vb = (VBlockFAST *)vb;
 
-    // skip showing line if this contig is grepped - but consume it anyway
-    if (fasta_vb->contig_grepped_out) vb->dont_show_curr_line = true;
+    // skip showing comment line in case cases - but consume it anyway:
+    if (  fasta_vb->contig_grepped_out || // 1. if this contig is grepped out
+          flag.out_dt == DT_PHYLIP)       // 2. if we're outputting in Phylis format
+        vb->dont_show_curr_line = true;
 
     // in case of not showing the COMMENT in the entire file (--header-only or this is a --reference) - we can skip consuming it
-    if (flag.header_one)  // note that piz_read_global_area rewrites --header-only as flag.header_one
+    if (flag.header_only_fast)  // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
         vb->dont_show_curr_line = true;     
     else 
         piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
+
+    fasta_vb->last_line = FASTA_LINE_COMMENT;
 
     return false; // no new value
 }
@@ -135,12 +156,38 @@ bool fasta_piz_is_grepped_out_due_to_regions (VBlockFAST *vb, const char *line_s
     return !regions_is_site_included (chrom_index, 1); // we check for POS 1 to include (or not) the whole contig
 }
 
+// Phylip format mandates exact 10 space-padded characters: http://scikit-bio.org/docs/0.2.3/generated/skbio.io.phylip.html
+static inline void fasta_piz_translate_desc_to_phylip (VBlock *vb, char *desc_start)
+{
+    uint32_t reconstructed_len = AFTERENT (const char, vb->txt_data) - desc_start;
+    *AFTERENT (char, vb->txt_data) = 0; // nul-terminate
+
+    const char *chrom_name = desc_start + 1;
+    unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
+    
+    memcpy (desc_start, chrom_name, MIN (chrom_name_len, 10));
+    if (chrom_name_len < 10) memcpy (desc_start + chrom_name_len, "          ", 10-chrom_name_len); // pad with spaces
+
+    if (reconstructed_len > 10) vb->txt_data.len -= reconstructed_len - 10; // we do it this way to avoid signed problems
+    else                        vb->txt_data.len += 10 - reconstructed_len;
+}
+
+// shorten DESC to the first white space
+static inline void fasta_piz_desc_header_one (VBlock *vb, char *desc_start)
+{
+    uint32_t reconstructed_len = AFTERENT (const char, vb->txt_data) - desc_start;
+    *AFTERENT (char, vb->txt_data) = 0; // nul-terminate
+    unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
+    
+    vb->txt_data.len -= reconstructed_len - chrom_name_len;
+}
+
 SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
 {
     VBlockFAST *fasta_vb = (VBlockFAST *)vb;
     fasta_vb->contig_grepped_out = false;
 
-    const char *desc_start = AFTERENT (const char, vb->txt_data);
+    char *desc_start = AFTERENT (char, vb->txt_data);
     piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
 
     // if --grep: here we decide whether to show this contig or not
@@ -156,6 +203,14 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
     if (fasta_vb->contig_grepped_out || flag.no_header)
         fasta_vb->dont_show_curr_line = true;     
 
+    if (flag.out_dt == DT_PHYLIP) 
+        fasta_piz_translate_desc_to_phylip (vb, desc_start);
+
+    if (flag.header_one)
+        fasta_piz_desc_header_one (vb, desc_start);
+
+    fasta_vb->last_line = FASTA_LINE_DESC;
+
     return false; // no new value
 }
 
@@ -165,4 +220,13 @@ bool fasta_piz_read_one_vb (VBlock *vb, ConstSectionListEntryP sl)
     if ((flag.grep || flag.regions) && !fast_piz_test_grep ((VBlockFAST *)vb)) return false; 
 
     return true;
+}
+
+// create Phylip header line
+TXTHEADER_TRANSLATOR (txtheader_fa2phylip)
+{
+    // get length of contigs and error if they are not all the same length
+    uint32_t contig_len = random_access_verify_all_contigs_same_length();
+
+    bufprintf (evb, txtheader_buf, "%"PRIu64" %u\n", z_file->contexts[FASTA_CONTIG].word_list.len, contig_len);
 }

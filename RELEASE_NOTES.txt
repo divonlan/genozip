@@ -272,3 +272,9 @@ Cleanup:
 
 9.0.10
 - Added the --index option for genounzip / genocat to create an index file alongside the decompressed file
+
+9.0.11
+- genozip --pair       can now compress any number of fastq files - every 2 consecutive files are considered a pair
+- genocat --header-one now works of FASTA too: Output the sequence name up to the first space or tab
+- genocat --phylip     new translator - outputs a multi-fasta in Phylip format
+- bug fixes

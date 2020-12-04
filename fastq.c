@@ -174,18 +174,20 @@ void fastq_seg_finalize (VBlockP vb)
 
     // top level snip
     Container top_level = { 
-        .repeats   = vb->lines.len,
-        .is_toplevel = true,
-        .filter_items = true,
+        .repeats        = vb->lines.len,
+        .is_toplevel    = true,
+        .filter_items   = true,
         .filter_repeats = true,
-        .num_items = 7,
-        .items     = { { (DictId)dict_id_fields[FASTQ_DESC],     DID_I_NONE, ""  },
-                       { (DictId)dict_id_fields[FASTQ_E1L],      DID_I_NONE, ""  }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
-                       { (DictId)dict_id_fields[FASTQ_SQBITMAP], DID_I_NONE, ""  },
-                       { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, "+" }, // + is the "separator" after the 2nd end-of-line
-                       { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  },
-                       { (DictId)dict_id_fields[FASTQ_QUAL],     DID_I_NONE, ""  },
-                       { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  } }
+        .num_items      = 7,
+        .items          = { 
+            { (DictId)dict_id_fields[FASTQ_DESC],     DID_I_NONE, ""  },
+            { (DictId)dict_id_fields[FASTQ_E1L],      DID_I_NONE, ""  }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
+            { (DictId)dict_id_fields[FASTQ_SQBITMAP], DID_I_NONE, ""  },
+            { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, "+" }, // + is the "separator" after the 2nd end-of-line
+            { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  },
+            { (DictId)dict_id_fields[FASTQ_QUAL],     DID_I_NONE, ""  },
+            { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  } 
+        }
     };
 
     container_seg_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
@@ -370,8 +372,8 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     if (!vb) return false; // we don't skip reading any SEC_DICT sections
 
-    // note that piz_read_global_area rewrites --header-only as flag.header_one: skip all items but DESC and E1L
-    if (flag.header_one && 
+    // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L
+    if (flag.header_only_fast && 
         (dict_id.num == dict_id_fields[FASTQ_E2L]      || dict_id.num == dict_id_fields[FASTQ_SQBITMAP] || 
          dict_id.num == dict_id_fields[FASTQ_NONREF]   || dict_id.num == dict_id_fields[FASTQ_NONREF_X] || 
          dict_id.num == dict_id_fields[FASTQ_GPOS]     || dict_id.num == dict_id_fields[FASTQ_STRAND]   || 
@@ -407,8 +409,8 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
                     vb->dont_show_curr_line = true; // container_reconstruct_do will rollback the line
             }
 
-            // case: --header-one or --header-only: dont show items 2+. note that piz_read_global_area rewrites --header-only as flag.header_one
-            if (flag.header_one && item >= 2) return false; // skip this item
+            // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
+            if (flag.header_only_fast && item >= 2) return false; // skip this item
         }
     }
 

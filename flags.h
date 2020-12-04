@@ -29,7 +29,7 @@ typedef struct {
     char *unbind;
 
     // PIZ: data-modifying genocat options for showing only a subset of the file 
-    int header_one, no_header, header_only, // how to handle the txt header
+    int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential, no_pg;
     char *grep;
     uint32_t one_vb, downsample;
@@ -74,7 +74,7 @@ typedef struct {
     bool ref_use_aligner,    // ZIP: compression requires using the aligner
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
          reading_reference,  // system is currently reading a reference file
-         do_translate,       // PIZ: decompression requires translation to another data type
+         trans_containers,   // PIZ: decompression invokes container translators
          genocat_info_only,  // User requested to genocat with only metadata to be shown, not file contents
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type

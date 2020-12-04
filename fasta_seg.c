@@ -130,11 +130,12 @@ void fasta_seg_finalize (VBlockP vb)
 {
     // top level snip
     Container top_level = { 
-        .repeats   = vb->lines.len,
-        .is_toplevel = true,
-        .num_items = 2,
-        .items     = { { (DictId)dict_id_fields[FASTA_LINEMETA], DID_I_NONE, ""   },
-                       { (DictId)dict_id_fields[FASTA_EOL],      DID_I_NONE, ""   } }
+        .repeats      = vb->lines.len,
+        .is_toplevel  = true,
+        .filter_items = true,
+        .num_items    = 2,
+        .items        = { { (DictId)dict_id_fields[FASTA_LINEMETA], DID_I_NONE, ""   },
+                          { (DictId)dict_id_fields[FASTA_EOL],      DID_I_NONE, ""   } }
     };
 
     container_seg_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], &top_level, 0, 0, 0);
@@ -168,6 +169,8 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
         // we store the contig name in a dictionary only (no b250), to be used if this fasta is used as a reference
         const char *chrom_name = line_start + 1;
         unsigned chrom_name_len = strcspn (line_start + 1, " \t\r\n");
+
+        ASSSEG0 (chrom_name_len, line_start, "Error: contig is missing a name");
 
         if (!flag.make_reference) {
             // we segment using / | : . and " " as separators. 

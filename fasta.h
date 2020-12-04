@@ -25,6 +25,7 @@ extern void fasta_piz_initialize (void);
 extern bool fasta_piz_read_one_vb (VBlockP vb, ConstSectionListEntryP sl);
 extern void fasta_piz_reconstruct_vb(); // no parameter - implicit casting of VBlockP
 extern bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
+CONTAINER_FILTER_FUNC (fasta_piz_filter);
 
 // VBlock stuff
 extern void fast_vb_release_vb();
@@ -42,5 +43,7 @@ SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
 
 #define FASTA_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTA, &dict_id_fields[FASTA_NONREF], fasta_zip_seq }, 
+
+TXTHEADER_TRANSLATOR (txtheader_fa2phylip);
 
 #endif

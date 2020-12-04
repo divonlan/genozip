@@ -28,7 +28,7 @@ typedef struct VBlockFAST {     // for FASTA and FASTQ
     // FASTA stuff
     bool contig_grepped_out;
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB is interpreted as a description, not a comment
-    enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // FASTA ZIP
+    enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP & PIZ
 } VBlockFAST;
 
 #define DATA_LINE(i) ENT (ZipDataLineFAST, vb->lines, i)

@@ -339,17 +339,20 @@ batch_genocat_tests()
     local file=$TESTDIR/basic.fa
     test_count_genocat_lines $file "--sequential" 9
     test_count_genocat_lines $file "--header-only" 3
-    test_count_genocat_lines $file "--header-one" 3
+    test_count_genocat_lines $file "--header-one" 18
     test_count_genocat_lines $file "--no-header" 15
     test_count_genocat_lines $file "--no-header --sequential" 6
     test_count_genocat_lines $file "--grep cytochrome" 6
     test_count_genocat_lines $file "--grep cytochrome --sequential " 2
     test_count_genocat_lines $file "--grep cytochrome --sequential --no-header " 1
 
+    # Multi-FASTA to Phylip
+    local file=$TESTDIR/basic-multifasta.fa
+    test_count_genocat_lines $file "--phylip" 4
+
     # FASTQ genocat tests
     file=$TESTDIR/basic.fq
     test_count_genocat_lines $file "--header-only" `grep @ $file | wc -l` 
-    test_count_genocat_lines $file "--header-one" `grep @ $file | wc -l`
     test_count_genocat_lines $file "--grep line5" 4
     test_count_genocat_lines $file "--grep line5 --header-only" 1
 }

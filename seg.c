@@ -467,9 +467,9 @@ Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_
 // anticipate that usually all lines have the same format, but we allow lines to have different formats.
 void seg_compound_field (VBlock *vb, 
                          Context *field_ctx, const char *field, unsigned field_len, 
-                         bool ws_is_sep, // whitespace is separator - separate by ' ' at '\t'
+                         bool ws_is_sep,            // whitespace is separator - separate by ' ' at '\t'
                          unsigned nonoptimized_len, // if non-zero, we don't account for the string given, instead, only for this amount (+add_for_eol)
-                         unsigned add_for_eol) // account for characters beyond the component seperators
+                         unsigned add_for_eol)      // account for characters beyond the component seperators
 {
     // we use nodes.param in D?ESC contexts to track whether all snips in in this VB are the same
     // defaults to 0 (the same) and we set it to 1 if we encounter a different one

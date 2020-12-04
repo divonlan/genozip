@@ -386,7 +386,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
 
     Context *ctx = &z_file->contexts[CHROM];
 
-    for (unsigned i=0; i < ra_buf->len; i++) {
+    for (uint32_t i=0; i < ra_buf->len; i++) {
         
         const char *chrom_snip; unsigned chrom_snip_len;
         if (from_zip) {
@@ -417,6 +417,34 @@ void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosTy
     *chrom_index = ra->chrom_index;
     *min_pos     = ra->min_pos;
     *max_pos     = ra->max_pos;
+}
+
+// FASTA PIZ I/O thread: check if all contigs have the same max pos, and return it
+uint32_t random_access_verify_all_contigs_same_length (void)
+{
+    static Buffer max_lens_buf = EMPTY_BUFFER;
+    const Context *ctx = &z_file->contexts[CHROM];
+    buf_alloc (evb, &max_lens_buf, ctx->word_list.len * sizeof (PosType), 1, "max_lens");
+    buf_zero (&max_lens_buf);
+
+    ARRAY (const RAEntry, ra, z_file->ra_buf);
+    ARRAY (PosType, max_lens, max_lens_buf);
+
+    PosType max_of_maxes=0;
+    for (uint32_t ra_i=0; ra_i < z_file->ra_buf.len; ra_i++) {
+        max_lens[ra[ra_i].chrom_index] = MAX (ra[ra_i].max_pos, max_lens[ra[ra_i].chrom_index]);
+        max_of_maxes = MAX (max_of_maxes, max_lens[ra[ra_i].chrom_index]);
+    }
+
+    for (uint32_t contig_i=0; contig_i < ctx->word_list.len; contig_i++) 
+        ASSINP (max_lens[contig_i] == max_of_maxes, "%s: File %s cannot be displayed in Phylip format because not all contigs are the same length: contig %s has length=%"PRIu64" which is shorter than other contigs of length=%"PRIu64,
+                global_cmd, z_name, 
+                ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, contig_i, 0, 0),
+                max_lens[contig_i], max_of_maxes);
+
+    buf_free (&max_lens_buf);
+
+    return max_of_maxes;
 }
 
 void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const char *buf_name, const char *show_index_msg)

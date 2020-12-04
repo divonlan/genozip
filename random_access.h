@@ -33,5 +33,6 @@ extern void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min
 extern void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosType *min_pos, PosType *max_pos);
 extern void random_access_load_ra_section (SectionType section_type, BufferP ra_buf, const char *buf_name, const char *show_index_msg);
 extern void random_access_compress (Buffer *ra_buf, SectionType sec_type, const char *msg);
+extern uint32_t random_access_verify_all_contigs_same_length (void);
 
 #endif

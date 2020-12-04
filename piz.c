@@ -537,13 +537,6 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
 
     dict_id_initialize (z_file->data_type); // must run after zfile_read_genozip_header that sets z_file->data_type
     
-    // for FASTA and FASTQ we convert a "header_only" flag to "header_one" as flag.header_only has some additional logic
-    // that doesn't work for FASTA / FASTQ
-    if (flag.header_only && (z_file->data_type == DT_FASTA || z_file->data_type == DT_FASTQ)) {
-        flag.header_only = false;
-        flag.header_one  = true;
-    }
-
     // check if the genozip file includes a reference
     bool has_ref_sections = !!sections_get_first_section_of_type (SEC_REFERENCE, true);
 

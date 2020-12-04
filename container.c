@@ -76,9 +76,11 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
 {
     #define IS_CI_SET(flag) (CI_ITEM_HAS_FLAG (item) && ((uint8_t)item->seperator[0] & ~(uint8_t)0x80 & flag))
 
-    TimeSpecType profiler_timer={0}; 
+    TimeSpecType profiler_timer = {}; 
     if (flag.show_time && con->is_toplevel) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
+    
+    int32_t last_non_filtered_item_i = -1;
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, con, &prefixes, &prefixes_len); 
@@ -102,10 +104,13 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
         const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
         uint32_t item_prefixes_len = prefixes_len;
 
+        last_non_filtered_item_i = -1;
         for (unsigned i=0; i < con->num_items; i++) {
             const ContainerItem *item = &con->items[i];
 
             if (con->filter_items && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
+
+            last_non_filtered_item_i = i;
 
             if (flag.show_containers && (item->did_i != DID_I_NONE || item->dict_id.num)) // show container reconstruction 
                 fprintf (stderr, "VB=%u Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
@@ -118,14 +123,14 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
             int32_t reconstructed_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
-                bool reconstruct = !flag.do_translate ||      // not translating Or...
+                bool reconstruct = !flag.trans_containers ||      // not translating Or...
                                    !IS_CI_SET (CI_TRANS_NOR); // no prohibition on reconstructing when translating
 
                 reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, 0, reconstruct);
 
                 // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item
                 // using the designated "translator" function, if one is available
-                if (flag.do_translate && item->translator) 
+                if (flag.trans_containers && item->translator) 
                     DT_FUNC(vb, translator)[item->translator](vb, &vb->contexts[item->did_i], reconstruction_start, reconstructed_len);  
             }            
 
@@ -134,10 +139,10 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
                 vb->txt_data.len -= ((item-1)->seperator[0] != 0) + ((item-1)->seperator[1] != 0);
 
             // seperator / flags determines what to do after the item            
-            if (flag.do_translate && IS_CI_SET (CI_TRANS_NUL))
+            if (flag.trans_containers && IS_CI_SET (CI_TRANS_NUL))
                 RECONSTRUCT1 (0);
 
-            else if (!flag.do_translate && IS_CI_SET (CI_NATIVE_NEXT))
+            else if (!flag.trans_containers && IS_CI_SET (CI_NATIVE_NEXT))
                 RECONSTRUCT1 (item->seperator[1]);
 
             else if (!CI_ITEM_HAS_FLAG(item)) { // seperator, not flag
@@ -146,7 +151,7 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
             }
 
             // after all reconstruction and translation is done - move if needed
-            if (flag.do_translate && IS_CI_SET (CI_TRANS_MOVE))
+            if (flag.trans_containers && IS_CI_SET (CI_TRANS_MOVE))
                 vb->txt_data.len += (uint8_t)item->seperator[1];
         }
 
@@ -161,10 +166,10 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
     }
 
     // remove final seperator, if we need to
-    if (con->drop_final_item_sep) {
-        const ContainerItem *item = &con->items[con->num_items-1]; // last item
+    if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
+        const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
-        vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (flag.do_translate ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
+        vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (flag.trans_containers ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
                                                    : (!!item->seperator[0] + !!item->seperator[1]);
     }
 
@@ -247,7 +252,7 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
 
             // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_OPTIONAL)
             ContainerItem *item0 = &con.items[0];
-            if (flag.do_translate && item0->did_i == DID_I_NONE && item0->translator) {
+            if (flag.trans_containers && item0->did_i == DID_I_NONE && item0->translator) {
                 int32_t prefixes_len_change = DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len);  
                 ASSERT (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, "Error in container_reconstruct: prefixes_len_change=%d exceeds range maximum %u",
                         prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE)
