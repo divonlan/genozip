@@ -167,6 +167,37 @@ void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *out_
     if (out_ft) *out_ft = ft;
 }
 
+// rules for pair filename: two filenames need to differ by exactly one character, which is '1' and '2',
+// if test_only we validate the rule
+// if !test_only, only fn1 needs to be provided, we assume the rule is valid, and we create the output file with "1+2"
+char *file_get_fastq_pair_filename (const char *fn1, const char *fn2, bool test_only)
+{
+    FileType ft1, ft2;
+    char *rn1, *rn2;
+
+    file_get_raw_name_and_type ((char *)fn1, &rn1, &ft1);
+    file_get_raw_name_and_type ((char *)fn2, &rn2, &ft2);
+    
+    unsigned len = strlen (rn1);
+    if (len != strlen (rn2)) return NULL;
+
+    int df = -1;
+    for (unsigned i=0; i < len; i++)
+        if (rn1[i] != rn2[i]) {
+            if (df >= 0) return NULL; // 2nd differing character
+            df = i;
+        }
+
+    if (!((rn1[df] == '1' && rn2[df] == '2') || (rn1[df] == '2' && rn2[df] == '1'))) return NULL; // one of them must be '1' and the other '2'
+
+    if (test_only) return (char *)1;
+
+    char *pair_fn = MALLOC (len+20);
+    sprintf (pair_fn, "%.*s1+2%s" FASTQ_GENOZIP_, df, rn1, &rn1[df+1]);
+    
+    return pair_fn;
+}
+
 void file_set_input_size (const char *size_str)
 {   
     unsigned len = strlen (size_str);

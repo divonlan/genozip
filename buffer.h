@@ -14,18 +14,18 @@
 
 struct variant_block_; 
 
-typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0
+typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitArrayType
 #define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY" }
 
 typedef struct Buffer {
-    BufferType type;
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
     
     const char *name; // name of allocator - used for memory debugging & statistics
     uint64_t size;    // number of bytes available to the user (i.e. not including the allocated overhead)
 
     //------------------------------------------------------------------------------------------------------
-    // these 3 fields can be overlayed with a BitArray - their order and size is identical to BitArray
+    // these 4 fields can be overlayed with a BitArray - their order and size is identical to BitArray
+    BufferType type;
     char *data;       // ==memory+8 if buffer is allocated or NULL if not
     int64_t param;    // parameter provided by allocator 
     uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
@@ -39,17 +39,7 @@ typedef struct Buffer {
     uint32_t code_line;
 } Buffer;
 
-#define EMPTY_BUFFER { .type        = BUF_UNALLOCATED,\
-                       .overlayable = false,\
-                       .name        = NULL,\
-                       .param       = 0,\
-                       .size        = 0,\
-                       .len         = 0,\
-                       .data        = NULL,\
-                       .memory      = NULL,\
-                       .vb          = NULL,\
-                       .func        = NULL,\
-                       .code_line   =0 }
+#define EMPTY_BUFFER ((Buffer){})
 
 #define ARRAY(element_type, name, buf) element_type *name = ((element_type *)((buf).data)) 
 
@@ -167,7 +157,7 @@ extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uin
 extern uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits);
 extern void buf_add_bit (Buffer *buf, int64_t new_bit);
 extern BitArrayP buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t num_of_bits);
-#define buf_get_bitarray(buf) ((BitArrayP)(&(buf)->data))
+#define buf_get_bitarray(buf) ((BitArrayP)(&(buf)->type))
 #define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
 #define buf_add_clear_bit(buf) buf_add_bit (buf, 0)
 

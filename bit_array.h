@@ -162,12 +162,15 @@ extern "C" {
 // Structs
 //
 
+typedef enum {BITARR_UNALLOCATED=0, BITARR_REGULAR, BITARR_OVERLAY} BitArrayType; // must be identical to BufferType
+
 typedef struct BitArray
 {
-  // These fields should not be changed or added to, as they map to Buffer
-  word_t* words;            // maps to Buffer->data
-  bit_index_t num_of_bits;  // maps to Buffer->param
-  word_addr_t num_of_words; // maps to Buffer->len  ; round_up (num_of_bits / 64)
+    // These fields should not be changed or added to, as they map to Buffer
+    BitArrayType type;
+    word_t *words;            // maps to Buffer->data
+    bit_index_t num_of_bits;  // maps to Buffer->param
+    word_addr_t num_of_words; // maps to Buffer->len  ; round_up (num_of_bits / 64)
 } BitArray;
 
 //
@@ -231,8 +234,8 @@ extern void bit_array_assign_bit(BitArray* bitarr, bit_index_t b, char c);
 // Returns the number of bits set
 // It is assumed that dst is at least of length (end-start)
 extern bit_index_t bit_array_get_bits(const BitArray* bitarr,
-                               bit_index_t start, bit_index_t end,
-                               bit_index_t* dst);
+                                      bit_index_t start, bit_index_t end,
+                                      bit_index_t* dst);
 
 // Set multiple bits at once.
 // e.g. set bits 1, 20 & 31: bit_array_set_bits(bitarr, 3, 1,20,31);

@@ -351,6 +351,7 @@ extern const char *file_plain_ext_by_dt (DataType dt);
 extern void file_remove_codec_ext (char *filename, FileType ft);
 extern const char *ft_name (FileType ft);
 extern const char *file_guess_original_filename (const File *file);
+extern char *file_get_fastq_pair_filename (const char *fn1, const char *fn2, bool test_only);
 
 // wrapper operations for operating system files
 extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, bool add_string_terminator);

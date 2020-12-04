@@ -1184,6 +1184,7 @@ static void ref_save_genome_copy_if_needed (bool is_last_file)
     // make a copy of genome and ranges
     if (!is_last_file && !buf_is_allocated (&genome_ref_copy)) {
         buf_alloc (evb, &genome_ref_copy, genome.ref.num_of_words * sizeof (word_t), 1, "genome_ref_copy");
+        memcpy (genome_ref_copy.data, genome.ref.words, genome.ref.num_of_words * sizeof (word_t));
         BitArray *bar = buf_get_bitarray (&genome_ref_copy);
         bar->num_of_bits  = genome.ref.num_of_bits;
         bar->num_of_words = genome.ref.num_of_words;

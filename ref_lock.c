@@ -23,7 +23,7 @@ static void ref_lock_initialize_do (uint32_t num_muteces)
     genome_muteces = CALLOC (num_muteces * sizeof (Mutex));
     genome_mutex_names = MALLOC (GM_NAME_LEN * num_muteces);
 
-    bool create_names = flag.show_mutex && !strncmp (GM_NAME, flag.show_mutex, 8); // only bother to create names if --show-mutex to this mutex
+    bool create_names = mutex_is_show (GM_NAME);
 
     for (unsigned i=0; i < num_muteces; i++) {
         if (create_names) sprintf (&genome_mutex_names[i*GM_NAME_LEN], GM_NAME, i);

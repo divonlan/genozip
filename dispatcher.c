@@ -42,7 +42,8 @@ typedef struct {
     unsigned num_running_compute_threads;
     unsigned next_vb_i;
     unsigned max_threads;
-    bool is_last_file;
+    bool is_last_file; // very last file in this execution
+    bool cleanup_after_me; // free resources after dispatcher is complete
     ProgressType prog;
     const char *filename;
 } DispatcherData;
@@ -108,17 +109,18 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
 }
 
 Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
-                            bool test_mode, bool is_last_file, 
+                            bool test_mode, bool is_last_file, bool cleanup_after_me,
                             const char *filename, // filename, or NULL if filename is unchanged
                             ProgressType prog, const char *prog_msg /* used if prog=PROGRESS_MESSAGE */)   
 {
     clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
     DispatcherData *dd = (DispatcherData *)CALLOC (sizeof(DispatcherData));
-    dd->next_vb_i    = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
-    dd->max_threads  = max_threads;
-    dd->is_last_file = is_last_file;
-    dd->prog         = prog;
+    dd->next_vb_i        = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
+    dd->max_threads      = max_threads;
+    dd->is_last_file     = is_last_file;
+    dd->cleanup_after_me = cleanup_after_me;
+    dd->prog             = prog;
 
     if (filename)
         dd->filename = filename;
@@ -183,12 +185,13 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     // free memory allocations between files, when compressing multiple non-bound files or 
     // decompressing multiple files. 
     // don't bother freeing (=save time) if this is the last file, unless we're going to test and need the memory
-    if (!flag.bind && (!dd->is_last_file || flag.test)) {
+    if (dd->cleanup_after_me && (!dd->is_last_file || flag.test)) {
         vb_cleanup_memory(); 
         vb_release_vb (evb);
     }
     
-    if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent bound files
+    if (last_vb_i && !dd->cleanup_after_me) 
+        *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent bound files
 
     FREE (*dispatcher);
 }
@@ -362,7 +365,7 @@ uint32_t dispatcher_fan_out_task (const char *filename,  // NULL to continue wit
                                   bool force_single_thread, 
                                   DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
-    Dispatcher dispatcher = dispatcher_init (force_single_thread ? 1 : global_max_threads, 0, test_mode, true, filename, prog, prog_msg);
+    Dispatcher dispatcher = dispatcher_init (force_single_thread ? 1 : global_max_threads, 0, test_mode, true, true, filename, prog, prog_msg);
     do {
         VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;

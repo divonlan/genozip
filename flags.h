@@ -71,8 +71,7 @@ typedef struct {
            dump_one_local_dict_id;  // argument of --dump-local-one
 
     // internal flags set by the system, not the command line
-    bool bind,               // ZIP: user used --output to bind 2+ files
-         ref_use_aligner,    // ZIP: compression requires using the aligner
+    bool ref_use_aligner,    // ZIP: compression requires using the aligner
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
          reading_reference,  // system is currently reading a reference file
          do_translate,       // PIZ: decompression requires translation to another data type
@@ -80,6 +79,8 @@ typedef struct {
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          data_modified;      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
+
+    enum { BIND_NONE, BIND_ALL, BIND_PAIRS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
 
     uint64_t stdin_size;
 } Flags;
@@ -98,7 +99,7 @@ extern bool option_is_short[];
 #define OT(l,s) option_is_short[(int)s[0]] ? "-"s : "--"l
 
 extern void flags_init_from_command_line (int argc, char **argv);
-extern void flags_update (unsigned num_files, char **filenames);
+extern void flags_update (unsigned num_files, const char **filenames);
 extern void flags_update_zip_one_file (void);
 extern void flags_update_piz_one_file (void);
 

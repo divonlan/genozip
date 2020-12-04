@@ -13,7 +13,7 @@ typedef void *Dispatcher;
 
 typedef enum { PROGRESS_PERCENT, PROGRESS_MESSAGE, PROGRESS_NONE } ProgressType;
 extern Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
-                                   bool test_mode, bool is_last_file, const char *filename, ProgressType prog, const char *prog_msg);
+                                   bool test_mode, bool is_last_file, bool cleanup_after_me, const char *filename, ProgressType prog, const char *prog_msg);
 extern void dispatcher_pause (Dispatcher dispatcher);
 extern void dispatcher_resume (Dispatcher dispatcher);
 extern void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i);

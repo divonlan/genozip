@@ -443,6 +443,15 @@ batch_make_reference()
 
 batch_reference()
 {
+    echo "paired FASTQ with --reference, --password"
+    test_standard "CONCAT -e$GRCh38 -p 123 --pair" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+
+    echo "4 paired FASTQ with --REFERENCE (not bound)"
+    test_standard "COPY -E$GRCh38 --pair" " " test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+
+    echo "4 paired FASTQ with --REFERENCE (bound)"
+    test_standard "COPY CONCAT -E$GRCh38 -2" "-u" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
     test_standard "-me$GRCh38" "-e$GRCh38" test.human-unsorted.sam test.human.fq test.human-sorted.sam
@@ -453,15 +462,9 @@ batch_reference()
     echo "SAM with --reference and --password" 
     test_standard "-me$GRCh38 --password 123" "-p123 -e$GRCh38" test.human-unsorted.sam
     
-    echo "SAM with --reference and --password" 
+    echo "SAM with --REFERENCE and --password" 
     test_standard "-E$GRCh38 --password 123" "-p123" test.human-unsorted.sam
     
-    echo "paired FASTQ with --reference, --password"
-    test_standard "CONCAT -e$GRCh38 -p 123 --pair" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
-
-    echo "4 paired FASTQ with --REFERENCE"
-    test_standard "COPY CONCAT -E$GRCh38 -2" "-u" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
-
     echo "multiple bound VCF with --reference, --md5 using hg19, and unbind"
     test_standard "COPY CONCAT -me$hg19" "-u" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 

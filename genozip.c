@@ -467,8 +467,9 @@ static void main_genozip_open_z_file_write (char **z_filename)
 }
 
 static void main_genozip (const char *txt_filename, 
+                          const char *next_txt_filename, // ignored unless we are of pair_1 in a --pair
                           char *z_filename,
-                          bool is_first_file, bool is_last_file,
+                          unsigned file_i, bool is_last_file,
                           char *exec_name)
 {
     SAVE_FLAGS;
@@ -492,26 +493,36 @@ static void main_genozip (const char *txt_filename,
     ASSERT0 (flag.bind || !z_file, "Error: expecting z_file to be NULL in non-bound mode");
 
     // get output FILE
-    if (!z_file)  // skip if we're the second file onwards in bind mode - nothing to do
+    if (!z_file) { // skip if we're the second file onwards in bind mode, or pair_2 in unbound list of pairs - nothing to do
+        
+        if (flag.pair && !z_filename)  // case: if we're the first file in a pair
+            z_filename = file_get_fastq_pair_filename (txt_filename, next_txt_filename, false);
+        
         main_genozip_open_z_file_write (&z_filename);
-    
+    }
+
     flags_update_zip_one_file();
 
-    zip_one_file (txt_file->basename, is_last_file);
+    bool z_closes_after_me = is_last_file || flag.bind==BIND_NONE || (flag.bind==BIND_PAIRS && file_i%2);
 
-    if (flag.show_stats && (!flag.bind || is_last_file)) stats_display();
+    zip_one_file (txt_file->basename, is_last_file, z_closes_after_me);
+
+    if (flag.show_stats && z_closes_after_me) stats_display();
 
     bool remove_txt_file = z_file && flag.replace && txt_filename;
 
-    file_close (&txt_file, false, !is_last_file);
+    file_close (&txt_file, false, !is_last_file);  // no need to waste time closing the last file, the process termination will do that
 
-    if ((is_last_file || !flag.bind) && !flag.to_stdout && z_file) 
+    // close the file if its an open disk file AND we need to close it
+    if (!flag.to_stdout && z_file && z_closes_after_me) {
+        if (!z_filename) { z_filename = z_file->name ; z_file->name = 0; } // take over the name if we don't have it (eg 2nd file in a pair)
         file_close (&z_file, false, !is_last_file); 
+    }
 
     if (remove_txt_file) file_remove (txt_filename, true); 
 
     // test the compression, if the user requested --test
-    if (flag.test && (!flag.bind || is_last_file)) main_test_after_genozip (exec_name, z_filename, is_last_file);
+    if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_file);
 
 done:
     RESTORE_FLAGS;
@@ -702,7 +713,7 @@ int main (int argc, char **argv)
 
     unsigned num_files = argc - optind;
 
-    flags_update (num_files, &argv[optind]);
+    flags_update (num_files, (const char **)&argv[optind]);
 
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
     qsort (&argv[optind], num_files, sizeof (argv[0]), main_sort_input_filenames);
@@ -725,7 +736,6 @@ int main (int argc, char **argv)
     if (command == ZIP) license_get(); 
 
     for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
-
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
@@ -740,9 +750,15 @@ int main (int argc, char **argv)
         main_load_reference (next_input_file, !file_i, is_last_file);
         
         switch (command) {
-            case ZIP  : main_genozip (next_input_file, flag.out_filename, file_i==0, !next_input_file || is_last_file, argv[0]); break;
+            case ZIP  : main_genozip (next_input_file, 
+                                      optind < argc ? argv[optind] : NULL, // file name of next file, if there is one
+                                      flag.out_filename, file_i, !next_input_file || is_last_file, argv[0]); 
+                        break;
+
             case PIZ  : main_genounzip (next_input_file, flag.out_filename, is_last_file); break;           
+
             case LIST : main_genols (next_input_file, false, NULL, false); break;
+
             default   : ABORT ("%s: unrecognized command %c", global_cmd, command);
         }
 

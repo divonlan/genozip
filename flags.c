@@ -124,7 +124,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sc {"show-codec",    no_argument,       &flag.show_codec,       1 }  
         #define _sb {"show-bgzf",     no_argument,       &flag.show_bgzf,        1 }
         #define _s5 {"show-digest",   no_argument,       &flag.show_digest,      1 }
-        #define _sM {"show-mutex",    required_argument, 0, 4                      }
+        #define _sM {"show-mutex",    optional_argument, 0, 4                      }
         #define _dS {"test-seg",      no_argument,       &flag.test_seg,         1 }  
         #define _dm {"debug-memory",  no_argument,       &flag.debug_memory,     1 }  
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
@@ -193,16 +193,16 @@ void flags_init_from_command_line (int argc, char **argv)
             case 'o' : flag.out_filename  = optarg  ; break;
             case 'g' : flag.grep          = optarg  ; break;
             case '~' : flag.show_is_set   = optarg  ; break;
-            case '\7': flag.dump_section  = optarg  ; break;
-            case '\4': flag.show_mutex    = optarg  ; break;
-            case '\2': if (optarg) flag.dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); 
+            case 7   : flag.dump_section  = optarg  ; break;
+            case 4   : flag.show_mutex    = optarg ? optarg : (char*)1; break;
+            case 2   : if (optarg) flag.dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); 
                        else        flag.show_b250 = 1;
                        break;
-            case '\3': if (optarg) flag.dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); 
+            case 3   : if (optarg) flag.dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); 
                        else        flag.show_dict = 1;
                        break;
-            case '\5': flag.dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg)); break;
-            case '\6': flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg)); break;
+            case 5   : flag.dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg)); break;
+            case 6   : flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg)); break;
             case 8   : flag.one_vb = atoi (optarg);  break;
             case 9   : flag.downsample = atoi (optarg); break;
             case 'B' : vb_set_global_max_memory_per_vb (optarg); 
@@ -236,34 +236,7 @@ void flags_init_from_command_line (int argc, char **argv)
     }
 }
 
-// if two filenames differ by one character only, which is '1' and '2', creates a combined filename with "1+2"
-static char *flags_get_fastq_pair_filename (const char *fn1, const char *fn2)
-{
-    FileType ft1, ft2;
-    char *rn1, *rn2;
-
-    file_get_raw_name_and_type ((char *)fn1, &rn1, &ft1);
-    file_get_raw_name_and_type ((char *)fn2, &rn2, &ft2);
-    
-    unsigned len = strlen (rn1);
-    if (len != strlen (rn2)) return NULL;
-
-    int df = -1;
-    for (unsigned i=0; i < len; i++)
-        if (rn1[i] != rn2[i]) {
-            if (df >= 0) return NULL; // 2nd differing character
-            df = i;
-        }
-
-    if (!((rn1[df] == '1' && rn2[df] == '2') || (rn1[df] == '2' && rn2[df] == '1'))) return NULL; // one of them must be '1' and the other '2'
-
-    char *pair_fn = MALLOC (len+20);
-    sprintf (pair_fn, "%.*s1+2%s" FASTQ_GENOZIP_, df, rn1, &rn1[df+1]);
-    
-    return pair_fn;
-}
-
-static void flags_warn_if_duplicates (int num_files, char **filenames)
+static void flags_warn_if_duplicates (int num_files, const char **filenames)
 {
     if (num_files <= 1) return; // nothing to do
 
@@ -320,26 +293,37 @@ static void flags_test_conflicts (void)
     }
 }
 
-void flags_update (unsigned num_files, char **filenames)
+// --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
+static void flags_verify_pair_rules (unsigned num_files, const char **filenames)
+{
+    // ZIP only
+    if (command != ZIP) {
+        flag.pair = false;
+        return;
+    }
+
+    // verify even number of files
+    ASSINP (num_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
+    ASSINP (flag.reference,     "%s: either --reference or --REFERENCE must be specified when using %s", global_cmd, OT("pair", "2"));
+
+    // verify all are fastq
+    for (unsigned i=0; i < num_files; i++)
+        ASSERT (txtfile_get_file_dt (filenames[i]) == DT_FASTQ, "%s: when using %s, all input files are expected to be FASTQ files, but %s is not", global_cmd, OT("pair", "2"), filenames[i]);
+
+    // if which --output is missing, we check if every pair of files has a consistent name
+    if (!flag.out_filename) 
+        for (unsigned i=0; i < num_files; i += 2) 
+            ASSINP (file_get_fastq_pair_filename (filenames[i], filenames[i+1], true),  
+                    "%s: to use %s without specifying --output, the naming of the files needs to be consistent and include the numbers 1 and 2 respectively, but these files don't: %s %s", 
+                    global_cmd, OT("pair", "2"), filenames[i], filenames[i+1]);
+}
+
+void flags_update (unsigned num_files, const char **filenames)
 {
     flags_test_conflicts();
 
-    // --pair (ZIP only): verify an even number of fastq files, --output, and --reference/--REFERENCE
-    if (flag.pair) {
-
-        for (unsigned i=0; i < num_files; i++)
-            ASSERT (txtfile_get_file_dt (filenames[i]) == DT_FASTQ, "%s: when using %s, all input files are expected to be FASTQ files, but %s is not", global_cmd, OT("pair", "2"), filenames[i]);
-
-        // in case of a flag.pair with 2 files, in which --output is missing, we attempt to figure it out if possible
-        if (!flag.out_filename && num_files == 2) 
-            flag.out_filename = flags_get_fastq_pair_filename (filenames[0], filenames[1]);
-
-        ASSINP (flag.out_filename,  "%s: --output must be specified when using %s", global_cmd, OT("pair", "2"));
-        ASSINP (flag.reference,     "%s: either --reference or --REFERENCE must be specified when using %s", global_cmd, OT("pair", "2"));
-        ASSINP (num_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
-    }
-
-    // deal with final setting of flag.quiet that suppresses warnings 
+    // verify stuff needed for --pair
+    if (flag.pair) flags_verify_pair_rules (num_files, filenames);
     
     // don't show progress or warning when outputing to stdout (note: we are "quiet" even if output doesn't go to the terminal
     // because often it will be piped and ultimately go the terminal)
@@ -388,7 +372,10 @@ void flags_update (unsigned num_files, char **filenames)
 
     flag.multiple_files = (num_files > 1);
 
-    flag.bind = (command == ZIP) && (flag.out_filename != NULL) && (num_files > 1);
+    if (command == ZIP && num_files > 1) 
+        flag.bind = flag.out_filename ? BIND_ALL   : 
+                    flag.pair         ? BIND_PAIRS : 
+                                        BIND_NONE  ;
 
     // cases where genocat is used to view some information, but not the file contents
     flag.genocat_info_only = exe_type == EXE_GENOCAT &&

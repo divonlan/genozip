@@ -46,8 +46,12 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bo
         static uint64_t txt_file_disk_size_bind = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
 
-        if (!txt_file_disk_size_bind) // first bound file
+        // reset for every set of bound files (we might have multiple sets if --pair)
+        if (z_file->num_txt_components_so_far == 1) {
+            txt_file_disk_size_bind=0; 
             source_file_type = txt_file->type;
+        }
+
         else if (source_file_type != txt_file->type) // heterogenous source file types
             source_file_type = UNKNOWN_FILE_TYPE;
 
@@ -427,7 +431,9 @@ void zip_prepopulate_contig_data (void)
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_one_file (const char *txt_basename, bool is_last_file)
+void zip_one_file (const char *txt_basename, 
+                   bool is_last_file,      // very last file in this execution
+                   bool z_closes_after_me) // we will finalize this z_file after writing this component
 {
     static DataType last_data_type = DT_NONE;
     static uint32_t prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
@@ -442,7 +448,8 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 
     // normally global_max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (global_max_threads, prev_file_last_vb_i, false, is_last_file, txt_basename, PROGRESS_PERCENT, 0);
+    Dispatcher dispatcher = dispatcher_init (global_max_threads, prev_file_last_vb_i, false, is_last_file, z_closes_after_me,
+                                             txt_basename, PROGRESS_PERCENT, 0);
 
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
@@ -566,12 +573,12 @@ void zip_one_file (const char *txt_basename, bool is_last_file)
 finish:
     z_file->txt_disk_so_far_bind  += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
-    if ((is_last_file || !flag.bind) && !flag.test_seg)
+    if (z_closes_after_me && !flag.test_seg)
         zip_write_global_area (dispatcher, single_component_digest);
 
-    zip_display_compression_ratio (dispatcher, flag.bind ? DIGEST_NONE : single_component_digest, is_last_file || !flag.bind); // Done for reference + final compression ratio calculation
+    zip_display_compression_ratio (dispatcher, flag.bind ? DIGEST_NONE : single_component_digest, z_closes_after_me); // Done for reference + final compression ratio calculation
     
-    if (flag.bind && z_file->num_txt_components_so_far > 1 && is_last_file) 
+    if (flag.bind && z_file->num_txt_components_so_far > 1 && z_closes_after_me) 
         progress_concatenated_md5 (dt_name (z_file->data_type), digest_finalize (&z_file->digest_ctx_bound, "file:digest_ctx_bound"));
 
     z_file->disk_size              = z_file->disk_so_far;
@@ -580,6 +587,9 @@ finish:
     evb->z_next_header_i           = 0;
     memset (&z_file->digest_ctx_single, 0, sizeof (z_file->digest_ctx_single));
 
+    if (z_closes_after_me) 
+        prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset statics
+    
     prev_file_first_vb_i = first_vb_i;
     dispatcher_finish (&dispatcher, &prev_file_last_vb_i);
 

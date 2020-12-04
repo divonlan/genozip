@@ -132,7 +132,7 @@ static const char *help_genozip[] = {
     "                     Note: due to these data modifications, files compressed with --optimize are NOT identical to the original file after decompression. For this reason, it is not possible to use this option in combination with --test or --md5",    
     "",
     "FASTQ-specific options (ignored for other file types):",
-    "   -2 --pair         Compress pairs of paired-end consecutive files, resulting in compression ratios better than compressing the files individually. When using this option, every two consecutive files on the file list should be paired read fastq files with an identical number of reads, --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To unbind the genozip file back to its original FASTQ files, use genounzip --unbind",
+    "   -2 --pair         Compress pairs of paired-end FASTQ files, resulting in compression ratios better than compressing the files individually. When using this option, every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names, and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To unbind the genozip file back to its original FASTQ files, use genounzip --unbind",
     "",
 #ifndef _WIN32
     "VCF-specific options (ignored for other file types):",
@@ -219,7 +219,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-digest     Show digest (MD5 or Adler32) updates",    
     "",
-    "   ZUC  --show-mutex      <mutex-name> Shows locks and unlocks of a particular mutex",    
+    "   ZUC  --show-mutex      <mutex-name> Shows locks and unlocks of all mutexes or a particular mutex",    
 };
 
 static const char *help_genounzip[] = {

@@ -38,6 +38,8 @@ void mutex_lock_do (MutexP mutex, const char *func);
 void mutex_unlock_do (MutexP mutex, const char *func, uint32_t line);
 #define mutex_unlock(mutex) mutex_unlock_do (&mutex, __FUNCTION__, __LINE__)
 
+#define mutex_is_show(name) (flag.show_mutex && (flag.show_mutex==(char*)1 || !strncmp ((name), flag.show_mutex, 8))) // only 8 chars so we can catch all genome_muteces[%u]
+
 // -----------
 // spinlock stuff
 // -----------
