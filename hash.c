@@ -208,6 +208,10 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
         vb_ctx->local_hash_prime = 1; // GNRIC_TOPLEVEL has only one snip
         break;
 
+    case DT_PHYLIP : 
+        vb_ctx->local_hash_prime = hash_next_size_up(500); // only TOPLEVEL, TOP2FASTA and EOL - all expected to have ~1 snip
+        break;
+
     default: ABORT ("hash_alloc_local: unknown data_type=%s", dt_name (segging_vb->data_type));
     }
 

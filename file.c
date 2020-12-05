@@ -532,14 +532,16 @@ static bool file_open_txt_write (File *file)
 
     // implicit translation flags - eg. "genocat xx.bam.genozip -o xx.fq" implies --fastq
     DataType dt_by_filename = file_get_data_type (file->type, true);
-    if ((file->data_type == DT_SAM  && dt_by_filename == DT_BAM  ) ||
-        (file->data_type == DT_BAM  && dt_by_filename == DT_SAM  ) ||
-        (file->data_type == DT_SAM  && dt_by_filename == DT_FASTQ) ||
-        (file->data_type == DT_BAM  && dt_by_filename == DT_FASTQ) ||
-        (file->data_type == DT_ME23 && dt_by_filename == DT_VCF  ) )
+    if ((file->data_type == DT_SAM    && dt_by_filename == DT_BAM  )  ||
+        (file->data_type == DT_BAM    && dt_by_filename == DT_SAM  )  ||
+        (file->data_type == DT_SAM    && dt_by_filename == DT_FASTQ)  ||
+        (file->data_type == DT_BAM    && dt_by_filename == DT_FASTQ)  ||
+        (file->data_type == DT_FASTA  && dt_by_filename == DT_PHYLIP) ||
+        (file->data_type == DT_PHYLIP && dt_by_filename == DT_FASTA)  ||
+        (file->data_type == DT_ME23   && dt_by_filename == DT_VCF  ) )
     {
         flag.out_dt = file->data_type = dt_by_filename;
-        flags_update_piz_one_file (); // update flags accordingly
+        flags_update_piz_one_file(); // update flags accordingly
         flag.bgzf = false; // ignore flag derived from z_file, and get the codec from the output filename extension below
     }
 

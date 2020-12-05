@@ -1,4 +1,3 @@
-
 // ------------------------------------------------------------------
 //   genozip.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
@@ -370,7 +369,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         }
     }
 
-    flags_update_piz_one_file();
+    flags_update_piz_one_file ();
     
     // set txt_filename from genozip file name (inc. extensions if translating or --bgzf)
     if (!txt_filename && !flag.to_stdout && !flag.unbind) 

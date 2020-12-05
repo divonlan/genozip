@@ -21,14 +21,17 @@
 #include "gff3.h"
 #include "me23.h"
 #include "generic.h"
+#include "phylip.h"
 
-#define MAX_NUM_SPECIAL MAX ((int)NUM_VCF_SPECIAL, \
+#define MAX_NUM_SPECIAL MAX ((int)NUM_GNRIC_SPECIAL, \
+                        MAX ((int)NUM_VCF_SPECIAL, \
                         MAX ((int)NUM_SAM_SPECIAL, \
-                             (int)NUM_FASTA_SPECIAL))
+                             (int)NUM_FASTA_SPECIAL)))
 
 typedef SPECIAL_RECONSTRUCTOR ((*PizSpecialReconstructor));
 typedef TRANSLATOR_FUNC ((*PizTranslator));
-#define MAX_NUM_TRANSLATORS NUM_SAM_TRANS
+#define MAX_NUM_TRANSLATORS MAX (NUM_SAM_TRANS, \
+                                 NUM_ME23_TRANS)
 
 typedef struct DataTypeProperties {
     
@@ -96,7 +99,7 @@ typedef struct DataTypeProperties {
     { "BAM",       true,  DT_NONE, RA,    0, sam_vb_size,  sam_vb_zip_dl_size,  HDR_MUST, -1,  bam_is_header_done,  bam_unconsumed,   sam_header_inspect,     NULL,                 sam_header_finalize, NULL,               bam_seg_initialize,   bam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  sam_header_finalize, NULL,                  NULL,                      NULL,                      sam_piz_sam2fq_filter, NUM_SAM_SPECIAL,   SAM_SPECIAL,   NUM_SAM_TRANS,   SAM_TRANSLATORS,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
     { "BCF",       false, DT_NONE, RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', NULL,                NULL,             vcf_inspect_txt_header, NULL,                 NULL,             NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,        NUM_VCF_SPECIAL,   VCF_SPECIAL,   0,               {},                vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
     { "GENERIC",   true,  DT_GENERIC, NO_RA, 0, 0,         0,                   HDR_NONE, -1,  NULL,                generic_unconsumed, NULL,                 NULL,                 NULL,             NULL,                  NULL,                 NULL,               generic_seg_finalize,NULL,                    NULL,                  NULL,                NULL,                  NULL,                      NULL,                      NULL,                  NUM_GNRIC_SPECIAL, GNRIC_SPECIAL, 0,               {},                NULL,               NULL,                NULL,                   "N/A",             { "FIELD", "ERROR!", "ERROR!" } }, \
-    { "PHYLIP",    false, DT_NONE, RA,    1, fast_vb_size, fast_vb_zip_dl_size, HDR_MUST, -1,  NULL,                fasta_unconsumed, NULL,                   NULL,                 NULL,             NULL,                  fasta_seg_initialize, fasta_seg_txt_line, fasta_seg_finalize, NULL,                     fasta_piz_initialize,  NULL,                fasta_piz_read_one_vb, fasta_piz_is_skip_section, NULL,                      fasta_piz_filter,      NUM_FASTA_SPECIAL, FASTA_SPECIAL, 0,               {}, fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
+    { "PHYLIP",    false, DT_NONE, NO_RA, 1, 0,            phy_vb_zip_dl_size,  HDR_MUST, -1,  phy_is_header_done,  NULL,             phy_header_inspect,     NULL,                 NULL,             NULL,                  phy_seg_initialize,   phy_seg_txt_line,   phy_seg_finalize,   NULL,                     NULL,                  NULL,                NULL,                  NULL,                      NULL,                      NULL,                  0,                 {},            0,               {},                NULL,               NULL,                NULL,                   "Sequences",       { "FIELD", "ERROR!", "ERROR!" } }, \
 }  
 #define DATA_TYPE_FUNCTIONS_DEFAULT /* only applicable to (some) functions */ \
     { "DEFAULT",   false, DT_NONE, NO_RA, 0, 0,            0,                   0,        0,   def_is_header_done,  def_unconsumed,   0,                      0,                    0,                0,                     0,                    0,                  0,                  0,                        0,                     NULL,                0,                     0,                         0,                         0,                     0,                 {},            0,               {},                0,                  0,                   0,                      "",                { }                             }
@@ -134,6 +137,7 @@ typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_DESC, FASTA_COMMEN
 typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, NUM_GFF3_FIELDS } Gff3Fields;
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPLEVEL, ME23_TOP2VCF, NUM_ME23_FIELDS } Me23Fields;  
 typedef enum { GNRIC_DATA, GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GenericFields;
+typedef enum { PHY_ID, PHY_SEQ, PHY_EOL, PHY_TOPLEVEL, PHY_TOP2FASTA, NUM_PHY_FIELDS } PhyFields;
 
 #define MAX_NUM_FIELDS_PER_DATA_TYPE MAX ((int) NUM_REF_FIELDS,    \
                                      MAX ((int) NUM_VCF_FIELDS,    \
@@ -142,7 +146,8 @@ typedef enum { GNRIC_DATA, GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GenericFields;
                                      MAX ((int) NUM_FASTA_FIELDS,  \
                                      MAX ((int) NUM_GFF3_FIELDS,   \
                                      MAX ((int) NUM_ME23_FIELDS,   \
-                                          (int) NUM_GNRIC_FIELDS )))))))
+                                     MAX ((int) NUM_GNRIC_FIELDS,  \
+                                          (int) NUM_PHY_FIELDS ))))))))
 
 #define MAX_DICTS (MAX_SUBFIELDS*2 + MAX_NUM_FIELDS_PER_DATA_TYPE)  
 //#if MAX_DICTS > 253 // 254 is for future use and 255 is DID_I_NONE
@@ -170,7 +175,7 @@ typedef struct DataTypeFields {
   {NUM_SAM_FIELDS,   SAM_POS,    -1,         SAM_NONREF,   SAM_EOL,   SAM_TOP2BAM,    { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "QUAL", "DOMQRUNS", "EOL", "BAM_BIN", TOPLEVEL, "TOP2BAM", "TOP2FQ", "E2:Z", "2NONREF", "N2ONREFX", "2GPOS", "S2TRAND", "U2:Z", "D2OMQRUN" } }, \
   {NUM_VCF_FIELDS,   VCF_POS,    VCF_INFO,   -1,           VCF_EOL,   VCF_TOPLEVEL,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL } }, \
   {NUM_GNRIC_FIELDS, -1,        -1,          -1,           -1,        GNRIC_TOPLEVEL, { "DATA", TOPLEVEL } }, \
-  {NUM_FASTA_FIELDS, -1,         -1,         FASTA_NONREF, FASTA_EOL, FASTA_TOPLEVEL, { "CONTIG", "LINEMETA", "EOL", "DESC", "COMMENT", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", TOPLEVEL } }, \
+  {NUM_PHY_FIELDS,   -1,         -1,         -1,           PHY_EOL,   PHY_TOPLEVEL,   { "ID", "SEQ", "EOL", TOPLEVEL, "TOP2FA" } }, \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)
@@ -184,6 +189,7 @@ extern DataTypeFields dt_fields[NUM_DATATYPES];
     BAM_LOCAL_GET_LINE_CALLBACKS    \
     FASTQ_LOCAL_GET_LINE_CALLBACKS  \
     FASTA_LOCAL_GET_LINE_CALLBACKS  \
+    PHY_LOCAL_GET_LINE_CALLBACKS    \
 }
 
 // aliases - these are used only in PIZ, as a way for multiple dict_id's to get access to the same data storage
@@ -211,13 +217,14 @@ typedef struct DtTranslation {
 
 #define TRANSLATIONS { \
     /*                          non-bin-dt binary dst_txt_dt toplevel     factor  txtheader_transl.    trans_con src_dt*/ \
-    /* SAM to BAM          */ { DT_SAM,    false, DT_BAM,    SAM_TOP2BAM,    2,   txtheader_sam2bam,   true,     false }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 and QUAL="*"->0xff X seq_len */ \
-    /* SAM to FASTQ        */ { DT_SAM,    false, DT_FASTQ,  SAM_TOP2FQ,     1,   txtheader_sam2fq,    true,     false }, /* sizes of SEQ, QUAL, QNAME the same */ \
-    /* Binary SAM to SAM   */ { DT_SAM,    true,  DT_SAM,    SAM_TOPLEVEL,   3,   txtheader_bam2sam,   false,    false }, /* BAM stores sequences in 2x and numbers in 1-2.5x */ \
-    /* Binary SAM to BAM   */ { DT_SAM,    true,  DT_BAM,    SAM_TOP2BAM,    2,   NULL,                true,     true  }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 */ \
-    /* Binary BAM to FASTQ */ { DT_SAM,    true,  DT_FASTQ,  SAM_TOP2FQ,     1.5, txtheader_sam2fq,    true,     false }, /* sizes of QNAME, QUAL the same, SEQ x2 */ \
-    /* 23andMe to VCF      */ { DT_ME23,   false, DT_VCF,    ME23_TOP2VCF,   4,   txtheader_me232vcf,  true,     false }, \
-    /* FASTA to Phylip     */ { DT_FASTA,  false, DT_PHYLIP, FASTA_TOPLEVEL, 4,   txtheader_fa2phylip, true,     false }, \
+    /* SAM to BAM          */ { DT_SAM,    false, DT_BAM,    SAM_TOP2BAM,    2,   txtheader_sam2bam,  true,     false }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 and QUAL="*"->0xff X seq_len */ \
+    /* SAM to FASTQ        */ { DT_SAM,    false, DT_FASTQ,  SAM_TOP2FQ,     1,   txtheader_sam2fq,   true,     false }, /* sizes of SEQ, QUAL, QNAME the same */ \
+    /* Binary SAM to SAM   */ { DT_SAM,    true,  DT_SAM,    SAM_TOPLEVEL,   3,   txtheader_bam2sam,  false,    false }, /* BAM stores sequences in 2x and numbers in 1-2.5x */ \
+    /* Binary SAM to BAM   */ { DT_SAM,    true,  DT_BAM,    SAM_TOP2BAM,    2,   NULL,               true,     true  }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 */ \
+    /* Binary BAM to FASTQ */ { DT_SAM,    true,  DT_FASTQ,  SAM_TOP2FQ,     1.5, txtheader_sam2fq,   true,     false }, /* sizes of QNAME, QUAL the same, SEQ x2 */ \
+    /* 23andMe to VCF      */ { DT_ME23,   false, DT_VCF,    ME23_TOP2VCF,   4,   txtheader_me232vcf, true,     false }, \
+    /* FASTA to Phylip     */ { DT_FASTA,  false, DT_PHYLIP, FASTA_TOPLEVEL, 1.1, txtheader_fa2phy,   true,     false }, \
+    /* Phylip to FASTA     */ { DT_PHYLIP, false, DT_FASTA,  PHY_TOP2FASTA,  1.1, txtheader_phy2fa,   true,     false }, \
 }
 
 extern const DtTranslation dt_get_translation (void);

@@ -79,6 +79,8 @@ void dict_id_initialize (DataType data_type)
 
     for (int f=0; f < dt_fields[data_type].num_fields; f++) {
         const char *field_name = dt_fields[data_type].names[f];
+
+        ASSERT (field_name, "Data type %s is missing a field name in DATA_TYPE_FIELDS for field %u", dt_name (data_type), f);
         dict_id_fields[f] = dict_id_field (dict_id_make (field_name, strlen (field_name))).num; 
     }
 

@@ -44,6 +44,6 @@ SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
 #define FASTA_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTA, &dict_id_fields[FASTA_NONREF], fasta_zip_seq }, 
 
-TXTHEADER_TRANSLATOR (txtheader_fa2phylip);
+TXTHEADER_TRANSLATOR (txtheader_fa2phy);
 
 #endif

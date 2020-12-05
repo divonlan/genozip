@@ -250,6 +250,7 @@ batch_minimal()
 batch_basic()
 {
     local files=(basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt)
+# TO DO add back basic.phy - fails redirection on Windows
     local file
     for file in ${files[@]}; do
         
@@ -347,8 +348,13 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--grep cytochrome --sequential --no-header " 1
 
     # Multi-FASTA to Phylip
+# TO DO: compare output to basic.phy and vice verse
     local file=$TESTDIR/basic-multifasta.fa
     test_count_genocat_lines $file "--phylip" 4
+
+    # Phylip to Multi-fasta
+    local file=$TESTDIR/basic.phy
+    test_count_genocat_lines $file "--fasta" 9
 
     # FASTQ genocat tests
     file=$TESTDIR/basic.fq

@@ -71,7 +71,7 @@ void sam_zip_qual (VBlock *vb, uint32_t vb_line_i, char **line_qual_data, uint32
         optimize_phred_quality_string (*line_qual_data, *line_qual_len);
 }
 
-// callback function for compress to get data of one line (called by codec_bz2_compress)
+// callback function for compress to get data of one line
 void sam_zip_u2 (VBlock *vb, uint32_t vb_line_i, char **line_u2_data,  uint32_t *line_u2_len, uint32_t maximum_len) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);

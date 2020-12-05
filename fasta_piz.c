@@ -223,7 +223,7 @@ bool fasta_piz_read_one_vb (VBlock *vb, ConstSectionListEntryP sl)
 }
 
 // create Phylip header line
-TXTHEADER_TRANSLATOR (txtheader_fa2phylip)
+TXTHEADER_TRANSLATOR (txtheader_fa2phy)
 {
     // get length of contigs and error if they are not all the same length
     uint32_t contig_len = random_access_verify_all_contigs_same_length();
