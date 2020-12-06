@@ -524,9 +524,6 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 
     switch (buf->type) {
 
-        case BUF_UNALLOCATED:
-            return; // nothing to do
-
         case BUF_REGULAR: 
 
             if (buf->overlayable) {
@@ -546,14 +543,14 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 
                 mutex_unlock (overlay_mutex);            
             }
-            
+
             buf->data        = NULL; 
+            buf->overlayable = false;
+            // fall through (name, memory and size are not changed)
+
+        case BUF_UNALLOCATED: // reset len and param that may be used even without allocating the buffer
             buf->len         = 0;
             buf->param       = 0;
-            buf->overlayable = false;
-            
-            // name, param, memory and size are not changed
-
             break;
 
         case BUF_OVERLAY:

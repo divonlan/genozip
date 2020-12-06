@@ -833,63 +833,61 @@ void ctx_update_stats (VBlock *vb)
     }
 }
 
+#define FINALIZE_CTX_BUFS(func) \
+    func (&ctx->dict);          \
+    func (&ctx->b250);          \
+    func (&ctx->local);         \
+    func (&ctx->pair);          \
+    func (&ctx->ol_dict);       \
+    func (&ctx->ol_nodes);      \
+    func (&ctx->nodes);         \
+    func (&ctx->node_i);        \
+    func (&ctx->local_hash);    \
+    func (&ctx->global_hash);   \
+    func (&ctx->word_list);     \
+    func (&ctx->con_cache);     \
+    func (&ctx->con_index);     \
+    func (&ctx->con_len);      
+
 void ctx_free_context (Context *ctx)
 {
-    buf_free (&ctx->ol_dict);
-    buf_free (&ctx->ol_nodes);
-    buf_free (&ctx->dict);
-    buf_free (&ctx->nodes);
-    buf_free (&ctx->word_list);
-    buf_free (&ctx->local_hash);
-    buf_free (&ctx->global_hash);
-    buf_free (&ctx->node_i);
-    buf_free (&ctx->b250);
-    buf_free (&ctx->local);
-    buf_free (&ctx->con_cache);
-    buf_free (&ctx->con_index);
-    buf_free (&ctx->con_len);
-    buf_free (&ctx->pair);
-    
-    ctx->node_i.len = 0; // VCF stores FORMAT length in here for stats, even if node_i is not allocated (and therefore buf_free will not cleanup)
-    ctx->local.len = 0; // For callback ctxs, length is stored, but data is not copied to local and is kept in vb->txt_data
-    ctx->dict_id.num = 0;
-    ctx->iterator.next_b250 = ctx->pair_b250_iter.next_b250 = NULL;
-    ctx->iterator.prev_word_index = ctx->pair_b250_iter.prev_word_index = 0;
-    ctx->local_hash_prime = 0;
-    ctx->global_hash_prime = 0;
-    ctx->merge_num = 0;
-    ctx->nodes_len_at_1_3 = ctx->nodes_len_at_2_3 = 0;
-    ctx->txt_len = ctx->next_local = ctx->num_singletons = ctx->num_failed_singletons = 0;
-    ctx->last_delta = 0;
-    ctx->last_value.i = 0;
-    ctx->last_line_i = 0;
+    FINALIZE_CTX_BUFS (buf_free);
+
+    memset ((char*)ctx->name, 0, sizeof(ctx->name));
     ctx->did_i = 0; 
+    ctx->st_did_i = 0;
     ctx->ltype = 0;
     ctx->flags = (struct FlagsCtx){};
-    ctx->lcodec = ctx->bcodec = 0;
-    memset ((char*)ctx->name, 0, sizeof(ctx->name));
-    mutex_destroy (ctx->mutex);
+    ctx->pair_flags = (struct FlagsCtx){};
+    ctx->dict_id.num = 0;
+    ctx->pair_b250_iter = (SnipIterator){};
+    ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback =
-    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->semaphore = 0;
+    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = 0;
+    ctx->local_hash_prime = 0;
+    ctx->num_new_entries_prev_merged_vb = 0;
+    ctx->nodes_len_at_1_3 = ctx->nodes_len_at_2_3 = 0;
+
+    ctx->global_hash_prime = 0;
+    ctx->merge_num = 0;
+    ctx->txt_len = ctx->num_singletons = ctx->num_failed_singletons = 0;
+
+    mutex_destroy (ctx->mutex);
+
+    ctx->iterator = (SnipIterator){};
+    ctx->next_local = 0;
+
+    ctx->last_line_i = 0;
+    ctx->last_value.i = 0;
+    ctx->last_delta = 0;
+    ctx->semaphore = 0;
 }
 
 // Called by file_close ahead of freeing File memory containing contexts
 void ctx_destroy_context (Context *ctx)
 {
-    buf_destroy (&ctx->ol_dict);
-    buf_destroy (&ctx->ol_nodes);
-    buf_destroy (&ctx->dict);
-    buf_destroy (&ctx->nodes);
-    buf_destroy (&ctx->word_list);
-    buf_destroy (&ctx->local_hash);
-    buf_destroy (&ctx->global_hash);
-    buf_destroy (&ctx->node_i);
-    buf_destroy (&ctx->b250);
-    buf_destroy (&ctx->con_cache);
-    buf_destroy (&ctx->con_index);
-    buf_destroy (&ctx->con_len);
-
+    FINALIZE_CTX_BUFS (buf_destroy);
     mutex_destroy (ctx->mutex);
 }
 
