@@ -178,9 +178,9 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
                       .compressed_index = vb->compressed.len,
                       .txt_size         = block_uncomp_len,
                       .comp_size        = block_comp_len,
-                      .is_decompressed  = false };           
+                      .is_decompressed  = !block_uncomp_len }; // EOF block is always considered decompressed           
 
-                vb->compressed.len   += block_comp_len;   // compressed size
+                vb->compressed.len += block_comp_len;   // compressed size
             }
 
             // case EOF - happens in 2 cases: 1. EOF block (block_comp_len=BGZF_EOF_LEN) or 2. no EOF block (block_comp_len=0)

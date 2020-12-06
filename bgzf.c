@@ -43,6 +43,15 @@ static const char *libdeflate_error (int err)
     }
 }
 
+typedef struct { char s[100]; } BgzfBlockStr;
+static BgzfBlockStr display_bb (BgzfBlockZip *bb)
+{
+    BgzfBlockStr s;
+    sprintf (s.s, "{txt_index=%u txt_size=%u compressed_index=%u comp_size=%u is_decompressed=%u}",
+             bb->txt_index, bb->txt_size, bb->compressed_index, bb->comp_size, bb->is_decompressed);
+    return s;
+}
+
 //--------------------------------------------------------------------
 // ZIP SIDE - decompress BGZF-compressed file and prepare BGZF section
 //--------------------------------------------------------------------
@@ -132,15 +141,15 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
     // verify that entire block is within vb->compressed
     ASSERT (bb->compressed_index + sizeof (BgzfHeader) < vb->compressed.len && // we have at least the header - we can access bsize
             bb->compressed_index + (uint32_t)LTEN16 (h->bsize) + 1 <= vb->compressed.len, 
-            "Error in bgzf_uncompress_vb: bgzf block size goes past the end of in vb->compressed: vb=%u compressed_index=%u vb->compressed.len=%"PRIu64, 
-            vb->vblock_i, bb->compressed_index, vb->compressed.len);
+            "Error in bgzf_uncompress_vb: bgzf block size goes past the end of in vb->compressed: bb=%s vb=%u compressed_index=%u vb->compressed.len=%"PRIu64, 
+            display_bb (bb).s, vb->vblock_i, bb->compressed_index, vb->compressed.len);
 
     ASSERT (h->id1==31 && h->id2==139, "Error in bgzf_uncompress_vb: not a valid bgzf block in vb->compressed: vb=%u compressed_index=%u", vb->vblock_i, bb->compressed_index);
 
     if (!vb->libdeflate) vb->libdeflate = libdeflate_alloc_decompressor();
 
     if (flag.show_bgzf)
-        fprintf (stderr, "%-7s vb=%u i=%u compressed_index=%u size=%u txt_index=%u size=%u",
+        fprintf (stderr, "%-7s vb=%u i=%u compressed_index=%u size=%u txt_index=%u size=%u ",
                  arch_am_i_io_thread() ? "IO" : "COMPUTE", vb->vblock_i, 
                  ENTNUM (vb->bgzf_blocks, bb), bb->compressed_index, bb->comp_size, bb->txt_index, bb->txt_size);
 
@@ -408,7 +417,7 @@ void bgzf_compress_vb (VBlock *vb)
     }
 }
 
-// Called by I/O thread to complete the work Compute Thread cannot do - see 1,2,3 below
+// PIZ: Called by I/O thread to complete the work Compute Thread cannot do - see 1,2,3 below
 void bgzf_write_to_disk (VBlock *vb)
 {
     // Step 1. bgzf-compress the BGZF block that is split between end the previous VB(s) (data currently in txt_file->unconsumed_txt)
