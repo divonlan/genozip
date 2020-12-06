@@ -240,19 +240,19 @@ void flags_init_from_command_line (int argc, char **argv)
     }
 }
 
-static void flags_warn_if_duplicates (int num_files, const char **filenames)
+static void flags_warn_if_duplicates (int num_txt_files, const char **filenames)
 {
-    if (num_files <= 1) return; // nothing to do
+    if (num_txt_files <= 1) return; // nothing to do
 
     # define BASENAME_LEN 256
-    char basenames[num_files * BASENAME_LEN];
+    char basenames[num_txt_files * BASENAME_LEN];
 
-    for (unsigned i=0; i < num_files; i++)
+    for (unsigned i=0; i < num_txt_files; i++)
         file_basename (filenames[i], false, "", &basenames[i*BASENAME_LEN], BASENAME_LEN);
 
-    qsort (basenames, num_files, BASENAME_LEN, (int (*)(const void *, const void *))strcmp);
+    qsort (basenames, num_txt_files, BASENAME_LEN, (int (*)(const void *, const void *))strcmp);
 
-    for (unsigned i=1; i < num_files; i++) 
+    for (unsigned i=1; i < num_txt_files; i++) 
         ASSERTW (strncmp(&basenames[(i-1) * BASENAME_LEN], &basenames[i * BASENAME_LEN], BASENAME_LEN), 
                  "Warning: two files with the same name '%s' - if you later unbind with 'genounzip --unbind %s', these files will overwrite each other", 
                  &basenames[i * BASENAME_LEN], flag.out_filename);
@@ -298,7 +298,7 @@ static void flags_test_conflicts (void)
 }
 
 // --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
-static void flags_verify_pair_rules (unsigned num_files, const char **filenames)
+static void flags_verify_pair_rules (unsigned num_txt_files, const char **filenames)
 {
     // ZIP only
     if (command != ZIP) {
@@ -307,27 +307,27 @@ static void flags_verify_pair_rules (unsigned num_files, const char **filenames)
     }
 
     // verify even number of files
-    ASSINP (num_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
+    ASSINP (num_txt_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
     ASSINP (flag.reference,     "%s: either --reference or --REFERENCE must be specified when using %s", global_cmd, OT("pair", "2"));
 
     // verify all are fastq
-    for (unsigned i=0; i < num_files; i++)
+    for (unsigned i=0; i < num_txt_files; i++)
         ASSERT (txtfile_get_file_dt (filenames[i]) == DT_FASTQ, "%s: when using %s, all input files are expected to be FASTQ files, but %s is not", global_cmd, OT("pair", "2"), filenames[i]);
 
     // if which --output is missing, we check if every pair of files has a consistent name
     if (!flag.out_filename) 
-        for (unsigned i=0; i < num_files; i += 2) 
+        for (unsigned i=0; i < num_txt_files; i += 2) 
             ASSINP (file_get_fastq_pair_filename (filenames[i], filenames[i+1], true),  
                     "%s: to use %s without specifying --output, the naming of the files needs to be consistent and include the numbers 1 and 2 respectively, but these files don't: %s %s", 
                     global_cmd, OT("pair", "2"), filenames[i], filenames[i+1]);
 }
 
-void flags_update (unsigned num_files, const char **filenames)
+void flags_update (unsigned num_txt_files, const char **filenames)
 {
     flags_test_conflicts();
 
     // verify stuff needed for --pair
-    if (flag.pair) flags_verify_pair_rules (num_files, filenames);
+    if (flag.pair) flags_verify_pair_rules (num_txt_files, filenames);
     
     // don't show progress or warning when outputing to stdout (note: we are "quiet" even if output doesn't go to the terminal
     // because often it will be piped and ultimately go the terminal)
@@ -355,7 +355,7 @@ void flags_update (unsigned num_files, const char **filenames)
         flag.md5 = true;
         if (!flag.vblock) vb_set_global_max_memory_per_vb("1");
 
-        ASSINP (num_files <= 1, "%s: you can specify only one FASTA file when using --make-reference.\n"
+        ASSINP (num_txt_files <= 1, "%s: you can specify only one FASTA file when using --make-reference.\n"
                 "To create a reference from multiple FASTAs use something like this:\n"
                 "cat *.fa | %s --make-reference --input fasta --output myref.ref.genozip -", global_cmd, global_cmd);
     }
@@ -372,11 +372,11 @@ void flags_update (unsigned num_files, const char **filenames)
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --unbind
-    if (command == ZIP && flag.out_filename && !flag.quiet) flags_warn_if_duplicates (num_files, filenames);
+    if (command == ZIP && flag.out_filename && !flag.quiet) flags_warn_if_duplicates (num_txt_files, filenames);
 
-    flag.multiple_files = (num_files > 1);
+    flag.multiple_files = (num_txt_files > 1);
 
-    if (command == ZIP && num_files > 1) 
+    if (command == ZIP && num_txt_files > 1) 
         flag.bind = flag.out_filename ? BIND_ALL   : 
                     flag.pair         ? BIND_PAIRS : 
                                         BIND_NONE  ;

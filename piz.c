@@ -633,7 +633,7 @@ static bool piz_read_one_vb (VBlock *vb)
     return ok_to_compute;
 }
 
-static Digest piz_one_file_verify_md5 (Digest original_file_digest)
+static Digest piz_one_file_verify_digest (Digest original_file_digest)
 {
     if (v8_digest_is_zero (original_file_digest) || flag.genocat_info_only || flag.data_modified) return DIGEST_NONE; // we can't calculate the digest for some reason
 
@@ -649,7 +649,7 @@ static Digest piz_one_file_verify_md5 (Digest original_file_digest)
 
         if (flag.test) { 
             sprintf (s, "%s = %s verified as identical to the original %s", 
-                        digest_name(), digest_display (decompressed_file_digest).s, dt_name (txt_file->data_type));
+                     digest_name(), digest_display (decompressed_file_digest).s, dt_name (txt_file->data_type));
             progress_finalize_component (s); 
         }
     }
@@ -660,10 +660,11 @@ static Digest piz_one_file_verify_md5 (Digest original_file_digest)
                digest_name(), digest_display (original_file_digest).s, digest_display (decompressed_file_digest).s);
     }
 
-    else ASSERT (digest_is_zero (original_file_digest), // its ok if we decompressed only a partial file
-                 "File integrity error: %s of decompressed file %s is %s, but the original %s file's was %s", 
-                 txt_file->name, digest_display (decompressed_file_digest).s, dt_name (txt_file->data_type), 
-                 digest_name(), digest_display (original_file_digest).s);
+    // if compressed incorrectly - warn, but still give user access to the decompressed file
+    else ASSERTW (digest_is_zero (original_file_digest), // its ok if we decompressed only a partial file
+                  "File integrity error: %s of decompressed file %s is %s, but the original %s file's was %s", 
+                  txt_file->name, digest_display (decompressed_file_digest).s, dt_name (txt_file->data_type), 
+                  digest_name(), digest_display (original_file_digest).s);
 
     return decompressed_file_digest;
 }
@@ -794,7 +795,7 @@ no_more_data:
     }
 
     // verifies reconstructed file against MD5 (if compressed with --md5 or --test) or Adler2 and/or codec_args (if bgzf)
-    Digest decompressed_file_digest = piz_one_file_verify_md5 (original_file_digest);
+    Digest decompressed_file_digest = piz_one_file_verify_digest (original_file_digest);
 
     if (flag.unbind) file_close (&txt_file, flag.index_txt, true); // close this component file (in non-unbind we close from main_genounzip)
 

@@ -122,6 +122,7 @@ void bgzf_compress_bgzf_section (void)
     txt_file->bgzf_isizes.len /= sizeof (uint16_t); // restore
 }
 
+// de-compresses a BGZF block in vb->compressed referred to by bb, into its place in vb->txt_data as prescribed by bb
 void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 {
     if (bb->is_decompressed) return; // already decompressed - nothing to do

@@ -321,7 +321,7 @@ static void main_ask_about_unbind (void)
     fprintf (stderr, "\n");
 }
 
-static void main_genounzip (const char *z_filename, const char *txt_filename, bool is_last_file)
+static void main_genounzip (const char *z_filename, const char *txt_filename, bool is_last_txt_file)
 {
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;
@@ -364,7 +364,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
 
         if (!flag.genocat_info_only) {
             SAVE_VALUE (z_file); // actually, read the reference first
-            ref_load_external_reference (false, false /* parameter ignored for REF_EXTERNAL */);
+            ref_load_external_reference (false, false /* argument ignored for REF_EXTERNAL */);
             RESTORE_VALUE (z_file);
         }
     }
@@ -389,7 +389,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     
     // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
     uint32_t component_i=0;
-    while (piz_one_file (component_i, is_last_file) && flag.unbind) component_i++;
+    while (piz_one_file (component_i, is_last_txt_file) && flag.unbind) component_i++;
 
     if (!flag.to_stdout && !flag.unbind) {
         // don't close stdout - we might still need it for the next file
@@ -407,12 +407,12 @@ done:
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
 // genounzipping, we create a new genounzip process
-static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_last_file)
+static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_last_txt_file)
 {
     const char *password = crypt_get_password();
 
     // is we have a loaded reference and it is no longer needed, unload it now, to free the memory for the testing process
-    if (is_last_file) ref_unload_reference (true);
+    if (is_last_txt_file) ref_unload_reference (true);
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",
@@ -468,7 +468,7 @@ static void main_genozip_open_z_file_write (char **z_filename)
 static void main_genozip (const char *txt_filename, 
                           const char *next_txt_filename, // ignored unless we are of pair_1 in a --pair
                           char *z_filename,
-                          unsigned file_i, bool is_last_file,
+                          unsigned txt_file_i, bool is_last_txt_file,
                           char *exec_name)
 {
     SAVE_FLAGS;
@@ -502,26 +502,26 @@ static void main_genozip (const char *txt_filename,
 
     flags_update_zip_one_file();
 
-    bool z_closes_after_me = is_last_file || flag.bind==BIND_NONE || (flag.bind==BIND_PAIRS && file_i%2);
+    bool z_closes_after_me = is_last_txt_file || flag.bind==BIND_NONE || (flag.bind==BIND_PAIRS && txt_file_i%2);
 
-    zip_one_file (txt_file->basename, is_last_file, z_closes_after_me);
+    zip_one_file (txt_file->basename, is_last_txt_file, z_closes_after_me);
 
     if (flag.show_stats && z_closes_after_me) stats_display();
 
     bool remove_txt_file = z_file && flag.replace && txt_filename;
 
-    file_close (&txt_file, false, !is_last_file);  // no need to waste time closing the last file, the process termination will do that
+    file_close (&txt_file, false, !is_last_txt_file);  // no need to waste time closing the last file, the process termination will do that
 
     // close the file if its an open disk file AND we need to close it
     if (!flag.to_stdout && z_file && z_closes_after_me) {
         if (!z_filename) { z_filename = z_file->name ; z_file->name = 0; } // take over the name if we don't have it (eg 2nd file in a pair)
-        file_close (&z_file, false, !is_last_file); 
+        file_close (&z_file, false, !is_last_txt_file); 
     }
 
     if (remove_txt_file) file_remove (txt_filename, true); 
 
     // test the compression, if the user requested --test
-    if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_file);
+    if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_txt_file);
 
 done:
     RESTORE_FLAGS;
@@ -575,7 +575,7 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
     return fn1 - fn2;
 }
 
-static void main_load_reference (const char *filename, bool is_first_file, bool is_last_file)
+static void main_load_reference (const char *filename, bool is_first_file, bool is_last_z_file)
 {
     if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE) return;
 
@@ -601,7 +601,7 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
     if (is_first_file)
-        ref_load_external_reference (false, is_last_file); // also loads refhash if needed
+        ref_load_external_reference (false, is_last_z_file); // also loads refhash if needed
 
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
     else if (!old_ref_use_aligner && flag.ref_use_aligner) { 
@@ -714,6 +714,11 @@ int main (int argc, char **argv)
 
     flags_update (num_files, (const char **)&argv[optind]);
 
+    unsigned num_z_files = command != ZIP          ? num_files     :
+                           flag.bind == BIND_ALL   ? 1             :  // flag.bind was set by flags_update
+                           flag.bind == BIND_PAIRS ? num_files / 2 :
+                                                     num_files;
+
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
     qsort (&argv[optind], num_files, sizeof (argv[0]), main_sort_input_filenames);
     
@@ -734,7 +739,7 @@ int main (int argc, char **argv)
     // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
     if (command == ZIP) license_get(); 
 
-    for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
+    for (unsigned file_i=0, z_file_i=0; file_i < MAX (num_files, 1); file_i++) {
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
@@ -744,17 +749,18 @@ int main (int argc, char **argv)
 
         ASSERTW (next_input_file || !flag.replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
 
-        bool is_last_file = (file_i==num_files-1);
+        bool is_last_txt_file = (file_i==num_files-1);
+        bool is_last_z_file = (z_file_i==num_z_files-1);
 
-        main_load_reference (next_input_file, !file_i, is_last_file);
+        main_load_reference (next_input_file, !file_i, is_last_z_file);
         
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
                                       optind < argc ? argv[optind] : NULL, // file name of next file, if there is one
-                                      flag.out_filename, file_i, !next_input_file || is_last_file, argv[0]); 
+                                      flag.out_filename, file_i, !next_input_file || is_last_txt_file, argv[0]); 
                         break;
 
-            case PIZ  : main_genounzip (next_input_file, flag.out_filename, is_last_file); break;           
+            case PIZ  : main_genounzip (next_input_file, flag.out_filename, is_last_txt_file); break;           
 
             case LIST : main_genols (next_input_file, false, NULL, false); break;
 
@@ -762,6 +768,8 @@ int main (int argc, char **argv)
         }
 
         if (flag.pair) flag.pair = 3 - flag.pair; // alternate between PAIR_READ_1 and PAIR_READ_2
+
+        if (!z_file) z_file_i++; // z_file was closed, meaning we're done with it
     }
 
     // if this is "list", finalize

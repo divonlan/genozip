@@ -1175,23 +1175,19 @@ void ref_generate_reverse_complement_genome (void)
     COPY_TIMER_VB (evb, generate_rev_complement_genome);
 }
 
-static void ref_save_genome_copy_if_needed (bool is_last_file)
+// make a copy of genome and ranges
+static void ref_save_genome_copy (void)
 {
-    if (flag.reference != REF_EXT_STORE) return; // relevant only for REF_EXT_STORE
+    ASSERT0 (genome.ref.words, "Error in ref_save_genome_copy: genome.ref is not allocated");
 
-    ASSERT0 (genome.ref.words, "Error in ref_save_genome_copy_if_needed: genome.ref is not allocated");
+    buf_alloc (evb, &genome_ref_copy, genome.ref.num_of_words * sizeof (word_t), 1, "genome_ref_copy");
+    memcpy (genome_ref_copy.data, genome.ref.words, genome.ref.num_of_words * sizeof (word_t));
+    BitArray *bar = buf_get_bitarray (&genome_ref_copy);
+    bar->num_of_bits  = genome.ref.num_of_bits;
+    bar->num_of_words = genome.ref.num_of_words;
 
-    // make a copy of genome and ranges
-    if (!is_last_file && !buf_is_allocated (&genome_ref_copy)) {
-        buf_alloc (evb, &genome_ref_copy, genome.ref.num_of_words * sizeof (word_t), 1, "genome_ref_copy");
-        memcpy (genome_ref_copy.data, genome.ref.words, genome.ref.num_of_words * sizeof (word_t));
-        BitArray *bar = buf_get_bitarray (&genome_ref_copy);
-        bar->num_of_bits  = genome.ref.num_of_bits;
-        bar->num_of_words = genome.ref.num_of_words;
-
-        // copy initial state of ranges, before they are modifed by compacting
-        buf_copy (evb, &ranges_copy, &ranges, sizeof (Range), 0, 0, "ranges_copy");
-    }
+    // copy initial state of ranges, before they are modifed by compacting
+    buf_copy (evb, &ranges_copy, &ranges, sizeof (Range), 0, 0, "ranges_copy");
 }
 
 bool ref_is_reference_loaded (void)
@@ -1200,7 +1196,7 @@ bool ref_is_reference_loaded (void)
 }
 
 // ZIP & PIZ: import external reference
-void ref_load_external_reference (bool display, bool is_last_file)
+void ref_load_external_reference (bool display, bool is_last_z_file)
 {
     ASSERT0 (ref_filename, "Error: ref_filename is NULL");
     SAVE_FLAGS;
@@ -1233,7 +1229,11 @@ void ref_load_external_reference (bool display, bool is_last_file)
     if (flag.ref_use_aligner && primary_command == ZIP) 
         ref_generate_reverse_complement_genome();
 
-    ref_save_genome_copy_if_needed (is_last_file);
+    // make a copy of the genome, if we are going to modify it by compacting for storing in the file
+    if (  flag.reference == REF_EXT_STORE &&    // relevant only for REF_EXT_STORE
+          !is_last_z_file &&                    // no point copying if no one's going to need it
+          !buf_is_allocated (&genome_ref_copy)) // not already copied
+        ref_save_genome_copy();
 
     if (display) ref_display_ref();
 }
