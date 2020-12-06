@@ -724,7 +724,8 @@ bool piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
         if (flag.test || flag.md5) 
             ASSERT0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
 
-        dispatcher = dispatcher_init (global_max_threads, 0, flag.test, is_last_file, true, z_file->basename, PROGRESS_PERCENT, 0);
+        dispatcher = dispatcher_init (flag.xthreads ? 1 : global_max_threads, 
+                                      0, flag.test, is_last_file, true, z_file->basename, PROGRESS_PERCENT, 0);
     }
     
     else if (flag.unbind) {

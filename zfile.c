@@ -901,8 +901,8 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
     vb_header->first_line   = BGEN32 (txt_first_line_i);
 
     if (flag.show_vblocks) 
-        fprintf (stderr, "vb_i=%u component_i=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
-                 vb->vblock_i, z_file->num_txt_components_so_far-1, txt_first_line_i, BGEN32 (vb_header->num_lines), 
+        fprintf (stderr, "vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
+                 vb->vblock_i, z_file->num_txt_components_so_far, txt_first_line_i, BGEN32 (vb_header->num_lines), 
                  BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
                  BGEN32 (vb_header->longest_line_len));
 

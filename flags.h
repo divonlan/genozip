@@ -62,7 +62,7 @@ typedef struct {
         show_reference, show_ref_hash, show_ref_index, show_ref_alts,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         debug_progress, show_hash, debug_memory, show_vblocks, show_threads,
-        test_seg;
+        test_seg, xthreads;
     char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
 
     DictId dict_id_show_one_b250,   // argument of --show-b250-one

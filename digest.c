@@ -113,11 +113,11 @@ void digest_one_vb (VBlock *vb)
             if (!digest_is_equal (vb->digest_so_far, piz_digest_so_far)) {
 
                 // dump bad vb to disk
-                WARN ("%s of reconstructed vblock=%u (%s) differs from original file (%s).\n"
+                WARN ("%s of reconstructed vblock=%u,component=%u (%s) differs from original file (%s).\n"
                       "Bad reconstructed vblock has been dumped to: %s\n"
                       "To see the same data in the original file:\n"
                       "   %s %s | head -c %"PRIu64" | tail -c %u > %s", DIGEST_NAME,
-                      vb->vblock_i, digest_display (piz_digest_so_far).s, digest_display (vb->digest_so_far).s, txtfile_dump_vb (vb, z_name),
+                      vb->vblock_i, z_file->num_txt_components_so_far, digest_display (piz_digest_so_far).s, digest_display (vb->digest_so_far).s, txtfile_dump_vb (vb, z_name),
                       codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
                       vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len, txtfile_dump_filename (vb, z_name, "good"));
 

@@ -280,3 +280,5 @@ Cleanup:
 - genocat --phylip     new translator - outputs a multi-fasta file in Phylip format
 - genocat --fasta      new translator - outputs a Phylip file in multi-fasta format
 - bug fixes
+- Developer options:
+    --xthreads Use only 1 threads for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers

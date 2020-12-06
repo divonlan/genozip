@@ -206,6 +206,8 @@ static const char *help_genozip_developer[] = {
     "",
     "   Z    --test-seg        Debug segmenting - runs the segmenter, but doesn't compress and doesn't write the output",
     "",
+    "   ZUC  --xthreads        Use only 1 threads for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers",
+    "",
     "   ZUCL --debug-memory    Buffer allocations and destructions",
     "",
     "   ZUC  --debug-progress  See raw numbers that feed into the progress indicator",

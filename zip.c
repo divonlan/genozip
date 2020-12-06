@@ -448,7 +448,8 @@ void zip_one_file (const char *txt_basename,
 
     // normally global_max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (global_max_threads, prev_file_last_vb_i, false, is_last_file, z_closes_after_me,
+    Dispatcher dispatcher = dispatcher_init (flag.xthreads ? 1 : global_max_threads, 
+                                             prev_file_last_vb_i, false, is_last_file, z_closes_after_me,
                                              txt_basename, PROGRESS_PERCENT, 0);
 
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
