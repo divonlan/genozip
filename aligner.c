@@ -255,6 +255,10 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     // it to be 1 in most cases - making the bitmap highly compressible)
     if (gpos_ctx->pair_local) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
+        
+        ASSERT (vb->line_i < pair_strand->num_of_bits, "Error: vb=%u cannot get pair-1 STRAND bit for line_i=%u but pair-1 strand bitarray has only %u bits",
+                vb->vblock_i, vb->line_i, (unsigned)pair_strand->num_of_bits);
+
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
         buf_add_bit (&strand_ctx->local, is_forward == pair_is_forward);
     }
@@ -382,6 +386,8 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
             vb->txt_data.len -= reconstructed_len; // roll back reconstruction
             gpos = gpos_ctx->last_value.i;
         }
+//if (gpos >= 3088270656 && gpos <= 3088287224) // GRCh38.ref chrM
+//fprintf (stderr, "XXX %"PRIu64"\n", gpos-3088270655);
 
         // sanity check - the sequence is supposed to fit in the 
         ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome.ref.num_of_bits / 2, "Error in aligner_reconstruct_seq: gpos=%"PRId64" is out of range: seq_len=%u and genome_size=%"PRIu64,
