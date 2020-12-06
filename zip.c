@@ -332,7 +332,7 @@ static void zip_compress_one_vb (VBlock *vb)
     START_TIMER; 
 
     // if the txt file is compressed with BGZF, we uncompress now, in the compute thread
-    if (txt_file->codec == CODEC_BGZF) 
+    if (txt_file->codec == CODEC_BGZF && flag.pair != PAIR_READ_2) 
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
