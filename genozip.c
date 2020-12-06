@@ -424,6 +424,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
                                   flag.show_time   ? "--show-time"    : SKIP_ARG,
                                   flag.threads_str ? "--threads"      : SKIP_ARG,
                                   flag.threads_str ? flag.threads_str : SKIP_ARG,
+                                  flag.xthreads    ? "--xthreads"     : SKIP_ARG,
                                   flag.reference == REF_EXTERNAL ? "--reference" : SKIP_ARG,
                                   flag.reference == REF_EXTERNAL ? ref_filename  : SKIP_ARG,
                                   NULL);

@@ -227,6 +227,23 @@ const char *st_name (SectionType sec_type)
     return (sec_type == SEC_NONE) ? "SEC_NONE" : type_name (sec_type, &abouts[sec_type].name , sizeof(abouts)/sizeof(abouts[0]));
 }
 
+// called to parse the optional argument to --show-headers. we accept eg REFERENCE or SEC_REFERENCE
+SectionType sections_st_by_name (const char *name)
+{
+    if (!name) return -2; // all sections
+
+    if (strlen (name) >= 4 && !memcmp (name, "SEC_", 4)) 
+        name += 4; // remove "SEC_" prefix;
+
+    for (SectionType st=0; st < NUM_SEC_TYPES; st++)
+        if (!strcmp (&abouts[st].name[4], name))
+            return st;
+
+    ABORT ("%s: bad argument for --show-sections - \"%s\", is not a recognized section type", 
+           global_cmd, name);
+    return 0; // silence compiler warning
+}
+
 uint32_t st_header_size (SectionType sec_type)
 {
     ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "Error in st_header_size: sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);

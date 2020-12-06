@@ -109,7 +109,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sa {"show-alleles",  no_argument,       &flag.show_alleles,     1 }
         #define _st {"show-time",     optional_argument, 0, 1                      } 
         #define _sm {"show-memory",   no_argument,       &flag.show_memory ,     1 } 
-        #define _sh {"show-headers",  no_argument,       &flag.show_headers,     1 } 
+        #define _sh {"show-headers",  optional_argument, 0, 10                     } 
         #define _si {"show-index",    no_argument,       &flag.show_index  ,     1 } 
         #define _Si {"show-ref-index",no_argument,       &flag.show_ref_index,   1 } 
         #define _Sh {"show-ref-hash" ,no_argument,       &flag.show_ref_hash,    1 } 
@@ -210,6 +210,7 @@ void flags_init_from_command_line (int argc, char **argv)
             case 6   : flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg)); break;
             case 8   : flag.one_vb = atoi (optarg);  break;
             case 9   : flag.downsample = atoi (optarg); break;
+            case 10  : flag.show_headers = 1 + sections_st_by_name (optarg); break; // +1 so SEC_NONE maps to 0
             case 'B' : vb_set_global_max_memory_per_vb (optarg); 
                        flag.vblock = true;
                        break;

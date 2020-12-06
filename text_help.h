@@ -173,7 +173,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --dump-section    <section-type>. Dump the uncompressed, unencrypted contents of all sections of this type (as it appears in --show-gheaders, eg SEC_REFERENCE), to a files named \"<section-type>.<vb>.<dict_id>.[header|body]\" - When used with genocat, the dump file will be created, and file contents will not be shown",
     "",
-    "   ZUC  --show-headers    Show the sections headers",
+    "   ZUC  --show-headers    <section-type>. Show all the sections headers, or those of a specific section type if the optional argument is provided",
     "",
     "   ZUC  --show-index      Show the content of the random access index (SEC_RANDOM_ACCESS section). When used with genocat, only the index is shown, not the file contents",
     "",

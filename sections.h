@@ -83,7 +83,7 @@ typedef union BgzfFlags {
     struct FlagsCtx {
         uint8_t store            : 2; // after reconstruction of a snip, store it in ctx.last_value
         uint8_t paired           : 1; // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-        uint8_t v8_container     : 1; // (canceled in 9 - files compressed with 8.0 will have alls containers have this flag)
+        uint8_t v8_container     : 1; // (canceled in 9 - files compressed with 8.0 will have this flag set for any context that contains 1 or more containers)
         uint8_t copy_param       : 1; // copy ctx.b250/local.param from SectionHeaderCtx.param
         uint8_t all_the_same     : 1; // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
     } ctx;
@@ -295,6 +295,7 @@ extern void sections_get_prev_file_vb_i (const SectionListEntry *sl, uint32_t *p
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);
+extern SectionType sections_st_by_name (const char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
 extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);

@@ -37,6 +37,10 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 {
     if (flag.reading_reference) return; // don't show headers of reference file
     
+    if (  flag.show_headers   != -1 &&                 // we don't need to show all sections
+          flag.show_headers-1 != header->section_type) // we don't need to show this section
+        return;
+
     bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
 
     char str[1000];

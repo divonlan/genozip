@@ -282,3 +282,5 @@ Cleanup:
 - bug fixes
 - Developer options:
     --xthreads Use only 1 threads for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers
+    --show-headers now accepts a section-type as an optional argument
+    
