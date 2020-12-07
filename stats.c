@@ -19,13 +19,9 @@
 #include "arch.h"
 #include "codec.h"
 
-static int *count_per_section = NULL;
-
-// a concatenation of all bound txt_names that contributed to this genozip file
-static Buffer bound_txt_names = EMPTY_BUFFER;
-
 static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_sec /* option 2*/, 
-                             int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size)
+                             int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
+                             int *count_per_section)
 {
     *dict_compressed_size = *b250_compressed_size = *local_compressed_size = 0;
 
@@ -51,7 +47,7 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_
     }
 }
 
-static void stats_check_count (uint64_t all_z_size)
+static void stats_check_count (uint64_t all_z_size, const int *count_per_section)
 {
     if (all_z_size == z_file->disk_so_far) return; // all good
 
@@ -72,8 +68,8 @@ static void stats_show_file_metadata (Buffer *buf)
     bufprintf (evb, buf, "%s", "\n\n");
     if (txt_file->name) 
         bufprintf (evb, buf, "%s file%s: %.*s\n", dt_name (z_file->data_type), 
-                   memchr (bound_txt_names.data, ' ', bound_txt_names.len) ? "s" : "", // a space separator indicates more than one file
-                   (int)bound_txt_names.len, bound_txt_names.data);
+                   z_file->bound_txt_names.param > 1 ? "s" : "", // param holds the number of txt files
+                   (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
         bufprintf (evb, buf, "Reference: %s\n", ref_filename);
@@ -238,10 +234,12 @@ void stats_compress (void)
 
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_size=0;
 
-    //prepare data
+    // prepare data
     StatsByLine sbl[MAX_DICTS + NUM_SEC_TYPES] = { }, *s = sbl;
 
-    count_per_section = CALLOC (z_file->section_list_buf.len * sizeof (int));
+    static Buffer count_per_section_buf = EMPTY_BUFFER;
+    buf_alloc (evb, &count_per_section_buf, z_file->section_list_buf.len * sizeof (int), 1, "count_per_section");
+    ARRAY (int, count_per_section, count_per_section_buf);
 
     #define SEC(i) (i<0 ? -(i)-1 : SEC_NONE) // i to section type
     #define ST_NAME(st) (&st_name(st)[4]) // cut off "SEC_" 
@@ -256,7 +254,7 @@ void stats_compress (void)
 
         int64_t dict_compressed_size, b250_compressed_size, local_compressed_size;
         stats_get_sizes (ctx ? ctx->dict_id : DICT_ID_NONE, SEC(i), 
-                         &dict_compressed_size, &b250_compressed_size, &local_compressed_size);
+                         &dict_compressed_size, &b250_compressed_size, &local_compressed_size, count_per_section);
 
         s->z_size = dict_compressed_size + b250_compressed_size + local_compressed_size;
 
@@ -334,7 +332,7 @@ void stats_compress (void)
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
     stats_output_stats (sbl, num_stats, txt_ratio, all_txt_size, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
 
-    stats_check_count (all_z_size);
+    stats_check_count (all_z_size, count_per_section);
 
     // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_so_far is 
     // missing, while txt_data_so_far_single is what was actually processed
@@ -346,7 +344,7 @@ void stats_compress (void)
     zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf_1);
     zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf_2);
 
-    FREE (count_per_section);
+    buf_free (&count_per_section_buf);
 }
 
 void stats_display (void)
@@ -384,10 +382,6 @@ void stats_read_and_display (void)
 // concatenate txt names of bound files so we can show them all
 void stats_add_txt_name (const char *fn)
 {
-    unsigned fn_len = strlen (fn);
-
-    buf_alloc (evb, &bound_txt_names, bound_txt_names.len + fn_len + 1, 2, "bound_txt_names");
-    
-    if (bound_txt_names.len) buf_add (&bound_txt_names, " ", 1);
-    buf_add (&bound_txt_names, fn, fn_len);
+    bufprintf (evb, &z_file->bound_txt_names, "%s%s", z_file->bound_txt_names.len ? " ": "", fn);
+    z_file->bound_txt_names.param++; // we store the number of files in param
 }

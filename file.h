@@ -329,8 +329,9 @@ typedef struct File {
     uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
     int32_t bzgf_passed_down_len;      // PIZ: bytes at the end of the VB too small for one bgzf block passed to the next block
 
-    // stats strings (z_file only)
+    // Z_FILE: stats data
     Buffer stats_buf_1, stats_buf_2;
+    Buffer bound_txt_names;            // ZIP: a concatenation of all bound txt_names that contributed to this genozip file
 
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;

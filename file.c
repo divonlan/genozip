@@ -828,6 +828,7 @@ void file_close (File **file_p,
         buf_destroy (&file->bgzf_isizes);
         buf_destroy (&file->stats_buf_1);
         buf_destroy (&file->stats_buf_2);
+        buf_destroy (&file->bound_txt_names);
 
         FREE (file->name);
         FREE (file->basename);

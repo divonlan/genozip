@@ -488,8 +488,6 @@ static void main_genozip (const char *txt_filename,
 
     if (!txt_file->file) goto done; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
 
-    stats_add_txt_name (txt_name);
-
     ASSERT0 (flag.bind || !z_file, "Error: expecting z_file to be NULL in non-bound mode");
 
     // get output FILE
@@ -500,6 +498,8 @@ static void main_genozip (const char *txt_filename,
         
         main_genozip_open_z_file_write (&z_filename);
     }
+
+    stats_add_txt_name (txt_name); // add txt file name to stats data stored in z_file
 
     flags_update_zip_one_file();
 
