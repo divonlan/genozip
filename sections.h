@@ -212,7 +212,8 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 typedef struct {
     SectionHeader h;
     LocalType ltype; // used by SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
-    uint8_t param;   // goes into ctx.b250/local.param if flags.copy_param
+    uint8_t param;   // Two options: 1. goes into ctx.b250/local.param if flags.copy_param. 
+                     //              2. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
     uint8_t ffu[2];
     DictId dict_id;           
 } SectionHeaderCtx;         

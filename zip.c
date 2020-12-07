@@ -523,7 +523,7 @@ void zip_one_file (const char *txt_basename,
                 ctx_clone (next_vb); 
 
                 // returns false if their is no vb with vb_i in the previous file
-                read_txt = fastq_read_pair_1_data (next_vb, prev_file_first_vb_i, prev_file_last_vb_i);
+                read_txt = fastq_read_pair_1_data (next_vb, prev_file_first_vb_i, prev_file_last_vb_i); // read here, decompressed in fastq_seg_initialize
             }
 
             if (read_txt) {

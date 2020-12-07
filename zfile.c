@@ -324,6 +324,12 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
     if (sample_size && uncompressed_len > sample_size) 
         uncompressed_len = sample_size;
 
+    uint8_t unused_bits = 0;
+    if (ctx->ltype == LT_BITMAP) {
+        BitArray *bm = buf_get_bitarray (&ctx->local);
+        unused_bits = ((uint8_t)64 - (uint8_t)(bm->num_of_bits % 64)) % (uint8_t)64;
+    }
+
     SectionHeaderCtx header = (SectionHeaderCtx) {
         .h.magic                 = BGEN32 (GENOZIP_MAGIC),
         .h.section_type          = SEC_LOCAL,
@@ -335,7 +341,7 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
         .h.flags.ctx             = flags,
         .dict_id                 = ctx->dict_id,
         .ltype                   = ctx->ltype,
-        .param                   = flags.copy_param ? (uint8_t)ctx->local.param : 0
+        .param                   = flags.copy_param ? (uint8_t)ctx->local.param : unused_bits,
     };
 
     LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);

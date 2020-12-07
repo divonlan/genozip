@@ -377,6 +377,8 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     return (int32_t)(vb->txt_data.len - start);
 }
 
+// PIZ compute thread: decompress all contexts
+// ZIP compute thread in FASTQ: decompress pair-1 contexts when compressing pair-2
 uint32_t piz_uncompress_all_ctxs (VBlock *vb, 
                                   uint32_t pair_vb_i) // used in ZIP when uncompressing previous file's paired sections
 {
@@ -427,7 +429,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 #           define adjust_lens(buf) { \
                 buf.len /= lt_desc[ctx->ltype].width; \
                 if (ctx->ltype == LT_BITMAP) { \
-                    buf.param = buf.len * 64; /* number of bits. note: this might be higher than the number of bits on the ZIP side, since we are rounding up the word boundary */ \
+                    buf.param = buf.len * 64 - header->param ; /* number of bits */ \
                     LTEN_bit_array (buf_get_bitarray (&buf)); \
                 } \
                 else if (ctx->ltype >= LT_INT8 && ctx->ltype <= LT_UINT64)    \
@@ -435,7 +437,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
             }
 
             if      (is_pair_section) adjust_lens (ctx->pair)
-            else if (is_local)        adjust_lens (ctx->local);
+            else if (is_local)        adjust_lens (ctx->local)
 
             if (header->h.flags.ctx.copy_param)
                 target_buf->param = header->param;

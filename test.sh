@@ -20,7 +20,7 @@ cmp_2_files() {
 
 test_header() {
     sep="=======================================================================================================\n"
-    printf "\n${sep}TESTING ${FUNCNAME[2]}: "
+    printf "\n${sep}TESTING ${FUNCNAME[2]} (batch_id=${batch_id}): "
     echo $1 | tr "\\\\" "/" # \ -> \\ coming from $path string on Windows
     printf "$sep"
 }
@@ -236,9 +236,16 @@ test_backward_compatability()
     $genounzip $arg1 -t $1 || exit 1
 }
 
+batch_print_header()
+{
+    batch_id=$((batch_id + 1))
+    echo "******* ${FUNCNAME[1]} (batch_id=${batch_id}) *******"
+}
+
 # minimal files - expose edge cases where fields have only 1 instance
 batch_minimal()
 {
+    batch_print_header
     local files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf minimal.genome_Full.me23.txt)
     local file
     for file in ${files[@]}; do
@@ -249,6 +256,7 @@ batch_minimal()
 # basic files
 batch_basic()
 {
+    batch_print_header
     local files=(basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt)
 # TO DO add back basic.phy - fails redirection on Windows
     local file
@@ -269,6 +277,7 @@ batch_basic()
 # pre-compressed files (except BGZF) and non-precompressed BAM
 batch_precompressed()
 {
+    batch_print_header
     local files=(basic-gzip.sam.gz basic-bz2.sam.bz2 basic-xz.sam.xz basic-nobgzip.bam) 
     local file
     for file in ${files[@]}; do
@@ -284,6 +293,7 @@ batch_precompressed()
 # bgzf files
 batch_bgzf()
 {
+    batch_print_header
     local files=(basic.bam basic-bgzf-6.sam.gz basic-bgzf-9.sam.gz basic-bgzf-6-no-eof.sam.gz)
     local file
     for file in ${files[@]}; do
@@ -301,6 +311,7 @@ batch_bgzf()
 # files represent cases that cannot be written into the test files because they would conflict
 batch_special_algs()
 {
+    batch_print_header
     local files=(basic-domqual.fq basic-domqual.sam basic-unaligned.sam basic-no-samples.vcf)
     local file
     for file in ${files[@]}; do
@@ -315,6 +326,8 @@ batch_special_algs()
 # Test translations
 batch_translations()
 {
+    batch_print_header
+
     # note: we have these files in both sam and bam versions generated with samtools
     local files=(test.NA12878.chr22.1x.bam 
                  test.m64136_200621_234916.ccs.10k.bam  # unaligned SAM/BAM with no SQ records
@@ -336,6 +349,8 @@ batch_translations()
 
 batch_genocat_tests()
 {
+    batch_print_header
+
     # FASTA genocat tests
     local file=$TESTDIR/basic.fa
     test_count_genocat_lines $file "--sequential" 9
@@ -365,6 +380,7 @@ batch_genocat_tests()
 
 batch_backward_compatability()
 {
+    batch_print_header
     local files=`ls $TESTDIR/back-compat/*.genozip` 
     local file
     for file in $files; do
@@ -374,6 +390,8 @@ batch_backward_compatability()
 
 batch_real_world_subsets()
 {
+    batch_print_header
+
     rm -f $TESTDIR/*.genozip # unfortunately, these go to TESTDIR not OUTDIR
 
     if [ -x "$(command -v xz)" ] ; then # xz available
@@ -388,6 +406,8 @@ batch_real_world_subsets()
 
 batch_misc_cases()
 {
+    batch_print_header
+
     # Test binding SAM files with lots of contigs (no reference)
     echo "binding SAM files with lots of contigs (no reference)"
     test_multi_bound test.human-unsorted.sam
@@ -395,6 +415,8 @@ batch_misc_cases()
 
 batch_external_tools()
 {
+    batch_print_header
+
     # VCF gtshark test
     if `command -v gtshark >& /dev/null`; then
         test_standard --gtshark " " basic.vcf
@@ -421,6 +443,8 @@ batch_external_tools()
 
 batch_make_reference()
 {
+    batch_print_header
+
     cleanup
 
     # Making a reference
@@ -452,13 +476,15 @@ batch_make_reference()
 
 batch_reference()
 {
+    batch_print_header
+
     echo "paired FASTQ with --reference, --password"
     test_standard "CONCAT -e$GRCh38 -p 123 --pair" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
-    echo "4 paired FASTQ with --REFERENCE (not bound)"
-    test_standard "COPY -E$GRCh38 --pair" " " test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    echo "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated)"
+    test_standard "COPY -E$GRCh38 --pair" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz
 
-    echo "4 paired FASTQ with --REFERENCE (bound)"
+    echo "4 paired FASTQ with --REFERENCE (BZ2, decompress unbound)"
     test_standard "COPY CONCAT -E$GRCh38 -2" "-u" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
     echo "command line with mixed SAM and FASTQ files with --reference"
@@ -490,7 +516,7 @@ hg19=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 
 if (( $# < 1 )); then
-    echo "Usage: tesh.sh <start-test> [optional-genozip-arg]"
+    echo "Usage: tesh.sh <batch_id-test> [optional-genozip-arg]"
     exit 0
 fi
 
@@ -537,20 +563,23 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
-start=$1
-if (( $start <=  1 )); then batch_minimal                  ; fi
-if (( $start <=  2 )); then batch_basic                    ; fi
-if (( $start <=  3 )); then batch_precompressed            ; fi
-if (( $start <=  4 )); then batch_bgzf                     ; fi
-if (( $start <=  5 )); then batch_special_algs             ; fi
-if (( $start <=  6 )); then batch_translations             ; fi
-if (( $start <=  7 )); then batch_genocat_tests            ; fi
-if (( $start <=  8 )); then batch_backward_compatability   ; fi
-if (( $start <=  9 )); then batch_real_world_subsets       ; fi
-if (( $start <= 10 )); then batch_misc_cases               ; fi
-if (( $start <= 11 )); then batch_external_tools           ; fi
-if (( $start <= 12 )); then batch_reference                ; fi
-if (( $start <= 13 )); then batch_make_reference           ; fi
+batch_id=$1
+batch_id=$((batch_id - 1))
+case $1 in
+    1)  batch_minimal                 ;&
+    2)  batch_basic                   ;&
+    3)  batch_precompressed           ;&
+    4)  batch_bgzf                    ;&
+    5)  batch_special_algs            ;&
+    6)  batch_translations            ;&
+    7)  batch_genocat_tests           ;&
+    8)  batch_backward_compatability  ;&
+    9)  batch_real_world_subsets      ;&
+    10) batch_misc_cases              ;&
+    11) batch_external_tools          ;&
+    12) batch_reference               ;&
+    13) batch_make_reference          ;&
+    *)  printf "\nALL GOOD!\n"
+esac
 
-printf "\nALL GOOD!\n"
 

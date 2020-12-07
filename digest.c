@@ -57,6 +57,8 @@ Digest digest_do (const void *data, uint32_t len)
 
 void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
 {
+    DigestContext before = *ctx;
+
     if (IS_ADLER) {
         if (!ctx->initialized) {
             ctx->adler_ctx.adler = 1;
@@ -74,7 +76,11 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
     }
 
     if (flag.show_digest) 
-        fprintf (stderr, "%s update %s (len=%"PRIu64"): %s\n", DIGEST_NAME, msg, buf->len, digest_display (digest_snapshot (ctx)).s);
+        fprintf (stderr, "vb=%05d %s update %s (len=%"PRIu64") 50chars=\"%.*s\": before=%s after=%s\n", 
+                 buf->vb->vblock_i, DIGEST_NAME, msg, buf->len, 
+                 MIN (50, (int)buf->len), buf->data, 
+                 digest_display (digest_snapshot (&before)).s, 
+                 digest_display (digest_snapshot (ctx)).s);
 }
 
 // ZIP: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
@@ -102,7 +108,7 @@ void digest_one_vb (VBlock *vb)
     else { // PIZ
         static bool failed = false; // note: when testing multiple files, if a file fails the test, we don't test subsequent files, so no need to reset this variable
 
-        digest_update (&txt_file->digest_ctx_bound, &vb->txt_data, "vb:digest_ctx_bound");
+        digest_update (&txt_file->digest_ctx_bound, &vb->txt_data, flag.unbind ? "vb:digest_ctx_single" : "vb:digest_ctx_bound"); // labels consistent with ZIP so we can easily diff PIZ vs ZIP
 
         // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
         // note: we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file

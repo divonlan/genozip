@@ -274,6 +274,8 @@ Cleanup:
 - Added the --index option for genounzip / genocat to create an index file alongside the decompressed file
 
 9.0.11
+- Fixed critical bug introduced in 9.0.0 in which FASTQ files that were compressed with BGZF (i.e. fq.gz),
+  and genozipped with --pair, did not compress correctly
 - Added Phylip data type
 - genozip --pair       can now compress any number of fastq files - every 2 consecutive files are considered a pair
 - genocat --header-one now works of FASTA too: Output the sequence name up to the first space or tab
@@ -281,6 +283,6 @@ Cleanup:
 - genocat --fasta      new translator - outputs a Phylip file in multi-fasta format
 - bug fixes
 - Developer options:
-    --xthreads Use only 1 threads for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers
+    --xthreads Use only 1 thread for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers
     --show-headers now accepts a section-type as an optional argument
     

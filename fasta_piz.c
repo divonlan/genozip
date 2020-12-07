@@ -76,7 +76,6 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
     bool is_first_seq_line_in_this_contig = snip[0] - '0';
 
     // --sequential - if this is NOT the first seq line in the contig, we delete the previous end-of-line
-    // TO DO: this doesn't yet work across vblock boundaries
     if (flag.sequential && !is_first_seq_line_in_this_contig) 
         fasta_piz_remove_trailing_newlines (fasta_vb);
 

@@ -123,8 +123,8 @@ static inline uint32_t txtfile_read_block_bz2 (VBlock *vb, uint32_t max_bytes)
     return bytes_read;
 }
 
-// BGZF: we read *compressed* data into vb->compressed - that will be decompressed later. we read
-// data with a *decompressed* size up to max_uncomp. vb->compressed always contains only full BGZF blocks
+// BGZF: we read *compressed* data into vb->compressed - that will be decompressed now or later, depending on uncompress. 
+// We read data with a *decompressed* size up to max_uncomp. vb->compressed always contains only full BGZF blocks
 static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /* must be signed */, bool uncompress)
 {
     #define uncomp_len param // we use vb->compress.param to hold the uncompressed length of the bgzf data in vb->compress
@@ -363,19 +363,24 @@ void txtfile_read_vblock (VBlock *vb)
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference;        // unconsumed callback for make-reference needs to inspect the whole data
 
-    int32_t block_i=0 ; for (; vb->txt_data.len < max_memory_per_vb; block_i++) {  
+    for (int32_t block_i=0; ; block_i++) {
 
         uint32_t len = txtfile_read_block (vb, max_memory_per_vb - vb->txt_data.len, always_uncompress);
-        if (!len)  break; // EOF
-            
-        // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
-        if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
-            vb->txt_data.len >= max_memory_per_vb && // we are about to exit the loop
-            !fastq_txtfile_have_enough_lines (vb, &passed_up_len)) { // we don't yet have all the data we need
 
-            // if we need more lines - increase memory and keep on reading
-            max_memory_per_vb *= 1.1; 
-            buf_alloc (vb, &vb->txt_data, max_memory_per_vb, 1, "txt_data");    
+        if (!len || vb->txt_data.len >= max_memory_per_vb) {  // EOF or we have filled up the allocted memory
+
+            // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
+            if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
+                !fastq_txtfile_have_enough_lines (vb, &passed_up_len)) { // we don't yet have all the data we need
+
+                ASSERT (vb->txt_data.len, "Error in txtfile_read_vblock: txt_data.len=0 when reading pair-2 vb=%u", vb->vblock_i);
+
+                // if we need more lines - increase memory and keep on reading
+                max_memory_per_vb *= 1.1; 
+                buf_alloc (vb, &vb->txt_data, max_memory_per_vb, 1, "txt_data");    
+            }
+            else
+                break;
         }
     }
 

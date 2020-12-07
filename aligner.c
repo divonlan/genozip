@@ -256,7 +256,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     if (gpos_ctx->pair_local) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
         
-        ASSERT (vb->line_i < pair_strand->num_of_bits, "Error: vb=%u cannot get pair-1 STRAND bit for line_i=%u but pair-1 strand bitarray has only %u bits",
+        ASSERT (vb->line_i < pair_strand->num_of_bits, "Error: vb=%u cannot get pair-1 STRAND bit for line_i=%u because pair-1 strand bitarray has only %u bits",
                 vb->vblock_i, vb->line_i, (unsigned)pair_strand->num_of_bits);
 
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
@@ -274,8 +274,9 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     bool store_local = true;
     if (gpos_ctx->pair_local) {
 
-        ASSERT (buf_is_allocated (&gpos_ctx->pair), "Error in aligner_seg_seq vb_i=%u: expecting gpos_ctx->pair to be allocated", vb->vblock_i);
-        
+        ASSERT (vb->line_i < gpos_ctx->pair.len, "Error: vb=%u cannot get pair-1 GPOS for line_i=%u because pair-1 GPOS.len=%"PRIu64,
+                vb->vblock_i, vb->line_i, gpos_ctx->pair.len);
+
         PosType pair_gpos = (PosType)*ENT (uint32_t, gpos_ctx->pair, vb->line_i); // same location, in the pair's local
         PosType gpos_delta = gpos - pair_gpos; 
 

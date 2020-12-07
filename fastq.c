@@ -68,18 +68,20 @@ out_of_data:
 // returns false is we don't yet have pair_1_num_lines lines - we need to read more
 bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len)
 {
+
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
     const char *next  = FIRSTENT (const char, vb->txt_data);
     const char *after = AFTERENT (const char, vb->txt_data);
 
-    for (uint32_t line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
-        while (*next != '\n' && next < after) next++; // note: next[-1] in the first iteration an underflow byte of the buffer, so no issue
+    uint32_t line_i; for (line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
+        while (*next != '\n' && next < after) next++; 
         if (next >= after) 
             return false;
         next++; // skip newline
     }
 
+    vb->lines.len = line_i/4;
     *unconsumed_len = after - next;
     return true;
 }
@@ -137,20 +139,27 @@ void fastq_seg_initialize (VBlockFAST *vb)
 
     vb->contexts[FASTQ_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 
+    Context *gpos_ctx     = &vb->contexts[FASTQ_GPOS];
+    Context *strand_ctx   = &vb->contexts[FASTQ_STRAND];
+    Context *sqbitmap_ctx = &vb->contexts[FASTQ_SQBITMAP];
+
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
-        vb->contexts[FASTQ_STRAND].ltype = LT_BITMAP;
-        vb->contexts[FASTQ_GPOS  ].ltype = LT_UINT32;
-        vb->contexts[FASTQ_GPOS  ].flags.store = STORE_INT;
+        strand_ctx->ltype = LT_BITMAP;
+        gpos_ctx->ltype   = LT_UINT32;
+        gpos_ctx->flags.store = STORE_INT;
     }
 
-    vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
-    vb->contexts[FASTQ_SQBITMAP].local_always = true;
+    sqbitmap_ctx->ltype = LT_BITMAP; 
+    sqbitmap_ctx->local_always = true;
 
     codec_acgt_comp_init ((VBlockP)vb);
 
      if (flag.pair == PAIR_READ_2) {
-        vb->contexts[FASTQ_GPOS]  .pair_local = true;
-        vb->contexts[FASTQ_STRAND].pair_local = true;
+
+        ASSERT (vb->lines.len == vb->pair_num_lines, "Error in fastq_seg_initialize: in vb=%u (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
+                vb->vblock_i, vb->pair_num_lines, (unsigned)vb->lines.len);
+
+        gpos_ctx->pair_local = strand_ctx->pair_local = true;
 
         piz_uncompress_all_ctxs ((VBlockP)vb, vb->pair_vb_i);
 
@@ -194,7 +203,7 @@ void fastq_seg_finalize (VBlockP vb)
 }
 
 
-// called from I/O thread ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
+// ZIP/PIZ I/O thread: called ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
 // returns true if successful, false if there isn't a vb with vb_i in the previous file
 bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_t last_vb_i_of_pair_1)
 {
@@ -203,6 +212,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
     uint64_t save_disk_so_far = z_file->disk_so_far;
 
     vb->pair_vb_i = first_vb_i_of_pair_1 + (vb->vblock_i - last_vb_i_of_pair_1 - 1);
+    if (vb->pair_vb_i > last_vb_i_of_pair_1) return false; // we're done
 
     const SectionListEntry *sl = sections_vb_first (vb->pair_vb_i, true);
     if (!sl) return false;
