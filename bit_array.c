@@ -131,11 +131,8 @@ static inline char* _word_to_str(word_t word, char str[WORD_SIZE+1])
 
 // Used in debugging
 #ifdef DEBUG
-    #define DEBUG_VALIDATE(a) validate_bitarr((a), __FUNCTION__, __LINE__)
-#else
-    #define DEBUG_VALIDATE(a)
-#endif
 
+#define DEBUG_VALIDATE(a) validate_bitarr((a), __FUNCTION__, __LINE__)
 static inline void validate_bitarr (BitArray *arr, const char *file, int lineno)
 {
     // Verify that its allocated
@@ -155,6 +152,10 @@ static inline void validate_bitarr (BitArray *arr, const char *file, int lineno)
     ASSERT (num_words == arr->num_of_words, "[%s:%i] num of words wrong [bits: %i, word: %i, actual words: %i]", 
             file, lineno, (int)arr->num_of_bits, (int)num_words, (int)arr->num_of_words);
 }
+
+#else
+    #define DEBUG_VALIDATE(a)
+#endif
 
 // Reverse a word
 static inline word_t _reverse_word(word_t word)
