@@ -619,8 +619,8 @@ static void file_initialize_z_file_data (File *file)
     INIT (alt_chrom_map);
     INIT (section_list_buf);
     INIT (unconsumed_txt);
-    INIT (stats_buf_1);
-    INIT (stats_buf_2);
+    INIT (stats_buf);
+    INIT (STATS_buf);
 }
 #undef INIT
 
@@ -826,8 +826,8 @@ void file_close (File **file_p,
         buf_destroy (&file->section_list_buf);
         buf_destroy (&file->unconsumed_txt);
         buf_destroy (&file->bgzf_isizes);
-        buf_destroy (&file->stats_buf_1);
-        buf_destroy (&file->stats_buf_2);
+        buf_destroy (&file->stats_buf);
+        buf_destroy (&file->STATS_buf);
         buf_destroy (&file->bound_txt_names);
 
         FREE (file->name);
