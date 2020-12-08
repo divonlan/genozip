@@ -46,7 +46,6 @@ ExeType exe_type;
 // primary_command vs command: primary_command is what the user typed on the command line. command is what is 
 // running now - for example, when ZIP is unzipping a reference, primary_command=ZIP and command=PIZ
 CommandType command = NO_COMMAND, primary_command = NO_COMMAND; 
-const char *command_line = NULL;
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file data
@@ -613,36 +612,6 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
     RESTORE_VALUE (txt_file);
 }
 
-static void main_copy_command_line (int argc, char **argv)
-{
-    unsigned len=0, pw_len=0;
-    const char *pw=0;
-
-    for (int i=0; i < argc; i++)
-        len += strlen (argv[i]) + 1; // +1 for seperator (' ' or '\0')
-
-    command_line = CALLOC (len);
-
-    if ((pw = crypt_get_password())) pw_len  = strlen (pw);
-
-    for (int i=0; i < argc; i++) {
-
-        unsigned arg_len = strlen (argv[i]);
-
-        if (pw && !strcmp(argv[i], pw)) // "-p 123", "--pass 123" etc
-            sprintf ((char*)&command_line[strlen(command_line)], "***%s", (i < argc-1 ? " ": "")); // hide password
-
-        else if (pw && (arg_len >= pw_len + 2) &&  // check for -p123 or eg -fmp123
-                    !strcmp (&argv[i][arg_len-pw_len], pw) && // not air-tight test, but good enough (eg "-ofilenamep123" will incorrectly trigger)
-                    argv[i][0] == '-' &&
-                    argv[i][arg_len-pw_len-1] == 'p')
-            sprintf ((char*)&command_line[strlen(command_line)], "%.*s***%s", arg_len-pw_len, argv[i], (i < argc-1 ? " ": "")); // hide password
-
-        else
-            sprintf ((char*)&command_line[strlen(command_line)], "%s%s", argv[i], (i < argc-1 ? " ": ""));
-    }
-}
-
 void TEST()
 {
     FILE *fp = fopen ("seq", "rb");
@@ -677,7 +646,7 @@ int main (int argc, char **argv)
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
     flags_init_from_command_line (argc, argv);
-    main_copy_command_line (argc, argv); // can only be called after --password is processed
+    flags_store_command_line (argc, argv); // can only be called after --password is processed
 
     // if command not chosen explicitly, use the default determined by the executable name
     if (command < 0) { 

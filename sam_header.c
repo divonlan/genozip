@@ -251,7 +251,7 @@ static inline void txtheader_sam_add_PG (Buffer *txtheader_buf)
     uint32_t unique_id = libdeflate_adler32 (1, &tb, sizeof (tb));
 
     bufprintf (evb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:%s\n", 
-               unique_id, GENOZIP_URL, GENOZIP_CODE_VERSION, command_line);
+               unique_id, GENOZIP_URL, GENOZIP_CODE_VERSION, flags_command_line()->data);
 }
 
 // PIZ I/O thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
@@ -323,7 +323,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     if (!from_SQ) n_ref = ref_num_loaded_contigs();
 
     // grow buffer to accommodate estimated reference size (we will more in txtheader_sam2bam_ref_info if not enough)
-    buf_alloc_more (evb, txtheader_buf, n_ref * 100 + (50 + strlen (command_line)) , 0, char, 1, 0);
+    buf_alloc_more (evb, txtheader_buf, n_ref * 100 + (50 + flags_command_line()->len) , 0, char, 1, 0);
 
     // add PG
     txtheader_sam_add_PG (txtheader_buf);

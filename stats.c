@@ -199,7 +199,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats, double txt_r
 #define PC(pc) ((pc==0 || pc>=10) ? 0 : (pc<1 ? 2:1))
 
     // add diagnostic info
-    bufprintf (evb, &z_file->stats_buf_2, "Command line: %s\n", command_line);
+    bufprintf (evb, &z_file->stats_buf_2, "Command line: %s\n", flags_command_line()->data);
     bufprintf (evb, &z_file->stats_buf_2, "System info: OS=%s cores=%u endianity=%s\n", 
                arch_get_os(), arch_get_num_cores(), arch_get_endianity());
     bufprintf (evb, &z_file->stats_buf_2, "\nSections (sorted by %% of genozip file):%s\n", "");

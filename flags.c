@@ -14,8 +14,9 @@
 #include "strings.h"
 
 Flags flag = { .out_dt = DT_NONE };
-
 bool option_is_short[256] = { }; // indexed by character of short option.
+
+static Buffer command_line = EMPTY_BUFFER;
 
 // command line options that get assigned to flags
 static int option_noisy=0, option_best=0;
@@ -457,4 +458,37 @@ void flags_update_piz_one_file (void)
                          flag.one_vb || flag.downsample;
 
     flags_test_conflicts(); // test again after updating flags
+}
+
+void flags_store_command_line (int argc, char **argv)
+{
+    unsigned len=0, pw_len=0;
+    const char *pw=0;
+
+    for (int i=0; i < argc; i++)
+        len += strlen (argv[i]) + 1; // +1 for seperator (' ' or '\0')
+
+    if ((pw = crypt_get_password())) pw_len  = strlen (pw);
+
+    for (int i=0; i < argc; i++) {
+
+        unsigned arg_len = strlen (argv[i]);
+
+        if (pw && !strcmp(argv[i], pw)) // "-p 123", "--pass 123" etc
+            bufprintf (evb, &command_line, "***%s", (i < argc-1 ? " ": "")) // hide password
+
+        else if (pw && (arg_len >= pw_len + 2) &&  // check for -p123 or eg -fmp123
+                    !strcmp (&argv[i][arg_len-pw_len], pw) && // not air-tight test, but good enough (eg "-ofilenamep123" will incorrectly trigger)
+                    argv[i][0] == '-' &&
+                    argv[i][arg_len-pw_len-1] == 'p')
+            bufprintf (evb, &command_line, "%.*s***%s", arg_len-pw_len, argv[i], (i < argc-1 ? " ": "")) // hide password
+
+        else
+            bufprintf (evb, &command_line, "%s%s", argv[i], (i < argc-1 ? " ": ""))
+    }
+}
+
+const BufferP flags_command_line (void)
+{
+    return &command_line;
 }

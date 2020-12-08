@@ -57,12 +57,13 @@ typedef struct {
     int list_chroms, show_stats; 
     
     // stats / debug useful mostly for developers
-    int show_memory, show_dict, show_b250, show_headers, show_aliases, show_digest,
+    int show_memory, show_dict, show_b250, show_aliases, show_digest,
         show_index, show_gheader, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_ref_alts,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         debug_progress, show_hash, debug_memory, show_vblocks, show_threads,
-        test_seg, xthreads;
+        test_seg, xthreads,
+        show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
 
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
@@ -102,5 +103,8 @@ extern void flags_init_from_command_line (int argc, char **argv);
 extern void flags_update (unsigned num_files, const char **filenames);
 extern void flags_update_zip_one_file (void);
 extern void flags_update_piz_one_file (void);
+
+extern void flags_store_command_line (int argc, char **argv);
+const BufferP flags_command_line (void);
 
 #endif

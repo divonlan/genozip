@@ -229,7 +229,7 @@ ifeq ($(OS),Windows_NT)
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderTxtHeader.genozip_version
-increment-version: $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@bash increment-version.sh
@@ -240,7 +240,7 @@ decrement-version:
 	@echo "Remove tag: git push --delete origin genozip-a.b.c"
 	@echo "Change version.h to the last version that still has a tag"
 
-.archive.tar.gz : increment-version $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
+.archive.tar.gz : increment-version $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null

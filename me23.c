@@ -178,7 +178,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     }
 
     // add final lines
-    bufprintf (evb, txtheader_buf, VCF_HEAD_3, GENOZIP_CODE_VERSION, command_line, sample_name_len, sample_name);
+    bufprintf (evb, txtheader_buf, VCF_HEAD_3, GENOZIP_CODE_VERSION, flags_command_line()->data, sample_name_len, sample_name);
 
     buf_free (&evb->compressed);
 }

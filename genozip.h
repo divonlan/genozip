@@ -118,7 +118,6 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
 typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP='h', TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
-extern const char *command_line;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
 extern VBlockP evb;
