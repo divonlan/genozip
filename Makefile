@@ -114,9 +114,9 @@ ifndef IS_CONDA
 	# local - static link everything
 	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS)
 
-	ifneq ($(shell uname -a | grep ppc64),)
-		CFLAGS += -mcpu=native 
-	endif
+#	ifneq ($(shell uname -a | grep ppc64),)
+#		CFLAGS += -mcpu=native 
+#	endif
 
 else  # conda
 	# use packages for bzip2
