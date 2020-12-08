@@ -176,17 +176,17 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
 static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_ratio,
                                 int64_t all_txt_size, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
-    bufprintf (evb, &z_file->stats_buf_1, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &z_file->stats_buf_1, "NAME                  TXT      %%       ZIP      %%   RATIO%s\n", "");
+    bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
+    bufprintf (evb, &z_file->stats_buf, "NAME                  TXT      %%       ZIP      %%   RATIO%s\n", "");
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &z_file->stats_buf_1, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+            bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                        s->name, str_size ((double)s->txt_size / txt_ratio).s, s->pc_of_txt, 
                        str_size (s->z_size).s, s->pc_of_z, 
                        ((double)s->txt_size / txt_ratio) / (double)s->z_size);
     
-    bufprintf (evb, &z_file->stats_buf_1, "TOTAL           "
+    bufprintf (evb, &z_file->stats_buf, "TOTAL           "
                 "%9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                 str_size ((double)all_txt_size / txt_ratio).s, all_pc_of_txt, str_size (all_z_size).s, 
                 all_pc_of_z, all_comp_ratio / txt_ratio);
@@ -199,38 +199,39 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats, double txt_r
 #define PC(pc) ((pc==0 || pc>=10) ? 0 : (pc<1 ? 2:1))
 
     // add diagnostic info
-    bufprintf (evb, &z_file->stats_buf_2, "Command line: %s\n", flags_command_line()->data);
-    bufprintf (evb, &z_file->stats_buf_2, "System info: OS=%s cores=%u endianity=%s\n", 
+    bufprintf (evb, &z_file->STATS_buf, "Command line: %s", "");
+    buf_add_string (evb, &z_file->STATS_buf, flags_command_line()->data); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
+    bufprintf (evb, &z_file->STATS_buf, "\nSystem info: OS=%s cores=%u endianity=%s\n", 
                arch_get_os(), arch_get_num_cores(), arch_get_endianity());
-    bufprintf (evb, &z_file->stats_buf_2, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &z_file->stats_buf_2, "did_i Name            Type            #Words  Snips-(%% of #Words)        Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  %s\n", "");
-    bufprintf (evb, &z_file->stats_buf_2, "                                     in file   Dict  Local   Both         Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip%s\n", "");
+    bufprintf (evb, &z_file->STATS_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
+    bufprintf (evb, &z_file->STATS_buf, "did_i Name            Type            #Words  Snips-(%% of #Words)        Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  %s\n", "");
+    bufprintf (evb, &z_file->STATS_buf, "                                     in file   Dict  Local   Both         Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip%s\n", "");
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &z_file->stats_buf_2, "%-2.2s    %-15.15s %-6.6s %15s  %4.*f%%  %4.*f%%  %4.*f%% %12s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
-                        s->did_i.s, s->name, s->type, s->words.s, 
-                        PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
-                        s->hash.s, s->pc_hash_occupancy, // Up to here - these don't appear in the total
-                        s->uncomp_dict.s, s->comp_dict.s, s->comp_b250.s, s->comp_data.s, str_size (s->z_size).s, 
-                        str_size ((double)s->txt_size / txt_ratio).s, ((double)s->txt_size / txt_ratio) / (double)s->z_size, s->pc_of_txt, s->pc_of_z);
+            bufprintf (evb, &z_file->STATS_buf, "%-2.2s    %-15.15s %-6.6s %15s  %4.*f%%  %4.*f%%  %4.*f%% %12s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+                       s->did_i.s, s->name, s->type, s->words.s, 
+                       PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
+                       s->hash.s, s->pc_hash_occupancy, // Up to here - these don't appear in the total
+                       s->uncomp_dict.s, s->comp_dict.s, s->comp_b250.s, s->comp_data.s, str_size (s->z_size).s, 
+                       str_size ((double)s->txt_size / txt_ratio).s, ((double)s->txt_size / txt_ratio) / (double)s->z_size, s->pc_of_txt, s->pc_of_z);
 
-    bufprintf (evb, &z_file->stats_buf_2, "TOTAL                                                                               "
-                "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
-                str_size (all_uncomp_dict).s, str_size (all_comp_dict).s,  str_size (all_comp_b250).s, 
-                str_size (all_comp_data).s,   str_size (all_z_size).s, str_size ((double)all_txt_size / txt_ratio).s, 
-                all_comp_ratio / txt_ratio, all_pc_of_txt, all_pc_of_z);
+    bufprintf (evb, &z_file->STATS_buf, "TOTAL                                                                               "
+               "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+               str_size (all_uncomp_dict).s, str_size (all_comp_dict).s,  str_size (all_comp_b250).s, 
+               str_size (all_comp_data).s,   str_size (all_z_size).s, str_size ((double)all_txt_size / txt_ratio).s, 
+               all_comp_ratio / txt_ratio, all_pc_of_txt, all_pc_of_z);
 
     if (txt_ratio != 1)
-        bufprintf (evb, &z_file->stats_buf_2, "\nNote: The source file was compressed with %s. txt sizes were calculated by applying the observed source file-wide compression ratio to the uncompressed txt data\n", 
+        bufprintf (evb, &z_file->STATS_buf, "\nNote: The source file was compressed with %s. txt sizes were calculated by applying the observed source file-wide compression ratio to the uncompressed txt data\n", 
                    codec_name (txt_file->codec));
 }
 
 // generate the stats text - all sections except genozip header and the two stats sections 
 void stats_compress (void)
 {
-    stats_show_file_metadata(&z_file->stats_buf_1);
-    buf_copy (evb, &z_file->stats_buf_2, &z_file->stats_buf_1, 0,0,0, "z_file->stats_buf_2");
+    stats_show_file_metadata(&z_file->stats_buf);
+    buf_copy (evb, &z_file->STATS_buf, &z_file->stats_buf, 0,0,0, "z_file->STATS_buf");
 
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_size=0;
 
@@ -341,15 +342,15 @@ void stats_compress (void)
              dt_name (z_file->data_type), str_uint_commas (all_txt_size).s, str_uint_commas (z_file->txt_data_so_far_bind).s, 
              (int32_t)(z_file->txt_data_so_far_bind - all_txt_size)); 
 
-    zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf_1);
-    zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf_2);
+    zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf);
+    zfile_compress_section_data (evb, SEC_STATS, &z_file->STATS_buf);
 
     buf_free (&count_per_section_buf);
 }
 
 void stats_display (void)
 {
-    Buffer *buf = flag.show_stats == 1 ? &z_file->stats_buf_1 : &z_file->stats_buf_2;
+    Buffer *buf = flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf;
 
     if (!buf_is_allocated (buf)) return; // no stats available
 
@@ -371,7 +372,7 @@ void stats_read_and_display (void)
 
     // read and uncompress the requested stats section
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_STATS, sl + (flag.show_stats==2));
-    zfile_uncompress_section (evb, evb->z_data.data, flag.show_stats == 1 ? &z_file->stats_buf_1 : &z_file->stats_buf_2, "z_file->stats_buf", 0, SEC_STATS);
+    zfile_uncompress_section (evb, evb->z_data.data, flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf, "z_file->stats_buf", 0, SEC_STATS);
     buf_free (&evb->z_data);
     
     stats_display();
