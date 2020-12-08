@@ -122,7 +122,8 @@ extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
                                                (buf)->len += new_len; }
 
 extern void buf_add_string (VBlockP vb, Buffer *buf, const char *str);
-#define bufprintf(vb, buf, format, ...)  { char __s[5000]; sprintf (__s, (format), __VA_ARGS__); buf_add_string ((vb), (buf), __s); }
+#define BUFPRINTF_MAX_LEN 5000
+#define bufprintf(vb, buf, format, ...)  { char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_add_string ((vb), (buf), __s); }
 
 extern void buf_print (Buffer *buf, bool add_newline);
 

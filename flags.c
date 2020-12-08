@@ -473,6 +473,8 @@ void flags_store_command_line (int argc, char **argv)
     for (int i=0; i < argc; i++) {
 
         unsigned arg_len = strlen (argv[i]);
+        ASSINP (arg_len < BUFPRINTF_MAX_LEN-10, "%s: argument %u longer than maximum allowed %u characters: %s", 
+                global_cmd, i, BUFPRINTF_MAX_LEN-10, argv[i]);
 
         if (pw && !strcmp(argv[i], pw)) // "-p 123", "--pass 123" etc
             bufprintf (evb, &command_line, "***%s", (i < argc-1 ? " ": "")) // hide password
