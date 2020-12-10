@@ -565,23 +565,24 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
+# unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
 batch_id=$1
 batch_id=$((batch_id - 1))
-case $1 in
-    1)  batch_minimal                 ;&
-    2)  batch_basic                   ;&
-    3)  batch_precompressed           ;&
-    4)  batch_bgzf                    ;&
-    5)  batch_special_algs            ;&
-    6)  batch_translations            ;&
-    7)  batch_genocat_tests           ;&
-    8)  batch_backward_compatability  ;&
-    9)  batch_real_world_subsets      ;&
-    10) batch_misc_cases              ;&
-    11) batch_external_tools          ;&
-    12) batch_reference               ;&
-    13) batch_make_reference          ;&
-    *)  printf "\nALL GOOD!\n"
-esac
+
+if (( $1 <= 1  )) ; then  batch_minimal                ; fi
+if (( $1 <= 2  )) ; then  batch_basic                  ; fi
+if (( $1 <= 3  )) ; then  batch_precompressed          ; fi
+if (( $1 <= 4  )) ; then  batch_bgzf                   ; fi
+if (( $1 <= 5  )) ; then  batch_special_algs           ; fi
+if (( $1 <= 6  )) ; then  batch_translations           ; fi
+if (( $1 <= 7  )) ; then  batch_genocat_tests          ; fi
+if (( $1 <= 8  )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 9  )) ; then  batch_real_world_subsets     ; fi
+if (( $1 <= 10 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 11 )) ; then  batch_external_tools         ; fi
+if (( $1 <= 12 )) ; then  batch_reference              ; fi
+if (( $1 <= 13 )) ; then  batch_make_reference         ; fi
+
+printf "\nALL GOOD!\n"
 
 
