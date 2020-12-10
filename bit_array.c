@@ -101,19 +101,6 @@ static word_t __inline windows_popcount(word_t w)
 
 #define bits_in_top_word(nbits) ((nbits) ? bitset64_idx((nbits) - 1) + 1 : 0)
 
-// Mostly used for debugging
-typedef struct { char s[WORD_SIZE+1]; } WordStr;
-static inline WordStr _print_word (word_t word)
-{
-    WordStr w;
-    w.s[WORD_SIZE] = 0;
-
-    for (word_offset_t i=0; i < WORD_SIZE; i++)
-        w.s[i] = ((word >> i) & (word_t)0x1) == 0 ? '0' : '1';
-
-    return w;
-}
-
 // prints right to left
 static inline char* _word_to_str(word_t word, char str[WORD_SIZE+1])
   __attribute__((unused));
@@ -131,6 +118,19 @@ static inline char* _word_to_str(word_t word, char str[WORD_SIZE+1])
 
 // Used in debugging
 #ifdef DEBUG
+
+// Mostly used for debugging
+typedef struct { char s[WORD_SIZE+1]; } WordStr;
+static inline WordStr _print_word (word_t word)
+{
+    WordStr w;
+    w.s[WORD_SIZE] = 0;
+
+    for (word_offset_t i=0; i < WORD_SIZE; i++)
+        w.s[i] = ((word >> i) & (word_t)0x1) == 0 ? '0' : '1';
+
+    return w;
+}
 
 #define DEBUG_VALIDATE(a) validate_bitarr((a), __FUNCTION__, __LINE__)
 static inline void validate_bitarr (BitArray *arr, const char *file, int lineno)
