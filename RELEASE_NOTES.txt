@@ -288,3 +288,7 @@ Cleanup:
     
 9.0.12
 - bug fix
+
+9.0.13
+- added genocat --interleave: displays pairs of FASTQ files compressed with --pair with their reads interleaved.
+

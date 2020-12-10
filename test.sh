@@ -25,7 +25,7 @@ test_header() {
     printf "$sep"
 }
 
-test_count_genocat_lines() {
+test_count_genocat_lines() { # $1 - genozip arguments $2 - genocat arguments $3 - expected number of output lines
     local cmd="$genocat $output $2 $arg1"
     test_header "$cmd"
     $genozip $arg1 $1 -fo $output || exit 1
@@ -376,6 +376,8 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--header-only" `grep @ $file | wc -l` 
     test_count_genocat_lines $file "--grep line5" 4
     test_count_genocat_lines $file "--grep line5 --header-only" 1
+    test_count_genocat_lines $file "--downsample 2" $(( 4 * `grep @ $file | wc -l` / 2 )) 
+    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave" $(( 4 * `grep @ $file | wc -l` * 2 )) 
 }
 
 batch_backward_compatability()

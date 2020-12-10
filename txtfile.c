@@ -490,6 +490,38 @@ void txtfile_write_one_vblock (VBlockP vb)
     COPY_TIMER (write);
 }
 
+static void txtfile_write_4_lines (VBlockP vb)
+{
+    ARRAY (char, txt, vb->txt_data);
+    int64_t *next = &vb->txt_data.param; // we use param as "next"
+
+    for (unsigned nl=0; nl < 4; nl++) {
+        int64_t last = *next; 
+        while (txt[last] != '\n') last++;
+        
+        int64_t len = last - *next + 1;
+        file_write (txt_file, &txt[*next], len);
+
+        txt_file->txt_data_so_far_single += len;
+        txt_file->disk_so_far            += len;
+        *next                            += len;
+    }
+}
+
+// write the VBs - interleaving their lines
+void txtfile_write_one_vblock_interleave (VBlockP vb1, VBlockP vb2)
+{
+    ASSERT (vb1->lines.len == vb2->lines.len, "Error txtfile_write_one_vblock_interleave: in vb1=%u vb2=%u expecting vb1->lines.len=%"PRIu64" == vb2->lines.len=%"PRIu64,
+            vb1->vblock_i, vb2->vblock_i, vb1->lines.len, vb2->lines.len);
+
+    vb1->txt_data.param = vb2->txt_data.param = 0;
+
+    for (uint64_t i=0; i < vb1->lines.len; i++) {
+        txtfile_write_4_lines (vb1);
+        txtfile_write_4_lines (vb2);
+    }
+}
+
 // ZIP only - estimate the size of the txt data in this file. affects the hash table size and the progress indicator.
 void txtfile_estimate_txt_data_size (VBlock *vb)
 {

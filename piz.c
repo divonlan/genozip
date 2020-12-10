@@ -163,7 +163,7 @@ done:
     COPY_TIMER (compute);
 }
 
-static void piz_read_all_ctxs (VBlock *vb, const SectionListEntry **next_sl)
+static void piz_read_all_ctxs (VBlock *vb, ConstSectionListEntryP *next_sl)
 {
     // ctxs that have dictionaries are already initialized, but others (eg local data only) are not
     ctx_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts);
@@ -258,7 +258,7 @@ static bool piz_read_one_vb (VBlock *vb)
 {
     START_TIMER; 
 
-    const SectionListEntry *sl = sections_vb_first (vb->vblock_i, false); 
+    ConstSectionListEntryP sl = sections_vb_first (vb->vblock_i, false); 
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
     
@@ -323,7 +323,7 @@ static Digest piz_one_file_verify_digest (Digest original_file_digest)
 }
 
 // returns false if VB was dispatched, and true if vb was skipped
-bool piz_dispatch_one_vb (Dispatcher dispatcher, const SectionListEntry *sl_ent)
+bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSectionListEntryP sl_ent)
 {
     static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
     if (!random_access_is_vb_included (sl_ent->vblock_i, &region_ra_intersection_matrix)) return true; // skip this VB if not included
@@ -351,7 +351,7 @@ bool piz_dispatch_one_vb (Dispatcher dispatcher, const SectionListEntry *sl_ent)
 void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is_last_z_file)
 {
     static Dispatcher dispatcher = NULL; // static dispatcher - with flag.unbind, we use the same dispatcher when pizzing components
-    static const SectionListEntry *sl_ent = NULL; // preserve for unbinding multiple files
+    static ConstSectionListEntryP sl_ent = NULL, sl_ent_leaf_2=NULL; // preserve for unbinding multiple files
 
     // read genozip header
     Digest original_file_digest = DIGEST_NONE;
@@ -368,7 +368,7 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
             goto finish; 
         }
 
-        sl_ent = NULL; // reset
+        sl_ent = sl_ent_leaf_2 = NULL; // reset
 
         ASSERT (!flag.test || !digest_is_zero (original_file_digest), 
                 "Error testing %s: --test cannot be used with this file, as it was not compressed (in genozip v8) with --md5 or --test", z_name);
@@ -393,39 +393,63 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
     // 2. Wait for the first thread (by sequential order) to complete and write data
 
+    bool do_interleave = (flag.interleave && !flag.reading_reference);
     bool header_only_file = true; // initialize - true until we encounter a VB header
     unsigned txt_header_i=0;
+    bool is_leaf_2 = false; // used when interleaving - true if we are reading a VB from the 2nd leaf
 
     while (!dispatcher_is_done (dispatcher)) {
 
         // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a vblock and compute it
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
 
-            bool another_header = sections_get_next_section_of_type2 (&sl_ent, SEC_TXT_HEADER, SEC_VB_HEADER, false, true);
+            ConstSectionListEntryP *sl_p = is_leaf_2 ? &sl_ent_leaf_2 : &sl_ent;
 
+            // note when interleaving: either leaf 1 or 2 may encounter a VB_HEADER, but only leaf_1 will encounter a TXT_HEADER bc we skipped it for leaf 2
+            bool another_header = sections_get_next_section_of_type2 (sl_p, SEC_TXT_HEADER, SEC_VB_HEADER, false, true);
+
+            // if we're interleaving and leaf 1 encountered a TXT_HEADER - this is the header of leaf_2. We skip to the next one
+            if (  another_header && sl_ent->section_type == SEC_TXT_HEADER && // this is leaf 1 and we encoutered a TXT_HEADER
+                  do_interleave && sl_ent_leaf_2) { // leaf 2 was already read (we set sl_ent_leaf_2 when we skipped its TXT_HEADER)
+                sl_ent_leaf_2 = NULL;
+                another_header = sections_get_next_section_of_type (&sl_ent, SEC_TXT_HEADER, false, false); // move to the next TXT_HEADER beyond leaf 2
+            }
+
+            // case: SEC_VB_HEADER
             if (another_header && sl_ent->section_type == SEC_VB_HEADER) {
                 
-                if (flag.one_vb && flag.one_vb != sl_ent->vblock_i) // we want only one VB, but not this one
-                    { sl_ent++; continue; }
+                if (flag.one_vb && flag.one_vb != (*sl_p)->vblock_i) // we want only one VB, but not this one
+                    { (*sl_p)++; continue; }
 
-                header_only_file &= piz_dispatch_one_vb (dispatcher, sl_ent);  // function returns true if VB was skipped
+                header_only_file &= piz_dispatch_one_vb (dispatcher, (*sl_p));  // function returns true if VB was skipped
+
+                // if we're interleaving - next VB will be from the opposite leaf
+                if (do_interleave) is_leaf_2 = !is_leaf_2;
             } 
 
-            else if (another_header && sl_ent->section_type == SEC_TXT_HEADER) { // 1st component or 2nd+ component and we're concatenating
+            // case SEC_TXT_HEADER when concatenating or first TXT_HEADER when unbinding 
+            // note: this never happens in the 2nd leaf when interleaving, because we skipped the header
+            else if (another_header && (!flag.unbind || !txt_header_i)) {
                 
                 txt_header_i++;
-                if (flag.unbind && txt_header_i > 1) goto no_more_data; // if unbinding, we processes only one component (piz_one_file will be called again for the next component)
-
                 txtfile_genozip_to_txt_header (sl_ent, unbind_component_i, (txt_header_i>=2 ? NULL : &original_file_digest)); // read header - it will skip 2nd+ txt header if concatenating
 
                 dispatcher_resume (dispatcher);  // in case it was paused by previous component when unbinding
 
                 if (flag.header_only) goto finish;
+
+                // if interleaving, set the start of leaf_2 to after its TXT_HEADER
+                if (do_interleave) { 
+                    sl_ent_leaf_2 = sl_ent;
+                    ASSERT (sections_get_next_section_of_type (&sl_ent_leaf_2, SEC_TXT_HEADER, false, false), // next sections_get_next_section_of_type2 will read after the TXT_HEADER
+                            "Error in piz_one_file: cannot find SEC_TXT_HEADER of 2nd leaf when trying to interleave in %s", z_name);
+                }
             }
 
-            else { // we're done (concatenating: no more VBs in the entire file ; unbinding: no more VBs in our component)
-                no_more_headers = true;
-no_more_data:            
+            // case: we're done (concatenating: no more VBs in the entire file ; unbinding: no more VBs in our component)
+            else { 
+                no_more_headers = !another_header;
+
                 sl_ent--; // re-read in next call to this function if unbinding
                 dispatcher_set_input_exhausted (dispatcher, true);
 
@@ -434,8 +458,22 @@ no_more_data:
             }
         }
 
-        // PRIORITY 2: Wait for the first thread (by sequential order) to complete and write data
-        else { 
+        // PRIORITY 2 (interleaving): Wait for two VBs, one from each leaf (by sequential order) and interleave them
+        else if (do_interleave) { 
+            VBlock *processed_vb_1 = dispatcher_get_processed_vb (dispatcher, NULL); 
+            VBlock *processed_vb_2 = dispatcher_get_processed_vb (dispatcher, NULL); 
+
+            // write the two VBs - interleaving their lines
+            txtfile_write_one_vblock_interleave (processed_vb_1, processed_vb_2);
+
+            z_file->num_vbs += 2;
+            z_file->txt_data_so_far_single += processed_vb_1->vb_data_size + processed_vb_2->vb_data_size; 
+
+            dispatcher_finalize_one_vb (dispatcher);
+        }
+
+        // PRIORITY 2 (not interleaving): Wait for the first thread (by sequential order) to complete and write data
+        else {
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
 
             // read of a normal file - output uncompressed block (unless we're reading a reference - we don't need to output it)

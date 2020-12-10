@@ -228,8 +228,10 @@ static Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
 
     uint32_t chrom_name_len;
     ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom, chrom_name, &chrom_name_len);
-    Range *r = ENT (Range, ranges, chrom); // in PIZ, we have one range per chrom
 
+    ASSERT (chrom < ranges.len, "Error in ref_get_range_by_chrom: expecting chrom=%d < ranges.len=%"PRIu64, chrom, ranges.len);
+    
+    Range *r = ENT (Range, ranges, chrom); // in PIZ, we have one range per chrom
     return r;
 }
 
@@ -280,7 +282,7 @@ static void ref_show_sequence (void)
 
 // entry point of compute thread of reference decompression. this is called when pizzing a file with a stored reference,
 // including reading the reference file itself.
-// vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET sections
+// vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET section
 static void ref_uncompress_one_range (VBlockP vb)
 {
     if (!buf_is_allocated (&vb->z_data) || !vb->z_data.len) goto finish; // we have no data in this VB because it was skipped due to --regions or genocat --show-headers
@@ -390,7 +392,9 @@ static void ref_uncompress_one_range (VBlockP vb)
 
             bit_index_t start = MAX (sec_start_within_contig, 0);
             bit_index_t len   = ref_sec_len - initial_flanking_len - final_flanking_len;
-            
+            ASSERT (len >= 0 && len <= ref_sec_len, "Error in ref_uncompress_one_range: expecting ref_sec_len=%"PRIu64" >= initial_flanking_len=%"PRIu64" + final_flanking_len=%"PRIu64,
+                    ref_sec_len, initial_flanking_len, final_flanking_len);
+
             RefLock lock = ref_lock (start + r->gpos, len);
             bit_array_set_region (&r->is_set, start, len);
             ref_unlock (lock);
@@ -1247,7 +1251,7 @@ static void ref_allocate_loaded_genome (void)
     // but our CHROM contexts also includes alternate chrom names that aren't in the original reference that appear after the reference
     // chroms. we need to make sure ranges.len does not include alternate chroms as that's how we know a chrom is alternate in ref_piz_get_range
     // 3. in case loading from a reference file, the number of contigs will match the number of chroms, so no issues.
-    ranges.len = z_file->z_flags.ref_internal ? z_file->contexts[CHROM].word_list.len : ref_contigs_num_contigs();
+    ranges.len = IS_REF_INTERNAL (z_file) ? z_file->contexts[CHROM].word_list.len : ref_contigs_num_contigs();
 
     buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges");     
     buf_zero (&ranges);

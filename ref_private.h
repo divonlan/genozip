@@ -35,6 +35,8 @@ extern void sam_seg_verify_pos (VBlockP vb, PosType this_pos);
 
 extern Buffer ranges; // param is RangesType
 
+#define IS_REF_INTERNAL(f) (((f)->data_type == DT_SAM || (f)->data_type == DT_BAM) && (f)->z_flags.dts_ref_internal)
+
 #define ROUNDUP64(x) (((x) + 63) & ~(typeof(x))0x3f) // round up to the nearest 64
 #define ROUNDDOWN64(x) ((x)      & ~(typeof(x))0x3f) // round down to the nearest 64
 #endif

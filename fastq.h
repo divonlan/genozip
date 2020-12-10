@@ -23,6 +23,7 @@ extern void fastq_seg_finalize();
 extern const char *fastq_seg_txt_line();
 
 // PIZ Stuff
+extern bool fastq_piz_is_paired (void);
 extern bool fastq_piz_read_one_vb (VBlockP vb, ConstSectionListEntryP sl);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);

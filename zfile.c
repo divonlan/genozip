@@ -65,13 +65,15 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     case SEC_GENOZIP_HEADER: {
         SectionHeaderGenozipHeader *h = (SectionHeaderGenozipHeader *)header;
         struct FlagsGenozipHeader f = h->h.flags.genozip_header;
+        DataType dt = BGEN16 (h->data_type);
         sprintf (str, SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u digest_bound=%s\n" 
-                      SEC_TAB "ref_internal=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u ref=\"%.*s\" md5ref=%s\n"
+                      SEC_TAB "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u ref=\"%.*s\" md5ref=%s\n"
                       SEC_TAB "created=\"%.*s\"\n",
-                 h->genozip_version, encryption_name (h->encryption_type), dt_name (BGEN16 (h->data_type)), 
+                 h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
                  BGEN64 (h->uncompressed_data_size), BGEN64 (h->num_items_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
                  digest_display (h->digest_bound).s, 
-                 f.ref_internal, f.aligner, f.txt_is_bin, f.bgzf, f.adler,
+                 (dt==DT_FASTQ ? "dts_paired" : "dts_ref_internal"), f.dt_specific, 
+                 f.aligner, f.txt_is_bin, f.bgzf, f.adler,
                  REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
                  FILE_METADATA_LEN, h->created);
         break;
@@ -713,7 +715,10 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     header.h.codec                 = CODEC_BZ2;
     header.h.flags.genozip_header  = (struct FlagsGenozipHeader) {
         .txt_is_bin   = DTPT (is_binary),
-        .ref_internal = (flag.reference == REF_INTERNAL),
+        .dt_specific  = z_file->data_type == DT_SAM   ? flag.reference == REF_INTERNAL :
+                        z_file->data_type == DT_BAM   ? flag.reference == REF_INTERNAL :
+                        z_file->data_type == DT_FASTQ ? flag.pair != NOT_PAIRED_END    :
+                                                        0, 
         .aligner      = (flag.ref_use_aligner > 0),
         .bgzf         = (txt_file->codec == CODEC_BGZF),
         .adler        = !flag.md5

@@ -279,7 +279,7 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
 
     if (dd->max_threads > 1) 
         // wait for thread to complete (possibly it completed already)
-        pthread_join(th->thread_id, NULL);
+        pthread_join (th->thread_id, NULL);
 
     if (flag.show_threads) dispatcher_show_time ("Join (end compute)", dd->next_thread_to_be_joined, th->vb->vblock_i);
 

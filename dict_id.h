@@ -6,11 +6,7 @@
 #ifndef DICT_ID_INCLUDED
 #define DICT_ID_INCLUDED
 
-#ifndef _MSC_VER // Microsoft compiler
 #include <inttypes.h>
-#else
-#include "compatibility/visual_c_stdint.h"
-#endif
 #include "genozip.h"
 #include "data_types.h"
 

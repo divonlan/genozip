@@ -12,6 +12,7 @@
 #include "dict_id.h"
 #include "crypt.h"
 #include "strings.h"
+#include "fastq.h"
 
 Flags flag = { .out_dt = DT_NONE };
 bool option_is_short[256] = { }; // indexed by character of short option.
@@ -81,6 +82,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _B  {"vblock",        required_argument, 0, 'B'                    }
         #define _r  {"regions",       required_argument, 0, 'r'                    }
         #define _s  {"samples",       required_argument, 0, 's'                    }
+        #define _il {"interleave",    no_argument,       &flag.interleave,       1 }
         #define _e  {"reference",     required_argument, 0, 'e'                    }
         #define _E  {"REFERENCE",     required_argument, 0, 'E'                    }
         #define _b  {"bytes",         no_argument,       &flag.bytes,            1 }
@@ -138,10 +140,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me,      _s5, _sM, _sA, _sc, _sI, _gt,                    _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _xt, _dm, _dp,                                                                                                      _sR, _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,     _00 };
-        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR, _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,     _00 };
-        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                                   _u,     _p, _e,                                                                                                     _st, _sm,                                       _dm,                                                                                                                                                                  _sM,                                    _b, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me,      _s5, _sM, _sA, _sc, _sI, _gt,                    _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                              _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _xt, _dm, _dp,                                                                                                      _sR, _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,     _00 };
+        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,         _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR, _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,     _00 };
+        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                                   _u,     _p, _e,                                                                                                          _st, _sm,                                       _dm,                                                                                                                                                                  _sM,                                    _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -274,6 +276,9 @@ static void flags_test_conflicts (void)
     ASSINP (!flag.test        || !flag.out_filename || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
     ASSINP (!flag.test        || !flag.replace || command != PIZ,   "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
     ASSINP (!flag.to_stdout   || command != ZIP,                    "%s: option %s only works for decompressing files, not compressing", global_cmd, OT("stdout", "c"));
+    ASSINP (!flag.one_vb      || !flag.interleave,                  "%s: option %s is incompatable with %s", global_cmd, "interleave", "one-vb");
+    ASSINP (!flag.xthreads    || !flag.interleave,                  "%s: option %s is incompatable with %s", global_cmd, "interleave", "xthreads");
+    ASSINP (!flag.header_only || !flag.interleave,                  "%s: option %s is incompatable with %s", global_cmd, "interleave", "header-only");
     ASSINP (!flag.header_only || !flag.no_header,                   "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
     ASSINP (!flag.no_header   || !flag.header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
     ASSINP (!flag.quiet       || !option_noisy,                     "%s: option %s is incompatable with %s", global_cmd, OT("quiet", "q"), OT("noisy", "Q"));
@@ -433,13 +438,16 @@ void flags_update_piz_one_file (void)
         flag.header_only_fast  = true;
     }
 
-
     // Case were we set flag.bgzf even if the user didn't explicitly ask for it with --bgzf
     // note: another case not cover here is when the output file type is GZ or BGZ or BAM - handled in file_open_txt_write
     if (!flag.plain && // user didn't not explicitly tell us to refrain from BGZF
         (z_file->z_flags.bgzf && exe_type != EXE_GENOCAT) && // source file had BGZF 
         (!flag.to_stdout || (flag.show_headers && exe_type == EXE_GENOCAT))) // we are outputing to a disk file OR user asked to see the headers (so we want to show her BGZF too)
-        flag.bgzf=true;   
+        flag.bgzf = true;   
+
+    // if interleaving bgzf is always false
+    if (flag.interleave)
+        flag.bgzf = false;
 
     // Note on BAM/SAM: BAM is stored as binary SAM, so trans_containers=true for BAM->BAM , but false for BAM->SAM
     flag.trans_containers = dt_get_translation().trans_containers; 
@@ -455,7 +463,12 @@ void flags_update_piz_one_file (void)
     flag.data_modified = !flag.reconstruct_as_src || // translating to another data
                          flag.header_one || flag.no_header || flag.header_only || flag.header_only_fast || flag.grep || 
                          flag.regions || flag.samples || flag.drop_genotypes || flag.gt_only || flag.sequential || 
-                         flag.one_vb || flag.downsample;
+                         flag.one_vb || flag.downsample || flag.interleave;
+
+    // interleaving is only possible for on FASTQ data compressed with --pair
+    ASSINP (!flag.interleave || (flag.out_dt == DT_FASTQ && fastq_piz_is_paired()), // untranslated FASTQ that is paired
+            "%s: Error: --interleave is not supported for %s because it only works on FASTQ data that was compressed with --pair", 
+            global_cmd, z_name);
 
     flags_test_conflicts(); // test again after updating flags
 }

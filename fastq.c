@@ -403,6 +403,36 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     return false;
 }
 
+// inspects z_file flags and if needed reads additional data, and returns true if the z_file consists of FASTQs compressed with --pair
+bool fastq_piz_is_paired (void)
+{
+    if (z_file->data_type != DT_FASTQ || z_file->num_components % 2) return false; // quick check to avoid the need for zfile_is_paired is most cases that dts_paired is missing
+
+    // this is a FASTQ genozip file. Now we can check dts_paired
+    if (z_file->z_flags.dts_paired) return true;  
+
+    // dts_paired is not set. This flag was introduced in 9.0.13 - if file is compressed with genozip version 10+, then for sure the file is not paired
+    if (z_file->genozip_version >= 10) return false;
+
+    // dts_paired is not set, and this is v8 for v9. We proceed to inspect GPOS.local of the 2nd component to see if it is paired
+    ConstSectionListEntryP sl = NULL;
+    sections_get_next_section_of_type (&sl, SEC_TXT_HEADER, false, false); // first component txt header
+    sections_get_next_section_of_type (&sl, SEC_TXT_HEADER, false, false); // second component txt header
+    sections_get_next_section_of_type (&sl, SEC_VB_HEADER,  false, false); // first VB of second component txt header
+
+    // scan all B250 and Local looking for evidence of pairing
+    while (sections_get_next_section_of_type2 (&sl, SEC_B250, SEC_LOCAL, true, false)) {            
+        SectionHeaderCtx *header = (SectionHeaderCtx *)zfile_read_section_header (evb, sl->offset, sl->vblock_i, sl->section_type);
+        z_file->z_flags.dts_paired = header->h.flags.ctx.paired;
+ 
+        buf_free (&evb->compressed); // zfile_read_section_header used this for the header
+
+        if (z_file->z_flags.dts_paired) return true;        
+    }
+    
+    return false; // no evidence of pairing
+}
+
 // filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat) and each toplevel item
 CONTAINER_FILTER_FUNC (fastq_piz_filter)
 {

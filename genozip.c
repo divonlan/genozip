@@ -302,8 +302,11 @@ finish:
 // if this is a bound file, and we don't have --unbind or --force, we ask the user
 static void main_ask_about_unbind (void)
 {
-    if (!isatty(0) || !isatty(2)) return; // if we stdin or stderr is redirected - we cannot ask the user an interactive question
-    if (flag.test || flag.genocat_info_only) return; // other cases we don't ask test
+    if (  flag.to_stdout           || // we don't ask if we're outputing to stdout as we can't unbind
+          !isatty(0) || !isatty(2) || // if we stdin or stderr is redirected - we cannot ask the user an interactive question
+          flag.test                || // we don't ask if we're just testing          
+          flag.genocat_info_only)     // we don't ask we're not reconstructing bc user only wants metadata
+        return; 
 
     fprintf (stderr, "\n%s: %s contains %u bound files. You may either:\n"
                      "y) uncompress and unbind - retrieve the individual files (or use --unbind=<prefix> to add a prefix) ; or-\n"

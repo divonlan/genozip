@@ -68,11 +68,14 @@ typedef union BgzfFlags {
     uint8_t flags;
 
     struct FlagsGenozipHeader {
-        uint8_t ref_internal     : 1; // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
-        uint8_t aligner          : 1; // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
-        uint8_t txt_is_bin       : 1; // Source file is binary (BAM)
-        uint8_t bgzf             : 1; // Reconstruct as BGZF (user may override) (determined by the last component)
-        uint8_t adler            : 1; // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
+        // note: if updating dts_* flags, update in zfile_compress_genozip_header, zfile_show_header too
+        #define dts_ref_internal dt_specific // SAM, BAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference)
+        #define dts_paired       dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13)
+        uint8_t dt_specific      : 1;        // this flag has a different meaning depending on the data_type, may be one of the above ^ 
+        uint8_t aligner          : 1;        // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
+        uint8_t txt_is_bin       : 1;        // Source file is binary (BAM)
+        uint8_t bgzf             : 1;        // Reconstruct as BGZF (user may override) (determined by the last component)
+        uint8_t adler            : 1;        // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
     } genozip_header;
 
     struct FlagsBgzf {
