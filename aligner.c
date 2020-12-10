@@ -13,6 +13,7 @@
 #include "file.h"
 #include "strings.h"
 #include "codec.h"
+#include "reconstruct.h"
 #include "piz.h"
 
 #define MAX_GPOS_DELTA 1000 // paired reads are usually with a delta less than 300 - so this is more than enough
@@ -383,7 +384,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
             is_forward = NEXTLOCALBIT (strand_ctx) ? is_forward_pair_1 : !is_forward_pair_1;
 
             // gpos: reconstruct, then cancel the reconstruction and just use last_value
-            int32_t reconstructed_len = piz_reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, true);
+            int32_t reconstructed_len = reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, true);
             vb->txt_data.len -= reconstructed_len; // roll back reconstruction
             gpos = gpos_ctx->last_value.i;
         }

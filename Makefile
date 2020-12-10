@@ -30,7 +30,7 @@ endif
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
 MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
-          zip.c piz.c seg.c zfile.c aligner.c flags.c digest.c mutex.c\
+          zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c\
 		  reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c  \
 		  vcf_piz.c vcf_seg.c vcf_shared.c vcf_samples.c vcf_header.c \
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
@@ -62,7 +62,7 @@ CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
              buffer.h file.h context.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h \
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h \
 			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h\
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h phylip.h generic.h \

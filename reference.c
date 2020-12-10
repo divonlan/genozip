@@ -1215,8 +1215,7 @@ void ref_load_external_reference (bool display, bool is_last_z_file)
 
     TEMP_VALUE (command, PIZ);
 
-    bool piz_successful = piz_one_file (0, false);
-    ASSERT (piz_successful, "Error: failed to uncompress reference file %s", ref_filename);
+    piz_one_file (0, false);
 
     // recover globals
     RESTORE_VALUE (command);

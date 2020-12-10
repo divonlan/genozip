@@ -22,7 +22,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(codec_assign_best_codec);
     ADD(bgzf_io_thread);
     ADD(bgzf_compute_thread);
-    ADD(piz_reconstruct_vb);
+    ADD(reconstruct_vb);
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
     ADD(compressor_hapmat);
@@ -104,7 +104,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (write, 1);
         fprintf (stderr, "GENOUNZIP compute threads: %u\n", ms(p->compute));
         PRINT (zfile_uncompress_section, 1);
-        PRINT (piz_reconstruct_vb, 1);
+        PRINT (reconstruct_vb, 1);
         PRINT (md5, 1);
         PRINT (bgzf_compute_thread, 1);
         PRINT (piz_get_line_subfields, 2);

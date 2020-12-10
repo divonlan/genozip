@@ -35,6 +35,7 @@ typedef struct {
     VBlock *processed_vb; // last vb for which caller got the processing results
 
     bool input_exhausted;
+    bool paused;
 
     unsigned next_thread_to_dispatched;
     unsigned next_thread_to_be_joined;
@@ -147,7 +148,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
 void dispatcher_pause (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-
+    dd->paused = true;
     dd->next_vb_i--;
 }
 
@@ -156,7 +157,10 @@ void dispatcher_resume (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
+    if (!dd->paused) return; // nothing to do
+
     dd->input_exhausted = false;
+    dd->paused          = false;
     dd->filename        = txt_file->name;
     
     progress_new_component (dd->filename, "0\%", -1);    
@@ -164,6 +168,8 @@ void dispatcher_resume (Dispatcher dispatcher)
 
 void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 {
+    if (! *dispatcher) return; // nothing to do
+
     DispatcherData *dd = (DispatcherData *)*dispatcher;
 
     COPY_TIMER_VB (evb, wallclock);

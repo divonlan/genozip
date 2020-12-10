@@ -7,7 +7,7 @@
 #include "seg.h"
 #include "context.h"
 #include "file.h"
-#include "piz.h"
+#include "reconstruct.h"
 #include "dict_id.h"
 #include "random_access.h"
 #include "strings.h"
@@ -86,7 +86,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
     if (flag.header_only_fast) // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
         vb->dont_show_curr_line = true;     
     else 
-        piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, true);    
+        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, true);    
 
     // case: --sequencial, and this seq line is the line in the vb, and it continues in the next vb
     if (  flag.sequential && // if we are asked for a sequential SEQ
@@ -113,7 +113,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_COMMENT)
     if (flag.header_only_fast)  // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
         vb->dont_show_curr_line = true;     
     else 
-        piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
+        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
 
     fasta_vb->last_line = FASTA_LINE_COMMENT;
 
@@ -187,7 +187,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
     fasta_vb->contig_grepped_out = false;
 
     char *desc_start = AFTERENT (char, vb->txt_data);
-    piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
 
     // if --grep: here we decide whether to show this contig or not
     if (flag.grep) {

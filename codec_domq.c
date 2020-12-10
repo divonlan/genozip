@@ -28,6 +28,7 @@
 #include "vblock.h"
 #include "data_types.h"
 #include "piz.h"
+#include "reconstruct.h"
 #include "profiler.h"
 #include "codec.h"
 

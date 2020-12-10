@@ -10,7 +10,7 @@
 #include "data_types.h"
 #include "base64.h"
 #include "seg.h"
-#include "piz.h"
+#include "reconstruct.h"
 #include "dict_id.h"
 #include "endianness.h"
 #include "file.h"
@@ -126,7 +126,7 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
                 bool reconstruct = !flag.trans_containers ||      // not translating Or...
                                    !IS_CI_SET (CI_TRANS_NOR); // no prohibition on reconstructing when translating
 
-                reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, 0, reconstruct);
+                reconstructed_len = reconstruct_from_ctx (vb, item->did_i, 0, reconstruct);
 
                 // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item
                 // using the designated "translator" function, if one is available
@@ -174,7 +174,7 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
     }
 
     if (con->is_toplevel)   
-        COPY_TIMER (piz_reconstruct_vb);
+        COPY_TIMER (reconstruct_vb);
 }
 
 void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, const char *snip, unsigned snip_len)

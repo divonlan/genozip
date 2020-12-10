@@ -71,7 +71,7 @@ static void codec_uncompress_error (VBlock *vb, Codec codec,
 
 static void codec_reconstruct_error (VBlockP vb, Codec codec, ContextP ctx)
 {
-    ABORT ("Error in piz_reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction", 
+    ABORT ("Error in reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction", 
            dis_dict_id (ctx->dict_id).s, codec_name (codec));
 }
 

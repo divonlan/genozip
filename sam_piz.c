@@ -8,6 +8,7 @@
 #include "seg.h"
 #include "context.h"
 #include "piz.h"
+#include "reconstruct.h"
 #include "strings.h"
 #include "dict_id.h"
 #include "codec.h" // must be included before reference.h
@@ -26,12 +27,12 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 }
 
 // PIZ: SEQ reconstruction 
-void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, unsigned unused2)
+void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, unsigned unused2)
 {
 #define ROUNDUP_TO_NEAREST_4(x) ((uint32_t)(x) + 3) & ~((uint32_t)0x3)
 
     VBlockSAMP vb = (VBlockSAMP)vb_;
-    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == SAM_SQBITMAP, "Error in sam_piz_reconstruct_seq: context is not SAM_SQBITMAP");
+    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == SAM_SQBITMAP, "Error in sam_reconstruct_seq: context is not SAM_SQBITMAP");
 
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 
@@ -75,7 +76,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
             subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
             cigar_op = cigar_lookup_sam[(uint8_t)*(next_cigar++)];
-            ASSERT (cigar_op, "Error in sam_piz_reconstruct_seq: Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
+            ASSERT (cigar_op, "Error in sam_reconstruct_seq: Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
             cigar_op &= 0x0f; // remove validity bit
         }
 
@@ -88,7 +89,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
 
                     if (!ref_is_nucleotide_set (range, idx)) { 
                         ref_print_is_set (range, pos + ref_consumed);
-                        ABORT ("Error in sam_piz_reconstruct_seq: while reconstructing line %u (vb_i=%u: last_txt_line=%u num_lines=%u): reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
+                        ABORT ("Error in sam_reconstruct_seq: while reconstructing line %u (vb_i=%u: last_txt_line=%u num_lines=%u): reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
                             " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
                             vb->line_i, vb->vblock_i, (uint32_t)(vb->first_line + vb->lines.len - 1), (uint32_t)vb->lines.len, range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);
                     }
@@ -109,8 +110,8 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
         subcigar_len--;
     }
 
-    ASSERT (seq_consumed == vb->seq_len,      "Error in sam_piz_reconstruct_seq: expecting seq_consumed(%u) == vb->seq_len(%u)", seq_consumed, vb->seq_len);
-    ASSERT (ref_consumed == vb->ref_consumed, "Error in sam_piz_reconstruct_seq: expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
+    ASSERT (seq_consumed == vb->seq_len,      "Error in sam_reconstruct_seq: expecting seq_consumed(%u) == vb->seq_len(%u)", seq_consumed, vb->seq_len);
+    ASSERT (ref_consumed == vb->ref_consumed, "Error in sam_reconstruct_seq: expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
 
     bitmap_ctx->last_value.i = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
     

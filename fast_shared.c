@@ -7,6 +7,7 @@
 #include "file.h"
 #include "endianness.h"
 #include "piz.h"
+#include "reconstruct.h"
 #include "dict_id.h"
 #include "mutex.h"
 #include "strings.h"
@@ -72,7 +73,7 @@ bool fast_piz_test_grep (VBlockFAST *vb)
     // iterate on all DESCs of this VB
     for (uint32_t desc_i=0; desc_i < num_descs; desc_i++) { 
 
-        piz_reconstruct_from_ctx (vb, desc_ctx->did_i, 0, true);
+        reconstruct_from_ctx (vb, desc_ctx->did_i, 0, true);
 
         *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string
 

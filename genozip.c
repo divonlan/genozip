@@ -320,7 +320,7 @@ static void main_ask_about_unbind (void)
     fprintf (stderr, "\n");
 }
 
-static void main_genounzip (const char *z_filename, const char *txt_filename, bool is_last_txt_file)
+static void main_genounzip (const char *z_filename, const char *txt_filename, bool is_last_z_file)
 {
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;
@@ -387,13 +387,11 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     }
     
     // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
-    uint32_t component_i=0;
-    while (piz_one_file (component_i, is_last_txt_file) && flag.unbind) component_i++;
+    for (uint32_t component_i=0; component_i < z_file->num_components; component_i += flag.unbind ? 1 + flag.interleave : z_file->num_components) {
+        piz_one_file (component_i, is_last_z_file);
 
-    if (!flag.to_stdout && !flag.unbind) {
-        // don't close stdout - we might still need it for the next file
-        // don't close in unbind mode - piz_one_file() opens and closes each component
-        file_close (&txt_file, flag.index_txt, false); 
+        if (!flag.to_stdout)  // don't close stdout - we might still need it for the next file
+            file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
     }
 
     file_close (&z_file, false, false);

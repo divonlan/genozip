@@ -105,7 +105,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
 
     if (!flag.make_reference) {
 
-        vb->contexts[FASTA_LINEMETA].no_stons = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
+        vb->contexts[FASTA_LINEMETA].no_stons = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
         
         codec_acgt_comp_init ((VBlockP)vb);
 

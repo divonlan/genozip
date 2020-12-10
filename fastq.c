@@ -428,12 +428,12 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
 }
 
 // PIZ: SEQ reconstruction 
-void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len)
+void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
  
     int64_t seq_len_64;
-    ASSERT (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "Error in fastq_piz_reconstruct_seq: could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
+    ASSERT (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "Error in fastq_reconstruct_seq: could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
     vb->seq_len = (uint32_t)seq_len_64;
 
     aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));

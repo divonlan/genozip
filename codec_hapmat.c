@@ -12,7 +12,7 @@
 #include "endianness.h"
 #include "context.h"
 #include "dict_id.h"
-#include "piz.h"
+#include "reconstruct.h"
 
 //--------------
 // ZIP side

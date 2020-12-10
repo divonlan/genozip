@@ -11,7 +11,7 @@
 #include "random_access.h"
 #include "endianness.h"
 #include "strings.h"
-#include "piz.h"
+#include "reconstruct.h"
 #include "dict_id.h"
 #include "stats.h"
 #include "reference.h"

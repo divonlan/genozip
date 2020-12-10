@@ -11,13 +11,13 @@
 #include "context.h"
 #include "file.h"
 #include "endianness.h"
-#include "piz.h"
 #include "sections.h"
 #include "random_access.h"
 #include "dict_id.h"
 #include "strings.h"
 #include "codec.h"
 #include "reference.h"
+#include "reconstruct.h"
 
 // returns true if section is to be skipped reading / uncompressing
 bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)

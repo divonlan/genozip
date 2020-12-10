@@ -30,8 +30,8 @@ extern uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md
 
 // PIZ Stuff
 extern bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
-extern void sam_piz_reconstruct_vb ();
-extern void sam_piz_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
+extern void sam_reconstruct_vb ();
+extern void sam_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
@@ -70,7 +70,7 @@ SPECIAL (SAM, 6, BIN,   bam_piz_special_BIN);
 #define sam_dict_id_qname_sf     dict_id_type_1
 #define sam_dict_id_optnl_sf     dict_id_type_2
 
-// note: we can't alias RNEXT to RNAME, because we can't alias to CHROM - see comment in piz_reconstruct_from_ctx_do 
+// note: we can't alias RNEXT to RNAME, because we can't alias to CHROM - see comment in reconstruct_from_ctx_do 
 #define SAM_DICT_ID_ALIASES \
     /*         alias                        maps to this ctx          */     \
     { DT_SAM,  &dict_id_OPTION_MC,          &dict_id_OPTION_CIGAR         }, \
