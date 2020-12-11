@@ -40,7 +40,7 @@ void ref_alt_chroms_compress (void)
     buf_alloc (evb, &z_file->alt_chrom_map, sizeof (AltChrom) * num_alt_chroms, 1, "z_file->alt_chrom_map");
 
     if (flag.show_ref_alts) 
-        fprintf (stderr, "\nAlternative chrom indices (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
+        fprintf (info_stream, "\nAlternative chrom indices (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
 
     for (uint32_t i=0; i < num_alt_chroms; i++) {
         WordIndex chrom_index = num_contigs + i;
@@ -58,7 +58,7 @@ void ref_alt_chroms_compress (void)
             const CtxNode *alt_node = ENT (CtxNode, ctx->nodes, alt_index);
             const char *alt_name = ENT (const char, ctx->dict, alt_node->char_index);
 
-            fprintf (stderr, "In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, chrom_index, alt_name, alt_index);
+            fprintf (info_stream, "In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, chrom_index, alt_name, alt_index);
         }
     }
 
@@ -81,7 +81,7 @@ void ref_alt_chroms_load (void)
     zfile_uncompress_section (evb, evb->z_data.data, &evb->compressed, "compressed", 0, SEC_REF_ALT_CHROMS);
 
     if (flag.show_ref_alts) 
-        fprintf (stderr, "\nAlternative chrom indices (output of --show-ref-alts): chroms that are in the txt file and are mapped to a different index in the reference\n");
+        fprintf (info_stream, "\nAlternative chrom indices (output of --show-ref-alts): chroms that are in the txt file and are mapped to a different index in the reference\n");
 
     evb->compressed.len /= sizeof (AltChrom);
     Context *ctx = &z_file->contexts[CHROM];
@@ -110,7 +110,7 @@ void ref_alt_chroms_load (void)
         if (flag.show_ref_alts) {
             const char *chrom_name = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, txt_chrom_index, 0, 0);
             const char *alt_name   = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, ref_chrom_index, 0, 0);
-            fprintf (stderr, "In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, txt_chrom_index, alt_name, ref_chrom_index);
+            fprintf (info_stream, "In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, txt_chrom_index, alt_name, ref_chrom_index);
         }
     }
 

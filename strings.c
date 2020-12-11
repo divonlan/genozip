@@ -5,6 +5,7 @@
 
 #include "genozip.h"
 #include "strings.h"
+#include "flags.h"
 #ifndef WIN32
 #include <sys/ioctl.h>
 #endif
@@ -180,16 +181,16 @@ void str_print_null_seperated_data (const char *data, unsigned len, bool add_new
         }
 
         switch (data[i]) {
-            case 32 ... 127 : fputc (data[i], stderr);      break;
-            case 0          : fputc (' ', stderr);          break; // snip separator
-            case '\t'       : fwrite ("\\t", 1, 2, stderr); break;
-            case '\n'       : fwrite ("\\n", 1, 2, stderr); break;
-            case '\r'       : fwrite ("\\r", 1, 2, stderr); break;
-            default         : fprintf (stderr, "\\x%x", data[i]);
+            case 32 ... 127 : fputc (data[i], info_stream);      break;
+            case 0          : fputc (' ', info_stream);          break; // snip separator
+            case '\t'       : fwrite ("\\t", 1, 2, info_stream); break;
+            case '\n'       : fwrite ("\\n", 1, 2, info_stream); break;
+            case '\r'       : fwrite ("\\r", 1, 2, info_stream); break;
+            default         : fprintf (info_stream, "\\x%x", data[i]);
         }
     }
     
-    if (add_newline) fputc ('\n', stderr);
+    if (add_newline) fputc ('\n', info_stream);
 }
 
 int str_print_text (const char **text, unsigned num_lines,

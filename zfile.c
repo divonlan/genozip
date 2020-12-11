@@ -159,7 +159,7 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
     mutex_initialize (show_b250_mutex); // possible unlikely race condition on initializing - good enough for debugging purposes
     mutex_lock (show_b250_mutex);
 
-    fprintf (stderr, "vb_i=%u %*.*s: ", BGEN32 (header->h.vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
+    fprintf (info_stream, "vb_i=%u %*.*s: ", BGEN32 (header->h.vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
 
     const uint8_t *data  = FIRSTENT (const uint8_t, *b250_data);
     const uint8_t *after = AFTERENT (const uint8_t, *b250_data);
@@ -167,13 +167,13 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
     while (data < after) {
         WordIndex word_index = base250_decode (&data, true);
         switch (word_index) {
-            case WORD_INDEX_ONE_UP     : fprintf (stderr, "ONE_UP "); break;
-            case WORD_INDEX_EMPTY_SF   : fprintf (stderr, "EMPTY "); break;
-            case WORD_INDEX_MISSING_SF : fprintf (stderr, "MISSING "); break;
-            default: fprintf (stderr, "%u ", word_index);
+            case WORD_INDEX_ONE_UP     : fprintf (info_stream, "ONE_UP "); break;
+            case WORD_INDEX_EMPTY_SF   : fprintf (info_stream, "EMPTY "); break;
+            case WORD_INDEX_MISSING_SF : fprintf (info_stream, "MISSING "); break;
+            default: fprintf (info_stream, "%u ", word_index);
         }
     }
-    fprintf (stderr, "\n");
+    fprintf (info_stream, "\n");
 
     mutex_unlock (show_b250_mutex);
 }
@@ -656,7 +656,7 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
                     "%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
 
         if (flag.show_reference && !md5_is_zero (header->ref_file_md5)) {
-            fprintf (stderr, "%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
+            fprintf (info_stream, "%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
                      z_name, header->ref_filename, digest_display (header->ref_file_md5).s);
             if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
         }
@@ -916,7 +916,7 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
     vb_header->first_line   = BGEN32 (txt_first_line_i);
 
     if (flag.show_vblocks) 
-        fprintf (stderr, "vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
+        fprintf (info_stream, "vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
                  vb->vblock_i, z_file->num_txt_components_so_far, txt_first_line_i, BGEN32 (vb_header->num_lines), 
                  BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
                  BGEN32 (vb_header->longest_line_len));

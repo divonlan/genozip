@@ -292,3 +292,5 @@ Cleanup:
 9.0.13
 - added genocat --interleave: displays pairs of FASTQ files compressed with --pair with their reads interleaved.
 
+9.0.14
+- added better selection of stdout vs stderr for messages (info_stream)

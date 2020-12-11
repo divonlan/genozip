@@ -200,7 +200,7 @@ static void refhash_compress_one_vb (VBlockP vb)
     comp_compress (vb, &vb->z_data, false, (SectionHeaderP)&header, ENT (char, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer), NULL);
 
     if (flag.show_ref_hash) 
-        fprintf (stderr, "vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
+        fprintf (info_stream, "vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
                  vb->vblock_i, header.num_layers, header.layer_i, header.layer_bits, vb->refhash_start_in_layer, uncompressed_size, BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
@@ -232,7 +232,7 @@ static void refhash_uncompress_one_vb (VBlockP vb)
     uint32_t layer_i = header->layer_i;
 
     if (flag.show_ref_hash) // before the sanity checks
-        fprintf (stderr, "vb_i=%u Uncompressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
+        fprintf (info_stream, "vb_i=%u Uncompressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
                  vb->vblock_i, header->num_layers, layer_i, header->layer_bits, start, size, BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
     // sanity checks

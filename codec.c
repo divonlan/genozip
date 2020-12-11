@@ -218,12 +218,12 @@ Codec codec_assign_best_codec (VBlockP vb,
     qsort (tests, num_tests, sizeof (CodecTest), (int (*)(const void *, const void*))codec_assign_sorter);
 
     if (flag.show_codec)
-        fprintf (stderr, "vb_i=%u %-8s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
-                vb->vblock_i, ctx ? ctx->name : "", st_name (st),
-                codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
-                codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
-                codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,
-                codec_name (tests[3].codec), (int)tests[3].size, tests[3].clock);
+        fprintf (info_stream, "vb_i=%u %-8s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
+                 vb->vblock_i, ctx ? ctx->name : "", st_name (st),
+                 codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
+                 codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
+                 codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,
+                 codec_name (tests[3].codec), (int)tests[3].size, tests[3].clock);
 
     // assign the best codec - the first one in the sorted array - and commit it to zf_ctx
     *selected_codec = tests[0].codec;
@@ -244,7 +244,6 @@ done:
 // of eg. --show-time=compressor_lzma
 void codec_show_time (VBlock *vb, const char *name, const char *subname, Codec codec)
 {
-//fprintf (stderr, "name=%s\n", name ? name:"N/A");    
     if ((strcmp (flag.show_time, "compressor_lzma"  ) && codec==CODEC_LZMA) ||
         (strcmp (flag.show_time, "compressor_bsc"   ) && codec==CODEC_BSC ) || 
         (strcmp (flag.show_time, "compressor_acgt"  ) && codec==CODEC_ACGT) || 

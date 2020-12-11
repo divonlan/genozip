@@ -16,6 +16,7 @@
 
 Flags flag = { .out_dt = DT_NONE };
 bool option_is_short[256] = { }; // indexed by character of short option.
+FILE *info_stream;               // either stdout or stderr - where non-error messages should go
 
 static Buffer command_line = EMPTY_BUFFER;
 
@@ -239,7 +240,7 @@ void flags_init_from_command_line (int argc, char **argv)
 
             case '?' : // unrecognized option - error message already displayed by libc
             default  :
-                fprintf(stderr, "Usage: %s [OPTIONS] filename1 filename2...\nTry %s --help for more information.\n", global_cmd, global_cmd);
+                fprintf (stderr, "Usage: %s [OPTIONS] filename1 filename2...\nTry %s --help for more information.\n", global_cmd, global_cmd);
                 exit(1);  
         }
     }
@@ -395,6 +396,9 @@ void flags_update (unsigned num_txt_files, const char **filenames)
         flag.show_index || flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || flag.dump_section || flag.show_headers ||
         flag.show_reference || flag.show_ref_contigs || flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
         flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs);
+
+    // where progress, metadata etc messages should go. data always goes to stdout and errors/warning always go to stderr.
+    info_stream = (!flag.to_stdout || flag.genocat_info_only) ? stdout : stderr;
 }
 
 void flags_update_zip_one_file (void)

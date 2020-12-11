@@ -336,7 +336,7 @@ void ctx_clone (VBlock *vb)
         if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this dict_id
 
             // overlay the global dict and nodes - these will not change by this (or any other) VB
-            //fprintf (stderr,  ("ctx_clone: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dict_id_printable (zf_ctx->dict_id).id, vb->vblock_i, did_i);
+            //fprintf (info_stream,  ("ctx_clone: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dict_id_printable (zf_ctx->dict_id).id, vb->vblock_i, did_i);
             buf_overlay (vb, &vb_ctx->ol_dict, &zf_ctx->dict, "ctx->ol_dict", did_i);   
             buf_overlay (vb, &vb_ctx->ol_nodes, &zf_ctx->nodes, "ctx->ol_nodes", did_i);   
 
@@ -507,7 +507,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     }
 
     START_TIMER; // note: careful not to count time spent waiting for the mutex
-    //fprintf (stderr,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, merging_vb->vblock_i, did_i, z_did_i);
+    //fprintf (info_stream,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, merging_vb->vblock_i, did_i, z_did_i);
 
     zf_ctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
     zf_ctx->txt_len += vb_ctx->txt_len; // for stats
@@ -638,7 +638,7 @@ Context *ctx_get_ctx_if_not_found_by_inline (
     
     Context *ctx = &contexts[did_i]; 
 
-    //fprintf (stderr, "New context: dict_id=%.8s in did_i=%u \n", dict_id_print (dict_id), did_i);
+    //fprintf (info_stream, "New context: dict_id=%.8s in did_i=%u \n", dict_id_print (dict_id), did_i);
     ASSERT (*num_contexts+1 < MAX_DICTS, 
             "Error: number of dictionaries is greater than MAX_DICTS=%u", MAX_DICTS);
 
@@ -980,7 +980,7 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
     };
 
     if (flag.show_dict) {
-        fprintf (stderr, "%s (vb_i=%u, did=%u, num_snips=%u):\t", 
+        fprintf (info_stream, "%s (vb_i=%u, did=%u, num_snips=%u):\t", 
                  vb->fragment_ctx->name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
         str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, true, false);
     }
@@ -1157,11 +1157,11 @@ void ctx_read_all_dictionaries (ReadChromeType read_chrom)
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, z_file->data_type == DT_SAM);
             
             if (flag.show_dict) {
-                fprintf (stderr, "%s (did_i=%u, num_snips=%u):\t", ctx->name, did_i, (uint32_t)ctx->word_list.len);
+                fprintf (info_stream, "%s (did_i=%u, num_snips=%u):\t", ctx->name, did_i, (uint32_t)ctx->word_list.len);
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), true, false);
             }
         }
-        fprintf (stderr, "\n");
+        fprintf (info_stream, "\n");
 
         if (exe_type == EXE_GENOCAT) exit_ok; // if this is genocat - we're done
     }

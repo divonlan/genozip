@@ -58,16 +58,16 @@ static void ref_contigs_show (const Buffer *contigs_buf, bool created)
     ARRAY (const RefContig, cn, *contigs_buf);
     Context *chrom_ctx = &z_file->contexts[CHROM];
 
-    fprintf (stderr, "\nContigs as they appear in the reference%s:\n", created ? " created (note: contig names are as they appear in the txt data, not the reference)" : "");
+    fprintf (info_stream, "\nContigs as they appear in the reference%s:\n", created ? " created (note: contig names are as they appear in the txt data, not the reference)" : "");
     for (uint32_t i=0; i < contigs_buf->len; i++) {
 
         const char *chrom_name = ENT (const char, chrom_ctx->dict, cn[i].char_index);
 
         if (cn[i].snip_len)
-            fprintf (stderr, "i=%u '%s' gpos=%"PRId64" min_pos=%"PRId64" max_pos=%"PRId64" chrom_index=%d char_index=%"PRIu64" snip_len=%u\n",
+            fprintf (info_stream, "i=%u '%s' gpos=%"PRId64" min_pos=%"PRId64" max_pos=%"PRId64" chrom_index=%d char_index=%"PRIu64" snip_len=%u\n",
                     i, chrom_name, cn[i].gpos, cn[i].min_pos, cn[i].max_pos, cn[i].chrom_index, cn[i].char_index, cn[i].snip_len);
         else
-            fprintf (stderr, "i=%u chrom_index=%d (unused - not present in txt data)\n", i, cn[i].chrom_index);
+            fprintf (info_stream, "i=%u chrom_index=%d (unused - not present in txt data)\n", i, cn[i].chrom_index);
     }
 }
 
@@ -361,7 +361,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsig
                                                                 .ref_chrom = BGEN32 (ref_chrom) };
 
         if (flag.show_ref_alts) 
-            fprintf (stderr, "In %s header: '%.*s' (index=%d) In reference: '%s' (index=%d)\n", 
+            fprintf (info_stream, "In %s header: '%.*s' (index=%d) In reference: '%s' (index=%d)\n", 
                      dt_name (txt_file->data_type), chrom_name_len, chrom_name, header_chrom, 
                      ref_contigs_get_chrom_snip (ref_chrom, 0, 0), ref_chrom);
     }

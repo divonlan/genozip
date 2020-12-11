@@ -118,6 +118,4 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
 
     // if the user filtered out all samples, its equivalent of drop_genotypes
     if (!vcf_num_displayed_samples) flag.drop_genotypes = true;
-
-    //for (i=0; i<num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
 }

@@ -149,7 +149,7 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
     if (!vb->libdeflate) vb->libdeflate = libdeflate_alloc_decompressor();
 
     if (flag.show_bgzf)
-        fprintf (stderr, "%-7s vb=%u i=%u compressed_index=%u size=%u txt_index=%u size=%u ",
+        fprintf (info_stream, "%-7s vb=%u i=%u compressed_index=%u size=%u txt_index=%u size=%u ",
                  arch_am_i_io_thread() ? "IO" : "COMPUTE", vb->vblock_i, 
                  ENTNUM (vb->bgzf_blocks, bb), bb->compressed_index, bb->comp_size, bb->txt_index, bb->txt_size);
 
@@ -164,7 +164,7 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 
     if (flag.show_bgzf)
         #define C(i) ((bb->txt_index + i < vb->txt_data.len) ? char_to_printable (*ENT (char, vb->txt_data, bb->txt_index + (i))).s : "") 
-        fprintf (stderr, "txt_data[5]=%1s%1s%1s%1s%1s %s\n", C(0), C(1), C(2), C(3), C(4), bb->comp_size == BGZF_EOF_LEN ? "EOF" : "");
+        fprintf (info_stream, "txt_data[5]=%1s%1s%1s%1s%1s %s\n", C(0), C(1), C(2), C(3), C(4), bb->comp_size == BGZF_EOF_LEN ? "EOF" : "");
         #undef C
 }
 
@@ -218,12 +218,12 @@ uint8_t bgzf_get_compression_level (const char *filename, const uint8_t *comp_bl
         libdeflate_free_compressor (compressor);
 
         if (recomp_size == comp_block_size && !memcmp (comp_block, recomp_block, comp_block_size)) {
-            if (flag.show_bgzf) fprintf (stderr, "File %s: Identified as compressed with libdeflate level %u\n", filename, level);
+            if (flag.show_bgzf) fprintf (info_stream, "File %s: Identified as compressed with libdeflate level %u\n", filename, level);
             return level; // this still might be wrong, see comment in function header ^
         }       
     }
   
-    if (flag.show_bgzf) fprintf (stderr, "File %s: Could not idetify libdeflate compression level\n", filename);
+    if (flag.show_bgzf) fprintf (info_stream, "File %s: Could not idetify libdeflate compression level\n", filename);
     return BGZF_COMP_LEVEL_UNKNOWN;
 }
 
@@ -327,7 +327,7 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
 
     if (flag.show_bgzf)
         #define C(i) (i < isize ? char_to_printable (in[i]).s : "")
-        fprintf (stderr, "%-7s vb=%u i=%d compressed_index=%u size=%u txt_index=%d size=%u txt_data[5]=%1s%1s%1s%1s%1s %s\n",
+        fprintf (info_stream, "%-7s vb=%u i=%d compressed_index=%u size=%u txt_index=%d size=%u txt_data[5]=%1s%1s%1s%1s%1s %s\n",
                 arch_am_i_io_thread() ? "IO" : "COMPUTE", vb->vblock_i, block_i,
                 comp_index, (unsigned)out_size, txt_index, isize, C(0), C(1), C(2), C(3), C(4),
                 out_size == BGZF_EOF_LEN ? "EOF" : "");
@@ -489,7 +489,7 @@ void bgzf_write_finalize (File *file)
         if (!flag.test) file_write (file, BGZF_EOF, BGZF_EOF_LEN);
         file->disk_so_far += BGZF_EOF_LEN;
     
-        if (flag.show_bgzf) fprintf (stderr, "%-7s vb=%u   EOF\n", "IO", 0);
+        if (flag.show_bgzf) fprintf (info_stream, "%-7s vb=%u   EOF\n", "IO", 0);
     }
 
     // if we attempted to reconstruct the BGZF lock to the original file's bgzf_isizes - warn if we were unlucky and failed

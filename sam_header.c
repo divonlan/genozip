@@ -119,7 +119,7 @@ static void sam_header_add_contig (const char *chrom_name, unsigned chrom_name_l
     };
 
     if (flag.show_txt_contigs) 
-        fprintf (stderr, "index=%u \"%.*s\" LN=%"PRId64" ref_chrom_index=%u snip_len=%u\n", 
+        fprintf (info_stream, "index=%u \"%.*s\" LN=%"PRId64" ref_chrom_index=%u snip_len=%u\n", 
                  (unsigned)header_contigs.len-1, chrom_name_len, chrom_name, last_pos, ref_chrom, chrom_name_len);
 
     // add to header_contigs_dict

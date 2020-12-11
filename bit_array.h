@@ -393,22 +393,22 @@ extern void bit_array_to_substr(const BitArray* bitarr,
 
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print
 // newline.
-extern void bit_array_print_do (const BitArray* bitarr, const char *msg);
-#define bit_array_print(bitarr) bit_array_print_do (bitarr, #bitarr)
+extern void bit_array_print_do (const BitArray* bitarr, const char *msg, FILE *file);
+#define bit_array_print(bitarr) bit_array_print_do (bitarr, #bitarr, info_stream)
 
-extern void bit_array_print_binary_word_do (word_t word, const char *msg);
-#define bit_array_print_binary_word(word) bit_array_print_binary_word_do (word, #word)
+extern void bit_array_print_binary_word_do (word_t word, const char *msg, FILE *file);
+#define bit_array_print_binary_word(word) bit_array_print_binary_word_do (word, #word, info_stream)
 
 // Print a string representations for a given region, using given on/off
 // characters. Reverse prints from highest to lowest -- this is useful for
 // printing binary numbers
-extern void bit_array_print_substr(const char *msg, const BitArray* bitarr,
-                                   bit_index_t start, bit_index_t length);
+extern void bit_array_print_substr (const char *msg, const BitArray* bitarr,
+                                    bit_index_t start, bit_index_t length, FILE *file);
 
 // Print bit array as hex
-extern size_t bit_array_print_hex(const BitArray* bitarr,
-                                  bit_index_t start, bit_index_t length,
-                                  FILE* fout, char uppercase);
+extern size_t bit_array_print_hex (const BitArray* bitarr,
+                                   bit_index_t start, bit_index_t length,
+                                   FILE* fout, char uppercase);
 
 //
 // Clone and copy

@@ -175,7 +175,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
 
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
-        fprintf (stderr, "%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
+        fprintf (info_stream, "%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
 
@@ -192,7 +192,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
 static void zip_assign_best_codec (VBlock *vb)
 {
     if (flag.show_codec && vb->vblock_i == 1)
-        fprintf (stderr, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
+        fprintf (info_stream, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
                  "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
 
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {

@@ -87,6 +87,7 @@ typedef struct {
 } Flags;
 
 extern Flags flag;
+extern FILE *info_stream;
 
 #define SAVE_FLAGS Flags save_flag = flag
 #define RESTORE_FLAGS flag = save_flag

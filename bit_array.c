@@ -913,38 +913,39 @@ void bit_array_to_substr(const BitArray* bitarr,
 //  str[length] = '\0';
 }
 
-void bit_array_print_do (const BitArray *bitarr, const char *msg)
+void bit_array_print_do (const BitArray *bitarr, const char *msg, FILE *file)
 {
-    fprintf (stderr, "%s (num_of_bits=%"PRIu64"): ", msg, bitarr->num_of_bits);
+    fprintf (file, "%s (num_of_bits=%"PRIu64"): ", msg, bitarr->num_of_bits);
 
     for (bit_index_t i=0; i < bitarr->num_of_bits; i++)
-        fprintf (stderr, "%c", bit_array_get(bitarr, i) ? '1' : '0');
+        fprintf (file, "%c", bit_array_get(bitarr, i) ? '1' : '0');
 
-    fprintf (stderr, "\n");
+    fprintf (file, "\n");
 }
 
-void bit_array_print_binary_word_do (word_t word, const char *msg)
+void bit_array_print_binary_word_do (word_t word, const char *msg, FILE *file)
 {
     BitArray bitarr = { .num_of_bits=64, .num_of_words=1, .words = &word };
-    bit_array_print_do (&bitarr, msg);
+    bit_array_print_do (&bitarr, msg, file);
 }
 
 // Print a string representations for a given region, using given on/off characters.
-void bit_array_print_substr(const char *msg, 
-                            const BitArray* bitarr,
-                            bit_index_t start, bit_index_t length)
+void bit_array_print_substr (const char *msg, 
+                             const BitArray* bitarr,
+                             bit_index_t start, bit_index_t length,
+                             FILE *file)
 {
   length = MIN (length, bitarr->num_of_bits - start);
 
   bit_index_t i, j;
 
-  if (msg) fprintf (stderr, "%s: ", msg);
+  if (msg) fprintf (file, "%s: ", msg);
   for(i = 0; i < length; i++)
   {
     j = start + i;
-    fprintf(stderr, "%c", bit_array_get(bitarr, j) ? '1' : '0');
+    fprintf (file, "%c", bit_array_get(bitarr, j) ? '1' : '0');
   }
-  fputc ('\n', stderr);
+  fputc ('\n', file);
 }
 
 //

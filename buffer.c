@@ -255,7 +255,7 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     if (memory_full)
         fprintf (stderr, "\n\nError memory is full:\n");
     else
-        fprintf (stderr, "\n-------------------------------------------------------------------------------------\n");
+        fprintf (info_stream, "\n-------------------------------------------------------------------------------------\n");
 
     VBlockPool *vb_pool = vb_get_pool ();
 
@@ -307,11 +307,11 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     uint64_t total_bytes=0;
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
-    fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str_size (total_bytes).s, num_buffers, vb_pool->num_allocated_vbs);
-    fprintf (stderr, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
+    fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists:\n", str_size (total_bytes).s, num_buffers, vb_pool->num_allocated_vbs);
+    fprintf (memory_full ? stderr : info_stream, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
 
     for (unsigned i=0; i < num_stats; i++)
-        fprintf (stderr, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str_size (stats[i].bytes).s, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
+        fprintf (memory_full ? stderr : info_stream, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str_size (stats[i].bytes).s, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
 }
 
 // thread safety: only the thread owning the VB of the buffer (I/O thread of evb) can add a buffer
@@ -332,7 +332,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
     ((Buffer **)bl->data)[bl->len++] = buf;
 
     if (flag.debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-        fprintf (stderr, "buf_add_to_buffer_list: %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
+        fprintf (info_stream, "buf_add_to_buffer_list: %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
                  buf_desc(buf).s, buf->size, str_pointer(buf).s, vb->id, (uint32_t)vb->buffer_list.len-1);
     
     buf->vb = vb; // successfully added to buf list
@@ -590,7 +590,7 @@ void buf_remove_from_buffer_list (Buffer *buf)
         if (buf_list[i] == buf) {
             
             if (flag.debug_memory) 
-                fprintf (stderr, "Destroy %s: buf_addr=%s buf->vb->id=%d buf_i=%u\n", buf_desc (buf).s, str_pointer(buf).s, buf->vb->id, i);
+                fprintf (info_stream, "Destroy %s: buf_addr=%s buf->vb->id=%d buf_i=%u\n", buf_desc (buf).s, str_pointer(buf).s, buf->vb->id, i);
 
             buf_list[i] = NULL;
             buf->vb = NULL;
@@ -686,7 +686,7 @@ void buf_print (Buffer *buf, bool add_newline)
 void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 {
     if (flag.debug_memory) 
-        fprintf (stderr, "Memory freed by free(): %s %s:%u\n", str_pointer (p).s, func, code_line);
+        fprintf (info_stream, "Memory freed by free(): %s %s:%u\n", str_pointer (p).s, func, code_line);
 
     if (p == BUFFER_BEING_MODIFIED) {
         fprintf (stderr, "Warning in buf_low_level_free: corrupt pointer = 0x777 while attempting free()\n");
@@ -702,7 +702,7 @@ void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t co
     ASSERT (new, "Error in %s:%u: REALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
 
     if (flag.debug_memory) 
-        fprintf (stderr, "realloc(): old=%s new=%s size=%"PRIu64" %s:%u\n", 
+        fprintf (info_stream, "realloc(): old=%s new=%s size=%"PRIu64" %s:%u\n", 
                  str_pointer (p).s, str_pointer (new).s, (uint64_t)size, func, code_line);
 
     return new;
@@ -714,7 +714,7 @@ void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t c
     ASSERT (new, "Error in %s:%u: MALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
 
     if (flag.debug_memory) 
-        fprintf (stderr, "malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new).s, (uint64_t)size, func, code_line);
+        fprintf (info_stream, "malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new).s, (uint64_t)size, func, code_line);
 
     if (zero) memset (new, 0, size);
     

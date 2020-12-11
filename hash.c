@@ -332,12 +332,12 @@ uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zf_ctx, const 
     if (flag.show_hash) {
  
         if (first_merging_vb_ctx->did_i==0) {
-            fprintf (stderr, "\n\nOutput of --show-hash:\n");
-            fprintf (stderr, "est_vbs=%u vb_1_num_lines=%s est_total_lines=%s\n", 
+            fprintf (info_stream, "\n\nOutput of --show-hash:\n");
+            fprintf (info_stream, "est_vbs=%u vb_1_num_lines=%s est_total_lines=%s\n", 
                      (unsigned)ceil(estimated_num_vbs), str_uint_commas (merging_vb->lines.len).s, str_uint_commas ((uint64_t)estimated_num_lines).s);
         }
         
-        fprintf (stderr, "dict=%s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u effc_vbs=%u "
+        fprintf (info_stream, "dict=%s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u effc_vbs=%u "
                  "n2_n3_lines=%s vb_ctx->nodes.len=%u est_entries=%d hashsize=%s\n", 
                  first_merging_vb_ctx->name, (int)n1, (int)n2, (int)n3, n2n3_density_ratio, gp, (unsigned)effective_num_vbs, 
                  str_uint_commas ((uint64_t)n2_n3_lines).s, (uint32_t)first_merging_vb_ctx->nodes.len, (int)estimated_entries, 

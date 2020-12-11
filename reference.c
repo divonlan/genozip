@@ -247,7 +247,7 @@ static void ref_print_bases (FILE *file, const BitArray *bitarr,
     if (is_forward)
         for (bit_index_t i=start_base*2; i < (start_base + num_of_bases)*2; i+=2) {
             if (!flag.sequential && (i-start_base*2) % (BASES_PER_LINE*2) == 0)
-                fprintf (stderr, "%8"PRIu64": ", i/2);
+                fprintf (file, "%8"PRIu64": ", i/2);
             fputc (fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)], file);
             if (!flag.sequential && ((i-start_base*2) % (BASES_PER_LINE*2) == 2*(BASES_PER_LINE-1))) fputc ('\n', file);
         }
@@ -272,8 +272,8 @@ static void ref_show_sequence (void)
             !regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, &first_pos, &last_pos)) continue;
 
         if (r->ref.num_of_bits) {
-            fprintf (stderr, "%.*s\n", r->chrom_name_len, r->chrom_name);
-            ref_print_bases (stderr, &r->ref, first_pos, last_pos-first_pos+1, true);
+            fprintf (info_stream, "%.*s\n", r->chrom_name_len, r->chrom_name);
+            ref_print_bases (info_stream, &r->ref, first_pos, last_pos-first_pos+1, true);
         }
     }
 
@@ -306,9 +306,9 @@ static void ref_uncompress_one_range (VBlockP vb)
     bool is_compacted = (header->h.section_type == SEC_REF_IS_SET); // we have a SEC_REF_IS_SET if  SEC_REFERENCE was compacted
 
     if (flag.show_reference && primary_command == PIZ && r)  // in ZIP, we show the compression of SEC_REFERENCE into z_file, not the uncompression of the reference file
-        fprintf (stderr, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
-                vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
-                BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
+        fprintf (info_stream, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
+                 vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
+                 BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
     // initialization of is_set:
     // case 1: ZIP (reading an external reference) - we CLEAR is_set, and let seg set the bits that are to be
@@ -352,15 +352,15 @@ static void ref_uncompress_one_range (VBlockP vb)
 
         // display contents of is_set if user so requested
         if (flag.show_is_set && !strcmp (chrom_name, flag.show_is_set)) 
-            ref_print_is_set (r, -1);
+            ref_print_is_set (r, -1, info_stream);
 
         // prepare for uncompressing the next section - which is the SEC_REFERENCE
         header = (SectionHeaderReference *)&vb->z_data.data[*ENT (uint32_t, vb->z_section_headers, 1)];
 
         if (flag.show_reference && primary_command == PIZ && r) 
-            fprintf (stderr, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
-                    vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
-                    BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
+            fprintf (info_stream, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
+                     vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
+                     BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
         compacted_ref_len  = (PosType)BGEN32(header->num_bases);
         uncomp_len         = BGEN32 (header->h.data_uncompressed_len);
@@ -780,7 +780,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
     if (flag.show_reference) {
         Context *ctx = &z_file->contexts[CHROM];
         CtxNode *node = ENT (CtxNode, ctx->nodes, BGEN32 (header->chrom_word_index));
-        fprintf (stderr, "Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
+        fprintf (info_stream, "Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
                  ref_filename, BGEN32 (header->chrom_word_index), 
                  ENT (char, ctx->dict, node->char_index), 
                  BGEN64(header->gpos), BGEN64(header->pos), 
@@ -931,10 +931,10 @@ static void ref_compress_one_range (VBlockP vb)
         comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, (char *)r->is_set.words, NULL);
 
         if (flag.show_reference && r) 
-            fprintf (stderr, "vb_i=%u Compressing SEC_REF_IS_SET chrom=%u (%.*s) gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
-                    vb->vblock_i, BGEN32 (header.chrom_word_index), r->chrom_name_len, r->chrom_name,
-                    BGEN64 (header.gpos), BGEN64 (header.pos), BGEN32 (header.num_bases), 
-                    BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
+            fprintf (info_stream, "vb_i=%u Compressing SEC_REF_IS_SET chrom=%u (%.*s) gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
+                     vb->vblock_i, BGEN32 (header.chrom_word_index), r->chrom_name_len, r->chrom_name,
+                     BGEN64 (header.gpos), BGEN64 (header.pos), BGEN32 (header.num_bases), 
+                     BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
     }
 
     // Second. SEC_REFERENCE
@@ -948,7 +948,7 @@ static void ref_compress_one_range (VBlockP vb)
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NULL);
 
     if (flag.show_reference && r) 
-        fprintf (stderr, "vb_i=%u Compressing SEC_REFERENCE chrom=%u (%.*s) %s gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
+        fprintf (info_stream, "vb_i=%u Compressing SEC_REFERENCE chrom=%u (%.*s) %s gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
                  vb->vblock_i, BGEN32 (header.chrom_word_index), r->chrom_name_len, r->chrom_name, is_compacted ? "compacted " : "",
                  BGEN64 (header.gpos), BGEN64 (header.pos), BGEN32 (header.num_bases), 
                  BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
@@ -1361,32 +1361,33 @@ typedef struct { PosType min_pos, max_pos; } MinMax;
 // Printing
 //---------------------------------------
 
-void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos) /* start_pos=end_pos=0 if entire ref */
+void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file) /* start_pos=end_pos=0 if entire ref */
 {
     uint64_t start_idx = start_pos ? start_pos - r->first_pos : 0;
     uint64_t end_idx   = (end_pos ? MIN (end_pos, r->last_pos) : r->last_pos) - r->first_pos;
 
-    fprintf (stderr, "%s: %.*s %"PRId64" - %"PRId64" (len=%u): ", msg, r->chrom_name_len, r->chrom_name, start_pos, end_pos, (uint32_t)(end_pos - start_pos + 1));
+    fprintf (file, "%s: %.*s %"PRId64" - %"PRId64" (len=%u): ", msg, r->chrom_name_len, r->chrom_name, start_pos, end_pos, (uint32_t)(end_pos - start_pos + 1));
     for (uint64_t idx = start_idx; idx <= end_idx; idx++) 
-        fputc (ref_get_nucleotide (r, idx) + (32 * !ref_is_nucleotide_set (r, idx)), stderr); // uppercase if set, lowercase if not
+        fputc (ref_get_nucleotide (r, idx) + (32 * !ref_is_nucleotide_set (r, idx)), file); // uppercase if set, lowercase if not
 
-    fputc ('\n', stderr);
+    fputc ('\n', file);
 }
 
 void ref_print_is_set (const Range *r,
-                       PosType around_pos) // display around this neighborhoud ; -1 means entire range
+                       PosType around_pos,  // display around this neighborhoud ; -1 means entire range
+                       FILE *file)
 {
 #   define neighborhood (PosType)10000
 
-    fprintf (stderr, "\n\nRegions set for chrom %u \"%.*s\" [%"PRId64"-%"PRId64"] according to range.is_set (format- \"first_pos-last_pos (len)\")\n", 
+    fprintf (file, "\n\nRegions set for chrom %u \"%.*s\" [%"PRId64"-%"PRId64"] according to range.is_set (format- \"first_pos-last_pos (len)\")\n", 
              r->chrom, r->chrom_name_len, r->chrom_name, r->first_pos, r->last_pos);
-    fprintf (stderr, "In the neighborhood of about %u bp around pos=%"PRId64"\n", (unsigned)neighborhood, around_pos);
+    fprintf (file, "In the neighborhood of about %u bp around pos=%"PRId64"\n", (unsigned)neighborhood, around_pos);
 
     if (!r->is_set.num_of_bits)
-        fprintf (stderr, "No data: r->is_set.num_of_bits=0\n");
+        fprintf (file, "No data: r->is_set.num_of_bits=0\n");
 
     if (around_pos < r->first_pos || around_pos > r->last_pos)
-        fprintf (stderr, "No data: pos=%"PRId64" is outside of [first_pos=%"PRId64" - last_pos=%"PRId64"]\n", around_pos, r->first_pos, r->last_pos);
+        fprintf (file, "No data: pos=%"PRId64" is outside of [first_pos=%"PRId64" - last_pos=%"PRId64"]\n", around_pos, r->first_pos, r->last_pos);
 
     uint64_t next;
     for (uint64_t i=0; i < r->is_set.num_of_bits; ) {
@@ -1397,9 +1398,9 @@ void ref_print_is_set (const Range *r,
         bool in_neighborhood = (around_pos - (PosType)(r->first_pos+i) > -neighborhood) && (around_pos - (PosType)(r->first_pos+i) < neighborhood);
         if (next > i && (around_pos == -1 || in_neighborhood)) {
             if (next - i > 1)
-                fprintf (stderr, "%"PRId64"-%"PRIu64"(%u)\t", r->first_pos + i, r->first_pos + next-1, (uint32_t)(next - i));
+                fprintf (file, "%"PRId64"-%"PRIu64"(%u)\t", r->first_pos + i, r->first_pos + next-1, (uint32_t)(next - i));
             else
-                fprintf (stderr, "%"PRId64"(1)\t", r->first_pos + i);
+                fprintf (file, "%"PRId64"(1)\t", r->first_pos + i);
         }                   
         if (!found) break;
 
@@ -1410,7 +1411,7 @@ void ref_print_is_set (const Range *r,
 
         i = next;
     }
-    fprintf (stderr, "\n");
+    fprintf (file, "\n");
 }
 
 // returns the reference file name for CRAM, derived from the genozip reference name

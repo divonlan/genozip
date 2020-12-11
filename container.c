@@ -113,7 +113,7 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, const C
             last_non_filtered_item_i = i;
 
             if (flag.show_containers && (item->did_i != DID_I_NONE || item->dict_id.num)) // show container reconstruction 
-                fprintf (stderr, "VB=%u Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
+                fprintf (info_stream, "VB=%u Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
                             vb->vblock_i, vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), 
                             item->did_i != DID_I_NONE ? vb->contexts[item->did_i].name : "(DID_I_NONE)", 
                             vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);

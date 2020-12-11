@@ -5,6 +5,7 @@
 
 #include "genozip.h"
 #include "profiler.h"
+#include "flags.h"
 
 void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
 {
@@ -69,7 +70,7 @@ const char *profiler_print_short (const ProfilerRec *p)
 void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs)
 {
     static const char *space = "                                                   ";
-#   define PRINT(x, level) if (p->x) fprintf (stderr, "%.*s" #x ": %u\n", level*3, space, ms(p->x));
+#   define PRINT(x, level) if (p->x) fprintf (info_stream, "%.*s" #x ": %u\n", level*3, space, ms(p->x));
     
 #if defined _WIN32
     static const char *os ="Windows";
@@ -81,28 +82,28 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     static const char *os ="Unknown OS";
 #endif
 
-    fprintf (stderr, "\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
-    fprintf (stderr, "OS=%s\n", os);
+    fprintf (info_stream, "\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
+    fprintf (info_stream, "OS=%s\n", os);
 #ifdef DEBUG
-    fprintf (stderr, "Build=Debug\n");
+    fprintf (info_stream, "Build=Debug\n");
 #else
-    fprintf (stderr, "Build=Optimized\n");
+    fprintf (info_stream, "Build=Optimized\n");
 #endif
-    fprintf (stderr, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
-    fprintf (stderr, "file=%s\n\n", filename ? filename : "(not file)");
+    fprintf (info_stream, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
+    fprintf (info_stream, "file=%s\n\n", filename ? filename : "(not file)");
     
-    fprintf (stderr, "Wallclock: %u milliseconds\n", ms (p->wallclock));
+    fprintf (info_stream, "Wallclock: %u milliseconds\n", ms (p->wallclock));
 
     if (command != ZIP) { // this is a uncompress operation
 
-        fprintf (stderr, "GENOUNZIP I/O thread (piz_one_file):\n");
+        fprintf (info_stream, "GENOUNZIP I/O thread (piz_one_file):\n");
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
         PRINT (ctx_read_all_dictionaries, 1)
         PRINT (ctx_dict_build_word_lists, 2);
         PRINT (bgzf_io_thread, 1);
         PRINT (write, 1);
-        fprintf (stderr, "GENOUNZIP compute threads: %u\n", ms(p->compute));
+        fprintf (info_stream, "GENOUNZIP compute threads: %u\n", ms(p->compute));
         PRINT (zfile_uncompress_section, 1);
         PRINT (reconstruct_vb, 1);
         PRINT (md5, 1);
@@ -111,14 +112,14 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (codec_hapmat_piz_get_one_line, 2);
     }
     else { // compress
-        fprintf (stderr, "GENOZIP I/O thread (zip_one_file):\n");
+        fprintf (info_stream, "GENOZIP I/O thread (zip_one_file):\n");
         PRINT (txtfile_read_header, 1);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
         PRINT (write, 1);
         PRINT (bgzf_io_thread, 1);
         PRINT (ref_contigs_compress, 1);
-        fprintf (stderr, "GENOZIP compute threads %u\n", ms(p->compute));
+        fprintf (info_stream, "GENOZIP compute threads %u\n", ms(p->compute));
         PRINT (ctx_clone, 1);
         PRINT (seg_all_data_lines, 1);
         PRINT (aligner_best_match, 2);
@@ -146,14 +147,14 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     PRINT (buf_alloc, 0);
     PRINT (generate_rev_complement_genome, 0);
     
-    fprintf (stderr, "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
+    fprintf (info_stream, "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
 
-    fprintf (stderr, "\nVblock stats:\n");
-    fprintf (stderr, "  Vblocks: %u\n", num_vbs);
-    fprintf (stderr, "  Maximum vblock size: %u MB\n", global_max_memory_per_vb / (1024 * 1024));
-    fprintf (stderr, "  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
-    fprintf (stderr, "  Average read time: %u\n", ms(p->read) / num_vbs);
-    fprintf (stderr, "  Average compute time: %u\n", ms(p->compute) / num_vbs);
-    fprintf (stderr, "  Average write time: %u\n", ms(p->write) / num_vbs);
-    fprintf (stderr, "\n");
+    fprintf (info_stream, "\nVblock stats:\n");
+    fprintf (info_stream, "  Vblocks: %u\n", num_vbs);
+    fprintf (info_stream, "  Maximum vblock size: %u MB\n", global_max_memory_per_vb / (1024 * 1024));
+    fprintf (info_stream, "  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
+    fprintf (info_stream, "  Average read time: %u\n", ms(p->read) / num_vbs);
+    fprintf (info_stream, "  Average compute time: %u\n", ms(p->compute) / num_vbs);
+    fprintf (info_stream, "  Average write time: %u\n", ms(p->write) / num_vbs);
+    fprintf (info_stream, "\n");
 }

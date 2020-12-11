@@ -207,9 +207,9 @@ void dict_id_initialize (DataType data_type)
 
 static void dict_id_show_aliases (void)
 {
-    fprintf (stderr, "Contents of SEC_DICT_ID_ALIASES section:\n");
+    fprintf (info_stream, "Contents of SEC_DICT_ID_ALIASES section:\n");
     for (unsigned i=0; i < dict_id_num_aliases; i++) 
-        fprintf (stderr, "alias=%.*s dst=%.*s\n", 
+        fprintf (info_stream, "alias=%.*s dst=%.*s\n", 
                     DICT_ID_LEN, dict_id_printable (dict_id_aliases[i].alias).id,
                     DICT_ID_LEN, dict_id_printable (dict_id_aliases[i].dst).id);
 }

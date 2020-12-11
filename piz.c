@@ -135,7 +135,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
 
     if (flag.show_vblocks) 
-        fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
+        fprintf (info_stream, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
     DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another

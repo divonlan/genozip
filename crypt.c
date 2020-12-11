@@ -120,19 +120,14 @@ void crypt_do (VBlock *vb, uint8_t *data, uint32_t data_len,
     uint8_t aes_key[AES_KEYLEN]; 
     crypt_generate_aes_key (vb, vb_i, sec_type, is_header, aes_key);
 
-    //fprintf (stderr, "command:%d id:%d vb_i=%d sec_type=%s%s data_len=%u key=%s\n", command, vb->id, vb_i, st_name (sec_type), is_header ? "(Hdr)": "", data_len, aes_display_key (aes_key));
-
     aes_initialize (vb, aes_key);
 
     // encrypt in-place
-    //fprintf (stderr, "BFRE: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
     aes_xcrypt_buffer (vb, data, data_len);
-    //fprintf (stderr, "AFTR: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
 }
 
 void crypt_continue (VBlock *vb, uint8_t *data, uint32_t data_len)
 {
-    //fprintf (stderr, "continue: data_len=%u\n", data_len);
     aes_xcrypt_buffer (vb, data, data_len);
 }
 
