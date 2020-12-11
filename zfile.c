@@ -715,10 +715,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     header.h.codec                 = CODEC_BZ2;
     header.h.flags.genozip_header  = (struct FlagsGenozipHeader) {
         .txt_is_bin   = DTPT (is_binary),
-        .dt_specific  = z_file->data_type == DT_SAM   ? flag.reference == REF_INTERNAL :
-                        z_file->data_type == DT_BAM   ? flag.reference == REF_INTERNAL :
-                        z_file->data_type == DT_FASTQ ? flag.pair != NOT_PAIRED_END    :
-                                                        0, 
+        .dt_specific  = DT_FUNC (z_file, zip_dts_flag)(),
         .aligner      = (flag.ref_use_aligner > 0),
         .bgzf         = (txt_file->codec == CODEC_BGZF),
         .adler        = !flag.md5

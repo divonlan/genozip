@@ -132,6 +132,12 @@ void fastq_zip_initialize (void)
     z_file->contexts[FASTQ_GPOS  ].lcodec = CODEC_UNKNOWN;
 }
 
+// called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
+bool fastq_zip_dts_flag (void)
+{
+    return flag.pair != NOT_PAIRED_END;
+}
+
 // called by Compute thread at the beginning of this VB
 void fastq_seg_initialize (VBlockFAST *vb)
 {
@@ -277,15 +283,15 @@ uint32_t fastq_get_pair_vb_i (VBlockP vb)
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
-const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+const char *fastq_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     ZipDataLineFAST *dl = DATA_LINE (vb->line_i);
 
-    const char *next_field, *field_start=field_start_line;
+    const char *next_field, *field_start=line_start;
     unsigned field_len=0;
     char separator;
 
-    int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - field_start_line);
+    int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - line_start);
 
     // the leading @ - just verify it (it will be included in D0ESC subfield)
     ASSSEG (*field_start != '\n', field_start, "%s: Invalid FASTQ file format: unexpected newline", global_cmd);

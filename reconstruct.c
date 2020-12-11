@@ -252,7 +252,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 
             case STORE_FLOAT: {
                 char *after;
-                new_value.d = strtod (snip, &after); // allows negative values
+                new_value.f = strtod (snip, &after); // allows negative values
 
                 // if the snip in its entirety is not a valid number, don't store the value.
                 // this can happen for example when seg_pos_field stores a "nonsense" snip.

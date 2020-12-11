@@ -299,7 +299,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
     }
 
 finish:
-    new_value->d = (double)machine_en.f;
+    new_value->f = (double)machine_en.f;
     return true; // have new value
 }
 
@@ -548,7 +548,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
     
     ASSERT0 (sizeof (value)==4, "Error in sam_piz_sam2fastq_FLOAT: expecting value to be 32 bits"); // should never happen
 
-    value.f = (float)ctx->last_value.d;
+    value.f = (float)ctx->last_value.f;
     RECONSTRUCT_BIN32 (value.i);
 
     return 0;

@@ -15,6 +15,7 @@ extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_le
 // ZIP Stuff
 extern void fastq_zip_initialize (void);
 extern void fastq_zip_read_one_vb (VBlockP vb);
+extern bool fastq_zip_dts_flag (void);
 COMPRESSOR_CALLBACK(fastq_zip_qual)
 
 // SEG Stuff

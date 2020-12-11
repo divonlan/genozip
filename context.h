@@ -66,9 +66,9 @@ typedef struct { // initialize with ctx_init_iterator()
 #define INTERLACE(type,n) ((((type)n) < 0) ? ((SAFE_NEGATE(type,n) << 1) - 1) : (((u##type)n) << 1))
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
-typedef union LastValueType {
+typedef union LastValueType { // 64 bit
     int64_t i;
-    double d;
+    double f;
 } LastValueType;
 
 typedef struct Context {
@@ -146,7 +146,7 @@ typedef struct Context {
     uint32_t next_local;       // PIZ only: iterator on Context.local
 
     uint32_t last_line_i;      // PIZ only: the last line_i this ctx was encountered
-    LastValueType last_value;  // PIZ only: last value from which to conduct a delta. 
+    LastValueType last_value;  // last value of this context (in PIZ, it can be a basis for a delta and other uses)
     int64_t last_delta;        // PIZ only: last delta value calculated
 
     // PIZ-only instructions

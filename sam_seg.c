@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   sam_zip.c
+//   sam_seg.c
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
@@ -116,6 +116,12 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
 
     *line_data = FIRSTENT (char, vb->bd_bi_line);
 }   
+
+// called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
+bool sam_zip_dts_flag (void)
+{
+    return flag.reference == REF_INTERNAL;
+}
 
 // ----------------------
 // Seg stuff

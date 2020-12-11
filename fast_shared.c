@@ -106,7 +106,7 @@ bool fast_piz_test_grep (VBlockFAST *vb)
         Context *ctx = &vb->contexts[did_i];
         if (dict_id_is_type_1 (ctx->dict_id)) {
             ctx_init_iterator (ctx);
-            ctx->last_delta = ctx->last_value.d = 0;
+            ctx->last_delta = ctx->last_value.f = 0;
         }
     }
 
