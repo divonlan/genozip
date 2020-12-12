@@ -67,8 +67,6 @@ extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed);
 extern void ref_consume_ref_fasta_global_area (void);
 extern Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, RefLock *lock);
-extern void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file);
-extern void ref_print_is_set (const Range *r, PosType around_pos, FILE *file);
 extern const char *ref_get_cram_ref (void);
 extern void ref_make_ref_init (void);
 extern void ref_generate_reverse_complement_genome (void);
@@ -104,7 +102,11 @@ extern void ref_alt_chroms_compress (void);
                                                      bit_array_get (&(range)->ref, (idx) * 2)]
 
 // display
+typedef struct { char s[300]; } RangeStr;
+extern RangeStr ref_display_range (const Range *r);
 extern void ref_print_bases_region (FILE *file, ConstBitArrayP bitarr, ConstBitArrayP is_set, PosType first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
+extern void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file);
+extern void ref_print_is_set (const Range *r, PosType around_pos, FILE *file);
 
 // globals
 extern const char *ref_filename;

@@ -1360,6 +1360,16 @@ typedef struct { PosType min_pos, max_pos; } MinMax;
 //---------------------------------------
 // Printing
 //---------------------------------------
+RangeStr ref_display_range (const Range *r)
+{
+    RangeStr s;
+
+    sprintf (s.s, "range_id=%u ref.num_bits=%"PRIu64" is_set.num_bits=%"PRIu64" chrom_name=%.*s chrom=%d range_i=%u first_pos=%"PRId64
+             " last_pos=%"PRId64" gpos=%"PRId64" copied_first_index=%u copied_len=%u",
+             r->range_id, r->ref.num_of_bits, r->is_set.num_of_bits, r->chrom_name_len, r->chrom_name, r->chrom, r->range_i, 
+             r->first_pos, r->last_pos, r->gpos, r->copied_first_index, r->copied_len);
+    return s;
+}
 
 void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file) /* start_pos=end_pos=0 if entire ref */
 {
