@@ -28,8 +28,7 @@ void *codec_alloc (VBlock *vb, int size, double grow_at_least_factor)
             return vb->codec_bufs[i].data;
         }
 
-    ABORT ("Error: codec_alloc could not find a free buffer. vb_i=%d", vb->vblock_i);
-    return 0; // squash compiler warning
+    ABORT_R ("Error: codec_alloc could not find a free buffer. vb_i=%d", vb->vblock_i);
 }
 
 void codec_free (VBlock *vb, void *addr)
@@ -56,8 +55,7 @@ void codec_free_all (VBlock *vb)
 static bool codec_compress_error (VBlock *vb, SectionHeader *header, const char *uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,
                                   char *compressed, uint32_t *compressed_len, bool soft_fail) 
 {
-    ABORT ("Error in comp_compress: Unsupported codec: %s", codec_name (header->codec));
-    return false;
+    ABORT_R ("Error in comp_compress: Unsupported codec: %s", codec_name (header->codec));
 }
 
 

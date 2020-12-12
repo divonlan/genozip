@@ -46,8 +46,7 @@ DataType dt_get_txt_dt (DataType dt)
         if (dt_props[txt_dt].bin_type == dt)
             return txt_dt;
 
-    ABORT ("Error in dt_get_txt_dt: cannot find textual type for binary data type %s", dt_name (dt));
-    return 0;
+    ABORT_R ("Error in dt_get_txt_dt: cannot find textual type for binary data type %s", dt_name (dt));
 }
 
 const char *dt_name (DataType dt)

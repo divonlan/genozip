@@ -339,7 +339,7 @@ void flags_update (unsigned num_txt_files, const char **filenames)
     if (flag.pair) flags_verify_pair_rules (num_txt_files, filenames);
     
     // don't show progress or warning when outputing to stdout (note: we are "quiet" even if output doesn't go to the terminal
-    // because often it will be piped and ultimately go the terminal)
+    // because often it will be piped and ultimately go the terminal - a user can override this with --noisy)
     if (flag.to_stdout) flag.quiet=true; 
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end

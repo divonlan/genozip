@@ -192,7 +192,9 @@ extern void main_exit (bool show_stack, bool is_error);
 #define RETURNW(condition, ret, format, ...) { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }}
 #define RETURNW0(condition, ret, string)     { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n%s\n", string); } return ret; } }
 #define ABORT(format, ...)                   { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);}
+#define ABORT_R(format, ...) /*w/ return 0*/ { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); return 0;}
 #define ABORT0(string)                       { fprintf (stderr, "\n%s\n", string); exit_on_error(true);}
+#define ABORT0_R(string)                     { fprintf (stderr, "\n%s\n", string); exit_on_error(true); return 0; }
 #define WARN(format, ...)                    { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } }
 #define WARN0(string)                        { if (!flag.quiet) fprintf (stderr, "\n%s\n", string); }
 #define ASSERTGOTO(condition, format, ...)   { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); goto error; }}

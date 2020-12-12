@@ -153,7 +153,7 @@ void vb_initialize_evb(void)
 }
 
 // allocate an unused vb from the pool. seperate pools for zip and unzip
-VBlock *vb_get_vb (unsigned vblock_i)
+VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
 {
     // see if there's a VB avaiable for recycling
     unsigned vb_i; for (vb_i=0; vb_i < pool->num_vbs; vb_i++) {
@@ -177,7 +177,7 @@ VBlock *vb_get_vb (unsigned vblock_i)
         if (!pool->vb[vb_i]->in_use) break;
     }
 
-    ASSERT (vb_i < pool->num_vbs, "Error: VB pool is full - it already has %u VBs", pool->num_vbs)
+    ASSERT (vb_i < pool->num_vbs, "Error in vb_get_vb, task=%s: VB pool is full - it already has %u VBs", task_name, pool->num_vbs)
 
     // initialize VB fields that need to be a value other than 0
     VBlock *vb = pool->vb[vb_i];

@@ -28,11 +28,12 @@ typedef struct {
 } Thread;
 
 typedef struct {
+    const char *task_name;
     unsigned max_vb_id_so_far; 
     Buffer compute_threads_buf;
     Thread *compute_threads;
     VBlock *next_vb; // next vb to be dispatched
-    VBlock *processed_vb; // last vb for which caller got the processing results
+    VBlock *processed_vb[2]; // processed VBs returned to caller (up to 2 concurrently)
 
     bool input_exhausted;
     bool paused;
@@ -109,7 +110,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     progress_update (sofar, total, done);
 }
 
-Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
+Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigned previous_vb_i,
                             bool test_mode, bool is_last_file, bool cleanup_after_me,
                             const char *filename, // filename, or NULL if filename is unchanged
                             ProgressType prog, const char *prog_msg /* used if prog=PROGRESS_MESSAGE */)   
@@ -117,6 +118,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
     clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
     DispatcherData *dd = (DispatcherData *)CALLOC (sizeof(DispatcherData));
+    dd->task_name        = task_name;
     dd->next_vb_i        = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
     dd->max_threads      = max_threads;
     dd->is_last_file     = is_last_file;
@@ -221,7 +223,7 @@ VBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
 
     if (flag.show_threads) dispatcher_show_time ("Generate vb", -1, dd->next_vb_i);
 
-    dd->next_vb = vb_get_vb (dd->next_vb_i);
+    dd->next_vb = vb_get_vb (dd->task_name, dd->next_vb_i);
     dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->next_vb->id);
 
     return dd->next_vb;
@@ -283,13 +285,16 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
 
     if (flag.show_threads) dispatcher_show_time ("Join (end compute)", dd->next_thread_to_be_joined, th->vb->vblock_i);
 
-    dd->processed_vb = th->vb;
-    
+    VBlockP processed_vb = th->vb; // possibly NULL if no running compute threads
+
     memset (th, 0, sizeof(Thread));
     dd->num_running_compute_threads--;
     dd->next_thread_to_be_joined = (dd->next_thread_to_be_joined + 1) % MAX (1, dd->max_threads);
 
-    return dd->processed_vb;
+    if      (!dd->processed_vb[0]) return (dd->processed_vb[0] = processed_vb); 
+    else if (!dd->processed_vb[1]) return (dd->processed_vb[1] = processed_vb);
+    else
+        ABORT_R ("Error in dispatcher_get_processed_vb task=%s: processed VBs already handed over and not freed yet", dd->task_name);
 }
 
 bool dispatcher_has_free_thread (Dispatcher dispatcher)
@@ -318,19 +323,20 @@ void dispatcher_abandon_next_vb (Dispatcher dispatcher)
     dd->next_vb = NULL;
 }
 
-void dispatcher_finalize_one_vb (Dispatcher dispatcher)
+void dispatcher_recycle_vbs (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
-    if (dd->processed_vb) {
+    for (unsigned i=0; i < 2; i++) 
+        if (dd->processed_vb[i]) {
 
-        buf_test_overflows(dd->processed_vb, "dispatcher_finalize_one_vb"); // just to be safe, this isn't very expensive
+            buf_test_overflows(dd->processed_vb[i], "dispatcher_recycle_vbs"); // just to be safe, this isn't very expensive
 
-        if (flag.show_time) profiler_add (&evb->profile, &dd->processed_vb->profile);
+            if (flag.show_time) profiler_add (&evb->profile, &dd->processed_vb[i]->profile);
 
-        vb_release_vb (dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
-        dd->processed_vb = NULL;
-    }
+            vb_release_vb (dd->processed_vb[i]); // cleanup vb and get it ready for another usage (without freeing memory)
+            dd->processed_vb[i] = NULL;
+        }
 
     if (dd->prog == PROGRESS_PERCENT)
         dispatcher_show_progress (dispatcher);
@@ -353,7 +359,7 @@ bool dispatcher_is_done (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
-    return dd->input_exhausted && !dd->next_vb && !dd->processed_vb && !dd->num_running_compute_threads;
+    return dd->input_exhausted && !dd->next_vb && !dd->processed_vb[0] && !dd->processed_vb[1] && !dd->num_running_compute_threads;
 }
 
 bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
@@ -364,14 +370,15 @@ bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
 }
 
 // returns the number of VBs successfully outputted
-uint32_t dispatcher_fan_out_task (const char *filename,  // NULL to continue with previous filename
-                                  ProgressType prog,
-                                  const char *prog_msg,  // used if prog=PROGRESS_MESSAGE 
-                                  bool test_mode,
-                                  bool force_single_thread, 
-                                  DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
+uint32_t dispatcher_fan_out_task_do (const char *task_name,
+                                     const char *filename,  // NULL to continue with previous filename
+                                     ProgressType prog,
+                                     const char *prog_msg,  // used if prog=PROGRESS_MESSAGE 
+                                     bool test_mode,
+                                     bool force_single_thread, 
+                                     DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
-    Dispatcher dispatcher = dispatcher_init (force_single_thread ? 1 : global_max_threads, 0, test_mode, true, true, filename, prog, prog_msg);
+    Dispatcher dispatcher = dispatcher_init (task_name, force_single_thread ? 1 : global_max_threads, 0, test_mode, true, true, filename, prog, prog_msg);
     do {
         VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;
@@ -390,7 +397,7 @@ uint32_t dispatcher_fan_out_task (const char *filename,  // NULL to continue wit
 
             if (output) output (processed_vb);
             
-            dispatcher_finalize_one_vb (dispatcher);
+            dispatcher_recycle_vbs (dispatcher);
         }        
         
         // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - get one range
@@ -402,7 +409,7 @@ uint32_t dispatcher_fan_out_task (const char *filename,  // NULL to continue wit
 
             if (!next_vb->ready_to_dispatch) {
                 dispatcher_set_input_exhausted (dispatcher, true);
-                dispatcher_finalize_one_vb (dispatcher); 
+                dispatcher_recycle_vbs (dispatcher); 
             }
         }
 

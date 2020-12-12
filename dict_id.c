@@ -290,8 +290,7 @@ const char *dict_id_display_type (DataType dt, DictId dict_id)
     if (dict_id_is_type_1 (dict_id)) return dt_props[dt].stat_dict_types[1]; 
     if (dict_id_is_type_2 (dict_id)) return dt_props[dt].stat_dict_types[2]; 
 
-    ABORT0 ("Error in dict_id_display_type");
-    return 0;    
+    ABORT0_R ("Error in dict_id_display_type");
 }
 
 // print the dict_id - NOT thread safe, for use in execution-termination messages

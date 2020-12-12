@@ -725,8 +725,7 @@ CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index)
     for (uint64_t i=0; i < ctx->nodes.len; i++)
         if (nodes[i].word_index.n == word_index) return &nodes[i];
 
-    ABORT ("ctx_get_node_by_word_index failed to find word_index=%d in did_i=%u", word_index, ctx->did_i);
-    return NULL; // never reaches here
+    ABORT_R ("ctx_get_node_by_word_index failed to find word_index=%d in did_i=%u", word_index, ctx->did_i);
 }
 
 // PIZ: get snip by normal word index (doesn't support WORD_INDEX_*)

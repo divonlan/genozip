@@ -106,8 +106,7 @@ bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bool soft
         }
     }
 
-    ABORT ("Error: invalid VCF file - it does not contain a field header line; tab_count=%u", tab_count+1);
-    return false; // avoid complication warnings
+    ABORT_R ("Error: invalid VCF file - it does not contain a field header line; tab_count=%u", tab_count+1);
 }
 
 // genocat: remove FORMAT and sample names from the vcf header line, in case of --drop-genotypes

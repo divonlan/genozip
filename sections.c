@@ -239,9 +239,8 @@ SectionType sections_st_by_name (const char *name)
         if (!strcmp (&abouts[st].name[4], name))
             return st;
 
-    ABORT ("%s: bad argument for --show-sections - \"%s\", is not a recognized section type", 
+    ABORT_R ("%s: bad argument for --show-sections - \"%s\", is not a recognized section type", 
            global_cmd, name);
-    return 0; // silence compiler warning
 }
 
 uint32_t st_header_size (SectionType sec_type)

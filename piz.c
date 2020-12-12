@@ -376,7 +376,7 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
         if (flag.test || flag.md5) 
             ASSERT0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
 
-        dispatcher = dispatcher_init (flag.xthreads ? 1 : global_max_threads, 
+        dispatcher = dispatcher_init ("piz", flag.xthreads ? 1 : global_max_threads, 
                                       0, flag.test, is_last_z_file, true, z_file->basename, PROGRESS_PERCENT, 0);
     }
     
@@ -454,7 +454,7 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
                 dispatcher_set_input_exhausted (dispatcher, true);
 
                 if (header_only_file)
-                    dispatcher_finalize_one_vb (dispatcher);
+                    dispatcher_recycle_vbs (dispatcher);
             }
         }
 
@@ -469,7 +469,7 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
             z_file->num_vbs += 2;
             z_file->txt_data_so_far_single += processed_vb_1->vb_data_size + processed_vb_2->vb_data_size; 
 
-            dispatcher_finalize_one_vb (dispatcher);
+            dispatcher_recycle_vbs (dispatcher);
         }
 
         // PRIORITY 2 (not interleaving): Wait for the first thread (by sequential order) to complete and write data
@@ -482,7 +482,7 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
             z_file->num_vbs++;
             z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
 
-            dispatcher_finalize_one_vb (dispatcher);
+            dispatcher_recycle_vbs (dispatcher);
         }
     }
 

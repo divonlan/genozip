@@ -448,7 +448,7 @@ void zip_one_file (const char *txt_basename,
 
     // normally global_max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (flag.xthreads ? 1 : global_max_threads, 
+    Dispatcher dispatcher = dispatcher_init ("zip", flag.xthreads ? 1 : global_max_threads, 
                                              prev_file_last_vb_i, false, is_last_file, z_closes_after_me,
                                              txt_basename, PROGRESS_PERCENT, 0);
 
@@ -504,7 +504,7 @@ void zip_one_file (const char *txt_basename,
 
             z_file->num_vbs++;
             
-            dispatcher_finalize_one_vb (dispatcher);
+            dispatcher_recycle_vbs (dispatcher);
         }        
         
         // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - read one
@@ -553,7 +553,7 @@ void zip_one_file (const char *txt_basename,
                 // update to the conclusive size. it might have been 0 (eg STDIN if HTTP) or an estimate (if compressed)
                 txt_file->txt_data_size_single = txt_file->txt_data_so_far_single; 
 
-                dispatcher_finalize_one_vb (dispatcher); 
+                dispatcher_recycle_vbs (dispatcher); 
             }
         }
         else  // nothing for us to do right now, just wait
