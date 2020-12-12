@@ -659,7 +659,7 @@ static bool file_open_z (File *file)
 
     ASSERT (!file->is_remote, "Error: it is not possible to access remote genozip files; when attempting to open %s", file->name);
     
-    if (!flag.test_seg)
+    if (!flag.test_seg || flag.reading_reference)
         file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, file->mode);
 
     file_initialize_z_file_data (file);
@@ -705,7 +705,9 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
         ASSINP (mode != READ || file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
     
-        if ((mode == WRITE || mode == WRITEREAD) && file_exists && !flag.force && !(supertype==TXT_FILE && flag.test))
+        if ((mode == WRITE || mode == WRITEREAD) && file_exists && !flag.force && 
+            !(supertype==TXT_FILE && flag.test) && // testing piz
+            !(supertype==Z_FILE && flag.test_seg)) // test-segging zip
             file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
         // copy filename 
