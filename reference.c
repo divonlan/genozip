@@ -35,7 +35,7 @@ Buffer ranges                       = EMPTY_BUFFER;
 
 Range genome = {}, genome_rev = {}; // used in ZIP/PIZ of fasta and fastq with a reference - we have only one range that is the entire genome (this points to the first entry in ranges)
 Buffer genome_ref_copy              = EMPTY_BUFFER; // saved copy of genome.ref, used when compressing multiple files with REF_EXT_STORE - which compacts ranges - recovering between files
-Buffer ranges_copy                  = EMPTY_BUFFER;     // saved copy of ranges in initialize state, for same purpose
+Buffer ranges_copy                  = EMPTY_BUFFER; // saved copy of ranges in initialize state, for same purpose
 
 PosType genome_size = 0;
 
@@ -72,11 +72,11 @@ Digest ref_md5 = {};
 #define ref_is_range_used(r) ((r)->ref.num_of_bits && ((r)->is_set.num_of_bits || flag.make_reference))
 
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
-void ref_unload_reference (bool force_clean_all)
+void ref_unload_reference (bool is_last_file)
 {
     // in case of REF_EXTERNAL/REF_EXT_STORE, we keep the reference for other files on the command line
     // note: in PIZ we never cleanup external references as they can never change (the user can only specify one --reference)
-    if ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && !force_clean_all) {  
+    if ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && !is_last_file) {  
         
         // zip sets 1 to nucleotides used. we clear it for the next file.
         if (primary_command == ZIP)
