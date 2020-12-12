@@ -98,8 +98,10 @@ extern void ref_alt_chroms_compress (void);
 
 #define ref_is_nucleotide_set(range,idx) ((bool)bit_array_get (&(range)->is_set, (idx)))
 
-#define ref_get_nucleotide(range,idx)   acgt_decode[(bit_array_get (&(range)->ref, (idx) * 2 + 1) << 1) | \
-                                                     bit_array_get (&(range)->ref, (idx) * 2)]
+#define ref_is_idx_in_range(range,idx) ((idx) < (range)->ref.num_of_bits / 2)
+
+#define ref_get_nucleotide(range,idx)  acgt_decode[(bit_array_get (&(range)->ref, (idx) * 2 + 1) << 1) | \
+                                                    bit_array_get (&(range)->ref, (idx) * 2)]
 
 // display
 typedef struct { char s[300]; } RangeStr;

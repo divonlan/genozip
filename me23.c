@@ -194,7 +194,12 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     // get the value of the loaded reference at this position    
     const Range *range = ref_piz_get_range (vb, pos, 1);
     ASSERT (range, "Error: Failed to find the site chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
+
     uint32_t idx = pos - range->first_pos;
+
+    ASSERT (ref_is_idx_in_range (range, idx), "Error in sam_piz_m232vcf_GENOTYPE: idx=%u but range has only %"PRIu64" nucleotides. pos=%"PRId64" range=%s", 
+            idx, range->ref.num_of_bits / 2, pos, ref_display_range (range).s)
+
     char ref_b = ref_get_nucleotide (range, idx);
 
     // get GENOTYPE from txt_data
@@ -217,7 +222,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     bool is_alt_1 = (b1 != ref_b) ;
     bool is_alt_2 = (b2 != ref_b) && (reconstructed_len==2);
     int num_uniq_alts = is_alt_1 + is_alt_2 - (is_alt_1 && (b1==b2));
-    
+
     switch (num_uniq_alts) {
         case 0: RECONSTRUCT1 ('.'); break; // no alt allele
         case 1: RECONSTRUCT1 (is_alt_1 ? b1 : b2); break;

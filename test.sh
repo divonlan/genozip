@@ -323,8 +323,8 @@ batch_special_algs()
     done
 }
 
-# Test translations
-batch_translations()
+# Test SAM/BAM translations
+batch_sam_translations()
 {
     batch_print_header
 
@@ -343,7 +343,12 @@ batch_translations()
         test_translate_sambam_to_fastq $file
         test_translate_sambam_to_fastq ${file%.bam}.sam
     done
+}
 
+# Test 23andMe translations
+batch_23andMe_translations()
+{
+    batch_print_header
     test_translate_23andMe_to_vcf test.genome_Full.txt
 }
 
@@ -574,14 +579,15 @@ if (( $1 <= 2  )) ; then  batch_basic                  ; fi
 if (( $1 <= 3  )) ; then  batch_precompressed          ; fi
 if (( $1 <= 4  )) ; then  batch_bgzf                   ; fi
 if (( $1 <= 5  )) ; then  batch_special_algs           ; fi
-if (( $1 <= 6  )) ; then  batch_translations           ; fi
-if (( $1 <= 7  )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 8  )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 9  )) ; then  batch_real_world_subsets     ; fi
-if (( $1 <= 10 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 11 )) ; then  batch_external_tools         ; fi
-if (( $1 <= 12 )) ; then  batch_reference              ; fi
-if (( $1 <= 13 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 6  )) ; then  batch_sam_translations       ; fi
+if (( $1 <= 7  )) ; then  batch_23andMe_translations   ; fi
+if (( $1 <= 8  )) ; then  batch_genocat_tests          ; fi
+if (( $1 <= 9  )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 10 )) ; then  batch_real_world_subsets     ; fi
+if (( $1 <= 11 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 12 )) ; then  batch_external_tools         ; fi
+if (( $1 <= 13 )) ; then  batch_reference              ; fi
+if (( $1 <= 14 )) ; then  batch_make_reference         ; fi
 
 printf "\nALL GOOD!\n"
 
