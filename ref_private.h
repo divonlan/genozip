@@ -18,8 +18,6 @@ extern void ref_lock_initialize_denovo_genome (void);
 extern void ref_lock_free (void);
 
 // contigs stuff
-typedef enum { WI_REF_CONTIG, WI_ZFILE_CHROM } GetWordIndexType;
-extern WordIndex ref_contigs_get_word_index (const char *chrom_name, unsigned chrom_name_len, GetWordIndexType wi_type, bool soft_fail);
 extern uint32_t ref_contigs_num_contigs (void);
 extern void ref_contigs_free (void);
 extern const char *ref_contigs_get_chrom_snip (WordIndex chrom_index, const char **snip, uint32_t *snip_len);

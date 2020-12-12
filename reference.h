@@ -72,6 +72,9 @@ extern void ref_make_ref_init (void);
 extern void ref_generate_reverse_complement_genome (void);
 
 // contigs stuff
+typedef enum { WI_REF_CONTIG, WI_ZFILE_CHROM } GetWordIndexType;
+extern WordIndex ref_contigs_get_word_index (const char *chrom_name, unsigned chrom_name_len, GetWordIndexType wi_type, bool soft_fail);
+
 extern void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs);
 extern uint32_t ref_num_loaded_contigs (void);
 extern PosType ref_contigs_get_contig_length (const char *chrom_name, unsigned chrom_name_len);
