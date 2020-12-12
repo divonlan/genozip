@@ -637,9 +637,9 @@ static bool file_open_z (File *file)
                 RETURNW (false, true, "Skipping %s - it doesn't have a .genozip extension", file_printname (file))
             else {
                 if (flag.reading_reference)
-                    ABORT ("%s: with --reference or --REFERENCE, you must specify a genozip reference file (.ref.genozip extension)\n"
+                    ABORT ("%s: You specified file \"%s\", but with --reference or --REFERENCE, you must specify a genozip reference file (.ref.genozip extension)\n"
                            "Tip: You can create a genozip reference file from a FASTA file with 'genozip --make-reference myfasta.fa'",
-                           global_cmd)
+                           global_cmd, file->name)
                 else
                     ABORT ("%s: file %s must have a " GENOZIP_EXT " extension", global_cmd, file_printname (file));
             }
