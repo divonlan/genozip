@@ -102,7 +102,38 @@ static inline uint32_t aligner_get_match_len (VBlock *vb, const BitArray *seq_bi
     return (uint32_t)seq_bits->num_of_bits - nonmatches; // this is the number of matches
 }
 
-// returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. returns false if no match found.
+// converts a string sequence to a 2-bit bitmap
+static inline BitArray aligner_seq_to_bitmap (const char *seq, word_t seq_len, 
+                                              word_t *bitmap_words,  // allocated by caller
+                                              bool *seq_is_all_actg) // optional out
+{
+    // covert seq to 2-bit array
+    BitArray seq_bits = { .num_of_bits  = seq_len * 2, 
+                          .num_of_words = roundup_bits2words64(seq_len * 2), 
+                          .words        = bitmap_words,
+                          .type         = BITARR_REGULAR };
+
+    if (seq_is_all_actg) *seq_is_all_actg = true; // starting optimistic
+
+    for (word_t base_i=0; base_i < seq_len; base_i++) {
+        uint8_t encoding = nuke_encode[(uint8_t)seq[base_i]];
+    
+        if (encoding == 4) { // not A, C, G or T - usually N
+            if (seq_is_all_actg) *seq_is_all_actg = false;
+            encoding = 0; // arbitrarily convert 4 (any non-actg is 4) to 0 ('A')
+        }
+    
+        bit_array_assign2 (&seq_bits, (base_i << 1), encoding);
+    }
+
+    bit_array_clear_excess_bits_in_top_word (&seq_bits);
+
+    return seq_bits;
+}
+
+// returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. 
+// returns false if no match found.
+// note: matches that imply a negative GPOS (i.e. their beginning is aligned to before the start of the genome), aren't consisdered
 static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
                                           bool *is_forward, bool *is_all_ref) // out
 {
@@ -114,28 +145,12 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
     
     PosType gpos, best_gpos = NO_GPOS; // match not found yet
     bool best_is_forward = false;
-    bool maybe_perfect_match = true;
 
-    // covert seq to 2-bit array
-    BitArray seq_bits = { .num_of_bits  = seq_len * 2, 
-                          .num_of_words = roundup_bits2words64(seq_len * 2), 
-                          .type         = BITARR_REGULAR };
-    word_t seq_bits_words[seq_bits.num_of_words];
-    seq_bits.words = seq_bits_words; 
-
-    for (word_t base_i=0; base_i < seq_len_64; base_i++) {
-        uint8_t encoding = nuke_encode[(uint8_t)seq[base_i]];
+    // convert seq to a bitmap
+    bool maybe_perfect_match;
+    word_t seq_bits_words[roundup_bits2words64(seq_len * 2)];
+    BitArray seq_bits = aligner_seq_to_bitmap (seq, seq_len, seq_bits_words, &maybe_perfect_match);
     
-        if (encoding == 4) { // not A, C, G or T - usually N
-            maybe_perfect_match = false; // this cannot be a perfect match
-            encoding = 0; // arbitrary
-        }
-    
-        bit_array_assign2 (&seq_bits, (base_i << 1), encoding);
-    }
-
-    bit_array_clear_excess_bits_in_top_word (&seq_bits);
-
     //ref_print_bases (&seq_bits, "\nseq_bits fwd", true);
     //ref_print_bases (&seq_bits, "seq_bits rev", false);
 
