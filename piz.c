@@ -235,7 +235,8 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
             ref_load_stored_reference();
 
             // load the refhash, if we are compressing FASTA or FASTQ
-            if (flag.reading_reference && primary_command == ZIP && flag.ref_use_aligner) 
+            if ((flag.reading_reference && primary_command == ZIP && flag.ref_use_aligner) ||
+                (flag.show_ref_hash && exe_type == EXE_GENOCAT))
                 refhash_load();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)

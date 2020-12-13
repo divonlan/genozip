@@ -148,7 +148,8 @@ const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
 // I/O thread: called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
 void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits) // optional outs
 {
-    ASSERT0 (flag.reading_reference, "Error in sections_get_refhash_details: can only be called while reading reference");
+    ASSERT0 (flag.reading_reference || flag.show_ref_hash, 
+             "Error in sections_get_refhash_details: can only be called while reading reference");
 
     for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the refhash sections are near the end
         const SectionListEntry *sl = ENT (const SectionListEntry, z_file->section_list_buf, i);
