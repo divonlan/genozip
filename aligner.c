@@ -117,7 +117,9 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
     bool maybe_perfect_match = true;
 
     // covert seq to 2-bit array
-    BitArray seq_bits = { .num_of_bits = seq_len * 2, .num_of_words = roundup_bits2words64(seq_len * 2)};
+    BitArray seq_bits = { .num_of_bits  = seq_len * 2, 
+                          .num_of_words = roundup_bits2words64(seq_len * 2), 
+                          .type         = BITARR_REGULAR };
     word_t seq_bits_words[seq_bits.num_of_words];
     seq_bits.words = seq_bits_words; 
 
