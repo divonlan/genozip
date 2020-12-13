@@ -358,7 +358,10 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
     // End Of Line    
     SEG_EOL (FASTQ_E2L, true);
 
-    ASSSEG (field_len == dl->seq_len, field_start, "%s: Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ=%.*s\nQUAL==%.*s",
+    ASSSEG (str_is_in_range (field_start, field_len, 33, 126), field_start, "%s: Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
+            global_cmd, field_len, field_start);
+
+    ASSSEG (field_len == dl->seq_len, field_start, "%s: Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
             global_cmd, dl->seq_len, field_len, dl->seq_len, seq_start, field_len, field_start);
  
     return next_field;
