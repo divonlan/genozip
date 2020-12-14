@@ -39,7 +39,7 @@ typedef struct Buffer {
     uint32_t code_line;
 } Buffer;
 
-#define EMPTY_BUFFER ((Buffer){})
+#define EMPTY_BUFFER {}
 
 #define ARRAY(element_type, name, buf) element_type *name = ((element_type *)((buf).data)) 
 
