@@ -39,7 +39,7 @@ extern void zfile_uncompress_section (VBlockP vb, void *section_header,
                                       const char *uncompressed_data_buf_name,
                                       uint32_t expected_vb_i, SectionType expected_section_type);
 
-extern void *zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, SectionType expected_sec_type);
+extern SectionHeader *zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, SectionType expected_sec_type);
 
 extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
 

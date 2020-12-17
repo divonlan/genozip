@@ -151,7 +151,7 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same,
     ASSERT (override_iterator || iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), "Error while reconstrucing line %u vb_i=%u: iterator for %s reached end of data",
             vb->line_i, vb->vblock_i, ctx->name);
             
-    word_index = base250_decode (&iterator->next_b250, !all_the_same);  // if this line has no non-GT subfields, it will not have a ctx 
+    word_index = base250_decode (&iterator->next_b250, !all_the_same, ctx->name);  // if this line has no non-GT subfields, it will not have a ctx 
 
     // case: a Container item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
     if (word_index == WORD_INDEX_MISSING_SF) {

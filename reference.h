@@ -49,11 +49,12 @@ extern RefLock ref_lock (PosType gpos_start, uint32_t seq_len);
 extern RefLock ref_unlock (RefLock lock);
 extern RefLock ref_lock_range (int32_t range_id);
 
-typedef enum { RT_NONE,     // value of ranges.param if ranges is unallocated
-               RT_MAKE_REF, // used in --make-ref one range per vb of fasta reference file - ranges in order of the fasta file
-               RT_DENOVO,   // used in SAM with REF_INTERNAL - an large array of Range's, hashed by the chrom and pos
-               RT_LOADED    // one Range per chrom (contig), overlayed on genome
-              } RangesType;
+typedef enum { RT_NONE,      // value of ranges.param if ranges is unallocated
+               RT_MAKE_REF,  // used in --make-ref one range per vb of fasta reference file - ranges in order of the fasta file
+               RT_DENOVO,    // used in SAM with REF_INTERNAL - an large array of Range's, hashed by the chrom and pos
+               RT_LOADED,    // one Range per chrom (contig), overlayed on genome
+               RT_ONE_CONTIG // used by genobwa
+             } RangesType;
               
 extern void ref_initialize_ranges (RangesType ranges_type);
 extern void ref_compress_ref (void);
@@ -70,6 +71,7 @@ extern Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_le
 extern const char *ref_get_cram_ref (void);
 extern void ref_make_ref_init (void);
 extern void ref_generate_reverse_complement_genome (void);
+extern Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name);
 
 // contigs stuff
 typedef enum { WI_REF_CONTIG, WI_ZFILE_CHROM } GetWordIndexType;
@@ -101,7 +103,7 @@ extern void ref_alt_chroms_compress (void);
 
 #define ref_is_nucleotide_set(range,idx) ((bool)bit_array_get (&(range)->is_set, (idx)))
 
-#define ref_is_idx_in_range(range,idx) ((idx) < (range)->ref.num_of_bits / 2)
+#define ref_is_idx_in_range(range,idx) ((idx) < (range)->ref.nbits / 2)
 
 #define ref_get_nucleotide(range,idx)  acgt_decode[(bit_array_get (&(range)->ref, (idx) * 2 + 1) << 1) | \
                                                     bit_array_get (&(range)->ref, (idx) * 2)]

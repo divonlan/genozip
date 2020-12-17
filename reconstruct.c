@@ -187,16 +187,19 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
                 DT_FUNC (vb, reconstruct_seq) (vb, base_ctx, snip, snip_len);
                 break;
 
-            default: ABORT ("Unsupported lt_type=%u for SNIP_LOOKUP or SNIP_OTHER_LOOKUP", base_ctx->ltype);
+            default: ABORT ("Error in reconstruct_one_snip: Unsupported lt_type=%u for SNIP_LOOKUP or SNIP_OTHER_LOOKUP", base_ctx->ltype);
         }
 
         break;
     }
-    case SNIP_PAIR_LOOKUP:
+    case SNIP_PAIR_LOOKUP: {
+        ASSERT (snip_ctx->pair_b250_iter.next_b250, "Error in reconstruct_one_snip: no pair_1 data for ctx=%s, while reconstructing pair_2 vb=%u", 
+                snip_ctx->name, vb->vblock_i);
+
         ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags.all_the_same, &snip_ctx->pair_b250_iter, &snip, &snip_len);
         reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len, reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
         break;
-
+    }
     case SNIP_SELF_DELTA:
         new_value.i = reconstruct_from_delta (vb, snip_ctx, base_ctx, snip+1, snip_len-1, reconstruct);
         have_new_value = true;

@@ -100,13 +100,8 @@ static void *codec_bsc_malloc (void *vb, size_t size)
     return mem;
 }
 
-static void codec_bsc_free (void *vb, void *addr)
-{
-    codec_free ((VBlock *)vb, addr);
-}
-
 void codec_bsc_initialize (void)
 {
-    bsc_init_full (LIBBSC_FEATURE_FASTMODE, codec_bsc_malloc, codec_bsc_free);
+    bsc_init_full (LIBBSC_FEATURE_FASTMODE, codec_bsc_malloc, codec_free);
 }
 

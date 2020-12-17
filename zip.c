@@ -160,7 +160,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
             // 1) it has local (bc if no-b250/dict-from-prev-vb/no-local piz can't distiguish between seg_id-with-b250-all-the-same-word-index-0 vs all-singleton-pushed-to-local)
             // 2) it has flags that need to be passed to piz (we can get rid of this limitation - bug 224), or
             // 3) the one snip is SELF_DELTA
-            if (base250_decode ((const uint8_t **)&ctx->b250.data, false) == 0 && 
+            if (base250_decode ((const uint8_t **)&ctx->b250.data, false, ctx->name) == 0 && 
                 !ctx->local.len &&
                 ! (*(uint8_t *)&ctx->flags) &&
                 *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) // word_index=0 is the first word in the dictionary
@@ -390,7 +390,7 @@ static void zip_compress_one_vb (VBlock *vb)
         random_access_merge_in_vb (vb);
 
     // generate & compress b250 and local data for all ctxs (for reference files we don't output VBs)
-    if (!flag.make_reference && !flag.test_seg)
+    if (!flag.make_reference && !flag.seg_only)
         zip_generate_and_compress_ctxs (vb);
 
     // compress data-type specific sections
@@ -497,7 +497,7 @@ void zip_one_file (const char *txt_basename,
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
             txt_line_i += (uint32_t)processed_vb->lines.len;
 
-            if (!flag.make_reference && !flag.test_seg)
+            if (!flag.make_reference && !flag.seg_only)
                 zfile_output_processed_vb (processed_vb);
             
             zip_update_txt_counters (processed_vb);
@@ -564,7 +564,7 @@ void zip_one_file (const char *txt_basename,
     // go back and update some fields in the txt header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
     Digest single_component_digest = DIGEST_NONE;
-    if (z_file && !flag.test_seg && !z_file->redirected && txt_header_header_pos >= 0) 
+    if (z_file && !flag.seg_only && !z_file->redirected && txt_header_header_pos >= 0) 
         success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_digest);
 
     // write the BGZF section containing BGZF block sizes, if this txt file is compressed with BGZF
@@ -574,7 +574,7 @@ void zip_one_file (const char *txt_basename,
 finish:
     z_file->txt_disk_so_far_bind  += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
-    if (z_closes_after_me && !flag.test_seg)
+    if (z_closes_after_me && !flag.seg_only)
         zip_write_global_area (dispatcher, single_component_digest);
 
     zip_display_compression_ratio (dispatcher, flag.bind ? DIGEST_NONE : single_component_digest, z_closes_after_me); // Done for reference + final compression ratio calculation

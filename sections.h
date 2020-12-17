@@ -64,7 +64,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 // endianity bugs will be discovered more readily this way
 
 // goes into SectionHeader.flags
-typedef union BgzfFlags {  
+typedef union SectionFlags {  
     uint8_t flags;
 
     struct FlagsGenozipHeader {
@@ -80,7 +80,10 @@ typedef union BgzfFlags {
 
     struct FlagsBgzf {
         uint8_t has_eof_block    : 1;
-        uint8_t libdeflate_level : 4; // 0-12, 15 means unknown
+        uint8_t level            : 4; // 0-12 for libdeflate or 0-9 for zlib level: 15 means unknown
+#define LIBD 0 // libdeflate
+#define LIBZ 1 // zlib
+        uint8_t library          : 1; // LIBD or LIBZ. ignored if level=15 (introduced 9.0.16)
     } bgzf;
 
     struct FlagsCtx {
@@ -295,7 +298,7 @@ extern bool sections_get_next_section_of_type2 (const SectionListEntry **sl_ent,
 
 extern uint32_t sections_count_sections (SectionType st);
 extern const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
-extern void sections_get_prev_file_vb_i (const SectionListEntry *sl, uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i);
+extern void sections_get_prev_component_vb_i (const SectionListEntry *sl, uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);

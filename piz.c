@@ -119,24 +119,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
 {
     START_TIMER;
 
-    ASSERT0 (!flag.reference || genome.ref.num_of_bits, "Error in piz_uncompress_one_vb: reference is not loaded correctly");
-
-    // we read the header and ctxs for all data_types
-    ARRAY (const uint32_t, section_index, vb->z_section_headers); 
-
-    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
-    vb->first_line       = BGEN32 (header->first_line);      
-    vb->lines.len        = BGEN32 (header->num_lines);       
-    vb->longest_line_len = BGEN32 (header->longest_line_len);
-    vb->digest_so_far    = header->digest_so_far;
-
-    // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
-    // because the dispatcher is re-initialized for every txt component
-    if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
-
-    if (flag.show_vblocks) 
-        fprintf (info_stream, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
-                 vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
+    ASSERT0 (!flag.reference || genome.ref.nbits, "Error in piz_uncompress_one_vb: reference is not loaded correctly");
 
     DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
 
@@ -264,7 +247,21 @@ static bool piz_read_one_vb (VBlock *vb)
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
     
     int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sl++); 
-    vb->vb_data_size = BGEN32 (((SectionHeaderVbHeader *)vb->z_data.data)->vb_data_size); // needed by bgzf_calculate_blocks_one_vb
+
+    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)ENT (char, vb->z_data, vb_header_offset);
+    vb->vb_data_size     = BGEN32 (header->vb_data_size); 
+    vb->first_line       = BGEN32 (header->first_line);      
+    vb->lines.len        = BGEN32 (header->num_lines);       
+    vb->longest_line_len = BGEN32 (header->longest_line_len);
+    vb->digest_so_far    = header->digest_so_far;
+
+    // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
+    // because the dispatcher is re-initialized for every txt component
+    if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
+
+    if (flag.show_vblocks) 
+        fprintf (info_stream, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
+                 vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
     ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
@@ -324,13 +321,14 @@ static Digest piz_one_file_verify_digest (Digest original_file_digest)
 }
 
 // returns false if VB was dispatched, and true if vb was skipped
-bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSectionListEntryP sl_ent)
+bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSectionListEntryP sl_ent, uint32_t component_i)
 {
     static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
     if (!random_access_is_vb_included (sl_ent->vblock_i, &region_ra_intersection_matrix)) return true; // skip this VB if not included
 
     VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
-    
+    next_vb->component_i = component_i;
+
     if (region_ra_intersection_matrix.data) {
         buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix");
         buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
@@ -349,7 +347,7 @@ bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSectionListEntryP sl_ent)
 }
 
 // called once per components reconstructed txt_file: i.e.. if unbinding there will be multiple calls.
-void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is_last_z_file)
+void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z_file)
 {
     static Dispatcher dispatcher = NULL; // static dispatcher - with flag.unbind, we use the same dispatcher when pizzing components
     static ConstSectionListEntryP sl_ent = NULL, sl_ent_leaf_2=NULL; // preserve for unbinding multiple files
@@ -361,7 +359,7 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
     static DataType data_type = DT_NONE; 
     bool no_more_headers = false;
 
-    if (unbind_component_i == 0) {
+    if (component_i == 0) {
 
         data_type = piz_read_global_area (&original_file_digest);
         if (data_type == DT_NONE || flag.reading_reference) {
@@ -396,7 +394,7 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
 
     bool do_interleave = (flag.interleave && !flag.reading_reference);
     bool header_only_file = true; // initialize - true until we encounter a VB header
-    unsigned txt_header_i=0;
+    bool first_component_this_txtfile = true;
     bool is_leaf_2 = false; // used when interleaving - true if we are reading a VB from the 2nd leaf
 
     while (!dispatcher_is_done (dispatcher)) {
@@ -422,19 +420,24 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
                 if (flag.one_vb && flag.one_vb != (*sl_p)->vblock_i) // we want only one VB, but not this one
                     { (*sl_p)++; continue; }
 
-                header_only_file &= piz_dispatch_one_vb (dispatcher, (*sl_p));  // function returns true if VB was skipped
+                header_only_file &= piz_dispatch_one_vb (dispatcher, (*sl_p), component_i + is_leaf_2);  // function returns true if VB was skipped
 
                 // if we're interleaving - next VB will be from the opposite leaf
                 if (do_interleave) is_leaf_2 = !is_leaf_2;
             } 
 
-            // case SEC_TXT_HEADER when concatenating or first TXT_HEADER when unbinding 
+            // case SEC_TXT_HEADER when concatenating or first TXT_HEADER when unbinding: proceed with this component 
             // note: this never happens in the 2nd leaf when interleaving, because we skipped the header
-            else if (another_header && (!flag.unbind || !txt_header_i)) {
-                
-                txt_header_i++;
-                txtfile_genozip_to_txt_header (sl_ent, unbind_component_i, (txt_header_i>=2 ? NULL : &original_file_digest)); // read header - it will skip 2nd+ txt header if concatenating
+            else if (another_header && (!flag.unbind || first_component_this_txtfile)) {
 
+                txtfile_genozip_to_txt_header (sl_ent,  
+                                               first_component_this_txtfile ? &original_file_digest : NULL); // NULL means skip txt header (2nd+ component if concatenating)
+                
+                if (!first_component_this_txtfile) 
+                    component_i += flag.interleave ? 2 : 1; 
+
+                first_component_this_txtfile = false;
+                
                 dispatcher_resume (dispatcher);  // in case it was paused by previous component when unbinding
 
                 if (flag.header_only) goto finish;
@@ -465,7 +468,7 @@ void piz_one_file (uint32_t unbind_component_i /* 0 if not unbinding */, bool is
             VBlock *processed_vb_2 = dispatcher_get_processed_vb (dispatcher, NULL); 
 
             // write the two VBs - interleaving their lines
-            txtfile_write_one_vblock_interleave (processed_vb_1, processed_vb_2);
+            fastq_txtfile_write_one_vblock_interleave (processed_vb_1, processed_vb_2);
 
             z_file->num_vbs += 2;
             z_file->txt_data_so_far_single += processed_vb_1->vb_data_size + processed_vb_2->vb_data_size; 

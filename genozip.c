@@ -357,7 +357,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         flag.out_dt = DT_SAM;
 
     // if this is a bound file, and we don't have --unbind or --force, we ask the user
-    if (z_file->num_components >= 2 && !flag.unbind && !flag.force)
+    if (z_file->num_components >= 2 && !flag.unbind && !flag.force && !flag.out_filename)
         main_ask_about_unbind();
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
@@ -392,9 +392,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
     for (uint32_t component_i=0; component_i < z_file->num_components; component_i += flag.unbind ? 1 + flag.interleave : z_file->num_components) {
         piz_one_file (component_i, is_last_z_file);
-
-        if (!flag.to_stdout)  // don't close stdout - we might still need it for the next file
-            file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
+        file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
     }
 
     file_close (&z_file, false, false);

@@ -96,10 +96,10 @@ bool sections_get_next_section_of_type2 (const SectionListEntry **sl_ent, // opt
 }
 
 // find the first and last vb_i of a the immediately previous bound file, start from an sl in this file
-void sections_get_prev_file_vb_i (const SectionListEntry *sl, // any sl of the current file
+void sections_get_prev_component_vb_i (const SectionListEntry *sl, // any sl of the current file
                                   uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i) //out
 {
-#   define SAFTEY ASSERT0 ((char*)sl > z_file->section_list_buf.data, "Error in sections_get_prev_file_vb_i: cannot find previous file VBs")
+#   define SAFTEY ASSERT0 ((char*)sl > z_file->section_list_buf.data, "Error in sections_get_prev_component_vb_i: cannot find previous file VBs")
 
     // search back to current file's txt header
     do { SAFTEY; sl--; } while (sl->section_type != SEC_TXT_HEADER);
@@ -155,7 +155,7 @@ void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bi
         const SectionListEntry *sl = ENT (const SectionListEntry, z_file->section_list_buf, i);
         if (sl->section_type == SEC_REF_HASH) {
 
-            SectionHeaderRefHash *header = zfile_read_section_header (evb, sl->offset, 0, SEC_REF_HASH);
+            SectionHeaderRefHash *header = (SectionHeaderRefHash *)zfile_read_section_header (evb, sl->offset, 0, SEC_REF_HASH);
             if (num_layers) *num_layers = header->num_layers;
             if (base_layer_bits) *base_layer_bits = header->layer_bits + header->layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
 

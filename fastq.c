@@ -20,6 +20,30 @@
 #include "aligner.h"
 #include "stats.h"
 
+//------------------
+// GENOBWA STUFF
+//------------------
+
+static WordIndex genobwa_chrom_index = WORD_INDEX_NONE;
+static Buffer genobwa_hash_buf = EMPTY_BUFFER;
+static BitArray *genobwa_hash = NULL;
+
+WordIndex fastq_get_genobwa_chrom (void) {  }
+
+// Called by thread I/O to initialize for a new genozip file
+static inline void fastq_genobwa_initialize (void)
+{
+
+}
+
+static inline bool fastq_genobwa_is_seq_included (const char *seq, uint32_t seq_len)
+{
+}
+
+//-----------------------
+// TXTFILE stuff
+//-----------------------
+
 // returns true if txt_data[txt_i] is the end of a FASTQ line (= block of 4 lines in the file); -1 if out of data
 static inline int fastq_is_end_of_line (VBlock *vb, uint32_t first_i, int32_t txt_i) // index of a \n in txt_data
 {
@@ -61,7 +85,6 @@ int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 out_of_data:
     return -1; // cannot find end-of-line in the data starting first_i
 }
-
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
 // comparing to the number of lines in the first file of the pair
 // returns true if we have at least as much as needed, and sets unconsumed_len to the amount of excess characters read
@@ -101,6 +124,32 @@ static void fastq_txtfile_count_lines (VBlockP vb)
     txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
 }
 
+// PIZ: if --interleave write the VBs - interleaving their lines
+void fastq_txtfile_write_one_vblock_interleave (VBlockP vb1_, VBlockP vb2_)
+{
+    VBlockFAST *vb1 = (VBlockFAST *)vb1_;
+    VBlockFAST *vb2 = (VBlockFAST *)vb2_;
+
+    ASSERT (vb1->lines.len == vb2->lines.len, "Error fastq_txtfile_write_one_vblock_interleave: in vb1=%u vb2=%u expecting vb1->lines.len=%"PRIu64" == vb2->lines.len=%"PRIu64,
+            vb1->vblock_i, vb2->vblock_i, vb1->lines.len, vb2->lines.len);
+
+    vb1->txt_data.param = vb2->txt_data.param = 0;
+    BitArray *show_1 = buf_get_bitarray (&vb1->genobwa_show_line);
+    BitArray *show_2 = buf_get_bitarray (&vb2->genobwa_show_line);
+    
+    for (uint64_t i=0; i < vb1->lines.len; i++) {
+
+        // in case of --genobwa, we show both interleaved lines, if either one of them is passed the filter
+        if (flag.genobwa && !bit_array_get (show_1, i) && !bit_array_get (show_2, i)) continue;
+
+        txtfile_write_4_lines (vb1_, "/1");
+        txtfile_write_4_lines (vb2_, "/2");
+    }
+}
+
+//---------------
+// ZIP / SEG stuff
+//---------------
 void fastq_zip_read_one_vb (VBlockP vb)
 {
     // in case we're optimizing DESC in FASTQ, we need to know the number of lines
@@ -224,7 +273,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
     if (!sl) return false;
 
     // get num_lines from vb header
-    SectionHeaderVbHeader *vb_header = zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER);
+    SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER);
     vb->pair_num_lines = BGEN32 (vb_header->num_lines);
 
     buf_free (&vb_->compressed); // allocated by zfile_read_section_header
@@ -253,24 +302,35 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
 }
 
 // I/O thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
-bool fastq_piz_read_one_vb (VBlockP vb, ConstSectionListEntryP sl)
+bool fastq_piz_read_one_vb (VBlockP vb_, ConstSectionListEntryP sl)
 {
-    // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
-    if (flag.grep && !fast_piz_test_grep ((VBlockFAST *)vb)) return false; 
+    VBlockFAST *vb = (VBlockFAST *)vb_;
+    bool i_am_pair_2 = z_file->z_flags.dts_paired && (vb->component_i % 2);
 
-    // in case of this is a paired fastq file, and this is the 2nd file of a pair - 
-    // we also read the equivalent sections from the first (bound) file
-    ARRAY (const unsigned, section_index, vb->z_section_headers);
-    for (uint32_t sec_i=1; sec_i < vb->z_section_headers.len; sec_i++) {
-        SectionHeaderCtx *header = (SectionHeaderCtx *)ENT (char, vb->z_data, section_index[sec_i]);
-        if (header->h.flags.ctx.paired) {
-            uint32_t prev_file_first_vb_i, prev_file_last_vb_i;
-            sections_get_prev_file_vb_i (sl, &prev_file_first_vb_i, &prev_file_last_vb_i);
+    uint32_t prev_file_first_vb_i, prev_file_last_vb_i;
+    if (i_am_pair_2) 
+        sections_get_prev_component_vb_i (sl, &prev_file_first_vb_i, &prev_file_last_vb_i);
 
-            fastq_read_pair_1_data (vb, prev_file_first_vb_i, prev_file_last_vb_i);
-            break;
+    if (flag.grep) {
+        // in case of this is a paired fastq file, get just the pair_1 data that is needed to resolve the grep
+        if (i_am_pair_2) {
+            vb->grep_stages = GS_TEST; // tell piz_is_skip_section to skip decompressing sections not needed for determining the grep
+            fastq_read_pair_1_data (vb_, prev_file_first_vb_i, prev_file_last_vb_i);
         }
+
+        // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
+        if (!fast_piz_test_grep (vb)) return false; // also updates vb->grep_stages
     }
+
+    // in case of this is a paired fastq file, get all the pair_1 data not already fetched for the grep above
+    if (i_am_pair_2) 
+        fastq_read_pair_1_data (vb_, prev_file_first_vb_i, prev_file_last_vb_i);
+
+    // if --genobwa and interleaving, initialize genobwa_show_line
+    if (flag.genobwa && flag.interleave) {
+        buf_alloc_bitarr (vb_, &vb->genobwa_show_line, vb->lines.len, "genobwa_show_line");
+        memset (vb->genobwa_show_line.data, 0xff, vb->genobwa_show_line.size); // initialize to "show"
+    } 
 
     return true;
 }
@@ -386,6 +446,15 @@ void fastq_zip_qual (VBlock *vb, uint32_t vb_line_i,
     if (flag.optimize_QUAL) optimize_phred_quality_string (*line_qual_data, *line_qual_len);
 }
 
+//-----------------
+// PIZ stuff
+//-----------------
+
+void fastq_piz_initialize (void)
+{
+    if (flag.genobwa) fastq_genobwa_initialize();
+}
+
 // returns true if section is to be skipped reading / uncompressing
 bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
@@ -431,14 +500,12 @@ bool fastq_piz_is_paired (void)
 
     // scan all B250 and Local looking for evidence of pairing
     while (sections_get_next_section_of_type2 (&sl, SEC_B250, SEC_LOCAL, true, false)) {            
-        SectionHeaderCtx *header = (SectionHeaderCtx *)zfile_read_section_header (evb, sl->offset, sl->vblock_i, sl->section_type);
-        z_file->z_flags.dts_paired = header->h.flags.ctx.paired;
- 
+        bool is_paired = zfile_read_section_header (evb, sl->offset, sl->vblock_i, sl->section_type)->flags.ctx.paired;
         buf_free (&evb->compressed); // zfile_read_section_header used this for the header
 
-        if (z_file->z_flags.dts_paired) return true;        
+        if (is_paired) return (z_file->z_flags.dts_paired = true); // assign and return
     }
-    
+   
     return false; // no evidence of pairing
 }
 
@@ -455,6 +522,16 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
             if (flag.grep && item == 2 /* first EOL */) {
                 *AFTERENT (char, vb->txt_data) = 0; // for strstr
                 if (!strstr (ENT (char, vb->txt_data, vb->line_start), flag.grep))
+                    vb->dont_show_curr_line = true; // container_reconstruct_do will rollback the line
+            }
+
+            // case: --genobwa: check if line is included after SEQ 
+            if (  flag.genobwa && item == 4 && // 2nd EOL
+                  !fastq_genobwa_is_seq_included (ENT (char, vb->txt_data, vb->txt_data.len - vb->seq_len), vb->seq_len)) {
+                if (flag.interleave) {
+                    BitArray *genobwa_show_line_bm = buf_get_bitarray (&((VBlockFAST*)vb)->genobwa_show_line);
+                    bit_array_clear (genobwa_show_line_bm, rep);
+                } else
                     vb->dont_show_curr_line = true; // container_reconstruct_do will rollback the line
             }
 
@@ -477,3 +554,4 @@ void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_le
 
     aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
 }
+

@@ -45,9 +45,9 @@ void codec_acgt_comp_init (VBlock *vb)
 bool codec_acgt_pack (BitArray *packed, const char *data, uint64_t data_len)
 {
     // increase bit array to accomodate data
-    uint64_t next_bit    = packed->num_of_bits;
-    packed->num_of_bits += data_len * 2;
-    packed->num_of_words = roundup_bits2words64 (packed->num_of_bits);
+    uint64_t next_bit    = packed->nbits;
+    packed->nbits += data_len * 2;
+    packed->nwords = roundup_bits2words64 (packed->nbits);
     
     bool has_non_agct    = false;
 
@@ -141,7 +141,7 @@ COPY_TIMER (tmp2);
 
     Codec sub_codec = codec_args[header->codec].sub_codec;
     CodecCompress *compress = codec_args[sub_codec].compress;
-    uint32_t packed_uncompressed_len = packed->num_of_words * sizeof (word_t);
+    uint32_t packed_uncompressed_len = packed->nwords * sizeof (word_t);
 
     PAUSE_TIMER; // sub-codec compresssors account for themselves
     if (flag.show_time) codec_show_time (vb, "Subcodec", vb->profile.next_subname, sub_codec);
@@ -205,8 +205,8 @@ void codec_acgt_uncompress (VBlock *vb, Codec codec,
 
     // finalize bitmap structure
     BitArray *packed     = buf_get_bitarray (&vb->compressed);
-    packed->num_of_bits  = num_bases * 2;
-    packed->num_of_words = roundup_bits2words64 (packed->num_of_bits);
+    packed->nbits  = num_bases * 2;
+    packed->nwords = roundup_bits2words64 (packed->nbits);
 
     LTEN_bit_array (packed);
 

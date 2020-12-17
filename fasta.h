@@ -29,6 +29,7 @@ CONTAINER_FILTER_FUNC (fasta_piz_filter);
 
 // VBlock stuff
 extern void fast_vb_release_vb();
+extern void fast_vb_destroy_vb();
 extern unsigned fast_vb_size (void);
 extern unsigned fast_vb_zip_dl_size (void);
 

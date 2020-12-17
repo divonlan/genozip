@@ -87,13 +87,16 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
 void digest_one_vb (VBlock *vb)
 {
     // wait for our turn
-    while (1) {
+    for (unsigned i=0; ; i++) {
         mutex_lock (vb_digest_mutex);
         if (vb_digest_last == vb->vblock_i - 1) break; // its our turn now
 
         // not our turn, wait 10ms and try again
         mutex_unlock (vb_digest_mutex);
         usleep (10000);
+
+        // timeout after approx 30 seconds
+        ASSERT (i < 3000, "Timeout while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", vb->vblock_i, vb_digest_last);
     }
 
     if (command == ZIP) {

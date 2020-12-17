@@ -482,6 +482,21 @@ finish:
     return buf->size;
 }
 
+BitArray *buf_alloc_bitarr_do (VBlock *vb,
+                               Buffer *buf, 
+                               uint64_t nbits,
+                               const char *func, uint32_t code_line,
+                               const char *name)
+{
+    uint64_t nwords = roundup_bits2words64 (nbits);
+    buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
+    BitArray *bitarr = buf_get_bitarray (buf);
+    bitarr->nbits  = nbits;
+    bitarr->nwords = nwords;
+
+    return bitarr;
+}
+
 // an overlay buffer is a buffer using some of the memory of another buffer - it doesn't have its own memory
 void buf_overlay_do (VBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line,
                      const char *name, int64_t param)
@@ -722,17 +737,17 @@ void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t c
 }
 
 // convert a Buffer from a z_file section whose len is in char to a bitarray
-BitArray *buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t num_of_bits)
+BitArray *buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t nbits)
 {
-    ASSERT (roundup_bits2bytes (num_of_bits) <= buf->len, "Error in buf_zfile_buf_to_bitarray: num_of_bits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
-            num_of_bits, roundup_bits2bytes (num_of_bits), buf->len);
+    ASSERT (roundup_bits2bytes (nbits) <= buf->len, "Error in buf_zfile_buf_to_bitarray: nbits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
+            nbits, roundup_bits2bytes (nbits), buf->len);
 
     BitArray *bitarr = buf_get_bitarray (buf);
-    bitarr->num_of_bits  = num_of_bits;
-    bitarr->num_of_words = roundup_bits2words64 (bitarr->num_of_bits);
+    bitarr->nbits  = nbits;
+    bitarr->nwords = roundup_bits2words64 (bitarr->nbits);
 
-    ASSERT (roundup_bits2bytes64 (num_of_bits) <= buf->size, "Error in buf_zfile_buf_to_bitarray: buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
-            buf->size, bitarr->num_of_words, bitarr->num_of_words * sizeof(uint64_t));
+    ASSERT (roundup_bits2bytes64 (nbits) <= buf->size, "Error in buf_zfile_buf_to_bitarray: buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
+            buf->size, bitarr->nwords, bitarr->nwords * sizeof(uint64_t));
 
     LTEN_bit_array (bitarr);
 
@@ -743,26 +758,26 @@ void buf_add_bit (Buffer *buf, int64_t new_bit)
 {
     BitArray *bar = buf_get_bitarray (buf);
 
-    ASSERT (bar->num_of_bits < buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
-    bar->num_of_bits++;     
-    if (bar->num_of_bits % 64 == 1) { // starting a new word                
-        bar->num_of_words++;
-        bar->words[bar->num_of_words-1] = new_bit; // LSb is as requested, other 63 bits are 0
+    ASSERT (bar->nbits < buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
+    bar->nbits++;     
+    if (bar->nbits % 64 == 1) { // starting a new word                
+        bar->nwords++;
+        bar->words[bar->nwords-1] = new_bit; // LSb is as requested, other 63 bits are 0
     } 
     else
-        bit_array_assign (bar, bar->num_of_bits-1, new_bit);  
+        bit_array_assign (bar, bar->nbits-1, new_bit);  
 }
  
 bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits) 
 {
     BitArray *bar = buf_get_bitarray (buf);
 
-    ASSERT (bar->num_of_bits + num_new_bits<= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
+    ASSERT (bar->nbits + num_new_bits<= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
     
-    bit_index_t next_bit = bar->num_of_bits;
+    bit_index_t next_bit = bar->nbits;
 
-    bar->num_of_bits += num_new_bits;     
-    bar->num_of_words = roundup_bits2words64 (bar->num_of_bits);
+    bar->nbits += num_new_bits;     
+    bar->nwords = roundup_bits2words64 (bar->nbits);
     bit_array_clear_excess_bits_in_top_word (bar);
 
     return next_bit;

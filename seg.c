@@ -543,7 +543,7 @@ void seg_compound_field (VBlock *vb,
                     // inequality - we stop the pairing going forward till the end of this VB
                     !sf_ctx->stop_pairing) {
                     
-                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250, !sf_ctx->pair_flags.all_the_same);  
+                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250, !sf_ctx->pair_flags.all_the_same, sf_ctx->name);  
                     
                     if (pair_word_index == WORD_INDEX_ONE_UP) 
                         pair_word_index = sf_ctx->pair_b250_iter.prev_word_index + 1;

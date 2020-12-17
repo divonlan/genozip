@@ -10,6 +10,7 @@
 #include "file.h"
 #include "zfile.h"
 #include "profiler.h"
+#include "bgzf.h"
 
 // --------------------------------------
 // memory functions that serve the codecs
@@ -31,8 +32,10 @@ void *codec_alloc (VBlock *vb, int size, double grow_at_least_factor)
     ABORT_R ("Error: codec_alloc could not find a free buffer. vb_i=%d", vb->vblock_i);
 }
 
-void codec_free (VBlock *vb, void *addr)
+void codec_free (void *vb_, void *addr)
 {
+    VBlockP vb = (VBlockP)vb_;
+
     if (!addr) return; // already freed
 
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
@@ -90,6 +93,7 @@ const char *codec_name (Codec codec)
 void codec_initialize (void)
 {
     codec_bsc_initialize();
+    bgzf_libdeflate_initialize();
 }
 
 // ------------------------------

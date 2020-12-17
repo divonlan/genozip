@@ -133,18 +133,19 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sb {"show-bgzf",     no_argument,       &flag.show_bgzf,        1 }
         #define _s5 {"show-digest",   no_argument,       &flag.show_digest,      1 }
         #define _sM {"show-mutex",    optional_argument, 0, 4                      }
-        #define _dS {"test-seg",      no_argument,       &flag.test_seg,         1 }  
+        #define _dS {"seg-only",      no_argument,       &flag.seg_only,         1 }  
         #define _xt {"xthreads",      no_argument,       &flag.xthreads,         1 }  
         #define _dm {"debug-memory",  no_argument,       &flag.debug_memory,     1 }  
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
         #define _dh {"show-hash",     no_argument,       &flag.show_hash,        1 }  
+        #define _bw {"genobwa",       required_argument, 0, 11                     }  
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me,      _s5, _sM, _sA, _sc, _sI, _gt,                    _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                              _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _xt, _dm, _dp,                                                                                                      _sR, _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,     _00 };
-        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,         _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR, _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,     _00 };
-        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                                   _u,     _p, _e,                                                                                                          _st, _sm,                                       _dm,                                                                                                                                                                  _sM,                                    _b, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me,      _s5, _sM, _sA, _sc, _sI, _gt,                _bw,     _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                              _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,          _00 };
+        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V,     _z0, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,         _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw,     _00 };
+        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                                   _u,     _p, _e,                                                                                                          _st, _sm,                                       _dm,                                                                                                                                                             _sM,                                         _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -203,6 +204,7 @@ void flags_init_from_command_line (int argc, char **argv)
             case 'g' : flag.grep          = optarg  ; break;
             case '~' : flag.show_is_set   = optarg  ; break;
             case 7   : flag.dump_section  = optarg  ; break;
+            case 11  : flag.genobwa       = optarg  ; break;
             case 4   : flag.show_mutex    = optarg ? optarg : (char*)1; break;
             case 2   : if (optarg) flag.dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); 
                        else        flag.show_b250 = 1;
@@ -266,44 +268,64 @@ static void flags_warn_if_duplicates (int num_txt_files, const char **filenames)
 
 static void flags_test_conflicts (void)
 {
-    ASSINP (!flag.to_stdout   || !flag.out_filename,                "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
-    ASSINP (!flag.to_stdout   || !flag.unbind,                      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("unbind", "u"));
-    ASSINP (!flag.unbind      || !flag.out_filename,                "%s: option %s is incompatable with %s", global_cmd, OT("unbind",  "u"), OT("output", "o"));
-    ASSINP (!flag.to_stdout   || !flag.replace,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
+    #define CONFLICT(flag1, flag2, text1, text2) \
+        ASSINP (!(flag1) || !(flag2), "%s: option %s is incompatable with %s", global_cmd, text1, text2);
 
-    // if flag.md5 we need to seek back and update the md5 in the txt header section - this is not possible with flag.to_stdout
-    ASSINP (!flag.to_stdout   || !flag.md5,                         "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("md5", "m"));
-    ASSINP (!flag.to_stdout   || !flag.index_txt,                   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("index", "x"));
-    ASSINP (!flag.test        || !flag.out_filename || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
-    ASSINP (!flag.test        || !flag.replace || command != PIZ,   "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
-    ASSINP (!flag.to_stdout   || command != ZIP,                    "%s: option %s only works for decompressing files, not compressing", global_cmd, OT("stdout", "c"));
-    ASSINP (!flag.one_vb      || !flag.interleave,                  "%s: option %s is incompatable with %s", global_cmd, "interleave", "one-vb");
-    ASSINP (!flag.xthreads    || !flag.interleave,                  "%s: option %s is incompatable with %s", global_cmd, "interleave", "xthreads");
-    ASSINP (!flag.header_only || !flag.interleave,                  "%s: option %s is incompatable with %s", global_cmd, "interleave", "header-only");
-    ASSINP (!flag.header_only || !flag.no_header,                   "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
-    ASSINP (!flag.no_header   || !flag.header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
-    ASSINP (!flag.quiet       || !option_noisy,                     "%s: option %s is incompatable with %s", global_cmd, OT("quiet", "q"), OT("noisy", "Q"));
-    ASSINP (!flag.test        || !flag.optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
-    ASSINP (!flag.md5         || !flag.optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
-    ASSINP (!flag.samples     || !flag.drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
-    ASSINP (!option_best      || !flag.fast,                        "%s: option %s is incompatable with --best", global_cmd, OT("fast", "t"));
-    ASSINP (!flag.plain       || !flag.bgzf,                        "%s: option %s is incompatable with --plain", global_cmd, OT("bgzf", "z"));
-    ASSINP (!flag.test        || !flag.make_reference,              "%s: option %s is incompatable with --make-reference", global_cmd, OT("test", "t"));
-    ASSINP (flag.reference != REF_EXTERNAL  || !flag.make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
-    ASSINP (flag.reference != REF_EXT_STORE || !flag.make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
-    ASSINP (flag.reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "%s: option %s supported only for viewing the reference file itself", global_cmd, OT("REFERENCE", "E"));
-    ASSINP (flag.reference != REF_EXTERNAL  || !flag.show_ref_seq,  "%s: option %s is incompatable with --show-ref-seq: use genocat --show-ref-seq on the reference file itself instead", global_cmd, OT("reference", "e"));
-    ASSINP (!flag.dump_one_b250_dict_id.num || !flag.dump_one_local_dict_id.num, "%s: option --dump-one-b250 is incompatable with --dump-one-local", global_cmd);
+    #define NEED_DECOMPRESS(flag1, text) \
+        ASSINP (!(flag1), "%s: option %s can only be used if --decompress is used too", global_cmd, text);
+
+    char s[20]; 
+
+    CONFLICT (flag.to_stdout,   flag.out_filename, OT("stdout", "c"), OT("output", "o"));
+    CONFLICT (flag.to_stdout,   flag.unbind, OT("stdout", "c"), OT("unbind", "u"));
+    CONFLICT (flag.unbind,      flag.out_filename, OT("unbind",  "u"), OT("output", "o"));
+    CONFLICT (flag.to_stdout,   flag.replace, OT("stdout", "c"), OT("replace", "^"));
+    CONFLICT (flag.to_stdout,   flag.index_txt, OT("stdout", "c"), OT("index", "x"));
+    CONFLICT (flag.one_vb,      flag.interleave, "--interleave", "--one-vb");
+    CONFLICT (flag.xthreads,    flag.interleave, "--interleave", "--xthreads");
+    CONFLICT (flag.header_only, flag.interleave, "--interleave", "--header-only");
+    CONFLICT (flag.header_only, flag.no_header, OT("no-header", "H"), "header-only");
+    CONFLICT (flag.no_header,   flag.header_one, OT("no-header", "H"), OT("header-one", "1"));
+    CONFLICT (flag.quiet,       option_noisy, OT("quiet", "q"), OT("noisy", "Q"));
+    CONFLICT (flag.test,        flag.optimize, OT("test", "t"), OT("optimize", "9"));
+    CONFLICT (flag.md5,         flag.optimize, OT("md5", "m"), OT("optimize", "9"));
+    CONFLICT (flag.samples,     flag.drop_genotypes, OT("samples", "s"), OT("drop-genotypes", "G"));
+    CONFLICT (option_best,      flag.fast, "--best", OT("fast", "F"));
+    CONFLICT (flag.plain,       flag.bgzf, "--plain",  OT("bgzf", "z"));
+    CONFLICT (flag.genobwa,     flag.test,           "--genobwa", OT("test", "t"));
+    CONFLICT (flag.genobwa,     flag.xthreads,       "--genobwa", "--xthreads");
+    CONFLICT (flag.genobwa,     flag.fast,           "--genobwa", OT("fast", "F"));
+    CONFLICT (flag.genobwa,     option_best,         "--genobwa", "--best");
+    CONFLICT (flag.genobwa,     flag.replace,        "--genobwa", OT("replace", "^"));
+    CONFLICT (flag.genobwa,     flag.optimize,       "--genobwa", OT("optimize", "9"));
+    CONFLICT (flag.genobwa,     flag.out_filename,   "--genobwa", OT("output", "o"));
+    CONFLICT (flag.genobwa,     flag.bgzf,           "--genobwa", OT("bgzf", "z"));
+    CONFLICT (flag.genobwa,     flag.make_reference, "--genobwa", "--make_reference");
+    CONFLICT (flag.test,        flag.make_reference, "--make-reference", OT("test", "t"));
+    CONFLICT (flag.reference == REF_EXTERNAL, flag.make_reference, "--make-reference", OT("reference", "e"));
+    CONFLICT (flag.reference == REF_EXT_STORE, flag.make_reference, "--make-reference", OT("REFERENCE", "E"));
+    CONFLICT (flag.reference == REF_EXTERNAL, flag.show_ref_seq, "--make-reference", OT("reference", "e"));
+    CONFLICT (flag.dump_one_b250_dict_id.num, flag.dump_one_local_dict_id.num, "--dump-one-b250", "--dump-one-local");
+
+    if (command == PIZ) {
+        CONFLICT (flag.test, flag.out_filename, OT("output", "o"),  OT("test", "t"));
+        CONFLICT (flag.test, flag.replace, OT("replace", "^"), OT("test", "t"));
+    }
 
     // some genozip flags are allowed only in combination with --decompress 
     if (exe_type == EXE_GENOZIP && command == ZIP) {
-        char s[20]; 
-        ASSINP (!flag.bgzf,        "%s: option %s can only be used if --decompress is used too", global_cmd, OT("bgzf", "z"));
-        ASSINP (flag.out_dt == DT_NONE, "%s: option --%s can only be used if --decompress is used too", global_cmd, str_tolower (dt_name (flag.out_dt), s));
-        ASSINP (!flag.unbind,       "%s: option %s can only be used if --decompress is used too", global_cmd, OT("unbind", "u"));
-        ASSINP (!flag.show_aliases, "%s: option --show_aliases can only be used if --decompress is used too", global_cmd);
-        ASSINP (!flag.show_is_set,  "%s: option --show_is_set can only be used if --decompress is used too", global_cmd);
+        NEED_DECOMPRESS (flag.bgzf, OT("bgzf", "z"));
+        NEED_DECOMPRESS (flag.out_dt != DT_NONE, str_tolower (dt_name (flag.out_dt), s));
+        NEED_DECOMPRESS (flag.unbind, OT("unbind", "u"));
+        NEED_DECOMPRESS (flag.show_aliases, "--show_aliases");
+        NEED_DECOMPRESS (flag.show_is_set, "--show_is_set");
     }
+
+    ASSINP (flag.reference != REF_EXTERNAL  || !flag.show_ref_seq,  "%s: option %s is incompatable with --show-ref-seq: use genocat --show-ref-seq on the reference file itself instead", global_cmd, OT("reference", "e"));
+    ASSINP (!flag.to_stdout || command != ZIP, "%s: option %s only works for decompressing files, not compressing", global_cmd, OT("stdout", "c"));
+    ASSINP (flag.reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "%s: option %s supported only for viewing the reference file itself", global_cmd, OT("REFERENCE", "E"));
+    ASSINP (global_max_threads >= 2 || !flag.genobwa, "%s: --genobwa requires at least 2 threads", global_cmd);
+    ASSINP (global_max_threads >= 2 || !flag.interleave, "%s: --interleave requires at least 2 threads", global_cmd);
 }
 
 // --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
@@ -338,6 +360,9 @@ void flags_update (unsigned num_txt_files, const char **filenames)
     // verify stuff needed for --pair
     if (flag.pair) flags_verify_pair_rules (num_txt_files, filenames);
     
+    if (flag.genobwa && command == ZIP)
+        flag.seg_only = true;
+
     // don't show progress or warning when outputing to stdout (note: we are "quiet" even if output doesn't go to the terminal
     // because often it will be piped and ultimately go the terminal - a user can override this with --noisy)
     if (flag.to_stdout) flag.quiet=true; 
@@ -467,12 +492,30 @@ void flags_update_piz_one_file (void)
     flag.data_modified = !flag.reconstruct_as_src || // translating to another data
                          flag.header_one || flag.no_header || flag.header_only || flag.header_only_fast || flag.grep || 
                          flag.regions || flag.samples || flag.drop_genotypes || flag.gt_only || flag.sequential || 
-                         flag.one_vb || flag.downsample || flag.interleave;
+                         flag.one_vb || flag.downsample || flag.interleave || flag.genobwa;
 
+    bool is_paired_fastq = fastq_piz_is_paired(); // also updates z_file->z_flags in case of backward compatability issues
+    
     // interleaving is only possible for on FASTQ data compressed with --pair
-    ASSINP (!flag.interleave || (flag.out_dt == DT_FASTQ && fastq_piz_is_paired()), // untranslated FASTQ that is paired
+    ASSINP (!flag.interleave || is_paired_fastq, 
             "%s: Error: --interleave is not supported for %s because it only works on FASTQ data that was compressed with --pair", 
             global_cmd, z_name);
+
+    // if using --genobwa in PIZ, z_file must be a FASTQ file with a single component or two paired components
+    if (flag.genobwa) {
+        ASSINP (z_file->data_type == DT_FASTQ, "%s: Error: genobwa accepts genozip files only if they contain FASTQ data, but %s is has %s data",
+                global_cmd, z_name, dt_name (z_file->data_type));
+
+        ASSINP (z_file->z_flags.aligner, "%s: Error: %s was not compressed with --reference or --REFERENCE which is required for genobwa", global_cmd, z_name);
+
+        ASSINP ((z_file->num_components==2 && is_paired_fastq) || z_file->num_components==1,
+                "%s: Error: genobwa accepts genozip files with a single FASTQ component or two components compressed with --pair, but %s has %u components (%s --pair)",
+                global_cmd, z_name, z_file->num_components, is_paired_fastq ? "with" : "without");
+
+        ASSINP0 (flag.reference == REF_EXTERNAL, "%s Error: --genobwa must be used in combination with --reference");
+
+        flag.interleave = (z_file->num_components==2);
+    }
 
     flags_test_conflicts(); // test again after updating flags
 }

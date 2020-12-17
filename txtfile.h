@@ -16,13 +16,14 @@ extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, doub
 
 extern void txtfile_estimate_txt_data_size (VBlockP vb);
 extern void txtfile_write_one_vblock (VBlockP vb);
-extern void txtfile_write_one_vblock_interleave (VBlockP vb1, VBlockP vb2);
+
+extern void txtfile_write_4_lines (VBlockP vb, const char *qname_suffix);
 
 extern const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext);
 extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
 
 extern bool txtfile_header_to_genozip (uint32_t *vcf_line_i);
-extern void txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, uint32_t unbind_component_i, Digest *digest);
+extern void txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Digest *digest);
 
 extern void txtfile_header_initialize(void);
 uint32_t txtfile_get_bound_headers_len(void); // for stats

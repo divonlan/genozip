@@ -1,10 +1,12 @@
 #!/bin/bash 
 
+shopt -s extglob  # Enables extglob
+
 TESTDIR=test
 OUTDIR=$TESTDIR/tmp
 
 cleanup() { 
-    rm -f $OUTDIR/* 
+    rm -f $OUTDIR/* $TESTDIR/*.!(ref).genozip # uses extglob
 }
 
 cmp_2_files() {
@@ -82,12 +84,8 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
             echo ${files[@]}
             exit 1
         fi
-
-        rm -f $TESTDIR/*.genozip
+        cleanup
     fi
-
-    local list=`ls $OUTDIR`
-    rm -f ${list/test\/tmp\/basic-ref.ref.genozip}
 }
 
 test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
@@ -399,7 +397,7 @@ batch_real_world_subsets()
 {
     batch_print_header
 
-    rm -f $TESTDIR/*.genozip # unfortunately, these go to TESTDIR not OUTDIR
+    cleanup # unfortunately, these go to TESTDIR not OUTDIR
 
     if [ -x "$(command -v xz)" ] ; then # xz available
         local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* test.*vcf* test.*gvf* test.*txt*` )

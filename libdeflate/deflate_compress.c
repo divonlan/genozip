@@ -322,6 +322,8 @@ struct block_split_stats {
 /* The main DEFLATE compressor structure  */
 struct libdeflate_compressor {
 
+	void *opaque; // added by divon
+
 	/* Pointer to the compress() implementation chosen at allocation time */
 	size_t (*impl)(struct libdeflate_compressor *,
 		       const u8 *, size_t, u8 *, size_t);
@@ -2686,7 +2688,7 @@ deflate_init_offset_slot_fast(struct libdeflate_compressor *c)
 }
 
 LIBDEFLATEEXPORT struct libdeflate_compressor * LIBDEFLATEAPI
-libdeflate_alloc_compressor(int compression_level)
+libdeflate_alloc_compressor(int compression_level, void *opaque)
 {
 	struct libdeflate_compressor *c;
 	size_t size = offsetof(struct libdeflate_compressor, p);
@@ -2704,11 +2706,12 @@ libdeflate_alloc_compressor(int compression_level)
 		size += sizeof(c->p.g);
 #endif
 
-	c = libdeflate_aligned_malloc(MATCHFINDER_MEM_ALIGNMENT, size);
+	c = libdeflate_aligned_malloc(MATCHFINDER_MEM_ALIGNMENT, size, opaque);
 	if (!c)
 		return NULL;
 
 	c->compression_level = compression_level;
+	c->opaque = opaque;
 
 	/*
 	 * The higher the compression level, the more we should bother trying to
@@ -2830,7 +2833,7 @@ libdeflate_deflate_compress(struct libdeflate_compressor *c,
 LIBDEFLATEEXPORT void LIBDEFLATEAPI
 libdeflate_free_compressor(struct libdeflate_compressor *c)
 {
-	libdeflate_aligned_free(c);
+	libdeflate_aligned_free(c, c ? c->opaque : NULL);
 }
 
 unsigned int

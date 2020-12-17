@@ -26,10 +26,18 @@ void fast_vb_release_vb (VBlockFAST *vb)
     if (z_file && (z_file->data_type == DT_FASTA || z_file->data_type == DT_REF))
         vb->contexts[FASTA_NONREF].local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
 
+    buf_free (&vb->genobwa_show_line);
+
     FREE (vb->optimized_desc);
     vb->optimized_desc_len = 0;
 }
-   
+
+void fast_vb_destroy_vb (VBlockFAST *vb)
+{
+    buf_destroy (&vb->genobwa_show_line);
+}
+
+
 // called by I/O thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
 bool fast_piz_test_grep (VBlockFAST *vb)

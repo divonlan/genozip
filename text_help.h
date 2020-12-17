@@ -204,7 +204,7 @@ static const char *help_genozip_developer[] = {
     "",
     "    UC  --show-containers Show flow of container reconstruction",
     "",
-    "   Z    --test-seg        Debug segmenting - runs the segmenter, but doesn't compress and doesn't write the output",
+    "   Z    --seg-only        Debug segmenting - runs the segmenter, but doesn't compress and doesn't write the output",
     "",
     "   ZUC  --xthreads        Use only 1 threads for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers",
     "",

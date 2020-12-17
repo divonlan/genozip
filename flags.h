@@ -13,7 +13,7 @@ typedef struct {
     // genozip options that affect the compressed file
     int vblock, gtshark, fast, make_reference, md5;
 
-    // ZIP: data modifying optinos
+    // ZIP: data modifying options
     int optimize, optimize_sort, optimize_PL, optimize_GL, optimize_GP, optimize_VQSLOD,  // optimize flags
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC;
     
@@ -53,6 +53,9 @@ typedef struct {
            REF_STORED     // PIZ: file contains REFERENCE sections (user cannot specify --reference)
     } reference;
 
+    // undocumented options for internal use
+    char *genobwa; // --genobwa=<contig-name> is used by the genobwa script in genozip / genocat to filter a fastq to a superset that includes all the reads that *might* be mapped to a chromosome 
+
     // stats / metadata flags for end users
     int list_chroms, show_stats; 
     
@@ -62,7 +65,7 @@ typedef struct {
         show_reference, show_ref_hash, show_ref_index, show_ref_alts,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         debug_progress, show_hash, debug_memory, show_vblocks, show_threads,
-        test_seg, xthreads,
+        seg_only, xthreads,
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
 

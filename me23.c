@@ -204,7 +204,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     uint32_t idx = pos - range->first_pos;
 
     ASSERT (ref_is_idx_in_range (range, idx), "Error in sam_piz_m232vcf_GENOTYPE: idx=%u but range has only %"PRIu64" nucleotides. pos=%"PRId64" range=%s", 
-            idx, range->ref.num_of_bits / 2, pos, ref_display_range (range).s)
+            idx, range->ref.nbits / 2, pos, ref_display_range (range).s)
 
     char ref_b = ref_get_nucleotide (range, idx);
 

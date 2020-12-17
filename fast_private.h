@@ -24,7 +24,8 @@ typedef struct VBlockFAST {     // for FASTA and FASTQ
     uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
     char *optimized_desc;    // base of desc in flag.optimize_DESC 
     uint32_t optimized_desc_len;
-    
+    Buffer genobwa_show_line; // genobwa only: bitmap - 1 if line survived the filter
+
     // FASTA stuff
     bool contig_grepped_out;
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB is interpreted as a description, not a comment

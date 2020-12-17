@@ -230,7 +230,7 @@ void sam_seg_finalize (VBlockP vb)
         .is_toplevel = true,
         .filter_repeats = true,  // drop non-primary chimeric reads and reads without QUAL data
         .num_items = 7,
-        .items     = { { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, " "                  }, 
+        .items     = { { (DictId)dict_id_fields[SAM_QNAME],    DID_I_NONE, "\n"                 }, 
                        { (DictId)dict_id_fields[SAM_RNAME],    DID_I_NONE, { CI_TRANS_NOR }     }, // needed for reconstructing seq 
                        { (DictId)dict_id_fields[SAM_POS],      DID_I_NONE, { CI_TRANS_NOR }     }, // needed for reconstructing seq
                        { (DictId)dict_id_fields[SAM_FLAG],     DID_I_NONE, { CI_TRANS_NOR }, SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
@@ -353,7 +353,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
 
     if (!recursion_level) {
-        // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it
+        // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite nbits that overlays it
         //buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
         //        buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
         

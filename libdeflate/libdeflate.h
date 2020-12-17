@@ -76,7 +76,7 @@ struct libdeflate_compressor;
  * However, different threads may use different compressors concurrently.
  */
 LIBDEFLATEEXPORT struct libdeflate_compressor * LIBDEFLATEAPI
-libdeflate_alloc_compressor(int compression_level);
+libdeflate_alloc_compressor(int compression_level, void *opaque);
 
 /*
  * libdeflate_deflate_compress() performs raw DEFLATE compression on a buffer of
@@ -182,7 +182,7 @@ struct libdeflate_decompressor;
  * However, different threads may use different decompressors concurrently.
  */
 LIBDEFLATEEXPORT struct libdeflate_decompressor * LIBDEFLATEAPI
-libdeflate_alloc_decompressor(void);
+libdeflate_alloc_decompressor(void *opaque);
 
 /*
  * Result of a call to libdeflate_deflate_decompress(),
@@ -318,7 +318,7 @@ libdeflate_gzip_decompress_ex(struct libdeflate_decompressor *decompressor,
  * is taken.
  */
 LIBDEFLATEEXPORT void LIBDEFLATEAPI
-libdeflate_free_decompressor(struct libdeflate_decompressor *decompressor);
+libdeflate_free_decompressor(struct libdeflate_decompressor **decompressor);
 
 /* ========================================================================== */
 /*                                Checksums                                   */
@@ -356,8 +356,8 @@ libdeflate_crc32(uint32_t crc, const void *buffer, size_t len);
  * structures in existence when calling this function.
  */
 LIBDEFLATEEXPORT void LIBDEFLATEAPI
-libdeflate_set_memory_allocator(void *(*malloc_func)(size_t),
-				void (*free_func)(void *));
+libdeflate_set_memory_allocator(void *(*malloc_func)(void *, unsigned, unsigned),
+				void (*free_func)(void *, void *));
 
 #ifdef __cplusplus
 }

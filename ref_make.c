@@ -33,7 +33,7 @@ void ref_make_create_range (VBlockP vb)
 
     // as this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
     // the missing details will be added during ref_prepare_range_for_compress
-    bit_array_alloc (&r->ref, seq_len * 2); // 2 bits per base
+    r->ref = bit_array_alloc (seq_len * 2, false); // 2 bits per base
 
     uint64_t bit_i=0;
     for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
@@ -87,7 +87,7 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
         r->gpos = ROUNDUP64 (r->gpos);
 
     vb->range              = r; // range to compress
-    vb->range_num_set_bits = r->ref.num_of_bits / 2;
+    vb->range_num_set_bits = r->ref.nbits / 2;
     vb->ready_to_dispatch  = true;
 }
 

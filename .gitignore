@@ -1,4 +1,4 @@
-genogwa-test-code.c
+*.back
 .conda-timestamp
 .archive.tar.gz
 *.o

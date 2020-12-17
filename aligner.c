@@ -72,13 +72,13 @@ static inline uint32_t aligner_get_match_len (VBlock *vb, const BitArray *seq_bi
 {
     START_TIMER;
 
-    bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2;
+    bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->nbits/2 -1)) * 2;
     const word_t *ref = &(is_forward ? genome : genome_rev).ref.words[bit_i >> 6];
     uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
 
     word_t word=0;
     uint32_t nonmatches=0; 
-    for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
+    for (uint32_t i=0; i < (uint32_t)seq_bits->nwords; i++) {
         // create ref_word - the word of the reference to be compared to seq[i] - if the word is not aligned
         // to the bitmap word boundaries, and hence spans 2 bitmap words, we take the MSb's from the left word and the 
         // LSb's from the right word, to create ref_word
@@ -95,21 +95,21 @@ static inline uint32_t aligner_get_match_len (VBlock *vb, const BitArray *seq_bi
     }
     
     // remove non-matches due to the unused part of the last word
-    if (seq_bits->num_of_bits % 64)
-        nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->num_of_bits % 64));
+    if (seq_bits->nbits % 64)
+        nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->nbits % 64));
 
     COPY_TIMER (aligner_get_match_len);
-    return (uint32_t)seq_bits->num_of_bits - nonmatches; // this is the number of matches
+    return (uint32_t)seq_bits->nbits - nonmatches; // this is the number of matches
 }
 
 // converts a string sequence to a 2-bit bitmap
-static inline BitArray aligner_seq_to_bitmap (const char *seq, word_t seq_len, 
-                                              word_t *bitmap_words,  // allocated by caller
-                                              bool *seq_is_all_actg) // optional out
+BitArray aligner_seq_to_bitmap (const char *seq, word_t seq_len, 
+                                word_t *bitmap_words,  // allocated by caller
+                                bool *seq_is_all_actg) // optional out
 {
     // covert seq to 2-bit array
-    BitArray seq_bits = { .num_of_bits  = seq_len * 2, 
-                          .num_of_words = roundup_bits2words64(seq_len * 2), 
+    BitArray seq_bits = { .nbits  = seq_len * 2, 
+                          .nwords = roundup_bits2words64(seq_len * 2), 
                           .words        = bitmap_words,
                           .type         = BITARR_REGULAR };
 
@@ -256,7 +256,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 
     BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
 
-    // allocate bitmaps - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it + param must be 0
+    // allocate bitmaps - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite nbits that overlays it + param must be 0
     buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
                buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local"); 
 
@@ -274,8 +274,8 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     if (gpos_ctx->pair_local) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
         
-        ASSERT (vb->line_i < pair_strand->num_of_bits, "Error: vb=%u cannot get pair-1 STRAND bit for line_i=%u because pair-1 strand bitarray has only %u bits",
-                vb->vblock_i, vb->line_i, (unsigned)pair_strand->num_of_bits);
+        ASSERT (vb->line_i < pair_strand->nbits, "Error: vb=%u cannot get pair-1 STRAND bit for line_i=%u because pair-1 strand bitarray has only %u bits",
+                vb->vblock_i, vb->line_i, (unsigned)pair_strand->nbits);
 
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
         buf_add_bit (&strand_ctx->local, is_forward == pair_is_forward);
@@ -407,8 +407,8 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         }
 
         // sanity check - the sequence is supposed to fit in the 
-        ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome.ref.num_of_bits / 2, "Error in aligner_reconstruct_seq: gpos=%"PRId64" is out of range: seq_len=%u and genome_size=%"PRIu64,
-                gpos, seq_len, genome.ref.num_of_bits / 2);
+        ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome.ref.nbits / 2, "Error in aligner_reconstruct_seq: gpos=%"PRId64" is out of range: seq_len=%u and genome_size=%"PRIu64,
+                gpos, seq_len, genome.ref.nbits / 2);
 
         if (is_forward)  // normal (note: this condition test is outside of the tight loop)
             for (uint32_t i=0; i < seq_len; i++)

@@ -74,7 +74,7 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
     // * larger than 0, smaller than BITS_PER_HASH if HOOK is in this range, 
     //   and some bits in this range and some in next
     // * BITS_PER_HASH if HOOK and all bits are in this range
-    PosType num_bits_this_range = MIN (bits_per_hash, (PosType)r->ref.num_of_bits - base_i*2);
+    PosType num_bits_this_range = MIN (bits_per_hash, (PosType)r->ref.nbits - base_i*2);
     uint32_t refhash_word = 0;
 
     // if the are any of the 29 bits in this range, use them
@@ -101,9 +101,9 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
     PosType this_range_size = ref_size (r);
     PosType next_range_size = ref_size (next_r);
     
-    ASSERT (this_range_size * 2 == r->ref.num_of_bits, 
-            "Error in refhash_calc_one_range: mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.num_of_bits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64, 
-            this_range_size, this_range_size*2, r->ref.num_of_bits, ENT (char, z_file->contexts[0].dict, ENT (CtxNode, z_file->contexts[0].nodes, r->chrom)->char_index), 
+    ASSERT (this_range_size * 2 == r->ref.nbits, 
+            "Error in refhash_calc_one_range: mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64, 
+            this_range_size, this_range_size*2, r->ref.nbits, ENT (char, z_file->contexts[0].dict, ENT (CtxNode, z_file->contexts[0].nodes, r->chrom)->char_index), 
             r->first_pos, r->last_pos);
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the

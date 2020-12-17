@@ -26,6 +26,7 @@
 #include "mutex.h"
 #include "digest.h"
 #include "zlib/zlib.h"
+#include "libdeflate/libdeflate.h"
 
 static bool is_first_txt = true; 
 static uint32_t total_bound_txt_headers_len = 0;
@@ -130,6 +131,10 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
     #define uncomp_len param // we use vb->compress.param to hold the uncompressed length of the bgzf data in vb->compress
 
     uint32_t block_comp_len, block_uncomp_len, this_uncomp_len=0;
+
+    if (uncompress)
+        vb->gzip_compressor = libdeflate_alloc_decompressor(vb);
+        
     while (vb->compressed.uncomp_len < max_uncomp - BGZF_MAX_BLOCK_SIZE) {
 
         buf_alloc_more (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, max_uncomp/4, char, 1.5, "compressed")
@@ -199,7 +204,10 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
         if (uncompress) bgzf_uncompress_one_block (vb, LASTENT (BgzfBlockZip, vb->bgzf_blocks));  
     }
 
-    if (uncompress) buf_free (&evb->compressed); 
+    if (uncompress) {
+        buf_free (&evb->compressed); 
+        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
+    }
 
     return this_uncomp_len;
 #undef param
@@ -316,7 +324,10 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
 
     // case: the data is BGZF-compressed in vb->compressed, except for passed down data from prev VB        
     // uncompress one block at a time to see if its sufficient. usually, one block is enough
-    if (txt_file->codec == CODEC_BGZF && vb->compressed.len)
+    if (txt_file->codec == CODEC_BGZF && vb->compressed.len) {
+
+        vb->gzip_compressor = libdeflate_alloc_decompressor(vb);
+
         for (int block_i=vb->bgzf_blocks.len-1; block_i >= 0; block_i--) {
             BgzfBlockZip *bb = ENT (BgzfBlockZip, vb->bgzf_blocks, block_i);
             bgzf_uncompress_one_block (vb, bb);
@@ -324,7 +335,11 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
             passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &i);
             if (passed_up_len >= 0) goto done; // we have the answer (callback returns -1 if no it needs more data)
         }
+
+        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
+
         // if not found - fall through to test the passed-down data too now
+    }
 
     // test remaining txt_data including passed-down data from previous VB
     passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, 0, &i);
@@ -490,35 +505,35 @@ void txtfile_write_one_vblock (VBlockP vb)
     COPY_TIMER (write);
 }
 
-static void txtfile_write_4_lines (VBlockP vb)
+void txtfile_write_4_lines (VBlockP vb, const char *qname_suffix)
 {
     ARRAY (char, txt, vb->txt_data);
     int64_t *next = &vb->txt_data.param; // we use param as "next"
+    unsigned qname_suffix_len = qname_suffix ? strlen (qname_suffix) : 0;
 
     for (unsigned nl=0; nl < 4; nl++) {
         int64_t last = *next; 
         while (txt[last] != '\n') last++;
         
         int64_t len = last - *next + 1;
-        file_write (txt_file, &txt[*next], len);
 
+        if (nl || !qname_suffix)
+            file_write (txt_file, &txt[*next], len);
+        else {
+            int64_t after_qname = last;
+            for (int64_t i=*next; i <= last; i++)
+                if (txt[i] == ' ' || txt[i] == '\t') {
+                    after_qname = i;
+                    break;
+                }
+            file_write (txt_file, &txt[*next], after_qname - *next);
+            file_write (txt_file, qname_suffix, qname_suffix_len);
+            file_write (txt_file, &txt[after_qname], len - (after_qname - *next));
+        }
+        
         txt_file->txt_data_so_far_single += len;
         txt_file->disk_so_far            += len;
         *next                            += len;
-    }
-}
-
-// write the VBs - interleaving their lines
-void txtfile_write_one_vblock_interleave (VBlockP vb1, VBlockP vb2)
-{
-    ASSERT (vb1->lines.len == vb2->lines.len, "Error txtfile_write_one_vblock_interleave: in vb1=%u vb2=%u expecting vb1->lines.len=%"PRIu64" == vb2->lines.len=%"PRIu64,
-            vb1->vblock_i, vb2->vblock_i, vb1->lines.len, vb2->lines.len);
-
-    vb1->txt_data.param = vb2->txt_data.param = 0;
-
-    for (uint64_t i=0; i < vb1->lines.len; i++) {
-        txtfile_write_4_lines (vb1);
-        txtfile_write_4_lines (vb2);
     }
 }
 
@@ -594,7 +609,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
         return false;
     }
 
-    if (z_file && !flag.test_seg)       
+    if (z_file && !flag.seg_only)       
         // we always write the txt_header section, even if we don't actually have a header, because the section
         // header contains the data about the file
         zfile_write_txt_header (&evb->txt_data, header_digest, is_first_txt); // we write all headers in bound mode too, to support --unbind
@@ -613,7 +628,8 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 }
 
 // PIZ: reads the txt header from the genozip file and outputs it to the reconstructed txt file
-void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_component_i, Digest *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
+void txtfile_genozip_to_txt_header (const SectionListEntry *sl, 
+                                    Digest *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
 {
     bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
 
@@ -663,7 +679,8 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl, uint32_t unbind_
         if (!loaded)
             txt_file->bgzf_flags = (struct FlagsBgzf){ // case: we're creating our own BGZF blocks
                 .has_eof_block = true, // add an EOF block at the end
-                .libdeflate_level = BGZF_COMP_LEVEL_DEFAULT 
+                .library       = LIBD, // default - libdeflate level 6
+                .level         = BGZF_COMP_LEVEL_DEFAULT 
             };
 
         header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_load_isizes

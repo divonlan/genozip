@@ -89,6 +89,9 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 }
 
+extern BitArrayP buf_alloc_bitarr_do (VBlockP vb, Buffer *buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
+#define buf_alloc_bitarr(vb, buf, nbits, name) buf_alloc_bitarr_do((vb), (buf), (nbits), __FUNCTION__, __LINE__, (name))
+
 #define buf_set_overlayable(buf) (buf)->overlayable = true
 
 extern void buf_overlay_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line, const char *name, int64_t param);
@@ -157,7 +160,7 @@ extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uin
 // bitmap stuff
 extern uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits);
 extern void buf_add_bit (Buffer *buf, int64_t new_bit);
-extern BitArrayP buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t num_of_bits);
+extern BitArrayP buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t nbits);
 #define buf_get_bitarray(buf) ((BitArrayP)(&(buf)->type))
 #define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
 #define buf_add_clear_bit(buf) buf_add_bit (buf, 0)

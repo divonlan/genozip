@@ -26,8 +26,11 @@ void vb_release_vb (VBlock *vb)
 {
     if (!vb) return; // nothing to release
 
+    // verify that gzip_compressor was released after use
+    ASSERT (!vb->gzip_compressor, "Error in vb_release_vb of vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
+
     vb->first_line = vb->vblock_i = vb->num_haplotypes_per_line = vb->fragment_len = vb->fragment_num_words = 0;
-    vb->vb_data_size = vb->vb_data_read_size = vb->longest_line_len = vb->line_i = vb->grep_stages = 0;
+    vb->vb_data_size = vb->vb_data_read_size = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
@@ -77,7 +80,7 @@ void vb_release_vb (VBlock *vb)
 
     // release data_type -specific fields
     if (vb->data_type != DT_NONE) 
-        DT_FUNC (vb, release_vb)(vb);
+        DT_FUNC (vb, release_vb)(vb);    
 
     // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
     // vb->num_lines_alloced
@@ -86,7 +89,6 @@ void vb_release_vb (VBlock *vb)
     // vb->num_sample_blocks : we keep this value as it is needed by vb_cleanup_memory, and it doesn't change
     //                         between VBs of a file or bound files.
     // vb->data_type   : type of this vb 
-    // vb->libdefalte  : an instance of libdeflate - no need to re-instantiate between VBs
 }
 
 void vb_destroy_vb (VBlockP *vb_p)
@@ -119,9 +121,6 @@ void vb_destroy_vb (VBlockP *vb_p)
     // destory data_type -specific buffers
     if (vb->data_type != DT_NONE)
         DT_FUNC(vb, destroy_vb)(vb);
-
-    if (command == ZIP) libdeflate_free_decompressor (vb->libdeflate);
-    else                libdeflate_free_compressor   (vb->libdeflate);
 
     FREE (*vb_p);
 }

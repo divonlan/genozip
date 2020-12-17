@@ -114,8 +114,8 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     
     case SEC_BGZF: {
         SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
-        sprintf (str, SEC_TAB "libdeflate_level=%u has_eof=%u\n",
-                 h->h.flags.bgzf.libdeflate_level, h->h.flags.bgzf.has_eof_block); 
+        sprintf (str, SEC_TAB "level=%u has_eof=%u\n",
+                 h->h.flags.bgzf.level, h->h.flags.bgzf.has_eof_block); 
         break;
     }
     
@@ -165,7 +165,7 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
     const uint8_t *after = AFTERENT (const uint8_t, *b250_data);
 
     while (data < after) {
-        WordIndex word_index = base250_decode (&data, true);
+        WordIndex word_index = base250_decode (&data, true, "zfile_show_b250_section");
         switch (word_index) {
             case WORD_INDEX_ONE_UP     : fprintf (info_stream, "ONE_UP "); break;
             case WORD_INDEX_EMPTY_SF   : fprintf (info_stream, "EMPTY "); break;
@@ -329,7 +329,7 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
     uint8_t unused_bits = 0;
     if (ctx->ltype == LT_BITMAP) {
         BitArray *bm = buf_get_bitarray (&ctx->local);
-        unused_bits = ((uint8_t)64 - (uint8_t)(bm->num_of_bits % 64)) % (uint8_t)64;
+        unused_bits = ((uint8_t)64 - (uint8_t)(bm->nbits % 64)) % (uint8_t)64;
     }
 
     SectionHeaderCtx header = (SectionHeaderCtx) {
@@ -499,9 +499,9 @@ int32_t zfile_read_section_do (File *file,
 }
 
 // Read one section header - returns the header in vb->compressed - caller needs to free vb->compressed
-void *zfile_read_section_header (VBlockP vb, uint64_t offset, 
-                                 uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
-                                 SectionType expected_sec_type)
+SectionHeader *zfile_read_section_header (VBlockP vb, uint64_t offset, 
+                                          uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
+                                          SectionType expected_sec_type)
 {
     uint32_t header_size = st_header_size (expected_sec_type);
 
@@ -626,7 +626,11 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
     if (z_file->num_components < 2) flag.unbind = 0; // override user's --unbind if file has only 1 component
 
     z_file->genozip_version   = header->genozip_version;
-    z_file->z_flags           = header->h.flags.genozip_header;
+    
+    int dts = z_file->z_flags.dt_specific; // save in case its set already (eg dts_paired is set in fastq_piz_is_paired)
+    z_file->z_flags = header->h.flags.genozip_header;
+    z_file->z_flags.dt_specific |= dts;
+
     if (digest) *digest       = header->digest_bound; 
     if (txt_data_size) *txt_data_size = BGEN64 (header->uncompressed_data_size);
     if (num_items_bound) *num_items_bound = BGEN64 (header->num_items_bound); 

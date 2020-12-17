@@ -528,8 +528,10 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_FLAG)
 {
     uint16_t flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
 
-    if (flag & 0x40) RECONSTRUCT ("1\n", 2); // usually R1
-    if (flag & 0x80) RECONSTRUCT ("2\n", 2); // usually R2
+    if (flag & (0x40 | 0x80)) vb->txt_data.len--; // remove newline
+
+    if (flag & 0x40) RECONSTRUCT ("/1\n", 3); // usually R1
+    if (flag & 0x80) RECONSTRUCT ("/2\n", 3); // usually R2
 
     return 0;
 }

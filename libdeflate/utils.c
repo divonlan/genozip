@@ -36,25 +36,25 @@
 #  include <stdlib.h>
 #endif
 
-static void *(*libdeflate_malloc_func)(size_t) = malloc;
-static void (*libdeflate_free_func)(void *) = free;
+static void *(*libdeflate_malloc_func)(void *, unsigned, unsigned) = 0; // modified by divon
+static void (*libdeflate_free_func)(void *, void *) = 0; // modified by divon
 
 void *
-libdeflate_malloc(size_t size)
+libdeflate_malloc(size_t size, void *opaque) // function modified by divon
 {
-	return (*libdeflate_malloc_func)(size);
+	return (*libdeflate_malloc_func)(opaque, (unsigned)size, 1); 
 }
 
 void
-libdeflate_free(void *ptr)
+libdeflate_free(void *ptr, void *opaque) // function modified by divon
 {
-	(*libdeflate_free_func)(ptr);
+	(*libdeflate_free_func)(opaque, ptr);
 }
 
 void *
-libdeflate_aligned_malloc(size_t alignment, size_t size)
+libdeflate_aligned_malloc(size_t alignment, size_t size, void *opaque)  // function modified by divon
 {
-	void *ptr = libdeflate_malloc(sizeof(void *) + alignment - 1 + size);
+	void *ptr = libdeflate_malloc(sizeof(void *) + alignment - 1 + size, opaque);
 	if (ptr) {
 		void *orig_ptr = ptr;
 		ptr = (void *)ALIGN((uintptr_t)ptr + sizeof(void *), alignment);
@@ -64,15 +64,15 @@ libdeflate_aligned_malloc(size_t alignment, size_t size)
 }
 
 void
-libdeflate_aligned_free(void *ptr)
+libdeflate_aligned_free(void *ptr, void *opaque)
 {
 	if (ptr)
-		libdeflate_free(((void **)ptr)[-1]);
+		libdeflate_free(((void **)ptr)[-1], opaque);
 }
 
 LIBDEFLATEEXPORT void LIBDEFLATEAPI
-libdeflate_set_memory_allocator(void *(*malloc_func)(size_t),
-				void (*free_func)(void *))
+libdeflate_set_memory_allocator(void *(*malloc_func)(void *, unsigned, unsigned), // function modified by divon
+				void (*free_func)(void *, void *))
 {
 	libdeflate_malloc_func = malloc_func;
 	libdeflate_free_func = free_func;

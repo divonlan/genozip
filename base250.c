@@ -26,11 +26,11 @@ Base250 base250_encode (WordIndex n) // number to encode
     return result;
 }
 
-WordIndex base250_decode (const uint8_t **str, bool advance)
+WordIndex base250_decode (const uint8_t **str, bool advance, const char *ctx_name)
 {
     #define ADVANCE(n) if (advance) *str += n
 
-    ASSERT0 (*str, "Error in base250_decode: *str is NULL");
+    ASSERT (*str, "Error in base250_decode: *str is NULL in ctx=%s", ctx_name);
 
     switch ((*str)[0]) {
         case BASE250_MOST_FREQ0: ADVANCE(1); return 0;

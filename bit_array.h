@@ -32,7 +32,7 @@
 #define roundup_bits2bytes(bits)   (((bits)+7)/8)
 #define roundup_bits2words32(bits) (((bits)+31)/32)
 #define roundup_bits2words64(bits) (((bits)+63)/64)
-#define roundup_bits2bytes64(bits) (roundup_bits2words64(bits)*8)
+#define roundup_bits2bytes64(bits) (roundup_bits2words64(bits)*8) // number of bytes in the array of 64b words needed for bits
 
 // Round a number up to the nearest number that is a power of two (fixed by Divon)
 #define roundup2pow(x) (__builtin_popcountll(x)==1 ? (x) : (1UL << (64 - leading_zeros(x))))
@@ -169,8 +169,8 @@ typedef struct BitArray
     // These fields should not be changed or added to, as they map to Buffer
     BitArrayType type;
     word_t *words;            // maps to Buffer->data
-    bit_index_t num_of_bits;  // maps to Buffer->param
-    word_addr_t num_of_words; // maps to Buffer->len  ; round_up (num_of_bits / 64)
+    bit_index_t nbits;  // maps to Buffer->param
+    word_addr_t nwords; // maps to Buffer->len  ; round_up (nbits / 64)
 } BitArray;
 
 //
@@ -179,16 +179,16 @@ typedef struct BitArray
 
 static inline void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) // divon
 {
-  if (bitarr->num_of_bits % 64)
-    bitarr->words[bitarr->num_of_words-1] &= bitmask64 (bitarr->num_of_bits % 64); 
+  if (bitarr->nbits % 64)
+    bitarr->words[bitarr->nwords-1] &= bitmask64 (bitarr->nbits % 64); 
 }
 
 // Allocate using existing struct
-extern BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits);
-extern void bit_array_dealloc(BitArray* bitarr);
+extern BitArray bit_array_alloc (bit_index_t nbits, bool clear);
+extern void bit_array_free (BitArray* bitarr);
 
 // Get length of bit array
-extern bit_index_t bit_array_length(const BitArray* bit_arr);
+extern bit_index_t bit_array_length (const BitArray* bit_arr);
 
 extern void LTEN_bit_array (BitArray* bitarr); // divon
 
@@ -211,7 +211,7 @@ extern void LTEN_bit_array (BitArray* bitarr); // divon
 // c must be 0,1,2 or 3 ; i must be even
 #define bit_array_assign2(arr,i,c) bitset_cpy2((arr)->words,i,c) // divon
 
-#define bit_array_len(arr) ((arr)->num_of_bits)
+#define bit_array_len(arr) ((arr)->nbits)
 
 //
 // Get, set, clear, assign and toggle individual bits
@@ -263,9 +263,6 @@ extern void bit_array_set_region(BitArray* bitarr, bit_index_t start, bit_index_
 #define bit_array_clear_region(bitarr,start,len) bit_array_clear_region_do (bitarr, start, len, __FUNCTION__, __LINE__)
 extern void bit_array_clear_region_do (BitArray* bitarr, bit_index_t start, bit_index_t len, const char *func, unsigned code_line);
 
-// Toggle all the bits in a region
-extern void bit_array_toggle_region(BitArray* bitarr, bit_index_t start, bit_index_t len);
-
 //
 // Set, clear and toggle all bits at once
 //
@@ -275,9 +272,6 @@ extern void bit_array_set_all(BitArray* bitarr);
 
 // Set all bits in this array to 0
 extern void bit_array_clear_all(BitArray* bitarr);
-
-// Set all 1 bits to 0, and all 0 bits to 1
-extern void bit_array_toggle_all(BitArray* bitarr);
 
 //
 // Get / set a word of a given size
@@ -379,7 +373,7 @@ extern void bit_array_from_substr(BitArray* bitarr, bit_index_t offset,
                            const char* str, size_t len,
                            const char *on, const char *off, char left_to_right);
 
-// Takes a char array to write to.  `str` must be bitarr->num_of_bits+1 in
+// Takes a char array to write to.  `str` must be bitarr->nbits+1 in
 // length. Terminates string with '\0'
 extern char* bit_array_to_str(const BitArray* bitarr, char* str);
 extern char* bit_array_to_str_rev(const BitArray* bitarr, char* str);
@@ -387,9 +381,9 @@ extern char* bit_array_to_str_rev(const BitArray* bitarr, char* str);
 // Get a string representations for a given region, using given on/off
 // characters.
 // Note: does not nul-terminate
-extern void bit_array_to_substr(const BitArray* bitarr,
-                         bit_index_t start, bit_index_t length,
-                         char* str, char on, char off, char left_to_right);
+extern void bit_array_to_substr (const BitArray* bitarr,
+                                 bit_index_t start, bit_index_t length,
+                                 char* str, char on, char off, char left_to_right);
 
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print
 // newline.
@@ -434,7 +428,7 @@ extern void bit_array_copy_all(BitArray* dst, const BitArray* src);
 // works on arrays with full words
 extern void bit_array_reverse_complement_all (BitArray *dst, const BitArray *src, bit_index_t src_start_base, bit_index_t max_num_bases);
 
-extern void bit_array_overlay (BitArray *overlaid_bitarr, BitArray *regular_bitarr, bit_index_t start, bit_index_t num_of_bits);
+extern void bit_array_overlay (BitArray *overlaid_bitarr, BitArray *regular_bitarr, bit_index_t start, bit_index_t nbits);
 
 //
 // Logic operators
@@ -502,7 +496,7 @@ void bit_array_reverse_region(BitArray* bitarr, bit_index_t start, bit_index_t l
 // Read/Write bit_array to a file
 //
 // File format is [8 bytes: for number of elements in array][data]
-// Number of bytes of data is: (int)((num_of_bits + 7) / 8)
+// Number of bytes of data is: (int)((nbits + 7) / 8)
 //
 
 //
@@ -512,10 +506,10 @@ void bit_array_reverse_region(BitArray* bitarr, bit_index_t start, bit_index_t l
 // Generalised 'binary to string' function
 // Adds bits to the string in order of lsb to msb
 // e.g. 0b11010 (26 in decimal) would come out as "01011"
-char* bit_array_word2str(const void *ptr, size_t num_of_bits, char *str);
+char* bit_array_word2str(const void *ptr, size_t nbits, char *str);
 
 // Same as above but in reverse
-char* bit_array_word2str_rev(const void *ptr, size_t num_of_bits, char *str);
+char* bit_array_word2str_rev(const void *ptr, size_t nbits, char *str);
 
 #ifdef __cplusplus
 }

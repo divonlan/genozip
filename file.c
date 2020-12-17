@@ -395,8 +395,7 @@ static bool file_open_txt_read (File *file)
                 evb->compressed.param = bgzf_uncompressed_size; // pass uncompressed size in param
                 buf_add (&evb->compressed, block, block_size);
                 
-                file->bgzf_flags.libdeflate_level = 
-                    bgzf_get_compression_level (file->name, block, block_size, (uint32_t)bgzf_uncompressed_size);
+                file->bgzf_flags = bgzf_get_compression_level (file->name, block, block_size, (uint32_t)bgzf_uncompressed_size);
             }
 
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
@@ -659,12 +658,12 @@ static bool file_open_z (File *file)
 
     ASSERT (!file->is_remote, "Error: it is not possible to access remote genozip files; when attempting to open %s", file->name);
     
-    if (!flag.test_seg || flag.reading_reference)
+    if (!flag.seg_only || flag.reading_reference)
         file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, file->mode);
 
     file_initialize_z_file_data (file);
 
-    return file->file != 0 || flag.test_seg;
+    return file->file != 0 || flag.seg_only;
 }
 
 File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
@@ -707,7 +706,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     
         if ((mode == WRITE || mode == WRITEREAD) && file_exists && !flag.force && 
             !(supertype==TXT_FILE && flag.test) && // testing piz
-            !(supertype==Z_FILE && flag.test_seg)) // test-segging zip
+            !(supertype==Z_FILE && flag.seg_only)) // zip with --seg-only
             file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
         // copy filename 
@@ -804,7 +803,11 @@ void file_close (File **file_p,
         else if (file->mode == WRITE && file_is_written_via_ext_compressor (file))
             stream_close (&output_compressor, STREAM_WAIT_FOR_PROCESS);
 
-        else 
+        // if its stdout - just flush, don't close - we might need it for the next file
+        else if (file->mode == WRITE && flag.to_stdout) 
+            fflush ((FILE *)file->file);
+
+        else
             FCLOSE (file->file, file_printname (file));
     }
 

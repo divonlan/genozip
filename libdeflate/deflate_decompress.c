@@ -140,6 +140,8 @@ struct libdeflate_decompressor {
 	u16 sorted_syms[DEFLATE_MAX_NUM_SYMS];
 
 	bool static_codes_loaded;
+
+	void *opaque;  // added by divon
 };
 
 /*****************************************************************************
@@ -968,7 +970,7 @@ libdeflate_deflate_decompress(struct libdeflate_decompressor * restrict d,
 }
 
 LIBDEFLATEEXPORT struct libdeflate_decompressor * LIBDEFLATEAPI
-libdeflate_alloc_decompressor(void)
+libdeflate_alloc_decompressor(void *opaque)
 {
 	/*
 	 * Note that only certain parts of the decompressor actually must be
@@ -985,16 +987,20 @@ libdeflate_alloc_decompressor(void)
 	 *
 	 * But for simplicity, we currently just zero the whole decompressor.
 	 */
-	struct libdeflate_decompressor *d = libdeflate_malloc(sizeof(*d));
+	struct libdeflate_decompressor *d = libdeflate_malloc(sizeof(*d), opaque);
 
 	if (d == NULL)
 		return NULL;
+	
 	memset(d, 0, sizeof(*d));
+	d->opaque = opaque;
+
 	return d;
 }
 
 LIBDEFLATEEXPORT void LIBDEFLATEAPI
-libdeflate_free_decompressor(struct libdeflate_decompressor *d)
+libdeflate_free_decompressor(struct libdeflate_decompressor **d)
 {
-	libdeflate_free(d);
+	libdeflate_free(*d, *d ? (*d)->opaque : NULL);
+	*d = NULL;
 }
