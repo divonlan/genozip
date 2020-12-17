@@ -24,11 +24,7 @@
 // GENOBWA STUFF
 //------------------
 
-static WordIndex genobwa_chrom_index = WORD_INDEX_NONE;
-static Buffer genobwa_hash_buf = EMPTY_BUFFER;
-static BitArray *genobwa_hash = NULL;
-
-WordIndex fastq_get_genobwa_chrom (void) {  }
+WordIndex fastq_get_genobwa_chrom (void) { return 0; }
 
 // Called by thread I/O to initialize for a new genozip file
 static inline void fastq_genobwa_initialize (void)
@@ -38,6 +34,7 @@ static inline void fastq_genobwa_initialize (void)
 
 static inline bool fastq_genobwa_is_seq_included (const char *seq, uint32_t seq_len)
 {
+    return true;
 }
 
 //-----------------------
