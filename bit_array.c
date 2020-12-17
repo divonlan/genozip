@@ -350,13 +350,12 @@ static inline void _set_region(BitArray* bitarr, bit_index_t start,
 // Constructor
 //
 
-BitArray bit_array_alloc (bit_index_t nbits, bool clear)
+BitArray bit_array_alloc_do (bit_index_t nbits, bool clear, const char *func, uint32_t code_line)
 {
     BitArray bitarr = { .type   = BITARR_REGULAR,
                         .nbits  = nbits,
                         .nwords = roundup_bits2words64(nbits),
-                        .words  = clear ? (word_t*)CALLOC (roundup_bits2bytes64(nbits)) 
-                                        : (word_t*)MALLOC (roundup_bits2bytes64(nbits)) };
+                        .words  = buf_low_level_malloc (roundup_bits2bytes64(nbits), clear, func, code_line) };
 
     // zero the bits in the top word that are beyond nbits (if not already cleared)
     if (!clear) bit_array_clear_excess_bits_in_top_word (&bitarr);

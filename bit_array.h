@@ -184,7 +184,9 @@ static inline void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) //
 }
 
 // Allocate using existing struct
-extern BitArray bit_array_alloc (bit_index_t nbits, bool clear);
+extern BitArray bit_array_alloc_do (bit_index_t nbits, bool clear, const char *func, uint32_t code_line);
+#define bit_array_alloc(nbits, clear) bit_array_alloc_do (nbits, clear, __FUNCTION__, __LINE__)
+
 extern void bit_array_free (BitArray* bitarr);
 
 // Get length of bit array
