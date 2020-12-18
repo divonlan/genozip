@@ -32,13 +32,16 @@
 #include "fastq.h"
 
 // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_DENOVO_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
-Buffer ranges                       = EMPTY_BUFFER; 
+Buffer ranges = EMPTY_BUFFER; 
 
-Range genome = {}, genome_rev = {}; // used in ZIP/PIZ of fasta and fastq with a reference - we have only one range that is the entire genome (this points to the first entry in ranges)
-Buffer genome_ref_copy              = EMPTY_BUFFER; // saved copy of genome.ref, used when compressing multiple files with REF_EXT_STORE - which compacts ranges - recovering between files
-Buffer ranges_copy                  = EMPTY_BUFFER; // saved copy of ranges in initialize state, for same purpose
+static Buffer genome_buf = {}, emoneg_buf = {}, genome_is_set_buf = {}, genome_cache = {};
+BitArray *genome=0, *emoneg=0 /* reverse compliment */, *genome_is_set=0;
 
-PosType genome_size = 0;
+//Range genome = {}, emoneg = {}; // used in ZIP/PIZ of fasta and fastq with a reference - we have only one range that is the entire genome (this points to the first entry in ranges)
+//Buffer genome_ref_copy              = EMPTY_BUFFER; // saved copy of genome.ref, used when compressing multiple files with REF_EXT_STORE - which compacts ranges - recovering between files
+//Buffer ranges_copy                  = EMPTY_BUFFER; // saved copy of ranges in initialize state, for same purpose
+
+PosType genome_nbases = 0;
 
 static Buffer ref_external_ra       = EMPTY_BUFFER; // Random Access data of the external reference file
 static Buffer ref_file_section_list = EMPTY_BUFFER; // Section List of the external reference file
@@ -72,22 +75,68 @@ Digest ref_md5 = {};
 
 #define ref_is_range_used(r) ((r)->ref.nbits && ((r)->is_set.nbits || flag.make_reference))
 
-// free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
-void ref_unload_reference (bool is_last_file)
+static inline bool ref_has_is_set (void)
 {
-    // in case of REF_EXTERNAL/REF_EXT_STORE, we keep the reference for other files on the command line
+    return primary_command == PIZ || (primary_command == ZIP && flag.reference == REF_EXT_STORE);
+}
+
+static void ref_free_denovo_ranges (void)
+{
+    if (!buf_is_allocated (&ranges)) return;
+
+    ARRAY (Range, r, ranges);
+    for (unsigned i=0; i < ranges.len ; i++) {
+        FREE (r[i].ref.words);
+        FREE (r[i].is_set.words);
+        if (primary_command == ZIP) 
+            FREE (r[i].chrom_name); // allocated only in ZIP/REF_INTERNAL - otherwise a pointer into another Buffer
+    }
+}
+
+// free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
+void ref_unload_reference (void)
+{
+    if (ranges_type == RT_DENOVO) ref_free_denovo_ranges();
+    
+    // in case of REF_EXTERNAL - the reference has not been modified and we can reuse it for the next file
+    if (flag.reference != REF_EXTERNAL) {
+        buf_free (&genome_buf);
+        buf_free (&emoneg_buf);
+        buf_free (&genome_cache);
+        buf_free (&ranges);
+    }
+
+    // in case of REF_EXTERNAL and REF_EXT_STORE - these buffers are immutable so the next file can use them
+    if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE) {
+        buf_free (&ref_external_ra);
+        buf_free (&ref_file_section_list);
+        buf_free (&genome_is_set_buf);
+        genome_nbases = 0;
+        ref_contigs_free();
+        ref_lock_free();
+    }
+    
+     // in ZIP with REF_EXTERNAL, we just cleanup is_set
+    if (flag.reference == REF_EXTERNAL && command == ZIP) 
+        buf_zero (&genome_is_set_buf);
+    
+    buf_free (&region_to_set_list);
+    buf_free (&ref_stored_ra);
+
+
+  /*  //REF_EXT_STORE, we keep the reference for other files on the command line
     // note: in PIZ we never cleanup external references as they can never change (the user can only specify one --reference)
     if ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && !is_last_file) {  
         
         // zip sets 1 to nucleotides used. we clear it for the next file.
-        if (primary_command == ZIP)
-            bit_array_clear_all (&genome.is_set); 
+        if (primary_command == ZIP) {
+            bit_array_clear_all (genome_is_set); 
 
-        // REF_EXT_STORE compacts ranges. We recover them from the copy
-        if (buf_is_allocated (&genome_ref_copy)) { // won't be allocated if we are compressing only one file or if not REF_EXT_STORE
-            memcpy (genome.ref.words, genome_ref_copy.data, genome.ref.nwords * sizeof (word_t));
-            buf_copy (evb, &ranges, &ranges_copy, sizeof (Range), 0, 0, "ranges");
-        }
+            // REF_EXT_STORE compacts ranges. We fix them in preparation for the next file
+            if (flag.reference == REF_EXT_STORE) { // won't be allocated if we are compressing only one file or if not REF_EXT_STORE
+                memcpy (genome.ref.words, genome_ref_copy.data, genome.ref.nwords * sizeof (word_t));
+                buf_copy (evb, &ranges, &ranges_copy, sizeof (Range), 0, 0, "ranges");
+            }
     }
 
     // case ZIP: REF_INTERNAL - we're done with ranges - free so next non-bound file can build its own
@@ -96,7 +145,7 @@ void ref_unload_reference (bool is_last_file)
     // case force_clean_all: happens before start the test process (in ZIP with --test) for the last file
 
     else {
-        if (buf_is_allocated (&ranges) && ranges.param == RT_DENOVO) {
+        if (buf_is_allocated (&ranges) && ranges_type == RT_DENOVO) {
             ARRAY (Range, rng, ranges);
             for (unsigned i=0; i < ranges.len ; i++) {
                 FREE (rng[i].ref.words);
@@ -106,12 +155,12 @@ void ref_unload_reference (bool is_last_file)
             }
         }
         
-        if (ranges.param == RT_LOADED) {
+        if (ranges_type == RT_LOADED) {
             FREE (genome.ref.words);
             FREE (genome.is_set.words);
-            FREE (genome_rev.ref.words);
-            genome = genome_rev = (Range){};
-            genome_size = 0;
+            FREE (emoneg.ref.words);
+            genome = emoneg = (Range){};
+            genome_nbases = 0;
         }
 
         buf_free (&ranges);
@@ -125,19 +174,33 @@ void ref_unload_reference (bool is_last_file)
         ref_contigs_free();
         ref_lock_free();
         refhash_free();
-    }
+    }*/
 }
 
+void ref_destroy_reference (void)
+{
+    if (ranges_type == RT_DENOVO) ref_free_denovo_ranges();
+
+    buf_destroy (&ranges);
+    buf_destroy (&genome_buf);
+    buf_destroy (&emoneg_buf);
+    buf_destroy (&genome_cache);
+    buf_destroy (&genome_is_set_buf);
+    buf_destroy (&region_to_set_list);
+    buf_destroy (&ref_external_ra);
+    buf_destroy (&ref_stored_ra);
+    buf_destroy (&ref_file_section_list);
+
+    ref_contigs_destroy();
+    refhash_destroy();
+}
+
+// account for memory allocations NOT through Buffers 
 MemStats ref_memory_consumption (void)
 {
     MemStats stats = { "reference", 0, 0 };
 
-    if (ranges.param == RT_LOADED) {
-        stats.bytes += (genome.ref.nwords + genome.is_set.nwords + genome_rev.ref.nwords) * sizeof (word_t);
-        stats.buffers = !!genome.ref.nwords + !!genome.is_set.nwords + !!genome_rev.ref.nwords;
-    }
-
-    else if (ranges.param == RT_DENOVO) {
+    if (ranges_type == RT_DENOVO) {
         ARRAY (Range, r, ranges);
         for (unsigned i=0; i < ranges.len; i++) {
             if (r[i].ref.nwords) {
@@ -223,10 +286,6 @@ static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, co
 // Compute thread: called by ref_uncompress_one_range
 Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
 {
-    // in genozip --genobwa, we load only the target contig, in ranges[0]
-    if (ranges.param == RT_ONE_CONTIG && command == ZIP) 
-        return FIRSTENT (Range, ranges);
-
     Context *ctx = &z_file->contexts[CHROM];
     ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "Error in ref_get_range_by_chrom: chrom=%d out of range - ctx->word_list.len=%u",
             chrom, (uint32_t)ctx->word_list.len);
@@ -460,16 +519,14 @@ static void ref_read_one_range (VBlockP vb)
     // if the user specified --regions, check if this ref range is needed
     bool range_is_included = true;
     RAEntry *ra = NULL;
-    if (flag.regions || 
-        (flag.genobwa && command == ZIP)) { // --genobwa: in ZIP we need only the target contig. in PIZ we need all, as we need to reconstruct
+    if (flag.regions) { 
         if (vb->vblock_i > ref_stored_ra.len) return; // we're done - no more ranges to read, per random access (this is the empty section)
 
         ra = ENT (RAEntry, ref_stored_ra, vb->vblock_i-1);
         ASSERT (ra->vblock_i == vb->vblock_i, "Error in ref_read_one_range: expecting ra->vblock_i(%u) == vb->vblock_i(%u)", 
                 ra->vblock_i, vb->vblock_i);
 
-        range_is_included = flag.regions ? regions_is_ra_included (ra)
-                                         : fastq_get_genobwa_chrom() == ra->chrom_index;
+        range_is_included = regions_is_ra_included (ra);
     }
 
     if (range_is_included) { 
@@ -509,15 +566,8 @@ void ref_load_stored_reference (void)
     ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
     
     if (!(flag.show_headers && exe_type == EXE_GENOCAT)) {
-        random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
-        
-        if (flag.reading_reference) {
-            buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra");
-            buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list");
-        }
 
-        ref_initialize_ranges ((flag.genobwa && command == ZIP) ? RT_ONE_CONTIG // --genobwa: in ZIP we need only the target contig. in PIZ we need all, as we need to reconstruct
-                                                                : RT_LOADED);
+        ref_initialize_ranges (RT_LOADED, NULL);
         
         sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
@@ -529,14 +579,13 @@ void ref_load_stored_reference (void)
     bool external = flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE;
     dispatcher_fan_out_task (external ? ref_filename     : z_file->basename, 
                              external ? PROGRESS_MESSAGE : PROGRESS_NONE, 
-                             external ? "Reading reference file..." : NULL, 
+                             external ? "Reading and caching reference file (next time will be faster!)..." : NULL, 
                              flag.test, false,
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NULL);
 
-    if (flag.show_ref_seq) 
-        ref_show_sequence();
+    if (flag.show_ref_seq) ref_show_sequence();
 
     // now we can safely set the is_set regions originating from non-compacted ranges. we couldn't do it before, because
     // copied-from-FASTA ranges appear first in the genozip file, and after them could be compacted ranges that originate
@@ -547,6 +596,49 @@ void ref_load_stored_reference (void)
 
     buf_test_overflows_all_vbs ("ref_load_stored_reference");
 }
+
+static inline const char *ref_get_cache_filename (char *cache_fn)
+{
+    sprintf (cache_fn, "%s.gcache", z_name);
+    return cache_fn;
+}
+
+// mmap the reference cached file, as copy-on-write - modifications are private to process and not written to the file
+bool ref_mmap_cached_reference (void)
+{
+    ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
+    
+    char cache_fn[strlen (z_name) + 20];
+    ref_get_cache_filename (cache_fn);
+
+    if (access (cache_fn, F_OK)) return false; // file doesn't exist
+
+    ref_initialize_ranges (RT_CACHED, cache_fn); // also does the actual buf_mmap
+
+    if (ref_has_is_set()) buf_zero (&genome_is_set_buf);
+
+    // PIZ: all ranges of contigs are "set", i.e. the genome is valid in this location (it is not set in the short space between contigs)
+    if (primary_command == PIZ) 
+        for (uint32_t chrom=0; chrom < ranges.len; chrom++) {
+            Range *r = ENT (Range, ranges, chrom);
+            bit_array_set_region (&r->is_set, 0, ref_size (r));
+        }
+
+    if (flag.show_ref_seq) ref_show_sequence();
+
+    return true;
+}
+
+void *ref_create_cache (void *unused_arg)
+{
+    char cache_fn[strlen (z_name) + 20];
+    ref_get_cache_filename (cache_fn);
+
+    buf_dump_to_file (cache_fn, &genome_cache, 1, true);
+
+    return NULL;
+}
+
 
 // ------------------------------------
 // ZIP side
@@ -736,10 +828,11 @@ Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, cons
     // sanity checks
     ASSSEG0 (vb->chrom_name, field, "Error in ref_seg_get_locked_range: vb->chrom_name=NULL");
 
-    switch (ranges.param) {
+    switch (ranges_type) {
         case RT_DENOVO : return ref_seg_get_locked_range_denovo (vb, pos, field, lock);
+        case RT_CACHED :
         case RT_LOADED : return ref_seg_get_locked_range_loaded (vb, pos, seq_len, field, lock);
-        default        : ABORT ("Error in ref_seg_get_locked_range: invalid ranges.param=%"PRId64, ranges.param); return 0;
+        default        : ABORT ("Error in ref_seg_get_locked_range: invalid ranges_type=%"PRId64, ranges_type); return 0;
     }
 }
 
@@ -855,7 +948,7 @@ static bool ref_remove_flanking_regions (Range *r, uint64_t r_num_set_bits, uint
     r->first_pos += *start_flanking_region_len;
     r->last_pos  -= end_flanking_region_len;
 
-    if (ranges.param == RT_LOADED) // note: for RT_DENOVO, gpos is still 0 at this point
+    if (ranges_type == RT_LOADED || ranges_type == RT_CACHED) // note: for RT_DENOVO, gpos is still 0 at this point
         r->gpos  += *start_flanking_region_len;
 
     ASSERT (r->last_pos >= r->first_pos, "Error in ref_compact_ref: bad removal of flanking regions: r->first_pos=%"PRId64" r->last_pos=%"PRId64,
@@ -919,9 +1012,9 @@ static void ref_compress_one_range (VBlockP vb)
     SectionHeaderReference header = { .h.vblock_i          = BGEN32 (vb->vblock_i),
                                       .h.magic             = BGEN32 (GENOZIP_MAGIC),
                                       .h.compressed_offset = BGEN32 (sizeof(header)),
-                                      .chrom_word_index    = r ? BGEN32 (r->chrom) : WORD_INDEX_NONE,
+                                      .chrom_word_index    = r ? BGEN32 (r->chrom)     : WORD_INDEX_NONE,
                                       .pos                 = r ? BGEN64 (r->first_pos) : 0,
-                                      .gpos                = r ? BGEN64 (r->gpos) : 0 };
+                                      .gpos                = r ? BGEN64 (r->gpos)      : 0 };
 
     vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
     vb->z_data.param = vb->vblock_i;
@@ -1047,16 +1140,16 @@ void ref_compress_ref (void)
 {
     if (!buf_is_allocated (&ranges)) return;
 
-    if ((ranges.param == RT_DENOVO) &&
+    if ((ranges_type == RT_DENOVO) &&
         buf_is_allocated (&z_file->contexts[CHROM].dict)) // did we have an aligned lines? (to do: this test is not enough)
         ref_finalize_denovo_ranges(); // assignes chroms; sorts ranges by chrom, pos; gets rid of unused ranges
 
-    if (ranges.param != RT_MAKE_REF)
+    if (ranges_type != RT_MAKE_REF)
         ref_contigs_compress(); // also assigns gpos to de-novo ranges 
 
     // copy already-compressed SEQ sections from the genozip reference file, but only such sections that are almost entirely
     // covered by ranges with is_accessed=true. we mark these ranges affected as is_accessed=false.
-    if (ranges.param == RT_LOADED)
+    if (ranges_type == RT_LOADED || ranges_type == RT_CACHED)
         ref_copy_compressed_sections_from_reference_file ();
 
     buf_alloc (evb, &ref_stored_ra, sizeof (RAEntry) * ranges.len, 1, "ref_stored_ra");
@@ -1089,7 +1182,7 @@ void ref_compress_ref (void)
     random_access_finalize_entries (&ref_stored_ra); // sort in order of vb_i
 
     // range data needed for contigs is only set in ref_make_prepare_range_for_compress which happens as part of the dispatcher_fan_out_task
-    if (ranges.param == RT_MAKE_REF) {
+    if (ranges_type == RT_MAKE_REF) {
         // sort by chrom then pos - so later piz can binary-search by chrom index
         qsort (ranges.data, ranges.len, sizeof (Range), ref_contigs_range_sorter);
 
@@ -1164,12 +1257,12 @@ static void ref_display_ref (void)
 
 static void ref_reverse_compliment_genome_prepare (VBlock *vb)
 {
-    vb->ready_to_dispatch = (vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD < genome_size;
+    vb->ready_to_dispatch = (vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD < genome_nbases;
 }
 
 static void ref_reverse_compliment_genome_do (VBlock *vb)
 {
-    bit_array_reverse_complement_all (&genome_rev.ref, &genome.ref, 
+    bit_array_reverse_complement_all (emoneg, genome, 
                                       (vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD, 
                                       REV_CODEC_GENOME_BASES_PER_THREAD);
 
@@ -1180,12 +1273,12 @@ void ref_generate_reverse_complement_genome (void)
 {
     START_TIMER;
     dispatcher_fan_out_task (NULL, PROGRESS_NONE, 0, false, false,
-                                ref_reverse_compliment_genome_prepare, 
-                                ref_reverse_compliment_genome_do, 
-                                NULL);
+                             ref_reverse_compliment_genome_prepare, 
+                             ref_reverse_compliment_genome_do, 
+                             NULL);
     COPY_TIMER_VB (evb, generate_rev_complement_genome);
 }
-
+/*
 // make a copy of genome and ranges
 static void ref_save_genome_copy (void)
 {
@@ -1197,7 +1290,7 @@ static void ref_save_genome_copy (void)
     // copy initial state of ranges, before they are modifed by compacting
     buf_copy (evb, &ranges_copy, &ranges, sizeof (Range), 0, 0, "ranges_copy");
 }
-
+*/
 bool ref_is_reference_loaded (void)
 {
     return buf_is_allocated (&ranges);
@@ -1232,21 +1325,18 @@ void ref_load_external_reference (bool display, bool is_last_z_file)
     file_close (&z_file, false, false);
     file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
 
-    // If we're zipping a FASTQ or unaligned SAM, create a reverse-complement genome too
-    if (flag.ref_use_aligner && primary_command == ZIP) 
-        ref_generate_reverse_complement_genome();
-
-    // make a copy of the genome, if we are going to modify it by compacting for storing in the file
-    if (  flag.reference == REF_EXT_STORE &&    // relevant only for REF_EXT_STORE
-          !is_last_z_file &&                    // no point copying if no one's going to need it
-          !buf_is_allocated (&genome_ref_copy)) // not already copied
-        ref_save_genome_copy();
-
     if (display) ref_display_ref();
 }
 
-static void ref_allocate_loaded_genome (void)
+static void ref_initialize_loaded_ranges (RangesType type)
 {
+    random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
+    
+    if (flag.reading_reference) {
+        buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra");
+        buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list");
+    }
+
     // notes on ranges.len:
     // 1. in case stored reference originates from REF_INTERNAL, we have a contig for every chrom for which there was a sequence,
     // but there might be additional chroms in the SAM file (eg in RNEXT) that don't have a sequence. Since we're indexing ranges by chrom,
@@ -1259,33 +1349,34 @@ static void ref_allocate_loaded_genome (void)
 
     buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges");     
     buf_zero (&ranges);
-    ranges.param = RT_LOADED;
+    ranges_type = type;
 
-    for (uint32_t range_id=0; range_id < ranges.len; range_id++) 
-        ENT (Range, ranges, range_id)->range_id = range_id;
+    Context *chrom_ctx = &z_file->contexts[CHROM];
+
+    for (uint32_t range_id=0; range_id < ranges.len; range_id++) {
+        Range *r = ENT (Range, ranges, range_id);
+        r->range_id = r->chrom = range_id;
+
+        if (flag.reference == REF_STORED) 
+            ctx_get_snip_by_word_index (&chrom_ctx->word_list, &chrom_ctx->dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
+        else
+            ref_contigs_get_chrom_snip (r->chrom, &r->chrom_name, &r->chrom_name_len);
+    }
 
     // we don't need is_set if we're compressing with REF_EXTERNAL 
-    bool has_is_set = primary_command == PIZ || (primary_command == ZIP && flag.reference == REF_EXT_STORE);
 
-    // note: genome_size must be full words, so that bit_array_reverse_complement doesn't need to shift
-    genome_size = ROUNDUP64 (ref_contigs_get_genome_size()) + 64; // round up to the nearest 64, and add one word, needed by aligner_get_match_len for bit shifting overflow
+    // note: genome_nbases must be full words, so that bit_array_reverse_complement doesn't need to shift
+    genome_nbases = ROUNDUP64 (ref_contigs_get_genome_nbases()) + 64; // round up to the nearest 64 bases, and add one word, needed by aligner_get_match_len for bit shifting overflow
 
-    genome     = (Range){ .ref            = bit_array_alloc (genome_size * 2, true), // 2 bits per base
-                          .is_set         = has_is_set ? bit_array_alloc (genome_size, true) : (BitArray){},
-                          .chrom_name     = CHROM_NAME_GENOME, 
-                          .chrom_name_len = strlen (CHROM_NAME_GENOME),
-                          .chrom          = CHROM_GENOME, 
-                          .last_pos       = genome_size - 1 };
-    
-    genome_rev = (Range){ .ref            = bit_array_alloc (genome_size * 2, true),
-                          .chrom_name     = CHROM_NAME_GENOME_REV, 
-                          .chrom_name_len = strlen (CHROM_NAME_GENOME_REV),
-                          .chrom          = CHROM_GENOME_REV, 
-                          .last_pos       = genome_size - 1 };
-    
+    if (ref_has_is_set()) 
+        genome_is_set = buf_alloc_bitarr (evb, &genome_is_set_buf, genome_nbases, "genome_is_set_buf");
+
     // we protect genome->ref while uncompressing reference data, and genome->is_set while segging
     ref_lock_initialize_loaded_genome();
+}
 
+static void overlay_ranges_on_loaded_genome (void)
+{
     // overlay all chromosomes (range[i] goes to chrom_index=i) - note some chroms might not have a contig in 
     // which case their range is not initialized
     for (Range *r = FIRSTENT (Range, ranges) ; r < AFTERENT (Range, ranges); r++) {
@@ -1298,21 +1389,21 @@ static void ref_allocate_loaded_genome (void)
             r->last_pos  = rc->max_pos;
             ref_contigs_get_chrom_snip (r->chrom, &r->chrom_name, &r->chrom_name_len);
             
-            PosType len = rc->max_pos - rc->min_pos + 1;
+            PosType nbases = rc->max_pos - rc->min_pos + 1;
 
-            ASSERT (r->gpos + len <= genome.ref.nbits / 2, "Error in ref_allocate_loaded_genome: adding range \"%s\": r->gpos(%"PRId64") + len(%"PRId64") (=%"PRId64") is beyond genome_size=%"PRId64,
-                    r->chrom_name, r->gpos, len, r->gpos+len, genome_size);
+            ASSERT (r->gpos + nbases <= genome->nbits / 2, "Error in overlay_ranges_on_loaded_genome: adding range \"%s\": r->gpos(%"PRId64") + nbases(%"PRId64") (=%"PRId64") is beyond genome_nbases=%"PRId64,
+                    r->chrom_name, r->gpos, nbases, r->gpos+nbases, genome_nbases);
 
-            bit_array_overlay (&r->ref, &genome.ref, r->gpos*2, len*2);
+            bit_array_overlay (&r->ref, genome, r->gpos*2, nbases*2);
 
-            if (has_is_set) 
-                bit_array_overlay (&r->is_set, &genome.is_set, r->gpos, len);
+            if (ref_has_is_set()) 
+                bit_array_overlay (&r->is_set, genome_is_set, r->gpos, nbases);
         }
     }
 }
 
  
-// Initialize the overlay ranges, one per chromosome for a loaded genome. The remaining fields will be set in ref_read_one_range 
+/*// Initialize the overlay ranges, one per chromosome for a loaded genome. The remaining fields will be set in ref_read_one_range 
 static void ref_create_contig_range_for_loaded_genome (Range *r, WordIndex chrom_index)
 {
     r->chrom = chrom_index;      
@@ -1327,47 +1418,40 @@ static void ref_create_contig_range_for_loaded_genome (Range *r, WordIndex chrom
     // case: this chrom has no RA - for example, it is a "=" or "*", it doesn't have a reference region
     //if (r->last_pos < 0) continue;
 }
-
+*/
 // case 1: in case of ZIP with external reference, called by ref_load_stored_reference during piz_read_global_area of the reference file
 // case 2: in case of PIZ: also called from ref_load_stored_reference with RT_LOADED
 // case 3: in case of ZIP of SAM using internal reference - called from sam_zip_initialize
 // note: ranges allocation must be called by the I/O thread as it adds a buffer to evb buf_list
-void ref_initialize_ranges (RangesType ranges_type)
+void ref_initialize_ranges (RangesType type, const char *cache_fn /* only for RT_CACHED */)
 {
-    switch (ranges_type) {
+    if (type == RT_LOADED || type == RT_CACHED) {
 
-        case RT_LOADED:
-            ref_allocate_loaded_genome();
-            
-            for (unsigned chrom_index=0; chrom_index < ranges.len; chrom_index++) 
-                ref_create_contig_range_for_loaded_genome (ENT (Range, ranges, chrom_index), chrom_index); // ranges is indexed by chrom_index
-            
-            break;
+        ref_initialize_loaded_ranges (type);
 
-        case RT_ONE_CONTIG:  // used by genobwa
-            if (buf_is_allocated (&ranges)) return; // case: 2nd+ bound file
-        
-            ranges.len   = 1;
-            ranges.param = RT_ONE_CONTIG;
-            buf_alloc (evb, &ranges, 1 * sizeof (Range), 1, "ranges"); 
-            buf_zero (&ranges);
+        if (type == RT_LOADED) {
+            genome_cache.len = genome_nbases / 4 * 2; // length in bytes - used by file_put_data to create cache file
+            buf_alloc (evb, &genome_cache, genome_cache.len, 1, "genome_cache") // contains both forward and rev. compliment
+        }
+        else  // RT_CACHED 
+            buf_mmap (evb, &genome_cache, cache_fn, "genome_cache"); // we map the entire file (forward and revese complement genomes) onto genome_cache
 
-            ref_create_contig_range_for_loaded_genome (FIRSTENT (Range, ranges), fastq_get_genobwa_chrom());
+        // overlay genome and emoneg. we do it this was so we can use just a single file
+        buf_set_overlayable (&genome_cache);
+        genome = buf_overlay_bitarr (evb, &genome_buf, &genome_cache, 0, genome_nbases * 2, "genome_buf");
+        emoneg = buf_overlay_bitarr (evb, &emoneg_buf, &genome_cache, genome_nbases / 4, genome_nbases * 2, "emoneg_buf");
 
-            break;
+        overlay_ranges_on_loaded_genome();
+    }
 
-        case RT_DENOVO: // used by SAM/BAM without reference
-            if (buf_is_allocated (&ranges)) return; // case: 2nd+ bound file
+    else { // RT_DENOVO
+        if (buf_is_allocated (&ranges)) return; // case: 2nd+ bound file
 
-            ranges.len   = REF_NUM_DENOVO_RANGES;
-            ranges.param = RT_DENOVO;
-            buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges"); 
-            buf_zero (&ranges);
-            ref_lock_initialize_denovo_genome();
-            break;
-
-        default:
-            ABORT ("Error in ref_initialize_ranges: Invalid ranges_type=%u", ranges_type);
+        ranges.len   = REF_NUM_DENOVO_RANGES;
+        ranges_type = RT_DENOVO;
+        buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges"); 
+        buf_zero (&ranges);
+        ref_lock_initialize_denovo_genome();
     }
 }
 

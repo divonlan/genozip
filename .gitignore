@@ -73,3 +73,5 @@ conda/README.md
 *.b250
 *.bad 
 *.good
+*.gcache
+*.hcache

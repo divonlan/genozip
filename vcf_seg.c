@@ -379,7 +379,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         // we overlay on the txt to save memory. since the HT data is by definition a subset of txt, we only overwrite txt
         // areas after we have already consumed them
         buf_set_overlayable (&vb->txt_data);
-        buf_overlay ((VBlockP)vb, &vb->ht_matrix_ctx->local, &vb->txt_data, "context->local", vb->ht_matrix_ctx->did_i);
+        buf_overlay ((VBlockP)vb, &vb->ht_matrix_ctx->local, &vb->txt_data, "context->local");
     }
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample)

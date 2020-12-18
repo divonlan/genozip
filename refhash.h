@@ -25,7 +25,7 @@ extern uint32_t layer_bitmask[64]; // 1s in the layer_bits[] LSbs
 extern uint32_t **refhashs;
 
 extern void refhash_initialize (void);
-extern void refhash_free (void);
+extern void refhash_destroy (void);
 
 // make-reference stuff
 extern void refhash_compress_refhash (void);

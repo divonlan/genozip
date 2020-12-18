@@ -72,8 +72,8 @@ static inline uint32_t aligner_get_match_len (VBlock *vb, const BitArray *seq_bi
 {
     START_TIMER;
 
-    bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->nbits/2 -1)) * 2;
-    const word_t *ref = &(is_forward ? genome : genome_rev).ref.words[bit_i >> 6];
+    bit_index_t bit_i = (is_forward ? gpos : genome_nbases-1 - (gpos + seq_bits->nbits/2 -1)) * 2;
+    const word_t *ref = &(is_forward ? genome : emoneg)->words[bit_i >> 6];
     uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
 
     word_t word=0;
@@ -213,7 +213,7 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
             }                                    \
         }
 
-        if (found != NOT_FOUND && (gpos >= 0) && (gpos != NO_GPOS) && (gpos + seq_len_64 < genome_size)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
+        if (found != NOT_FOUND && (gpos >= 0) && (gpos != NO_GPOS) && (gpos + seq_len_64 < genome_nbases)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
             finds[num_finds++] = (struct Finds){ .refhash_word = refhash_word, .i = i, .found = found };
             UPDATE_BEST (found);
         }
@@ -234,7 +234,7 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
 
             gpos -= (finds[find_i].found == FORWARD ? finds[find_i].i : seq_len_64-1 - finds[find_i].i);
 
-            if ((gpos >= 0) && (gpos + seq_len_64 < genome_size)) {
+            if ((gpos >= 0) && (gpos + seq_len_64 < genome_nbases)) {
                 UPDATE_BEST (finds[find_i].found);
             }
         }
@@ -332,12 +332,12 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
         bitmap_ctx->next_local += seq_len;
         
         if (flag.reference == REF_EXT_STORE) 
-            bit_array_set_region (&genome.is_set, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
+            bit_array_set_region (genome_is_set, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
 
         goto done;
     }
 
-    PosType room_fwd = genome_size - gpos; // how much reference forward might contain a match
+    PosType room_fwd = genome_nbases - gpos; // how much reference forward might contain a match
 
     bit_index_t next_bit = bitmap_ctx->next_local; // copy to automatic variable (optimized to a register) for performace
     for (uint32_t i=0; i < seq_len; i++) {
@@ -349,13 +349,13 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
             char seq_base = is_forward ? seq[i] : complement[(uint8_t)seq[i]];
             
             PosType ref_i = gpos + (is_forward ? i : seq_len-1-i);
-            char ref_base = ACGT_DECODE (&genome.ref, ref_i);
+            char ref_base = ACGT_DECODE (genome, ref_i);
 
             if (seq_base == ref_base) {
                 
                 // TO DO: replace this with bit_array_or_with (dst, start, len, src, start) (dst=is_set, src=bitmap) (bug 174)
                 if (flag.reference == REF_EXT_STORE) 
-                    bit_array_set (&genome.is_set, ref_i); // we will need this ref to reconstruct
+                    bit_array_set (genome_is_set, ref_i); // we will need this ref to reconstruct
 
                 use_reference = true;
             }
@@ -407,20 +407,20 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         }
 
         // sanity check - the sequence is supposed to fit in the 
-        ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome.ref.nbits / 2, "Error in aligner_reconstruct_seq: gpos=%"PRId64" is out of range: seq_len=%u and genome_size=%"PRIu64,
-                gpos, seq_len, genome.ref.nbits / 2);
+        ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome->nbits / 2, "Error in aligner_reconstruct_seq: gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,
+                gpos, seq_len, genome->nbits / 2);
 
         if (is_forward)  // normal (note: this condition test is outside of the tight loop)
             for (uint32_t i=0; i < seq_len; i++)
                 if (NEXTLOCALBIT (bitmap_ctx))  // get base from reference
-                    RECONSTRUCT1 (ACGT_DECODE (&genome.ref, gpos + i));
+                    RECONSTRUCT1 (ACGT_DECODE (genome, gpos + i));
                 else  // get base from nonref
                     RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
 
         else // reverse complement
             for (uint32_t i=0; i < seq_len; i++) 
                 if (NEXTLOCALBIT (bitmap_ctx))  // case: get base from reference
-                    RECONSTRUCT1 (complement [(uint8_t)ACGT_DECODE (&genome.ref, gpos + seq_len-1 - i)]);
+                    RECONSTRUCT1 (complement [(uint8_t)ACGT_DECODE (genome, gpos + seq_len-1 - i)]);
                 else  // case: get base from nonref
                     RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
     }

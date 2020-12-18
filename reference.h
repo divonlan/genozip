@@ -53,17 +53,19 @@ typedef enum { RT_NONE,      // value of ranges.param if ranges is unallocated
                RT_MAKE_REF,  // used in --make-ref one range per vb of fasta reference file - ranges in order of the fasta file
                RT_DENOVO,    // used in SAM with REF_INTERNAL - an large array of Range's, hashed by the chrom and pos
                RT_LOADED,    // one Range per chrom (contig), overlayed on genome
-               RT_ONE_CONTIG // used by genobwa
+               RT_CACHED     // same as RT_LOADED, but data is mmap'ed to a cache file
              } RangesType;
+#define ranges_type ranges.param
               
-extern void ref_initialize_ranges (RangesType ranges_type);
+extern void ref_initialize_ranges (RangesType type, const char *cache_fn);
 extern void ref_compress_ref (void);
 extern void ref_load_external_reference (bool display, bool is_last_z_file);
 extern void ref_load_stored_reference (void);
 extern bool ref_is_reference_loaded (void);
 extern void ref_set_reference (const char *filename);
 extern void ref_set_ref_file_info (Digest md5, const char *fasta_name);
-extern void ref_unload_reference (bool is_last_file);
+extern void ref_unload_reference (void);
+extern void ref_destroy_reference (void);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed);
 extern void ref_consume_ref_fasta_global_area (void);
@@ -72,6 +74,9 @@ extern const char *ref_get_cram_ref (void);
 extern void ref_make_ref_init (void);
 extern void ref_generate_reverse_complement_genome (void);
 extern Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name);
+extern bool ref_mmap_cached_reference (void);
+extern void *ref_create_cache (void *unused_arg);
+
 
 // contigs stuff
 typedef enum { WI_REF_CONTIG, WI_ZFILE_CHROM } GetWordIndexType;
@@ -121,7 +126,7 @@ extern Digest ref_md5;
 extern Buffer ref_stored_ra;
 extern Buffer loaded_contigs, header_contigs, header_contigs_dict;
 extern bool has_header_contigs;
-extern Range genome, genome_rev;
-extern PosType genome_size;
+extern BitArrayP genome, emoneg, genome_is_set;
+extern PosType genome_nbases;
 
 #endif

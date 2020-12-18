@@ -50,8 +50,8 @@ uint32_t nukes_per_hash=0;   // = layer_bits[0] / 2
 uint32_t layer_bits[64];     // number of bits in each layer - layer_bits[0] is the base (widest) layer
 uint32_t layer_size[64];     // size (in bytes) of each layer - layer_size[0] is the base (biggest) layer
 uint32_t layer_bitmask[64];  // 1s in the layer_bits[] LSbs
-static Buffer *refhash_bufs = NULL; // array of buffers, one for each layer
-uint32_t **refhashs = NULL;  // array of pointers to the beginning of each layer
+static Buffer refhash_buf = {}; // One buffer that includes all layers
+uint32_t **refhashs = NULL;  // array of pointers to into refhash_buf.data - beginning of each layer 
 
 static const SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
@@ -102,9 +102,9 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
     PosType next_range_size = ref_size (next_r);
     
     ASSERT (this_range_size * 2 == r->ref.nbits, 
-            "Error in refhash_calc_one_range: mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64, 
+            "Error in refhash_calc_one_range: mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64" r->range_id=%u", 
             this_range_size, this_range_size*2, r->ref.nbits, ENT (char, z_file->contexts[0].dict, ENT (CtxNode, z_file->contexts[0].nodes, r->chrom)->char_index), 
-            r->first_pos, r->last_pos);
+            r->first_pos, r->last_pos, r->range_id);
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
     // end of this one (note: we only look at one next range - even if it is very short, we will not overflow to the next one after)
@@ -171,12 +171,14 @@ static void refhash_prepare_for_compress (VBlockP vb)
     }
 }
 
+// part of --make-reference - compute thread for compressing part of the hash
 static void refhash_compress_one_vb (VBlockP vb)
 {
     uint32_t uncompressed_size = MIN (make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
-    
+    const uint32_t *hash_data = &refhashs[vb->refhash_layer][vb->refhash_start_in_layer / sizeof (uint32_t)];
+//const uint32_t *hash_data = ENT (const uint32_t, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer / sizeof (uint32_t));
+
     // calculate density to decide on compression codec
-    const uint32_t *hash_data = ENT (const uint32_t, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer / sizeof (uint32_t));
     uint32_t num_zeros=0;
     for (uint32_t i=0 ; i < uncompressed_size / sizeof (uint32_t); i++)
         if (!hash_data[i]) num_zeros++;
@@ -197,7 +199,8 @@ static void refhash_compress_one_vb (VBlockP vb)
                                     .start_in_layer          = BGEN32 (vb->refhash_start_in_layer)     };
 
     vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set    
-    comp_compress (vb, &vb->z_data, false, (SectionHeaderP)&header, ENT (char, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer), NULL);
+//comp_compress (vb, &vb->z_data, false, (SectionHeaderP)&header, ENT (char, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer), NULL);
+    comp_compress (vb, &vb->z_data, false, (SectionHeaderP)&header, (char*)hash_data, NULL);
 
     if (flag.show_ref_hash) 
         fprintf (info_stream, "vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
@@ -246,8 +249,8 @@ static void refhash_uncompress_one_vb (VBlockP vb)
 
     // a hack for uncompressing to a location withing the buffer - while multiple threads are uncompressing into 
     // non-overlappying regions in the same buffer in parallel
-    Buffer copy = refhash_bufs[layer_i];
-    copy.data += start;
+    Buffer copy = refhash_buf;
+    copy.data = (char *)refhashs[layer_i] + start; // refhashs[layer_i] points to the start of the layer within refhash_buf.data
     zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_REF_HASH);
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
@@ -329,41 +332,40 @@ void refhash_initialize (void)
     else 
         sections_get_refhash_details (num_layers ? NULL : &num_layers, &base_layer_bits);
 
+    uint64_t refhash_size = 0;
     for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
         layer_bits[layer_i]    = base_layer_bits - layer_i;
         layer_bitmask[layer_i] = bitmask32 (layer_bits[layer_i]);
         layer_size[layer_i]    = ((1 << layer_bits[layer_i]) * sizeof (uint32_t));
+        refhash_size          += layer_size[layer_i];
     }
 
     bits_per_hash  = layer_bits[0];
     bits_per_hash_is_odd = bits_per_hash % 2;
     nukes_per_hash = (1 + bits_per_hash) / 2; // round up
 
-    // allocate memory
-    refhash_bufs = CALLOC (num_layers * sizeof (Buffer));     // array of Buffer
-    refhashs     = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointeshs");
+    // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
+    buf_alloc (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
+    refhash_buf.len = refhash_size; // needed by buf_dump_to_file
 
-    // base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
+    // set all entries to NO_GPOS. note: no need to set in ZIP, as we will be reading the data from the refernce file
+    // NOTE: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min
+    // due to a different LZMA internal mode when compressing the hash. However, the resulting file is MUCH smaller,
+    // and loading of refhash during zip is MUCH faster
+    if (flag.make_reference) buf_set (&refhash_buf, 0xff); 
+
+    refhashs = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointers
+
+    // set layer pointers
+    uint64_t offset=0;
     for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-        buf_alloc (evb, &refhash_bufs[layer_i], layer_size[layer_i], 1, "refhash_bufs");
-
-        // set all entries to NO_GPOS. note: no need to set in ZIP, as we will be reading the data from the refernce file
-        // NOT: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min
-        // due to a different LZMA internal mode when compressing the hash. However, the resulting file is MUCH smaller,
-        // and loading of refhash during zip is MUCH faster
-        if (flag.make_reference) buf_set (&refhash_bufs[layer_i], 0xff); 
-
-        refhashs[layer_i] = FIRSTENT (uint32_t, refhash_bufs[layer_i]);
+        refhashs[layer_i] = (uint32_t*)ENT (uint8_t, refhash_buf, offset);
+        offset += layer_size[layer_i];
     }
 }
 
-void refhash_free (void)
+void refhash_destroy (void)
 {
-    if (refhash_bufs) {
-        for (unsigned layer_i=0; layer_i < num_layers; layer_i++) 
-            buf_destroy (&refhash_bufs[layer_i]);
-
-        FREE (refhash_bufs);
-        FREE (refhashs);
-    }
+    buf_destroy (&refhash_buf);
+    FREE (refhashs);
 }

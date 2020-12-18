@@ -33,7 +33,7 @@ static void ref_lock_initialize_do (uint32_t num_muteces)
 
 void ref_lock_initialize_loaded_genome (void) 
 { 
-    ref_lock_initialize_do ((genome_size + GENOME_BASES_PER_MUTEX-1) / GENOME_BASES_PER_MUTEX); // round up
+    ref_lock_initialize_do ((genome_nbases + GENOME_BASES_PER_MUTEX-1) / GENOME_BASES_PER_MUTEX); // round up
 }
 
 void ref_lock_initialize_denovo_genome (void) 
@@ -52,6 +52,11 @@ void ref_lock_free (void)
 
         FREE (genome_mutex_names);
     }
+}
+
+void ref_lock_destroy (void)
+{
+    ref_lock_free();
 }
 
 // lock a region that includes the region given and the flanking regions 

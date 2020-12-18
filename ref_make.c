@@ -31,9 +31,10 @@ void ref_make_create_range (VBlockP vb)
     Range *r = ref_make_ref_get_range (vb->vblock_i);
     uint64_t seq_len = vb->contexts[FASTA_NONREF].local.len;
 
-    // as this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
-    // the missing details will be added during ref_prepare_range_for_compress
+    // at this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
+    // the missing details will be added during ref_make_prepare_range_for_compress
     r->ref = bit_array_alloc (seq_len * 2, false); // 2 bits per base
+    r->range_id = vb->vblock_i-1;
 
     uint64_t bit_i=0;
     for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
@@ -58,7 +59,7 @@ void ref_make_ref_init (void)
     ASSERT0 (flag.make_reference, "Expecting flag.make_reference=true");
 
     buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges"); // must be allocated by I/O thread as its evb
-    ranges.param = RT_MAKE_REF;
+    ranges_type = RT_MAKE_REF;
     
     buf_zero (&ranges);
 

@@ -410,7 +410,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     const char *password = crypt_get_password();
 
     // is we have a loaded reference and it is no longer needed, unload it now, to free the memory for the testing process
-    if (is_last_txt_file) ref_unload_reference (true);
+    if (is_last_txt_file) ref_destroy_reference();
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",
@@ -599,25 +599,19 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
-    if (is_first_file)
+    if (!ref_is_reference_loaded())
         ref_load_external_reference (false, is_last_z_file); // also loads refhash if needed
 
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
-    else if (!old_ref_use_aligner && flag.ref_use_aligner) { 
-        ref_generate_reverse_complement_genome();
+    if (!old_ref_use_aligner && flag.ref_use_aligner) 
         refhash_load_standalone();
-    }
 
     RESTORE_VALUE (txt_file);
 }
 
-void TEST()
-{
-    FILE *fp = fopen ("seq", "rb");
-    char *data = MALLOC (14236798);
-    (void)!fread (data, 1, 14236798, fp); // (void)! to quieten compiler "warning: ignoring return value"
+void TEST() {
+    
 }
-
 
 int main (int argc, char **argv)
 {

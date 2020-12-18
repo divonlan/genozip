@@ -103,7 +103,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
 START_TIMER;        
         // overlay the NONREF.local to NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
         buf_set_overlayable (&nonref_ctx->local);
-        buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, "context->local", nonref_x_ctx->did_i);
+        buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, "context->local");
 
         PACK (uncompressed, *uncompressed_len); // pack into vb->compressed
 

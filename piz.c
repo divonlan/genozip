@@ -28,6 +28,9 @@
 #include "flags.h"
 #include "reconstruct.h"
 
+static pthread_t cache_creation_thread_id;
+static bool has_cache_creation_thread = false;
+
 // PIZ compute thread: decompress all contexts
 // ZIP compute thread in FASTQ: decompress pair_1 contexts when compressing pair_2
 uint32_t piz_uncompress_all_ctxs (VBlock *vb, 
@@ -119,7 +122,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
 {
     START_TIMER;
 
-    ASSERT0 (!flag.reference || genome.ref.nbits, "Error in piz_uncompress_one_vb: reference is not loaded correctly");
+    ASSERT0 (!flag.reference || (genome && genome->nbits), "Error in piz_uncompress_one_vb: reference is not loaded correctly");
 
     DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
 
@@ -214,19 +217,44 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
         ref_alt_chroms_load();
 
-        if (has_ref_sections) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
-            ref_load_stored_reference();
+        // case: reading reference file
+        if (flag.reading_reference) {
+            bool dispatcher_invoked = false;
 
-            // load the refhash, if we are compressing FASTA or FASTQ
-            if ((flag.reading_reference && primary_command == ZIP && flag.ref_use_aligner) ||
-                (flag.show_ref_hash && exe_type == EXE_GENOCAT))
+            // attempt to mmap a cached reference, and if one doesn't exist, uncompress the reference file and cache it
+            if (!ref_mmap_cached_reference()) {
+                ref_load_stored_reference();
+                ref_generate_reverse_complement_genome();
+
+                // start creating the genome cache now in a background thread, but only if we loaded the entire reference
+                if (!flag.regions) { 
+                    unsigned err= pthread_create (&cache_creation_thread_id, NULL, ref_create_cache, NULL);
+                    ASSERT (!err, "Error in piz_read_global_area: pthread_create failed: err=%u", err);
+                    has_cache_creation_thread = true;
+                }
+
+                dispatcher_invoked = true;
+            }
+
+            // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
+            if (  (primary_command == ZIP && flag.ref_use_aligner) ||
+                  (flag.show_ref_hash && exe_type == EXE_GENOCAT)) {
                 refhash_load();
+                dispatcher_invoked = true;
+            }
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
             if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok;
 
-            if (flag.reading_reference) 
-                progress_finalize_component ((flag.test && !flag.reading_reference) ? "Success" : "Done");
+            if (dispatcher_invoked) progress_finalize_component ("Done");
+        }
+
+        // case: non-reference file has stored reference sections
+        else if (has_ref_sections) { 
+            ref_load_stored_reference();
+
+            // exit now if all we wanted was just to see the reference (we've already shown it)
+            if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok;
         }
 
         // read dict_id aliases, if there are any
@@ -504,4 +532,9 @@ finish:
     else dispatcher_finish (&dispatcher, NULL);    
 
     DT_FUNC (z_file, piz_finalize)();
+
+    if (has_cache_creation_thread) {
+        pthread_join (cache_creation_thread_id, NULL);
+        has_cache_creation_thread = false;
+    }
 }

@@ -14,8 +14,8 @@
 
 struct variant_block_; 
 
-typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitArrayType
-#define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY" }
+typedef enum { BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_MMAP, BUF_NUM_TYPES } BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitArrayType
+#define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY", "MMAP" }
 
 typedef struct Buffer {
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
@@ -89,20 +89,32 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 }
 
+extern void buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, const char *func, uint32_t code_line, const char *name);
+#define buf_mmap(vb, buf, filename, name) \
+    buf_mmap_do((vb), (buf), (filename), __FUNCTION__, __LINE__, (name))
+
 extern BitArrayP buf_alloc_bitarr_do (VBlockP vb, Buffer *buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
 #define buf_alloc_bitarr(vb, buf, nbits, name) buf_alloc_bitarr_do((vb), (buf), (nbits), __FUNCTION__, __LINE__, (name))
 
+extern BitArrayP buf_overlay_bitarr_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, uint64_t start_byte_in_regular_buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
+#define buf_overlay_bitarr(vb, overlaid_buf, regular_buf, start_byte_in_regular_buf, nbits, name) \
+    buf_overlay_bitarr_do((vb), (overlaid_buf), (regular_buf), (start_byte_in_regular_buf), (nbits), __FUNCTION__, __LINE__, (name))
+
 #define buf_set_overlayable(buf) (buf)->overlayable = true
 
-extern void buf_overlay_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line, const char *name, int64_t param);
-#define buf_overlay(vb, overlaid_buf, regular_buf, name, param) \
-    buf_overlay_do(vb, overlaid_buf, regular_buf, __FUNCTION__, __LINE__, name, param) 
+extern void buf_overlay_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf,  uint64_t start_in_regular,  
+                            const char *func, uint32_t code_line, const char *name);
+#define buf_overlay(vb, overlaid_buf, regular_buf, name) \
+    buf_overlay_do((vb), (overlaid_buf), (regular_buf), 0, __FUNCTION__, __LINE__, (name)) 
+
+#define buf_overlay_partial(vb, overlaid_buf, regular_buf, start, name) \
+    buf_overlay_do((vb), (overlaid_buf), (regular_buf), (start), __FUNCTION__, __LINE__, (name)) 
 
 extern void buf_free_do (Buffer *buf, const char *func, uint32_t code_line);
-#define buf_free(buf) buf_free_do (buf, __FUNCTION__, __LINE__);
+#define buf_free(buf) buf_free_do ((buf), __FUNCTION__, __LINE__);
 
 extern void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line);
-#define buf_destroy(buf) buf_destroy_do (buf, __FUNCTION__, __LINE__)
+#define buf_destroy(buf) buf_destroy_do ((buf), __FUNCTION__, __LINE__)
 
 #define buf_is_large_enough(buf_p, requested_size) (buf_is_allocated ((buf_p)) && (buf_p)->size >= requested_size)
 
@@ -156,6 +168,8 @@ extern void *buf_low_level_realloc (void *p, size_t size, const char *func, uint
 extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t code_line);
 #define MALLOC(size) buf_low_level_malloc (size, false, __FUNCTION__, __LINE__)
 #define CALLOC(size) buf_low_level_malloc (size, true,  __FUNCTION__, __LINE__)
+
+extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region);
 
 // bitmap stuff
 extern uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits);

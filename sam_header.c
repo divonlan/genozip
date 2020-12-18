@@ -165,7 +165,8 @@ bool sam_header_inspect (BufferP txt_header)
         if (flag.reference == REF_NONE) flag.reference = REF_INTERNAL;
 
         // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
-        if (!flag.reference || flag.reference == REF_INTERNAL) ref_initialize_ranges (RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
+        if (!flag.reference || flag.reference == REF_INTERNAL) 
+            ref_initialize_ranges (RT_DENOVO, NULL); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
         // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
         random_access_alloc_ra_buf (evb, 0);

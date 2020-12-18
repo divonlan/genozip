@@ -337,12 +337,12 @@ void ctx_clone (VBlock *vb)
 
             // overlay the global dict and nodes - these will not change by this (or any other) VB
             //fprintf (info_stream,  ("ctx_clone: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dict_id_printable (zf_ctx->dict_id).id, vb->vblock_i, did_i);
-            buf_overlay (vb, &vb_ctx->ol_dict, &zf_ctx->dict, "ctx->ol_dict", did_i);   
-            buf_overlay (vb, &vb_ctx->ol_nodes, &zf_ctx->nodes, "ctx->ol_nodes", did_i);   
+            buf_overlay (vb, &vb_ctx->ol_dict, &zf_ctx->dict, "ctx->ol_dict");   
+            buf_overlay (vb, &vb_ctx->ol_nodes, &zf_ctx->nodes, "ctx->ol_nodes");   
 
             // overlay the hash table, that may still change by future vb's merging... this vb will only use
             // entries that are up to this merge_num
-            buf_overlay (vb, &vb_ctx->global_hash, &zf_ctx->global_hash, "contexts->global_hash", did_i);
+            buf_overlay (vb, &vb_ctx->global_hash, &zf_ctx->global_hash, "contexts->global_hash");
             vb_ctx->merge_num = zf_ctx->merge_num;
             vb_ctx->global_hash_prime = zf_ctx->global_hash_prime; // can never change
             vb_ctx->num_new_entries_prev_merged_vb = zf_ctx->num_new_entries_prev_merged_vb;
@@ -710,8 +710,8 @@ void ctx_overlay_dictionaries_to_vb (VBlock *vb)
 
             ctx_init_iterator (vb_ctx);
 
-            buf_overlay (vb, &vb_ctx->dict, &zf_ctx->dict, "ctx->dict", did_i);    
-            buf_overlay (vb, &vb_ctx->word_list, &zf_ctx->word_list, "ctx->word_list", did_i);
+            buf_overlay (vb, &vb_ctx->dict, &zf_ctx->dict, "ctx->dict");    
+            buf_overlay (vb, &vb_ctx->word_list, &zf_ctx->word_list, "ctx->word_list");
         }
     }
     vb->num_contexts = z_file->num_contexts;
@@ -895,8 +895,8 @@ void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, fals
     char dump_fn[50];
     sprintf (dump_fn, "%s.%05u.%s", ctx->name, vb->vblock_i, local ? "local" : "b250");
     
-    bool success = local ? file_put_buffer (dump_fn, &ctx->local, lt_desc[ctx->ltype].width)
-                         : file_put_buffer (dump_fn, &ctx->b250, 1);
+    bool success = local ? buf_dump_to_file (dump_fn, &ctx->local, lt_desc[ctx->ltype].width, false)
+                         : buf_dump_to_file (dump_fn, &ctx->b250, 1, false);
 
     ASSERTW (success, "Warning: ctx_dump_binary failed to output file %s: %s", dump_fn, strerror (errno));
 }

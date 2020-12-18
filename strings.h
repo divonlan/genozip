@@ -50,4 +50,6 @@ extern void str_query_user (const char *query, char *response, unsigned response
 extern _Bool str_verify_y_n (char *response, unsigned response_size, const char *y_or_n);
 extern _Bool str_verify_not_empty (char *response, unsigned response_size, const char *unused);
 
+extern const char *str_win_error (void);
+
 #endif

@@ -168,7 +168,7 @@ typedef struct BitArray
 {
     // These fields should not be changed or added to, as they map to Buffer
     BitArrayType type;
-    word_t *words;            // maps to Buffer->data
+    word_t *words;      // maps to Buffer->data
     bit_index_t nbits;  // maps to Buffer->param
     word_addr_t nwords; // maps to Buffer->len  ; round_up (nbits / 64)
 } BitArray;

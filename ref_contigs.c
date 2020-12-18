@@ -38,6 +38,13 @@ void ref_contigs_free (void)
     buf_free (&loaded_contigs_sorted_index);
 }
 
+void ref_contigs_destroy (void)
+{
+    buf_destroy (&loaded_contigs);          
+    buf_destroy (&loaded_contigs_dict);
+    buf_destroy (&loaded_contigs_sorted_index);
+}
+
 uint32_t ref_contigs_num_contigs(void) { return (uint32_t)loaded_contigs.len; }
 
 static void BGEN_ref_contigs (Buffer *contigs_buf)
@@ -100,10 +107,10 @@ void ref_contigs_compress (void)
             // and is no longer 64-aligned, we start the contig a little earlier to be 64-aligned
             // (note: this is guaranteed to be within the original contig before compacting, because the original
             // contig had a 64-aligned gpos)
-            PosType delta = (ranges.param == RT_LOADED) ? r->gpos % 64 : 0;
+            PosType delta = (ranges_type == RT_LOADED || ranges_type == RT_CACHED) ? r->gpos % 64 : 0;
 
             // in case of RT_DENOVO, we assign 64-aligned gpos (in case of RT_LOADED - gposes are loaded)
-            if (ranges.param == RT_DENOVO)
+            if (ranges_type == RT_DENOVO)
                 r->gpos = range_i ? ROUNDUP64 ((r-1)->gpos + (r-1)->last_pos - (r-1)->first_pos + 1) : 0;
 
             WordIndex txt_chrom = WORD_INDEX_NONE;
@@ -139,7 +146,7 @@ void ref_contigs_compress (void)
         }
         else {
             // set gpos of the next range relative to this chrom (note: ranges might not be contiguous)
-            if (ranges.param == RT_DENOVO) 
+            if (ranges_type == RT_DENOVO) 
                 r->gpos = (r-1)->gpos + (r->first_pos - (r-1)->first_pos); // note: only the first range in the chrom needs to be 64-aligned
             
             last->max_pos = r->last_pos; // update
@@ -437,7 +444,7 @@ void ref_contigs_iterate (RefContigsIteratorCallback callback, void *callback_pa
     }
 }
 
-PosType ref_contigs_get_genome_size (void)
+PosType ref_contigs_get_genome_nbases (void)
 {
     if (!loaded_contigs.len) return 0;
 
@@ -451,7 +458,7 @@ PosType ref_contigs_get_genome_size (void)
     // to which we grant 1M gpos space) - this is ok because denovo doesn't use gpos, rather the POS from the SAM alighment
 
     ASSERT ((rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS) || IS_REF_INTERNAL (z_file),
-            "Error in ref_contigs_get_genome_size: gpos=%"PRId64" out of range 0-%"PRId64,
+            "Error in ref_contigs_get_genome_nbases: gpos=%"PRId64" out of range 0-%"PRId64,
             rc_with_largest_gpos->gpos, MAX_GPOS);
 
     return rc_with_largest_gpos->gpos + (rc_with_largest_gpos->max_pos - rc_with_largest_gpos->min_pos + 1);

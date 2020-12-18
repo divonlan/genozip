@@ -192,7 +192,7 @@ static void zfile_dump_section (Buffer *uncompressed_data, SectionHeader *sectio
     // body
     if (uncompressed_data->len) {
         sprintf (filename, "%s.%u.%s.body", st_name (section_header->section_type), vb_i, dict_id_print (dict_id));
-        file_put_buffer (filename, uncompressed_data, 1);
+        buf_dump_to_file (filename, uncompressed_data, 1, false);
     }
 }
 

@@ -994,25 +994,34 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
     FCLOSE (file, filename);
 }
 
-// writes data to a file, return true if successful
+// writes data to a file and flushes it, returns true if successful
 bool file_put_data (const char *filename, void *data, uint64_t len)
 {
-    FILE *file = fopen (filename, "wb");
+    // we first write to tmp_filename, and after we complete and flush, we rename to the final name
+    // this is important, eg for the reference cache files - if a file exists (in its final name) - then it is fully written
+    char tmp_filename[strlen(filename)+10];
+    sprintf (tmp_filename, "%s.tmp", filename);
+
+    file_remove (filename, true);
+    file_remove (tmp_filename, true);
+
+    FILE *file = fopen (tmp_filename, "wb");
     if (!file) return false;
     
     size_t written = fwrite (data, 1, len, file);
     
+    fflush (file);
+    
     SAVE_VALUE (errno);
-    FCLOSE (file, filename);
+    FCLOSE (file, tmp_filename); 
     RESTORE_VALUE (errno); // in cases caller wants to print fwrite error
 
-    return written == len;
-}
-
-// writes a buffer to a file, return true if successful
-bool file_put_buffer (const char *filename, const Buffer *buf, unsigned buf_word_width)
-{
-    return file_put_data (filename, buf->data, buf->len * buf_word_width);
+    if (written == len) { // successful
+        ASSERT (!rename (tmp_filename, filename), "Error in file_put_data: failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
+        return true;
+    } 
+    else
+        return false;
 }
 
 void file_assert_ext_decompressor (void)

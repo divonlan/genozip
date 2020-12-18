@@ -8,6 +8,8 @@
 #include "flags.h"
 #ifndef WIN32
 #include <sys/ioctl.h>
+#else
+#include <windows.h>
 #endif
 
 char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */)
@@ -271,4 +273,14 @@ void str_query_user (const char *query, char *response, unsigned response_size,
         response[bytes-1] = '\0'; // string terminator instead of the newline
 
     } while (verifier && !verifier (response, response_size, verifier_param));
+}
+
+const char *str_win_error (void)
+{
+#ifdef _WIN32
+    static char msg[100];
+    FormatMessageA (FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,                   
+                    NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg, sizeof (msg), NULL);
+    return msg;
+#endif
 }

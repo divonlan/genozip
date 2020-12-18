@@ -43,7 +43,7 @@ const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char
 const char *txtfile_dump_vb (VBlockP vb, const char *base_name)
 {
     const char *dump_filename = txtfile_dump_filename (vb, base_name, "bad");
-    file_put_buffer (dump_filename, &vb->txt_data, 1);
+    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false);
 
     return dump_filename;
 }
@@ -169,7 +169,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
                 sprintf (dump_fn, "%s.vb-%u.bad-bgzf.bad-offset-0x%X", txt_name, vb->vblock_i, (uint32_t)vb->compressed.len);
                 Buffer dump_buffer = vb->compressed; // a copy
                 dump_buffer.len   += block_comp_len; // compressed size
-                file_put_buffer (dump_fn, &dump_buffer, 1);
+                buf_dump_to_file (dump_fn, &dump_buffer, 1, false);
 
                 ABORT ("Error in txtfile_read_block_bgzf: Invalid BGZF block in vb=%u block_comp_len=%u. Entire BGZF data of this vblock dumped to %s, bad block stats at offset 0x%X",
                        vb->vblock_i, block_comp_len, dump_fn, (uint32_t)vb->compressed.len)
@@ -365,7 +365,6 @@ void txtfile_read_vblock (VBlock *vb)
     buf_alloc (vb, &vb->txt_data, global_max_memory_per_vb, 1, "txt_data");    
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
-    uint64_t passed_down_len = txt_file->unconsumed_txt.len;
     if (buf_is_allocated (&txt_file->unconsumed_txt)) {
         buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, 0 ,0 ,0, "txt_data");
         buf_free (&txt_file->unconsumed_txt);
@@ -402,7 +401,9 @@ void txtfile_read_vblock (VBlock *vb)
     if (always_uncompress) buf_free (&vb->compressed); // tested by txtfile_get_unconsumed_to_pass_up
 
     // callback to decide what part of txt_data to pass up to the next VB (usually partial lines, but sometimes more)
-    if (!passed_up_len && vb->txt_data.len > passed_down_len) 
+    // note: even if we haven't read any new data (everything was passed down), we still might data to pass up - eg
+    // in FASTA with make-reference if we have a lots of small contigs, each VB will take one contig and pass up the remaining
+    if (!passed_up_len && vb->txt_data.len) 
         passed_up_len = txtfile_get_unconsumed_to_pass_up (vb);
 
     // make sure file isn't truncated - if we reached EOF there should be no data to be passed up   
