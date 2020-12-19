@@ -406,11 +406,11 @@ void txtfile_read_vblock (VBlock *vb)
     if (!passed_up_len && vb->txt_data.len) 
         passed_up_len = txtfile_get_unconsumed_to_pass_up (vb);
 
-    // make sure file isn't truncated - if we reached EOF there should be no data to be passed up   
+/*    // make sure file isn't truncated - if we reached EOF there should be no data to be passed up   
     ASSERT (!passed_up_len || !txt_file->is_eof,
             "Error: input file %s ends abruptly after reading %" PRIu64 " bytes in vb=%u ft=%s dt=%s", 
             txt_name, vb->txt_data.len, vb->vblock_i, ft_name (txt_file->type), dt_name (txt_file->data_type));
-
+*/
     // if we have some unconsumed data, pass it up to the next vb
     if (passed_up_len) {
         buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, 1, // evb, because dst buffer belongs to File
@@ -419,6 +419,10 @@ void txtfile_read_vblock (VBlock *vb)
         // now, if our data is bgzf-compressed, txt_data.len becomes shorter than indicated by vb->bgzf_blocks. that's ok - all that data
         // is decompressed and passed-down to the next VB. because it has been decompressed, the compute thread won't try to decompress it again
         vb->txt_data.len -= passed_up_len; 
+
+        // if is possible we reached eof but still have pass_up_data - this happens eg in make-reference when a
+        // VB takes only one contig from txt_data and pass up the rest - reset eof so that we come back here to process the rest
+        txt_file->is_eof = false;
     }
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;

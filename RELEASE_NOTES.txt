@@ -298,9 +298,10 @@ Cleanup:
 
 9.0.15
 - bug fixes and minor improvements
-
+mut
 9.0.16
-- append /1 and /2 to the qname in fastq files in both --interleave of a paired fastq file and --fastq of a sam/bam file
+- refactor access to the reference file - to using memory mapping and cache files - a lot faster and consumes less memory
 - when compressing a .gz (or BAM), test BGZF blocks against zlib too (with all compression levels), in addition to libdeflate
+- append /1 and /2 to the qname in fastq files in both --interleave of a paired fastq file and --fastq of a sam/bam file
 - renamed --test-seg to --seg-only
-- bug fixes and minor improvements
+- bug fixes 

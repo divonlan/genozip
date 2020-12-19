@@ -57,7 +57,7 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
         // test to see block_size makes sense
         if ((uint64_t)*i + (uint64_t)block_size + 4 > (uint64_t)vb->txt_data.len || // 64 bit arith to catch block_size=-1 that will overflow in 32b
-            block_size < sizeof (BAMAlignmentFixed) + 4*n_cigar_op  + aln->l_read_name + l_seq + (l_seq+1)/2)
+            block_size + 4 < sizeof (BAMAlignmentFixed) + 4*n_cigar_op  + aln->l_read_name + l_seq + (l_seq+1)/2)
             continue;
 
         // test to see l_read_name makes sense

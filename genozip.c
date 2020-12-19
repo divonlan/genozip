@@ -410,7 +410,14 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     const char *password = crypt_get_password();
 
     // is we have a loaded reference and it is no longer needed, unload it now, to free the memory for the testing process
-    if (is_last_txt_file) ref_destroy_reference();
+    if (is_last_txt_file) {
+        
+        // finish dumping reference and/or refhash to cache before destroying it...
+        ref_create_cache_join();
+        refhash_create_cache_join();
+        
+        ref_destroy_reference();
+    }
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",
@@ -737,6 +744,10 @@ int main (int argc, char **argv)
 
     // if this is "list", finalize
     if (command == LIST) main_genols (NULL, true, NULL, false);
+
+    // finish dumping reference and/or refhash to cache
+    ref_create_cache_join();
+    refhash_create_cache_join();
 
     return 0;
 }

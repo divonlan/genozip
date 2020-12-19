@@ -570,13 +570,19 @@ void buf_overlay_do (VBlock *vb,
 
 // creates a copy-on-write file mapping: data is mapping from a read-only file, any modifications are private
 // to the process and not written back to the file. buf->param is used for mmapping.
-void buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, const char *func, uint32_t code_line, const char *name)
+bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, const char *func, uint32_t code_line, const char *name)
 {
+    int fd = -1;
+
+    if (access (filename, F_OK)) return false; // file doesn't exist
+
     // if this buffer was used by a previous VB as a regular buffer - we need to "destroy" it first
     if (buf->type == BUF_REGULAR && buf->data == NULL && buf->memory) {
         buf_low_level_free (buf->memory, func, code_line);
         buf->type = BUF_UNALLOCATED;
     }
+
+    uint64_t file_size = file_get_size (filename);
 
     *buf = (Buffer){
         .type      = BUF_MMAP,
@@ -584,31 +590,49 @@ void buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, const char *fun
         .func      = func,
         .code_line = code_line,
         .vb        = vb,
-        .size      = file_get_size (filename) - control_size
+        .size      = file_size - control_size
     };
 
-    int fd = open (filename, O_RDONLY);    
+    fd = open (filename, O_RDONLY);    
 
 #ifdef _WIN32
     HANDLE file = (HANDLE)_get_osfhandle (fd);
-    buf->param = (int64_t)CreateFileMapping (file, NULL, PAGE_WRITECOPY, buf->size >> 32, buf->size & 0xffffffff, NULL);
-    ASSERT (buf->param, "Error in buf_mmap: CreateFileMapping failed: %s", str_win_error())
+    buf->param = (int64_t)CreateFileMapping (file, NULL, PAGE_WRITECOPY, file_size >> 32, file_size & 0xffffffff, NULL);
+    ASSERTGOTO (buf->param, "Error in buf_mmap, deleting %s: CreateFileMapping failed: %s", filename, str_win_error())
   
     // note that mmap'ed buffers include the Buffer 
-    buf->memory = MapViewOfFile ((HANDLE)buf->param, FILE_MAP_COPY, 0, 0, buf->size);
-    ASSERT (buf->memory, "Error in buf_mmap: MapViewOfFile failed: %s", str_win_error())
+    buf->memory = MapViewOfFile ((HANDLE)buf->param, FILE_MAP_COPY, 0, 0, file_size);
+    ASSERTGOTO (buf->memory, "Error in buf_mmap, deleting %s: MapViewOfFile failed: %s", filename, str_win_error())
 
 #else
-    buf->memory = mmap (NULL, buf->size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-    ASSERT (buf->memory != MAP_FAILED, "Error in buf_mmap: map failed: %s", strerror (errno));
+    buf->memory = mmap (NULL, file_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    ASSERT (buf->memory != MAP_FAILED, "Error in buf_mmap, deleting %s: mmap failed: %s", filename, strerror (errno));
 #endif
     close (fd);
+    fd=-1;
 
-    // reset control area
+    // verify buffer integrity
     buf->data = buf->memory + sizeof (uint64_t);
-    *(uint64_t *)(buf->memory)           = UNDERFLOW_TRAP;        // underflow protection
-    *(uint64_t *)(buf->data + buf->size) = OVERFLOW_TRAP;         // overflow prortection 
-    *(uint16_t *)(buf->data + buf->size + sizeof (uint64_t)) = 1; // counter of buffers that use of this memory (0 or 1 main buffer + any number of overlays)
+    ASSERTGOTO (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "Error in buf_mmap, deleting %s: mmap'ed buffer has corrupt underflow trap", filename);
+    ASSERTGOTO (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "Error in buf_mmap, deleting %s: mmap'ed buffer has corrupt overflow trap - possibly file is trucated", filename);
+
+    // reset overlay counter
+    *(uint16_t *)(buf->data + buf->size + sizeof (uint64_t)) = 1;
+    return true;
+
+error:
+    // close mapping and delete file - ignore errors
+    if (fd >= 0) close (fd);
+#ifdef _WIN32
+    UnmapViewOfFile (buf->data);
+    CloseHandle ((HANDLE)buf->param);
+#else
+    munmap (buf->data, buf->size);
+#endif
+    file_remove (filename, true);
+
+    memset (buf, 0, sizeof(Buffer));
+    return false;
 }
 
 // free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
@@ -880,8 +904,12 @@ bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_wor
 {
     ASSERT (buf->type == BUF_REGULAR, "Error in buf_dump_to_file: buffer.type=%s while putting %s", buf_display_type (buf), filename);
 
-    if (including_control_region) 
-        return file_put_data (filename, buf->memory, buf->len * buf_word_width + control_size);
+    if (including_control_region) {
+        ASSERT (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "Error in buf_dump_to_file of %s: buffer has underflowed", filename);
+        ASSERT (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "Error in buf_dump_to_file of %s: buffer has underflowed", filename);
+
+        return file_put_data (filename, buf->memory, buf->size + control_size);
+    }
     else
         return file_put_data (filename, buf->data, buf->len * buf_word_width);
 }

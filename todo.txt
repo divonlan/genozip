@@ -1,0 +1,6 @@
+--make-ref with grc38.fa.gz 
+
+check 2nd mmap in same file to protect files between REFERENCE munmaps (keep a secondary mapping open throughout)
+
+dumping to cache needs to finish before ref_compress_ref (if there is any), but dumping refhash can be until the end of main
+

@@ -481,6 +481,8 @@ batch_make_reference()
 
 batch_reference()
 {
+    rm -f ${hg19}.*cache* ${GRCh38}.*cache* # delete genome and hash caches
+
     batch_print_header
 
     echo "paired FASTQ with --reference, --password"

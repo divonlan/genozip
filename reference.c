@@ -63,6 +63,9 @@ static const SectionListEntry *sl_ent = NULL; // NULL -> first call to this sect
 
 static char *ref_fasta_name = NULL;
 
+static pthread_t ref_cache_creation_thread_id;
+static bool ref_creating_cache = false;
+
 // globals
 const char *ref_filename = NULL; // filename of external reference file
 Digest ref_md5 = {};
@@ -567,7 +570,7 @@ void ref_load_stored_reference (void)
     
     if (!(flag.show_headers && exe_type == EXE_GENOCAT)) {
 
-        ref_initialize_ranges (RT_LOADED, NULL);
+        ref_initialize_ranges (RT_LOADED);
         
         sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
@@ -579,7 +582,7 @@ void ref_load_stored_reference (void)
     bool external = flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE;
     dispatcher_fan_out_task (external ? ref_filename     : z_file->basename, 
                              external ? PROGRESS_MESSAGE : PROGRESS_NONE, 
-                             external ? "Reading and caching reference file (next time will be faster!)..." : NULL, 
+                             external ? "Reading and caching reference file..." : NULL, 
                              flag.test, false,
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
@@ -597,10 +600,25 @@ void ref_load_stored_reference (void)
     buf_test_overflows_all_vbs ("ref_load_stored_reference");
 }
 
-static inline const char *ref_get_cache_filename (char *cache_fn)
+// ---------------------
+// Cache stuff
+// ---------------------
+
+static inline const char *ref_get_cache_fn (void)
 {
-    sprintf (cache_fn, "%s.gcache", z_name);
+    static char *cache_fn = NULL;
+
+    if (!cache_fn) {
+        cache_fn = MALLOC (strlen (z_name) + 20);
+        sprintf (cache_fn, "%s.gcache", z_name);
+    }
+
     return cache_fn;
+}
+
+void ref_remove_cache (void)
+{
+    file_remove (ref_get_cache_fn(), true);
 }
 
 // mmap the reference cached file, as copy-on-write - modifications are private to process and not written to the file
@@ -608,12 +626,9 @@ bool ref_mmap_cached_reference (void)
 {
     ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
     
-    char cache_fn[strlen (z_name) + 20];
-    ref_get_cache_filename (cache_fn);
+    if (access (ref_get_cache_fn(), F_OK)) return false; // file doesn't exist
 
-    if (access (cache_fn, F_OK)) return false; // file doesn't exist
-
-    ref_initialize_ranges (RT_CACHED, cache_fn); // also does the actual buf_mmap
+    ref_initialize_ranges (RT_CACHED); // also does the actual buf_mmap
 
     if (ref_has_is_set()) buf_zero (&genome_is_set_buf);
 
@@ -629,14 +644,29 @@ bool ref_mmap_cached_reference (void)
     return true;
 }
 
-void *ref_create_cache (void *unused_arg)
+static void *ref_create_cache (void *unused_arg)
 {
-    char cache_fn[strlen (z_name) + 20];
-    ref_get_cache_filename (cache_fn);
-
-    buf_dump_to_file (cache_fn, &genome_cache, 1, true);
-
+    buf_dump_to_file (ref_get_cache_fn(), &genome_cache, 1, true);
     return NULL;
+}
+
+void ref_create_cache_in_background (void)
+{
+    // start creating the genome cache now in a background thread, but only if we loaded the entire reference
+    if (!flag.regions) { 
+        ref_get_cache_fn(); // generate name before closing z_file
+        unsigned err = pthread_create (&ref_cache_creation_thread_id, NULL, ref_create_cache, NULL);
+        ASSERT (!err, "Error in ref_create_cache_in_background: pthread_create failed: err=%u", err);
+        ref_creating_cache = true;
+    }
+}
+
+void ref_create_cache_join (void)
+{
+    if (!ref_creating_cache) return;
+
+    pthread_join (ref_cache_creation_thread_id, NULL);
+    ref_creating_cache = false;
 }
 
 
@@ -1140,6 +1170,8 @@ void ref_compress_ref (void)
 {
     if (!buf_is_allocated (&ranges)) return;
 
+    ref_create_cache_join(); // finish dumping reference to cache before we modify it via compacting
+
     if ((ranges_type == RT_DENOVO) &&
         buf_is_allocated (&z_file->contexts[CHROM].dict)) // did we have an aligned lines? (to do: this test is not enough)
         ref_finalize_denovo_ranges(); // assignes chroms; sorts ranges by chrom, pos; gets rid of unused ranges
@@ -1402,39 +1434,22 @@ static void overlay_ranges_on_loaded_genome (void)
     }
 }
 
- 
-/*// Initialize the overlay ranges, one per chromosome for a loaded genome. The remaining fields will be set in ref_read_one_range 
-static void ref_create_contig_range_for_loaded_genome (Range *r, WordIndex chrom_index)
-{
-    r->chrom = chrom_index;      
-    
-    if (flag.reference == REF_STORED) {
-        Context *ctx = &z_file->contexts[CHROM];
-        ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
-    }
-    else
-        ref_contigs_get_chrom_snip (r->chrom, &r->chrom_name, &r->chrom_name_len);
-
-    // case: this chrom has no RA - for example, it is a "=" or "*", it doesn't have a reference region
-    //if (r->last_pos < 0) continue;
-}
-*/
 // case 1: in case of ZIP with external reference, called by ref_load_stored_reference during piz_read_global_area of the reference file
 // case 2: in case of PIZ: also called from ref_load_stored_reference with RT_LOADED
 // case 3: in case of ZIP of SAM using internal reference - called from sam_zip_initialize
 // note: ranges allocation must be called by the I/O thread as it adds a buffer to evb buf_list
-void ref_initialize_ranges (RangesType type, const char *cache_fn /* only for RT_CACHED */)
+void ref_initialize_ranges (RangesType type)
 {
     if (type == RT_LOADED || type == RT_CACHED) {
 
         ref_initialize_loaded_ranges (type);
 
-        if (type == RT_LOADED) {
-            genome_cache.len = genome_nbases / 4 * 2; // length in bytes - used by file_put_data to create cache file
-            buf_alloc (evb, &genome_cache, genome_cache.len, 1, "genome_cache") // contains both forward and rev. compliment
-        }
+        if (type == RT_LOADED) 
+            buf_alloc (evb, &genome_cache, genome_nbases / 4 * 2, 1, "genome_cache") // contains both forward and rev. compliment
+        
         else  // RT_CACHED 
-            buf_mmap (evb, &genome_cache, cache_fn, "genome_cache"); // we map the entire file (forward and revese complement genomes) onto genome_cache
+            ASSERT0 (buf_mmap (evb, &genome_cache, ref_get_cache_fn(), "genome_cache"),  // we map the entire file (forward and revese complement genomes) onto genome_cache
+                     "Error in ref_initialize_ranges: failed to map cache. Please try again");
 
         // overlay genome and emoneg. we do it this was so we can use just a single file
         buf_set_overlayable (&genome_cache);

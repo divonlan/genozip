@@ -277,10 +277,10 @@ void str_query_user (const char *query, char *response, unsigned response_size,
 
 const char *str_win_error (void)
 {
-#ifdef _WIN32
     static char msg[100];
+#ifdef _WIN32
     FormatMessageA (FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,                   
                     NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg, sizeof (msg), NULL);
-    return msg;
 #endif
+    return msg;
 }

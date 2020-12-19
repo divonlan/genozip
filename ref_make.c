@@ -58,12 +58,16 @@ void ref_make_ref_init (void)
 {
     ASSERT0 (flag.make_reference, "Expecting flag.make_reference=true");
 
+    // remove old cache files
+    ref_remove_cache();
+    refhash_remove_cache();
+
     buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges"); // must be allocated by I/O thread as its evb
     ranges_type = RT_MAKE_REF;
     
     buf_zero (&ranges);
 
-    refhash_initialize();
+    refhash_initialize (NULL);
 
     spin_initialize (make_ref_spin);
 }

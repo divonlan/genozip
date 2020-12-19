@@ -63,6 +63,10 @@ static uint32_t next_task_start_within_layer = 0;
 const char complement[256] =  { ['A']='T', ['C']='G', ['G']='C', ['T']='A',  // complement A,C,G,T, others are 4
                                 [0 ...'@']=4, ['B']=4, ['D'...'F']=4, ['U'...255]=0 };
 
+// cache stuff
+static pthread_t refhash_cache_creation_thread_id;
+static bool refhash_creating_cache = false;
+
 // ------------------------------------------------------
 // stuff related to creating the refhash
 // ------------------------------------------------------
@@ -222,6 +226,54 @@ void refhash_compress_refhash (void)
                              zfile_output_processed_vb);
 }
 
+// -----------------------------------
+// stuff related to refhash cache file
+// -----------------------------------
+
+static inline const char *refhash_get_cache_fn (void)
+{
+    static char *cache_fn = NULL;
+
+    if (!cache_fn) {
+        cache_fn = MALLOC (strlen (z_name) + 20);
+        sprintf (cache_fn, "%s.hcache", z_name);
+    }
+
+    return cache_fn;
+}
+
+void refhash_remove_cache (void)
+{
+    file_remove (refhash_get_cache_fn(), true);
+}
+
+// thread entry for creating refhash cache
+static void *refhash_create_cache (void *unused_arg)
+{
+    buf_dump_to_file (refhash_get_cache_fn(), &refhash_buf, 1, true);
+
+    return NULL;
+}
+
+static void refhash_create_cache_in_background (void)
+{
+    // start creating the genome cache now in a background thread, but only if we loaded the entire reference
+    if (!flag.regions) { 
+        refhash_get_cache_fn(); // generate name before we close z_file
+        unsigned err = pthread_create (&refhash_cache_creation_thread_id, NULL, refhash_create_cache, NULL);
+        ASSERT (!err, "Error in refhash_create_cache_in_background: pthread_create failed: err=%u", err);
+        refhash_creating_cache = true;
+    }
+}
+
+void refhash_create_cache_join (void)
+{
+    if (!refhash_creating_cache) return;
+
+    pthread_join (refhash_cache_creation_thread_id, NULL);
+    refhash_creating_cache = false;
+}
+
 // ----------------------------------------------------------------------------------------------
 // stuff related to ZIPping fasta and fastq using an external reference that includes the refhash
 // ----------------------------------------------------------------------------------------------
@@ -275,20 +327,6 @@ static void refhash_read_one_vb (VBlockP vb)
     vb->ready_to_dispatch = true;
 }
 
-// called by the I/O thread - piz_read_global_area when reading the reference file, ahead of compressing a fasta or fastq file. 
-void refhash_load(void)
-{
-    refhash_initialize();
-
-    sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-
-    dispatcher_fan_out_task (ref_filename,
-                             PROGRESS_MESSAGE, "Reading reference hash table...", flag.test, false,
-                             refhash_read_one_vb, 
-                             refhash_uncompress_one_vb, 
-                             NULL);
-}
-
 void refhash_load_standalone (void)
 {
     flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
@@ -301,7 +339,7 @@ void refhash_load_standalone (void)
 
     zfile_read_genozip_header (0, 0, 0, 0);
 
-    refhash_load();
+    refhash_initialize (NULL);
 
     file_close (&z_file, false, false);
     file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
@@ -312,13 +350,32 @@ void refhash_load_standalone (void)
     flag.reading_reference = false;
 }
 
+
 // ----------------------------
 // general stuff
 // ----------------------------
 
-void refhash_initialize (void)
+static void refhash_initialize_refhashs_array (void)
+{
+    refhashs = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointers
+
+    // set layer pointers
+    uint64_t offset=0;
+    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
+        refhashs[layer_i] = (uint32_t*)ENT (uint8_t, refhash_buf, offset);
+        offset += layer_size[layer_i];
+    }
+}
+
+// called by the I/O thread - piz_read_global_area when reading the reference file, ahead of compressing a fasta or fastq file. 
+// returns true if mapped cache
+void refhash_initialize (bool *dispatcher_invoked)
 {
     uint32_t base_layer_bits;
+    
+    if (dispatcher_invoked) *dispatcher_invoked = false; // initialize
+
+    if (buf_is_allocated (&refhash_buf)) return; // already loaded from a previous file
 
     // case 1: called from ref_make_ref_init - initialize for making a reference file
     if (flag.make_reference) {
@@ -344,24 +401,40 @@ void refhash_initialize (void)
     bits_per_hash_is_odd = bits_per_hash % 2;
     nukes_per_hash = (1 + bits_per_hash) / 2; // round up
 
-    // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
-    buf_alloc (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
-    refhash_buf.len = refhash_size; // needed by buf_dump_to_file
+    // if not making reference - we try to load - first from cache, then from reference file
+    if (!flag.make_reference) {
 
-    // set all entries to NO_GPOS. note: no need to set in ZIP, as we will be reading the data from the refernce file
-    // NOTE: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min
-    // due to a different LZMA internal mode when compressing the hash. However, the resulting file is MUCH smaller,
-    // and loading of refhash during zip is MUCH faster
-    if (flag.make_reference) buf_set (&refhash_buf, 0xff); 
+        // attempt to mmap the cache, but if it doesn't exist read from the reference and create the cache
+        bool mapped_cache = buf_mmap (evb, &refhash_buf, refhash_get_cache_fn(), "refhash_buf");
+        if (!mapped_cache) { 
+            // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
+            buf_alloc (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
+            refhash_initialize_refhashs_array();
 
-    refhashs = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointers
+            sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
+            dispatcher_fan_out_task (ref_filename,
+                                    PROGRESS_MESSAGE, "Reading and caching reference hash table...", flag.test, false,
+                                    refhash_read_one_vb, 
+                                    refhash_uncompress_one_vb, 
+                                    NULL);
 
-    // set layer pointers
-    uint64_t offset=0;
-    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-        refhashs[layer_i] = (uint32_t*)ENT (uint8_t, refhash_buf, offset);
-        offset += layer_size[layer_i];
+            refhash_create_cache_in_background();
+            
+            if (dispatcher_invoked) *dispatcher_invoked = true;
+        }
     }
+
+    else { // make_reference
+        // set all entries to NO_GPOS. note: no need to set in ZIP, as we will be reading the data from the refernce file
+        // NOTE: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min
+        // due to a different LZMA internal mode when compressing the hash. However, the resulting file is MUCH smaller,
+        // and loading of refhash during zip is MUCH faster
+        buf_alloc (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
+        buf_set (&refhash_buf, 0xff); 
+    }
+
+    // if we haven't prepared refhashs yet, do it now.
+    if (!refhashs) refhash_initialize_refhashs_array();
 }
 
 void refhash_destroy (void)

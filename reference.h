@@ -57,7 +57,7 @@ typedef enum { RT_NONE,      // value of ranges.param if ranges is unallocated
              } RangesType;
 #define ranges_type ranges.param
               
-extern void ref_initialize_ranges (RangesType type, const char *cache_fn);
+extern void ref_initialize_ranges (RangesType type);
 extern void ref_compress_ref (void);
 extern void ref_load_external_reference (bool display, bool is_last_z_file);
 extern void ref_load_stored_reference (void);
@@ -74,9 +74,12 @@ extern const char *ref_get_cram_ref (void);
 extern void ref_make_ref_init (void);
 extern void ref_generate_reverse_complement_genome (void);
 extern Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name);
-extern bool ref_mmap_cached_reference (void);
-extern void *ref_create_cache (void *unused_arg);
 
+// cache stuff
+extern bool ref_mmap_cached_reference (void);
+extern void ref_create_cache_in_background (void);
+extern void ref_create_cache_join (void);
+extern void ref_remove_cache (void);
 
 // contigs stuff
 typedef enum { WI_REF_CONTIG, WI_ZFILE_CHROM } GetWordIndexType;

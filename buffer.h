@@ -89,7 +89,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 }
 
-extern void buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, const char *func, uint32_t code_line, const char *name);
+extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, const char *func, uint32_t code_line, const char *name);
 #define buf_mmap(vb, buf, filename, name) \
     buf_mmap_do((vb), (buf), (filename), __FUNCTION__, __LINE__, (name))
 

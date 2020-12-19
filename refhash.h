@@ -24,7 +24,7 @@ extern uint32_t layer_size[64];    // size (in bytes) of each layer - layer_size
 extern uint32_t layer_bitmask[64]; // 1s in the layer_bits[] LSbs
 extern uint32_t **refhashs;
 
-extern void refhash_initialize (void);
+extern void refhash_initialize (bool *dispatcher_invoked);
 extern void refhash_destroy (void);
 
 // make-reference stuff
@@ -32,8 +32,9 @@ extern void refhash_compress_refhash (void);
 extern void refhash_calc_one_range (const Range *r, const Range *next_r);
 
 // stuff for loading and using refhash when ZIPping a fastq or fasta file
-extern void refhash_load(void);
 extern void refhash_load_standalone (void);
+extern void refhash_create_cache_join (void);
+extern void refhash_remove_cache (void);
 
 // globals
 extern const char complement[256];

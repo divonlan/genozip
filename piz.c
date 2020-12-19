@@ -28,9 +28,6 @@
 #include "flags.h"
 #include "reconstruct.h"
 
-static pthread_t cache_creation_thread_id;
-static bool has_cache_creation_thread = false;
-
 // PIZ compute thread: decompress all contexts
 // ZIP compute thread in FASTQ: decompress pair_1 contexts when compressing pair_2
 uint32_t piz_uncompress_all_ctxs (VBlock *vb, 
@@ -227,11 +224,7 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
                 ref_generate_reverse_complement_genome();
 
                 // start creating the genome cache now in a background thread, but only if we loaded the entire reference
-                if (!flag.regions) { 
-                    unsigned err= pthread_create (&cache_creation_thread_id, NULL, ref_create_cache, NULL);
-                    ASSERT (!err, "Error in piz_read_global_area: pthread_create failed: err=%u", err);
-                    has_cache_creation_thread = true;
-                }
+                if (!flag.regions) ref_create_cache_in_background(); 
 
                 dispatcher_invoked = true;
             }
@@ -239,8 +232,8 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
             // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
             if (  (primary_command == ZIP && flag.ref_use_aligner) ||
                   (flag.show_ref_hash && exe_type == EXE_GENOCAT)) {
-                refhash_load();
-                dispatcher_invoked = true;
+                
+                refhash_initialize (&dispatcher_invoked);
             }
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
@@ -532,9 +525,4 @@ finish:
     else dispatcher_finish (&dispatcher, NULL);    
 
     DT_FUNC (z_file, piz_finalize)();
-
-    if (has_cache_creation_thread) {
-        pthread_join (cache_creation_thread_id, NULL);
-        has_cache_creation_thread = false;
-    }
 }
