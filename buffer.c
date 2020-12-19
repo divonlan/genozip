@@ -691,10 +691,10 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 
         case BUF_MMAP:
 #ifdef _WIN32
-            ASSERT (UnmapViewOfFile (buf->data), "Error in buf_free_do called from %s:%u: UnmapViewOfFile failed: %s", buf->func, buf->code_line, str_win_error());
+            ASSERT (UnmapViewOfFile (buf->memory), "Error in buf_free_do called from %s:%u: UnmapViewOfFile failed: %s", buf->func, buf->code_line, str_win_error());
             ASSERT (CloseHandle ((HANDLE)buf->param), "Error in buf_free_do called from %s:%u: CloseHandle failed: %s", buf->func, buf->code_line, str_win_error());            
 #else
-            ASSERT (!munmap (buf->data, buf->size), "Error in buf_free_do called from %s:%u: munmap failed: %s", buf->func, buf->code_line, strerror (errno));
+            ASSERT (!munmap (buf->memory, buf->size), "Error in buf_free_do called from %s:%u: munmap failed: %s", buf->func, buf->code_line, strerror (errno));
 #endif
             buf_reset (buf);
             break;
