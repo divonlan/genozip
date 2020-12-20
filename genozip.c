@@ -635,7 +635,6 @@ int main (int argc, char **argv)
     str_tolower (argv[0], argv[0]);
 #else
     signal (SIGSEGV, main_sigsegv_handler);   // segmentation fault handler
-    signal (SIGBUS,  main_sigsegv_handler);    // bus error handler
 #endif
 
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
