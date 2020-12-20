@@ -283,9 +283,9 @@ static void zip_update_txt_counters (VBlock *vb)
     if (!(flag.optimize_DESC && vb->data_type == DT_FASTQ)) 
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
         
-    z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all bound files in this z_file
-    z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
-    z_file->txt_data_so_far_bind             += (int64_t)vb->vb_data_size;
+    z_file->num_lines              += (int64_t)vb->lines.len; // lines in all bound files in this z_file
+    z_file->txt_data_so_far_single += (int64_t)vb->vb_data_size;
+    z_file->txt_data_so_far_bind   += (int64_t)vb->vb_data_size;
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
