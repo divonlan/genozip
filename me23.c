@@ -27,8 +27,8 @@ bool me23_header_inspect (BufferP txt_header)
     buf_alloc_more (evb, txt_header, 1, 0, char, 0, 0); // make room for \0
     *AFTERENT (char, *txt_header) = 0; // nul-terminate for strstr
 
-    ASSINP (strstr (txt_header->data, "23andMe"), "%s: file %s is missing a 23andMe header and thus not identified as a 23andMe file", 
-            global_cmd, txt_name);
+    ASSINP (strstr (txt_header->data, "23andMe"), "file %s is missing a 23andMe header and thus not identified as a 23andMe file", 
+            txt_name);
 
     return true;
 }
@@ -96,8 +96,8 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     // Genotype (a combination of one or two bases or "--")
     GET_LAST_ITEM ("GENOTYPE");
     
-    ASSERT (field_len == 1 || field_len == 2, "%s: Error in %s: expecting all genotype data to be 1 or 2 characters, but found one with %u: %.*s",
-            global_cmd, txt_name, field_len, field_len, field_start);
+    ASSSEG (field_len == 1 || field_len == 2, field_start, "expecting all genotype data to be 1 or 2 characters, but found one with %u: %.*s",
+            field_len, field_len, field_start);
 
     seg_add_to_local_fixed (vb, &vb->contexts[ME23_GENOTYPE], field_start, field_len); 
         

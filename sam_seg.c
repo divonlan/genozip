@@ -270,10 +270,10 @@ void sam_seg_tlen_field (VBlockSAM *vb,
     Context *ctx = &vb->contexts[SAM_TLEN];
 
     if (tlen) { // option 1
-        ASSSEG (tlen_len, tlen, "%s: empty TLEN", global_cmd);
+        ASSSEG0 (tlen_len, tlen, "empty TLEN");
 
         bool is_int = str_get_int (tlen, tlen_len, &tlen_value); // note: tlen_value remains 0 if not a valid integer
-        ASSSEG (is_int, tlen, "%s: expecting TLEN to be an integer, but found \"%.*s\"", global_cmd, tlen_len, tlen);
+        ASSSEG (is_int, tlen, "expecting TLEN to be an integer, but found \"%.*s\"", tlen_len, tlen);
     }
 
     unsigned add_bytes = IS_BAM ? sizeof (uint32_t) : tlen_len + 1;
@@ -472,7 +472,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
         else if (cigar_op == 'I' || cigar_op == 'S') {
 
             ASSSEG (subcigar_len > 0 && subcigar_len <= (seq_len - i), seq,
-                    "Error in sam_seg_seq_field: CIGAR %s implies seq_len longer than actual seq_len=%u", cigar, seq_len);
+                    "CIGAR %s implies seq_len longer than actual seq_len=%u", cigar, seq_len);
 
             buf_add (&nonref_ctx->local, &seq[i], subcigar_len);
             i += subcigar_len;
@@ -496,7 +496,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
                     pos_index + ref_len_this_level - next_ref, seq_len-i,   cigar, pos, recursion_level, level_0_cigar, level_0_seq_len,
                     vb->ref_consumed, next_ref, pos_index, ref_len_this_level, subcigar_len, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);        
 
-            ASSSEG (false, vb->last_cigar, "Error in sam_seg_seq_field: Invalid CIGAR op: '%c' (ASCII %u)", cigar_op, cigar_op);        
+            ASSSEG (false, vb->last_cigar, "Invalid CIGAR op: '%c' (ASCII %u)", cigar_op, cigar_op);        
         }
 
         // case: we're at the end of the reference AND we want more of it
@@ -516,9 +516,9 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     // call recursively with remaining sequence and next reference range 
     if (i < seq_len) {
 
-        ASSSEG (this_seq_last_pos <= MAX_POS, cigar, "%s: Error: POS=%"PRId64" and the consumed reference implied by CIGAR=\"%s\", exceeding MAX_POS=%"PRId64
+        ASSSEG (this_seq_last_pos <= MAX_POS, cigar, "POS=%"PRId64" and the consumed reference implied by CIGAR=\"%s\", exceeding MAX_POS=%"PRId64
                 " (next_ref=%u pos_index=%u ref_len_this_level=%u subcigar_len=%u range=[%.*s %"PRId64"-%"PRId64"])",
-                global_cmd, pos, cigar, MAX_POS, next_ref, pos_index, ref_len_this_level, subcigar_len, 
+                pos, cigar, MAX_POS, next_ref, pos_index, ref_len_this_level, subcigar_len, 
                 range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);
 
         vb->ref_consumed -= ref_len_this_level;
@@ -570,7 +570,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
 
     for (uint32_t i=0; i < field_len; sa_oa.repeats++) {
 
-        ASSSEG (sa_oa.repeats <= CONTAINER_MAX_REPEATS, field, "Error in sam_seg_SA_or_OA_field - exceeded maximum repeats allowed (%u) while parsing %s",
+        ASSSEG (sa_oa.repeats <= CONTAINER_MAX_REPEATS, field, "exceeded maximum repeats allowed (%u) while parsing %s",
                 CONTAINER_MAX_REPEATS, dis_dict_id (subfield_dict_id).s);
 
         DO_SSF (rname,  ','); // these also do sanity checks
@@ -633,7 +633,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
 
     for (uint32_t i=0; i < field_len; xa.repeats++) {
 
-        ASSSEG (xa.repeats <= CONTAINER_MAX_REPEATS, field, "Error in sam_seg_XA_field - exceeded maximum repeats allowed (%u) while parsing XA",
+        ASSSEG (xa.repeats <= CONTAINER_MAX_REPEATS, field, "exceeded maximum repeats allowed (%u) while parsing XA",
                 CONTAINER_MAX_REPEATS);
 
         DO_SSF (rname,  ','); 
@@ -849,7 +849,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
         str++;
     }
 
-    ASSSEG (con.repeats < CONTAINER_MAX_REPEATS, value, "Error: array has too many elements, more than %u", CONTAINER_MAX_REPEATS);
+    ASSSEG (con.repeats < CONTAINER_MAX_REPEATS, value, "array has too many elements, more than %u", CONTAINER_MAX_REPEATS);
 
     // add bytes here in case of BAM - all to main field
     unsigned container_add_bytes=0;
@@ -941,7 +941,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 
     // E2 - SEQ data (note: E2 doesn't have a context - it shares with SEQ)
     else if (dict_id.num == dict_id_fields[SAM_E2_Z]) {
-        ASSSEG0 (dl->seq_len, value, "Error: E2 tag without a SEQ"); 
+        ASSSEG0 (dl->seq_len, value, "E2 tag without a SEQ"); 
         ASSERT (value_len == dl->seq_len, 
                 "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                 txt_name, dl->seq_len, value_len, value_len, value);
@@ -953,7 +953,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 
     // U2 - QUAL data (note: U2 doesn't have a context - it shares with QUAL)
     else if (dict_id.num == dict_id_fields[SAM_U2_Z]) {
-        ASSSEG0 (dl->seq_len, value, "Error: U2 tag without a SEQ"); 
+        ASSSEG0 (dl->seq_len, value, "U2 tag without a SEQ"); 
         ASSERT (value_len == dl->seq_len, 
                 "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                 txt_name, dl->seq_len, value_len, value_len, value);
@@ -991,9 +991,9 @@ const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, int32_t
     char separator;
     GET_MAYBE_LAST_ITEM ("OPTIONAL-subfield"); 
 
-    ASSSEG0 (field_len, field_start, "Error: line invalidly ends with a tab");
+    ASSSEG0 (field_len, field_start, "line invalidly ends with a tab");
 
-    ASSSEG (field_len >= 6 && field_start[2] == ':' && field_start[4] == ':', field_start, "Error: invalid optional field format: %.*s",
+    ASSSEG (field_len >= 6 && field_start[2] == ':' && field_start[4] == ':', field_start, "invalid optional field format: %.*s",
             field_len, field_start);
 
     *tag         = field_start;
@@ -1033,7 +1033,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
             .did_i        = DID_I_NONE, // seg always puts NONE, PIZ changes it
         };
 
-        ASSSEG (con.num_items <= MAX_SUBFIELDS, value, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
+        ASSSEG (con.num_items <= MAX_SUBFIELDS, value, "too many optional fields, limit is %u", MAX_SUBFIELDS);
 
         // in the optional field prefix (unlike array type), all integer types become 'i'.
         char prefix_type = sam_seg_bam_type_to_sam_type (type);
@@ -1147,7 +1147,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     SEG_NEXT_ITEM (SAM_FLAG);
     int64_t flag;
-    ASSSEG (str_get_int (field_start, field_len, &flag), field_start, "Error: invalid flag field: %.*s", field_len, field_start);
+    ASSSEG (str_get_int (field_start, field_len, &flag), field_start, "invalid FLAG field: %.*s", field_len, field_start);
 
     GET_NEXT_ITEM ("RNAME");
     seg_chrom_field (vb_, field_start, field_len);

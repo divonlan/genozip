@@ -71,13 +71,13 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
         else if ((!allow_tab     && str[i] == '\t') ||  // note: a colon with allow_colon=false is not an error, its just part of the string rather than being a separator
                  (!allow_newline && str[i] == '\n')) break;
             
-    ASSSEG (*str_len, str, "Error: missing %s field", item_name);
+    ASSSEG (*str_len, str, "missing %s field", item_name);
 
     ASSSEG (str[i] != '\t' || vb->data_type != DT_VCF || (item_name == DTF(names)[VCF_INFO] /* pointer, not string, comparison */), 
-            str, "Error: while segmenting %s: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
+            str, "while segmenting %s: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
             item_name);
 
-    ABOSEG (str, "Error: while segmenting %s: expecting a %s %s %s after \"%.*s\"", 
+    ABOSEG (str, "while segmenting %s: expecting a %s %s %s after \"%.*s\"", 
             item_name,
             allow_newline ? "NEWLINE" : "", allow_tab ? "TAB" : "", allow_colon ? "\":\"" : "", 
             MIN (i-1, 1000), str);
@@ -103,9 +103,9 @@ const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigne
                 return str + i+1; // beyond the separator
         }
     
-    ASSSEG (*str_len, str, "Error: missing %s field", item_name);
+    ASSSEG (*str_len, str, "missing %s field", item_name);
 
-    ABOSEG (str, "Error: while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
+    ABOSEG (str, "while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
             item_name, MIN (i-1, 1000), str);
 
     return 0; // avoid compiler warning - never reaches here
@@ -137,7 +137,7 @@ WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str
 
     // don't allow adding chroms if const_chroms (except "*")
     ASSSEG (!is_new || !flag.const_chroms || (chrom_str_len == 1 && chrom_str[0] == '*'), 
-            chrom_str, "Error: contig '%.*s' appears in file, but is missing in the %s header", chrom_str_len, chrom_str, dt_name (txt_file->data_type));
+            chrom_str, "contig '%.*s' appears in file, but is missing in the %s header", chrom_str_len, chrom_str, dt_name (txt_file->data_type));
             
     random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_str, chrom_str_len);
 
@@ -154,7 +154,7 @@ PosType seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool
     if (is_int && value >= 0 && value <= MAX_POS)
         return value; // all good
 
-    ASSSEG (allow_nonsense, snip, "Error: position field must be an integer number between 0 and %"PRId64", seeing: %.*s", 
+    ASSSEG (allow_nonsense, snip, "position field must be an integer number between 0 and %"PRId64", seeing: %.*s", 
             MAX_POS, snip_len, snip);
 
     return -1; // bad number
@@ -339,7 +339,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
 
                 if (this_name_len > 0) { 
                     ASSSEG ((this_name[0] >= 64 && this_name[0] <= 127) || this_name[0] == '.', info_str,
-                            "Error: %s field contains a name %.*s starting with an illegal character '%c' (ASCII %u)", 
+                            "%s field contains a name %.*s starting with an illegal character '%c' (ASCII %u)", 
                             field_name, this_name_len, this_name, this_name[0], this_name[0]);
 
                     InfoItem *ii = &info_items[con.num_items];
@@ -693,7 +693,7 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
     ASSERT (vb->txt_data.len, "Error in seg_estimate_num_lines for vb=%u: txt_data is empty", vb->vblock_i); 
 
     ASSSEG (newlines==DTP (line_height) || len < vb->txt_data.len, vb->txt_data.data, 
-            "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
+            "a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
             str_uint_commas (global_max_memory_per_vb).s);
 
     return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));

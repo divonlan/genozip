@@ -747,7 +747,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, const ch
     }
 
     uint32_t range_id = ref_range_id_by_hash (vb, range_i);
-    ASSSEG (range_id < ranges.len, field, "Error in ref_seg_get_locked_range: range_id=%u expected to be smaller than ranges.len=%u", range_id, (uint32_t)ranges.len);
+    ASSSEG (range_id < ranges.len, field, "range_id=%u expected to be smaller than ranges.len=%u", range_id, (uint32_t)ranges.len);
 
     Range *range = ENT (Range, ranges, range_id);
     *lock = ref_lock_range (range_id);
@@ -831,7 +831,7 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
         }
     }
 
-    ASSSEG (ref_index < ranges.len, field, "Error in ref_seg_get_locked_range: ref_index=%u expected to be smaller than ranges.len=%u", 
+    ASSSEG (ref_index < ranges.len, field, "ref_index=%u expected to be smaller than ranges.len=%u", 
             ref_index, (uint32_t)ranges.len);
 
     Range *range = ENT (Range, ranges, ref_index);
@@ -843,7 +843,7 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
     // note: in SAM, if a read starts within the valid range, it is allowed to overflow beyond it - and we will circle
     // around to the beginning of the range assuming its a circular chromosome (see in sam_seg_seq_field)
     ASSSEG ((pos >= range->first_pos && pos <= range->last_pos), field,
-            "Error: file has POS=%"PRId64" for contig \"%.*s\", but this contig's range is %"PRId64" - %"PRId64". Likely this is because %s was created using a reference file other than %s.",
+            "POS=%"PRId64" for contig \"%.*s\", but this contig's range is %"PRId64" - %"PRId64". Likely this is because %s was created using a reference file other than %s.",
             pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, txt_name, ref_filename);
 
     return range; // returning locked range
@@ -856,7 +856,7 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
 Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, RefLock *lock)  
 {
     // sanity checks
-    ASSSEG0 (vb->chrom_name, field, "Error in ref_seg_get_locked_range: vb->chrom_name=NULL");
+    ASSERT0 (vb->chrom_name, "Error in ref_seg_get_locked_range: vb->chrom_name=NULL");
 
     switch (ranges_type) {
         case RT_DENOVO : return ref_seg_get_locked_range_denovo (vb, pos, field, lock);
@@ -1545,7 +1545,7 @@ const char *ref_get_cram_ref (void)
     static char *samtools_T_option = NULL;
     if (samtools_T_option) goto done; // already calculated
 
-    ASSINP (ref_filename, "%s: when compressing a CRAM file, --reference or --REFERENCE must be specified", global_cmd);
+    ASSINP0 (ref_filename, "when compressing a CRAM file, --reference or --REFERENCE must be specified");
 
     // if we're attempting to open a cram file, just to check whether it is aligned (in main_load_reference),
     // then we haven't loaded the reference file yet, and hence we don't know ref_fasta_name.
@@ -1557,11 +1557,11 @@ const char *ref_get_cram_ref (void)
     file_close (&z_file, false, true);
 
 
-    ASSINP (ref_fasta_name, "%s: cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",
-            global_cmd, ref_filename, REF_FILENAME_LEN-1);
+    ASSINP (ref_fasta_name, "cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",
+            ref_filename, REF_FILENAME_LEN-1);
 
-    ASSINP (file_exists (ref_fasta_name), "%s: cannot find the fasta file %s. Note: this is the file that was used to create %s, and it needs to exist in this name, in order to be passed to samtools as a reference file (-T option) for reading the CRAM file", 
-            global_cmd, ref_fasta_name, ref_filename);
+    ASSINP (file_exists (ref_fasta_name), "cannot find the fasta file %s. Note: this is the file that was used to create %s, and it needs to exist in this name, in order to be passed to samtools as a reference file (-T option) for reading the CRAM file", 
+            ref_fasta_name, ref_filename);
 
     samtools_T_option = MALLOC (strlen (ref_fasta_name) + 10);
     sprintf (samtools_T_option, "-T%s", ref_fasta_name);

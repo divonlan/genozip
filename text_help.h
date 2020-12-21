@@ -132,7 +132,7 @@ static const char *help_genozip[] = {
     "                     Note: due to these data modifications, files compressed with --optimize are NOT identical to the original file after decompression. For this reason, it is not possible to use this option in combination with --test or --md5",    
     "",
     "FASTQ-specific options (ignored for other file types):",
-    "   -2 --pair         Compress pairs of paired-end FASTQ files, resulting in compression ratios better than compressing the files individually. When using this option, every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names, and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display interleaved, use genocat --interleave, and to unbind the genozip file back to its original FASTQ files, use genounzip --unbind.",
+    "   -2 --pair         Compress pairs of paired-end FASTQ files, resulting in compression ratios better than compressing the files individually. When using this option, every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names, and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display interleaved, use genocat --interleaved, and to unbind the genozip file back to its original FASTQ files, use genounzip --unbind.",
     "",
 #ifndef _WIN32
     "VCF-specific options (ignored for other file types):",
@@ -327,7 +327,7 @@ static const char *help_genocat[] = {
     "Subsetting options (options resulting in modified display of the data):",    
     "   --downsample      <rate> Show only one in every <rate> lines (or reads in the case of FASTQ). Other subsetting options, if any, will be applied to the surviving lines only.",
     "",
-    "   --interleave      For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file, then a read from the second file, then the next read from the first file and so on.",
+    "   --interleaved     For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file, then a read from the second file, then the next read from the first file and so on.",
     "",
     "   -r --regions      [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...]",
     "   VCF SAM FASTA     Show one or more regions of the file. Examples:",

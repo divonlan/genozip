@@ -181,9 +181,10 @@ extern void main_exit (bool show_stack, bool is_error);
 #define exit_ok main_exit (false, false)
 
 // check for a user error
-#define ASSINP(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false); }}
-#define ASSINP0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s\n", string); exit_on_error(false); }}
-#define ABORTINP(format, ...)                { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);}
+#define ASSINP(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false); }}
+#define ASSINP0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s: %s\n", global_cmd, string); exit_on_error(false); }}
+#define ABORTINP(format, ...)                { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);}
+#define ABORTINP0(string)                    { fprintf (stderr, "\n%s: %s\n", global_cmd, string); exit_on_error(false);}
 
 // check for a bug - prints stack
 #define ASSERT(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }}

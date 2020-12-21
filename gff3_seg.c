@@ -115,7 +115,7 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
         
         con.repeats++;
 
-        ASSSEG (con.repeats <= CONTAINER_MAX_REPEATS, snip, "Error in gff3_seg_array_of_struct - exceeded maximum repeats allowed (%u) while parsing %s",
+        ASSSEG (con.repeats <= CONTAINER_MAX_REPEATS, snip, "exceeded maximum repeats allowed (%u) while parsing %s",
                 CONTAINER_MAX_REPEATS, subfield_ctx->name);
     }
 

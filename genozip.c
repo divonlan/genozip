@@ -331,14 +331,14 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     txtfile_header_initialize();
     
     // get input FILE
-    ASSINP0 (z_filename, "Error: z_filename is NULL");
+    ASSERT0 (z_filename, "Error: z_filename is NULL");
 
     // we cannot work with a remote genozip file because the decompression process requires random access
     ASSINP (!url_is_url (z_filename), 
-            "%s: genozip files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
+            "genozip files must be regular files, they cannot be a URL: %s", z_filename);
 
     ASSINP (!txt_filename || !url_is_url (txt_filename), 
-            "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, txt_filename);
+            "output files must be regular files, they cannot be a URL: %s", txt_filename);
 
     // skip this file if its size is 0
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
@@ -362,7 +362,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
     if (flag.reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
-        ASSINP (flag.reference != REF_EXTERNAL || !flag.show_ref_seq, "%s: Error: --show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead", global_cmd);
+        ASSINP0 (flag.reference != REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
         if (!flag.genocat_info_only) {
             SAVE_VALUE (z_file); // actually, read the reference first
@@ -438,7 +438,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     int exit_code = stream_wait_for_exit (test);
 
     TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
-    ASSINP (!exit_code, "genozip test exited with status %d\n", exit_code);
+    ASSINP (!exit_code, "test exited with status %d\n", exit_code);
     RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
 }
 
@@ -448,7 +448,7 @@ static void main_genozip_open_z_file_write (char **z_filename)
 
     if (! *z_filename) {
 
-        ASSINP (txt_file->name, "%s: please use --output to specify the output filename (with a .genozip extension)", global_cmd);
+        ASSINP0 (txt_file->name, "use --output to specify the output filename (with a .genozip extension)");
 
         bool is_url = url_is_url (txt_file->name);
         const char *basename = is_url ? file_basename (txt_file->name, false, "", 0,0) : NULL;
@@ -480,7 +480,7 @@ static void main_genozip (const char *txt_filename,
     SAVE_FLAGS;
 
     ASSINP (!z_filename || !url_is_url (z_filename), 
-            "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
+            "output files must be regular files, they cannot be a URL: %s", z_filename);
 
     // get input file
     if (!txt_file) // open the file - possibly already open from main_load_reference
@@ -539,10 +539,10 @@ static void main_list_dir(const char *dirname)
     struct dirent *ent;
 
     dir = opendir (dirname);
-    ASSINP (dir, "Error: failed to open directory: %s", strerror (errno));
+    ASSERT (dir, "Error: failed to open directory: %s", strerror (errno));
 
     int ret = chdir (dirname);
-    ASSINP (!ret, "Error: failed to chdir(%s)", dirname);
+    ASSERT (!ret, "Error: failed to chdir(%s)", dirname);
 
     while ((ent = readdir(dir))) 
         if (!file_is_dir (ent->d_name))  // don't go down subdirectories recursively
@@ -551,7 +551,7 @@ static void main_list_dir(const char *dirname)
     closedir(dir);    
 
     ret = chdir ("..");
-    ASSINP0 (!ret, "Error: failed to chdir(..)");
+    ASSERT0 (!ret, "Error: failed to chdir(..)");
 }
 
 static inline DataType main_get_file_dt (const char *filename)
@@ -694,7 +694,7 @@ int main (int argc, char **argv)
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (flag.threads_str) {
         int ret = sscanf (flag.threads_str, "%u", &global_max_threads);
-        ASSINP (ret == 1 && global_max_threads >= 1, "%s: %s requires an integer value of at least 1", global_cmd, OT("threads", "@"));
+        ASSINP (ret == 1 && global_max_threads >= 1, "%s requires an integer value of at least 1", OT("threads", "@"));
     }
     else global_max_threads = (double)arch_get_num_cores() * 1.4; // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
     
@@ -713,8 +713,7 @@ int main (int argc, char **argv)
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
-        ASSINP (next_input_file || command != PIZ, 
-                "%s: filename(s) required (redirecting from stdin is not possible)", global_cmd);
+        ASSINP0 (next_input_file || command != PIZ, "filename(s) required (redirecting from stdin is not possible)");
 
         ASSERTW (next_input_file || !flag.replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
 
@@ -733,7 +732,7 @@ int main (int argc, char **argv)
 
             case LIST : main_genols (next_input_file, false, NULL, false); break;
 
-            default   : ABORT ("%s: unrecognized command %c", global_cmd, command);
+            default   : ABORTINP ("unrecognized command %c", command);
         }
 
         if (flag.pair) flag.pair = 3 - flag.pair; // alternate between PAIR_READ_1 and PAIR_READ_2

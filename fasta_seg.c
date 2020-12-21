@@ -170,7 +170,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
         const char *chrom_name = line_start + 1;
         unsigned chrom_name_len = strcspn (line_start + 1, " \t\r\n");
 
-        ASSSEG0 (chrom_name_len, line_start, "Error: contig is missing a name");
+        ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
 
         if (!flag.make_reference) {
             // we segment using / | : . and " " as separators. 

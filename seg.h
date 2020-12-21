@@ -102,13 +102,13 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 #define SEG_EOL(f,account_for_ascii10) seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); 
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
-    ASSERT (condition, format "\n\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
+    ASSERT (condition, "%s: Error in file %s: "format "\n\nvb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
                               "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
                               "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
                               "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
                               "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s"\
                               "\nDumped bad vblock from memory: %s", \
-            __VA_ARGS__, txt_name, vb->line_i, vb->vblock_i, \
+                                     global_cmd, txt_name, __VA_ARGS__, vb->line_i, vb->vblock_i, \
             /* pos_in_vb:         */ (PosType)(p_into_txt ? (p_into_txt - vb->txt_data.data) : -1), \
             /* pos_in_file:       */ (PosType)(p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1),\
             /* vb start pos file: */ vb->vb_position_txt_file, \

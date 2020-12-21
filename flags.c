@@ -83,7 +83,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _B  {"vblock",        required_argument, 0, 'B'                    }
         #define _r  {"regions",       required_argument, 0, 'r'                    }
         #define _s  {"samples",       required_argument, 0, 's'                    }
-        #define _il {"interleave",    no_argument,       &flag.interleave,       1 }
+        #define _il {"interleaved",   no_argument,       &flag.interleave,       1 }
         #define _e  {"reference",     required_argument, 0, 'e'                    }
         #define _E  {"REFERENCE",     required_argument, 0, 'E'                    }
         #define _b  {"bytes",         no_argument,       &flag.bytes,            1 }
@@ -169,7 +169,7 @@ void flags_init_from_command_line (int argc, char **argv)
 
             case PIZ : case LIST : case LICENSE : 
             case VERSION :
-                ASSINP (command<0 || command==c, "%s: can't have both -%c and -%c", global_cmd, command, c); 
+                ASSINP (command<0 || command==c, "can't have both -%c and -%c", command, c); 
                 command=c; 
                 break;
 
@@ -237,7 +237,7 @@ void flags_init_from_command_line (int argc, char **argv)
                     ASSINP (long_options[exe_type][option_index].flag != &command || 
                             long_options[exe_type][option_index].val  == command ||
                             command < 0, 
-                            "%s: can't have both --%s and -%c", global_cmd, long_options[exe_type][option_index].name, command);
+                            "can't have both --%s and -%c", long_options[exe_type][option_index].name, command);
                 break; 
 
             case '?' : // unrecognized option - error message already displayed by libc
@@ -269,10 +269,10 @@ static void flags_warn_if_duplicates (int num_txt_files, const char **filenames)
 static void flags_test_conflicts (void)
 {
     #define CONFLICT(flag1, flag2, text1, text2) \
-        ASSINP (!(flag1) || !(flag2), "%s: option %s is incompatable with %s", global_cmd, text1, text2);
+        ASSINP (!(flag1) || !(flag2), "option %s is incompatable with %s", text1, text2);
 
     #define NEED_DECOMPRESS(flag1, text) \
-        ASSINP (!(flag1), "%s: option %s can only be used if --decompress is used too", global_cmd, text);
+        ASSINP (!(flag1), "option %s can only be used if --decompress is used too", text);
 
     char s[20]; 
 
@@ -321,11 +321,11 @@ static void flags_test_conflicts (void)
         NEED_DECOMPRESS (flag.show_is_set, "--show_is_set");
     }
 
-    ASSINP (flag.reference != REF_EXTERNAL  || !flag.show_ref_seq,  "%s: option %s is incompatable with --show-ref-seq: use genocat --show-ref-seq on the reference file itself instead", global_cmd, OT("reference", "e"));
-    ASSINP (!flag.to_stdout || command != ZIP, "%s: option %s only works for decompressing files, not compressing", global_cmd, OT("stdout", "c"));
-    ASSINP (flag.reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "%s: option %s supported only for viewing the reference file itself", global_cmd, OT("REFERENCE", "E"));
-    ASSINP (global_max_threads >= 2 || !flag.genobwa, "%s: --genobwa requires at least 2 threads", global_cmd);
-    ASSINP (global_max_threads >= 2 || !flag.interleave, "%s: --interleave requires at least 2 threads", global_cmd);
+    ASSINP (flag.reference != REF_EXTERNAL  || !flag.show_ref_seq, "option %s is incompatable with --show-ref-seq: use genocat --show-ref-seq on the reference file itself instead", OT("reference", "e"));
+    ASSINP (!flag.to_stdout || command != ZIP, "option %s only works for decompressing files, not compressing", OT("stdout", "c"));
+    ASSINP (flag.reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "option %s supported only for viewing the reference file itself", OT("REFERENCE", "E"));
+    ASSINP0 (global_max_threads >= 2 || !flag.genobwa, "--genobwa requires at least 2 threads");
+    ASSINP0 (global_max_threads >= 2 || !flag.interleave, "--interleave requires at least 2 threads");
 }
 
 // --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
@@ -338,19 +338,19 @@ static void flags_verify_pair_rules (unsigned num_txt_files, const char **filena
     }
 
     // verify even number of files
-    ASSINP (num_txt_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
-    ASSINP (flag.reference,     "%s: either --reference or --REFERENCE must be specified when using %s", global_cmd, OT("pair", "2"));
+    ASSINP (num_txt_files % 2 == 0, "when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", OT("pair", "2"));
+    ASSINP (flag.reference, "either --reference or --REFERENCE must be specified when using %s", OT("pair", "2"));
 
     // verify all are fastq
     for (unsigned i=0; i < num_txt_files; i++)
-        ASSERT (txtfile_get_file_dt (filenames[i]) == DT_FASTQ, "%s: when using %s, all input files are expected to be FASTQ files, but %s is not", global_cmd, OT("pair", "2"), filenames[i]);
+        ASSERT (txtfile_get_file_dt (filenames[i]) == DT_FASTQ, "when using %s, all input files are expected to be FASTQ files, but %s is not", OT("pair", "2"), filenames[i]);
 
     // if which --output is missing, we check if every pair of files has a consistent name
     if (!flag.out_filename) 
         for (unsigned i=0; i < num_txt_files; i += 2) 
             ASSINP (file_get_fastq_pair_filename (filenames[i], filenames[i+1], true),  
-                    "%s: to use %s without specifying --output, the naming of the files needs to be consistent and include the numbers 1 and 2 respectively, but these files don't: %s %s", 
-                    global_cmd, OT("pair", "2"), filenames[i], filenames[i+1]);
+                    "to use %s without specifying --output, the naming of the files needs to be consistent and include the numbers 1 and 2 respectively, but these files don't: %s %s", 
+                    OT("pair", "2"), filenames[i], filenames[i+1]);
 }
 
 void flags_update (unsigned num_txt_files, const char **filenames)
@@ -384,14 +384,14 @@ void flags_update (unsigned num_txt_files, const char **filenames)
     // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
     // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.
     if (flag.make_reference) {
-        ASSINP (!crypt_have_password(), "%s: option --make-reference is incompatable with %s", global_cmd, OT("password", "p"));
+        ASSINP (!crypt_have_password(), "option --make-reference is incompatable with %s", OT("password", "p"));
 
         flag.md5 = true;
         if (!flag.vblock) vb_set_global_max_memory_per_vb("1");
 
-        ASSINP (num_txt_files <= 1, "%s: you can specify only one FASTA file when using --make-reference.\n"
+        ASSINP (num_txt_files <= 1, "you can specify only one FASTA file when using --make-reference.\n"
                 "To create a reference from multiple FASTAs use something like this:\n"
-                "cat *.fa | %s --make-reference --input fasta --output myref.ref.genozip -", global_cmd, global_cmd);
+                "cat *.fa | %s --make-reference --input fasta --output myref.ref.genozip -", global_cmd);
     }
 
     // if --optimize was selected, all optimizations are turned on
@@ -498,21 +498,20 @@ void flags_update_piz_one_file (void)
     
     // interleaving is only possible for on FASTQ data compressed with --pair
     ASSINP (!flag.interleave || is_paired_fastq, 
-            "%s: Error: --interleave is not supported for %s because it only works on FASTQ data that was compressed with --pair", 
-            global_cmd, z_name);
+            "--interleave is not supported for %s because it only works on FASTQ data that was compressed with --pair", z_name);
 
     // if using --genobwa in PIZ, z_file must be a FASTQ file with a single component or two paired components
     if (flag.genobwa) {
-        ASSINP (z_file->data_type == DT_FASTQ, "%s: Error: genobwa accepts genozip files only if they contain FASTQ data, but %s is has %s data",
-                global_cmd, z_name, dt_name (z_file->data_type));
+        ASSINP (z_file->data_type == DT_FASTQ, "genobwa accepts genozip files only if they contain FASTQ data, but %s is has %s data",
+                z_name, dt_name (z_file->data_type));
 
-        ASSINP (z_file->z_flags.aligner, "%s: Error: %s was not compressed with --reference or --REFERENCE which is required for genobwa", global_cmd, z_name);
+        ASSINP (z_file->z_flags.aligner, "%s was not compressed with --reference or --REFERENCE which is required for genobwa", z_name);
 
         ASSINP ((z_file->num_components==2 && is_paired_fastq) || z_file->num_components==1,
-                "%s: Error: genobwa accepts genozip files with a single FASTQ component or two components compressed with --pair, but %s has %u components (%s --pair)",
-                global_cmd, z_name, z_file->num_components, is_paired_fastq ? "with" : "without");
+                "genobwa accepts genozip files with a single FASTQ component or two components compressed with --pair, but %s has %u components (%s --pair)",
+                z_name, z_file->num_components, is_paired_fastq ? "with" : "without");
 
-        ASSINP0 (flag.reference == REF_EXTERNAL, "%s Error: --genobwa must be used in combination with --reference");
+        ASSINP0 (flag.reference == REF_EXTERNAL, "--genobwa must be used in combination with --reference");
 
         flag.interleave = (z_file->num_components==2);
     }
@@ -533,8 +532,8 @@ void flags_store_command_line (int argc, char **argv)
     for (int i=0; i < argc; i++) {
 
         unsigned arg_len = strlen (argv[i]);
-        ASSINP (arg_len < BUFPRINTF_MAX_LEN-10, "%s: argument %u longer than maximum allowed %u characters: %s", 
-                global_cmd, i, BUFPRINTF_MAX_LEN-10, argv[i]);
+        ASSINP (arg_len < BUFPRINTF_MAX_LEN-10, "argument %u longer than maximum allowed %u characters: %s", 
+                i, BUFPRINTF_MAX_LEN-10, argv[i]);
 
         if (pw && !strcmp (argv[i], pw)) // "-p 123", "--pass 123" etc
             bufprintf (evb, &command_line, "***%s", (i < argc-1 ? " ": "")) // hide password

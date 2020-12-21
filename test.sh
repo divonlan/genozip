@@ -6,7 +6,7 @@ TESTDIR=test
 OUTDIR=$TESTDIR/tmp
 
 cleanup() { 
-    rm -f $OUTDIR/* $TESTDIR/*.!(ref).genozip # uses extglob
+    rm -f $OUTDIR/* $TESTDIR/*.!(ref).genozip $TESTDIR/*.bad # uses extglob
 }
 
 cmp_2_files() {

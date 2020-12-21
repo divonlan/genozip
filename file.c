@@ -203,7 +203,7 @@ void file_set_input_size (const char *size_str)
     unsigned len = strlen (size_str);
 
     for (unsigned i=0; i < len; i++) {
-        ASSINP (IS_DIGIT (size_str[i]), "%s: expecting the file size in bytes to be a positive integer: %s", global_cmd, size_str);
+        ASSINP (IS_DIGIT (size_str[i]), "expecting the file size in bytes to be a positive integer: %s", size_str);
 
         flag.stdin_size = flag.stdin_size * 10 + (size_str[i] - '0'); 
     }
@@ -267,7 +267,7 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
     FILE *redirected_stdout_file = NULL;
     if (!flag.to_stdout) {
         redirected_stdout_file = fopen (file->name, file->mode); // exec_name will redirect its output to this file
-        ASSINP (redirected_stdout_file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
+        ASSINP (redirected_stdout_file, "cannot open file %s: %s", file->name, strerror(errno));
     }
     char reason[100];
     sprintf (reason, "To output a %s file", file_exts[file->type]);
@@ -333,7 +333,7 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
         }
         else {
             ASSINP (!file_has_ext (file->name, ".genozip"), 
-                    "%s: cannot compress %s because it is already compressed", global_cmd, file_printname(file));
+                    "cannot compress %s because it is already compressed", file_printname(file));
 
             if (file->redirected)
                 ABORT ("%s: to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", 
@@ -344,7 +344,7 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
         }
     }
 
-    ASSINP0 (!flag.make_reference || file->data_type == DT_REF, "Error: --make-reference can only be used with FASTA files");
+    ASSINP0 (!flag.make_reference || file->data_type == DT_REF, "--make-reference can only be used with FASTA files");
 
     return false; // all good - no need to skip this file
 }
@@ -388,7 +388,7 @@ static bool file_open_txt_read (File *file)
 
             // case: this is indeed a bgzf - we put the still-compressed data in vb->compressed for later consumption
             // is txtfile_read_block_bgzf
-            if (bgzf_uncompressed_size >= 0) {
+            if (bgzf_uncompressed_size > 0) {
                 file->codec = CODEC_BGZF;
                 
                 buf_alloc (evb, &evb->compressed, block_size, 1, "compressed"); 
@@ -398,6 +398,10 @@ static bool file_open_txt_read (File *file)
                 file->bgzf_flags = bgzf_get_compression_level (file->name ? file->name : FILENAME_STDIN, 
                                                                block, block_size, (uint32_t)bgzf_uncompressed_size);
             }
+
+            // for regulars files, we already skipped 0 size files. This can happen in STDIN
+            else if (bgzf_uncompressed_size == 0) 
+                ABORTINP0 ("no input data")
 
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
             // (note: we cannot re-read the bytes from the file as the file might be piped in)
@@ -526,7 +530,7 @@ static bool file_open_txt_write (File *file)
         // case: not .gz and not BAM - use the default plain file format
         else { 
             file->type = txt_out_ft_by_dt[file->data_type][0];  
-            ASSINP (!flag.bgzf, "%s: using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz", global_cmd);
+            ASSINP0 (!flag.bgzf, "using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz");
         }
     }
 
@@ -546,7 +550,7 @@ static bool file_open_txt_write (File *file)
     }
 
     if (z_file->data_type == DT_ME23 && flag.out_dt == DT_VCF)
-        ASSINP (flag.reference, "%s: --reference must be specified when translating 23andMe to VCF", global_cmd);
+        ASSINP0 (flag.reference, "--reference must be specified when translating 23andMe to VCF");
 
     // get the codec    
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, WRITE);
@@ -649,7 +653,7 @@ static bool file_open_z (File *file)
     }
     else { // WRITE or WRITEREAD - data_type is already set by file_open
         ASSINP (file->redirected || file_has_ext (file->name, GENOZIP_EXT), 
-                "%s: file %s must have a " GENOZIP_EXT " extension", global_cmd, file_printname (file));
+                "file %s must have a " GENOZIP_EXT " extension", file_printname (file));
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
         // uses the --output option, he is unrestricted in the choice of a file name
         file->type = file_get_z_ft_by_txt_in_ft (file->data_type, txt_file->type); 
@@ -679,7 +683,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     bool is_file_exists = false;
 
     // is_remote is only possible in READ mode
-    ASSINP (mode == READ || !file->is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
+    ASSINP (mode == READ || !file->is_remote, "expecting output file %s to be local, not a URL", filename);
 
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
     const char *error = NULL;
@@ -705,7 +709,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
     if (!file->redirected) {
 
-        ASSINP (mode != READ || is_file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
+        ASSINP (mode != READ || is_file_exists, "cannot open '%s' for reading: %s", filename, error);
     
         if ((mode == WRITE || mode == WRITEREAD) && 
             is_file_exists && 
@@ -749,7 +753,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         default:       ABORT ("Error: invalid supertype: %u", supertype);
     }
 
-    ASSINP (success, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
+    ASSINP (success, "cannot open file %s: %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
     return file;
 }
@@ -1006,7 +1010,7 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
     buf_alloc (vb, buf, size + add_string_terminator, 1, buf_name);
 
     FILE *file = fopen (filename, "rb");
-    ASSINP (file, "Error: cannot open %s: %s", filename, strerror (errno));
+    ASSINP (file, "cannot open %s: %s", filename, strerror (errno));
 
     size_t bytes_read = fread (buf->data, 1, size, file);
     ASSERT (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));

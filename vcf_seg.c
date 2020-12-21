@@ -151,7 +151,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         return; // if we're not expecting any samples, no need to analyze the FORMAT field
     }
 
-    ASSSEG0 (field_len >= 2, field_start, "Error: missing or invalid FORMAT field");
+    ASSSEG0 (field_len >= 2, field_start, "missing or invalid FORMAT field");
 
     Container format_mapper = (Container){ 
         .drop_final_repeat_sep = true,
@@ -166,7 +166,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
     bool last_item = false;
     do {
         ASSSEG (format_mapper.num_items < MAX_SUBFIELDS, field_start,
-                "Error: FORMAT field has too many subfields, the maximum allowed is %u",  MAX_SUBFIELDS);
+                "FORMAT field has too many subfields, the maximum allowed is %u",  MAX_SUBFIELDS);
 
         DictId dict_id = vcf_seg_get_format_subfield (&str, (unsigned *)&len);
         last_item = (str[-1] == '\t' || str[-1] == '\n');
@@ -178,7 +178,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         };
 
         ASSSEG (dict_id_is_vcf_format_sf (dict_id), field_start,
-                "Error: string %.*s in the FORMAT field is not a legal subfield", DICT_ID_LEN, dict_id.id);
+                "string %.*s in the FORMAT field is not a legal subfield", DICT_ID_LEN, dict_id.id);
     } 
     while (!last_item && len > 0);
     
@@ -362,7 +362,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
             gt.repsep[0] = cell[i];
         }
 
-    ASSSEG (gt.repeats <= VCF_MAX_PLOIDY, cell, "Error: ploidy=%u exceeds the maximum of %u", gt.repeats, VCF_MAX_PLOIDY);
+    ASSSEG (gt.repeats <= VCF_MAX_PLOIDY, cell, "ploidy=%u exceeds the maximum of %u", gt.repeats, VCF_MAX_PLOIDY);
     
     // if the ploidy of this line is bigger than the ploidy of the data in this VB so far, then
     // we have to increase ploidy of all the haplotypes read in in this VB so far. This can happen for example in 
@@ -392,7 +392,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         cell_len--;
 
         ASSSEG (IS_DIGIT(ht) || ht == '.', cell,
-                "Error: invalid VCF file - expecting an allele in a sample to be a number 0-99 or . , but seeing %c (ht_i=%u)", ht, ht_i);
+                "invalid VCF file - expecting an allele in a sample to be a number 0-99 or . , but seeing %c (ht_i=%u)", ht, ht_i);
 
         // single-digit allele numbers
         ht_data[ht_i] = ht;
@@ -405,7 +405,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
             cell_len--;
 
             // make sure there isn't a 3rd digit
-            ASSSEG (!cell_len || !IS_DIGIT (*cell), cell, "Error: VCF file sample %u - genozip currently supports only alleles up to 99", sample_i+1);
+            ASSSEG (!cell_len || !IS_DIGIT (*cell), cell, "VCF file sample %u - genozip currently supports only alleles up to 99", sample_i+1);
 
             ht_data[ht_i] = '0' + allele; // use ascii 48->147
         }
@@ -416,8 +416,8 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
             char phase = *(cell++);
             cell_len--;
 
-            ASSSEG (phase != ' ', cell, "Error: invalid VCF file - expecting a tab or newline after sample %u but seeing a space", sample_i+1);
-            ASSSEG (phase == gt.repsep[0], cell, "Error: invalid VCF file -  unable to parse sample %u: expecting a %c but seeing %c", sample_i+1, gt.repsep[0], phase);
+            ASSSEG (phase != ' ', cell, "invalid VCF file - expecting a tab or newline after sample %u but seeing a space", sample_i+1);
+            ASSSEG (phase == gt.repsep[0], cell, "invalid VCF file -  unable to parse sample %u: expecting a %c but seeing %c", sample_i+1, gt.repsep[0], phase);
         }
 
     } // for characters in a sample
@@ -570,7 +570,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Container *sa
                 "Error in vcf_seg_one_sample - end_of_sample and yet separator is %c (ASCII %u) is not \\t or \\n",
                 cell[-1], cell[-1]);
     }
-    ASSSEG0 (end_of_sample, cell, "Error: More FORMAT subfields data than expected by the specification in the FORMAT field");
+    ASSSEG0 (end_of_sample, cell, "More FORMAT subfields data than expected by the specification in the FORMAT field");
 }
 
 static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, const char *next_field, 
@@ -597,7 +597,7 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
         vcf_seg_one_sample (vb, dl, &samples, samples.repeats, field_start, field_len, true, &num_colons, has_13);
 
         ASSSEG (samples.repeats < vcf_num_samples || separator == '\n', next_field,
-                "Error: invalid VCF file - expecting a newline after the last sample (sample #%u)", vcf_num_samples);
+                "invalid VCF file - expecting a newline after the last sample (sample #%u)", vcf_num_samples);
     }
 
     // in some real-world files I encountered have too-short lines due to human errors. we pad them
@@ -703,7 +703,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         vcf_seg_format_field (vb, dl, field_start, field_len);
 
         ASSSEG0 (separator == '\n' || dl->has_genotype_data || dl->has_haplotype_data, field_start,
-                "Error: expecting line to end as it has no genotype or haplotype data, but it is not");
+                 "expecting line to end as it has no genotype or haplotype data, but it is not");
 
         if (separator != '\n') // has samples
             next_field = vcf_seg_samples (vb, dl, &len, next_field, has_13); // All sample columns

@@ -351,10 +351,10 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
     int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - line_start);
 
     // the leading @ - just verify it (it will be included in D0ESC subfield)
-    ASSSEG (*field_start != '\n', field_start, "%s: Invalid FASTQ file format: unexpected newline", global_cmd);
+    ASSSEG0 (*field_start != '\n', field_start, "Invalid FASTQ file format: unexpected newline");
 
-    ASSSEG (*field_start == '@', field_start, "%s: Invalid FASTQ file format: expecting description line to start with @ but it starts with %c",
-            global_cmd, *field_start);
+    ASSSEG (*field_start == '@', field_start, "Invalid FASTQ file format: expecting description line to start with @ but it starts with %c",
+            *field_start);
 
     // DESC - the description/id line is vendor-specific. example:
     // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG (<-- this is Illumina format)
@@ -401,8 +401,8 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
 
     // PLUS - next line is expected to be a "+" (note: we don't seg the +, it is recorded a separator in the top level Container)
     GET_LAST_ITEM ("+");
-    ASSSEG (*field_start=='+' && field_len==1, field_start, "%s: Invalid FASTQ file format: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\"",
-            global_cmd, field_len, field_start);
+    ASSSEG (*field_start=='+' && field_len==1, field_start, "Invalid FASTQ file format: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\"",
+            field_len, field_start);
 
     SEG_EOL (FASTQ_E2L, true); // account for ascii-10
 
@@ -415,11 +415,11 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
     // End Of Line    
     SEG_EOL (FASTQ_E2L, true);
 
-    ASSSEG (str_is_in_range (field_start, field_len, 33, 126), field_start, "%s: Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
-            global_cmd, field_len, field_start);
+    ASSSEG (str_is_in_range (field_start, field_len, 33, 126), field_start, "Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
+            field_len, field_start);
 
-    ASSSEG (field_len == dl->seq_len, field_start, "%s: Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
-            global_cmd, dl->seq_len, field_len, dl->seq_len, seq_start, field_len, field_start);
+    ASSSEG (field_len == dl->seq_len, field_start, "Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
+            dl->seq_len, field_len, dl->seq_len, seq_start, field_len, field_start);
  
     return next_field;
 }
