@@ -395,7 +395,8 @@ static bool file_open_txt_read (File *file)
                 evb->compressed.param = bgzf_uncompressed_size; // pass uncompressed size in param
                 buf_add (&evb->compressed, block, block_size);
                 
-                file->bgzf_flags = bgzf_get_compression_level (file->name, block, block_size, (uint32_t)bgzf_uncompressed_size);
+                file->bgzf_flags = bgzf_get_compression_level (file->name ? file->name : FILENAME_STDIN, 
+                                                               block, block_size, (uint32_t)bgzf_uncompressed_size);
             }
 
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
