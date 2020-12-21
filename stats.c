@@ -67,8 +67,9 @@ static void stats_show_file_metadata (Buffer *buf)
 {
     bufprintf (evb, buf, "%s", "\n\n");
     if (txt_file->name) 
-        bufprintf (evb, buf, "%s file%s: %.*s\n", dt_name (z_file->data_type), 
+        bufprintf (evb, buf, "%s file%s%s: %.*s\n", dt_name (z_file->data_type), 
                    z_file->bound_txt_names.param > 1 ? "s" : "", // param holds the number of txt files
+                   flag.pair ? " (paired)" : "",
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
