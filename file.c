@@ -675,7 +675,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     file->redirected = !filename;
     file->mode       = mode;
 
-    bool file_exists = false;
+    bool is_file_exists = false;
 
     // is_remote is only possible in READ mode
     ASSINP (mode == READ || !file->is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
@@ -684,27 +684,27 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     const char *error = NULL;
     
     if (file->is_remote) {
-        error = url_get_status (filename, &file_exists, &url_file_size); // accessing is expensive - get existance and size in one call
+        error = url_get_status (filename, &is_file_exists, &url_file_size); // accessing is expensive - get existance and size in one call
         if (url_file_size >= 0) file->disk_size = (uint64_t)url_file_size;
     }
     
     else if (!file->redirected) {
-        file_exists = (access (filename, F_OK) == 0);
+        is_file_exists = file_exists (filename);
         error = strerror (errno);
-        if (file_exists && mode == READ) file->disk_size = file_get_size (filename);
+        if (is_file_exists && mode == READ) file->disk_size = file_get_size (filename);
     }
 
     // return null if genozip input file size is known to be 0, so we can skip it. note: file size of url might be unknown
-    if (mode == READ && supertype == TXT_FILE && file_exists && !file->disk_size && !url_file_size) {
+    if (mode == READ && supertype == TXT_FILE && is_file_exists && !file->disk_size && !url_file_size) {
         FREE (file);
         return NULL; 
     }
 
     if (!file->redirected) {
 
-        ASSINP (mode != READ || file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
+        ASSINP (mode != READ || is_file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
     
-        if ((mode == WRITE || mode == WRITEREAD) && file_exists && !flag.force && 
+        if ((mode == WRITE || mode == WRITEREAD) && is_file_exists && !flag.force && 
             !(supertype==TXT_FILE && flag.test) && // testing piz
             !(supertype==Z_FILE && flag.seg_only)) // zip with --seg-only
             file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
@@ -874,6 +874,13 @@ void file_mkfifo (const char *filename)
 #else
     ABORT0 ("file_mkfifo not supported on Windows");
 #endif
+}
+
+bool file_exists (const char *filename)
+{
+    if (!filename || !filename[0]) return false;
+
+    return !access (filename, F_OK);
 }
 
 bool file_has_ext (const char *filename, const char *extension)

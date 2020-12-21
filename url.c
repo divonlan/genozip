@@ -101,9 +101,9 @@ static int url_do_curl_head (const char *url,
 // for a url, returns whether that URL exists, and if possible, its file_size, or -1 if its not available
 // note that the file_size availability is at the discretion of the web/ftp site. 
 // in case of an error, returns the error string
-const char *url_get_status (const char *url, bool *file_exists, int64_t *file_size)
+const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file_size)
 {
-    *file_exists = false;
+    *is_file_exists = false;
     *file_size = 0;
     char response[CURL_RESPONSE_LEN];
     char *error = MALLOC (CURL_RESPONSE_LEN);
@@ -147,7 +147,7 @@ const char *url_get_status (const char *url, bool *file_exists, int64_t *file_si
     // case HTTP: check status
     if (strstr (error, "http") || strstr (error, "HTTP")) {
         if (strstr (error, "200")) 
-            *file_exists = true;
+            *is_file_exists = true;
         else
             return error;
     } 
@@ -159,7 +159,7 @@ const char *url_get_status (const char *url, bool *file_exists, int64_t *file_si
     // Case: we got the file length - file exists even if we didn't get an HTTP status (eg because URL is not http)
     if (len_start) {
         *file_size = strtoull (len_start, NULL, 10);
-        *file_exists = true; // if we got its length, we know it exists (for non-HTTP, this is the way we check existence)
+        *is_file_exists = true; // if we got its length, we know it exists (for non-HTTP, this is the way we check existence)
     }
     else *file_size = -1; // file possibly exists (if this is HTTP and response was 200), but length is unknown
 

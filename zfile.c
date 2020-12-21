@@ -682,9 +682,16 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
         // reference specified in the header. 
         // Note: this code will be executed when zfile_read_genozip_header is called from main_genounzip.
         if (!md5_is_zero (header->ref_file_md5) && !ref_filename && exe_type != EXE_GENOLS) {
-            ASSERTW (flag.genocat_info_only, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
-            ref_set_reference (header->ref_filename);
-            flag.reference = REF_EXTERNAL;
+            
+            if (file_exists (header->ref_filename)) {
+                ASSERTW (flag.genocat_info_only, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
+                ref_set_reference (header->ref_filename);
+                flag.reference = REF_EXTERNAL;
+            }
+            else {
+                ABORTINP ("%s: please use --reference specify the current path to reference file with which %s was compressed (original path was %s)",
+                          global_cmd, z_name, header->ref_filename)
+            }
         }
     }
      

@@ -626,7 +626,7 @@ bool ref_mmap_cached_reference (void)
 {
     ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
     
-    if (access (ref_get_cache_fn(), F_OK)) return false; // file doesn't exist
+    if (!file_exists (ref_get_cache_fn())) return false; // file doesn't exist
 
     ref_initialize_ranges (RT_CACHED); // also does the actual buf_mmap
 
@@ -1560,8 +1560,7 @@ const char *ref_get_cram_ref (void)
     ASSINP (ref_fasta_name, "%s: cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",
             global_cmd, ref_filename, REF_FILENAME_LEN-1);
 
-    bool file_exists = (access (ref_fasta_name, F_OK) == 0);
-    ASSINP (file_exists, "%s: cannot find the fasta file %s. Note: this is the file that was used to create %s, and it needs to exist in this name, in order to be passed to samtools as a reference file (-T option) for reading the CRAM file", 
+    ASSINP (file_exists (ref_fasta_name), "%s: cannot find the fasta file %s. Note: this is the file that was used to create %s, and it needs to exist in this name, in order to be passed to samtools as a reference file (-T option) for reading the CRAM file", 
             global_cmd, ref_fasta_name, ref_filename);
 
     samtools_T_option = MALLOC (strlen (ref_fasta_name) + 10);

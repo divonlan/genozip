@@ -228,7 +228,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
         first_file = false;
     }
     
-    if (!file_has_ext (z_filename, GENOZIP_EXT) || access (z_filename, F_OK)!=0) {
+    if (!file_has_ext (z_filename, GENOZIP_EXT) || !file_exists (z_filename)) {
         files_ignored++;
         goto finish;
     }

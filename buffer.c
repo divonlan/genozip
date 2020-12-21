@@ -570,7 +570,7 @@ bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, const char *fun
 {
     int fd = -1;
 
-    if (access (filename, F_OK)) return false; // file doesn't exist
+    if (!file_exists (filename)) return false; 
 
     // if this buffer was used by a previous VB as a regular buffer - we need to "destroy" it first
     if (buf->type == BUF_REGULAR && buf->data == NULL && buf->memory) {

@@ -12,7 +12,7 @@
 
 extern bool url_is_url (const char *filename);
 
-extern const char *url_get_status (const char *url, bool *file_exists, int64_t *file_size);
+extern const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file_size);
 
 extern FILE *url_open (StreamP parent_stream, const char *url);
 
