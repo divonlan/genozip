@@ -695,7 +695,9 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     }
 
     // return null if genozip input file size is known to be 0, so we can skip it. note: file size of url might be unknown
-    if (mode == READ && supertype == TXT_FILE && is_file_exists && !file->disk_size && !url_file_size) {
+    if (mode == READ && supertype == TXT_FILE && is_file_exists && !file->disk_size && !url_file_size && 
+        !(!file->is_remote && !file->redirected && file_is_fifo (filename))) // a fifo is allowed is be size 0 (as it always is) 
+    {
         FREE (file);
         return NULL; 
     }
@@ -704,9 +706,12 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
         ASSINP (mode != READ || is_file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
     
-        if ((mode == WRITE || mode == WRITEREAD) && is_file_exists && !flag.force && 
-            !(supertype==TXT_FILE && flag.test) && // testing piz
-            !(supertype==Z_FILE && flag.seg_only)) // zip with --seg-only
+        if ((mode == WRITE || mode == WRITEREAD) && 
+            is_file_exists && 
+            !(!file->is_remote && !file->redirected && file_is_fifo (filename)) && // a fifo can be "overwritten" (that's just normal writing to a fifo)
+            !flag.force && 
+            !(supertype==TXT_FILE && flag.test) && // not testing piz
+            !(supertype==Z_FILE && flag.seg_only)) // not zip with --seg-only
             file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
         // copy filename 
@@ -874,6 +879,17 @@ void file_mkfifo (const char *filename)
 #else
     ABORT0 ("file_mkfifo not supported on Windows");
 #endif
+}
+
+bool file_is_fifo (const char *filename)
+{
+#ifdef _WIN32
+    return false; // we don't support FIFOs in Win32 yet
+#endif
+    struct stat st;
+    ASSERT (!stat (filename, &st), "Error in file_is_fifo: stat failed on %s", filename);
+
+    return S_ISFIFO (st.st_mode);
 }
 
 bool file_exists (const char *filename)
