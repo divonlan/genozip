@@ -97,7 +97,7 @@ static inline bool buf_has_overflowed (const Buffer *buf, const char *msg)
 
 static inline bool buf_has_underflowed (const Buffer *buf, const char *msg)
 {
-    if (buf->type == BUF_MMAP) return false; // we don't (yet) have over/underflow protection for MMAP buffers
+    if (buf->type == BUF_OVERLAY) return false; // overlayed buffers might be partial and start at a different address 
 
     // see comment in buf_has_overflowed
     char *memory = buf->memory;
@@ -192,7 +192,7 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
                         buf_desc (buf).s, buf->vb->vblock_i, buf_i);
                 corruption = 1;
             }
-            if (buf->type < BUF_UNALLOCATED || buf->type > BUF_OVERLAY) {
+            if (buf->type < 0 || buf->type > BUF_NUM_TYPES) {
                 fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", 
                          nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf).s, buf_i);
                 corruption = 2;
@@ -202,7 +202,7 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
                          nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf).s, buf_i);
                 corruption = 3;
             }
-            else if (buf->data && (buf->data != buf->memory + sizeof(uint64_t))) {
+            else if (buf->data && buf->type != BUF_OVERLAY && (buf->data != buf->memory + sizeof(uint64_t))) {
                 fprintf (stderr, 
                          "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%s memory=%s name=%s : Corrupt Buffer structure - expecting data+8 == memory. buf->data=%s\n", 
                          nl[primary], msg, vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, str_pointer(buf).s, str_pointer(buf->memory).s, buf_desc(buf).s, str_pointer(buf->data).s);
@@ -480,15 +480,11 @@ uint64_t buf_alloc_do (VBlock *vb,
         ASSERT (memory != BUFFER_BEING_MODIFIED, "Error in buf_alloc_do called from %s:%u: malloc didn't assign, very weird! buffer %s new_size=%"PRIu64,
                 func, code_line, buf_desc(buf).s, new_size);
 
-        buf->type   = BUF_REGULAR;
+        buf->type = BUF_REGULAR;
 
         buf_init (buf, memory, new_size, 0, func, code_line, name);
         buf_add_to_buffer_list(vb, buf);
     }
-
-//    char size_str[20];
-//    ASSERTW (new_size < 0x80000000ULL, "FYI: allocated > 2GB of memory buffer for %s: allocated=%s vb_i=%u", 
-//             buf_desc (buf).s, str_size (new_size, size_str), vb->vblock_i);
 
 finish:
     if (vb != evb) COPY_TIMER (buf_alloc); // this is not thread-safe for evb as evb buffers might be allocated by any thread
