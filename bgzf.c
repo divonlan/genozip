@@ -290,8 +290,9 @@ bool bgzf_load_isizes (const SectionListEntry *sl_ent)
     SectionHeader *header = (SectionHeader *)ENT (char, evb->z_data, offset);
     txt_file->bgzf_flags = header->flags.bgzf;
 
-    // if we don't know the compression level, go with the default
-    if (txt_file->bgzf_flags.level == BGZF_COMP_LEVEL_UNKNOWN)
+    // if we don't know the compression level, or if original file had compression level 0 (no compression), go with the default
+    if (txt_file->bgzf_flags.level == BGZF_COMP_LEVEL_UNKNOWN ||
+        !txt_file->bgzf_flags.level) // the user can override this behaviour with --plain
         txt_file->bgzf_flags.level = BGZF_COMP_LEVEL_DEFAULT;
 
     zfile_uncompress_section (evb, header, &txt_file->bgzf_isizes, "txt_file->bgzf_isizes", 0, SEC_BGZF);
