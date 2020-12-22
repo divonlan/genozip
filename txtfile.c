@@ -282,7 +282,8 @@ static Digest txtfile_read_header (bool is_first_txt)
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
     #define HEADER_BLOCK (256*1024) // we have no idea how big the header will be... read this much at a time
     while ((header_len = (DT_FUNC (txt_file, is_header_done)())) < 0) { // we might have data here from txtfile_test_data
-        ASSERT (bytes_read, "Error in txtfile_read_header: %s: %s file too short - unexpected end-of-file", txt_name, dt_name(txt_file->data_type));
+        ASSERT (bytes_read, "Error in txtfile_read_header: unexpected end-of-file while reading the %s header of %s (header_len=%u)", 
+                dt_name(txt_file->data_type), txt_name, header_len);
 
         buf_alloc_more (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
         bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true);
