@@ -420,7 +420,7 @@ void flags_update (unsigned num_txt_files, const char **filenames)
         (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.dict_id_show_one_dict.num ||
         flag.show_index || flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || flag.dump_section || flag.show_headers ||
         flag.show_reference || flag.show_ref_contigs || flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
-        flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs);
+        flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs || flag.show_gheader);
 
     // where progress, metadata etc messages should go. data always goes to stdout and errors/warning always go to stderr.
     info_stream = (!flag.to_stdout || flag.genocat_info_only) ? stdout : stderr;
