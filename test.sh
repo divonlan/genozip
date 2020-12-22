@@ -481,8 +481,6 @@ batch_make_reference()
 
 batch_reference()
 {
-    rm -f ${hg19}.*cache* ${GRCh38}.*cache* # delete genome and hash caches
-
     batch_print_header
 
     echo "paired FASTQ with --reference, --password"
@@ -569,6 +567,7 @@ fi
 
 mkdir $OUTDIR >& /dev/null
 cleanup
+rm -f ${hg19}.*cache* ${GRCh38}.*cache* # delete genome and hash caches
 
 # unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
 batch_id=$1
