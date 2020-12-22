@@ -340,7 +340,8 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     Context *bitmap_ctx = &vb->contexts[bitmap_did];
     Context *nonref_ctx = bitmap_ctx + 1;
 
-    ASSERT0 (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion"); // this would mean a read of about 4M bases... in 2020, this looks unlikely
+    ASSERT (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion recursion_level=%u seq_len=%u level_0_cigar=%s", // this would mean a read of about 4M bases... in 2020, this looks unlikely
+            recursion_level, seq_len, level_0_cigar);
 
     bitmap_ctx->txt_len += add_bytes; // byte counts for --show-sections
 
@@ -1177,6 +1178,10 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     sam_seg_tlen_field (vb, field_start, field_len, 0, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len);
 
     GET_NEXT_ITEM ("SEQ");
+
+    ASSSEG (dl->seq_len == field_len || vb->last_cigar[0] == '*', field_start, 
+            "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
+            vb->last_cigar, dl->seq_len, field_len, field_len, field_start);
 
     // calculate diff vs. reference (denovo or loaded)
     sam_seg_seq_field (vb, SAM_SQBITMAP, field_start, field_len, this_pos, vb->last_cigar, 0, field_len, vb->last_cigar, field_len+1);
