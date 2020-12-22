@@ -68,7 +68,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     }
 
     const char *next_cigar = vb->last_cigar; // don't change vb->last_cigar as we may still need it, eg if we have an E2 optional field
-    range = ref_piz_get_range (vb_, pos, vb->ref_consumed);
+    range = vb->ref_consumed ? ref_piz_get_range (vb_, pos, vb->ref_consumed) : NULL;
     
     while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {
         

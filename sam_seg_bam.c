@@ -377,7 +377,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     // SEQ - calculate diff vs. reference (denovo or loaded)
     bam_rewrite_seq (vb, l_seq, next_field);
 
-    ASSERT (dl->seq_len == l_seq || vb->last_cigar[0] == '*', 
+    ASSERT (dl->seq_len == l_seq || vb->last_cigar[0] == '*' || !l_seq, 
             "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
             vb->last_cigar, dl->seq_len, l_seq, l_seq, vb->textual_seq.data);
 

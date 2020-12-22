@@ -488,8 +488,10 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
             subcigar_len -= ref_consumed;
         }
 
-        // Hard clippping (H) or padding (P) we do nothing
-        else if (cigar_op == 'H' || cigar_op == 'P') {}
+        // Hard clippping (H) or padding (P) - nothing much to do
+        else if (cigar_op == 'H' || cigar_op == 'P') {
+            subcigar_len = 0;
+        }
 
         else {
             ASSSEG (cigar_op, vb->last_cigar, "Error in sam_seg_seq_field: End of CIGAR reached but we still have %u reference and %u sequence bases to consume"
@@ -1179,7 +1181,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     GET_NEXT_ITEM ("SEQ");
 
-    ASSSEG (dl->seq_len == field_len || vb->last_cigar[0] == '*', field_start, 
+    ASSSEG (dl->seq_len == field_len || vb->last_cigar[0] == '*' || field_start[0] == '*', field_start, 
             "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
             vb->last_cigar, dl->seq_len, field_len, field_len, field_start);
 
