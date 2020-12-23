@@ -4,6 +4,11 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <getopt.h>
+#ifdef __linux__
+#include <sys/types.h>
+#include <signal.h>
+#include <errno.h>
+#endif
 #include "genozip.h"
 #include "flags.h"
 #include "data_types.h"
@@ -13,12 +18,16 @@
 #include "crypt.h"
 #include "strings.h"
 #include "fastq.h"
+#include "stream.h"
 
 Flags flag = { .out_dt = DT_NONE };
 bool option_is_short[256] = { }; // indexed by character of short option.
 FILE *info_stream;               // either stdout or stderr - where non-error messages should go
 
 static Buffer command_line = EMPTY_BUFFER;
+
+static pid_t pipe_in_pid = 0;
+static char pipe_in_process_name[100] = "";
 
 // command line options that get assigned to flags
 static int option_noisy=0, option_best=0;
@@ -519,6 +528,24 @@ void flags_update_piz_one_file (void)
     flags_test_conflicts(); // test again after updating flags
 }
 
+static void flags_store_piped_in_details (void)
+{
+#ifdef __linux__    
+    char cmd[200];
+    unsigned pid = getpid();
+    sprintf (cmd, "lsof -n -P 2> /dev/null | grep $(ls /proc/%u/fd/0 -l | cut -d[ -f2| cut -d] -f1) 2> /dev/null | grep -v %u", pid, pid);
+    StreamP strm = stream_create (0, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0, "to get counter-process details", 
+                                  "bash", "-c", cmd);
+    char str[500];
+    unsigned len = fread (str, 1, sizeof (str)-1, stream_from_stream_stdout (strm));
+    str[len] = 0;
+
+    char format[20];
+    sprintf (format, "%%%us %%u", (unsigned)sizeof (pipe_in_process_name)-1);
+    sscanf (str, format, pipe_in_process_name, &pipe_in_pid);
+#endif
+}
+
 void flags_store_command_line (int argc, char **argv)
 {
     unsigned len=0, pw_len=0;
@@ -547,9 +574,34 @@ void flags_store_command_line (int argc, char **argv)
         else
             bufprintf (evb, &command_line, "%s%s", argv[i], (i < argc-1 ? " ": ""))
     }
+
+    flags_store_piped_in_details();    
 }
 
 const BufferP flags_command_line (void)
 {
     return &command_line;
 }
+
+const char *flags_pipe_in_process_name (void)
+{
+    return pipe_in_process_name;
+}
+
+unsigned flags_pipe_in_pid (void)
+{
+    return pipe_in_pid;
+}
+
+// attempt to check if piped-in process died. 
+// note: we won't detect this, if the piped-in process died right away, before completed flags_store_piped_in_details()
+bool flags_pipe_in_process_died (void)
+{
+#ifdef __linux__
+    usleep(100000); // wait for dying process to be dead
+    return pipe_in_pid && kill (pipe_in_pid, 0);
+#else
+    return false;
+#endif
+}
+

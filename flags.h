@@ -110,5 +110,8 @@ extern void flags_update_piz_one_file (void);
 
 extern void flags_store_command_line (int argc, char **argv);
 const BufferP flags_command_line (void);
+const char *flags_pipe_in_process_name (void);
+unsigned flags_pipe_in_pid (void);
+bool flags_pipe_in_process_died (void);
 
 #endif

@@ -400,8 +400,14 @@ static bool file_open_txt_read (File *file)
             }
 
             // for regulars files, we already skipped 0 size files. This can happen in STDIN
-            else if (bgzf_uncompressed_size == 0) 
-                ABORTINP0 ("no input data")
+            else if (bgzf_uncompressed_size == 0) {
+
+                ASSINP (!flags_pipe_in_process_died(), // only works for Linux
+                        "Pipe-in process %s (pid=%u) died without sending any data",
+                        flags_pipe_in_process_name(), flags_pipe_in_pid());
+
+                ABORTINP0 ("No input data")
+            }
 
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
             // (note: we cannot re-read the bytes from the file as the file might be piped in)
