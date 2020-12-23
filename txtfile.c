@@ -518,36 +518,47 @@ void txtfile_write_one_vblock (VBlockP vb)
     COPY_TIMER (write);
 }
 
-void txtfile_write_4_lines (VBlockP vb, const char *qname_suffix)
+void txtfile_write_4_lines (VBlockP vb, 
+                            unsigned pair) // 1 or 2 to add /1 or /2 to the end of the qname
 {
+    static const char *suffixes[3] = { "", "/1", "/2" }; // suffixes for pair 1 and pair 2 reads
+
     ARRAY (char, txt, vb->txt_data);
-    int64_t *next = &vb->txt_data.param; // we use param as "next"
-    unsigned qname_suffix_len = qname_suffix ? strlen (qname_suffix) : 0;
+    #define start_line (vb->txt_data.param) // we use param as "start_line"
 
     for (unsigned nl=0; nl < 4; nl++) {
-        int64_t last = *next; 
-        while (txt[last] != '\n') last++;
+        int64_t last_in_line = start_line; 
+        while (txt[last_in_line] != '\n') last_in_line++;
         
-        int64_t len = last - *next + 1;
+        int64_t line_len = last_in_line - start_line + 1;
 
-        if (nl || !qname_suffix)
-            file_write (txt_file, &txt[*next], len);
+        if (nl || !pair)
+            file_write (txt_file, &txt[start_line], line_len);
+
         else {
-            int64_t after_qname = last;
-            for (int64_t i=*next; i <= last; i++)
+            int64_t after_qname = last_in_line;
+            for (int64_t i=start_line; i <= last_in_line; i++)
                 if (txt[i] == ' ' || txt[i] == '\t') {
                     after_qname = i;
                     break;
                 }
-            file_write (txt_file, &txt[*next], after_qname - *next);
-            file_write (txt_file, qname_suffix, qname_suffix_len);
-            file_write (txt_file, &txt[after_qname], len - (after_qname - *next));
+
+            int qname_len = after_qname - start_line;
+            file_write (txt_file, &txt[start_line], qname_len);
+
+            // write suffix if requested, and suffix is not already present
+            if (pair && (qname_len < 3 || txt[after_qname-2] != '/' || txt[after_qname-1] != '0' + pair))
+                file_write (txt_file, suffixes[pair], 2);
+
+            file_write (txt_file, &txt[after_qname], line_len - qname_len);
         }
         
-        txt_file->txt_data_so_far_single += len;
-        txt_file->disk_so_far            += len;
-        *next                            += len;
+        txt_file->txt_data_so_far_single += line_len;
+        txt_file->disk_so_far            += line_len;
+        start_line                       += line_len;
     }
+
+    #undef start_line
 }
 
 // ZIP only - estimate the size of the txt data in this file. affects the hash table size and the progress indicator.

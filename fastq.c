@@ -139,8 +139,8 @@ void fastq_txtfile_write_one_vblock_interleave (VBlockP vb1_, VBlockP vb2_)
         // in case of --genobwa, we show both interleaved lines, if either one of them is passed the filter
         if (flag.genobwa && !bit_array_get (show_1, i) && !bit_array_get (show_2, i)) continue;
 
-        txtfile_write_4_lines (vb1_, "/1");
-        txtfile_write_4_lines (vb2_, "/2");
+        txtfile_write_4_lines (vb1_, 1);
+        txtfile_write_4_lines (vb2_, 2);
     }
 }
 

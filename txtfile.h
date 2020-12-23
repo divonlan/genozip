@@ -17,7 +17,7 @@ extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, doub
 extern void txtfile_estimate_txt_data_size (VBlockP vb);
 extern void txtfile_write_one_vblock (VBlockP vb);
 
-extern void txtfile_write_4_lines (VBlockP vb, const char *qname_suffix);
+extern void txtfile_write_4_lines (VBlockP vb, unsigned pair);
 
 extern const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext);
 extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
