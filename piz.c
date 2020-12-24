@@ -119,7 +119,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
 {
     START_TIMER;
 
-    ASSERT0 (!flag.reference || (genome && genome->nbits), "Error in piz_uncompress_one_vb: reference is not loaded correctly");
+    ASSERTE0 (!flag.reference || (genome && genome->nbits), "reference is not loaded correctly");
 
     DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
 
@@ -135,7 +135,8 @@ static void piz_uncompress_one_vb (VBlock *vb)
     reconstruct_from_ctx (vb, trans.toplevel, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
-    if (flag.bgzf) bgzf_compress_vb (vb);
+    if (txt_file->bgzf_flags.level) 
+        bgzf_compress_vb (vb);
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
     if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified) 
@@ -176,8 +177,8 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
     // check if the genozip file includes a reference
     bool has_ref_sections = !!sections_get_first_section_of_type (SEC_REFERENCE, true);
 
-    ASSERT (!has_ref_sections || flag.reference != REF_EXTERNAL || flag.reading_reference, 
-            "Error: cannot use --reference with %s because it was not compressed with --reference", z_name);
+    ASSINP (!has_ref_sections || flag.reference != REF_EXTERNAL || flag.reading_reference, 
+            "Cannot use --reference with %s because it was not compressed with --reference", z_name);
 
     if (!flag.reading_reference && has_ref_sections) 
         flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
@@ -284,7 +285,7 @@ static bool piz_read_one_vb (VBlock *vb)
         fprintf (info_stream, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
-    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
+    ASSERTE (vb_header_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
     buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(uint32_t), 0, "z_section_headers"); // room for section headers  
@@ -297,8 +298,9 @@ static bool piz_read_one_vb (VBlock *vb)
     // read additional sections and other logic specific to this data type
     bool ok_to_compute = DTPZ(piz_read_one_vb) ? DTPZ(piz_read_one_vb)(vb, sl) : true; // true if we should go forward with computing this VB (otherwise skip it)
 
-    // calculate the BGZF blocks that the compute thread is expected to compress
-    if (flag.bgzf) bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
+    // calculate the BGZF blocks from SEC_BGZF that the compute thread is expected to re-create
+    if (flag.bgzf == FLAG_BGZF_BY_ZFILE && txt_file->bgzf_flags.level > 0)     
+        bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
 
     COPY_TIMER (piz_read_one_vb); 
 
@@ -367,7 +369,7 @@ bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSectionListEntryP sl_ent, 
     return false;
 }
 
-// called once per components reconstructed txt_file: i.e.. if unbinding there will be multiple calls.
+// called once per txt_file created: i.e. if concatenating - a single call, if unbinding there will be multiple calls to this function
 void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z_file)
 {
     static Dispatcher dispatcher = NULL; // static dispatcher - with flag.unbind, we use the same dispatcher when pizzing components
@@ -390,11 +392,11 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z
 
         sl_ent = sl_ent_leaf_2 = NULL; // reset
 
-        ASSERT (!flag.test || !digest_is_zero (original_file_digest), 
+        ASSINP (!flag.test || !digest_is_zero (original_file_digest), 
                 "Error testing %s: --test cannot be used with this file, as it was not compressed (in genozip v8) with --md5 or --test", z_name);
 
         if (flag.test || flag.md5) 
-            ASSERT0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
+            ASSINP0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
 
         dispatcher = dispatcher_init ("piz", flag.xthreads ? 1 : global_max_threads, 
                                       0, flag.test, is_last_z_file, true, z_file->basename, PROGRESS_PERCENT, 0);
@@ -466,8 +468,8 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z
                 // if interleaving, set the start of leaf_2 to after its TXT_HEADER
                 if (do_interleave) { 
                     sl_ent_leaf_2 = sl_ent;
-                    ASSERT (sections_get_next_section_of_type (&sl_ent_leaf_2, SEC_TXT_HEADER, false, false), // next sections_get_next_section_of_type2 will read after the TXT_HEADER
-                            "Error in piz_one_file: cannot find SEC_TXT_HEADER of 2nd leaf when trying to interleave in %s", z_name);
+                    ASSERTE (sections_get_next_section_of_type (&sl_ent_leaf_2, SEC_TXT_HEADER, false, false), // next sections_get_next_section_of_type2 will read after the TXT_HEADER
+                            "cannot find SEC_TXT_HEADER of 2nd leaf when trying to interleave in %s", z_name);
                 }
             }
 

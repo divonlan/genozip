@@ -33,20 +33,19 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* tracking lines */\
     Buffer lines;              /* An array of *DataLine* - the lines in this VB */\
-    uint32_t first_line;       /* PIZ only: line number in txt file (counting from 1), of this variant block */\
+    uint32_t first_line;       /* PIZ: line number in txt file (counting from 1), of this variant block */\
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file; /* position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\
-    int32_t vb_data_size;      /* ZIP: actual size of txt read file file ; PIZ: expected size of decompressed txt. Might be different than original if --optimize is used. */\
-    uint32_t vb_data_read_size;/* ZIP only: amount of data read in txtfile_read_block() (either plain VCF or gz or bz2) for this VB */\
+    int32_t vb_data_size;      /* ZIP: actual size of txt read from file ; PIZ: expected size of decompressed txt. Might be different than original if --optimize is used. */\
     uint32_t longest_line_len; /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
     uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
     Digest digest_so_far;      /* partial calculation of MD5 up to and including this VB */ \
     uint32_t component_i;      /* PIZ: 0-based txt component within z_file that this VB belongs to */ \
     \
-    bool dont_show_curr_line;  /* PIZ only - line currently in reconstruction is grepped out due to --grep or --regions and should not be displayed */\
+    bool dont_show_curr_line;  /* PIZ: line currently in reconstruction is grepped out due to --grep or --regions and should not be displayed */\
     GrepStages grep_stages;    /* PIZ: tell piz_is_skip_section what to skip in case of --grep */\
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \

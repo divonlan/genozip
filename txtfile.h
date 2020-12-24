@@ -14,7 +14,7 @@ extern const char *txtfile_piz_get_filename (const char *orig_name, const char *
 typedef bool (*TxtFileTestFunc)(const char *, int);
 extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, double success_threashold, TxtFileTestFunc test_func);
 
-extern void txtfile_estimate_txt_data_size (VBlockP vb);
+extern int64_t txtfile_estimate_txt_data_size (VBlockP vb);
 extern void txtfile_write_one_vblock (VBlockP vb);
 
 extern void txtfile_write_4_lines (VBlockP vb, unsigned pair);

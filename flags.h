@@ -23,9 +23,10 @@ typedef struct {
     int pair; // unfortunately we can't rely on enum being sizeof(int)
 
     // genounzip options
-    int plain,  // set by --plain only - under so circumstances should we output BGZF
-        bgzf,   // can be set by --bgzf, or by various other conditions
-        out_dt; // used to indicate the desired dt of the output txt - consumed by file_open, and thereafter equal to txt_file->data_type
+    #define FLAG_BGZF_BY_ZFILE -1
+    int bgzf;   // can be set by --bgzf, or by various other conditions. values 0-12 indicate the level of libdeflate, FLAG_BGZF_BY_ZFILE means use SEC_BGZF or default level if it is absent
+    
+    int out_dt; // used to indicate the desired dt of the output txt - consumed by file_open, and thereafter equal to txt_file->data_type
     char *unbind;
 
     // PIZ: data-modifying genocat options for showing only a subset of the file 

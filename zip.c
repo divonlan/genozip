@@ -89,7 +89,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bo
 // returns true if section should be dropped
 static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample_size)
 {
-    ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->node_i is not empty. Dict=%s", ctx->name);
+    ASSERTE (ctx->b250.len==0, "ctx->node_i is not empty. Dict=%s", ctx->name);
 
     buf_alloc (vb, &ctx->b250, ctx->node_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
                1.1, "ctx->b250_buf");
@@ -355,14 +355,8 @@ static void zip_compress_one_vb (VBlock *vb)
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely
     // beneficial to all vbs as they are likely to more-or-less have the same frequent entries
-    if (vb->vblock_i == 1) {
+    if (vb->vblock_i == 1) 
         ctx_sort_dictionaries_vb_1(vb);
-
-        // for a file that's compressed (and hence we don't know the size of content a-priori) AND we know the
-        // compressed file size (eg a local gz/bz2 file or a compressed file on a ftp server) - we now estimate the 
-        // txt_data_size_single that will be used for the global_hash and the progress indicator
-        txtfile_estimate_txt_data_size (vb);
-    }
 
     zfile_compress_vb_header (vb); // vblock header
 
@@ -441,9 +435,9 @@ void zip_one_file (const char *txt_basename,
     if (!flag.bind) prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
 
     // we cannot bind files of different type
-    ASSERT (!flag.bind || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
+    ASSINP (!flag.bind || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
             "%s: cannot bind %s because it is a %s file, whereas the previous file was a %s",
-             global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
+            global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
     last_data_type =  txt_file->data_type;
 
     // normally global_max_threads would be the number of cores available - we allow up to this number of compute threads, 
@@ -530,9 +524,13 @@ void zip_one_file (const char *txt_basename,
                 if (flag.show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);            
                 txtfile_read_vblock (next_vb);
 
-                // if this is vb=1, we lock the mutex here in the I/O thread before any compute threads start running.
-                // this will cause vb>=2 to block on merge, until vb=1 has completed its merge and unlocked it in zip_compress_one_vb()
-                if (next_vb->vblock_i == 1) {
+                // initializations after reading the first vb and before running any compute thread
+                if (next_vb->vblock_i == 1) { 
+
+                    // estimate txt_data_size_single that will be used for the global_hash and the progress indicator
+                    txt_file->txt_data_size_single = txtfile_estimate_txt_data_size (next_vb);
+
+                    // we lock, so vb>=2 will block on merge, until vb=1 has completed its merge and unlocked it in zip_compress_one_vb()
                     mutex_initialize (wait_for_vb_1_mutex);
                     mutex_lock (wait_for_vb_1_mutex); 
                 }
@@ -545,21 +543,20 @@ void zip_one_file (const char *txt_basename,
             
             else {
                 // error if stdin is empty - can happen only when redirecting eg "cat empty-file|./genozip -" (we test for empty regular files in main_genozip)
-                ASSERT0 (next_vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, "Error: Cannot compress stdin data because its size is 0");
+                ASSINP0 (next_vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, 
+                         "Error: Cannot compress stdin data because its size is 0");
 
                 // this vb has no data
                 dispatcher_set_input_exhausted (dispatcher, true);
-                
-                // update to the conclusive size. it might have been 0 (eg STDIN if HTTP) or an estimate (if compressed)
-                txt_file->txt_data_size_single = txt_file->txt_data_so_far_single; 
-
-                dispatcher_recycle_vbs (dispatcher); 
             }
         }
         else  // nothing for us to do right now, just wait
             usleep (100000); // 100ms
 
     } while (!dispatcher_is_done (dispatcher));
+
+    // update to the conclusive size. it might have been 0 (eg STDIN if HTTP) or an estimate (if compressed)
+    txt_file->txt_data_size_single = txt_file->txt_data_so_far_single; 
 
     // go back and update some fields in the txt header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected

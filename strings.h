@@ -20,6 +20,7 @@ typedef struct { char s[30]; } StrText;
 
 extern StrText char_to_printable (char c);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
+extern char *str_toupper (const char *in, char *out);
 
 extern StrText str_size (uint64_t size);
 extern StrText str_uint_commas (int64_t n);

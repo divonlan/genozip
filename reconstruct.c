@@ -150,7 +150,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     LastValueType new_value = {0};
     bool have_new_value = false;
     Context *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
-    enum StoreType store_type = snip_ctx->flags.store;
+    StoreType store_type = snip_ctx->flags.store;
 
     switch (snip[0]) {
 

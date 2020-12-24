@@ -228,19 +228,18 @@ const char *st_name (SectionType sec_type)
     return (sec_type == SEC_NONE) ? "SEC_NONE" : type_name (sec_type, &abouts[sec_type].name , sizeof(abouts)/sizeof(abouts[0]));
 }
 
-// called to parse the optional argument to --show-headers. we accept eg REFERENCE or SEC_REFERENCE
-SectionType sections_st_by_name (const char *name)
+// called to parse the optional argument to --show-headers. we accept eg "REFERENCE" or "SEC_REFERENCE" or even "ref"
+SectionType sections_st_by_name (char *name)
 {
     if (!name) return -2; // all sections
 
-    if (strlen (name) >= 4 && !memcmp (name, "SEC_", 4)) 
-        name += 4; // remove "SEC_" prefix;
+    str_toupper (name, name); // name is case insesitive (compare uppercase)
 
     for (SectionType st=0; st < NUM_SEC_TYPES; st++)
-        if (!strcmp (&abouts[st].name[4], name))
+        if (strstr (abouts[st].name, name)) // found if name is a substring of the section name
             return st;
 
-    ABORT_R ("%s: bad argument for --show-sections - \"%s\", is not a recognized section type", 
+    ABORT_R ("%s: bad argument for --show-headers - \"%s\", is not a recognized section type", 
            global_cmd, name);
 }
 

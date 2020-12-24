@@ -62,7 +62,7 @@ static inline uint32_t bgzf_fread (File *file, void *dst_buf, uint32_t count)
     return fread (dst_buf, 1, count, (FILE *)file->file);
 }
 
-// reads and validates a BGZF block, and returns the uncompressed size, or, in case of soft_fail:
+// ZIP: reads and validates a BGZF block, and returns the uncompressed size or (only if soft_fail) an error
 int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called from file_open_txt_read
                          uint8_t *block /* must be BGZF_MAX_BLOCK_SIZE in size */, uint32_t *block_size /* out */,
                          bool soft_fail)
@@ -73,23 +73,23 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     if (! *block_size) return 0; // EOF without an EOF block
 
     if (*block_size < 12) {
-        ASSERT (soft_fail, "Error in bgzf_read_block: file %s appears truncated - it ends with a partial gzip block header", file->basename); // less than the minimal gz block header size
+        ASSERTE (soft_fail, "file %s appears truncated - it ends with a partial gzip block header", file->basename); // less than the minimal gz block header size
         return BGZF_BLOCK_IS_NOT_GZIP;
     } 
 
     // case: this is not a GZ / BGZF block at all (see: https://tools.ietf.org/html/rfc1952)
     if (h->id1 != 31 || h->id2 != 139) {
-        ASSERT (soft_fail, "Error: expecting %s to be compressed with gzip format, but it is not", file->basename);
+        ASSERTE (soft_fail, "expecting %s to be compressed with gzip format, but it is not", file->basename);
         return BGZF_BLOCK_IS_NOT_GZIP;
     }
 
 #ifdef _WIN32
     // On Windows, we can't pipe binary files, bc Windows converts \n to \r\n
-    ASSERT (!file->redirected, "%s: genozip on Windows supports piping in only plain (uncompressed) data", global_cmd);
+    ASSINP0 (!file->redirected, "genozip on Windows supports piping in only plain (uncompressed) data");
 #endif
     // case: this is GZIP block that is NOT a valid BGZF block (see: https://samtools.github.io/hts-specs/SAMv1.pdf)
     if (!(*block_size == 18 && !memcmp (h, BGZF_PREFIX, BGZF_PREFIX_LEN))) {
-        ASSERT (soft_fail, "Error in bgzf_read_block: invalid BGZF block while reading %s", file->basename);
+        ASSERTE (soft_fail, "invalid BGZF block while reading %s", file->basename);
         return BGZF_BLOCK_GZIP_NOT_BGZIP;
     }
 
@@ -97,8 +97,8 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     
     uint32_t body_size = *block_size - sizeof (struct BgzfHeader);
     uint32_t bytes = bgzf_fread (file, h+1, body_size);
-    ASSERT (bytes == body_size, "Error in bgzf_read_block: failed to read body of BGZF block in %s - expecting %u bytes but read %u: %s", 
-            file->basename, body_size, bytes, strerror (errno));
+    ASSERTE (bytes == body_size, "failed to read body of BGZF block in %s - expecting %u bytes but read %u: %s", 
+             file->basename, body_size, bytes, strerror (errno));
 
     uint32_t isize_lt32 = *(uint32_t *)&block[*block_size - 4];
     uint32_t isize = LTEN32 (isize_lt32); // 0...65536 per spec
@@ -114,6 +114,7 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     return isize;
 }
 
+// ZIP
 void bgzf_compress_bgzf_section (void)
 {
     if (!txt_file->bgzf_isizes.len) return; // this txt file is not compressed with BGZF - we don't need a BGZF section
@@ -121,14 +122,20 @@ void bgzf_compress_bgzf_section (void)
     // we don't write a BGZF block if we have optimized, as the file has changed and we can't reconstruct to the same blocks
     if (flag.optimize) return; 
 
-    txt_file->bgzf_isizes.len *= sizeof (uint16_t);
+    // sanity check
+    int64_t total_isize = 0;
+    ARRAY (uint16_t, isizes, txt_file->bgzf_isizes);
+    for (uint64_t i=0; i < txt_file->bgzf_isizes.len; i++) 
+        total_isize += BGEN16 (isizes[i]) + 1; // values 0-65535 correspond to isize 1-65536
+    ASSERTE (total_isize == txt_file->txt_data_size_single, "Expecting total_isize=%"PRId64" == txt_file->txt_data_size_single=%"PRId64,
+             total_isize, txt_file->txt_data_size_single);
 
     // usually BZ2 is the best, but if the sizes are highly random (happens in long read SAM/BAM), then BZ2 can be bloated
     // and even produce an error. that's why we test.
+    txt_file->bgzf_isizes.len *= sizeof (uint16_t);
     Codec codec = codec_assign_best_codec (evb, NULL, &txt_file->bgzf_isizes, SEC_BGZF);
 
     zfile_compress_section_data_ex (evb, SEC_BGZF, &txt_file->bgzf_isizes, NULL, 0, codec, (SectionFlags)txt_file->bgzf_flags);
-
     txt_file->bgzf_isizes.len /= sizeof (uint16_t); // restore
 }
 
@@ -137,17 +144,17 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
 {
     if (bb->is_decompressed) return; // already decompressed - nothing to do
 
-    ASSERT0 (vb->gzip_compressor, "Error in bgzf_uncompress_one_block: vb->gzip_compressor=NULL");
+    ASSERTE0 (vb->gzip_compressor, "vb->gzip_compressor=NULL");
 
     BgzfHeader *h = (BgzfHeader *)ENT (char, vb->compressed, bb->compressed_index);
 
     // verify that entire block is within vb->compressed
-    ASSERT (bb->compressed_index + sizeof (BgzfHeader) < vb->compressed.len && // we have at least the header - we can access bsize
-            bb->compressed_index + (uint32_t)LTEN16 (h->bsize) + 1 <= vb->compressed.len, 
-            "Error in bgzf_uncompress_vb: bgzf block size goes past the end of in vb->compressed: bb=%s vb=%u compressed_index=%u vb->compressed.len=%"PRIu64, 
-            display_bb (bb).s, vb->vblock_i, bb->compressed_index, vb->compressed.len);
+    ASSERTE (bb->compressed_index + sizeof (BgzfHeader) < vb->compressed.len && // we have at least the header - we can access bsize
+             bb->compressed_index + (uint32_t)LTEN16 (h->bsize) + 1 <= vb->compressed.len, 
+             "bgzf block size goes past the end of in vb->compressed: bb=%s vb=%u compressed_index=%u vb->compressed.len=%"PRIu64, 
+             display_bb (bb).s, vb->vblock_i, bb->compressed_index, vb->compressed.len);
 
-    ASSERT (h->id1==31 && h->id2==139, "Error in bgzf_uncompress_vb: not a valid bgzf block in vb->compressed: vb=%u compressed_index=%u", vb->vblock_i, bb->compressed_index);
+    ASSERTE (h->id1==31 && h->id2==139, "not a valid bgzf block in vb->compressed: vb=%u compressed_index=%u", vb->vblock_i, bb->compressed_index);
 
     if (flag.show_bgzf)
         fprintf (info_stream, "%-7s vb=%u i=%u compressed_index=%u size=%u txt_index=%u size=%u ",
@@ -159,7 +166,7 @@ void bgzf_uncompress_one_block (VBlock *vb, BgzfBlockZip *bb)
                                        h+1, bb->comp_size - sizeof(BgzfHeader) - sizeof (BgzfFooter), // compressed
                                        ENT (char, vb->txt_data, bb->txt_index), bb->txt_size, NULL);  // uncompressed
 
-    ASSERT (ret == LIBDEFLATE_SUCCESS, "Error in bgzf_uncompress_vb: libdeflate_deflate_decompress failed: %s", libdeflate_error(ret));
+    ASSERTE (ret == LIBDEFLATE_SUCCESS, "libdeflate_deflate_decompress failed: %s", libdeflate_error(ret));
 
     bb->is_decompressed = true;
 
@@ -207,9 +214,11 @@ void bgzf_libdeflate_initialize (void)
 // level. This is because multiple levels might result in the same compression for this block, but maybe not for other blocks in the file.
 struct FlagsBgzf bgzf_get_compression_level (const char *filename, const uint8_t *comp_block, uint32_t comp_block_size, uint32_t uncomp_block_size)
 {
-    static const struct { int library, level; } levels[] =  // test in the order of likelihood of observing them
-        { {LIBD,6}, {LIBZ,6},  {LIBZ,4},  {LIBD,9},  {LIBD,8}, {LIBD,7}, {LIBD,5}, {LIBD,4}, {LIBD,3}, {LIBD,2}, {LIBD,1}, 
-          {LIBD,0}, {LIBD,12}, {LIBD,11}, {LIBD,10}, {LIBZ,9}, {LIBZ,7}, {LIBZ,8}, {LIBZ,5}, {LIBZ,3}, {LIBZ,2}, {LIBZ,1} };
+    static const struct { BgzfLibraryType library; int level; } levels[] =  // test in the order of likelihood of observing them
+        { {BGZF_LIBDEFLATE,6}, {BGZF_ZLIB,6},  {BGZF_ZLIB,4},  {BGZF_LIBDEFLATE,9},  {BGZF_LIBDEFLATE,8}, {BGZF_LIBDEFLATE,7}, 
+          {BGZF_LIBDEFLATE,5}, {BGZF_LIBDEFLATE,4}, {BGZF_LIBDEFLATE,3}, {BGZF_LIBDEFLATE,2}, {BGZF_LIBDEFLATE,1}, 
+          {BGZF_LIBDEFLATE,0}, {BGZF_LIBDEFLATE,12}, {BGZF_LIBDEFLATE,11}, {BGZF_LIBDEFLATE,10}, {BGZF_ZLIB,9}, {BGZF_ZLIB,7}, 
+          {BGZF_ZLIB,8}, {BGZF_ZLIB,5}, {BGZF_ZLIB,3}, {BGZF_ZLIB,2}, {BGZF_ZLIB,1} };
 
     // ignore the header and footer of the block
     comp_block      += sizeof (BgzfHeader);
@@ -222,7 +231,7 @@ struct FlagsBgzf bgzf_get_compression_level (const char *filename, const uint8_t
     enum libdeflate_result ret = 
         libdeflate_deflate_decompress (evb->gzip_compressor, comp_block, comp_block_size, uncomp_block, uncomp_block_size, NULL);
 
-    ASSERT (ret == LIBDEFLATE_SUCCESS, "Error in bgzf_get_compression_level: unable to read file %s. It appears to be compressed with BGZF, however decompression failed: %s", filename, libdeflate_error(ret));
+    ASSERTE (ret == LIBDEFLATE_SUCCESS, "unable to read file %s. It appears to be compressed with BGZF, however decompression failed: %s", filename, libdeflate_error(ret));
     
     libdeflate_free_decompressor ((struct libdeflate_decompressor **)&evb->gzip_compressor);
 
@@ -233,38 +242,38 @@ struct FlagsBgzf bgzf_get_compression_level (const char *filename, const uint8_t
     for (int level_i=0; level_i < sizeof (levels) / sizeof (levels[0]); level_i++) { 
         struct FlagsBgzf l = { .library = levels[level_i].library, .level = levels[level_i].level };
 
-        if (l.library == LIBD) {
+        if (l.library == BGZF_LIBDEFLATE) {
             void *compressor = libdeflate_alloc_compressor (l.level, evb);
             recomp_size = (uint32_t)libdeflate_deflate_compress (compressor, uncomp_block, uncomp_block_size, recomp_block, BGZF_MAX_BLOCK_SIZE);
 
             libdeflate_free_compressor (compressor);
         }
-        else { // LIBZ
+        else { // BGZF_ZLIB
             z_stream strm = { .zalloc = bgzf_alloc, .zfree  = codec_free, .opaque = evb };
             // deflateInit2 with the default zlib parameters, with is also the same as htslib does
-            ASSERT0 (deflateInit2 (&strm, l.level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) == Z_OK, "Error in bgzf_get_compression_level: deflateInit2 failed");
+            ASSERTE0 (deflateInit2 (&strm, l.level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) == Z_OK, "deflateInit2 failed");
 
             strm.next_in   = uncomp_block;
             strm.avail_in  = uncomp_block_size;
             strm.next_out  = recomp_block;
             strm.avail_out = sizeof (recomp_block);
-            ASSERT (deflate (&strm, Z_FINISH) == Z_STREAM_END, "Error in bgzf_get_compression_level: deflate failed: msg=%s", strm.msg);
+            ASSERTE (deflate (&strm, Z_FINISH) == Z_STREAM_END, "deflate failed: msg=%s", strm.msg);
 
             recomp_size = sizeof (recomp_block) - strm.avail_out;
             
-            ASSERT0 (deflateEnd (&strm) == Z_OK, "Error in bgzf_get_compression_level: deflateEnd failed");
+            ASSERTE0 (deflateEnd (&strm) == Z_OK, "deflateEnd failed");
         }
 
         bool identical = recomp_size == comp_block_size && !memcmp (comp_block, recomp_block, comp_block_size);
 
         if (flag.show_bgzf) 
             fprintf (info_stream, "Testing library %s level %u: size_in_file=%u size_in_test=%u identical=%s\n", 
-                     l.library == LIBD ? "libdeflate" : "zlib", l.level, comp_block_size, recomp_size, identical ? "Yes" : "No");
+                     l.library == BGZF_LIBDEFLATE ? "libdeflate" : "zlib", l.level, comp_block_size, recomp_size, identical ? "Yes" : "No");
 
         if (identical) {
             if (flag.show_bgzf) 
                 fprintf (info_stream, "File %s: Identified as compressed with %s level %u\n", 
-                         filename, l.library == LIBD ? "libdeflate" : "zlib", l.level);
+                         filename, l.library == BGZF_LIBDEFLATE ? "libdeflate" : "zlib", l.level);
             return l; // this still might be wrong, see comment in function header ^
         }       
     }
@@ -300,13 +309,13 @@ bool bgzf_load_isizes (const SectionListEntry *sl_ent)
 
     // convert to native endianity from big endian
     ARRAY (uint16_t, isizes, txt_file->bgzf_isizes);
-    for (uint32_t i=0; i < txt_file->bgzf_isizes.len; i++) 
+    for (uint64_t i=0; i < txt_file->bgzf_isizes.len; i++) 
         isizes[i] = BGEN16 (isizes[i]); // now it contains isize-1 - a value 0->65535 representing an isize 1->65536
 
     return true; // bgzf_isizes successfully loaded
 }                
 
-// I/O thread ahead of dispatching - calculate the BGZF blocks within this VB that need to be compressed by
+// PIZ: I/O thread ahead of dispatching - calculate the BGZF blocks within this VB that need to be compressed by
 // the compute thread - i.e. excluding the flanking regions of txt_data that might share a BGZF block with the adjacent VB
 // and will be compressed by bgzf_compress_and_write_split_blocks.
 void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
@@ -314,7 +323,7 @@ void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
     ARRAY (uint16_t, isizes, txt_file->bgzf_isizes);
     #define next_isize txt_file->bgzf_isizes.param // during PIZ, we use bgzf_isizes.param as "next" - iterator on bgzf_isizes
      
-    // if we don't have isize (either source is not BGZF, or compressed with --optimize, or data-modifying piz options, or v8)
+    // if we don't have isize (either source is not BGZF, or compressed with --optimize, or --bgzf or data-modifying piz options, or v8)
     // then we don't prescribe blocks, and let the VB compress based on the actual length of data reconstructed
     if (!txt_file->bgzf_isizes.len) return;
 
@@ -326,11 +335,11 @@ void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
         
         int32_t isize = (int32_t)isizes[next_isize] + 1;// +1 bc the array values are (isize-1)
 
-        ASSERT (index + isize > 0, "Error in bgzf_calculate_blocks_one_vb: expecting index=%d + isize=%d > 0", index, isize); // if isize is small than the unconsumed data, then this block should have belonged to the previous VB
+        ASSERTE (index + isize > 0, "expecting index=%d + isize=%d > 0", index, isize); // if isize is small than the unconsumed data, then this block should have belonged to the previous VB
 
         if (index + isize > (int32_t)vb_txt_data_len) {
             txt_file->bzgf_passed_down_len = (int32_t)vb_txt_data_len - index; // pass down to next vb 
-            break; // this bgzf block doesn't fit in the VB
+            break; // this VB doesn't have enough data to fill up this BGZF block - pass it down to the next VB
         }
         buf_alloc_more (vb, &vb->bgzf_blocks, 1, global_max_memory_per_vb / 63000, BgzfBlockPiz, 1.5, "bgzf_blocks");
 
@@ -345,9 +354,9 @@ void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
 
 static void bgzf_alloc_compressor (VBlock *vb, struct FlagsBgzf bgzf_flags)
 {
-    ASSERT0 (!vb->gzip_compressor, "Error in bgzf_alloc_compressor: expecting vb->gzip_compressor=NULL");
+    ASSERTE0 (!vb->gzip_compressor, "expecting vb->gzip_compressor=NULL");
 
-    if (bgzf_flags.library == LIBD)  // libdeflate
+    if (bgzf_flags.library == BGZF_LIBDEFLATE)  // libdeflate
         vb->gzip_compressor = libdeflate_alloc_compressor (bgzf_flags.level, vb);
 
     else { // zlib
@@ -358,7 +367,7 @@ static void bgzf_alloc_compressor (VBlock *vb, struct FlagsBgzf bgzf_flags)
 
 static void bgzf_free_compressor (VBlock *vb, struct FlagsBgzf bgzf_flags)
 {
-    if (bgzf_flags.library == LIBD)  // libdeflate
+    if (bgzf_flags.library == BGZF_LIBDEFLATE)  // libdeflate
         libdeflate_free_compressor (vb->gzip_compressor);
     else
         codec_free (vb, vb->gzip_compressor);
@@ -371,7 +380,7 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
 {
     START_TIMER;
 
-    ASSERT0 (vb->gzip_compressor, "Error in bgzf_compress_one_block: vb->gzip_compressor=NULL");
+    ASSERTE0 (vb->gzip_compressor, "vb->gzip_compressor=NULL");
 
     #define BGZF_MAX_CDATA_SIZE (BGZF_MAX_BLOCK_SIZE - sizeof (BgzfHeader) - sizeof (BgzfFooter))
 
@@ -383,7 +392,7 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
     uint32_t comp_index = vb->compressed.len;
     int out_size;
 
-    if (txt_file->bgzf_flags.library == LIBD) { // libdeflate
+    if (txt_file->bgzf_flags.library == BGZF_LIBDEFLATE) { // libdeflate
 
         out_size = (int)libdeflate_deflate_compress (vb->gzip_compressor, in, isize, AFTERENT (char, vb->compressed), BGZF_MAX_CDATA_SIZE);
 
@@ -399,19 +408,18 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
     else { // zlib
         #define strm ((z_stream *)vb->gzip_compressor)
 
-        ASSERT0 (deflateInit2 (vb->gzip_compressor, txt_file->bgzf_flags.level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) == Z_OK, 
-                 "Error in bgzf_compress_one_block: deflateInit2 failed");
+        ASSERTE0 (deflateInit2 (vb->gzip_compressor, txt_file->bgzf_flags.level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) == Z_OK, 
+                  "deflateInit2 failed");
 
         strm->next_in   = (uint8_t *)in;
         strm->avail_in  = isize;
         strm->next_out  = AFTERENT (uint8_t, vb->compressed);
         strm->avail_out = BGZF_MAX_CDATA_SIZE;
-        ASSERT (deflate (vb->gzip_compressor, Z_FINISH) == Z_STREAM_END, "Error in bgzf_compress_one_block: deflate failed: msg=%s", strm->msg);
+        ASSERTE (deflate (vb->gzip_compressor, Z_FINISH) == Z_STREAM_END, "deflate failed: msg=%s", strm->msg);
 
         out_size = BGZF_MAX_CDATA_SIZE - strm->avail_out;
         
-        ASSERT0 (deflateEnd (vb->gzip_compressor) == Z_OK, 
-                 "Error in bgzf_compress_one_block: deflateEnd failed");
+        ASSERTE0 (deflateEnd (vb->gzip_compressor) == Z_OK, "deflateEnd failed");
         #undef strm
     }
 
@@ -423,7 +431,7 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
                 out_size == BGZF_EOF_LEN ? "EOF" : "");
         #undef C
 
-    ASSERT (out_size, "Error in bgzf_uncompress_vb: cannot compress block with %u bytes into a BGZF block with %u bytes", isize, BGZF_MAX_BLOCK_SIZE);
+    ASSERTE (out_size, "cannot compress block with %u bytes into a BGZF block with %u bytes", isize, BGZF_MAX_BLOCK_SIZE);
     vb->compressed.len += out_size;
 
     header->bsize = LTEN16 ((uint16_t)(sizeof (BgzfHeader) + out_size + sizeof (BgzfFooter) - 1));
@@ -475,23 +483,26 @@ static void bgzf_compress_vb_no_blocks (VBlock *vb)
 // (eg libdeflate), version and parameters are the same 
 void bgzf_compress_vb (VBlock *vb)
 {
-    ASSERT0 (!vb->compressed.len, "Error in bgzf_compress_vb: expecting vb->compressed to be free, but its not");
+    ASSERTE0 (!vb->compressed.len, "expecting vb->compressed to be free, but its not");
 
     // case: we don't have perscribed bgzf blocks bc we're modifying the data or the source file didn't provided them
-    if (!vb->bgzf_blocks.len) {
+    if (!buf_is_allocated (&txt_file->bgzf_isizes)) {
         bgzf_compress_vb_no_blocks (vb);
         return;
     }
+
+    // we have no bgzf blocks in this VB, possibly bc it is too small to fill a BGZF block and all data was passed up to next vb
+    if (!vb->bgzf_blocks.len) return;
 
     buf_alloc (vb, &vb->compressed, vb->bgzf_blocks.len * BGZF_MAX_BLOCK_SIZE/2, 1, "compressed"); // alloc based on estimated size
     bgzf_alloc_compressor (vb, txt_file->bgzf_flags);
 
     ARRAY (BgzfBlockPiz, blocks, vb->bgzf_blocks);
-    for (uint32_t i=0; i < vb->bgzf_blocks.len; i++) {
+    for (uint64_t i=0; i < vb->bgzf_blocks.len; i++) {
 
-        ASSERT (blocks[i].txt_index + blocks[i].txt_size <= vb->txt_data.len, 
-                "Error in bgzf_compress_vb: block=%u out of range: expecting txt_index=%u txt_size=%u <= txt_data.len=%u",
-                i, blocks[i].txt_index, blocks[i].txt_size, (uint32_t)vb->txt_data.len);
+        ASSERTE (blocks[i].txt_index + blocks[i].txt_size <= vb->txt_data.len, 
+                 "block=%"PRIu64" out of range: expecting txt_index=%u txt_size=%u <= txt_data.len=%u",
+                 i, blocks[i].txt_index, blocks[i].txt_size, (uint32_t)vb->txt_data.len);
 
         // case: all the data is from the current VB. if there is any data from the previous VB, the index will be negative 
         // and we will compress it in bgzf_write_to_disk() instead
@@ -514,8 +525,8 @@ void bgzf_write_to_disk (VBlock *vb)
         BgzfBlockPiz *first_block = FIRSTENT (BgzfBlockPiz, vb->bgzf_blocks); // this block contains both uncosumed data and the first data of this VB
         int32_t first_data_len = first_block->txt_index + first_block->txt_size; // hopefully the VB has this much, but possibly not...
 
-        ASSERT (txt_file->unconsumed_txt.len + first_block->txt_index == 0, "Error in bgzf_write_to_disk: Expecting txt_file->unconsumed_txt.len=%"PRId64" + first_block->txt_index=%d == 0",
-                txt_file->unconsumed_txt.len, first_block->txt_index);
+        ASSERTE (txt_file->unconsumed_txt.len + first_block->txt_index == 0, "Expecting txt_file->unconsumed_txt.len=%"PRId64" + first_block->txt_index=%d == 0",
+                 txt_file->unconsumed_txt.len, first_block->txt_index);
         
         // case: if we have enough data in this VB to complete the BGZF block, we compress it now
         if (first_data_len <= vb->txt_data.len) {
@@ -525,7 +536,7 @@ void bgzf_write_to_disk (VBlock *vb)
 
             // note: if we're writing the txt_header, then evb->compressed will contain the first BGZF blocks of the txt_header. 
             // Luckily, there will be no unconsumed_data as there is nothing before the header, so Step 1 is not entered
-            ASSERT0 (!evb->compressed.len, "Error in bgzf_write_to_disk: expecting evb->compressed to be empty");
+            ASSERTE0 (!evb->compressed.len, "expecting evb->compressed to be empty");
 
             bgzf_alloc_compressor (evb, txt_file->bgzf_flags);
             bgzf_compress_one_block (evb, block, first_block->txt_size, 0, first_block->txt_index); // compress into evb->compressed
@@ -543,7 +554,7 @@ void bgzf_write_to_disk (VBlock *vb)
         // case: we don't have enough data in this VB to complete the BGZF block
         else {
             // santiy check: this case, we are not expecting any compressed data
-            ASSERT0 (!vb->compressed.len, "Error in bgzf_write_to_disk: not expecting compressed data, if VB is too small to complete a BGZF block");
+            ASSERTE0 (!vb->compressed.len, "not expecting compressed data, if VB is too small to complete a BGZF block");
         }
     }
 

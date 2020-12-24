@@ -27,10 +27,10 @@ void vb_release_vb (VBlock *vb)
     if (!vb) return; // nothing to release
 
     // verify that gzip_compressor was released after use
-    ASSERT (!vb->gzip_compressor, "Error in vb_release_vb of vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
+    ASSERTE (!vb->gzip_compressor, "vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
 
     vb->first_line = vb->vblock_i = vb->num_haplotypes_per_line = vb->fragment_len = vb->fragment_num_words = 0;
-    vb->vb_data_size = vb->vb_data_read_size = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
+    vb->vb_data_size = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
@@ -127,8 +127,8 @@ void vb_destroy_vb (VBlockP *vb_p)
 
 void vb_create_pool (unsigned num_vbs)
 {
-    ASSERT (!pool || num_vbs <= pool->num_vbs, 
-            "Error: vb pool already exists, but with the wrong number of vbs - expected %u but it has %u", num_vbs, pool->num_vbs);
+    ASSERTE (!pool || num_vbs <= pool->num_vbs, 
+             "vb pool already exists, but with the wrong number of vbs - expected %u but it has %u", num_vbs, pool->num_vbs);
 
     if (!pool)  {
         // allocation includes array of pointers (initialized to NULL)
@@ -144,7 +144,7 @@ VBlockPool *vb_get_pool (void)
 
 void vb_initialize_evb(void)
 {
-    ASSERT0 (!evb, "Error: evb already initialized");
+    ASSERTE0 (!evb, "Error: evb already initialized");
 
     evb = CALLOC (sizeof (VBlock));
     evb->data_type = DT_NONE;
@@ -176,7 +176,7 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
         if (!pool->vb[vb_i]->in_use) break;
     }
 
-    ASSERT (vb_i < pool->num_vbs, "Error in vb_get_vb, task=%s: VB pool is full - it already has %u VBs", task_name, pool->num_vbs)
+    ASSERTE (vb_i < pool->num_vbs, "task=%s: VB pool is full - it already has %u VBs", task_name, pool->num_vbs)
 
     // initialize VB fields that need to be a value other than 0
     VBlock *vb = pool->vb[vb_i];
@@ -217,14 +217,14 @@ const char *err_vb_pos (void *vb)
 
 void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str)
 {
-    const char *err_msg = "Error: invalid argument of --vblock: %s. Expecting an integer between 1 and 2048. The file will be read and processed in blocks of this number of megabytes.";
+    const char *err_msg = "invalid argument of --vblock: %s. Expecting an integer between 1 and 2048. The file will be read and processed in blocks of this number of megabytes.";
 
     unsigned len = strlen (mem_size_mb_str);
-    ASSERT (len <= 4 || (len==1 && mem_size_mb_str[0]=='0'), err_msg, mem_size_mb_str);
-    ASSERT (strspn (mem_size_mb_str, "0123456789") == len, err_msg, mem_size_mb_str);
+    ASSINP (len <= 4 || (len==1 && mem_size_mb_str[0]=='0'), err_msg, mem_size_mb_str);
+    ASSINP (strspn (mem_size_mb_str, "0123456789") == len, err_msg, mem_size_mb_str);
 
     unsigned mem_size_mb = atoi (mem_size_mb_str);
-    ASSERT (mem_size_mb <= 2048, err_msg, mem_size_mb_str);
+    ASSINP (mem_size_mb <= 2048, err_msg, mem_size_mb_str);
 
     global_max_memory_per_vb = mem_size_mb * 1024 * 1024;
 }

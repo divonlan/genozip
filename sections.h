@@ -63,6 +63,10 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
 
+// note: #pragma pack doesn't affect enums
+typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
+typedef enum __attribute__ ((__packed__)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX } StoreType; // values for SectionFlags.ctx.store
+
 // goes into SectionHeader.flags
 typedef union SectionFlags {  
     uint8_t flags;
@@ -81,21 +85,17 @@ typedef union SectionFlags {
     struct FlagsBgzf {
         uint8_t has_eof_block    : 1;
         uint8_t level            : 4; // 0-12 for libdeflate or 0-9 for zlib level: 15 means unknown
-#define LIBD 0 // libdeflate
-#define LIBZ 1 // zlib
-        uint8_t library          : 1; // LIBD or LIBZ. ignored if level=15 (introduced 9.0.16)
+        BgzfLibraryType library  : 3; // ignored if level=15 (introduced 9.0.16)
     } bgzf;
 
     struct FlagsCtx {
-        uint8_t store            : 2; // after reconstruction of a snip, store it in ctx.last_value
+        StoreType store          : 2; // after reconstruction of a snip, store it in ctx.last_value
         uint8_t paired           : 1; // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
         uint8_t v8_container     : 1; // (canceled in 9 - files compressed with 8.0 will have this flag set for any context that contains 1 or more containers)
         uint8_t copy_param       : 1; // copy ctx.b250/local.param from SectionHeaderCtx.param
         uint8_t all_the_same     : 1; // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
     } ctx;
 } SectionFlags;
-
-enum __attribute__ ((__packed__)) StoreType { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX }; // values for SectionFlags.ctx.store
 
 #define SECTION_FLAGS_NONE ((SectionFlags){ .flags = 0 })
 
@@ -121,14 +121,14 @@ typedef struct {
     uint64_t num_items_bound;         // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
     uint32_t num_components;          // number of txt bound components in this file (1 if no binding)
-    Digest digest_bound;
+    Digest   digest_bound;
     uint8_t  password_test[16];       // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
-    char created[FILE_METADATA_LEN];  // nul-terminated metadata
-    Digest license_hash;              // MD5(license_num)
+    char     created[FILE_METADATA_LEN];  // nul-terminated metadata
+    Digest   license_hash;            // MD5(license_num)
 #define REF_FILENAME_LEN 256
-    char ref_filename[REF_FILENAME_LEN]; // external reference filename, null-terimated. ref_filename[0]=0 if there is no external reference.
-    Digest ref_file_md5;             // SectionHeaderGenozipHeader.digest_bound.md5 of the reference FASTA genozip file
+    char     ref_filename[REF_FILENAME_LEN]; // external reference filename, null-terimated. ref_filename[0]=0 if there is no external reference.
+    Digest   ref_file_md5;            // SectionHeaderGenozipHeader.digest_bound.md5 of the reference FASTA genozip file
 } SectionHeaderGenozipHeader;
 
 // this footer appears AFTER the genozip header data, facilitating reading the genozip header in reverse from the end of the file
@@ -141,13 +141,12 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint64_t txt_data_size;    // number of bytes in the original txt file. 
-#define NUM_LINES_UNKNOWN ((uint64_t)-1) 
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     Codec    codec;            // codec of original txt file (none, bgzf, gz, bz2...)
     uint8_t  codec_info[3];    // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
-    Digest  digest_single;     // digest of original single txt file. non-0 only if this genozip file is a result of binding. MD5 if --md5 or Adler32 otherwise. 0 if compressed in v8 without --md5. 
-    Digest  digest_header;     // MD5 or Adler32 of header
+    Digest   digest_single;    // digest of original single txt file. non-0 only if this genozip file is a result of binding. MD5 if --md5 or Adler32 otherwise. 0 if compressed in v8 without --md5. 
+    Digest   digest_header;    // MD5 or Adler32 of header
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
 } SectionHeaderTxtHeader; 
@@ -302,7 +301,7 @@ extern void sections_get_prev_component_vb_i (const SectionListEntry *sl, uint32
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);
-extern SectionType sections_st_by_name (const char *name);
+extern SectionType sections_st_by_name (char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
 extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);

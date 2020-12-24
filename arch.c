@@ -44,9 +44,19 @@ void arch_initialize(void)
 #endif
 
     // verify that type sizes are as required (types that appear in section headers written to the genozip format)
-    ASSERT0 (sizeof (SectionType)    ==1, "Error: expecting sizeof (SectionType)==1");
-    ASSERT0 (sizeof (Codec) ==1, "Error: expecting sizeof (Codec)==1");
-    ASSERT0 (sizeof (LocalType)      ==1, "Error: expecting sizeof (LocalType)==1");
+    ASSERT0 (sizeof (SectionType) == 1, "Error: expecting sizeof (SectionType)==1");
+    ASSERT0 (sizeof (Codec)       == 1, "Error: expecting sizeof (Codec)==1");
+    ASSERT0 (sizeof (LocalType)   == 1, "Error: expecting sizeof (LocalType)==1");
+
+    // verify that order of bit fields in a structure is as expected (this is compiler-implementation dependent, and we go by gcc)
+    // it might be endianity-dependent, and we haven't implemented big-endian yet, see: http://mjfrazer.org/mjfrazer/bitfields/
+    union {
+        uint8_t byte;
+        struct __attribute__ ((__packed__)) { uint8_t a : 1; uint8_t b : 1; } bit_1;
+        struct __attribute__ ((__packed__)) { uint8_t a : 3; } bit_3;
+    } bittest = { .bit_1 = { .a = 1 } }; // we expect this to set the LSb of .byte and of .bit_3.a
+    ASSERT0 (bittest.byte == 1, "Error: unsupported bit order in a struct, please use gcc to compile (1)");
+    ASSERT0 (bittest.bit_3.a == 1, "Error: unsupported bit order in a struct, please use gcc to compile (2)");
 
     io_thread_id = pthread_self();
 }

@@ -617,7 +617,6 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 }
 
 void TEST() {
-    
 }
 
 int main (int argc, char **argv)

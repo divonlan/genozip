@@ -225,8 +225,10 @@ void file_set_input_type (const char *type_str)
     else if (!strcmp (ext, ".generic"))
         stdin_type = GNRIC;
 
-    else
+    else {
         stdin_type = file_get_type (ext); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
+        if (stdin_type == GNRIC) stdin_type = UNKNOWN_FILE_TYPE; // This is an unknown input name - not generic
+    }
 
     if (file_get_data_type (stdin_type, true) != DT_NONE) return; // all good 
 
@@ -314,7 +316,7 @@ static const char *file_samtools_no_PG (void)
     } 
     samtools_help_text[len] = '\0'; // terminate string (more portable, strnstr and memmem are non-standard)
 
-    ASSERT0 (len >= MIN_ACCEPTABLE_LEN, "Error in file_samtools_no_PG: no response from \"samtools view --junk\"");
+    ASSERTE0 (len >= MIN_ACCEPTABLE_LEN, "no response from \"samtools view --junk\"");
 
     return ret_str[(has_no_PG = !!strstr (samtools_help_text, "--no-PG"))];
 }
@@ -362,8 +364,8 @@ static bool file_open_txt_read (File *file)
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, READ);
 
 #ifdef _WIN32 
-    ASSERT (!file->redirected || file->codec == CODEC_NONE, 
-            "%s: genozip on Windows supports piping in only plain (uncompressed) data", global_cmd);
+    ASSINP0 (!file->redirected || file->codec == CODEC_NONE, 
+             "genozip on Windows supports piping in only plain (uncompressed) data");
 #endif
 
     switch (file->codec) { 
@@ -373,7 +375,7 @@ static bool file_open_txt_read (File *file)
             file->file = file->is_remote  ? url_open (NULL, file->name)  : 
                          file->redirected ? fdopen (STDIN_FILENO,  "rb") :
                                             fopen (file->name, READ);
-            ASSERT (file->file, "Error in file_open_txt_read: failed to open %s: %s", file->name, strerror (errno));
+            ASSERTE (file->file, "failed to open %s: %s", file->name, strerror (errno));
 
             // read the first potential BGZF block to test if this is GZ or BGZF
             uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
@@ -413,7 +415,7 @@ static bool file_open_txt_read (File *file)
             // (note: we cannot re-read the bytes from the file as the file might be piped in)
             else if (bgzf_uncompressed_size == BGZF_BLOCK_GZIP_NOT_BGZIP) {
                 
-                ASSERT0 (!file->redirected, "Error: genozip can't read gzip data from a pipe - piped data must be either plain or in BGZF format - i.e. compressed with bgzip, htslib etc");
+                ASSERTE0 (!file->redirected, "genozip can't read gzip data from a pipe - piped data must be either plain or in BGZF format - i.e. compressed with bgzip, htslib etc");
 
                 file->codec = CODEC_GZ;
                 file->file  = gzdopen (fileno((FILE *)file->file), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
@@ -432,12 +434,12 @@ static bool file_open_txt_read (File *file)
             // 2. On Windows, we can't pipe binary files, bc Windows converts \n to \r\n
             // 3. The codec at this point is what the user declared in -i (we haven't tested for gz yet)
 #ifdef _WIN32 
-            ASSERT (!file->redirected || file->codec == CODEC_NONE, 
-                    "%s: genozip on Windows supports piping in only plain (uncompressed) data", global_cmd);
+            ASSINP0 (!file->redirected || file->codec == CODEC_NONE, 
+                     "genozip on Windows supports piping in only plain (uncompressed) data");
 #else
-            ASSERT (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF, 
-                    "%s: genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension) (codec=%s)", 
-                    global_cmd, codec_name (file->codec));
+            ASSINP (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF, 
+                    "genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension) (codec=%s)", 
+                    codec_name (file->codec));
 #endif
             break;
         }
@@ -507,16 +509,14 @@ static bool file_open_txt_read (File *file)
             ABORT ("%s: invalid filename extension for %s files: %s", global_cmd, dt_name (file->data_type), file->name);
     }
 
-    file->txt_data_size_single = file->disk_size; 
-
     return file->file != 0;
 }
 
 // returns true if successful
 static bool file_open_txt_write (File *file)
 {
-    ASSERT (file->data_type > DT_NONE && file->data_type < NUM_DATATYPES ,"Error in file_open_txt_write: invalid data_type=%s (%u)", 
-            dt_name (file->data_type), file->data_type);
+    ASSERTE (file->data_type > DT_NONE && file->data_type < NUM_DATATYPES ,"invalid data_type=%s (%u)", 
+             dt_name (file->data_type), file->data_type);
 
     // check if type derived from file name is supported, and if not - set it to plain or .gz
     if (file_get_data_type (file->type, false) == DT_NONE) {
@@ -526,7 +526,7 @@ static bool file_open_txt_write (File *file)
              file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
             
             file->type = txt_out_ft_by_dt[file->data_type][1]; 
-            flag.bgzf = true;
+            if (flag.bgzf == FLAG_BGZF_BY_ZFILE) flag.bgzf = BGZF_COMP_LEVEL_DEFAULT;
         }
 
         // case: BAM
@@ -536,7 +536,7 @@ static bool file_open_txt_write (File *file)
         // case: not .gz and not BAM - use the default plain file format
         else { 
             file->type = txt_out_ft_by_dt[file->data_type][0];  
-            ASSINP0 (!flag.bgzf, "using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz");
+            ASSINP0 (flag.bgzf == FLAG_BGZF_BY_ZFILE, "using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz");
         }
     }
 
@@ -552,7 +552,6 @@ static bool file_open_txt_write (File *file)
     {
         flag.out_dt = file->data_type = dt_by_filename;
         flags_update_piz_one_file(); // update flags accordingly
-        flag.bgzf = false; // ignore flag derived from z_file, and get the codec from the output filename extension below
     }
 
     if (z_file->data_type == DT_ME23 && flag.out_dt == DT_VCF)
@@ -562,16 +561,17 @@ static bool file_open_txt_write (File *file)
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, WRITE);
     
     // set to bgzf if the file type implies it
-    if (file->codec == CODEC_GZ || file->codec == CODEC_BGZF) { 
+    if (file->codec == CODEC_GZ || file->codec == CODEC_BGZF) 
         file->codec = CODEC_BGZF; // we always write gzip format output with BGZF
-        flag.bgzf   = true;
-    }
 
-    // case the user overrides with --plain (override bgzf set here or before, in flags_update_piz_one_file)
-    if (flag.plain && file->codec == CODEC_BGZF) {
+    // in genocat (including translation) if the user didn't explicitly set bgzf, we set it now, 
+    // based on the codec, ignoring SEC_BGZF
+    if (exe_type == EXE_GENOCAT && flag.bgzf == FLAG_BGZF_BY_ZFILE) 
+        flag.bgzf = (file->codec == CODEC_BGZF ? BGZF_COMP_LEVEL_DEFAULT : 0); // ignore flag derived from z_file, and get the codec from the output filename extension below
+
+    // case the user overrides with --bgzf=0 (override bgzf set here or before, in flags_update_piz_one_file)
+    if (flag.bgzf == 0 && file->codec == CODEC_BGZF) 
         file->codec = CODEC_NONE;
-        flag.bgzf = false;
-    }
 
     // don't actually open the output file if we're just testing in genounzip or PIZing a reference file
     if (flag.test || flag.reading_reference) return true;
@@ -581,8 +581,14 @@ static bool file_open_txt_write (File *file)
         case CODEC_GZ   :
         case CODEC_BGZF : 
         case CODEC_NONE : file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
-        case CODEC_BCF  : file_redirect_output_to_stream (file, "bcftools", "view", "-Ob", NULL); break;
+
         case CODEC_CRAM : file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", file_samtools_no_PG()); break;
+        
+        case CODEC_BCF  : {
+            char comp_level[4] = { '-', 'l', '0' + MIN (flag.bgzf, 9), 0 };
+            file_redirect_output_to_stream (file, "bcftools", "view", "-Ob", flag.bgzf >= 0 ? comp_level : NULL); 
+            break;
+        }
 
         default         : ABORT ("%s: invalid filename extension for %s files: %s. Please use --output to set another name", global_cmd, dt_name (file->data_type), file->name);
     }
@@ -640,7 +646,7 @@ static bool file_open_z (File *file)
     // for READ, set data_type
     if (file->mode == READ) {
 
-        ASSERT0 (file->name, "Error in file_open_z: cannot redirect genozip files from stdin");
+        ASSERTE0 (file->name, "cannot redirect genozip files from stdin");
 
         if (!file_has_ext (file->name, GENOZIP_EXT)) {
             if (flag.multiple_files) 
@@ -667,7 +673,7 @@ static bool file_open_z (File *file)
         mutex_initialize (file->dicts_mutex);
     }
 
-    ASSERT (!file->is_remote, "Error: it is not possible to access remote genozip files; when attempting to open %s", file->name);
+    ASSINP (!file->is_remote, "it is not possible to access remote genozip files; when attempting to open %s", file->name);
     
     if (!flag.seg_only || flag.reading_reference)
         file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, file->mode);
@@ -872,7 +878,7 @@ void file_write (File *file, const void *data, unsigned len)
     if (bytes_written < len && !file->name) exit (0);
 
     // error if failed to write to file
-    ASSERT (bytes_written == len, "Error: failed to write %u bytes to %s: %s", len, file->name, strerror(errno));
+    ASSERTE (bytes_written == len, "failed to write %u bytes to %s: %s", len, file->name, strerror(errno));
 }
 
 void file_remove (const char *filename, bool fail_quietly)
@@ -885,7 +891,7 @@ void file_mkfifo (const char *filename)
 {
 #ifndef _WIN32
     file_remove (filename, true);
-    ASSERT (!mkfifo (filename, 0666), "Error in file_mkfifo: mkfifo failed for %s: %s", filename, strerror (errno));
+    ASSERTE (!mkfifo (filename, 0666), "mkfifo failed for %s: %s", filename, strerror (errno));
 
 #else
     ABORT0 ("file_mkfifo not supported on Windows");
@@ -898,7 +904,7 @@ bool file_is_fifo (const char *filename)
     return false; // we don't support FIFOs in Win32 yet
 #endif
     struct stat st;
-    ASSERT (!stat (filename, &st), "Error in file_is_fifo: stat failed on %s", filename);
+    ASSERTE (!stat (filename, &st), "stat failed on %s", filename);
 
     return S_ISFIFO (st.st_mode);
 }
@@ -969,7 +975,7 @@ bool file_seek (File *file, int64_t offset,
         }
     } 
     else {
-        ASSERT (!ret, "Error: fseeko failed on file %s: %s", file_printname (file), strerror (errno));
+        ASSERTE (!ret, "fseeko failed on file %s: %s", file_printname (file), strerror (errno));
     }
 
     return !ret;
@@ -995,7 +1001,7 @@ uint64_t file_get_size (const char *filename)
     struct stat64 st;
     
     int ret = stat64(filename, &st);
-    ASSERT (!ret, "Error: failed accessing '%s': %s", filename, strerror(errno));
+    ASSERTE (!ret, "stat64 failed on '%s': %s", filename, strerror(errno));
     
     return st.st_size;
 }
@@ -1019,7 +1025,7 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
     ASSINP (file, "cannot open %s: %s", filename, strerror (errno));
 
     size_t bytes_read = fread (buf->data, 1, size, file);
-    ASSERT (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));
+    ASSERTE (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));
 
     buf->len = size;
 
@@ -1051,7 +1057,8 @@ bool file_put_data (const char *filename, void *data, uint64_t len)
     RESTORE_VALUE (errno); // in cases caller wants to print fwrite error
 
     if (written == len) { // successful
-        ASSERT (!rename (tmp_filename, filename), "Error in file_put_data: failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
+        ASSERTE (!rename (tmp_filename, filename), "failed to rename %s to %s: %s", 
+                 tmp_filename, filename, strerror (errno));
         return true;
     } 
     else

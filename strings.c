@@ -22,6 +22,16 @@ char *str_tolower (const char *in, char *out /* out allocated by caller - can be
     return startout;
 }
 
+char *str_toupper (const char *in, char *out /* out allocated by caller - can be the same as in */)
+{
+    char *startout = out;
+
+    for (; *in; in++, out++) 
+        *out = (*in >= 'a' && *in <= 'z') ? *in - 32 : *in;
+    
+    return startout;
+}
+
 StrText char_to_printable (char c) 
 {
     switch ((uint8_t)c) {

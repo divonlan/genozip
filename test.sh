@@ -92,7 +92,12 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
     test_header "$1 - redirected from stdin"
     local file=$TESTDIR/$1
     local args=( "$@" )
-    cat $file | $genozip $arg1 ${args[@]:1} --test --force --output $output --input ${file#*.} - || exit 1
+
+    # instead of passing the input, we pass the filename. that works, because the code compares extensions
+    local input=${file#*.}
+    if [[ $input == genome_Full.me23.txt ]]; then input=23andme; fi
+
+    cat $file | $genozip $arg1 ${args[@]:1} --test --force --output $output --input $input - || exit 1
     cleanup
 }
 
@@ -292,7 +297,7 @@ batch_precompressed()
 batch_bgzf()
 {
     batch_print_header
-    local files=(basic.bam basic-bgzf-6.sam.gz basic-bgzf-9.sam.gz basic-bgzf-6-no-eof.sam.gz)
+    local files=(basic.bam basic-bgzf-6.sam.gz basic-bgzf-9.sam.gz basic-bgzf-6-no-eof.sam.gz basic-1bgzp_block.bam)
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file

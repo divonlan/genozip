@@ -19,7 +19,7 @@
 #include "container.h"
 #include "stats.h"
 
-static const enum StoreType optional_field_store_flag[256] = {
+static const StoreType optional_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
     ['s']=STORE_INT, ['S']=STORE_INT,
     ['i']=STORE_INT, ['I']=STORE_INT,

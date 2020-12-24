@@ -189,6 +189,8 @@ extern void main_exit (bool show_stack, bool is_error);
 // check for a bug - prints stack
 #define ASSERT(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }}
 #define ASSERT0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s\n", string); exit_on_error(true); }}
+#define ASSERTE(condition, format, ...)      { if (!(condition)) { fprintf (stderr, "\nError in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }}
+#define ASSERTE0(condition, string)          { if (!(condition)) { fprintf (stderr, "\nError in %s:%u: %s\n", __FUNCTION__, __LINE__, string); exit_on_error(true); }}
 #define ASSERTW(condition, format, ...)      { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
 #define ASSERTW0(condition, string)          { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n%s\n", string); } }
 #define RETURNW(condition, ret, format, ...) { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }}

@@ -55,4 +55,3 @@ extern void bgzf_calculate_blocks_one_vb (VBlockP vb, uint32_t vb_txt_data_len);
 extern void bgzf_compress_vb (VBlockP vb);
 extern void bgzf_write_to_disk (VBlockP vb);
 extern void bgzf_write_finalize (FileP file);
-

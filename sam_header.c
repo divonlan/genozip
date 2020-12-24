@@ -45,7 +45,7 @@ void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string
                 unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
                 PosType last_pos = (PosType)strtoull (&last_pos_str[3], NULL, 10);
 
-                ASSERT (last_pos <= MAX_POS_SAM, "Error: @SQ record in header contains LN:%"PRId64" which is beyond the maximum permitted by the SAM spec of %"PRId64,
+                ASSINP (last_pos <= MAX_POS_SAM, "Error: @SQ record in header contains LN:%"PRId64" which is beyond the maximum permitted by the SAM spec of %"PRId64,
                         last_pos, MAX_POS_SAM);
 
                 callback (&chrom_name[3], chrom_name_len, last_pos, callback_param);
@@ -130,18 +130,18 @@ static void sam_header_add_contig (const char *chrom_name, unsigned chrom_name_l
 #define next_contig param // we use header_contigs.param as "next_contig"
 static void sam_header_verify_contig (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
 {
-    ASSERT (header_contigs.next_contig < header_contigs.len, 
+    ASSINP (header_contigs.next_contig < header_contigs.len, 
             "Error: SAM header: contigs mismatch between files: first file has %u contigs, but %s has more",
              (unsigned)header_contigs.len, txt_name);
 
     RefContig *rc = ENT (RefContig, header_contigs, header_contigs.next_contig++);
     const char *rc_chrom_name = ENT (char, header_contigs_dict, rc->char_index);
     
-    ASSERT (chrom_name_len == rc->snip_len && !memcmp (chrom_name, rc_chrom_name, chrom_name_len),
+    ASSINP (chrom_name_len == rc->snip_len && !memcmp (chrom_name, rc_chrom_name, chrom_name_len),
             "Error: SAM header contig=%u: contig name mismatch between files: in first file: \"%s\", in %s: \"%.*s\"",
             (unsigned)header_contigs.next_contig, rc_chrom_name, txt_name, chrom_name_len, chrom_name);
             
-    ASSERT (last_pos == rc->max_pos, "Error: SAM header in \"%s\": contig length mismatch between files: in first file: LN:%"PRId64", in %s: LN:%"PRId64,
+    ASSINP (last_pos == rc->max_pos, "Error: SAM header in \"%s\": contig length mismatch between files: in first file: LN:%"PRId64", in %s: LN:%"PRId64,
             rc_chrom_name, rc->max_pos, txt_name, last_pos);
 }
 
@@ -211,8 +211,8 @@ int32_t bam_is_header_done (void)
     uint32_t next=0;
 
     HDRSKIP(4); // magic
-    ASSERT (!memcmp (evb->txt_data.data, BAM_MAGIC, 4), // magic
-            "Error in bam_read_txt_header: %s doesn't have a BAM magic - it doesn't seem to be a BAM file", txt_name);
+    ASSINP (!memcmp (evb->txt_data.data, BAM_MAGIC, 4), // magic
+            "%s doesn't have a BAM magic - it doesn't seem to be a BAM file", txt_name);
 
     // sam header text
     uint32_t l_text = HDR32;
@@ -258,7 +258,7 @@ static inline void txtheader_sam_add_PG (Buffer *txtheader_buf)
 // PIZ I/O thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
 TXTHEADER_TRANSLATOR (txtheader_bam2sam)
 {
-    ASSERT0 (buf_is_allocated (txtheader_buf), "Error in txtheader_bam2sam: txtheader_buf not allocated");
+    ASSERTE0 (buf_is_allocated (txtheader_buf), "txtheader_buf not allocated");
 
     uint32_t l_text = GET_UINT32 (ENT (char, *txtheader_buf, 4));
     memcpy (txtheader_buf->data, ENT (char, *txtheader_buf, 8), l_text);
@@ -283,7 +283,7 @@ static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_n
     *(uint32_t *)AFTERENT (char, *txtheader_buf) = LTEN32 (chrom_name_len); 
     txtheader_buf->len += sizeof (uint32_t);
 
-    ASSERT (chrom_name_len <= INT32_MAX, "Error: cannot convert to BAM because l_name=%u exceeds BAM format maximum of %u", chrom_name_len, INT32_MAX);
+    ASSINP (chrom_name_len <= INT32_MAX, "Error: cannot convert to BAM because l_name=%u exceeds BAM format maximum of %u", chrom_name_len, INT32_MAX);
 
     // name
     buf_add (txtheader_buf, chrom_name, chrom_name_len-1);                  
@@ -294,7 +294,7 @@ static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_n
     *(uint32_t *)AFTERENT (char, *txtheader_buf) = LTEN32 (last_pos32); 
     txtheader_buf->len += sizeof (uint32_t);
 
-    ASSERT (last_pos <= INT32_MAX, "Error: cannot convert to BAM because contig %.*s has length=%"PRId64" that exceeds BAM format maximum of %u", 
+    ASSINP (last_pos <= INT32_MAX, "Error: cannot convert to BAM because contig %.*s has length=%"PRId64" that exceeds BAM format maximum of %u", 
             chrom_name_len-1, chrom_name, last_pos, INT32_MAX);
 }
 
@@ -314,10 +314,10 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     // we can't convert to BAM if its a SAM file with aligned reads but without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
     // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
     // analysis. Better give an error here than create confusion downstream. 
-    ASSERT (n_ref ||  // has SQ records
+    ASSINP (n_ref ||  // has SQ records
             !z_file->z_flags.dts_ref_internal || // has external reference
             z_file->contexts[SAM_POS].word_list.len==1, // has only one POS word = "Delta 0" = unaligned SAM that doesn't need contigs 
-            "Error: Failed to convert %s from SAM to BAM: genounzip requires that either the SAM header has SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or the file was genozipped with --reference or --REFERENCE", z_name);
+            "Failed to convert %s from SAM to BAM: genounzip requires that either the SAM header has SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or the file was genozipped with --reference or --REFERENCE", z_name);
 
     // if no SQ lines - get lines from loaded contig (will be available only if file was compressed with --reference or --REFERENCE)
     bool from_SQ = !!n_ref;
@@ -332,7 +332,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     // construct magic, l_text, text and n_ref fields of BAM header
     char *text = txtheader_buf->data + 8;
     uint32_t l_text = txtheader_buf->len;
-    ASSERT (txtheader_buf->len <= INT32_MAX, "Error: cannot convert to BAM because SAM header length (%"PRIu64" bytes) exceeds BAM format maximum of %u", txtheader_buf->len, INT32_MAX);
+    ASSINP (txtheader_buf->len <= INT32_MAX, "Cannot convert to BAM because SAM header length (%"PRIu64" bytes) exceeds BAM format maximum of %u", txtheader_buf->len, INT32_MAX);
 
     memmove (text, txtheader_buf->data, l_text);                          // text
     memcpy (FIRSTENT (char, *txtheader_buf), BAM_MAGIC, 4);               // magic
