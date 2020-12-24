@@ -253,7 +253,7 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
         argv[argc++] = arg;
     }
 
-    ASSERT (!arg, "Error: too many arguments - max is %u", MAX_ARGC-1); // MAX_ARGC-1 real args and last must be NULL
+    ASSERTE (!arg, "too many arguments when executing %s - max is %u", exec_name, MAX_ARGC-1); // MAX_ARGC-1 real args and last must be NULL
 
     FILE *input_pipe = NULL;
     if (input_url_name) 
