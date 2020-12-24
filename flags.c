@@ -19,6 +19,7 @@
 #include "strings.h"
 #include "fastq.h"
 #include "stream.h"
+#include "bgzf.h"
 
 // flags - default values (all others are 0)
 Flags flag = { .out_dt = DT_NONE, 
@@ -37,7 +38,8 @@ static int option_noisy=0, option_best=0;
 
 static void flags_set_bgzf (const char *level_str)
 {
-    int64_t level_64;
+    int64_t level_64=BGZF_COMP_LEVEL_DEFAULT;
+
     ASSINP0 (level_str && str_get_int (level_str, strlen (level_str), &level_64),
              "--bgzf expects a value between 0 (no compression) and 12 (best, yet slowest, compression). If you're not sure what value to choose, 6 is a popular option.");
 
@@ -542,7 +544,7 @@ static void flags_store_piped_in_details (void)
     unsigned pid = getpid();
     sprintf (cmd, "lsof -n -P 2> /dev/null | grep $(ls /proc/%u/fd/0 -l | cut -d[ -f2| cut -d] -f1) 2> /dev/null | grep -v %u", pid, pid);
     StreamP strm = stream_create (0, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0, "to get counter-process details", 
-                                  "bash", "-c", cmd);
+                                  "bash", "-c", cmd, NULL);
     char str[500];
     unsigned len = fread (str, 1, sizeof (str)-1, stream_from_stream_stdout (strm));
     str[len] = 0;

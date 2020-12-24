@@ -239,8 +239,7 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     va_list argp;
     va_start (argp, exec_name);
 
-    const char *argv[MAX_ARGC];
-    memset (argv, 0, sizeof(argv));
+    const char *argv[MAX_ARGC] = {};
     unsigned argc = 0;
 
     argv[argc++] = exec_name;

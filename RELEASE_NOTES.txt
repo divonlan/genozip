@@ -2,6 +2,7 @@ Note on versioning:
 Major version change occurs when genozip file format changes
 Middle version changes when major features are updated without file format change
 Minor version changes with bug fixes and minor feature updates
+Some minor versions are skipped due to failed conda deployments
 
 1.1.3
 - --unbind option - required storing the VCF header of all files, and keeping md5 for both the bound file and each component
@@ -306,7 +307,7 @@ Cleanup:
 - renamed --test-seg to --seg-only
 - bug fixes 
 
-9.0.18
+9.0.20
 - allow --output to a named pipe (fifo) (not available on Windows)
 - genounzip --bgzf now requires a level parameter (0 to 12). 0 means no compression, and hence --plain flag is canceled.
 - bug fixes 
