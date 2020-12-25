@@ -840,7 +840,7 @@ const char *txtfile_piz_get_filename (const char *orig_name,const char *prefix, 
     sprintf ((char *)txt_filename, "%s%.*s%s%s", prefix,
                 fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
                 old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
-                (txt_file->bgzf_flags.level && flag.out_dt != DT_BAM) ? ".gz" : ""); // add .gz if --bgzf (except in BAM where it is implicit)
+                (z_file->z_flags.bgzf && flag.out_dt != DT_BAM) ? ".gz" : ""); // add .gz if --bgzf (except in BAM where it is implicit)
 
     return txt_filename;
 }
