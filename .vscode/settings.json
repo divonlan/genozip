@@ -45,7 +45,9 @@
         "unordered_map": "c",
         "vector": "c",
         "reference.h": "c",
-        "*.tcc": "c"
+        "*.tcc": "c",
+        "optional": "c",
+        "system_error": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

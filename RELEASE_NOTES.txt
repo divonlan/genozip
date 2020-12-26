@@ -311,3 +311,6 @@ Cleanup:
 - allow --output to a named pipe (fifo) (not available on Windows)
 - genounzip --bgzf now requires a level parameter (0 to 12). 0 means no compression, and hence --plain flag is canceled.
 - bug fixes 
+
+9.0.21
+bug fixes
