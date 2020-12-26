@@ -254,7 +254,7 @@ void sam_seg_verify_pos (VBlock *vb, PosType this_pos)
     
     PosType max_pos = (has_header_contigs) ? ENT (RefContig, header_contigs, vb->chrom_node_index)->max_pos
                                            : ENT (RefContig, loaded_contigs, vb->chrom_node_index)->max_pos;
-    ASSERT (this_pos <= max_pos, "Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%u chrom_node_index=%d", 
+    ASSINP (this_pos <= max_pos, "Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%u chrom_node_index=%d", 
             this_pos, vb->chrom_name_len, vb->chrom_name, max_pos, vb->vblock_i, vb->line_i, vb->chrom_node_index);
 }
 
@@ -340,8 +340,8 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     Context *bitmap_ctx = &vb->contexts[bitmap_did];
     Context *nonref_ctx = bitmap_ctx + 1;
 
-    ASSERT (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion recursion_level=%u seq_len=%u level_0_cigar=%s", // this would mean a read of about 4M bases... in 2020, this looks unlikely
-            recursion_level, seq_len, level_0_cigar);
+    ASSERTE (recursion_level < 4, "excess recursion recursion_level=%u seq_len=%u level_0_cigar=%s", // this would mean a read of about 4M bases... in 2020, this looks unlikely
+             recursion_level, seq_len, level_0_cigar);
 
     bitmap_ctx->txt_len += add_bytes; // byte counts for --show-sections
 
@@ -413,7 +413,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     
     while (i < seq_len || next_ref < pos_index + ref_len_this_level) {
 
-        ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_len_this_level, "Error in sam_seg_seq_field: i or next_ref are out of range");
+        ASSERTE0 (i <= seq_len && next_ref <= pos_index + ref_len_this_level, "i or next_ref are out of range");
 
         subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
@@ -421,9 +421,9 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
         if (cigar_op == 'M' || cigar_op == '=' || cigar_op == 'X') { // alignment match or sequence match or mismatch
 
-            ASSERT (subcigar_len > 0 && subcigar_len <= (seq_len - i), 
-                    "Error in sam_seg_seq_field: CIGAR %s implies seq_len longer than actual seq_len=%u (recursion_level=%u level0: cigar=%s seq_len=%u)", 
-                    cigar, seq_len, recursion_level, level_0_cigar, level_0_seq_len);
+            ASSERTE (subcigar_len > 0 && subcigar_len <= (seq_len - i), 
+                     "CIGAR %s implies seq_len longer than actual seq_len=%u (recursion_level=%u level0: cigar=%s seq_len=%u)", 
+                     cigar, seq_len, recursion_level, level_0_cigar, level_0_seq_len);
 
             uint32_t bit_i = bitmap_ctx->next_local; // copy to automatic variable for performance
             uint32_t start_i = i;
@@ -512,8 +512,8 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
     // in REF_INTERNAL, the sequence can flow over to the next range as each range is 1M bases. this cannot happen
     // in REF_EXTERNAL as each range is the entire contig
-    ASSERT (flag.reference == REF_INTERNAL || i == seq_len, "Error in sam_seg_seq_field: expecting i(%u) == seq_len(%u) pos=%"PRId64" range=[%.*s %"PRId64"-%"PRId64"] (cigar=%s recursion_level=%u level0: cigar=%s seq_len=%u)", 
-            i, seq_len, pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, cigar, recursion_level, level_0_cigar, level_0_seq_len);
+    ASSERTE (flag.reference == REF_INTERNAL || i == seq_len, "expecting i(%u) == seq_len(%u) pos=%"PRId64" range=[%.*s %"PRId64"-%"PRId64"] (cigar=%s recursion_level=%u level0: cigar=%s seq_len=%u)", 
+             i, seq_len, pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, cigar, recursion_level, level_0_cigar, level_0_seq_len);
 
     // case: we have reached the end of the current reference range, but we still have sequence left - 
     // call recursively with remaining sequence and next reference range 
@@ -586,8 +586,9 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         // sanity checks before adding to any dictionary
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
         
-        PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, pos, pos_len, true);
-        if (pos_value < 0) goto error;
+        SegError err;
+        PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, pos, pos_len, &err);
+        if (err != ERR_SEG_NO_ERROR) goto error;
 
         seg_by_dict_id (vb, rname,  rname_len,  container_SA_OA.items[0].dict_id, 1 + rname_len);
         seg_by_dict_id (vb, strand, strand_len, container_SA_OA.items[2].dict_id, 1 + strand_len);
@@ -647,8 +648,9 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         // sanity checks before adding to any dictionary
         if (pos_len < 2 || (pos[0] != '+' && pos[0] != '-')) goto error; // invalid format - expecting pos to begin with the strand
 
-        PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, &pos[1], pos_len-1, true);
-        if (pos_value < 0) goto error;
+        SegError err;
+        PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, &pos[1], pos_len-1, &err);
+        if (err != ERR_SEG_NO_ERROR) goto error;
 
         seg_by_dict_id (vb, rname,  rname_len, container_XA.items[0].dict_id, 1 + rname_len);
         seg_by_dict_id (vb, pos,    1,         container_XA.items[1].dict_id, 1); // strand is first character of pos
@@ -749,6 +751,22 @@ static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictId d
     // not possible - just store unmodified
     else
         seg_by_dict_id (vb, snip, snip_len, dict_id, add_bytes); 
+}
+
+// mc:i: (output of bamsormadup and other biobambam tools - mc in small letters) 
+// appears to be a pos value usually close to PNEXT, but it is -1 is POS=PNEXT.
+static inline void sam_seg_mc_field (VBlockSAM *vb, DictId dict_id, 
+                                     const char *snip, unsigned snip_len, unsigned add_bytes)
+{
+    uint8_t mc_did_i = ctx_get_ctx (vb, dict_id)->did_i;
+    
+    // if snip is "-1", store as simple snip
+    if (snip_len == 2 && snip[0] == '-' && snip[1] == '1')
+        seg_by_did_i (vb, snip, snip_len, mc_did_i, add_bytes)
+    
+    // delta vs PNEXT
+    else
+        seg_pos_field ((VBlockP)vb, mc_did_i, SAM_PNEXT, true, snip, snip_len, 0, add_bytes);
 }
 
 // optimization for Ion Torrent flow signal (ZM) - negative values become zero, positives are rounded to the nearest 10
@@ -934,18 +952,15 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
     else if (dict_id.num == dict_id_OPTION_AS) 
         sam_seg_AS_field (vb, dl, dict_id, value, value_len, add_bytes);
     
-    // mc:i: (output of bamsormadup? - mc in small letters) appears to a pos value usually close to POS.
-    // we encode as a delta.
-    else if (dict_id.num == dict_id_OPTION_mc) {
-        uint8_t mc_did_i = ctx_get_ctx (vb, dict_id)->did_i;
-
-        seg_pos_field ((VBlockP)vb, mc_did_i, SAM_POS, true, value, value_len, 0, add_bytes);
-    }
+    // mc:i: (output of bamsormadup and other biobambam tools - mc in small letters) 
+    // appears to be a pos value usually close to PNEXT, but it is -1 is POS=PNEXT.
+    else if (dict_id.num == dict_id_OPTION_mc) 
+        sam_seg_mc_field (vb, dict_id, value, value_len, add_bytes);
 
     // E2 - SEQ data (note: E2 doesn't have a context - it shares with SEQ)
     else if (dict_id.num == dict_id_fields[SAM_E2_Z]) {
         ASSSEG0 (dl->seq_len, value, "E2 tag without a SEQ"); 
-        ASSERT (value_len == dl->seq_len, 
+        ASSINP (value_len == dl->seq_len, 
                 "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                 txt_name, dl->seq_len, value_len, value_len, value);
 
@@ -957,7 +972,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
     // U2 - QUAL data (note: U2 doesn't have a context - it shares with QUAL)
     else if (dict_id.num == dict_id_fields[SAM_U2_Z]) {
         ASSSEG0 (dl->seq_len, value, "U2 tag without a SEQ"); 
-        ASSERT (value_len == dl->seq_len, 
+        ASSINP (value_len == dl->seq_len, 
                 "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                 txt_name, dl->seq_len, value_len, value_len, value);
 

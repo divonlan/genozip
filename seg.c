@@ -30,9 +30,9 @@ WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *
     
     WordIndex node_index = ctx_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
-    ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
-            "Error in seg_by_did_i: out of range: dict=%s node_i=%d nodes.len=%u ol_nodes.len=%u",  
-            ctx->name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_nodes.len);
+    ASSERTE (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
+             "out of range: dict=%s node_i=%d nodes.len=%u ol_nodes.len=%u",  
+             ctx->name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_nodes.len);
     
     NEXTENT (uint32_t, ctx->node_i) = node_index;
     ctx->txt_len += add_bytes;
@@ -62,7 +62,7 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
                 // check for Windows-style '\r\n' end of line 
                 if (i && str[i] == '\n' && str[i-1] == '\r') {
                     (*len)--;
-                    ASSERT0 (has_13, "Error in seg_get_next_item: has_13==NULL but expecting it because allow_newline=true");
+                    ASSERTE0 (has_13, "has_13==NULL but expecting it because allow_newline=true");
                     *has_13 = true;
                 }
 
@@ -130,7 +130,7 @@ void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_p
 
 WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
 {
-    ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
+    ASSERTE0 (chrom_str_len, "chrom_str_len=0");
 
     bool is_new;
     WordIndex chrom_node_index = seg_by_did_i_ex (vb, chrom_str, chrom_str_len, CHROM, chrom_str_len+1, &is_new);
@@ -146,25 +146,29 @@ WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str
 
 // scans a pos field - in case of non-digit or not in the range [0,MAX_POS], either returns -1
 // (if allow_nonsense) or errors
-PosType seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool allow_nonsense)
+PosType seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, 
+                           SegError *err) // out - if NULL, exception if error
 {
-    PosType value;
-    bool is_int = str_get_int (snip, snip_len, &value);
+    PosType value=0;
+    bool is_int = str_get_int (snip, snip_len, &value); // value unchanged if not integer
 
-    if (is_int && value >= 0 && value <= MAX_POS)
+    if (is_int && value >= 0 && value <= MAX_POS) {
+        *err = ERR_SEG_NO_ERROR;
         return value; // all good
+    }
 
-    ASSSEG (allow_nonsense, snip, "position field must be an integer number between 0 and %"PRId64", seeing: %.*s", 
+    ASSSEG (err, snip, "position field must be an integer number between 0 and %"PRId64", seeing: %.*s", 
             MAX_POS, snip_len, snip);
 
-    return -1; // bad number
+    *err = is_int ? ERR_SEG_OUT_OF_RANGE : ERR_SEG_NOT_INTEGER;
+    return value; // in- or out-of- range integer, or 0 if value is not integer
 }
 
 // returns POS value if a valid pos, or 0 if not
 PosType seg_pos_field (VBlock *vb, 
                        DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
                        DidIType base_did_i,    // mandatory: base for delta
-                       bool allow_non_number,  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+                       bool seg_bad_snips_too, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
                        const char *pos_str, unsigned pos_len, // option 1
                        PosType this_pos,       // option 2
                        unsigned add_bytes)
@@ -177,35 +181,38 @@ PosType seg_pos_field (VBlock *vb,
 
     base_ctx->no_stons = true;
 
-    if (pos_str)
-        this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
+    SegError err = ERR_SEG_NO_ERROR;
+    if (pos_str) {
+        this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, &err);
+        ASSERTE (seg_bad_snips_too || !err, "invalid value %.*s in %s", pos_len, pos_str, vb->contexts[snip_did_i].name);
 
-    // < 0  -  caller allows a non-valid-number and this is indeed a non-valid-number, just store the string
-    // cancled   // == 0 - 
-    // cancled   //     for the primary pos field - we proceed as usual as we will need this value when reconstructing the reference
-    // cancled   for non-primary - e.g. "not available" in SAM_PNEXT - we store "0" verbatim with SNIP_DONT_STORE
-    // In both cases, we store as SNIP_DONT_STORE so that piz doesn't update last_value after reading this value
-    if (this_pos < 0) {// } || (this_pos==0 && !(snip_ctx == base_ctx && base_did_i == DTF(pos)))) { 
+        // we accept out-of-range integer values for non-self-delta
+        if (snip_did_i != base_did_i && err == ERR_SEG_OUT_OF_RANGE) err = ERR_SEG_NO_ERROR;
 
-        if (pos_str) { // option 1
+        if (err) {
             SAFE_ASSIGN (1, pos_str-1, SNIP_DONT_STORE);
             seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, add_bytes, NULL); 
             SAFE_RESTORE (1);
+            snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
+            return 0; // invalid pos
         }
-        else { // option 2 
+    }
+
+    else {
+        // check out-of-range for self-delta
+        if (snip_did_i == base_did_i && (this_pos < 0 || this_pos > MAX_POS)) {
+            err = ERR_SEG_OUT_OF_RANGE;
             char snip[15] = { SNIP_DONT_STORE };
             unsigned snip_len = 1 + str_int (this_pos, &snip[1]);
             seg_by_ctx (vb, snip, snip_len, snip_ctx, add_bytes, NULL); 
+            snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
+            return 0; // invalid pos
         }
-
-        snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
-        return 0; // invalid pos
     }
 
     PosType pos_delta = this_pos - base_ctx->last_value.i;
     
-    // if we're self-delta'ing - we store the value
-    if (snip_ctx == base_ctx) base_ctx->last_value.i = this_pos; 
+    snip_ctx->last_value.i = this_pos;
 
     // if the delta is too big, add this_pos (not delta) to local and put SNIP_LOOKUP in the b250
     // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
@@ -491,7 +498,7 @@ void seg_compound_field (VBlock *vb,
         
             // process the subfield that just ended
             Context *sf_ctx = ctx_get_ctx (vb, con.items[con.num_items].dict_id);
-            ASSERT (sf_ctx, "Error in seg_compound_field: sf_ctx for %s is NULL", dis_dict_id (con.items[con.num_items].dict_id).s);
+            ASSERTE (sf_ctx, "sf_ctx for %s is NULL", dis_dict_id (con.items[con.num_items].dict_id).s);
 
             sf_ctx->st_did_i = field_ctx->did_i;
 
@@ -690,7 +697,7 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 
     len /= NUM_LINES_IN_TEST; // average length of a line
 
-    ASSERT (vb->txt_data.len, "Error in seg_estimate_num_lines for vb=%u: txt_data is empty", vb->vblock_i); 
+    ASSERTE (vb->txt_data.len, "vb=%u: txt_data is empty", vb->vblock_i); 
 
     ASSSEG (newlines==DTP (line_height) || len < vb->txt_data.len, vb->txt_data.data, 
             "a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 

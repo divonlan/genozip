@@ -86,6 +86,8 @@ typedef struct Context {
     Buffer b250;               // The buffer of b250 data containing indices (in b250) to word_list. 
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
     Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if inst.pair_b250 or inst.pair_local is set)
+    LastValueType last_value;  // last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
+    int64_t last_delta;        // last delta value calculated
     SnipIterator pair_b250_iter; // Iterator on pair, if it contains b250 data
 
     // ----------------------------
@@ -146,8 +148,6 @@ typedef struct Context {
     uint32_t next_local;       // PIZ only: iterator on Context.local
 
     uint32_t last_line_i;      // PIZ only: the last line_i this ctx was encountered
-    LastValueType last_value;  // last value of this context (in PIZ, it can be a basis for a delta and other uses)
-    int64_t last_delta;        // PIZ only: last delta value calculated
 
     // PIZ-only instructions
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.

@@ -12,6 +12,8 @@
 #include "context.h"
 #include "container.h"
 
+typedef enum { ERR_SEG_NO_ERROR=0, ERR_SEG_OUT_OF_RANGE, ERR_SEG_NOT_INTEGER } SegError;
+
 extern void seg_all_data_lines (VBlockP vb); 
 
 extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, 
@@ -27,7 +29,7 @@ extern WordIndex seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, Co
 
 extern WordIndex seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
-extern PosType seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_len, bool allow_nonsense);
+extern PosType seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_len, SegError *err);
 
 extern void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes);
 #define seg_integer(vb,did_i,n,account_for_bytes) seg_integer_do((VBlockP)(vb), (did_i), (n), (account_for_bytes) ? sizeof(n) : 0)
@@ -36,7 +38,7 @@ extern void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_
 extern PosType seg_pos_field (VBlockP vb, 
                               DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
                               DidIType base_did_i,    // mandatory: base for delta
-                              bool allow_non_number,      // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+                              bool seg_bad_snips_too, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
                               const char *pos_str, unsigned pos_len, 
                               PosType this_pos,
                               unsigned add_bytes);

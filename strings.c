@@ -103,7 +103,8 @@ StrText str_int_s (int64_t n)
 
 // similar to strtoull, except it rejects numbers that are shorter than str_len, or that their reconstruction would be different
 // the the original string
-bool str_get_int (const char *str, unsigned str_len, int64_t *value)
+bool str_get_int (const char *str, unsigned str_len, 
+                  int64_t *value) // out - modified only if str is an integer
 {
     int64_t out = 0;
 
@@ -210,7 +211,7 @@ int str_print_text (const char **text, unsigned num_lines,
                     const char *newline_separator, 
                     unsigned line_width /* 0=calcuate optimal */)
 {                       
-    ASSERT0 (text, "Error in str_print_text: text is NULL");
+    ASSERTE0 (text, "text is NULL");
     
     if (!line_width) {
 #ifdef _WIN32
@@ -246,8 +247,8 @@ int str_print_text (const char **text, unsigned num_lines,
 // receives a user response, a default "Y" or "N" (or NULL) and modifies the response to be "Y" or "N"
 bool str_verify_y_n (char *response, unsigned response_size, const char *y_or_n)
 {
-    ASSERT0 (!y_or_n || (strlen (y_or_n)==1 && (y_or_n[0]=='Y' || y_or_n[0]=='N')), 
-             "Error: y_or_n needs to be NULL, \"Y\" or \"N\"");
+    ASSERTE0 (!y_or_n || (strlen (y_or_n)==1 && (y_or_n[0]=='Y' || y_or_n[0]=='N')), 
+              "y_or_n needs to be NULL, \"Y\" or \"N\"");
 
     // default is N (or no default) and first character of the user's response is y or Y
     if ((!y_or_n || y_or_n[0] == 'N') && (response[0] == 'y' || response[0] == 'Y')) response[0] = 'Y'; 
