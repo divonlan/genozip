@@ -584,7 +584,7 @@ void flags_store_command_line (int argc, char **argv)
             bufprintf (evb, &command_line, "%s%s", argv[i], (i < argc-1 ? " ": ""))
     }
 
-    if (command == ZIP)
+    if (command == ZIP && !isatty(0))
         flags_store_piped_in_details();    
 }
 
