@@ -174,26 +174,31 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
     va_end (args);
 }
 
-static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_ratio,
+static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_ratio, Codec codec,
                                 int64_t all_txt_size, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
     bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &z_file->stats_buf, "NAME                  TXT      %%       ZIP      %%   RATIO%s\n", "");
+    bufprintf (evb, &z_file->stats_buf, "NAME              GENOZIP      %%      %4s   RATIO       TXT   RATIO      %%\n", 
+               codec_name (codec));
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-                       s->name, str_size ((double)s->txt_size / txt_ratio).s, s->pc_of_txt, 
-                       str_size (s->z_size).s, s->pc_of_z, 
-                       ((double)s->txt_size / txt_ratio) / (double)s->z_size);
+            bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %6.1fX %9s %6.1fX %5.1f%%\n", 
+                       s->name, 
+                       str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
+                       str_size ((double)s->txt_size / txt_ratio).s, ((double)s->txt_size / txt_ratio) / (double)s->z_size, // codec-compressed size and ratio z vs compressed
+                       str_size ((double)s->txt_size).s, (double)s->txt_size / (double)s->z_size, // txt size and ratio z vs txt
+                       s->pc_of_txt); // the % of total txt which is in this line
     
     bufprintf (evb, &z_file->stats_buf, "TOTAL           "
-                "%9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-                str_size ((double)all_txt_size / txt_ratio).s, all_pc_of_txt, str_size (all_z_size).s, 
-                all_pc_of_z, all_comp_ratio / txt_ratio);
+                "%9s %5.1f%% %9s %6.1fX %9s %6.1fX %5.1f%%\n", 
+                str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
+                str_size (all_txt_size / txt_ratio).s, all_comp_ratio / txt_ratio, // total codec-compressed size and ratio z vs compressed
+                str_size (all_txt_size).s, all_comp_ratio, // total txt fize and ratio z vs txt
+                all_pc_of_txt);
 }
 
-static void stats_output_STATS (StatsByLine *s, unsigned num_stats, double txt_ratio,
+static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
                                 int64_t all_txt_size, int64_t all_uncomp_dict, int64_t all_comp_dict, int64_t all_comp_b250, int64_t all_comp_data, 
                                 int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
@@ -215,17 +220,13 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats, double txt_r
                        PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
                        s->hash.s, s->pc_hash_occupancy, // Up to here - these don't appear in the total
                        s->uncomp_dict.s, s->comp_dict.s, s->comp_b250.s, s->comp_data.s, str_size (s->z_size).s, 
-                       str_size ((double)s->txt_size / txt_ratio).s, ((double)s->txt_size / txt_ratio) / (double)s->z_size, s->pc_of_txt, s->pc_of_z);
+                       str_size ((double)s->txt_size).s, (double)s->txt_size / (double)s->z_size, s->pc_of_txt, s->pc_of_z);
 
     bufprintf (evb, &z_file->STATS_buf, "TOTAL                                                                               "
                "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
                str_size (all_uncomp_dict).s, str_size (all_comp_dict).s,  str_size (all_comp_b250).s, 
-               str_size (all_comp_data).s,   str_size (all_z_size).s, str_size ((double)all_txt_size / txt_ratio).s, 
-               all_comp_ratio / txt_ratio, all_pc_of_txt, all_pc_of_z);
-
-    if (txt_ratio != 1)
-        bufprintf (evb, &z_file->STATS_buf, "\nNote: The source file was compressed with %s. txt sizes were calculated by applying the observed source file-wide compression ratio to the uncompressed txt data\n", 
-                   codec_name (txt_file->codec));
+               str_size (all_comp_data).s,   str_size (all_z_size).s, str_size (all_txt_size).s, 
+               all_comp_ratio, all_pc_of_txt, all_pc_of_z);
 }
 
 // generate the stats text - all sections except genozip header and the two stats sections 
@@ -314,7 +315,7 @@ void stats_compress (void)
 
     // long form stats from --show-STATS    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
-    stats_output_STATS (sbl, num_stats, txt_ratio,
+    stats_output_STATS (sbl, num_stats, 
                         all_txt_size, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_data, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
     
     // consolidates stats of child contexts into the parent one
@@ -332,7 +333,7 @@ void stats_compress (void)
 
     // short form stats from --show-stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
-    stats_output_stats (sbl, num_stats, txt_ratio, all_txt_size, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
+    stats_output_stats (sbl, num_stats, txt_ratio, txt_file->codec, all_txt_size, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
 
     stats_check_count (all_z_size, count_per_section);
 
