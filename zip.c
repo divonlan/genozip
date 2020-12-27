@@ -35,50 +35,59 @@ static Mutex wait_for_vb_1_mutex = {};
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bool is_final_component)
 {
-    double z_bytes   = (double)z_file->disk_so_far;
-    double txt_bytes = (double)z_file->txt_data_so_far_bind;
-    double ratio     = txt_bytes / z_bytes;
-    double ratio2    = -1;
+    double z_bytes        = (double)z_file->disk_so_far;
+    double plain_bytes    = (double)z_file->txt_data_so_far_bind;
+    double comp_bytes     = (double)txt_file->disk_so_far; // unlike disk_size, works also for piped-in files
+    double ratio_vs_plain = plain_bytes / z_bytes;
+    double ratio_vs_comp  = -1;
 
     // in bind mode, we don't show compression ratio for files except for the last one
     if (flag.bind) { 
 
-        static uint64_t txt_file_disk_size_bind = 0;
+        static double comp_bytes_bind = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
 
         // reset for every set of bound files (we might have multiple sets if --pair)
         if (z_file->num_txt_components_so_far == 1) {
-            txt_file_disk_size_bind=0; 
+            comp_bytes_bind=0; 
             source_file_type = txt_file->type;
         }
 
         else if (source_file_type != txt_file->type) // heterogenous source file types
             source_file_type = UNKNOWN_FILE_TYPE;
 
-        txt_file_disk_size_bind += txt_file->disk_size;
+        comp_bytes_bind += comp_bytes;
 
-        if (is_final_component) 
-            ratio2 = (double)txt_file_disk_size_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+        if (is_final_component) { 
+            ratio_vs_comp = comp_bytes_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+            if (flag.debug_progress) 
+                fprintf (info_stream, "Ratio calculation: ratio_vs_comp=%f = comp_bytes_bind=%"PRIu64" / z_bytes=%"PRIu64"\n",
+                         ratio_vs_comp, txt_file->disk_size, (uint64_t)z_bytes);
+        }
         else 
             progress_finalize_component_time ("Done", md5);
     }
-    else 
-        ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
-    
+    else {
+        ratio_vs_comp = comp_bytes / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+        if (flag.debug_progress) 
+            fprintf (info_stream, "Ratio calculation: ratio_vs_comp=%f = comp_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
+                     ratio_vs_comp, comp_bytes, (uint64_t)z_bytes);
+    }
+
     // when making a reference, we don't care about the compression
     if (flag.make_reference)
         progress_finalize_component_time ("Done", md5);
 
-    // when compressing BAM report only ratio2 (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
+    // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     else if (z_file->data_type == DT_BAM) 
-            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio2, md5);
+            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_comp, md5);
 
-    else if (ratio2 >= 0) {
-        if (txt_file->codec == CODEC_NONE || ratio2 < 1.05)  // source file was plain txt or ratio2 is low (nothing to brag about)
-            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio, md5);
+    else if (ratio_vs_comp >= 0) {
+        if (txt_file->codec == CODEC_NONE || ratio_vs_comp < 1.05)  // source file was plain txt or ratio_vs_comp is low (nothing to brag about)
+            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_plain, md5);
         
         else // source was compressed
-            progress_finalize_component_time_ratio_better (dt_name (z_file->data_type), ratio, file_exts[txt_file->type], ratio2, md5);
+            progress_finalize_component_time_ratio_better (dt_name (z_file->data_type), ratio_vs_plain, file_exts[txt_file->type], ratio_vs_comp, md5);
     }
 }
 

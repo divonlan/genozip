@@ -143,6 +143,8 @@ void progress_update_status (const char *status)
         fprintf (info_stream, "\n");
         last_len = 0;
     }
+
+    fflush (info_stream);
 }
 
 void progress_finalize_component (const char *status)
