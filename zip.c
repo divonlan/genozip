@@ -35,7 +35,7 @@ static Mutex wait_for_vb_1_mutex = {};
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bool is_final_component)
 {
-    double z_bytes        = (double)z_file->disk_so_far;
+    double z_bytes        = MAX ((double)z_file->disk_so_far, 1.0); // at least one, to avoid division by zero in case of a z_bytes=0 issue
     double plain_bytes    = (double)z_file->txt_data_so_far_bind;
     double comp_bytes     = (double)txt_file->disk_so_far; // unlike disk_size, works also for piped-in files
     double ratio_vs_plain = plain_bytes / z_bytes;
@@ -62,7 +62,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bo
             ratio_vs_comp = comp_bytes_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
             if (flag.debug_progress) 
                 fprintf (info_stream, "Ratio calculation: ratio_vs_comp=%f = comp_bytes_bind=%"PRIu64" / z_bytes=%"PRIu64"\n",
-                         ratio_vs_comp, txt_file->disk_size, (uint64_t)z_bytes);
+                         ratio_vs_comp, (uint64_t)comp_bytes_bind, (uint64_t)z_bytes);
         }
         else 
             progress_finalize_component_time ("Done", md5);
@@ -71,7 +71,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bo
         ratio_vs_comp = comp_bytes / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
         if (flag.debug_progress) 
             fprintf (info_stream, "Ratio calculation: ratio_vs_comp=%f = comp_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
-                     ratio_vs_comp, comp_bytes, (uint64_t)z_bytes);
+                     ratio_vs_comp, (uint64_t)comp_bytes, (uint64_t)z_bytes);
     }
 
     // when making a reference, we don't care about the compression
