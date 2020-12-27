@@ -41,6 +41,10 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bo
     double ratio_vs_plain = plain_bytes / z_bytes;
     double ratio_vs_comp  = -1;
 
+    if (flag.debug_progress) 
+        fprintf (info_stream, "Ratio calculation: ratio_vs_plain=%f = plain_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
+                    ratio_vs_plain, (uint64_t)plain_bytes, (uint64_t)z_bytes);
+
     // in bind mode, we don't show compression ratio for files except for the last one
     if (flag.bind) { 
 
