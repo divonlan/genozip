@@ -313,4 +313,9 @@ Cleanup:
 - bug fixes 
 
 9.0.21
-bug fixes
+bug fixes, including major bug with mc:i optional field in SAM
+
+9.0.22
+- more consistent --bgzf, --sam, --bam behavior in genocat
+- better --stats
+- minor bug fixes
