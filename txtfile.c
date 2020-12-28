@@ -514,7 +514,7 @@ void txtfile_write_one_vblock (VBlockP vb)
 {
     START_TIMER;
 
-    if (txt_file->bgzf_flags.level)
+    if (txt_file->codec == CODEC_BGZF)
         bgzf_write_to_disk (vb); 
     else
         txtfile_write_to_disk (&vb->txt_data);
@@ -741,7 +741,7 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
     // case: the user wants us to reconstruct (or not) the BGZF blocks in a particular way, this overrides the z_file instructions 
     else 
         txt_file->bgzf_flags = (struct FlagsBgzf){ // case: we're creating our own BGZF blocks
-            .has_eof_block = flag.bgzf >= 1, // add an EOF block at the end
+            .has_eof_block = true, // add an EOF block at the end
             .library       = BGZF_LIBDEFLATE, 
             .level         = flag.bgzf 
         };
@@ -779,7 +779,7 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
         if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
 
         // compress the txt header with BGZF if needed
-        if (txt_file->bgzf_flags.level) { 
+        if (txt_file->codec == CODEC_BGZF) { 
             bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
             bgzf_compress_vb (evb); // compress data (but not if we are re-creating SEC_BGZF blocks and header is too small to fit into the first block)
             bgzf_write_to_disk (evb); // write blocks to disk and/or move unconsumed data to the next vb

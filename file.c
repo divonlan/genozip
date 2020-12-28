@@ -526,12 +526,12 @@ static bool file_open_txt_write (File *file)
              file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
             
             file->type = txt_out_ft_by_dt[file->data_type][1]; 
-            if (flag.bgzf == FLAG_BGZF_BY_ZFILE) flag.bgzf = BGZF_COMP_LEVEL_DEFAULT;
+            if (flag.bgzf == FLAG_BGZF_BY_ZFILE) flag.bgzf = BGZF_COMP_LEVEL_DEFAULT; // default unless user specified otherwise
         }
 
         // case: BAM
         else if (file->data_type == DT_BAM) 
-            file->type = BAM; // flag.bgzf already set in flags_update_piz_one_file
+            file->type = BAM; 
         
         // case: not .gz and not BAM - use the default plain file format
         else { 
@@ -564,14 +564,14 @@ static bool file_open_txt_write (File *file)
     if (file->codec == CODEC_GZ || file->codec == CODEC_BGZF) 
         file->codec = CODEC_BGZF; // we always write gzip format output with BGZF
 
-    // in genocat (including translation) if the user didn't explicitly set bgzf, we set it now, 
-    // based on the codec, ignoring SEC_BGZF
-    if (exe_type == EXE_GENOCAT && flag.bgzf == FLAG_BGZF_BY_ZFILE) 
-        flag.bgzf = (file->codec == CODEC_BGZF ? BGZF_COMP_LEVEL_DEFAULT : 0); // ignore flag derived from z_file, and get the codec from the output filename extension below
-
     // case the user overrides with --bgzf=0 (override bgzf set here or before, in flags_update_piz_one_file)
     if (flag.bgzf == 0 && file->codec == CODEC_BGZF) 
         file->codec = CODEC_NONE;
+
+    // in genocat (including translation) with CODEC_BGZF, set bgzf=0 unless user specicied --bgzf (ignoring SEC_BGZF).
+    // note: a user-specified --bgzf=0 is CODEC_NONE, but a genocat without --bgzf is CODEC_BGZF with level=0
+    if (exe_type == EXE_GENOCAT && file->codec == CODEC_BGZF && flag.bgzf == FLAG_BGZF_BY_ZFILE) 
+        flag.bgzf = 0;
 
     // don't actually open the output file if we're just testing in genounzip or PIZing a reference file
     if (flag.test || flag.reading_reference) return true;
@@ -752,7 +752,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     }
     else { // stdout
         file->data_type = data_type; 
-        file->type = txt_out_ft_by_dt[data_type][0];
+        file->type = txt_out_ft_by_dt[data_type][flag.bgzf >= 1]; // plain file or .gz file
     }
 
     if (mode==READ)

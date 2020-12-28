@@ -135,7 +135,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     reconstruct_from_ctx (vb, trans.toplevel, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
-    if (txt_file->bgzf_flags.level) 
+    if (txt_file->codec == CODEC_BGZF) 
         bgzf_compress_vb (vb);
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
@@ -299,7 +299,7 @@ static bool piz_read_one_vb (VBlock *vb)
     bool ok_to_compute = DTPZ(piz_read_one_vb) ? DTPZ(piz_read_one_vb)(vb, sl) : true; // true if we should go forward with computing this VB (otherwise skip it)
 
     // calculate the BGZF blocks from SEC_BGZF that the compute thread is expected to re-create
-    if (flag.bgzf == FLAG_BGZF_BY_ZFILE && txt_file->bgzf_flags.level > 0)     
+    if (flag.bgzf == FLAG_BGZF_BY_ZFILE && txt_file->codec == CODEC_BGZF)     
         bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
 
     COPY_TIMER (piz_read_one_vb); 

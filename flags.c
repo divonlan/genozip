@@ -175,7 +175,7 @@ void flags_init_from_command_line (int argc, char **argv)
             "i:I:cdfhlLqQt^Vzm@:o:p:B:9wWFe:E:2z:u", // genozip (note: includes some genounzip options to be used in combination with -d)
             "cz:fhLqQt^V@:uo:p:me:wWx",              // genounzip
             "hLVp:qfub",                             // genols
-            "hLV@:p:qQ1r:s:H1Go:fg:e:E:wWx"          // genocat
+            "z:hLV@:p:qQ1r:s:H1Go:fg:e:E:wWx"          // genocat
         };
 
         int option_index = -1;
@@ -484,14 +484,7 @@ void flags_update_piz_one_file (void)
         flag.header_only = false;
         flag.header_only_fast  = true;
     }
-/*
-    // Case were we set flag.bgzf even if the user didn't explicitly ask for it with --bgzf
-    // note: another case not covered here is when the output file type is GZ or BGZ or BAM - handled in file_open_txt_write
-    if (!flag.plain && // user didn't not explicitly tell us to refrain from BGZF
-        (z_file->z_flags.bgzf && exe_type != EXE_GENOCAT) && // source file had BGZF 
-        (!flag.to_stdout || (flag.show_headers && exe_type == EXE_GENOCAT))) // we are outputing to a disk file OR user asked to see the headers (so we want to show her BGZF too)
-        flag.bgzf = true;   
-*/
+
     // if interleaving bgzf is always 0
     if (flag.interleave)
         flag.bgzf = 0;

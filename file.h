@@ -220,7 +220,7 @@ extern const char *file_exts[];
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 }, \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
                            { GVF, GVF_GZ, /*GFF3, GFF3_GZ,*/ 0 }, \
-                           { ME23, ME23_ZIP, 0 }, \
+                           { ME23, ME23 /* no GZ */, ME23_ZIP, 0 }, \
                            { 0 }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
                            { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
                            { GNRIC, GNRIC_GZ, 0 }, \
