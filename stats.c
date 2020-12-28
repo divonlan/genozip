@@ -84,8 +84,9 @@ static void stats_show_file_metadata (Buffer *buf)
 
     char timestr[100];
     time_t now = time (NULL);
-    strftime (timestr, 100, "%Y-%m-%d %H:%M:%S", gmtime (&now));
-    bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s UTC\n", GENOZIP_CODE_VERSION, arch_get_distribution(), timestr);
+    strftime (timestr, 100, "%Y-%m-%d %H:%M:%S", localtime (&now));
+    bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s %s\n", 
+               GENOZIP_CODE_VERSION, arch_get_distribution(), timestr, tzname[daylight]);
 }
 
 typedef struct {
