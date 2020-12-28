@@ -643,41 +643,50 @@ static void file_initialize_z_file_data (File *file)
 // returns true if successful
 static bool file_open_z (File *file)
 {
+    ASSINP (!file->is_remote, "it is not possible to access remote genozip files; when attempting to open %s", file->name);
+    ASSINP0 (file->name, "it is not possible to redirect genozip files from stdin / stdout");
+
     // for READ, set data_type
     if (file->mode == READ) {
 
-        ASSERTE0 (file->name, "cannot redirect genozip files from stdin");
+        ASSINP (!flag.reading_reference || file_has_ext (file->name, REF_GENOZIP_), 
+                "You specified file \"%s\", however with --reference or --REFERENCE, you must specify a genozip reference file (%s extension)\n"
+                "Tip: You can create a genozip reference file from a FASTA file with 'genozip --make-reference myfasta.fa'",
+                file->name, REF_GENOZIP_);
 
-        if (!file_has_ext (file->name, GENOZIP_EXT)) {
-            if (flag.multiple_files) 
-                RETURNW (false, true, "Skipping %s - it doesn't have a .genozip extension", file_printname (file))
-            else {
-                if (flag.reading_reference)
-                    ABORT ("%s: You specified file \"%s\", but with --reference or --REFERENCE, you must specify a genozip reference file (.ref.genozip extension)\n"
-                           "Tip: You can create a genozip reference file from a FASTA file with 'genozip --make-reference myfasta.fa'",
-                           global_cmd, file->name)
+        if (!flag.seg_only || flag.reading_reference) {
+            file->file = fopen (file->name, READ);
+
+            // verify that this is a genozip file 
+            // we read the Magic at the end of the file (as the magic at the beginning may be encrypted)
+            uint32_t magic;
+            if (  fseek (file->file, -(int)sizeof (magic), SEEK_END) || 
+                  !fread (&magic, sizeof (magic), 1, file->file) ||
+                  BGEN32 (magic) != GENOZIP_MAGIC) {
+
+                FCLOSE (file->file, file_printname (file));
+
+                if (flag.multiple_files) 
+                    RETURNW (false, true, "Skipping %s - it is not a valid genozip file", file_printname (file))
                 else
-                    ABORT ("%s: file %s must have a " GENOZIP_EXT " extension", global_cmd, file_printname (file));
+                    ABORTINP ("file %s is not a valid genozip file", file_printname (file));
             }
         }
 
-        file->data_type = file_get_dt_by_z_ft (file->type); // if we will verify this is correct in zfile_read_genozip_header
+        file->data_type = DT_NONE; // we will get the data type from the genozip header, not by the file name
     }
     else { // WRITE or WRITEREAD - data_type is already set by file_open
-        ASSINP (file->redirected || file_has_ext (file->name, GENOZIP_EXT), 
+        ASSINP (file_has_ext (file->name, GENOZIP_EXT), 
                 "file %s must have a " GENOZIP_EXT " extension", file_printname (file));
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
         // uses the --output option, he is unrestricted in the choice of a file name
         file->type = file_get_z_ft_by_txt_in_ft (file->data_type, txt_file->type); 
 
         mutex_initialize (file->dicts_mutex);
+
+        file->file = fopen (file->name, file->mode);
     }
-
-    ASSINP (!file->is_remote, "it is not possible to access remote genozip files; when attempting to open %s", file->name);
     
-    if (!flag.seg_only || flag.reading_reference)
-        file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, file->mode);
-
     file_initialize_z_file_data (file);
 
     return file->file != 0 || flag.seg_only;

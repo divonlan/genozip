@@ -340,9 +340,6 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     ASSINP (!txt_filename || !url_is_url (txt_filename), 
             "output files must be regular files, they cannot be a URL: %s", txt_filename);
 
-    // skip this file if its size is 0
-    RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
-
     z_file = file_open (z_filename, READ, Z_FILE, DT_NONE);    
 
     // read the genozip header:
@@ -688,7 +685,9 @@ int main (int argc, char **argv)
                                                      num_files;
 
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
+    SET_FLAG (quiet); // suppress warnings
     qsort (&argv[optind], num_files, sizeof (argv[0]), main_sort_input_filenames);
+    RESTORE_FLAG (quiet);
     
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (flag.threads_str) {

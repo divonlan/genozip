@@ -266,7 +266,7 @@ typedef struct File {
     FileSupertype supertype;            
     FileType type;
     bool is_remote;                    // true if file is downloaded from a url
-    bool redirected;                   // true if this file is redirected from stdin/stdout
+    bool redirected;                   // txt_file: true if this file is redirected from stdin/stdout
     bool is_eof;                       // we've read the entire file
     DataType data_type;
     Codec codec;                       // ZIP - txt_file: generic codec used with this file (in PIZ we use flag.bgzf instead)

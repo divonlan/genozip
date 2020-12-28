@@ -827,7 +827,9 @@ const char *txtfile_piz_get_filename (const char *orig_name,const char *prefix, 
     char *txt_filename = (char *)MALLOC(fn_len + 10);
 
     #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
-        ((z_file->data_type==(from) && flag.out_dt==(to) && !strcmp (&txt_filename[fn_len-genozip_ext_len-strlen(ext)], (ext))) ? (int)strlen(ext) : 0) 
+        ((z_file->data_type==(from) && flag.out_dt==(to) && \
+         fn_len >= genozip_ext_len+strlen(ext) && \
+         !strcmp (&txt_filename[fn_len-genozip_ext_len-strlen(ext)], (ext))) ? (int)strlen(ext) : 0) 
 
     // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
     int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_BAM,   ".sam") +

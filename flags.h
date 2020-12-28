@@ -97,7 +97,8 @@ extern FILE *info_stream;
 #define RESTORE_FLAGS flag = save_flag
 
 #define SAVE_FLAG(f) typeof(flag.f) save_##f = flag.f 
-#define RESET_FLAG(f) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)0
+#define SET_FLAG(f) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)1
+#define CLEAR_FLAG(f) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)0
 #define RESTORE_FLAG(f) flag.f = save_##f
 
 // check for incompatabilities between flags

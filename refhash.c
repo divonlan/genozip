@@ -332,7 +332,7 @@ void refhash_load_standalone (void)
     flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
 
     TEMP_VALUE (command, PIZ);
-    RESET_FLAG (test);
+    CLEAR_FLAG (test);
 
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);

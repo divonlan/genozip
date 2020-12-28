@@ -965,10 +965,12 @@ DataType zfile_get_file_dt (const char *filename)
 {
     FileType ft = file_get_type (filename);
     DataType dt = file_get_dt_by_z_ft (ft);
+    File *file = NULL;
 
     // case: we don't know yet what file type this is - we need to read the genozip header to determine
     if (dt == DT_NONE && filename) {
-        File *file = file_open (filename, READ, Z_FILE, DT_NONE);
+        if (!(file = file_open (filename, READ, Z_FILE, DT_NONE)) || !file->file)
+            goto done; // not a genozip file
 
         // read the footer from the end of the file
         if (!file_seek (file, -sizeof(SectionFooterGenozipHeader), SEEK_END, true))
@@ -995,11 +997,10 @@ DataType zfile_get_file_dt (const char *filename)
         if (BGEN32 (header.h.magic) != GENOZIP_MAGIC) goto done;
 
         dt = (DataType)BGEN16 (header.data_type);
-
-        file_close (&file, false, false);
     }
 
 done:
+    file_close (&file, false, false);
     return dt;
 }
 

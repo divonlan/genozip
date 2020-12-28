@@ -882,7 +882,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 
     static Buffer ref_seq_section = EMPTY_BUFFER;
 
-    RESET_FLAG (show_headers);
+    CLEAR_FLAG (show_headers);
     zfile_read_section (ref_file, evb, ra->vblock_i, &ref_seq_section, "ref_seq_section", SEC_REFERENCE, *sl);
     RESTORE_FLAG (show_headers);
 
