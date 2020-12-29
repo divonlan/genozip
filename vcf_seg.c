@@ -133,8 +133,18 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
 static DictId vcf_seg_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
 {
     unsigned i=0; for (; i < *len && (*str)[i] != ':' && (*str)[i] != '\t' && (*str)[i] != '\n'; i++);
-
-    DictId dict_id = dict_id_vcf_format_sf (dict_id_make (*str, i));
+    
+    DictId dict_id;
+    // case: normal field - starts with a letter or another character in the range
+    if ((*str)[0] >= 64 && (*str)[0] <= 127) 
+        dict_id = dict_id_vcf_format_sf (dict_id_make (*str, i));
+    
+    // case: unusual field - starts with an out-range character, eg a digit - prefix with @ so its a legal FORMAT dict_id
+    else {
+        SAFE_ASSIGN (save, *str - 1, '@')
+        dict_id = dict_id_vcf_format_sf (dict_id_make (*str-1, i+1));
+        SAFE_RESTORE (save);
+    }
 
     *str += i+1;
     *len -= i+1;
@@ -166,7 +176,8 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
     bool last_item = false;
     do {
         ASSSEG (format_mapper.num_items < MAX_SUBFIELDS, field_start,
-                "FORMAT field has too many subfields, the maximum allowed is %u",  MAX_SUBFIELDS);
+                "FORMAT field has too many subfields, the maximum allowed is %u: \"%.*s\"",  
+                MAX_SUBFIELDS, field_len, field_start);
 
         DictId dict_id = vcf_seg_get_format_subfield (&str, (unsigned *)&len);
         last_item = (str[-1] == '\t' || str[-1] == '\n');
@@ -178,7 +189,9 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         };
 
         ASSSEG (dict_id_is_vcf_format_sf (dict_id), field_start,
-                "string %.*s in the FORMAT field is not a legal subfield", DICT_ID_LEN, dict_id.id);
+                "string %.*s in the FORMAT field \"%.*s\" is not a legal subfield", 
+                DICT_ID_LEN, dict_id.id, field_len, field_start);
+
     } 
     while (!last_item && len > 0);
     
@@ -193,8 +206,8 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
     dl->format_node_i = node_index;
 
     if (is_new) {
-        ASSERT (node_index == vb->format_mapper_buf.len, 
-                "Error: node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
+        ASSERTE (node_index == vb->format_mapper_buf.len, 
+                 "node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
         buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf");
     }    
@@ -327,8 +340,8 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
 static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigned sample_i, uint32_t max_new_size)
 {
     // protect against highly unlikely case that we don't have enough consumed txt data to store increased-ploidy ht data 
-    ASSERT (new_ploidy * vb->line_i * vcf_num_samples <= max_new_size, 
-            "Error: haplotype data overflow due to increased ploidy on line %u", vb->line_i);
+    ASSERTE (new_ploidy * vb->line_i * vcf_num_samples <= max_new_size, 
+             "haplotype data overflow due to increased ploidy on line %u", vb->line_i);
 
     uint32_t num_samples = vb->line_i * vcf_num_samples + sample_i; // all samples in previous lines + previous samples in current line
     char *ht_data = vb->ht_matrix_ctx->local.data;
