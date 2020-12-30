@@ -44,7 +44,7 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_INFO_DP4, dict_id_INFO_SF, dict_id_INFO_END, dict_id_INFO_SVLEN, dict_id_WindowsEOL,
 
                 // tags from VEP (Varient Effect Predictor) and similar tools
-                dict_id_INFO_CSQ, dict_id_INFO_DP_HIST, dict_id_INFO_GQ_HIST, 
+                dict_id_INFO_CSQ, dict_id_INFO_vep, dict_id_INFO_DP_HIST, dict_id_INFO_GQ_HIST, 
                 dict_id_INFO_AGE_HISTOGRAM_HET, dict_id_INFO_AGE_HISTOGRAM_HOM,
 
                 // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf

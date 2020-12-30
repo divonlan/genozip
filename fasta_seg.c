@@ -133,9 +133,9 @@ void fasta_seg_finalize (VBlockP vb)
         .repeats      = vb->lines.len,
         .is_toplevel  = true,
         .filter_items = true,
-        .num_items    = 2,
-        .items        = { { (DictId)dict_id_fields[FASTA_LINEMETA], DID_I_NONE, ""   },
-                          { (DictId)dict_id_fields[FASTA_EOL],      DID_I_NONE, ""   } }
+        .nitems_lo    = 2,
+        .items        = { { .dict_id = (DictId)dict_id_fields[FASTA_LINEMETA]  },
+                          { .dict_id = (DictId)dict_id_fields[FASTA_EOL]       } }
     };
 
     container_seg_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);

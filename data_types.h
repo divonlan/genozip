@@ -150,7 +150,7 @@ typedef enum { PHY_ID, PHY_SEQ, PHY_EOL, PHY_TOPLEVEL, PHY_TOP2FASTA, NUM_PHY_FI
                                      MAX ((int) NUM_GNRIC_FIELDS,  \
                                           (int) NUM_PHY_FIELDS ))))))))
 
-#define MAX_DICTS 254 // 254 is for future use and 255 is DID_I_NONE
+#define MAX_DICTS 2048
 
 typedef struct DataTypeFields {
     unsigned num_fields;

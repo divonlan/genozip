@@ -93,10 +93,10 @@ void phy_seg_finalize (VBlockP vb)
     SmallContainer top_level = { 
         .repeats     = vb->lines.len,
         .is_toplevel = true,
-        .num_items   = 3,
-        .items       = { { (DictId)dict_id_fields[PHY_ID],  DID_I_NONE, "" },
-                         { (DictId)dict_id_fields[PHY_SEQ], DID_I_NONE, "" },
-                         { (DictId)dict_id_fields[PHY_EOL], DID_I_NONE, "" } }
+        .nitems_lo   = 3,
+        .items       = { { .dict_id = (DictId)dict_id_fields[PHY_ID]  },
+                         { .dict_id = (DictId)dict_id_fields[PHY_SEQ] },
+                         { .dict_id = (DictId)dict_id_fields[PHY_EOL] } }
     };
 
     container_seg_by_ctx (vb, &vb->contexts[PHY_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
@@ -104,9 +104,9 @@ void phy_seg_finalize (VBlockP vb)
     SmallContainer top_level_to_fasta = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
-        .num_items = 2,
-        .items     = { { (DictId)dict_id_fields[PHY_ID],    DID_I_NONE, "\n" },
-                       { (DictId)dict_id_fields[PHY_SEQ],   DID_I_NONE, "\n\n" } }
+        .nitems_lo = 2,
+        .items     = { { .dict_id = (DictId)dict_id_fields[PHY_ID],  .seperator = "\n"   },
+                       { .dict_id = (DictId)dict_id_fields[PHY_SEQ], .seperator = "\n\n" } }
     };
 
     static const char fasta_prefix[] = { CON_PREFIX_SEP,        // has prefix 

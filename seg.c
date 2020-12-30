@@ -326,7 +326,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
     const int info_field   = DTF(info);
     const char *field_name = DTF(names)[info_field];
 
-    Container con = { .repeats=1, .num_items=0, .repsep={0,0}, .drop_final_item_sep=true };
+    Container con = { .repeats=1, .drop_final_item_sep=true };
 
     const char *this_name = info_str, *this_value = NULL;
     int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
@@ -351,7 +351,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
                             "%s field contains a name %.*s starting with an illegal character '%c' (ASCII %u)", 
                             field_name, this_name_len, this_name, this_name[0], this_name[0]);
 
-                    InfoItem *ii = &info_items[con.num_items];
+                    InfoItem *ii = &info_items[con_nitems(con)];
                     ii->start    = this_name; 
                     ii->len      = this_name_len + valueful; // include the '=' if there is one 
                     ii->dict_id  = valueful ? dict_id_type_1 (dict_id_make (this_name, this_name_len)) 
@@ -369,7 +369,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
 
             if (c == ';') { // end of value
                 // If its a valueful item, seg it (either special or regular)
-                DictId dict_id = info_items[con.num_items].dict_id;
+                DictId dict_id = info_items[con_nitems(con)].dict_id;
                 if (dict_id.num) { 
                     char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
                     bool not_yet_segged = seg_special_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len, optimized_snip);
@@ -380,9 +380,9 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
                 reading_name = true;  // end of value - move to the next item
                 this_name = &info_str[i+1]; // move to next field in info string
                 this_name_len = 0;
-                con.num_items++;
+                con_inc_nitems (con);
 
-                ASSSEG (con.num_items <= MAX_SUBFIELDS, info_str, "A line has too many subfields (tags) in the %s field - the maximum supported is %u",
+                ASSSEG (con_nitems(con) <= MAX_SUBFIELDS, info_str, "A line has too many subfields (tags) in the %s field - the maximum supported is %u",
                         field_name, MAX_SUBFIELDS);
             }
             else this_value_len++;
@@ -394,8 +394,8 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
 
     // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
     // thereby both improving compression and improving --regions speed. 
-    if (flag.optimize_sort && con.num_items > 1) 
-        qsort (info_items, con.num_items, sizeof(InfoItem), sort_by_subfield_name);
+    if (flag.optimize_sort && con_nitems(con) > 1) 
+        qsort (info_items, con_nitems(con), sizeof(InfoItem), sort_by_subfield_name);
 
     char prefixes[CONTAINER_MAX_PREFIXES_LEN]; // these are the Container prefixes
     prefixes[0] = prefixes[1] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix
@@ -403,12 +403,11 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
 
     // Populate the Container 
     uint32_t total_names_len=0;
-    for (unsigned i=0; i < con.num_items; i++) {
+    for (unsigned i=0; i < con_nitems(con); i++) {
         // Set the Container item and find (or create) a context for this name
         InfoItem *ii = &info_items[i];
         con.items[i] = (ContainerItem){ .dict_id   = ii->dict_id,
-                                        .seperator = { ';', 0 },
-                                        .did_i     = DID_I_NONE }; // this must be NONE, it is used only by PIZ
+                                        .seperator = { ';', 0 } }; 
         // add to the prefixes
         ASSSEG (prefixes_len + ii->len + 1 <= CONTAINER_MAX_PREFIXES_LEN, info_str, 
                 "%s contains tag names that, combined (including the '='), exceed the maximum of %u characters", field_name, CONTAINER_MAX_PREFIXES_LEN);
@@ -421,7 +420,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
     }
 
     container_seg_by_ctx (vb, &vb->contexts[info_field], &con, prefixes, prefixes_len, 
-                            total_names_len /* names inc. = */ + (con.num_items-1) /* the ;s */ + 1 /* \t or \n */);
+                          total_names_len /* names inc. = */ + (con_nitems(con)-1) /* the ;s */ + 1 /* \t or \n */);
 }
 
 WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len,
@@ -457,7 +456,6 @@ Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_
         const uint8_t *id = dict_id.id;
         uint8_t char2 = (i < 10) ? ('0' + i) : ('a' + (i-10));
         
-        con.items[i].did_i   = DID_I_NONE;
         con.items[i].dict_id = (DictId){ .id = { id[0], char2, id[1], id[2], id[3], id[4], id[5], id[6] }};
         
         if (type_1_items) con.items[i].dict_id = dict_id_type_1 (con.items[i].dict_id);
@@ -496,7 +494,7 @@ void seg_compound_field (VBlock *vb,
         char sep = (i==field_len) ? 0 : field[i];
 
         if (!sep || 
-            (con.num_items < MAX_COMPOUND_COMPONENTS-1 && 
+            (con_nitems(con) < MAX_COMPOUND_COMPONENTS-1 && 
              ((sep==':' && arg.colon) || 
               (sep=='/' && arg.slash) ||
               (sep=='|' && arg.pipe)  || 
@@ -504,8 +502,8 @@ void seg_compound_field (VBlock *vb,
               ((sep==' ' || sep=='\t' || sep==1) && arg.whitespace)))) {
         
             // process the subfield that just ended
-            Context *sf_ctx = ctx_get_ctx (vb, con.items[con.num_items].dict_id);
-            ASSERTE (sf_ctx, "sf_ctx for %s is NULL", dis_dict_id (con.items[con.num_items].dict_id).s);
+            Context *sf_ctx = ctx_get_ctx (vb, con.items[con_nitems(con)].dict_id);
+            ASSERTE (sf_ctx, "sf_ctx for %s is NULL", dis_dict_id (con.items[con_nitems(con)].dict_id).s);
 
             sf_ctx->st_did_i = field_ctx->did_i;
 
@@ -592,17 +590,17 @@ void seg_compound_field (VBlock *vb,
 
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
-                con.items[con.num_items].seperator[0] = sep;
-                con.items[con.num_items].seperator[1] = double_sep ? sep : 0;
+                con.items[con_nitems(con)].seperator[0] = sep;
+                con.items[con_nitems(con)].seperator[1] = double_sep ? sep : 0;
                 snip = &field[i+1];
                 snip_len = 0;
             }
-            con.num_items++;
+            con_inc_nitems (con);
         }
         else snip_len++;
     }
 
-    container_seg_by_ctx (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con.num_items + num_double_sep - 1) + add_for_eol);
+    container_seg_by_ctx (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con_nitems(con) + num_double_sep - 1) + add_for_eol);
 }
 
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 
@@ -735,13 +733,13 @@ static void seg_verify_file_size (VBlock *vb)
 {
     uint32_t reconstructed_vb_size = 0;
 
-    for (unsigned sf_i=0; sf_i < vb->num_contexts; sf_i++) 
+    for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) 
         reconstructed_vb_size += vb->contexts[sf_i].txt_len;
         
     if (vb->vb_data_size != reconstructed_vb_size && !flag.optimize) {
 
         fprintf (stderr, "Txt lengths:\n");
-        for (unsigned sf_i=0; sf_i < vb->num_contexts; sf_i++) {
+        for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
             Context *ctx = &vb->contexts[sf_i];
             fprintf (stderr, "%s: %u\n", ctx->name, (uint32_t)ctx->txt_len);
         }

@@ -391,7 +391,7 @@ batch_genocat_tests()
 batch_backward_compatability()
 {
     batch_print_header
-    local files=`ls $TESTDIR/back-compat/*.genozip` 
+    local files=`ls $TESTDIR/back-compat/[0-9]*/*.genozip` 
     local file
     for file in $files; do
         test_backward_compatability $file

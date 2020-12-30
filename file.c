@@ -608,7 +608,7 @@ static bool file_open_txt_write (File *file)
 // with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
 static void file_initialize_z_file_data (File *file)
 {
-    memset (file->dict_id_to_did_i_map, DID_I_NONE, sizeof(file->dict_id_to_did_i_map));
+    memset (file->dict_id_to_did_i_map, 0xff, sizeof(file->dict_id_to_did_i_map)); // DID_I_NONE
 
 #define INIT(buf) file->contexts[i].buf.name  = #buf; \
                   file->contexts[i].buf.param = i;    \

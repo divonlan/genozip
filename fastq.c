@@ -239,15 +239,15 @@ void fastq_seg_finalize (VBlockP vb)
         .is_toplevel    = true,
         .filter_items   = true,
         .filter_repeats = true,
-        .num_items      = 7,
+        .nitems_lo      = 7,
         .items          = { 
-            { (DictId)dict_id_fields[FASTQ_DESC],     DID_I_NONE, ""  },
-            { (DictId)dict_id_fields[FASTQ_E1L],      DID_I_NONE, ""  }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
-            { (DictId)dict_id_fields[FASTQ_SQBITMAP], DID_I_NONE, ""  },
-            { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, "+" }, // + is the "separator" after the 2nd end-of-line
-            { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  },
-            { (DictId)dict_id_fields[FASTQ_QUAL],     DID_I_NONE, ""  },
-            { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  } 
+            { .dict_id = (DictId)dict_id_fields[FASTQ_DESC],     },
+            { .dict_id = (DictId)dict_id_fields[FASTQ_E1L],      }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
+            { .dict_id = (DictId)dict_id_fields[FASTQ_SQBITMAP], },
+            { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      .seperator = "+" }, // + is the "separator" after the 2nd end-of-line
+            { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      },
+            { .dict_id = (DictId)dict_id_fields[FASTQ_QUAL],     },
+            { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      } 
         }
     };
 

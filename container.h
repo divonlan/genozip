@@ -10,16 +10,16 @@
 #include "sections.h"
 
 #pragma pack(1)
-#define CONTAINER_MAX_PREFIXES_LEN 1000    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
+#define CONTAINER_MAX_PREFIXES_LEN (32 * MAX_SUBFIELDS)    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
 #define CON_PREFIX_SEP              '\x4'  // starts the prefix string and terminates every prefix within it
 #define CON_PREFIX_SEP_SHOW_REPEATS '\x5'  // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
 
-#define CONTAINER_MAX_REPEATS (UINT32_MAX-1) // one less than maxuint32 to make it easier to loop with con.repeats without overflow 
+#define CONTAINER_MAX_REPEATS 0xfffffe     // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
 typedef struct ContainerItem {
     DictId dict_id;  
-    DidIType did_i;                        // Used only in PIZ, must remain DID_I_NONE in ZIP
+    uint8_t unused;                        // was 8-bit did_i, canceled in 9.0.23, will contain 255 in files created in 9.0.22 and earlier
 
     // seperator[0] values with bit 7 set (0x80) are interpreted as flags rather than a seperator, in 
     // which case seperator[1] is a parameter of the flags
@@ -40,8 +40,9 @@ typedef struct ContainerItem {
 // Only the container-wide prefix may alternatively be terminated by CON_PREFIX_SEP_SHOW_REPEATS.
 
 #define CONTAINER_FIELDS(nitems)       \
-    uint32_t repeats;                   /* number of "repeats" (array elements) */ \
-    uint8_t num_items;                  /* 1 to MAX_SUBFIELDS */  \
+    uint32_t nitems_hi            : 8;  /* MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)) */ \
+    uint32_t repeats              : 24; /* number of "repeats" (array elements) */ \
+    uint8_t nitems_lo;                  /* LSB of num_items */  \
     /* container flags */               \
     uint8_t drop_final_item_sep   : 1;  \
     uint8_t drop_final_repeat_sep : 1;  \
@@ -58,7 +59,10 @@ typedef struct MiniContainer  { CONTAINER_FIELDS(1) } MiniContainer;
 typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) } SmallContainer;
 
 #pragma pack()
-#define sizeof_container(con) (sizeof(con) - sizeof((con).items) + (con).num_items * sizeof((con).items[0]))
+#define con_nitems(con) ((con).nitems_hi * 256 + (con).nitems_lo)
+#define con_set_nitems(con, n) { (con).nitems_hi = (n) >> 8; (con).nitems_lo = ((n) & 0xff); }
+#define con_inc_nitems(con) con_set_nitems ((con), con_nitems (con) + 1)
+#define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
 
 extern WordIndex container_seg_by_ctx (VBlockP vb, ContextP ctx, ContainerP con, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
 #define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg_by_ctx ((VBlockP)vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)

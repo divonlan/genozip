@@ -52,12 +52,12 @@ void me23_seg_finalize (VBlockP vb)
     SmallContainer top_level = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
-        .num_items = 5,
-        .items     = { { (DictId)dict_id_fields[ME23_ID],       DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[ME23_CHROM],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[ME23_POS],      DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[ME23_GENOTYPE], DID_I_NONE, ""   },
-                       { (DictId)dict_id_fields[ME23_EOL],      DID_I_NONE, ""   } }
+        .nitems_lo = 5,
+        .items     = { { .dict_id = (DictId)dict_id_fields[ME23_ID],       .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[ME23_CHROM],    .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[ME23_POS],      .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[ME23_GENOTYPE]                    },
+                       { .dict_id = (DictId)dict_id_fields[ME23_EOL],                        } }
     };
 
     container_seg_by_ctx (vb, &vb->contexts[ME23_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
@@ -65,11 +65,11 @@ void me23_seg_finalize (VBlockP vb)
     SmallContainer top_level_to_vcf = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
-        .num_items = 5,
-        .items     = { { (DictId)dict_id_fields[ME23_CHROM],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[ME23_POS],      DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[ME23_ID],       DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[ME23_GENOTYPE], DID_I_NONE, "\n", ME232VCF_GENOTYPE } }
+        .nitems_lo = 5,
+        .items     = { { .dict_id = (DictId)dict_id_fields[ME23_CHROM],    .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[ME23_POS],      .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[ME23_ID],       .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[ME23_GENOTYPE], .seperator = "\n", .translator = ME232VCF_GENOTYPE } }
     };
 
     container_seg_by_ctx (vb, &vb->contexts[ME23_TOP2VCF], (ContainerP)&top_level_to_vcf, 0, 0, 0);

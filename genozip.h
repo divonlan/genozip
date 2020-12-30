@@ -32,7 +32,7 @@
 #define TXT_DATA_PER_VB_FAST    "16" // MB with --fast
 extern void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str);
 
-#define MAX_SUBFIELDS 128  // Maximum number of items in a Container (for example: VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc). This value can be increased subject to MAX_DICTS<=253.
+#define MAX_SUBFIELDS 2048  // Maximum number of items in a Container (for example: VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc). This value can be increased subject to MAX_DICTS<=253.
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
@@ -82,8 +82,8 @@ typedef union DictId {
 } DictId;
 #pragma pack()
 
-typedef uint8_t DidIType;   // index of a context in vb->contexts or z_file->contexts / a counter of contexts
-#define DID_I_NONE   255
+typedef uint16_t DidIType;   // index of a context in vb->contexts or z_file->contexts / a counter of contexts
+#define DID_I_NONE ((DidIType)-1)
 
 typedef uint64_t CharIndex;   // index within dictionary
 typedef int32_t WordIndex;    // used for word and node indices

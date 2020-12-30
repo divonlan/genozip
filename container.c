@@ -20,26 +20,34 @@
 //----------------------
 
 WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, ContainerP con, 
-                                 // prefixes can be one of 3 options:
-                                 // 1. NULL
-                                 // 2. a "container-wide prefix" that will be reconstructed once, at the beginning of the Container
-                                 // 3. a "container-wide prefix" followed by exactly one prefix per item. the per-item prefixes will be
-                                 //    displayed once per repeat, before their respective items. in this case, the container-wide prefix
-                                 //    may be empty. 
-                                 // Each prefix is terminated by a CON_PREFIX_SEP character
-                                 const char *prefixes, unsigned prefixes_len, // a container-wide prefix (may be empty), followed (or not) by one prefix per item. Each prefixes is terminated by CON_PREFIX_SEP.
-                                 unsigned add_bytes)
+                                // prefixes can be one of 3 options:
+                                // 1. NULL
+                                // 2. a "container-wide prefix" that will be reconstructed once, at the beginning of the Container
+                                // 3. a "container-wide prefix" followed by exactly one prefix per item. the per-item prefixes will be
+                                //    displayed once per repeat, before their respective items. in this case, the container-wide prefix
+                                //    may be empty. 
+                                // Each prefix is terminated by a CON_PREFIX_SEP character
+                                const char *prefixes, unsigned prefixes_len, // a container-wide prefix (may be empty), followed (or not) by one prefix per item. Each prefixes is terminated by CON_PREFIX_SEP.
+                                unsigned add_bytes)
 {
     ctx->no_stons = true; // we need the word index to for container caching
 
     // con=NULL means MISSING Container (see container_reconstruct_do)
     if (!con) return seg_by_ctx (vb, NULL, 0, ctx, 0, NULL); 
 
-    con->repeats = BGEN32 (con->repeats);
-    char snip[1 + base64_sizeof(Container) + CONTAINER_MAX_PREFIXES_LEN]; // maximal size
+    ASSERTE (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is beyond maximum of %u in ctx=%s",
+             prefixes_len, CONTAINER_MAX_PREFIXES_LEN, ctx->name);
+
+    con->repeats = BGEN24 (con->repeats); 
+    unsigned con_size = con_sizeof (*con);
+    char snip[1 + base64_size(con_size) + prefixes_len]; 
     snip[0] = SNIP_CONTAINER;
-    unsigned b64_len = base64_encode ((uint8_t*)con, sizeof_container (*con), &snip[1]);
-    con->repeats = BGEN32 (con->repeats); // restore
+    
+    unsigned b64_len = base64_encode ((uint8_t*)con, con_size, &snip[1]);
+    ASSERTE (b64_len <= base64_size(con_size), "b64_len=%u larger than base64_size(%u)=%u in ctx=%s",
+             b64_len, con_size, base64_size(con_size), ctx->name);
+    
+    con->repeats = BGEN24 (con->repeats); // restore
 
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
     uint32_t snip_len = 1 + b64_len + prefixes_len;
@@ -88,6 +96,11 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, ConstCo
     ASSERTE (DTP (container_filter) || (!con->filter_repeats && !con->filter_items), 
              "data_type=%s doesn't support container_filter, despite being specified in the Container", dt_name (vb->data_type));
 
+    uint32_t num_items = con_nitems(*con);
+    Context *item_ctxs[num_items];
+    for (unsigned i=0; i < num_items; i++) 
+        item_ctxs[i] = con->items[i].dict_id.num ? ctx_get_existing_ctx (vb, con->items[i].dict_id) : NULL;
+
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip
@@ -105,17 +118,16 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, ConstCo
         uint32_t item_prefixes_len = prefixes_len;
 
         last_non_filtered_item_i = -1;
-        for (unsigned i=0; i < con->num_items; i++) {
+        for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
 
             if (con->filter_items && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
 
             last_non_filtered_item_i = i;
 
-            if (flag.show_containers && (item->did_i != DID_I_NONE || item->dict_id.num)) // show container reconstruction 
+            if (flag.show_containers && item_ctxs[i]) // show container reconstruction 
                 fprintf (info_stream, "VB=%u Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
-                            vb->vblock_i, vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), 
-                            item->did_i != DID_I_NONE ? vb->contexts[item->did_i].name : "(DID_I_NONE)", 
+                            vb->vblock_i, vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), item_ctxs[i]->name, 
                             vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 
             container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len); // item prefix (we will have one per item or none at all)
@@ -126,12 +138,12 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, ConstCo
                 bool reconstruct = !flag.trans_containers ||      // not translating Or...
                                    !IS_CI_SET (CI_TRANS_NOR); // no prohibition on reconstructing when translating
 
-                reconstructed_len = reconstruct_from_ctx (vb, item->did_i, 0, reconstruct);
+                reconstructed_len = reconstruct_from_ctx (vb, item_ctxs[i]->did_i, 0, reconstruct);
 
                 // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item
                 // using the designated "translator" function, if one is available
                 if (flag.trans_containers && item->translator) 
-                    DT_FUNC(vb, translator)[item->translator](vb, &vb->contexts[item->did_i], reconstruction_start, reconstructed_len);  
+                    DT_FUNC(vb, translator)[item->translator](vb, item_ctxs[i], reconstruction_start, reconstructed_len);  
             }            
 
             // case: WORD_INDEX_MISSING_SF - delete previous item's separator if it has one (used by SAM_OPTIONAL - sam_seg_optional_all)
@@ -190,7 +202,7 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
     if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *ENT (uint16_t, ctx->con_len, word_index)))) {
         con_p = (ContainerP)ENT (char, ctx->con_cache, *ENT (uint32_t, ctx->con_index, word_index));
         
-        unsigned st_size = sizeof_container (*con_p);
+        unsigned st_size = con_sizeof (*con_p);
         prefixes = (char *)con_p + st_size; // prefixes are stored after the Container
         prefixes_len = cache_item_len - st_size;
     }
@@ -200,21 +212,13 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
         // decode
         unsigned b64_len = snip_len; // maximum length of b64 - it will be shorter if snip includes prefixes too
         base64_decode (snip, &b64_len, (uint8_t*)&con);
-        con.repeats = BGEN32 (con.repeats);
+        con.repeats = BGEN24 (con.repeats);
 
-        ASSERTE (con.num_items <= MAX_SUBFIELDS, "A container of %s has %u items which is beyond MAX_SUBFIELDS=%u. Please upgrade to latest version of genozip to access this file.",
-                 ctx->name, con.num_items, MAX_SUBFIELDS);
+        ASSERTE (con_nitems (con) <= MAX_SUBFIELDS, "A container of %s has %u items which is beyond MAX_SUBFIELDS=%u. Please upgrade to latest version of genozip to access this file.",
+                 ctx->name, con_nitems (con), MAX_SUBFIELDS);
 
-        // get the did_i for each dict_id
-        for (uint8_t item_i=0; item_i < con.num_items; item_i++)
-            if (con.items[item_i].dict_id.num) { // not a prefix-only item
-                con.items[item_i].did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
-                ASSERTE (con.items[item_i].did_i != DID_I_NONE, "analyzing a %s container: unable to find did_i for item %.8s",
-                         ctx->name, dict_id_print (con.items[item_i].dict_id));
-            }
-            
         // get prefixes
-        unsigned st_size = sizeof_container (con);
+        unsigned st_size = con_sizeof (con);
         con_p         = &con;
         prefixes     = (b64_len < snip_len) ? &snip[b64_len+1]       : NULL;
         prefixes_len = (b64_len < snip_len) ? snip_len - (b64_len+1) : 0;
@@ -253,7 +257,7 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
 
             // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_OPTIONAL)
             ContainerItem *item0 = &con.items[0];
-            if (flag.trans_containers && item0->did_i == DID_I_NONE && item0->translator) {
+            if (flag.trans_containers && !item0->dict_id.num && item0->translator) {
                 int32_t prefixes_len_change = DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len);  
                 ASSERTE (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
                          "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", 
@@ -274,14 +278,16 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
 // display
 void container_display (ConstContainerP con)
 {
+    uint32_t num_items = con_nitems (*con);
+
     fprintf (info_stream, "repeats=%u\nnum_items=%u\ndrop_final_item_sep=%u\ndrop_final_repeat_sep=%u\n"
                           "filter_repeats=%u\nfilter_items=%u\nis_toplevel=%u\nrepsep={ %u %u }\n",
-             con->repeats, con->num_items, con->drop_final_item_sep, con->drop_final_repeat_sep, 
+             con->repeats, num_items, con->drop_final_item_sep, con->drop_final_repeat_sep, 
              con->filter_repeats, con->filter_items, con->is_toplevel, con->repsep[0], con->repsep[1]);
     
-    for (unsigned i=0; i < con->num_items; i++)
-        fprintf (info_stream, "item %u: dict_id=%s did_i=%u seperator={ %u %u } translator=%u\n",
-                 i, dis_dict_id (con->items[i].dict_id).s, con->items[i].did_i, 
+    for (unsigned i=0; i < num_items; i++)
+        fprintf (info_stream, "item %u: dict_id=%s seperator={ %u %u } translator=%u\n",
+                 i, dis_dict_id (con->items[i].dict_id).s,  
                  con->items[i].seperator[0], con->items[i].seperator[1], con->items[i].translator);
 }
 

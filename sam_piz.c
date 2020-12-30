@@ -420,10 +420,12 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
 
     if (reconstructed_len == -1) return 0; // no Optional data in this alignment
 
-    char *prefixes_before = &reconstructed[sizeof_container (*con)] + 2; // +2 to skip the empty prefixes of container wide, and item[0]
+    char *prefixes_before = &reconstructed[con_sizeof (*con)] + 2; // +2 to skip the empty prefixes of container wide, and item[0]
     char *prefixes_after = prefixes_before;
 
-    for (unsigned i=1; i < con->num_items; i++, prefixes_before+=6, prefixes_after+=4) {
+    uint32_t num_items = con_nitems (*con);
+
+    for (unsigned i=1; i < num_items; i++, prefixes_before+=6, prefixes_after+=4) {
         prefixes_after[0] = prefixes_before[0]; // tag[0] 
         prefixes_after[1] = prefixes_before[1]; // tag[1]
         prefixes_after[2] = prefixes_before[3]; // type
@@ -435,7 +437,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
             prefixes_after[2] = "\0cCsSiI"[con->items[i].translator];
     }
 
-    return -2 * (con->num_items-1); // change in prefixes_len
+    return -2 * (num_items-1); // change in prefixes_len
 }
 
 // translate OPTIONAL SAM->BAM - called after Optional reconstruction is done
@@ -560,7 +562,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
 TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
 {
     ContainerP con = (ContainerP)reconstructed;
-    char *prefixes = &reconstructed[sizeof_container (*con)];
+    char *prefixes = &reconstructed[con_sizeof (*con)];
 
     // remove the ',' from the prefix, and terminate with CON_PREFIX_SEP_SHOW_REPEATS - this will cause
     // the number of repeats (in LTEN32) to be outputed after the prefix

@@ -31,20 +31,20 @@ void gff3_seg_finalize (VBlockP vb)
     SmallContainer top_level = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
-        .num_items = 10,
-        .items     = { { (DictId)dict_id_fields[GFF3_SEQID],  DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[GFF3_SOURCE], DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[GFF3_TYPE],   DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[GFF3_START],  DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[GFF3_END],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[GFF3_SCORE],  DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[GFF3_STRAND], DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[GFF3_PHASE],  DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[GFF3_ATTRS],  DID_I_NONE, ""   },
-                       { (DictId)dict_id_fields[GFF3_EOL],    DID_I_NONE, ""   } }
+        .nitems_lo = 10,
+        .items     = { { .dict_id = (DictId)dict_id_fields[GFF3_SEQID],  .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_SOURCE], .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_TYPE],   .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_START],  .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_END],    .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_SCORE],  .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_STRAND], .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_PHASE],  .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_ATTRS],  .seperator = ""   },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_EOL],    .seperator = ""   } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], (Container *)&top_level, 0, 0, 0);
 }
 
 
@@ -71,19 +71,20 @@ static unsigned gff3_seg_get_aofs_item_len (const char *str, unsigned len, bool 
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
 static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx, 
-                                      Container con, 
+                                      SmallContainer con, 
                                       const char *snip, unsigned snip_len)
 {
     bool is_last_entry = false;
+    uint32_t num_items = con_nitems (con);
 
     // get ctx's
     Context *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->contexts)
-    for (unsigned i=0; i < con.num_items; i++) 
+    for (unsigned i=0; i < num_items; i++) 
         ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
 
     // set roll back point
     uint64_t saved_node_i_len[MAX_ENST_ITEMS], saved_local_len[MAX_ENST_ITEMS], saved_txt_len[MAX_ENST_ITEMS];
-    for (unsigned item_i=0; item_i < con.num_items; item_i++) {
+    for (unsigned item_i=0; item_i < num_items; item_i++) {
         saved_node_i_len[item_i] = ctxs[item_i]->node_i.len;
         saved_local_len[item_i] = ctxs[item_i]->local.len;
         saved_txt_len  [item_i] = ctxs[item_i]->txt_len;
@@ -95,8 +96,8 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
 
     while (snip_len) {
         
-        for (unsigned item_i=0; item_i < con.num_items; item_i++) {
-            bool is_last_item = (item_i == con.num_items-1);
+        for (unsigned item_i=0; item_i < num_items; item_i++) {
+            bool is_last_item = (item_i == num_items-1);
             unsigned item_len = gff3_seg_get_aofs_item_len (snip, snip_len, is_last_item);
             if (!item_len) goto badly_formatted;
 
@@ -120,13 +121,13 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
     }
 
     // finally, the Container snip itself
-    container_seg_by_ctx ((VBlockP)vb, subfield_ctx, &con, NULL, 0, 0);
+    container_seg_by_ctx ((VBlockP)vb, subfield_ctx, (ContainerP)&con, NULL, 0, 0);
 
     return;
 
 badly_formatted:
     // roll back all the changed data
-    for (unsigned item_i=0; item_i < con.num_items ; item_i++) {
+    for (unsigned item_i=0; item_i < num_items ; item_i++) {
         ctxs[item_i]->node_i.len = saved_node_i_len[item_i];
         ctxs[item_i]->local.len = saved_local_len[item_i];
         ctxs[item_i]->txt_len   = saved_txt_len[item_i];
@@ -155,55 +156,55 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     // subfields that are arrays of structs, for example:
     // "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
     if (dict_id.num == dict_id_ATTR_Variant_effect) {
-        static const Container Variant_effect = {
-            .num_items   = 4, 
+        static const SmallContainer Variant_effect = {
+            .nitems_lo   = 4, 
             .drop_final_item_sep = true,
             .repsep      = {0,0},
-            .items       = { { .dict_id={.id="V0arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="V1arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="V2arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="ENSTid"  }, .seperator = {','}, .did_i = DID_I_NONE } }
+            .items       = { { .dict_id={.id="V0arEff" }, .seperator = {' '} },
+                             { .dict_id={.id="V1arEff" }, .seperator = {' '} },
+                             { .dict_id={.id="V2arEff" }, .seperator = {' '} },
+                             { .dict_id={.id="ENSTid"  }, .seperator = {','} } }
         };
         gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), Variant_effect, *this_value, *this_value_len);
         return false;
     }
 
     if (dict_id.num == dict_id_ATTR_sift_prediction) {
-        static const Container sift_prediction = {
-            .num_items   = 4, 
+        static const SmallContainer sift_prediction = {
+            .nitems_lo   = 4, 
             .drop_final_item_sep = true,
             .repsep      = {0,0},
-            .items       = { { .dict_id={.id="S0iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="S1iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="S2iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="ENSTid"  }, .seperator = {','}, .did_i = DID_I_NONE } }
+            .items       = { { .dict_id={.id="S0iftPr" }, .seperator = {' '} },
+                             { .dict_id={.id="S1iftPr" }, .seperator = {' '} },
+                             { .dict_id={.id="S2iftPr" }, .seperator = {' '} },
+                             { .dict_id={.id="ENSTid"  }, .seperator = {','} } }
         };
         gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), sift_prediction, *this_value, *this_value_len);
         return false;
     }
 
     if (dict_id.num == dict_id_ATTR_polyphen_prediction) {
-        static const Container polyphen_prediction = {
-            .num_items   = 4, 
+        static const SmallContainer polyphen_prediction = {
+            .nitems_lo   = 4, 
             .drop_final_item_sep = true,
             .repsep      = {0,0},
-            .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="P1olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="P2olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="ENSTid"   }, .seperator = {','}, .did_i = DID_I_NONE } }
+            .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = {' '} },
+                             { .dict_id={.id="P1olyPhP" }, .seperator = {' '} },
+                             { .dict_id={.id="P2olyPhP" }, .seperator = {' '} },
+                             { .dict_id={.id="ENSTid"   }, .seperator = {','} } }
         };
         gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), polyphen_prediction, *this_value, *this_value_len);
         return false;
     }
 
     if (dict_id.num == dict_id_ATTR_variant_peptide) {
-        static const Container variant_peptide = {
-            .num_items   = 3, 
+        static const SmallContainer variant_peptide = {
+            .nitems_lo   = 3, 
             .drop_final_item_sep = true,
             .repsep      = {0,0},
-            .items       = { { .dict_id={.id="v0arPep" }, .seperator = {' '}, .did_i = DID_I_NONE }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
-                             { .dict_id={.id="v1arPep" }, .seperator = {' '}, .did_i = DID_I_NONE },
-                             { .dict_id={.id="ENSTid"  }, .seperator = {','}, .did_i = DID_I_NONE } }
+            .items       = { { .dict_id={.id="v0arPep" }, .seperator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
+                             { .dict_id={.id="v1arPep" }, .seperator = {' '} },
+                             { .dict_id={.id="ENSTid"  }, .seperator = {','} } }
         };
         gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), variant_peptide, *this_value, *this_value_len);
         return false;

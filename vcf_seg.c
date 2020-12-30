@@ -51,17 +51,17 @@ void vcf_seg_finalize (VBlockP vb_)
     SmallContainer top_level = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
-        .num_items = 10,
-        .items     = { { (DictId)dict_id_fields[VCF_CHROM],   DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[VCF_POS],     DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[VCF_ID],      DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[VCF_REFALT],  DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[VCF_QUAL],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[VCF_FILTER],  DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[VCF_INFO],    DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[VCF_FORMAT],  DID_I_NONE, "\t" },
-                       { (DictId)dict_id_fields[VCF_SAMPLES], DID_I_NONE, ""   },
-                       { (DictId)dict_id_fields[VCF_EOL],     DID_I_NONE, ""   } }
+        .nitems_lo = 10,
+        .items     = { { .dict_id = (DictId)dict_id_fields[VCF_CHROM],   .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[VCF_POS],     .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[VCF_ID],      .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[VCF_REFALT],  .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[VCF_QUAL],    .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[VCF_FILTER],  .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[VCF_INFO],    .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[VCF_FORMAT],  .seperator = "\t" },
+                       { .dict_id = (DictId)dict_id_fields[VCF_SAMPLES], .seperator = ""   },
+                       { .dict_id = (DictId)dict_id_fields[VCF_EOL],     .seperator = ""   } }
     };
     
     container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
@@ -175,18 +175,18 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
     bool last_item = false;
     do {
-        ASSSEG (format_mapper.num_items < MAX_SUBFIELDS, field_start,
+        ASSSEG (con_nitems (format_mapper) < MAX_SUBFIELDS, field_start,
                 "FORMAT field has too many subfields, the maximum allowed is %u: \"%.*s\"",  
                 MAX_SUBFIELDS, field_len, field_start);
 
         DictId dict_id = vcf_seg_get_format_subfield (&str, (unsigned *)&len);
         last_item = (str[-1] == '\t' || str[-1] == '\n');
 
-        format_mapper.items[format_mapper.num_items++] = (ContainerItem) {
+        format_mapper.items[con_nitems (format_mapper)] = (ContainerItem) {
             .dict_id   = dict_id,
             .seperator = { last_item ? 0 : ':' },
-            .did_i     = DID_I_NONE, // seg always puts NONE, PIZ changes it
         };
+        con_inc_nitems (format_mapper);
 
         ASSSEG (dict_id_is_vcf_format_sf (dict_id), field_start,
                 "string %.*s in the FORMAT field \"%.*s\" is not a legal subfield", 
@@ -213,7 +213,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
     }    
 
     ContainerP con = ENT (Container, vb->format_mapper_buf, node_index);
-    if (is_new || !con->num_items) // assign if not already assigned. 
+    if (is_new || !con_nitems (*con)) // assign if not already assigned. 
         *con = format_mapper; 
 }
 
@@ -233,10 +233,9 @@ static inline void vcf_seg_INFO_array (VBlock *vb, Context *container_ctx, DidIT
         buf_alloc (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "ctx->con_cache");
 
         con = FIRSTENT (MiniContainer, container_ctx->con_cache);
-        *con = (MiniContainer){ .num_items = 1, 
+        *con = (MiniContainer){ .nitems_lo = 1, 
                                 .drop_final_item_sep = true,
                                 .items     = { { .dict_id   = arr_dict_id, // only one item
-                                                 .did_i     = DID_I_NONE,  
                                                  .seperator = { sep } } } };
 
         arr_ctx = ctx_get_ctx (vb, arr_dict_id);
@@ -303,18 +302,18 @@ static inline void vcf_seg_INFO_double_array (VBlock *vb, DictId dict_id, const 
         DictId dict_id_1 = { .id = { id[0], id[1]+1, id[2], id[3], id[4], id[5], id[6], id[7] } };
         ctx_get_ctx (vb, dict_id_1)->st_did_i = container_ctx->did_i;
         NEXTENT (SmallContainer, container_ctx->con_cache) = 
-            (SmallContainer){ .num_items = 1, 
+            (SmallContainer){ .nitems_lo = 1, 
                               .repeats   = 1, 
-                              .items     = { { .dict_id = dict_id_1, .did_i = DID_I_NONE } } };
+                              .items     = { { .dict_id = dict_id_1 } } };
 
         // two items
         DictId dict_id_2 = { .id = { id[0], id[1]+2, id[2], id[3], id[4], id[5], id[6], id[7] } };
         ctx_get_ctx (vb, dict_id_2)->st_did_i = container_ctx->did_i;
         NEXTENT (SmallContainer, container_ctx->con_cache) = 
-            (SmallContainer){ .num_items = 2, 
+            (SmallContainer){ .nitems_lo = 2, 
                               .repeats   = 1, 
-                              .items     = { { .dict_id = dict_id_1, .did_i = DID_I_NONE, .seperator = { ',' } },
-                                             { .dict_id = dict_id_2, .did_i = DID_I_NONE                     } } };
+                              .items     = { { .dict_id = dict_id_1, .seperator = { ',' } },
+                                             { .dict_id = dict_id_2,                    } } };
     }
 
     const char *comma = NULL;
@@ -340,37 +339,38 @@ static inline void vcf_seg_INFO_double_array (VBlock *vb, DictId dict_id, const 
     container_seg_by_ctx (vb, container_ctx, (ContainerP)con, 0, 0, comma != NULL); // 1 for the comma
 }
 
-static inline void vcf_seg_INFO_CSQ (VBlock *vb, const char *field, unsigned field_len)
+// INFO fields with a format originating from the VEP software, eg
+// vep=T|intergenic_variant|MODIFIER|||Intergenic||||||||||||1|||SNV||||||||||||||||||||||||
+static inline void vcf_seg_INFO_vep_field (VBlock *vb, DictId dict_id, const char *field, unsigned field_len)
 {
     Container con = { .repsep = { ',' }, 
                       .drop_final_repeat_sep = true,
                       .keep_empty_item_sep   = true }; // don't delete the | before an empty item
 
-    Context *csq_ctx = ctx_get_ctx (vb, (DictId)dict_id_INFO_CSQ);
+    Context *vep_ctx = ctx_get_ctx (vb, dict_id);
     Context *sf_ctxs[MAX_SUBFIELDS] = {};
 
     uint32_t item_i=0;
     const char *item_start = field;
     for (uint32_t i=0; i < field_len+1; i++) {
         if (i == field_len || field[i] == ',' || field[i] == '|') { // end of item
-            if (item_i == con.num_items) {
+            if (item_i == con_nitems(con)) {
                 ASSSEG (!con.repeats, field, 
-                        "expecting all repeats of CSQ to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has more", 
-                        con.num_items, con.repeats);
+                        "expecting all repeats of %s to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has more", 
+                        vep_ctx->name, con_nitems(con), con.repeats);
 
                 ASSSEG (item_i < MIN (126, MAX_SUBFIELDS), field, "exceeded the max number of CSQ items=%u", MIN (126, MAX_SUBFIELDS)); // the 126 constraint is just the context naming scheme
                 
                 char name[8];
-                sprintf (name, "%c%c_CSQ", item_i < 63 ? '_' : '`', '@' + (item_i % 63));
+                sprintf (name, "%c%c_%.3s", item_i < 63 ? '_' : '`', '@' + (item_i % 63), vep_ctx->name);
                 DictId dict_id = dict_id_vcf_info_sf (dict_id_make (name, 6));
 
                 sf_ctxs[item_i] = ctx_get_ctx (vb, dict_id);
-                sf_ctxs[item_i]->st_did_i = csq_ctx->did_i;
+                sf_ctxs[item_i]->st_did_i = vep_ctx->did_i;
 
                 con.items[item_i] = (ContainerItem){ .dict_id   = dict_id, 
-                                                     .did_i     = DID_I_NONE, 
                                                      .seperator = { field[i]=='|' ? '|' : 0 } };
-                con.num_items++;
+                con_inc_nitems (con);                                     
             }
 
             unsigned item_len = &field[i] - item_start;
@@ -380,9 +380,9 @@ static inline void vcf_seg_INFO_CSQ (VBlock *vb, const char *field, unsigned fie
             item_start = &field[i+1];
 
             if (field[i] != '|') { // end of repeat
-                ASSSEG (!con.repeats || item_i == con.num_items, field, 
-                        "expecting all repeats of CSQ to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has only %u items", 
-                        con.num_items, con.repeats, item_i);
+                ASSSEG (!con.repeats || item_i == con_nitems(con), field, 
+                        "expecting all repeats of %s to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has only %u items", 
+                        vep_ctx->name, con_nitems(con), con.repeats, item_i);
             
                 con.repeats++;
                 item_i=0;
@@ -390,9 +390,10 @@ static inline void vcf_seg_INFO_CSQ (VBlock *vb, const char *field, unsigned fie
         }
     }
 
-    container_seg_by_ctx (vb, csq_ctx, &con, 0, 0, 0);
+    container_seg_by_ctx (vb, vep_ctx, &con, 0, 0, 0);
 
     // TODO: recover and seg just the field as-is, rather than throw an error, if its not the CSQ format we expect
+    // (need to roll back all changes to subfields)
 }
 
 static inline bool vcf_seg_test_svlen (VBlockVCF *vb, const char *svlen_str, unsigned svlen_str_len)
@@ -461,8 +462,9 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         ctx->no_stons = true;
     }
 
-    else if (dict_id.num == dict_id_INFO_CSQ) {
-        vcf_seg_INFO_CSQ (vb_, *this_value, *this_value_len);
+    else if (dict_id.num == dict_id_INFO_CSQ ||
+             dict_id.num == dict_id_INFO_vep) {
+        vcf_seg_INFO_vep_field (vb_, dict_id, *this_value, *this_value_len);
         return false; // caller shouldn't seg because we already did
     }
 
@@ -590,8 +592,8 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
 {
     // the GT field is represented as a Container, with a single item repeating as required by poidy, and the seperator 
     // determined by the phase
-    MiniContainer gt = { .repeats=1, .num_items=1, .drop_final_repeat_sep=true };
-    gt.items[0] = (ContainerItem){ .dict_id = (DictId)dict_id_FORMAT_GT_HT, .did_i = DID_I_NONE };
+    MiniContainer gt = { .repeats=1, .nitems_lo=1, .drop_final_repeat_sep=true };
+    gt.items[0] = (ContainerItem){ .dict_id = (DictId)dict_id_FORMAT_GT_HT };
     unsigned save_cell_len = cell_len;
 
     // update repeats according to ploidy, and separator according to phase
@@ -706,18 +708,18 @@ static WordIndex vcf_seg_hetero_array_field (VBlock *vb, DictId dict_id, const c
 {   
     Container con = seg_initialize_container_array (vb, dict_id, false);    
 
-    for (con.num_items=0; con.num_items < MAX_HETERO_ARRAY_ITEMS && value_len > 0; con.num_items++) { // value_len will be -1 after last number
+    for (con.nitems_lo=0; con.nitems_lo < MAX_HETERO_ARRAY_ITEMS && value_len > 0; con.nitems_lo++) { // value_len will be -1 after last number
 
         const char *snip = value;
         for (; value_len && *value != ','; value++, value_len--) {};
 
         unsigned number_len = (unsigned)(value - snip);
 
-        if (con.num_items == MAX_HETERO_ARRAY_ITEMS-1) // final permitted repeat - take entire remaining string
+        if (con.nitems_lo == MAX_HETERO_ARRAY_ITEMS-1) // final permitted repeat - take entire remaining string
             number_len += value_len;
 
-        if (value_len > 0) con.items[con.num_items].seperator[0] = ','; 
-        seg_by_dict_id (vb, snip, number_len, con.items[con.num_items].dict_id, number_len + (value_len>0 /* has comma */));
+        if (value_len > 0) con.items[con.nitems_lo].seperator[0] = ','; 
+        seg_by_dict_id (vb, snip, number_len, con.items[con.nitems_lo].dict_id, number_len + (value_len>0 /* has comma */));
         
         value_len--; // skip comma
         value++;
@@ -735,8 +737,9 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
 {
     Context *dp_ctx = NULL, *info_dp_ctx = NULL;    
     bool end_of_sample = !sample_len;
-
-    for (unsigned sf=0; sf < samples->num_items; sf++) { // iterate on the order as in the line
+    
+    uint32_t num_items = con_nitems (*samples);
+    for (unsigned sf=0; sf < num_items; sf++) { // iterate on the order as in the line
 
         // move next to the beginning of the subfield data, if there is any
         unsigned cell_len = end_of_sample ? 0 : seg_snip_len_tnc (cell, has_13);

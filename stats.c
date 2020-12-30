@@ -179,22 +179,19 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_r
                                 int64_t all_txt_size, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
     bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &z_file->stats_buf, "NAME              GENOZIP      %%      %4s   RATIO       TXT   RATIO      %%\n", 
-               codec_name (codec));
+    bufprintf (evb, &z_file->stats_buf, "NAME              GENOZIP      %%      TXT   RATIO      %%\n%s", "");
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %6.1fX %9s %6.1fX %5.1f%%\n", 
+            bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %6.1fX %5.1f%%\n", 
                        s->name, 
                        str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
-                       str_size ((double)s->txt_size / txt_ratio).s, ((double)s->txt_size / txt_ratio) / (double)s->z_size, // codec-compressed size and ratio z vs compressed
                        str_size ((double)s->txt_size).s, (double)s->txt_size / (double)s->z_size, // txt size and ratio z vs txt
                        s->pc_of_txt); // the % of total txt which is in this line
     
     bufprintf (evb, &z_file->stats_buf, "TOTAL           "
-                "%9s %5.1f%% %9s %6.1fX %9s %6.1fX %5.1f%%\n", 
+                "%9s %5.1f%% %9s %6.1fX %5.1f%%\n", 
                 str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
-                str_size (all_txt_size / txt_ratio).s, all_comp_ratio / txt_ratio, // total codec-compressed size and ratio z vs compressed
                 str_size (all_txt_size).s, all_comp_ratio, // total txt fize and ratio z vs txt
                 all_pc_of_txt);
 }

@@ -184,7 +184,7 @@ extern CtxNode *ctx_node_zf_do (const Context *ctx, int32_t node_index, const ch
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vb_ctx, bool is_lcodec);
 
-extern Context *ctx_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, DidIType *num_contexts, DictId dict_id);
+extern Context *ctx_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType map_did_i, DidIType *num_contexts, DictId dict_id);
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
 #define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts, (DictId)(dict_id))

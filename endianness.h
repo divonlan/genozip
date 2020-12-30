@@ -107,6 +107,7 @@
 
 #ifdef __LITTLE_ENDIAN__
 #define BGEN16(x) bswap16(x)
+#define BGEN24(x) (bswap32(x) >> 8)
 #define BGEN32(x) bswap32(x)
 #define BGEN64(x) bswap64(x)
 #define LTEN16(x) (x)
@@ -117,6 +118,7 @@
 #define LTEN32(x) bswap32(x))
 #define LTEN64(x) bswap64(x))
 #define BGEN16(x) (x)
+#define BGEN24(x) (x)
 #define BGEN32(x) (x)
 #define BGEN64(x) (x)
 #endif

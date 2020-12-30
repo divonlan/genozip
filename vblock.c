@@ -184,7 +184,7 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
     vb->in_use         = true;
     vb->vblock_i       = vblock_i;
     vb->buffer_list.vb = vb;
-    memset (vb->dict_id_to_did_i_map, DID_I_NONE, sizeof(vb->dict_id_to_did_i_map));
+    memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_I_NONE
 
     return vb;
 }

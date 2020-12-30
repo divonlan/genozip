@@ -27,7 +27,7 @@ uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0, dict_id_INFO_DP4=0, dict_id_INFO_SF=0,
          
          // tags from VEP (Varient Effect Predictor) and similar tools
-         dict_id_INFO_CSQ=0, dict_id_INFO_DP_HIST=0, dict_id_INFO_GQ_HIST=0, 
+         dict_id_INFO_CSQ=0, dict_id_INFO_vep=0, dict_id_INFO_DP_HIST=0, dict_id_INFO_GQ_HIST=0, 
          dict_id_INFO_AGE_HISTOGRAM_HET=0, dict_id_INFO_AGE_HISTOGRAM_HOM=0; 
    
 // SAM stuff
@@ -114,6 +114,7 @@ void dict_id_initialize (DataType data_type)
         dict_id_INFO_SF       = dict_id_vcf_info_sf   (dict_id_make ("SF", 2)).num;
         dict_id_INFO_VQSLOD   = dict_id_vcf_info_sf   (dict_id_make ("VQSLOD", 6)).num;
         dict_id_INFO_CSQ      = dict_id_vcf_info_sf   (dict_id_make ("CSQ", 3)).num;
+        dict_id_INFO_vep      = dict_id_vcf_info_sf   (dict_id_make ("vep", 3)).num;
         dict_id_INFO_DP_HIST  = dict_id_vcf_info_sf   (dict_id_make ("DP_HIST", 7)).num; // unfortunately there's a 2-letter conflict with DP, but we can't change names of INFO fields 
         dict_id_INFO_GQ_HIST  = dict_id_vcf_info_sf   (dict_id_make ("GQ_HIST", 7)).num;
         dict_id_INFO_AGE_HISTOGRAM_HET = dict_id_vcf_info_sf (dict_id_make ("AGE_HISTOGRAM_HET", 17)).num; 
