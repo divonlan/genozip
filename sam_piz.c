@@ -416,7 +416,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_TLEN)
 // fix prefix eg MX:i: -> MXs
 TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
 {
-    Container *con = (Container *)reconstructed;
+    ContainerP con = (ContainerP)reconstructed;
 
     if (reconstructed_len == -1) return 0; // no Optional data in this alignment
 
@@ -559,7 +559,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
 // remove the comma from the prefix that contains the type, eg "i,"->"i"
 TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
 {
-    Container *con = (Container *)reconstructed;
+    ContainerP con = (ContainerP)reconstructed;
     char *prefixes = &reconstructed[sizeof_container (*con)];
 
     // remove the ',' from the prefix, and terminate with CON_PREFIX_SEP_SHOW_REPEATS - this will cause

@@ -32,7 +32,7 @@
 #define TXT_DATA_PER_VB_FAST    "16" // MB with --fast
 extern void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str);
 
-#define MAX_SUBFIELDS 64   // Maximum number of items in a Container (for example: VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc). This value can be increased subject to MAX_DICTS<=253.
+#define MAX_SUBFIELDS 128  // Maximum number of items in a Container (for example: VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc). This value can be increased subject to MAX_DICTS<=253.
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
@@ -62,7 +62,7 @@ typedef const struct RAEntry *ConstRAEntryP;
 typedef union LastValueType *LastValueTypeP;
 typedef struct Mutex *MutexP;
 
-typedef void BgEnBufFunc (BufferP buf);
+typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPES } ExeType;

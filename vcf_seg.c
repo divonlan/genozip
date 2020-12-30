@@ -48,7 +48,7 @@ void vcf_seg_finalize (VBlockP vb_)
         vcf_seg_complete_missing_lines (vb);
 
     // top level snip
-    Container top_level = { 
+    SmallContainer top_level = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .num_items = 10,
@@ -64,7 +64,7 @@ void vcf_seg_finalize (VBlockP vb_)
                        { (DictId)dict_id_fields[VCF_EOL],     DID_I_NONE, ""   } }
     };
     
-    container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
+    container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
 
     if (flag.show_alleles && vb->ht_matrix_ctx) {
         printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_matrix_ctx->local.len);
@@ -212,9 +212,187 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf");
     }    
 
-    Container *con = ENT (Container, vb->format_mapper_buf, node_index);
+    ContainerP con = ENT (Container, vb->format_mapper_buf, node_index);
     if (is_new || !con->num_items) // assign if not already assigned. 
         *con = format_mapper; 
+}
+
+// an array of integers
+static inline void vcf_seg_INFO_array (VBlock *vb, Context *container_ctx, DidIType sf_did_i, 
+                                       const char *field, int32_t field_len /* must be signed */, char sep)
+{   
+    MiniContainer *con;
+    DictId arr_dict_id;
+    Context *arr_ctx;
+
+    // first use in this VB - prepare context where array elements will go in
+    if (!container_ctx->con_cache.len) {
+        const uint8_t *id = container_ctx->dict_id.id;
+        arr_dict_id = (DictId){ .id = { id[0], FLIP_CASE(id[1]), id[2], id[3], id[4], id[5], id[6], id[7] } };
+        
+        buf_alloc (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "ctx->con_cache");
+
+        con = FIRSTENT (MiniContainer, container_ctx->con_cache);
+        *con = (MiniContainer){ .num_items = 1, 
+                                .drop_final_item_sep = true,
+                                .items     = { { .dict_id   = arr_dict_id, // only one item
+                                                 .did_i     = DID_I_NONE,  
+                                                 .seperator = { sep } } } };
+
+        arr_ctx = ctx_get_ctx (vb, arr_dict_id);
+        arr_ctx->st_did_i = sf_did_i;
+        arr_ctx->ltype = LT_UINT32;
+    }
+    else { 
+        con         = FIRSTENT (MiniContainer, container_ctx->con_cache);
+        arr_dict_id = con->items[0].dict_id;
+        arr_ctx     = ctx_get_ctx (vb, arr_dict_id);
+    }
+
+    uint64_t save_arr_len  = arr_ctx->local.len;
+    int32_t save_field_len = field_len;
+    const char *save_field = field;
+
+    // count fields (1 + number of seperators)
+    con->repeats=1;
+    for (int32_t i=0; i < field_len; i++) 
+        if (field[i] == sep) con->repeats++;
+    
+    if (con->repeats == 1) goto simple_seg; 
+    
+    buf_alloc_more (vb, &arr_ctx->local, con->repeats, con->repeats * vb->lines.len, uint32_t, 1.2, "ctx->local");
+
+    for (uint32_t i=0; i < con->repeats; i++) { // field_len will be -1 after last number
+
+        const char *int_str = field;
+        for (; field_len && *field != sep; field++, field_len--) {};
+
+        int64_t value;
+        unsigned int_str_len  = (unsigned)(field - int_str);
+        if (!str_get_int (int_str, int_str_len, &value) ||
+            value < 0 || value > 0xffffffffULL) goto simple_seg;
+
+        NEXTENT (uint32_t, arr_ctx->local) = BGEN32 (value);
+
+        field_len--; // skip seperator
+        field++;
+    }
+
+    container_seg_by_ctx (vb, container_ctx, (ContainerP)con, 0, 0, save_field_len);
+
+    return;
+
+simple_seg:
+    arr_ctx->local.len = save_arr_len; // roll back
+    seg_by_ctx (vb, save_field, save_field_len, container_ctx, save_field_len, 0);
+}
+
+// Looks like this: DP_HIST=7458|1998|549|119|34|7|0|0|0|0|0|0|0|0|0|0|0|0|0|0,297|494|158|41|8|2|0|0|0|0|0|0|0|0|0|0|0|0|0|0
+// We create a two-item, 1 repeat container, each item is a array
+static inline void vcf_seg_INFO_double_array (VBlock *vb, DictId dict_id, const char *field, int32_t field_len)
+{
+    Context *container_ctx = ctx_get_ctx (vb, dict_id);
+
+    // we cache the container in con_coche
+    if (!container_ctx->con_cache.len) {
+
+        buf_alloc (vb, &container_ctx->con_cache, sizeof (SmallContainer) * 2, 1, "ctx->con_cache");
+        const uint8_t *id = dict_id.id;
+
+        // single item
+        DictId dict_id_1 = { .id = { id[0], id[1]+1, id[2], id[3], id[4], id[5], id[6], id[7] } };
+        ctx_get_ctx (vb, dict_id_1)->st_did_i = container_ctx->did_i;
+        NEXTENT (SmallContainer, container_ctx->con_cache) = 
+            (SmallContainer){ .num_items = 1, 
+                              .repeats   = 1, 
+                              .items     = { { .dict_id = dict_id_1, .did_i = DID_I_NONE } } };
+
+        // two items
+        DictId dict_id_2 = { .id = { id[0], id[1]+2, id[2], id[3], id[4], id[5], id[6], id[7] } };
+        ctx_get_ctx (vb, dict_id_2)->st_did_i = container_ctx->did_i;
+        NEXTENT (SmallContainer, container_ctx->con_cache) = 
+            (SmallContainer){ .num_items = 2, 
+                              .repeats   = 1, 
+                              .items     = { { .dict_id = dict_id_1, .did_i = DID_I_NONE, .seperator = { ',' } },
+                                             { .dict_id = dict_id_2, .did_i = DID_I_NONE                     } } };
+    }
+
+    const char *comma = NULL;
+    for (unsigned i=0; i < field_len; i++) 
+        if (field[i] == ',') {
+            comma = &field[i];
+            break;
+        }
+
+    SmallContainer *con = ENT (SmallContainer, container_ctx->con_cache, comma != NULL);
+
+    int32_t array_0_len = comma ? (int32_t)(comma-field) : field_len;
+    int32_t array_1_len = comma ? field_len - array_0_len - 1 : 1 /* dummy value */;
+
+    ASSSEG (array_0_len > 0 && array_1_len > 0, field, "Invalid %s field: array_0_len=%d array_1_len=%d", 
+            dis_dict_id (dict_id).s, array_0_len, array_1_len);
+
+    vcf_seg_INFO_array (vb, ctx_get_ctx (vb, con->items[0].dict_id), container_ctx->did_i, field, array_0_len, '|');
+    
+    if (comma)
+        vcf_seg_INFO_array (vb, ctx_get_ctx (vb, con->items[1].dict_id), container_ctx->did_i, comma+1, array_1_len, '|');
+
+    container_seg_by_ctx (vb, container_ctx, (ContainerP)con, 0, 0, comma != NULL); // 1 for the comma
+}
+
+static inline void vcf_seg_INFO_CSQ (VBlock *vb, const char *field, unsigned field_len)
+{
+    Container con = { .repsep = { ',' }, 
+                      .drop_final_repeat_sep = true,
+                      .keep_empty_item_sep   = true }; // don't delete the | before an empty item
+
+    Context *csq_ctx = ctx_get_ctx (vb, (DictId)dict_id_INFO_CSQ);
+    Context *sf_ctxs[MAX_SUBFIELDS] = {};
+
+    uint32_t item_i=0;
+    const char *item_start = field;
+    for (uint32_t i=0; i < field_len+1; i++) {
+        if (i == field_len || field[i] == ',' || field[i] == '|') { // end of item
+            if (item_i == con.num_items) {
+                ASSSEG (!con.repeats, field, 
+                        "expecting all repeats of CSQ to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has more", 
+                        con.num_items, con.repeats);
+
+                ASSSEG (item_i < MIN (126, MAX_SUBFIELDS), field, "exceeded the max number of CSQ items=%u", MIN (126, MAX_SUBFIELDS)); // the 126 constraint is just the context naming scheme
+                
+                char name[8];
+                sprintf (name, "%c%c_CSQ", item_i < 63 ? '_' : '`', '@' + (item_i % 63));
+                DictId dict_id = dict_id_vcf_info_sf (dict_id_make (name, 6));
+
+                sf_ctxs[item_i] = ctx_get_ctx (vb, dict_id);
+                sf_ctxs[item_i]->st_did_i = csq_ctx->did_i;
+
+                con.items[item_i] = (ContainerItem){ .dict_id   = dict_id, 
+                                                     .did_i     = DID_I_NONE, 
+                                                     .seperator = { field[i]=='|' ? '|' : 0 } };
+                con.num_items++;
+            }
+
+            unsigned item_len = &field[i] - item_start;
+            seg_by_ctx (vb, item_start, item_len, sf_ctxs[item_i], item_len + (i != field_len), NULL);
+
+            item_i++;
+            item_start = &field[i+1];
+
+            if (field[i] != '|') { // end of repeat
+                ASSSEG (!con.repeats || item_i == con.num_items, field, 
+                        "expecting all repeats of CSQ to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has only %u items", 
+                        con.num_items, con.repeats, item_i);
+            
+                con.repeats++;
+                item_i=0;
+            }
+        }
+    }
+
+    container_seg_by_ctx (vb, csq_ctx, &con, 0, 0, 0);
+
+    // TODO: recover and seg just the field as-is, rather than throw an error, if its not the CSQ format we expect
 }
 
 static inline bool vcf_seg_test_svlen (VBlockVCF *vb, const char *svlen_str, unsigned svlen_str_len)
@@ -283,6 +461,27 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         ctx->no_stons = true;
     }
 
+    else if (dict_id.num == dict_id_INFO_CSQ) {
+        vcf_seg_INFO_CSQ (vb_, *this_value, *this_value_len);
+        return false; // caller shouldn't seg because we already did
+    }
+
+    else if (dict_id.num == dict_id_INFO_DP_HIST ||
+             dict_id.num == dict_id_INFO_GQ_HIST ||
+             dict_id.num == dict_id_INFO_AGE_HISTOGRAM_HET ||
+             dict_id.num == dict_id_INFO_AGE_HISTOGRAM_HOM) {
+
+        vcf_seg_INFO_double_array (vb_, dict_id, *this_value, *this_value_len);
+        return false;
+    }
+
+    else if (dict_id.num == dict_id_INFO_DP4) {
+        // tested also for dict_id_INFO_SF, but it makes it worse
+        Context *ctx = ctx_get_ctx (vb, dict_id);
+        vcf_seg_INFO_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',');
+        return false;
+    }
+
     // finalization of this INFO field
     else if (!dict_id.num) { 
 
@@ -333,7 +532,34 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
     if (str_get_int (cell, cell_len, &ps_value) && ps_value == ctx->last_value.i) // same as previous line
         return seg_by_ctx ((VBlockP)vb, (char []){ SNIP_SELF_DELTA, '0' }, 2, ctx, cell_len, NULL);
 
-    return vcf_seg_delta_vs_other ((VBlockP)vb, ctx, &vb->contexts[VCF_POS], cell, cell_len, 1000);
+    return seg_delta_vs_other ((VBlockP)vb, ctx, &vb->contexts[VCF_POS], cell, cell_len, 1000);
+}
+
+// used for DP and GQ - store in transposed matrix in local 
+static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
+{
+    ctx->ltype = LT_UINT32_TR;
+    ctx->flags.store = STORE_INT;
+
+    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, "ctx->local");
+
+    if (cell_len == 1 && cell[0] == '.') {
+        NEXTENT (uint32_t, ctx->local) = 0xffffffff;
+    }
+    else {
+        ASSERTE (str_get_int (cell, cell_len, &ctx->last_value.i) && ctx->last_value.i >= 0 && ctx->last_value.i <= 0xfffffffe, 
+                 "expecting an integer in the range [0, 0xfffffffe] or a '.', but found: %.*s", cell_len, cell);
+
+        NEXTENT (uint32_t, ctx->local) = (uint32_t)ctx->last_value.i;
+    }
+
+    // add a LOOKUP to b250
+    static const char lookup[1] = { SNIP_LOOKUP };
+    seg_by_ctx ((VBlockP)vb, lookup, 1, ctx, 0, NULL);
+
+    ctx->txt_len += cell_len;
+
+    return 0;
 }
 
 // increase ploidy of the previous lines, if higher ploidy was encountered
@@ -459,7 +685,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     else {
         vb->gt_prev_ploidy = gt.repeats;
         vb->gt_prev_phase  = gt.repsep[0];
-        return container_seg_by_ctx ((VBlockP)vb, ctx, (Container *)&gt, 0, 0, save_cell_len); 
+        return container_seg_by_ctx ((VBlockP)vb, ctx, (ContainerP)&gt, 0, 0, save_cell_len); 
     }
 }
 
@@ -497,10 +723,10 @@ static WordIndex vcf_seg_hetero_array_field (VBlock *vb, DictId dict_id, const c
         value++;
     }
 
-    return container_seg_by_dict_id (vb, dict_id, (Container *)&con, 0);
+    return container_seg_by_dict_id (vb, dict_id, (ContainerP)&con, 0);
 }
 
-static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Container *samples, uint32_t sample_i,
+static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP samples, uint32_t sample_i,
                                 const char *cell, // beginning of sample, also beginning of first "cell" (subfield)
                                 unsigned sample_len,  // not including the \t or \n 
                                 bool is_vcf_string,
@@ -558,13 +784,17 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Container *sa
 
         // case: DP - if there is an INFO/DP too, and it is the same - we store a delta of 0 
         // (this usually means there's one sample) - if they are not the same don't delta
-        else if (dict_id.num == dict_id_FORMAT_DP) 
-            node_index = vcf_seg_delta_vs_other ((VBlockP)vb, ctx, info_dp_ctx, cell, cell_len, 0);
+        else if (dict_id.num == dict_id_FORMAT_DP && vcf_num_samples == 1) 
+            node_index = seg_delta_vs_other ((VBlockP)vb, ctx, info_dp_ctx, cell, cell_len, 0);
 
+        else if (dict_id.num == dict_id_FORMAT_DP ||
+                 dict_id.num == dict_id_FORMAT_GQ) 
+            node_index = vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len);
+            
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         else if (dict_id.num == dict_id_FORMAT_MIN_DP) 
-            node_index = vcf_seg_delta_vs_other ((VBlockP)vb, ctx, dp_ctx, cell, cell_len, -1);
+            node_index = seg_delta_vs_other ((VBlockP)vb, ctx, dp_ctx, cell, cell_len, -1);
 
         else if (dict_id.num == dict_id_FORMAT_AD || dict_id.num == dict_id_FORMAT_ADALL) 
             node_index = vcf_seg_hetero_array_field ((VBlockP)vb, dict_id, cell, cell_len);

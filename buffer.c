@@ -910,11 +910,11 @@ bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_wor
         return file_put_data (filename, buf->data, buf->len * buf_word_width);
 }
  
-void BGEN_u8_buf (Buffer *buf)
+void BGEN_u8_buf (Buffer *buf, LocalType *lt)
 {
 }
 
-void BGEN_u16_buf (Buffer *buf)
+void BGEN_u16_buf (Buffer *buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint16_t num_big_en = *ENT (uint16_t, *buf, i);
@@ -922,7 +922,7 @@ void BGEN_u16_buf (Buffer *buf)
     }
 }
 
-void BGEN_u32_buf (Buffer *buf)
+void BGEN_u32_buf (Buffer *buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint32_t num_big_en = *ENT (uint32_t, *buf, i);
@@ -930,7 +930,7 @@ void BGEN_u32_buf (Buffer *buf)
     }
 }
 
-void BGEN_u64_buf (Buffer *buf)
+void BGEN_u64_buf (Buffer *buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint64_t num_big_en = *ENT (uint64_t, *buf, i);
@@ -938,37 +938,137 @@ void BGEN_u64_buf (Buffer *buf)
     }
 }
 
-void BGEN_deinterlace_d8_buf (Buffer *buf)
+void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
+{
+    uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix
+    
+    if (!cols && z_file->data_type == DT_VCF) cols = vcf_header_get_num_samples();
+    ASSERTE0 (cols, "cols=0");
+
+    uint32_t rows = buf->len / cols;
+
+    buf_alloc (buf->vb, &buf->vb->compressed, buf->len, 1, "compressed");
+    ARRAY (uint8_t, target, buf->vb->compressed);
+    ARRAY (uint8_t, transposed, *buf);
+
+    for (uint32_t c=0; c < cols; c++) 
+        for (uint32_t r=0; r < rows; r++) 
+            target[r * cols + c] = transposed[c * rows + r];
+
+    buf->vb->compressed.len = buf->len;
+    buf_copy (buf->vb, buf, &buf->vb->compressed, 1, 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+
+    buf_free (&buf->vb->compressed);
+
+    *lt = LT_UINT8; // no longer transposed
+}
+
+void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
+{
+    uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix
+
+    if (!cols && z_file->data_type == DT_VCF) cols = vcf_header_get_num_samples();
+    ASSERTE0 (cols, "cols=0");
+
+    uint32_t rows = buf->len / cols;
+
+    buf_alloc (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint16_t), 1, "compressed");
+    ARRAY (uint16_t, target, buf->vb->compressed);
+    ARRAY (uint16_t, transposed, *buf);
+
+    for (uint32_t c=0; c < cols; c++) 
+        for (uint32_t r=0; r < rows; r++) 
+            target[r * cols + c] = BGEN16 (transposed[c * rows + r]);
+
+    buf->vb->compressed.len = buf->len;
+    buf_copy (buf->vb, buf, &buf->vb->compressed, sizeof (uint16_t), 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+
+    buf_free (&buf->vb->compressed);
+
+    *lt = LT_UINT16; // no longer transposed
+}
+
+void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
+{
+    uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix
+
+    if (!cols && z_file->data_type == DT_VCF) cols = vcf_header_get_num_samples();
+    ASSERTE0 (cols, "cols=0");
+
+    uint32_t rows = buf->len / cols;
+
+    buf_alloc (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint32_t), 1, "compressed");
+    ARRAY (uint32_t, target, buf->vb->compressed);
+    ARRAY (uint32_t, transposed, *buf);
+
+    for (uint32_t c=0; c < cols; c++) 
+        for (uint32_t r=0; r < rows; r++) 
+            target[r * cols + c] = BGEN32 (transposed[c * rows + r]);
+
+    buf->vb->compressed.len = buf->len;
+    buf_copy (buf->vb, buf, &buf->vb->compressed, sizeof (uint32_t), 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+
+    buf_free (&buf->vb->compressed);
+
+    *lt = LT_UINT32; // no longer transposed
+}
+
+void BGEN_transpose_u64_buf (Buffer *buf, LocalType *lt)
+{
+    uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix
+
+    if (!cols && z_file->data_type == DT_VCF) cols = vcf_header_get_num_samples();
+    ASSERTE0 (cols, "cols=0");
+
+    uint32_t rows = buf->len / cols;
+
+    buf_alloc (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint64_t), 1, "compressed");
+    ARRAY (uint64_t, target, buf->vb->compressed);
+    ARRAY (uint64_t, transposed, *buf);
+
+    for (uint32_t c=0; c < cols; c++) 
+        for (uint32_t r=0; r < rows; r++) 
+            target[r * cols + c] = BGEN64 (transposed[c * rows + r]);
+
+    buf->vb->compressed.len = buf->len;
+    buf_copy (buf->vb, buf, &buf->vb->compressed, sizeof (uint64_t), 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+
+    buf_free (&buf->vb->compressed);
+
+    *lt = LT_UINT64; // no longer transposed
+}
+
+void BGEN_deinterlace_d8_buf (Buffer *buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint8_t unum = *ENT (uint8_t, *buf, i);
         *ENT (int8_t, *buf, i) = DEINTERLACE(int8_t,unum); 
-   }
+    }
 }
 
-void BGEN_deinterlace_d16_buf (Buffer *buf)
+void BGEN_deinterlace_d16_buf (Buffer *buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint16_t num_big_en = *ENT (uint16_t, *buf, i);
         uint16_t unum = BGEN16 (num_big_en);
         *ENT (int16_t, *buf, i) = DEINTERLACE(int16_t,unum); 
-   }
+    }
 }
 
-void BGEN_deinterlace_d32_buf (Buffer *buf)
+void BGEN_deinterlace_d32_buf (Buffer *buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint32_t num_big_en = *ENT (uint32_t, *buf, i);
         uint32_t unum = BGEN32 (num_big_en);
         *ENT (int32_t, *buf, i) = DEINTERLACE(int32_t,unum); 
-   }
+    }
 }
 
-void BGEN_deinterlace_d64_buf (Buffer *buf)
+void BGEN_deinterlace_d64_buf (Buffer *buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint64_t num_big_en = *ENT (uint64_t, *buf, i);
         uint64_t unum = BGEN64 (num_big_en);
         *ENT (int64_t, *buf, i) = DEINTERLACE(int64_t,unum); 
-   }
+    }
 }

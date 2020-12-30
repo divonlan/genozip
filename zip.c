@@ -195,6 +195,62 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
     return false; // don't drop this section
 }
 
+// selects the smallest size (8, 16, 32) for the data, transposes, and BGENs
+static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
+{
+    ARRAY (uint32_t, data, ctx->local);
+
+    // get largest element (excluding 0xffffffff - representing a '.')
+    uint32_t largest=0;
+    for (uint64_t i=0; i < ctx->local.len; i++)
+        if (data[i] > largest && data[i] != 0xffffffff) largest = data[i];
+
+    if      (largest < 0xfe)   ctx->ltype = LT_UINT8_TR;  // -1 is reserved for "missing"
+    else if (largest < 0xfffe) ctx->ltype = LT_UINT16_TR;
+    
+    buf_alloc (vb, &vb->compressed, ctx->local.len * lt_desc[ctx->ltype].width, 1, "compressed");
+
+    uint32_t cols = ctx->local.param;
+    if (cols == 0 && z_file->data_type == DT_VCF)
+        cols = vcf_header_get_num_samples();
+    
+    else
+        // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
+        ASSERTE (cols > 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->name);
+
+    // case: matrix is not transposable - just BGEN it
+    if (ctx->local.len % cols) {
+        ctx->ltype = LT_UINT32; // not transposed
+
+        for (unsigned i=0; i < ctx->local.len; i++)
+            data[i] = BGEN32 (data[i]);
+            
+        return;
+    }
+
+    uint32_t rows = ctx->local.len / cols;
+
+    ctx->flags.copy_param = true;
+    
+    for (uint32_t r=0; r < rows; r++) 
+        for (uint32_t c=0; c < cols; c++) {
+
+            uint32_t value = data[r * cols + c];
+
+            switch (ctx->ltype) { // note: the casting aslo correctly converts 0xffffffff to eg 0xff
+                case LT_UINT8_TR  : *ENT (uint8_t,  vb->compressed, c * rows + r) =         (uint8_t)value;   break;
+                case LT_UINT16_TR : *ENT (uint16_t, vb->compressed, c * rows + r) = BGEN16 ((uint16_t)value); break;
+                case LT_UINT32_TR : *ENT (uint32_t, vb->compressed, c * rows + r) = BGEN32 (value);           break;
+                default: ABORT ("Error in zip_generate_transposed_local: Bad ltype=%s", lt_name (ctx->ltype));
+            }
+        }
+
+    vb->compressed.len = ctx->local.len;
+    buf_copy (vb, &ctx->local, &vb->compressed, lt_desc[ctx->ltype].width, 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+
+    buf_free (&vb->compressed);
+}
+
 // Codecs may be assigned in 3 stages:
 // 1. During Seg (a must for all complex codecs - eg HT, DOMQ, ACGT...)
 // 2. At merge - inherit from z_file->context if not set in Seg
@@ -260,9 +316,11 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
     // generate & write b250 data for all primary fields
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = &vb->contexts[did_i];
-
+        
         if (ctx->node_i.len) {
-            
+
+            ASSERTE (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->node_i containing data", did_i);
+
             bool drop_section = zip_generate_b250_section (vb, ctx, 0);
 
             if (!drop_section) {
@@ -276,11 +334,16 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
 
         if (ctx->local.len || ctx->local_always) { 
 
+            ASSERTE (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->local containing data", did_i);
+
             if (dict_id_printable (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
                 ctx_dump_binary (vb, ctx, true);
 
             if (ctx->ltype == LT_BITMAP) 
                 LTEN_bit_array (buf_get_bitarray (&ctx->local));
+
+            else if (ctx->ltype == LT_UINT32_TR)
+                zip_generate_transposed_local (vb, ctx);
 
             if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->name, ctx->lcodec);
             zfile_compress_local_data (vb, ctx, 0);

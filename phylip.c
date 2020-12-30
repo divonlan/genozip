@@ -90,7 +90,7 @@ void phy_seg_initialize (VBlock *vb)
 void phy_seg_finalize (VBlockP vb)
 {
     // top level snip
-    Container top_level = { 
+    SmallContainer top_level = { 
         .repeats     = vb->lines.len,
         .is_toplevel = true,
         .num_items   = 3,
@@ -99,9 +99,9 @@ void phy_seg_finalize (VBlockP vb)
                          { (DictId)dict_id_fields[PHY_EOL], DID_I_NONE, "" } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[PHY_TOPLEVEL], &top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[PHY_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
 
-    Container top_level_to_fasta = { 
+    SmallContainer top_level_to_fasta = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .num_items = 2,
@@ -113,7 +113,7 @@ void phy_seg_finalize (VBlockP vb)
                                          CON_PREFIX_SEP,        // end of (empty) container-wide prefix
                                          '>', CON_PREFIX_SEP }; // sequence ID prefix in fasta
 
-    container_seg_by_ctx (vb, &vb->contexts[PHY_TOP2FASTA], &top_level_to_fasta, fasta_prefix, sizeof (fasta_prefix), 0);
+    container_seg_by_ctx (vb, &vb->contexts[PHY_TOP2FASTA], (ContainerP)&top_level_to_fasta, fasta_prefix, sizeof (fasta_prefix), 0);
 }
 
 const char *phy_seg_txt_line (VBlock *vb, const char *line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts

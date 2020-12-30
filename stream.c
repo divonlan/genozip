@@ -60,10 +60,10 @@ static const char *stream_windows_error (void)
 static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip)
 {
 #ifdef _WIN32
-    ASSERT (!_pipe (fds,  pipe_size, _O_BINARY), "Error: failed to create pipe: %s", strerror (errno));
+    ASSERTE (!_pipe (fds,  pipe_size, _O_BINARY), "failed to create pipe: %s", strerror (errno));
 
 #else // Not Windows
-    ASSERT (!pipe (fds), "Error: failed to create pipe: %s", strerror (errno));
+    ASSERTE (!pipe (fds), "failed to create pipe: %s (errno=%u)", strerror (errno), errno);
 
 #ifdef F_SETPIPE_SZ // this is Linux-specific, and available since kernel 2.6.35
     
@@ -302,8 +302,8 @@ void stream_close_pipes (Stream *stream)
 {
     // fclose and fail silently (pipes might be gone already after we killed the counter part process?)
     
-    // BUG here: fclose fails in Windows, core-dumps in Linux - looks like it already closed - commented out for now.
-    //if (stream->from_stream_stdout) FCLOSE (stream->from_stream_stdout, "stream->from_stream_stdout"); 
+    // issue here: fclose fails in Windows, core-dumps in Linux - unclear why - replaced with low-level close.
+    if (stream->from_stream_stdout) close (fileno (stream->from_stream_stdout));
     if (stream->from_stream_stderr) FCLOSE (stream->from_stream_stderr, "stream->from_stream_stderr");
     if (stream->to_stream_stdin)    FCLOSE (stream->to_stream_stdin,    "stream->from_stream_stderr");
 }

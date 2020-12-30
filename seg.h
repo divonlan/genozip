@@ -57,10 +57,11 @@ extern void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, u
 extern void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes);
 extern void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned add_bytes);
 
-extern WordIndex vcf_seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
+extern WordIndex seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
 
+typedef struct { bool slash, pipe, colon, dot, whitespace; /* seperators */ } SegCompoundArg; 
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
-                                bool ws_is_sep, unsigned nonoptimized_len, unsigned add_for_eol);
+                                SegCompoundArg arg, unsigned nonoptimized_len, unsigned add_for_eol);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 

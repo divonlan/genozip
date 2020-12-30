@@ -23,11 +23,15 @@ const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES] = LOCALTYPE_DESC;
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 {
     DictId dict_id = DICT_ID_NONE;
+    bool has_dict_id = true;
 
     if      (header->section_type == SEC_DICT ) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
     else if (header->section_type == SEC_B250 ) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
     else if (header->section_type == SEC_LOCAL) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
+    else has_dict_id = false;
 
+    ASSERTE0 (!has_dict_id || dict_id.num, "dict_id=0");
+    
     buf_alloc_more (vb, &vb->section_list_buf, 1, 50, SectionListEntry, 2, "section_list_buf");
     
     NEXTENT (SectionListEntry, vb->section_list_buf) = (SectionListEntry) {
@@ -261,4 +265,12 @@ const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool
     ASSERT (soft_fail, "Error in sections_get_first_section_of_type: Cannot find section_type=%s in z_file", st_name (st));
 
     return NULL;
+}
+
+const char *lt_name (LocalType lt)
+{
+    if (lt >= 0 && lt < NUM_LOCAL_TYPES) 
+        return lt_desc[lt].name;
+    else
+        return "INVALID_LT";
 }

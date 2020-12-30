@@ -39,36 +39,23 @@ typedef struct ContainerItem {
 // by a prefix for each item. Every prefix, if provided, is terminated by CON_PREFIX_SEP.
 // Only the container-wide prefix may alternatively be terminated by CON_PREFIX_SEP_SHOW_REPEATS.
 
-typedef struct Container {
-    uint32_t repeats;     // number of "repeats" (array elements)
-    uint8_t num_items;    // 1 to MAX_CONTAINER_ITEMS
+#define CONTAINER_FIELDS(nitems)       \
+    uint32_t repeats;                   /* number of "repeats" (array elements) */ \
+    uint8_t num_items;                  /* 1 to MAX_SUBFIELDS */  \
+    /* container flags */               \
+    uint8_t drop_final_item_sep   : 1;  \
+    uint8_t drop_final_repeat_sep : 1;  \
+    uint8_t filter_repeats        : 1;  \
+    uint8_t filter_items          : 1;  \
+    uint8_t is_toplevel           : 1;  \
+    uint8_t keep_empty_item_sep   : 1; /* normally, we delete the separator preceding an empty item. this flag suppresses this deletion */ \
+    char repsep[2];                    /* repeat seperator - two bytes that appear at the end of each repeat (ignored if 0) */ \
+    ContainerItem items[nitems];
 
-    // container flags
-    uint8_t drop_final_item_sep   : 1;
-    uint8_t drop_final_repeat_sep : 1;
-    uint8_t filter_repeats        : 1;
-    uint8_t filter_items          : 1;
-    uint8_t is_toplevel           : 1;
-    
-    char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
-    ContainerItem items[MAX_SUBFIELDS];
-} Container;
-
-// identical to Container, but with only one item
-typedef struct MiniContainer {
-    uint32_t repeats;     // number of "repeats" (array elements)
-    uint8_t num_items;    // must be 1
-
-    // container flags
-    uint8_t drop_final_item_sep   : 1;
-    uint8_t drop_final_repeat_sep : 1;
-    uint8_t filter_repeats        : 1;
-    uint8_t filter_items          : 1;
-    uint8_t is_toplevel           : 1;
-
-    char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
-    ContainerItem items[1];
-} MiniContainer;
+typedef struct Container      { CONTAINER_FIELDS(MAX_SUBFIELDS) } Container;
+typedef struct MiniContainer  { CONTAINER_FIELDS(1) } MiniContainer;
+#define NUM_SMALL_CONTAINER_SUBFIELDS 16
+typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) } SmallContainer;
 
 #pragma pack()
 #define sizeof_container(con) (sizeof(con) - sizeof((con).items) + (con).num_items * sizeof((con).items[0]))
@@ -77,6 +64,8 @@ extern WordIndex container_seg_by_ctx (VBlockP vb, ContextP ctx, ContainerP con,
 #define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg_by_ctx ((VBlockP)vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
 
 extern void container_reconstruct (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len);
+
+extern void container_display (ConstContainerP con);
 
 // Translators reconstructing last_value as a little endian binary
 TRANSLATOR_FUNC (container_translate_I8);   

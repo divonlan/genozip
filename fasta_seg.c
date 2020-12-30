@@ -129,7 +129,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
 void fasta_seg_finalize (VBlockP vb)
 {
     // top level snip
-    Container top_level = { 
+    SmallContainer top_level = { 
         .repeats      = vb->lines.len,
         .is_toplevel  = true,
         .filter_items = true,
@@ -138,7 +138,7 @@ void fasta_seg_finalize (VBlockP vb)
                           { (DictId)dict_id_fields[FASTA_EOL],      DID_I_NONE, ""   } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], &top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
 }
 
 
@@ -173,9 +173,8 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
         ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
 
         if (!flag.make_reference) {
-            // we segment using / | : . and " " as separators. 
-
-            seg_compound_field ((VBlockP)vb, &vb->contexts[FASTA_DESC], line_start, line_len, true, 0, 0);
+            SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
+            seg_compound_field ((VBlockP)vb, &vb->contexts[FASTA_DESC], line_start, line_len, arg, 0, 0);
             
             seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_fields[FASTA_DESC], false, 0, &special_snip[2], &special_snip_len);
 

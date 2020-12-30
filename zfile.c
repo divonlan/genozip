@@ -131,7 +131,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     case SEC_LOCAL: {
         SectionHeaderCtx *h = (SectionHeaderCtx *)header;
         sprintf (str, SEC_TAB "%s ltype=%s param=%u paired=%u copy_param=%u\n",
-                 dis_dict_id (h->dict_id).s, lt_desc[h->ltype].name, h->param, h->h.flags.ctx.paired, h->h.flags.ctx.copy_param); 
+                 dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, h->h.flags.ctx.paired, h->h.flags.ctx.copy_param); 
         break;
     }
 

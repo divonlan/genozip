@@ -25,6 +25,8 @@
 WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                      bool *is_new) // optional out
 {
+    ASSERTE0 (ctx, "ctx is NULL");
+
     buf_alloc (vb, &ctx->node_i, MAX (vb->lines.len, ctx->node_i.len + 1) * sizeof (uint32_t),
                CTX_GROWTH, "contexts->node_i");
     
@@ -422,8 +424,8 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
                             total_names_len /* names inc. = */ + (con.num_items-1) /* the ;s */ + 1 /* \t or \n */);
 }
 
-WordIndex vcf_seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len,
-                                  int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
+WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len,
+                              int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
 {
     if (!other_ctx) goto fallback;
 
@@ -474,7 +476,7 @@ Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_
 // anticipate that usually all lines have the same format, but we allow lines to have different formats.
 void seg_compound_field (VBlock *vb, 
                          Context *field_ctx, const char *field, unsigned field_len, 
-                         bool ws_is_sep,            // whitespace is separator - separate by ' ' at '\t'
+                         SegCompoundArg arg,   
                          unsigned nonoptimized_len, // if non-zero, we don't account for the string given, instead, only for this amount (+add_for_eol)
                          unsigned add_for_eol)      // account for characters beyond the component seperators
 {
@@ -494,7 +496,12 @@ void seg_compound_field (VBlock *vb,
         char sep = (i==field_len) ? 0 : field[i];
 
         if (!sep || 
-            ((con.num_items < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || sep=='.' || (ws_is_sep && (sep==' ' || sep=='\t' || sep==1))))) {
+            (con.num_items < MAX_COMPOUND_COMPONENTS-1 && 
+             ((sep==':' && arg.colon) || 
+              (sep=='/' && arg.slash) ||
+              (sep=='|' && arg.pipe)  || 
+              (sep=='.' && arg.dot)   || 
+              ((sep==' ' || sep=='\t' || sep==1) && arg.whitespace)))) {
         
             // process the subfield that just ended
             Context *sf_ctx = ctx_get_ctx (vb, con.items[con.num_items].dict_id);

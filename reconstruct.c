@@ -48,7 +48,7 @@ static int64_t reconstruct_from_delta (VBlock *vb,
 #define ASSERT_IN_BOUNDS \
     ASSERT (ctx->next_local < ctx->local.len, \
             "Error in %s:%u reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s)", \
-            __FUNCTION__, __LINE__, vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len, lt_desc[ctx->ltype].name, codec_name (ctx->lcodec));
+            __FUNCTION__, __LINE__, vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec));
 
 static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reconstruct)
 {
@@ -72,11 +72,13 @@ static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char sepera
 #   define GETNUMBER(signedtype) { \
         u ## signedtype unum = NEXTLOCAL (u ## signedtype, ctx); \
         num = (int64_t)(lt_desc[ctx->ltype].is_signed ? (signedtype)unum : unum); \
+        is_minus_1 = (unum == (u ## signedtype)-1); \
     }
 
     ASSERT_IN_BOUNDS;
 
     int64_t num=0;
+    bool is_minus_1=false;
     switch (lt_desc[ctx->ltype].width) {
         case 4: GETNUMBER (int32_t); break;
         case 2: GETNUMBER (int16_t); break;
@@ -87,7 +89,11 @@ static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char sepera
 
     // TO DO: RECONSTRUCT_INT won't reconstruct large uint64_t correctly
     if (reconstruct) { 
-        RECONSTRUCT_INT (num);
+        if (is_minus_1 && vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) {
+            RECONSTRUCT1 ('.');
+        } else {
+            RECONSTRUCT_INT (num);
+        }
         if (seperator) RECONSTRUCT1 (seperator);
     }
 
@@ -323,7 +329,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     else if (ctx->local.len) {
         switch (ctx->ltype) {
         case LT_INT8 ... LT_UINT64 :
-            reconstruct_from_local_int(vb, ctx, 0, reconstruct); break;
+            reconstruct_from_local_int (vb, ctx, 0, reconstruct); break;
         
         case LT_CODEC:
             codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx); break;

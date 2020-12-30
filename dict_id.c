@@ -24,8 +24,12 @@ uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_
          dict_id_FORMAT_GT_SHARK_DB=0, dict_id_FORMAT_GT_SHARK_GT=0, dict_id_FORMAT_GT_SHARK_EX=0,
          dict_id_FORMAT_AD=0, dict_id_FORMAT_ADALL=0, dict_id_FORMAT_GQ=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
-         dict_id_INFO_END=0, dict_id_INFO_SVLEN=0;
-
+         dict_id_INFO_END=0, dict_id_INFO_SVLEN=0, dict_id_INFO_DP4=0, dict_id_INFO_SF=0,
+         
+         // tags from VEP (Varient Effect Predictor) and similar tools
+         dict_id_INFO_CSQ=0, dict_id_INFO_DP_HIST=0, dict_id_INFO_GQ_HIST=0, 
+         dict_id_INFO_AGE_HISTOGRAM_HET=0, dict_id_INFO_AGE_HISTOGRAM_HOM=0; 
+   
 // SAM stuff
 uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
          dict_id_OPTION_H1=0, dict_id_OPTION_H2=0, dict_id_OPTION_MD=0, dict_id_OPTION_MQ=0, dict_id_OPTION_NH=0, dict_id_OPTION_NM=0, 
@@ -106,7 +110,14 @@ void dict_id_initialize (DataType data_type)
         dict_id_INFO_AF       = dict_id_vcf_info_sf   (dict_id_make ("AF", 2)).num;
         dict_id_INFO_AN       = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
         dict_id_INFO_DP       = dict_id_vcf_info_sf   (dict_id_make ("DP", 2)).num;
+        dict_id_INFO_DP4      = dict_id_vcf_info_sf   (dict_id_make ("DP4", 3)).num;
+        dict_id_INFO_SF       = dict_id_vcf_info_sf   (dict_id_make ("SF", 2)).num;
         dict_id_INFO_VQSLOD   = dict_id_vcf_info_sf   (dict_id_make ("VQSLOD", 6)).num;
+        dict_id_INFO_CSQ      = dict_id_vcf_info_sf   (dict_id_make ("CSQ", 3)).num;
+        dict_id_INFO_DP_HIST  = dict_id_vcf_info_sf   (dict_id_make ("DP_HIST", 7)).num; // unfortunately there's a 2-letter conflict with DP, but we can't change names of INFO fields 
+        dict_id_INFO_GQ_HIST  = dict_id_vcf_info_sf   (dict_id_make ("GQ_HIST", 7)).num;
+        dict_id_INFO_AGE_HISTOGRAM_HET = dict_id_vcf_info_sf (dict_id_make ("AGE_HISTOGRAM_HET", 17)).num; 
+        dict_id_INFO_AGE_HISTOGRAM_HOM = dict_id_vcf_info_sf (dict_id_make ("AGE_HISTOGRAM_HOM", 17)).num;
 
         // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
         dict_id_INFO_END      = dict_id_vcf_info_sf   (dict_id_make ("END", 3)).num;

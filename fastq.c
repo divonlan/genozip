@@ -234,7 +234,7 @@ void fastq_seg_finalize (VBlockP vb)
         vb->contexts[FASTQ_QUAL].ltype  = LT_SEQUENCE; // might be overridden by codec_domq_compress
 
     // top level snip
-    Container top_level = { 
+    SmallContainer top_level = { 
         .repeats        = vb->lines.len,
         .is_toplevel    = true,
         .filter_items   = true,
@@ -251,7 +251,7 @@ void fastq_seg_finalize (VBlockP vb)
         }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
+    container_seg_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], (ContainerP)&top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
 }
 
 
@@ -372,7 +372,8 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
     }
 
     // we segment it using / | : and " " as separators. 
-    seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, true, unoptimized_len, 0);
+    SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
+    seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, arg, unoptimized_len, 0);
     SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line

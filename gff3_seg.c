@@ -28,7 +28,7 @@ void gff3_seg_initialize (VBlock *vb)
 void gff3_seg_finalize (VBlockP vb)
 {
     // top level snip
-    Container top_level = { 
+    SmallContainer top_level = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .num_items = 10,
@@ -44,7 +44,7 @@ void gff3_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[GFF3_EOL],    DID_I_NONE, ""   } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], &top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
 }
 
 

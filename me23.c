@@ -49,7 +49,7 @@ void me23_seg_initialize (VBlock *vb)
 void me23_seg_finalize (VBlockP vb)
 {
     // top level snip
-    Container top_level = { 
+    SmallContainer top_level = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .num_items = 5,
@@ -60,9 +60,9 @@ void me23_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[ME23_EOL],      DID_I_NONE, ""   } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[ME23_TOPLEVEL], &top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[ME23_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
 
-    Container top_level_to_vcf = { 
+    SmallContainer top_level_to_vcf = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .num_items = 5,
@@ -72,7 +72,7 @@ void me23_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[ME23_GENOTYPE], DID_I_NONE, "\n", ME232VCF_GENOTYPE } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[ME23_TOP2VCF], &top_level_to_vcf, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[ME23_TOP2VCF], (ContainerP)&top_level_to_vcf, 0, 0, 0);
 }
 
 const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts

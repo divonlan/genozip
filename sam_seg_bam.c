@@ -360,8 +360,9 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     sam_seg_tlen_field (vb, 0, 0, (int64_t)tlen, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len); // TLEN
 
+    SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
     seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], next_field, // QNAME
-                        l_read_name-1, false, 0, 2 /* account for \0 and l_read_name */); 
+                        l_read_name-1, arg, 0, 2 /* account for \0 and l_read_name */); 
     next_field += l_read_name; // inc. \0
 
     // *** ingest & segment variable-length fields ***

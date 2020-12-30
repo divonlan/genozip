@@ -83,8 +83,8 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
                     buf.param = buf.len * 64 - header->param ; /* number of bits */ \
                     LTEN_bit_array (buf_get_bitarray (&buf)); \
                 } \
-                else if (ctx->ltype >= LT_INT8 && ctx->ltype <= LT_UINT64)    \
-                    lt_desc[ctx->ltype].file_to_native (&buf); \
+                else if (lt_desc[ctx->ltype].file_to_native)   \
+                    lt_desc[ctx->ltype].file_to_native (&buf, &ctx->ltype); \
             }
 
             if      (is_pair_section) adjust_lens (ctx->pair)

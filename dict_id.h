@@ -41,7 +41,11 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_FORMAT_GT_SHARK_DB, dict_id_FORMAT_GT_SHARK_GT, dict_id_FORMAT_GT_SHARK_EX,
                 dict_id_FORMAT_AD, dict_id_FORMAT_ADALL, dict_id_FORMAT_GQ,
                 dict_id_INFO_AC,  dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD, // some VCF INFO subfields
-                dict_id_INFO_END, dict_id_INFO_SVLEN, dict_id_WindowsEOL,
+                dict_id_INFO_DP4, dict_id_INFO_SF, dict_id_INFO_END, dict_id_INFO_SVLEN, dict_id_WindowsEOL,
+
+                // tags from VEP (Varient Effect Predictor) and similar tools
+                dict_id_INFO_CSQ, dict_id_INFO_DP_HIST, dict_id_INFO_GQ_HIST, 
+                dict_id_INFO_AGE_HISTOGRAM_HET, dict_id_INFO_AGE_HISTOGRAM_HOM,
 
                 // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
                 dict_id_OPTION_AM, dict_id_OPTION_AS, dict_id_OPTION_CM, dict_id_OPTION_E2, dict_id_OPTION_LB, dict_id_OPTION_FI, 

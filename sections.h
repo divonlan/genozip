@@ -170,20 +170,24 @@ typedef struct {
 
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
 typedef enum __attribute__ ((__packed__)) { // 1 byte
-    LT_TEXT     = 0,
-    LT_INT8     = 1,    
-    LT_UINT8    = 2,
-    LT_INT16    = 3,
-    LT_UINT16   = 4,
-    LT_INT32    = 5,
-    LT_UINT32   = 6,
-    LT_INT64    = 7,   // ffu
-    LT_UINT64   = 8,   // ffu
-    LT_FLOAT32  = 9,   // ffu
-    LT_FLOAT64  = 10,  // ffu
-    LT_SEQUENCE = 11,  // length of data extracted is determined by vb->seq_len
-    LT_BITMAP   = 12,  // a bitmap
-    LT_CODEC    = 13,  // codec specific type with its codec specific reconstructor
+    LT_TEXT      = 0,
+    LT_INT8      = 1,    
+    LT_UINT8     = 2,
+    LT_INT16     = 3,
+    LT_UINT16    = 4,
+    LT_INT32     = 5,
+    LT_UINT32    = 6,
+    LT_INT64     = 7,   // ffu
+    LT_UINT64    = 8,   // ffu
+    LT_FLOAT32   = 9,   // ffu
+    LT_FLOAT64   = 10,  // ffu
+    LT_SEQUENCE  = 11,  // length of data extracted is determined by vb->seq_len
+    LT_BITMAP    = 12,  // a bitmap
+    LT_CODEC     = 13,  // codec specific type with its codec specific reconstructor
+    LT_UINT8_TR  = 14,  // transposed array - number of columns in original array is in param (up to 255 columns)
+    LT_UINT16_TR = 15,  // "
+    LT_UINT32_TR = 16,  // "
+    LT_UINT64_TR = 17,  // "
     NUM_LOCAL_TYPES
 } LocalType;
 
@@ -212,6 +216,10 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "SEQ", 0,   1,  0,     0                        }, \
    { "BMP", 0,   8,  0,     0                        }, \
    { "COD", 0,   1,  0,     0                        }, \
+   { "T8 ", 0,   1,  0,     BGEN_transpose_u8_buf    }, \
+   { "T16", 0,   2,  0,     BGEN_transpose_u16_buf   }, \
+   { "T32", 0,   4,  0,     BGEN_transpose_u32_buf   }, \
+   { "T64", 0,   8,  0,     BGEN_transpose_u64_buf   }, \
 }
 
 typedef struct {
@@ -307,5 +315,7 @@ extern uint32_t st_header_size (SectionType sec_type);
 extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);
 
 extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
+
+extern const char *lt_name (LocalType lt);
 
 #endif

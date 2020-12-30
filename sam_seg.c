@@ -172,7 +172,7 @@ void sam_seg_finalize (VBlockP vb)
         vb->contexts[SAM_U2_Z].ltype  = LT_SEQUENCE; 
 
     // top level snip - reconstruction as SAM
-    Container top_level_sam = { 
+    SmallContainer top_level_sam = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .num_items = 13,
@@ -190,13 +190,13 @@ void sam_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[SAM_OPTIONAL], DID_I_NONE       },
                        { (DictId)dict_id_fields[SAM_EOL],      DID_I_NONE       } }
     };
-    container_seg_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], &top_level_sam, 0, 0, 0);
+    container_seg_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], (ContainerP)&top_level_sam, 0, 0, 0);
 
     // top level snip - reconstruction as BAM
     // strategy: we start by reconstructing the variable-length fields first (after a prefix that sets them in place) 
     // - read_name, cigar, seq and qual - and then go back and fill in the fixed-location fields
     // Translation (a feature of Container): items reconstruct their data and then call a translation function to translate it to the desired format
-    Container top_level_bam = { 
+    SmallContainer top_level_bam = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .num_items = 13,
@@ -221,11 +221,11 @@ void sam_seg_finalize (VBlockP vb)
                                             CON_PREFIX_SEP, // end of (empty) container-wide prefix
                                             ' ',' ',' ',' ', CON_PREFIX_SEP }; // first item prefix - 4 spaces (place holder for block_size)
 
-    container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2BAM], &top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
+    container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2BAM], (ContainerP)&top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
                           IS_BAM ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
 
     // top level snip - reconstruction as FASTQ
-    Container top_level_fastq = { 
+    SmallContainer top_level_fastq = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .filter_repeats = true,  // drop non-primary chimeric reads and reads without QUAL data
@@ -244,7 +244,7 @@ void sam_seg_finalize (VBlockP vb)
     static const char fastq_line_prefix[] = { CON_PREFIX_SEP, CON_PREFIX_SEP, '@', CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, 
                                               CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, '+', '\n', CON_PREFIX_SEP };
 
-    container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2FQ], &top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
+    container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2FQ], (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 }
 
 void sam_seg_verify_pos (VBlock *vb, PosType this_pos)
@@ -555,7 +555,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
     // Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
     // See: https://samtools.github.io/hts-specs/SAMtags.pdf
-    static const Container container_SA_OA = {
+    static const SmallContainer container_SA_OA = {
         .repeats     = 0, 
         .num_items   = 6, 
         .repsep      = {0,0},
@@ -569,7 +569,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
 
     DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(strand); DEC_SSF(cigar); DEC_SSF(mapq); DEC_SSF(nm); 
 
-    Container sa_oa = container_SA_OA;
+    SmallContainer sa_oa = container_SA_OA;
 
     for (uint32_t i=0; i < field_len; sa_oa.repeats++) {
 
@@ -601,7 +601,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
     }
 
-    container_seg_by_dict_id (vb, subfield_dict_id, &sa_oa, 1 /* 1 for \t in SAM and \0 in BAM */);
+    container_seg_by_dict_id (vb, subfield_dict_id, (ContainerP)&sa_oa, 1 /* 1 for \t in SAM and \0 in BAM */);
     
     return;
 
@@ -612,7 +612,7 @@ error:
     ASSSEG (!sa_oa.repeats, field, "Invalid format in repeat #%u of field %s. snip: %.*s",
             sa_oa.repeats+1, dis_dict_id (subfield_dict_id).s, field_len, field);
 
-    seg_by_dict_id (vb, field, sizeof(field_len), subfield_dict_id, field_len + 1 /* 1 for \t in SAM and \0 in BAM */); 
+    seg_by_dict_id (vb, field, field_len, subfield_dict_id, field_len + 1 /* 1 for \t in SAM and \0 in BAM */); 
 }
 
 static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_len)
@@ -620,7 +620,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
     // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
     // Example XA:Z:chr9,-60942781,150M,0;chr9,-42212061,150M,0;chr9,-61218415,150M,0;chr9,+66963977,150M,1;
     // See: http://bio-bwa.sourceforge.net/bwa.shtml
-    static const Container container_XA = {
+    static const SmallContainer container_XA = {
         .repeats     = 0, 
         .num_items   = 5, 
         .repsep      = {0,0},
@@ -631,7 +631,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
                          { .dict_id = {.id="NM:i"    }, .seperator = {';'}, .did_i = DID_I_NONE } }     
     };
 
-    Container xa = container_XA;
+    SmallContainer xa = container_XA;
 
     DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(cigar); DEC_SSF(nm); 
 
@@ -663,7 +663,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
     }
 
-    container_seg_by_dict_id (vb, dict_id_OPTION_XA, &xa, 1 /* 1 for \t in SAM and \0 in BAM */);
+    container_seg_by_dict_id (vb, dict_id_OPTION_XA, (ContainerP)&xa, 1 /* 1 for \t in SAM and \0 in BAM */);
     return;
 
 error:
@@ -881,7 +881,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
     else 
         container_add_bytes = 2; // type - eg "i,"
 
-    container_seg_by_ctx (vb, container_ctx, (Container *)&con, prefixes, sizeof(prefixes), container_add_bytes);
+    container_seg_by_ctx (vb, container_ctx, (ContainerP)&con, prefixes, sizeof(prefixes), container_add_bytes);
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
@@ -1161,7 +1161,8 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     GET_NEXT_ITEM ("QNAME");
-    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], field_start, field_len, false, 0, 1 /* \n */);
+    SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
+    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], field_start, field_len, arg, 0, 1 /* \n */);
 
     SEG_NEXT_ITEM (SAM_FLAG);
     int64_t flag;
