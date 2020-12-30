@@ -243,6 +243,7 @@ void stats_compress (void)
 
     static Buffer count_per_section_buf = EMPTY_BUFFER;
     buf_alloc (evb, &count_per_section_buf, z_file->section_list_buf.len * sizeof (int), 1, "count_per_section");
+    buf_zero (&count_per_section_buf);
     ARRAY (int, count_per_section, count_per_section_buf);
 
     #define SEC(i) (i<0 ? -(i)-1 : SEC_NONE) // i to section type
