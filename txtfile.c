@@ -332,7 +332,7 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     return -1; // cannot find \n in the data starting first_i
 }
 
-static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
+static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memory)
 {
     int32_t passed_up_len;
     int32_t i=vb->txt_data.len-1; // next index to test (going backwards)
@@ -359,7 +359,10 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
     // test remaining txt_data including passed-down data from previous VB
     passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, 0, &i);
 
-    ASSERTE (passed_up_len >= 0, "failed to find a single complete line in the entire vb in vb=%u data_type=%s codec=%s. VB dumped: %s", 
+    // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
+    if (testing_memory && passed_up_len < 0) return (uint32_t)-1;
+
+    ASSERTE (passed_up_len >= 0, "failed to find a single complete line in the entire vb in vb=%u data_type=%s codec=%s. Sometimes this happens when the file is missing a newline on the last line. VB dumped: %s", 
              vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec), txtfile_dump_vb (vb, txt_name));
 
 done:
@@ -367,7 +370,7 @@ done:
 }
 
 // ZIP I/O threads
-void txtfile_read_vblock (VBlock *vb)
+void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 {
     START_TIMER;
 
@@ -377,7 +380,7 @@ void txtfile_read_vblock (VBlock *vb)
     if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file))
         pos_before = file_tell (txt_file);
 
-    buf_alloc (vb, &vb->txt_data, global_max_memory_per_vb, 1, "txt_data");    
+    buf_alloc (vb, &vb->txt_data, flag.vblock_memory, 1, "txt_data");    
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
     if (buf_is_allocated (&txt_file->unconsumed_txt)) {
@@ -386,15 +389,16 @@ void txtfile_read_vblock (VBlock *vb)
     }
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
-    uint64_t max_memory_per_vb = global_max_memory_per_vb;
+    uint64_t max_memory_per_vb = flag.vblock_memory;
     uint32_t passed_up_len=0;
 
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
-                             flag.make_reference;        // unconsumed callback for make-reference needs to inspect the whole data
+                             flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
+                             testing_memory;
 
     for (int32_t block_i=0; ; block_i++) {
 
-        uint32_t len = txtfile_read_block (vb, max_memory_per_vb - vb->txt_data.len, always_uncompress);
+        uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, max_memory_per_vb - vb->txt_data.len, always_uncompress) : 0;
 
         if (!len || vb->txt_data.len >= max_memory_per_vb) {  // EOF or we have filled up the allocted memory
 
@@ -418,8 +422,16 @@ void txtfile_read_vblock (VBlock *vb)
     // callback to decide what part of txt_data to pass up to the next VB (usually partial lines, but sometimes more)
     // note: even if we haven't read any new data (everything was passed down), we still might data to pass up - eg
     // in FASTA with make-reference if we have a lots of small contigs, each VB will take one contig and pass up the remaining
-    if (!passed_up_len && vb->txt_data.len) 
-        passed_up_len = txtfile_get_unconsumed_to_pass_up (vb);
+    if (!passed_up_len && vb->txt_data.len) {
+        passed_up_len = txtfile_get_unconsumed_to_pass_up (vb, testing_memory);
+
+        // case: return if we're testing memory, and there is not even one line of text  
+        if (testing_memory && passed_up_len == (uint32_t)-1) {
+            buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, 0, 0, 0, "txt_file->unconsumed_txt"); 
+            buf_free (&vb->txt_data);
+            return;
+        }
+    }
 
     // if we have some unconsumed data, pass it up to the next vb
     if (passed_up_len) {
@@ -437,20 +449,24 @@ void txtfile_read_vblock (VBlock *vb)
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
 
-    txt_file->txt_data_so_far_single += vb->txt_data.len;
     vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
-    
-    // update vb1_txt_data_comp_len used by txtfile_estimate_txt_data_size(). Note: it already includes
-    // the part of vb=1 passed up from txtfile_read_header()
-    if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file)) {
-        vb1_txt_data_comp_len += file_tell (txt_file) - pos_before; // bgzf/gz/bz2 compressed bytes read
 
-        // deduct the amount of compressed data due to passed up data that actually belongs to vb>=2
-        // assume the same compression ratio for the passup part as the (vb data + passed up)
-        if (passed_up_len) {
-            double comp_ratio = (double)vb1_txt_data_comp_len / (double)(vb->txt_data.len + passed_up_len);
-            uint32_t pass_up_len_comp = (double)passed_up_len * comp_ratio;
-            vb1_txt_data_comp_len -= pass_up_len_comp;
+    if (!testing_memory) {
+
+        txt_file->txt_data_so_far_single += vb->txt_data.len;
+    
+        // update vb1_txt_data_comp_len used by txtfile_estimate_txt_data_size(). Note: it already includes
+        // the part of vb=1 passed up from txtfile_read_header()
+        if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file)) {
+            vb1_txt_data_comp_len += file_tell (txt_file) - pos_before; // bgzf/gz/bz2 compressed bytes read
+
+            // deduct the amount of compressed data due to passed up data that actually belongs to vb>=2
+            // assume the same compression ratio for the passup part as the (vb data + passed up)
+            if (passed_up_len) {
+                double comp_ratio = (double)vb1_txt_data_comp_len / (double)(vb->txt_data.len + passed_up_len);
+                uint32_t pass_up_len_comp = (double)passed_up_len * comp_ratio;
+                vb1_txt_data_comp_len -= pass_up_len_comp;
+            }
         }
     }
 

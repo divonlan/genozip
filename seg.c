@@ -46,6 +46,12 @@ WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *
     return node_index;
 } 
 
+void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
+{
+    static const char lookup[1] = { SNIP_LOOKUP };
+    seg_by_ctx (vb, lookup, 1, ctx, add_bytes, NULL);
+}
+
 const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
                                unsigned *len, char *separator, 
                                bool *has_13, // out - only needed if allow_newline=true
@@ -310,6 +316,40 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
     SAFE_RESTORE (1);
 }
 
+void seg_integer_or_not (VBlockP vb, ContextP ctx, 
+                         const char *this_value, unsigned this_value_len, unsigned add_bytes)
+{
+    int64_t value;
+
+    // case: its an integer
+    if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actual be a float)
+        str_get_int (this_value, this_value_len, &value) &&
+        value >= 0 && value <= 0xffffffffULL) {
+
+        // if this is the first snip in the ctx, 
+        if (!ctx->local.len) { // first number
+            ctx->dynamic_size_local = true;
+            ctx->ltype = LT_UINT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
+        
+            if (!ctx->node_i.len) // no non-numbers yet
+                ctx->numeric_only = true; // until proven otherwise
+        }
+
+        // add to local
+        buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "ctx->local");
+        NEXTENT (uint32_t, ctx->local) = value;
+        
+        // add to node_i
+        seg_simple_lookup ((VBlockP)vb, ctx, add_bytes);
+    }
+
+    // case: non-numeric snip
+    else { 
+        seg_by_ctx (vb, this_value, this_value_len, ctx, add_bytes, 0);
+        ctx->numeric_only = false;
+    }
+}
+
 typedef struct { const char *start; unsigned len; DictId dict_id; } InfoItem;
 
 static int sort_by_subfield_name (const void *a, const void *b)  
@@ -372,9 +412,9 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
                 DictId dict_id = info_items[con_nitems(con)].dict_id;
                 if (dict_id.num) { 
                     char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
-                    bool not_yet_segged = seg_special_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len, optimized_snip);
-                        
-                    if (not_yet_segged) seg_by_dict_id (vb, this_value, this_value_len, dict_id, this_value_len);
+                    if (seg_special_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len, optimized_snip))
+                        seg_integer_or_not (vb, ctx_get_ctx (vb, dict_id), this_value, this_value_len, this_value_len);
+                        //seg_by_dict_id (vb, this_value, this_value_len, dict_id, this_value_len);
                 }
 
                 reading_name = true;  // end of value - move to the next item
@@ -706,7 +746,7 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 
     ASSSEG (newlines==DTP (line_height) || len < vb->txt_data.len, vb->txt_data.data, 
             "a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
-            str_uint_commas (global_max_memory_per_vb).s);
+            str_uint_commas (flag.vblock_memory).s);
 
     return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
 }
@@ -745,7 +785,7 @@ static void seg_verify_file_size (VBlock *vb)
         }
         
         ABOSEG (vb->txt_data.data, "Error while verifying reconstructed vblock size: "
-                "reconstructed_vb_size=%s (calculated bottoms-up) but vb->vb_data_size=%s (calculated tops-down) (diff=%d)", 
+                "reconstructed_vb_size=%s (calculated by adding up ctx.txt_data after segging) but vb->vb_data_size=%s (calculated when reading data from the file) (diff=%d)", 
                 str_uint_commas (reconstructed_vb_size).s, str_uint_commas (vb->vb_data_size).s, 
                 (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
     }

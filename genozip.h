@@ -27,11 +27,6 @@
 
 #define MAX_POS ((PosType)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
 
-// default max amount of txt data in each variant block. this is user-configurable with --vblock
-#define TXT_DATA_PER_VB_DEFAULT "16" // MB in default mode
-#define TXT_DATA_PER_VB_FAST    "16" // MB with --fast
-extern void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str);
-
 #define MAX_SUBFIELDS 2048  // Maximum number of items in a Container (for example: VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc). This value can be increased subject to MAX_DICTS<=253.
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
@@ -90,7 +85,7 @@ typedef int32_t WordIndex;    // used for word and node indices
 typedef int64_t PosType;      // used for position coordinate within a genome
 
 // global parameters - set before any thread is created, and never change
-extern uint32_t global_max_threads, global_max_memory_per_vb;
+extern uint32_t global_max_threads;
 extern const char *global_cmd;            // set once in main()
 extern ExeType exe_type;
 

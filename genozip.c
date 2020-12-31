@@ -48,7 +48,6 @@ ExeType exe_type;
 CommandType command = NO_COMMAND, primary_command = NO_COMMAND; 
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
-uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file data
 
 static void print_call_stack (void) 
 {

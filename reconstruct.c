@@ -67,7 +67,7 @@ static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reco
     return snip_len;
 }
 
-static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char seperator /* 0 if none */, bool reconstruct)
+int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char seperator /* 0 if none */, bool reconstruct)
 {
 #   define GETNUMBER(signedtype) { \
         u ## signedtype unum = NEXTLOCAL (u ## signedtype, ctx); \
@@ -328,9 +328,14 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     // case: all data is only in local
     else if (ctx->local.len) {
         switch (ctx->ltype) {
-        case LT_INT8 ... LT_UINT64 :
-            reconstruct_from_local_int (vb, ctx, 0, reconstruct); break;
-        
+        case LT_INT8 ... LT_UINT64 : {
+            int64_t value = reconstruct_from_local_int (vb, ctx, 0, reconstruct); 
+
+            if (ctx->flags.store == STORE_INT) 
+                ctx->last_value.i = value;
+
+            break;
+        }
         case LT_CODEC:
             codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx); break;
 
@@ -368,4 +373,4 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 
     return (int32_t)(vb->txt_data.len - start);
-}
+} 

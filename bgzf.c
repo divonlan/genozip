@@ -105,7 +105,7 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
 
     // add isize to buffer that will be written to SEC_BGZF
     if (isize) { // don't store EOF block (bc isize=0 cannot be represented as (isize-1) )
-        buf_alloc_more (evb, &file->bgzf_isizes, 1, global_max_memory_per_vb / 63000, uint16_t, 2, "bgzf_isizes");
+        buf_alloc_more (evb, &file->bgzf_isizes, 1, flag.vblock_memory / 63000, uint16_t, 2, "bgzf_isizes");
         NEXTENT (uint16_t, file->bgzf_isizes) = BGEN16 ((uint16_t)(isize - 1)); // -1 to make the range 0..65535
     }
     else 
@@ -341,7 +341,7 @@ void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
             txt_file->bzgf_passed_down_len = (int32_t)vb_txt_data_len - index; // pass down to next vb 
             break; // this VB doesn't have enough data to fill up this BGZF block - pass it down to the next VB
         }
-        buf_alloc_more (vb, &vb->bgzf_blocks, 1, global_max_memory_per_vb / 63000, BgzfBlockPiz, 1.5, "bgzf_blocks");
+        buf_alloc_more (vb, &vb->bgzf_blocks, 1, flag.vblock_memory / 63000, BgzfBlockPiz, 1.5, "bgzf_blocks");
 
         NEXTENT (BgzfBlockPiz, vb->bgzf_blocks) = (BgzfBlockPiz){ .txt_index = index, .txt_size = isize };
 

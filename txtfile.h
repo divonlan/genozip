@@ -28,7 +28,7 @@ extern void txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Digest *di
 extern void txtfile_header_initialize(void);
 uint32_t txtfile_get_bound_headers_len(void); // for stats
 
-extern void txtfile_read_vblock (VBlockP vb);
+extern void txtfile_read_vblock (VBlockP vb, bool force_uncompress);
 extern void txtfile_write_to_disk (BufferP buf);
 
 // callbacks

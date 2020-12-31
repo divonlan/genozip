@@ -320,11 +320,13 @@ bug fixes, including major bug with mc:i optional field in SAM
 - better --stats
 - minor bug fixes
 
-9.0.23
-- VCF: support FORMAT tags that begin with a character other than a letter (eg a digit)
-- VCF: better handling of multi-value INFO fields: INFO/DP4
-- VCF: better handling of VEP fields: CSQ, DP_HIST, GQ_HIST, AGE_HISTOGRAM_HET, AGE_HISTOGRAM_HOM
-- VCF: better handling of FORMAT/DP and FORMAT/GQ - transposed matrix
+10.0.0
 - Increased MAX_SUBFIELDS from 64 to 2048. This sets the maximum number of INFO and FORMAT tags in VCF, 
   maximum number of optional fields in SAM/BAM and maximum ATTR in GVF.
+- Set size of vblock dynamically
+- VCF: support FORMAT tags that begin with a character other than a letter (eg a digit)
+- VCF: better handling of INFO arrays
+- VCF: better handling of VEP fields: CSQ, DP_HIST, GQ_HIST, AGE_HISTOGRAM_HET, AGE_HISTOGRAM_HOM
+- VCF: better handling of FORMAT/DP and FORMAT/GQ - transposed matrix
 - Several other bug fixes
+- Backward compatible with Genozip 8 and 9 - v8 and v9-compressed files can be read by v10

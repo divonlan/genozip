@@ -133,8 +133,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_AC)
     Context *ctx_an = ctx_get_existing_ctx (vb, dict_id_INFO_AN);
     Context *ctx_af = ctx_get_existing_ctx (vb, dict_id_INFO_AF);
 
-    uint32_t an = is_an_before_ac ? ctx_an->last_value.i : atoi (ctx_peek_next_snip (vb, ctx_an));
-    double   af = is_af_before_ac ? ctx_af->last_value.f : atof (ctx_peek_next_snip (vb, ctx_af));
+    uint32_t an = is_an_before_ac ? ctx_an->last_value.i : ctx_peek_next_int (vb, ctx_an);
+    double   af = is_af_before_ac ? ctx_af->last_value.f : ctx_peek_next_float (vb, ctx_af);
 
     char ac_str[30];
     unsigned ac_str_len = str_int ((int64_t)round(an * af), ac_str);    

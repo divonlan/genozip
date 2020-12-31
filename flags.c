@@ -225,6 +225,7 @@ void flags_init_from_command_line (int argc, char **argv)
             case 'g' : flag.grep          = optarg  ; break;
             case '~' : flag.show_is_set   = optarg  ; break;
             case 7   : flag.dump_section  = optarg  ; break;
+            case 'B' : flag.vblock        = optarg  ; break;
             case 11  : flag.genobwa       = optarg  ; break;
             case 'z' : flags_set_bgzf (optarg)      ; break;
             case 4   : flag.show_mutex    = optarg ? optarg : (char*)1; break;
@@ -239,9 +240,6 @@ void flags_init_from_command_line (int argc, char **argv)
             case 8   : flag.one_vb = atoi (optarg);  break;
             case 9   : flag.downsample = atoi (optarg); break;
             case 10  : flag.show_headers = 1 + sections_st_by_name (optarg); break; // +1 so SEC_NONE maps to 0
-            case 'B' : vb_set_global_max_memory_per_vb (optarg); 
-                       flag.vblock = true;
-                       break;
             case 'p' : crypt_set_password (optarg) ; break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
@@ -374,6 +372,16 @@ static void flags_verify_pair_rules (unsigned num_txt_files, const char **filena
                     OT("pair", "2"), filenames[i], filenames[i+1]);
 }
 
+static void flag_set_vblock_memory (void)
+{
+    int64_t mem_size_mb;
+    ASSINP (str_get_int_range (flag.vblock, strlen (flag.vblock), 1, MAX_VBLOCK_MEMORY, &mem_size_mb), 
+            "invalid argument of --vblock: %s. Expecting an integer between 1 and %u. The file will be read and processed in blocks of this number of megabytes.",
+            flag.vblock, MAX_VBLOCK_MEMORY);
+
+    flag.vblock_memory = (uint64_t)mem_size_mb << 20;
+}
+
 void flags_update (unsigned num_txt_files, const char **filenames)
 {
     flags_test_conflicts();
@@ -399,8 +407,14 @@ void flags_update (unsigned num_txt_files, const char **filenames)
 
     if (command == ZIP && flag.test) flag.md5=true; // test implies md5
 
-    // default values, if not overridden by the user
-    if (!flag.vblock) vb_set_global_max_memory_per_vb (flag.fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 
+    // set memory if --vblock (note: if not set, we will set it dymamically in zip_dynamically_set_max_memory)
+    if (flag.vblock) flag_set_vblock_memory();
+
+    // set memory if --fast and user didn't specify --vblock
+    else if (flag.fast) flag.vblock_memory = VBLOCK_MEMORY_FAST;
+
+    // if --gtshark we use extra large vblocks to get a good result from gtshark
+    else if (flag.gtshark) flag.vblock_memory = VBLOCK_MEMORY_GTSHARK;
 
     // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
     // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.
@@ -408,7 +422,7 @@ void flags_update (unsigned num_txt_files, const char **filenames)
         ASSINP (!crypt_have_password(), "option --make-reference is incompatable with %s", OT("password", "p"));
 
         flag.md5 = true;
-        if (!flag.vblock) vb_set_global_max_memory_per_vb("1");
+        if (!flag.vblock) flag.vblock_memory = VBLOCK_MEMORY_MAKE_REF;
 
         ASSINP (num_txt_files <= 1, "you can specify only one FASTA file when using --make-reference.\n"
                 "To create a reference from multiple FASTAs use something like this:\n"

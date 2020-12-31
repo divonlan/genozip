@@ -27,6 +27,7 @@ extern StrText str_uint_commas (int64_t n);
 extern StrText str_int_s (int64_t n);
 extern unsigned str_int (int64_t n, char *str /* out */);
 extern _Bool str_get_int (const char *str, unsigned str_len, int64_t *value); // note: for a reason beyond me, Docker hub won't compile if its "bool" and not "_Bool"
+extern _Bool str_get_int_range (const char *str, unsigned str_len, int64_t min_val, int64_t max_val, int64_t *value);
 #define str_is_int(str,str_len) str_get_int ((str), (str_len), NULL)
 
 extern _Bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last_c);

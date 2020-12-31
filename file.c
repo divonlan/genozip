@@ -273,7 +273,7 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
     }
     char reason[100];
     sprintf (reason, "To output a %s file", file_exts[file->type]);
-    output_compressor = stream_create (0, 0, 0, global_max_memory_per_vb, 
+    output_compressor = stream_create (0, 0, 0, DEFAULT_PIPE_SIZE, 
                                        redirected_stdout_file, // output is redirected unless flag.to_stdout
                                        0, false, reason,
                                        exec_name, 
@@ -456,7 +456,7 @@ static bool file_open_txt_read (File *file)
             break;
 
         case CODEC_XZ:
-            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,     // url
                                                 file->redirected,
                                                 "To uncompress an .xz file", "xz",       // reason, exec_name
@@ -468,7 +468,7 @@ static bool file_open_txt_read (File *file)
             break;
 
         case CODEC_ZIP:
-            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,     // url
                                                 file->redirected,
                                                 "To uncompress a .zip file", "unzip",    // reason, exec_name
@@ -480,7 +480,7 @@ static bool file_open_txt_read (File *file)
             break;
 
         case CODEC_BCF: {
-            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,         // url                                        
                                                 file->redirected,
                                                 "To compress a BCF file", 
@@ -493,7 +493,7 @@ static bool file_open_txt_read (File *file)
         }
 
         case CODEC_CRAM: {
-            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,      // url                                        
                                                 file->redirected,
                                                 "To compress a CRAM file", 

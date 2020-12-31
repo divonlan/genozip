@@ -78,7 +78,7 @@ static const char *help_genozip[] = {
     "",
     "   -@ --threads      <number>. Specify the maximum number of threads. By default, genozip uses all the threads it needs to maximize usage of all available cores",
     "",
-    "   -B --vblock       <number between 1 and 2048>. Set the maximum size of data (in megabytes) of the source textual (VCF, SAM, FASTQ etc) data that can go into one vblock. By default, this is set to "TXT_DATA_PER_VB_DEFAULT" MB. Smaller values will result in faster subsetting with --regions and --grep, while larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression",
+    "   -B --vblock       <number between 1 and 2048>. Set the maximum size of data (in megabytes) of the source textual (VCF, SAM, FASTQ etc) data that can go into one vblock. By default, this is set to a value between 16 and 128 MB depending on the characateristics of the file. Smaller values will result in faster subsetting with --regions and --grep, while larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression",
     "",
     "   -e --reference    <filename>.ref.genozip Use a reference file - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat.",    
     "                     While genozip is capabale of compressing without a reference, in the following cases providing a reference may result in better compression:",

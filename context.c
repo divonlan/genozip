@@ -27,6 +27,7 @@
 #include "flags.h"
 #include "zip.h"
 #include "piz.h"
+#include "reconstruct.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -192,17 +193,47 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same,
 }
 
 // get next snip without advancing the iterator
-const char *ctx_peek_next_snip (VBlock *vb, Context *ctx)
+int64_t ctx_peek_next_int (VBlock *vb, Context *ctx)
 {
-    SnipIterator save = ctx->iterator;
+    if (ctx->b250.len) {
+        const char *snip;
+        uint32_t snip_len;
 
-    const char *snip;
-    uint32_t snip_len;
-    ctx_get_next_snip (vb, ctx, ctx->flags.all_the_same, NULL, &snip, &snip_len);
-    
-    ctx->iterator = save; // restore
+        SnipIterator save = ctx->iterator;
+        ctx_get_next_snip (vb, ctx, ctx->flags.all_the_same, NULL, &snip, &snip_len);
+        ctx->iterator = save; // restore
 
-    return snip;
+        return atoi (snip);
+    }
+
+    // local-only context
+    else {
+        uint32_t save_next_local = ctx->next_local;
+        int64_t value = reconstruct_from_local_int (vb, ctx, 0, false);
+        ctx->next_local = save_next_local; // restore
+
+        return value;
+    }
+}
+
+// get next snip without advancing the iterator
+double ctx_peek_next_float (VBlock *vb, Context *ctx)
+{
+    if (ctx->b250.len) {
+        const char *snip;
+        uint32_t snip_len;
+
+        SnipIterator save = ctx->iterator;
+        ctx_get_next_snip (vb, ctx, ctx->flags.all_the_same, NULL, &snip, &snip_len);
+        ctx->iterator = save; // restore
+
+        return atof (snip);
+    }
+
+    // local-only context
+    else {
+        ABORT_R ("Error in ctx_peek_next_float: no more data in b250 of %s", ctx->name);
+    }
 }
 
 // Process and snip - return its node index, and enter it into the directory if its not already there. Called
@@ -868,7 +899,8 @@ void ctx_free_context (Context *ctx)
     ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback =
-    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = 0;
+    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = 
+    ctx->dynamic_size_local = ctx->numeric_only = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
     ctx->nodes_len_at_1_3 = ctx->nodes_len_at_2_3 = 0;

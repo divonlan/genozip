@@ -382,7 +382,7 @@ void refhash_initialize (bool *dispatcher_invoked)
         num_layers       = MAKE_REF_NUM_LAYERS;
         base_layer_bits  = MAKE_REF_BASE_LAYER_BITS;
         // we use the default vb size (16MB) not the reduced make-ref size (1MB), unless user overrides with --vblock
-        make_ref_vb_size = flag.vblock ? global_max_memory_per_vb : (atoi (TXT_DATA_PER_VB_DEFAULT) << 20);
+        make_ref_vb_size = flag.vblock ? flag.vblock_memory : VBLOCK_MEMORY_REFHASH;
     }
 
     // case 2: piz_read_global_area from piz_read_global_area -> refhash_load - initialize when reading an external reference for ZIP of fasta or fastq

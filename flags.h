@@ -11,8 +11,9 @@
 typedef struct {
     
     // genozip options that affect the compressed file
-    int vblock, gtshark, fast, make_reference, md5;
-
+    int gtshark, fast, make_reference, md5;
+    char *vblock;
+    
     // ZIP: data modifying options
     int optimize, optimize_sort, optimize_PL, optimize_GL, optimize_GP, optimize_VQSLOD,  // optimize flags
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC;
@@ -86,8 +87,18 @@ typedef struct {
          data_modified;      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
 
     enum { BIND_NONE, BIND_ALL, BIND_PAIRS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
-
     uint64_t stdin_size;
+
+    // default max amount of txt data in each variant block. this is user-configurable with --vblock
+    #define MAX_VBLOCK_MEMORY      2048       // in MB
+    #define VBLOCK_MEMORY_MIN_DYN  (16   << 20) // VB memory - min/max when set in zip_dynamically_set_max_memory
+    #define VBLOCK_MEMORY_MAX_DYN  (512  << 20) 
+    #define VBLOCK_MEMORY_FAST     (16   << 20) // VB memory with --fast
+    #define VBLOCK_MEMORY_MAKE_REF (1    << 20) // VB memory with --make-reference - reference data 
+    #define VBLOCK_MEMORY_REFHASH  (16   << 20) // VB memory with --make-reference - refhash data (overridable with --vblock)
+    #define VBLOCK_MEMORY_GENERIC  (16   << 20) // VB memory for the generic data type
+    #define VBLOCK_MEMORY_GTSHARK  (512  << 20) // Extra large memory for GTShark
+    uint64_t vblock_memory;
 } Flags;
 
 extern Flags flag;

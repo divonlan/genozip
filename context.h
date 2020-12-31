@@ -113,7 +113,8 @@ typedef struct Context {
     bool local_param;          // copy local.param to SectionHeaderCtx
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
     bool local_always;         // always create a local section in zfile, even if it is empty 
-
+    bool dynamic_size_local;   // resize LT_UINT32 according to data during generate (also do BGEN)
+    bool numeric_only;         // if both numeric_only and dynamic_size_local are set, 
     // hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and the rest of linked to them by linked list
@@ -174,7 +175,10 @@ static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = 
 
 extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
 extern WordIndex ctx_get_next_snip (VBlockP vb, Context *ctx, bool all_the_same, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
-extern const char *ctx_peek_next_snip (VBlockP vb, Context *ctx);
+//extern const char *ctx_peek_next_snip (VBlockP vb, Context *ctx);
+extern int64_t ctx_peek_next_int (VBlockP vb, ContextP ctx);
+extern double ctx_peek_next_float (VBlockP vb, ContextP ctx);
+
 extern WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
 extern void ctx_clone (VBlockP vb);
 extern CtxNode *ctx_node_vb_do (const Context *ctx, WordIndex node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);

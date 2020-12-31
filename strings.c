@@ -131,6 +131,13 @@ bool str_get_int (const char *str, unsigned str_len,
     return true;
 }
 
+bool str_get_int_range (const char *str, unsigned str_len, int64_t min_val, int64_t max_val, int64_t *value)
+{
+    if (!str_get_int (str, str_len, value)) return false;
+    
+    return *value >= min_val && *value <= max_val;
+}
+
 StrText str_uint_commas (int64_t n)
 {
     StrText s;

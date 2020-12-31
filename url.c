@@ -192,7 +192,7 @@ FILE *url_open (StreamP parent_stream, const char *url)
 {
     ASSERT0 (!curl, "Error url_open failed because curl is already running");
 
-    curl = stream_create (parent_stream, global_max_memory_per_vb, 0, 0, 0, 0, 0,
+    curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
                           "To compress files from a URL", "curl", "--silent", url, NULL);
     return stream_from_stream_stdout (curl);
 }

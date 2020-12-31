@@ -151,7 +151,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
 
     fprintf (info_stream, "\nVblock stats:\n");
     fprintf (info_stream, "  Vblocks: %u\n", num_vbs);
-    fprintf (info_stream, "  Maximum vblock size: %u MB\n", global_max_memory_per_vb / (1024 * 1024));
+    fprintf (info_stream, "  Maximum vblock size: %"PRIu64" MB\n", flag.vblock_memory >> 20);
     fprintf (info_stream, "  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
     fprintf (info_stream, "  Average read time: %u\n", ms(p->read) / num_vbs);
     fprintf (info_stream, "  Average compute time: %u\n", ms(p->compute) / num_vbs);

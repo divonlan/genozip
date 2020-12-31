@@ -34,6 +34,9 @@ extern PosType seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_le
 extern void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes);
 #define seg_integer(vb,did_i,n,account_for_bytes) seg_integer_do((VBlockP)(vb), (did_i), (n), (account_for_bytes) ? sizeof(n) : 0)
 
+extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
+extern void seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
+
 #define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 extern PosType seg_pos_field (VBlockP vb, 
                               DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
@@ -67,6 +70,7 @@ typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_f
 
 extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
                                     char *snip, unsigned *snip_len);
+
 
 // ------------------
 // Seg utilities

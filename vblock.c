@@ -14,6 +14,7 @@
 #include "reference.h"
 #include "digest.h"
 #include "bgzf.h"
+#include "strings.h"
 
 // pool of VBs allocated based on number of threads
 static VBlockPool *pool = NULL;
@@ -215,16 +216,3 @@ const char *err_vb_pos (void *vb)
     return s;
 }
 
-void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str)
-{
-    const char *err_msg = "invalid argument of --vblock: %s. Expecting an integer between 1 and 2048. The file will be read and processed in blocks of this number of megabytes.";
-
-    unsigned len = strlen (mem_size_mb_str);
-    ASSINP (len <= 4 || (len==1 && mem_size_mb_str[0]=='0'), err_msg, mem_size_mb_str);
-    ASSINP (strspn (mem_size_mb_str, "0123456789") == len, err_msg, mem_size_mb_str);
-
-    unsigned mem_size_mb = atoi (mem_size_mb_str);
-    ASSINP (mem_size_mb <= 2048, err_msg, mem_size_mb_str);
-
-    global_max_memory_per_vb = mem_size_mb * 1024 * 1024;
-}

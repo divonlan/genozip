@@ -179,11 +179,11 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_r
                                 int64_t all_txt_size, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
     bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &z_file->stats_buf, "NAME              GENOZIP      %%      TXT   RATIO      %%\n%s", "");
+    bufprintf (evb, &z_file->stats_buf, "NAME              GENOZIP      %%      TXT       %%   RATIO\n%s", "");
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %6.1fX %5.1f%%\n", 
+            bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                        s->name, 
                        str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
                        str_size ((double)s->txt_size).s, (double)s->txt_size / (double)s->z_size, // txt size and ratio z vs txt
@@ -192,8 +192,8 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_r
     bufprintf (evb, &z_file->stats_buf, "TOTAL           "
                 "%9s %5.1f%% %9s %6.1fX %5.1f%%\n", 
                 str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
-                str_size (all_txt_size).s, all_comp_ratio, // total txt fize and ratio z vs txt
-                all_pc_of_txt);
+                str_size (all_txt_size).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+                all_comp_ratio);
 }
 
 static void stats_output_STATS (StatsByLine *s, unsigned num_stats,

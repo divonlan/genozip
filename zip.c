@@ -95,6 +95,68 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bo
     }
 }
 
+// we segment the first line of the txt file and see how many contexts were created. when then set
+// global_max_memory_per_vb to 1MB per context (subject to VBLOCK_MEMORY_MIN/MAX_DYN). rational: we need sufficient amount 
+// of data in each context for the generic codecs to work well. if compressing multiple files,
+// we do this just for the first file, so VBs can be reused (typically, the files will be similar)
+static void zip_dynamically_set_max_memory (void)
+{
+    static uint64_t test_vb_sizes[] = { 70000, 250000, 1000000 }; // must be at least BGZF_MAX_BLOCK_SIZE
+
+    if (flag.out_dt == DT_GENERIC) {
+        flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
+        return;
+    }
+
+    VBlock *vb = vb_get_vb ("dynamically_set_memory", 1);
+
+    bool done = false;
+    for (unsigned test_i=0; !done && test_i < sizeof (test_vb_sizes) / sizeof (test_vb_sizes[0]); test_i++) {
+
+        flag.vblock_memory = test_vb_sizes[test_i]; // read this amount of data
+        txtfile_read_vblock (vb, true);
+
+        // case: we found at least one full line - we can calculate the memory now
+        if (vb->txt_data.len) {
+
+            // make a copy of txt_data as seg may modify it
+            static Buffer txt_data_copy = {};
+            buf_copy (evb, &txt_data_copy, &vb->txt_data, 0, 0, 0, "txt_data_copy");
+
+            // segment this VB
+            ctx_clone (vb);
+            seg_all_data_lines (vb);
+
+            // formula - 1MB for each contexts, 128K for each VCF sample
+            uint64_t mb = ((uint64_t)vb->num_contexts << 20) + 
+                          (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
+
+            // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
+            flag.vblock_memory = MIN (MAX (mb, VBLOCK_MEMORY_MIN_DYN), VBLOCK_MEMORY_MAX_DYN);
+
+            if (flag.show_memory)
+                fprintf (info_stream, "\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
+                         (unsigned)(flag.vblock_memory >> 20), vb->num_contexts, vcf_header_get_num_samples());
+
+            // return the data tp txt_file->unconsumed_txt - squeeze it in before the passed-up data
+            buf_alloc_more (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
+            memcpy (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
+            memcpy (txt_file->unconsumed_txt.data, txt_data_copy.data, txt_data_copy.len);
+            txt_file->unconsumed_txt.len += txt_data_copy.len;
+            buf_destroy (&txt_data_copy);
+
+            done = true;
+        }
+
+        // try again with a larger size (note: all data arleady read is waiting in txt_file->unconsumed_txt)
+        vb_release_vb (vb);
+    }
+
+    // if we failed to calculate - use default
+    if (!done)
+        flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
+}
+
 // here we translate the node_i indices creating during seg_* to their finally dictionary indices in base-250.
 // Note that the dictionary indices have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
@@ -193,6 +255,37 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample
     }
 
     return false; // don't drop this section
+}
+
+static void zip_resize_local (VBlock *vb, Context *ctx)
+{
+    ARRAY (uint32_t, src, ctx->local);
+
+    uint32_t largest=0;
+    for (uint64_t i=0; i < ctx->local.len; i++)
+        if (src[i] > largest) largest = src[i];
+
+    // 8 bit
+    if (largest < 0xff) {
+        ctx->ltype = LT_UINT8;
+        ARRAY (uint8_t, dst, ctx->local);
+        for (uint64_t i=0; i < ctx->local.len; i++)
+            dst[i] = (uint8_t)src[i];
+    }
+
+    // 16 bit
+    else if (largest < 0xffff) {
+        ctx->ltype = LT_UINT16;
+        ARRAY (uint16_t, dst, ctx->local);
+        for (uint64_t i=0; i < ctx->local.len; i++)
+            dst[i] = BGEN16 ((uint16_t)src[i]);
+    }
+
+    // 32 bit
+    else {
+        for (uint64_t i=0; i < ctx->local.len; i++)
+            src[i] = BGEN32 (src[i]);
+    }
 }
 
 // selects the smallest size (8, 16, 32) for the data, transposes, and BGENs
@@ -316,7 +409,12 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
     // generate & write b250 data for all primary fields
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = &vb->contexts[did_i];
-        
+
+        // case: the entire context is just numbers in local, and b250 is only SNIP_LOOKUPs. 
+        // ctx->numeric_only is set to indicate we get rid of the b250.
+        if (ctx->numeric_only) 
+            buf_free (&ctx->node_i);
+
         if (ctx->node_i.len) {
 
             ASSERTE (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->node_i containing data", did_i);
@@ -332,6 +430,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
             }
         }
 
+        // local first - so zip_resize_local can eliminate b250 if needed
         if (ctx->local.len || ctx->local_always) { 
 
             ASSERTE (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->local containing data", did_i);
@@ -344,6 +443,9 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
 
             else if (ctx->ltype == LT_UINT32_TR)
                 zip_generate_transposed_local (vb, ctx);
+
+            else if (ctx->dynamic_size_local) 
+                zip_resize_local (vb, ctx);
 
             if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->name, ctx->lcodec);
             zfile_compress_local_data (vb, ctx, 0);
@@ -598,7 +700,12 @@ void zip_one_file (const char *txt_basename,
 
             if (read_txt) {
                 if (flag.show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);            
-                txtfile_read_vblock (next_vb);
+
+                // if vblock_memory is not already set by user options or previous files, set the size of the VBs for optimal compression
+                if (!flag.vblock_memory)
+                    zip_dynamically_set_max_memory();
+
+                txtfile_read_vblock (next_vb, false);
 
                 // initializations after reading the first vb and before running any compute thread
                 if (next_vb->vblock_i == 1) { 

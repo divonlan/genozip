@@ -13,6 +13,8 @@ extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bo
 
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len, bool reconstruct);
 
+extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char seperator /* 0 if none */, bool reconstruct);
+
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
 
 // gets snip, snip_len from b250 data

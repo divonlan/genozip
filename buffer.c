@@ -321,6 +321,8 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
     fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists:\n", str_size (total_bytes).s, num_buffers, vb_pool->num_allocated_vbs);
+    if (command == ZIP) 
+        fprintf (memory_full ? stderr : info_stream, "vblock_memory = %u MB\n", (unsigned)(flag.vblock_memory >> 20));
     fprintf (memory_full ? stderr : info_stream, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
 
     for (unsigned i=0; i < num_stats; i++)
