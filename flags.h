@@ -97,7 +97,6 @@ typedef struct {
     #define VBLOCK_MEMORY_MAKE_REF (1    << 20) // VB memory with --make-reference - reference data 
     #define VBLOCK_MEMORY_REFHASH  (16   << 20) // VB memory with --make-reference - refhash data (overridable with --vblock)
     #define VBLOCK_MEMORY_GENERIC  (16   << 20) // VB memory for the generic data type
-    #define VBLOCK_MEMORY_GTSHARK  (512  << 20) // Extra large memory for GTShark
     uint64_t vblock_memory;
 } Flags;
 

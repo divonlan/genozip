@@ -413,9 +413,6 @@ void flags_update (unsigned num_txt_files, const char **filenames)
     // set memory if --fast and user didn't specify --vblock
     else if (flag.fast) flag.vblock_memory = VBLOCK_MEMORY_FAST;
 
-    // if --gtshark we use extra large vblocks to get a good result from gtshark
-    else if (flag.gtshark) flag.vblock_memory = VBLOCK_MEMORY_GTSHARK;
-
     // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
     // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.
     if (flag.make_reference) {
