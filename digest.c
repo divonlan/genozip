@@ -86,6 +86,8 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
 // ZIP: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
 void digest_one_vb (VBlock *vb)
 {
+    #define DIGEST_TIMEOUT (30*60) // 30 min
+
     // wait for our turn
     for (unsigned i=0; ; i++) {
         mutex_lock (vb_digest_mutex);
@@ -96,7 +98,8 @@ void digest_one_vb (VBlock *vb)
         usleep (10000);
 
         // timeout after approx 30 seconds
-        ASSERT (i < 3000, "Timeout while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", vb->vblock_i, vb_digest_last);
+        ASSERT (i < DIGEST_TIMEOUT*100, "Timeout (%u sec) while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", 
+                DIGEST_TIMEOUT, vb->vblock_i, vb_digest_last);
     }
 
     if (command == ZIP) {
