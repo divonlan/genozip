@@ -67,7 +67,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 
             zfile_uncompress_section (vb, header, 
                                       is_pair_section ? &ctx->pair      : target_buf, 
-                                      is_pair_section ? "context->pair" : is_local ? "context->local" : "context->b250", 
+                                      is_pair_section ? "context->pair" : is_local ? "contexts->local" : "contexts->b250", 
                                       is_pair_section ? pair_vb_i : vb->vblock_i,
                                       header->h.section_type); 
 

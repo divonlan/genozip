@@ -258,13 +258,13 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 
     // allocate bitmaps - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite nbits that overlays it + param must be 0
     buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-               buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local"); 
+               buf_is_allocated (&bitmap_ctx->local) ? NULL : "contexts->local"); 
 
     buf_alloc (vb, &strand_ctx->local, MAX (nonref_ctx->local.len + sizeof (int64_t), roundup_bits2bytes64 (vb->lines.len)), CTX_GROWTH, 
-               buf_is_allocated (&strand_ctx->local) ? NULL : "context->local"); 
+               buf_is_allocated (&strand_ctx->local) ? NULL : "contexts->local"); 
 
-    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local"); 
-    buf_alloc (vb, &gpos_ctx->local,   MAX (nonref_ctx->local.len + sizeof (uint32_t), vb->lines.len * sizeof (uint32_t)), CTX_GROWTH, "context->local"); 
+    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "contexts->local"); 
+    buf_alloc (vb, &gpos_ctx->local,   MAX (nonref_ctx->local.len + sizeof (uint32_t), vb->lines.len * sizeof (uint32_t)), CTX_GROWTH, "contexts->local"); 
 
     bool is_forward, is_all_ref;
     PosType gpos = aligner_best_match ((VBlockP)vb, seq, seq_len, &is_forward, &is_all_ref);

@@ -110,7 +110,7 @@ static void codec_hapmap_compress_build_index (VBlock *vb, HaploTypeSortHelperIn
     // create a permutation index for the vblock
     // we populate the hapmat_hapmat_index_ctx local, and it will be written after us, as the context is create after the hapmat_ctx 
     buf_alloc (vb, &vb->hapmat_index_ctx->local, vb->num_haplotypes_per_line * sizeof(uint32_t), 
-               0, "context->local");
+               0, "contexts->local");
     vb->hapmat_index_ctx->local.len = vb->num_haplotypes_per_line;
     
     ARRAY (uint32_t, hp_index, vb->hapmat_index_ctx->local);

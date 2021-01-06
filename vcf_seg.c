@@ -234,7 +234,7 @@ static inline void vcf_seg_INFO_array (VBlock *vb, Context *container_ctx, DidIT
                                         subarray_sep ? id[1]+1 : FLIP_CASE(id[1]), // different IDs for top array, subarray and items
                                         id[2], id[3], id[4], id[5], id[6], id[7] } };
         
-        buf_alloc (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "ctx->con_cache");
+        buf_alloc (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "contexts->con_cache");
 
         con = FIRSTENT (MiniContainer, container_ctx->con_cache);
         *con = (MiniContainer){ .nitems_lo = 1, 
@@ -296,7 +296,7 @@ static inline void vcf_seg_INFO_double_array (VBlock *vb, DictId dict_id, const 
     // we cache the container in con_coche
     if (!container_ctx->con_cache.len) {
 
-        buf_alloc (vb, &container_ctx->con_cache, sizeof (SmallContainer) * 2, 1, "ctx->con_cache");
+        buf_alloc (vb, &container_ctx->con_cache, sizeof (SmallContainer) * 2, 1, "contexts->con_cache");
         const uint8_t *id = dict_id.id;
 
         // single item
@@ -546,7 +546,7 @@ static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, 
     ctx->ltype = LT_UINT32_TR;
     ctx->flags.store = STORE_INT;
 
-    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, "ctx->local");
+    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, "contexts->local");
 
     if (cell_len == 1 && cell[0] == '.') {
         NEXTENT (uint32_t, ctx->local) = 0xffffffff;
@@ -623,7 +623,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         // we overlay on the txt to save memory. since the HT data is by definition a subset of txt, we only overwrite txt
         // areas after we have already consumed them
         buf_set_overlayable (&vb->txt_data);
-        buf_overlay ((VBlockP)vb, &vb->ht_matrix_ctx->local, &vb->txt_data, "context->local");
+        buf_overlay ((VBlockP)vb, &vb->ht_matrix_ctx->local, &vb->txt_data, "contexts->local");
     }
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample)
@@ -678,11 +678,10 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     // shortcut if we have the same ploidy and phase as previous GT
     if (gt.repeats == vb->gt_prev_ploidy && gt.repsep[0] == vb->gt_prev_phase) {
 
-        buf_alloc (vb, &ctx->node_i, MAX (vb->lines.len, ctx->node_i.len + 1) * sizeof (uint32_t),
-                   CTX_GROWTH, "contexts->node_i");
+        buf_alloc_more (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
 
-        WordIndex node_index = *LASTENT (uint32_t, ctx->node_i);
-        NEXTENT (uint32_t, ctx->node_i) = node_index;
+        WordIndex node_index = *LASTENT (uint32_t, ctx->b250);
+        NEXTENT (uint32_t, ctx->b250) = node_index;
         ctx->txt_len += save_cell_len;
 
         return node_index;

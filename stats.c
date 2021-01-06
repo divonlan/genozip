@@ -270,7 +270,7 @@ void stats_compress (void)
 
         ASSERTW (s->z_size >= 0, "Hmm... s->z_size=%"PRId64" is negative for %s", s->z_size, s->name);
 
-        if (ctx && !ctx->node_i.len && !ctx->txt_len && !ctx->b250.len && !s->z_size) continue;
+        if (ctx && !ctx->b250.param && !ctx->txt_len && !ctx->b250.len && !s->z_size) continue;
 
         s->txt_size = ctx ? ctx->txt_len : (i==-SEC_TXT_HEADER ? txtfile_get_bound_headers_len() : 0);
         
@@ -288,10 +288,10 @@ void stats_compress (void)
                              s->my_did_i = ctx->did_i;
                              s->st_did_i = ctx->st_did_i;
         /* did_i          */ s->did_i = str_uint_commas ((uint64_t)ctx->did_i); 
-        /* #Words in file */ s->words = str_uint_commas (ctx->node_i.len);
-        /* % dict         */ s->pc_dict              = !ctx->node_i.len         ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->node_i.len;
-        /* % singletons   */ s->pc_singletons        = !ctx->node_i.len         ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->node_i.len;
-        /* % failed singl.*/ s->pc_failed_singletons = !ctx->node_i.len         ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->node_i.len;
+        /* #Words in file */ s->words = str_uint_commas (ctx->b250.param);
+        /* % dict         */ s->pc_dict              = !ctx->b250.param         ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->b250.param;
+        /* % singletons   */ s->pc_singletons        = !ctx->b250.param         ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->b250.param;
+        /* % failed singl.*/ s->pc_failed_singletons = !ctx->b250.param         ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->b250.param;
         /* % hash occupn. */ s->pc_hash_occupancy    = !ctx->global_hash_prime  ? 0 : 100.0 * (double)(ctx->nodes.len + ctx->ol_nodes.len) / (double)ctx->global_hash_prime;
         /* Hash           */ s->hash = str_uint_commas (ctx->global_hash_prime);
         /* uncomp dict    */ s->uncomp_dict = str_size (ctx->dict.len);

@@ -387,7 +387,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
 
     else {
         Context *nonref_ctx = &vb->contexts[FASTQ_NONREF];
-        buf_alloc ((VBlockP)vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), CTX_GROWTH, "context->local"); 
+        buf_alloc ((VBlockP)vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), CTX_GROWTH, "contexts->local"); 
         buf_add (&nonref_ctx->local, seq_start, dl->seq_len);
     }
 

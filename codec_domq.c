@@ -120,10 +120,10 @@ bool codec_domq_compress (VBlock *vb,
 
     // this is usually enough, but might not be in some edge cases
     // note: qual_buf->len is the total length of all qual lines
-    buf_alloc (vb, qual_buf, qual_buf->len / 5, 1, "context->local"); 
+    buf_alloc (vb, qual_buf, qual_buf->len / 5, 1, "contexts->local"); 
     qual_buf->param = dom; // dom goes into param, and eventually into SectionHeaderCtx.local_param
 
-    buf_alloc (vb, qdomruns_buf, qual_buf->len / 10, 1, "context->local");
+    buf_alloc (vb, qdomruns_buf, qual_buf->len / 10, 1, "contexts->local");
 
     qual_buf->len = 0; 
     uint32_t runlen = 0;

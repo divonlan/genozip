@@ -501,7 +501,7 @@ static Context *ctx_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
 
     // only when the new entry is finalized, do we increment num_contexts, atmoically , this is because
     // other threads might access it without a mutex when searching for a dict_id
-    __atomic_store_n (&z_file->num_contexts, z_file->num_contexts+1, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_i
+    __atomic_store_n (&z_file->num_contexts, z_file->num_contexts+1, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the b250
 
 finish:
     mutex_unlock (z_file->dicts_mutex);
@@ -857,14 +857,15 @@ void ctx_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 // ZIP only: run by I/O thread during zfile_output_processed_vb()
 void ctx_update_stats (VBlock *vb)
 {
-    // zf_ctx doesn't store node_i, but we just use node_i.len as a counter for displaying in genozip_show_sections
+    // zf_ctx doesn't store b250, but we just use b250.len as a counter for displaying in genozip_show_sections
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
         Context *vb_ctx = &vb->contexts[did_i];
     
         Context *zf_ctx = ctx_get_zf_ctx (vb_ctx->dict_id);
         if (!zf_ctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
 
-        zf_ctx->node_i.len += vb_ctx->node_i.len; // thread safety: no issues, this only updated only by the I/O thread
+        // b250.param contains the number of base250 words 
+        zf_ctx->b250.param += vb_ctx->b250.param; // thread safety: no issues, this only updated only by the I/O thread
     }
 }
 
@@ -876,7 +877,6 @@ void ctx_update_stats (VBlock *vb)
     func (&ctx->ol_dict);       \
     func (&ctx->ol_nodes);      \
     func (&ctx->nodes);         \
-    func (&ctx->node_i);        \
     func (&ctx->local_hash);    \
     func (&ctx->global_hash);   \
     func (&ctx->word_list);     \
@@ -1089,14 +1089,14 @@ static void ctx_dict_read_one_vb (VBlockP vb)
             // this allows us to calculate the FRAGMENT_SIZE with which this file was compressed and hence an upper bound on the size
             uint32_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : roundup2pow (vb->fragment_len) * num_fragments;
             
-            buf_alloc (evb, &dict_ctx->dict, size_upper_bound, 0, "context->dict");
+            buf_alloc (evb, &dict_ctx->dict, size_upper_bound, 0, "contexts->dict");
             buf_set_overlayable (&dict_ctx->dict);
         }
     }
 
     // when pizzing a v8 file, we run in single-thread since we need to do the following dictionary enlargement with which fragment
     if (z_file->genozip_version == 8) {
-        buf_alloc_more (evb, &dict_ctx->dict, vb->fragment_len, 0, char, 0, "context->dict");
+        buf_alloc_more (evb, &dict_ctx->dict, vb->fragment_len, 0, char, 0, "contexts->dict");
         buf_set_overlayable (&dict_ctx->dict);
     }
 
@@ -1138,7 +1138,7 @@ static void ctx_dict_build_word_lists (void)
 
         if (!ctx->word_list.len || ctx->word_list.data) continue; // skip if 1. no words, or 2. already built
 
-        buf_alloc (evb, &ctx->word_list, ctx->word_list.len * sizeof (CtxWord), 0, "word_list");
+        buf_alloc (evb, &ctx->word_list, ctx->word_list.len * sizeof (CtxWord), 0, "contexts->word_list");
         buf_set_overlayable (&ctx->word_list);
 
         const char *word_start = ctx->dict.data;

@@ -157,96 +157,103 @@ static void zip_dynamically_set_max_memory (void)
         flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
 }
 
-// here we translate the node_i indices creating during seg_* to their finally dictionary indices in base-250.
-// Note that the dictionary indices have changed since segregate (which is why we needed this intermediate step)
-// because: 1. the dictionary got integrated into the global one - some values might have already been in the global
-// dictionary thanks to other threads working on other VBs ; 2. for the first VB, we sort the dictionary by frequency
-// returns true if section should be dropped
-static bool zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample_size)
+static inline void zip_set_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i,
+                                     Buffer *b250_buf, 
+                                     WordIndex *prev_word_index,  // in/out
+                                     bool show)
 {
-    ASSERTE (ctx->b250.len==0, "ctx->node_i is not empty. Dict=%s", ctx->name);
+    WordIndex node_index = *ENT(WordIndex, ctx->b250, word_i);
 
-    buf_alloc (vb, &ctx->b250, ctx->node_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
-               1.1, "ctx->b250_buf");
+    if (node_index >= 0) { // normal index
 
-    bool show = (flag.show_b250 || dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_b250.num) && !sample_size;
+        CtxNode *node = ctx_node_vb (ctx, node_index, NULL, NULL);
 
-    if (show) 
-        bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
+        WordIndex n           = node->word_index.n;
+        unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
+        uint8_t *numerals     = node->word_index.encoded.numerals;
+        
+        bool one_up = (n == *prev_word_index + 1) && (word_i > 0);
 
-    // calculate number of node_i words to be generated - normally all of them, except if we're just sampling in zip_assign_best_codec
-    uint32_t num_words = (uint32_t)ctx->node_i.len;
-    if (sample_size && num_words > sample_size / sizeof (uint32_t))
-        num_words = sample_size / sizeof (uint32_t);
+        if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
+            NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_ONE_UP;
+            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", word_i)
+        }
 
-    WordIndex first_node_index = *ENT (WordIndex, ctx->node_i, 0);
+        else {
+            if (num_numerals == 4) { // assign word byte by byte, as it is not word-boundary aligned
+                memcpy (AFTERENT (char, *b250_buf), numerals, 4); // hopefully the compiler will optimize this memcpy and it won't e a function call...
+                b250_buf->len += 4;
+            } 
+            else
+                NEXTENT (uint8_t, *b250_buf) = *numerals;
+
+            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", word_i, n)
+        }
+        *prev_word_index = n;
+    }
+
+    else if (node_index == WORD_INDEX_MISSING_SF) {
+        NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_MISSING_SF;
+        *prev_word_index = node_index;
+        if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", word_i)
+    }
+    
+    else if (node_index == WORD_INDEX_EMPTY_SF) {
+        NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_EMPTY_SF;
+        *prev_word_index = node_index;
+        if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", word_i)
+    }
+
+    else ABORT ("Error in zip_set_one_b250: invalid node_index=%u", node_index);        
+}
+
+// here we generate the b250 data: we convert the b250 buffer data from an index into context->nodes
+// to an index into the to-be-generated-in-piz context->word_index, encoded in base250.
+// Note that the word indices have changed since segmentation (which is why we needed this intermediate step)
+// because: 1. the dictionary got integrated into the global one - some values might have already been in the global
+// dictionary thanks to other threads working on other VBs  
+// 2. for the first VB, we sort the dictionary by frequency returns true if section should be dropped
+static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
+{
+    bool show = flag.show_b250 || dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
+    
+    if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
+
+    // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
+    ctx->b250.param = (int64_t)ctx->b250.len;
+    ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
+
+    WordIndex first_node_index = *ENT (WordIndex, ctx->b250, 0);
     bool all_the_same = true; // are all the node_index of this context the same in this VB
 
+    // we assign the b250 data back onto the same buffer. this words, because the b250 numerals are of length 1 or 4, 
+    // therefore smaller than node_index
     WordIndex prev = WORD_INDEX_NONE; 
-    for (uint32_t i=0; i < num_words; i++) {
+    for (uint32_t word_i=0; word_i < (uint32_t)ctx->b250.param; word_i++) {
+        if (*ENT(WordIndex, ctx->b250, word_i) != first_node_index) // we found evidence that not all are the same
+            all_the_same = false;
 
-        WordIndex node_index = *ENT(WordIndex, ctx->node_i, i);
-
-        if (node_index != first_node_index) all_the_same = false;
-
-        if (node_index >= 0) { // normal index
-
-            CtxNode *node = ctx_node_vb (ctx, node_index, NULL, NULL);
-
-            WordIndex n           = node->word_index.n;
-            unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
-            uint8_t *numerals     = node->word_index.encoded.numerals;
-            
-            bool one_up = (n == prev + 1) && (i > 0);
-
-            if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
-                NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_ONE_UP;
-                if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", i)
-            }
-
-            else {
-                memcpy (AFTERENT (char, ctx->b250), numerals, num_numerals);
-                ctx->b250.len += num_numerals;
-                if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", i, n)
-            }
-            prev = n;
-        }
-
-        else if (node_index == WORD_INDEX_MISSING_SF) {
-            NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_MISSING_SF;
-            prev = node_index;
-            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", i)
-        }
-        
-        else if (node_index == WORD_INDEX_EMPTY_SF) {
-            NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_EMPTY_SF;
-            prev = node_index;
-            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", i)
-        }
-
-        else ABORT ("Error in zip_generate_b250_section: invalid node_index=%u", node_index);        
+        zip_set_one_b250 (vb, ctx, word_i, &ctx->b250, &prev, show);
     }
 
     // if all the node_index of this context are the same in this VB, we store just one, and set a flag
-    if (!sample_size) { // this logic is not to be applied if we're just sampling 
-        if (all_the_same) {
+    if (all_the_same) {
 
-            // if the entire section is word_index = 0 we can drop it, unless:
-            // 1) it has local (bc if no-b250/dict-from-prev-vb/no-local piz can't distiguish between seg_id-with-b250-all-the-same-word-index-0 vs all-singleton-pushed-to-local)
-            // 2) it has flags that need to be passed to piz (we can get rid of this limitation - bug 224), or
-            // 3) the one snip is SELF_DELTA
-            if (base250_decode ((const uint8_t **)&ctx->b250.data, false, ctx->name) == 0 && 
-                !ctx->local.len &&
-                ! (*(uint8_t *)&ctx->flags) &&
-                *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) // word_index=0 is the first word in the dictionary
-                return true; 
+        // if the entire section is word_index = 0 we can drop it, unless:
+        // 1) it has local (bc if no-b250/dict-from-prev-vb/no-local piz can't distiguish between seg_id-with-b250-all-the-same-word-index-0 vs all-singleton-pushed-to-local)
+        // 2) it has flags that need to be passed to piz (we can get rid of this limitation - bug 224), or
+        // 3) the one snip is SELF_DELTA
+        if (base250_decode ((const uint8_t **)&ctx->b250.data, false, ctx->name) == 0 && 
+            !ctx->local.len &&
+            ! (*(uint8_t *)&ctx->flags) &&
+            *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) // word_index=0 is the first word in the dictionary
+            return true; 
 
-            ctx->b250.len = base250_len (ctx->b250.data);
-            ctx->flags.all_the_same = true;
-        }
-        else
-            ctx->flags.all_the_same = false;
+        ctx->b250.len = base250_len (ctx->b250.data);
+        ctx->flags.all_the_same = true;
     }
+    else
+        ctx->flags.all_the_same = false;
 
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
@@ -339,7 +346,7 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
         }
 
     vb->compressed.len = ctx->local.len;
-    buf_copy (vb, &ctx->local, &vb->compressed, lt_desc[ctx->ltype].width, 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+    buf_copy (vb, &ctx->local, &vb->compressed, lt_desc[ctx->ltype].width, 0, 0, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
 
     buf_free (&vb->compressed);
 }
@@ -367,16 +374,24 @@ static void zip_assign_best_codec (VBlock *vb)
             ctx->local.len /= lt_desc[ctx->ltype].width;
         }
 
-        // b250
-        if (ctx->node_i.len * sizeof (uint32_t) < MIN_LEN_FOR_COMPRESSION)
-            continue; // case: size is too small even before shrinking during generation
+        // b250 is not yet "generated", it still contains node indices
+        if (ctx->b250.len * sizeof (uint32_t) >= MIN_LEN_FOR_COMPRESSION) { // not too small
 
-        // generate a sample of ctx.b250 data from ctx.node_i data
-        zip_generate_b250_section (vb, ctx, CODEC_ASSIGN_SAMPLE_SIZE);
+            // generate a sample of b250 data, in vb->compressed, from a sample of ctx.b250 data
+            uint32_t num_words = MIN ((uint32_t)ctx->b250.len, CODEC_ASSIGN_SAMPLE_SIZE / sizeof (uint32_t));
 
-        codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
+            ASSERTE (vb->compressed.len==0, "ctx->compressed is not empty. Ctx=%s", ctx->name);
+            buf_alloc (vb, &vb->compressed, num_words * MAX_BASE250_NUMERALS, 1, "vb->compressed");
 
-        ctx->b250.len = 0; // roll back
+            WordIndex prev = WORD_INDEX_NONE; 
+            for (uint32_t word_i=0; word_i < num_words; word_i++) 
+                zip_set_one_b250 (vb, ctx, word_i, &vb->compressed, &prev, false);
+
+            // find best codec
+            codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
+
+            buf_free (&vb->compressed);
+        }
     }
 }
 
@@ -387,9 +402,9 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = &vb->contexts[did_i];
     
-        if (!ctx->nodes.len || ctx->nodes.len != ctx->node_i.len) continue; // check that all words are unique (and new to this vb)
+        if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
         if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
-        if (ctx->nodes.len < vb->lines.len / 5)   continue; // don't bother if this is a rare field less than 20% of the lines
+        if (ctx->nodes.len < vb->lines.len / 5) continue; // don't bother if this is a rare field less than 20% of the lines
         if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
         // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
@@ -397,7 +412,7 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
 
         buf_move (vb, &ctx->local, vb, &ctx->dict);
         buf_free (&ctx->nodes);
-        buf_free (&ctx->node_i);
+        buf_free (&ctx->b250);
     }
 }
 
@@ -413,13 +428,13 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
         // case: the entire context is just numbers in local, and b250 is only SNIP_LOOKUPs. 
         // ctx->numeric_only is set to indicate we get rid of the b250.
         if (ctx->numeric_only) 
-            buf_free (&ctx->node_i);
+            buf_free (&ctx->b250);
 
-        if (ctx->node_i.len) {
+        if (ctx->b250.len) {
 
-            ASSERTE (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->node_i containing data", did_i);
+            ASSERTE (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", did_i);
 
-            bool drop_section = zip_generate_b250_section (vb, ctx, 0);
+            bool drop_section = zip_generate_b250_section (vb, ctx);
 
             if (!drop_section) {
                 if (dict_id_printable (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 

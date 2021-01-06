@@ -356,14 +356,14 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     if (!recursion_level) {
         // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite nbits that overlays it
         //buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-        //        buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
+        //        buf_is_allocated (&bitmap_ctx->local) ? NULL : "contexts->local", 0); 
         
         ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspeciously high and might indicate a bug", seq_len);
         
         buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-                   "context->local"); 
+                   "contexts->local"); 
         
-        buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local"); 
+        buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "contexts->local"); 
 
         buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
     }

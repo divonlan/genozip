@@ -611,19 +611,20 @@ static void file_initialize_z_file_data (File *file)
     memset (file->dict_id_to_did_i_map, 0xff, sizeof(file->dict_id_to_did_i_map)); // DID_I_NONE
 
 #define INIT(buf) file->contexts[i].buf.name  = #buf; \
-                  file->contexts[i].buf.param = i;    \
                   buf_add_to_buffer_list (evb, &file->contexts[i].buf);
 
     for (unsigned i=0; i < MAX_DICTS; i++) {
         INIT (dict);        
         INIT (b250);
         INIT (nodes);
-        INIT (node_i);
         INIT (global_hash);
         INIT (ol_dict);
         INIT (ol_nodes);
         INIT (local_hash);
         INIT (word_list);
+        INIT (con_cache);
+        INIT (con_index);
+        INIT (con_len);
     }
 
 #undef INIT

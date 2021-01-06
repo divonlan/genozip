@@ -83,7 +83,10 @@ typedef struct Context {
     struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
-    Buffer b250;               // The buffer of b250 data containing indices (in b250) to word_list. 
+    Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In zip_generate_b250_section, 
+                               //      the "node indices" are converted into "word indices" - indices into the future 
+                               //      context->word_list, in base-250. the number of words is moved from .len to .param. 
+                               // PIZ: .data contains the word indices (i.e. indices into word_list) in base-250
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
     Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if inst.pair_b250 or inst.pair_local is set)
     LastValueType last_value;  // last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
@@ -98,7 +101,6 @@ typedef struct Context {
     Buffer ol_nodes;           // MTF nodes - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
                                // zfile: nodes of singletons
     Buffer nodes;              // array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
-    Buffer node_i;             // contains 32bit indices into the ctx->nodes - this is an intermediate step before generating b250 or genotype_data 
     
     // settings
     Codec lcodec, bcodec;      // codec used to compress local and b250
@@ -115,6 +117,7 @@ typedef struct Context {
     bool local_always;         // always create a local section in zfile, even if it is empty 
     bool dynamic_size_local;   // resize LT_UINT32 according to data during generate (also do BGEN)
     bool numeric_only;         // if both numeric_only and dynamic_size_local are set, 
+    
     // hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and the rest of linked to them by linked list
@@ -134,11 +137,11 @@ typedef struct Context {
     // stats
     uint64_t txt_len;          // How many characters in the txt file are accounted for by snips in this ctx (for stats)
     uint32_t num_singletons;   // True singletons that appeared exactly once in the entire file
-    uint32_t num_failed_singletons;// Words that we wrote into local in one VB only to discover later that they're not a singleton, and wrote into the global dict too
 
     // ----------------------------
     // ZIP in z_file only
     // ----------------------------
+    uint32_t num_failed_singletons;// (for stats) Words that we wrote into local in one VB only to discover later that they're not a singleton, and wrote into the global dict too
     Mutex mutex;               // Context in z_file (only) is protected by a mutex 
     
     // ----------------------------

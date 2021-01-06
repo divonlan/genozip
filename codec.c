@@ -171,9 +171,9 @@ Codec codec_assign_best_codec (VBlockP vb,
 
     // set data
     switch (st) {
-        case SEC_DICT  : data = &ctx->dict  ; break;
-        case SEC_B250  : data = &ctx->b250  ; break;
-        case SEC_LOCAL : data = &ctx->local ; break;
+        case SEC_DICT  : data = &ctx->dict      ; break;
+        case SEC_B250  : data = &vb->compressed ; break; // set in zip_generate_b250_sample
+        case SEC_LOCAL : data = &ctx->local     ; break;
         default: ASSERT0 (data, "Error in codec_assign_best_codec: no data");
     }
 

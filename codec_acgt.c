@@ -103,7 +103,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
 START_TIMER;        
         // overlay the NONREF.local to NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
         buf_set_overlayable (&nonref_ctx->local);
-        buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, "context->local");
+        buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, "contexts->local");
 
         PACK (uncompressed, *uncompressed_len); // pack into vb->compressed
 
@@ -117,7 +117,7 @@ COPY_TIMER (tmp1);
     else if (callback) {
 START_TIMER;        
 
-        buf_alloc (vb, &nonref_x_ctx->local, *uncompressed_len, CTX_GROWTH, "ctx->local");
+        buf_alloc (vb, &nonref_x_ctx->local, *uncompressed_len, CTX_GROWTH, "contexts->local");
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
             char *data_1=0;

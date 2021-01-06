@@ -94,7 +94,7 @@ static void *codec_gtshark_read_gtshark_output_file (void *arg)
 
     uint32_t bytes_read;
     do {
-        buf_alloc (vb, buf, buf->len + CHUNK, 2, "context->local"); 
+        buf_alloc (vb, buf, buf->len + CHUNK, 2, "contexts->local"); 
         bytes_read = fread (AFTERENT (char, *buf), 1, CHUNK, file);
         buf->len += bytes_read;
     } while (bytes_read == CHUNK); // its EOF if its smaller
@@ -147,7 +147,7 @@ static void *codec_gtshark_zip_create_vcf_file (void *arg)
     fputc ('\n', file);
 
     // exceptions - one byte per matrix byte, ASCII 0 matrix is '0' or '1', or the matrix value if not
-    buf_alloc (vb, &vb->gtshark_ex_ctx->local, vb->lines.len * num_hts, 1.1, "context->local");
+    buf_alloc (vb, &vb->gtshark_ex_ctx->local, vb->lines.len * num_hts, 1.1, "contexts->local");
     buf_zero (&vb->gtshark_ex_ctx->local);
     vb->gtshark_ex_ctx->local.len = vb->lines.len * num_hts;
     bool has_ex = false;
@@ -300,7 +300,7 @@ static void codec_gtshark_reconstruct_ht_matrix (VBlock *vb)
 
     ASSERTE (num_lines && num_hts, "Expecting num_lines=%u and num_hts=%u to be >0", num_lines, num_hts);
     
-    buf_alloc (vb, &vb->ht_matrix_ctx->local, num_lines * num_hts, 1, "context->local");
+    buf_alloc (vb, &vb->ht_matrix_ctx->local, num_lines * num_hts, 1, "contexts->local");
     vb->ht_matrix_ctx->local.len = num_lines * num_hts;
     
     ARRAY (uint8_t, ht_matrix, vb->ht_matrix_ctx->local);

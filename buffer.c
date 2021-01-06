@@ -960,7 +960,7 @@ void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
             target[r * cols + c] = transposed[c * rows + r];
 
     buf->vb->compressed.len = buf->len;
-    buf_copy (buf->vb, buf, &buf->vb->compressed, 1, 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+    buf_copy (buf->vb, buf, &buf->vb->compressed, 1, 0, 0, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
 
     buf_free (&buf->vb->compressed);
 
@@ -985,7 +985,7 @@ void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
             target[r * cols + c] = BGEN16 (transposed[c * rows + r]);
 
     buf->vb->compressed.len = buf->len;
-    buf_copy (buf->vb, buf, &buf->vb->compressed, sizeof (uint16_t), 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+    buf_copy (buf->vb, buf, &buf->vb->compressed, sizeof (uint16_t), 0, 0, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
 
     buf_free (&buf->vb->compressed);
 
@@ -1010,7 +1010,7 @@ void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
             target[r * cols + c] = BGEN32 (transposed[c * rows + r]);
 
     buf->vb->compressed.len = buf->len;
-    buf_copy (buf->vb, buf, &buf->vb->compressed, sizeof (uint32_t), 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+    buf_copy (buf->vb, buf, &buf->vb->compressed, sizeof (uint32_t), 0, 0, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
 
     buf_free (&buf->vb->compressed);
 
@@ -1035,7 +1035,7 @@ void BGEN_transpose_u64_buf (Buffer *buf, LocalType *lt)
             target[r * cols + c] = BGEN64 (transposed[c * rows + r]);
 
     buf->vb->compressed.len = buf->len;
-    buf_copy (buf->vb, buf, &buf->vb->compressed, sizeof (uint64_t), 0, 0, "ctx->local"); // copy and not move, so we can keep local's memory for next vb
+    buf_copy (buf->vb, buf, &buf->vb->compressed, sizeof (uint64_t), 0, 0, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
 
     buf_free (&buf->vb->compressed);
 

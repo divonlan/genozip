@@ -85,9 +85,9 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
     // set roll back point
     uint64_t saved_node_i_len[MAX_ENST_ITEMS], saved_local_len[MAX_ENST_ITEMS], saved_txt_len[MAX_ENST_ITEMS];
     for (unsigned item_i=0; item_i < num_items; item_i++) {
-        saved_node_i_len[item_i] = ctxs[item_i]->node_i.len;
-        saved_local_len[item_i] = ctxs[item_i]->local.len;
-        saved_txt_len  [item_i] = ctxs[item_i]->txt_len;
+        saved_node_i_len[item_i] = ctxs[item_i]->b250.len;
+        saved_local_len[item_i]  = ctxs[item_i]->local.len;
+        saved_txt_len  [item_i]  = ctxs[item_i]->txt_len;
     }
     const char *saved_snip = snip;
     unsigned saved_snip_len = snip_len;
@@ -128,7 +128,7 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
 badly_formatted:
     // roll back all the changed data
     for (unsigned item_i=0; item_i < num_items ; item_i++) {
-        ctxs[item_i]->node_i.len = saved_node_i_len[item_i];
+        ctxs[item_i]->b250.len  = saved_node_i_len[item_i];
         ctxs[item_i]->local.len = saved_local_len[item_i];
         ctxs[item_i]->txt_len   = saved_txt_len[item_i];
     }
