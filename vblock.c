@@ -30,7 +30,7 @@ void vb_release_vb (VBlock *vb)
     // verify that gzip_compressor was released after use
     ASSERTE (!vb->gzip_compressor, "vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
 
-    vb->first_line = vb->vblock_i = vb->num_haplotypes_per_line = vb->fragment_len = vb->fragment_num_words = 0;
+    vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
     vb->vb_data_size = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
@@ -43,8 +43,6 @@ void vb_release_vb (VBlock *vb)
     vb->range = NULL;
     vb->chrom_name = vb->fragment_start = NULL;
     vb->prev_range = NULL;
-    vb->ht_matrix_ctx = NULL;
-    vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->digest_so_far = DIGEST_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
@@ -64,10 +62,6 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
     buf_free(&vb->region_ra_intersection_matrix);
-    buf_free(&vb->hapmat_helper_index_buf);
-    buf_free(&vb->hapmat_columns_data);
-    buf_free(&vb->hapmat_one_array);
-    buf_free(&vb->hapmat_column_of_zeros);
     buf_free(&vb->bgzf_blocks);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
@@ -107,10 +101,6 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->show_b250_buf);
     buf_destroy (&vb->section_list_buf);
     buf_destroy (&vb->region_ra_intersection_matrix);
-    buf_destroy (&vb->hapmat_helper_index_buf);
-    buf_destroy (&vb->hapmat_columns_data);
-    buf_destroy (&vb->hapmat_one_array);
-    buf_destroy (&vb->hapmat_column_of_zeros);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)

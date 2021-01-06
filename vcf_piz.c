@@ -48,6 +48,8 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
 // FORMAT - obey GT-only and drop-genotypes ; load haplotype line
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
 {
+    VBlockVCF *vb_vcf = (VBlockVCF *)vb;
+
     if (flag.drop_genotypes) goto done;
 
     bool has_GT = (snip_len>=2 && snip[0]=='G' && snip[1] == 'T' && (snip_len==2 || snip[2] == ':'));
@@ -62,14 +64,15 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
     }
 
     // initialize haplotype stuff
-    if (has_GT && !vb->ht_matrix_ctx) {
+    if (has_GT && !vb_vcf->ht_matrix_ctx) {
 
-        ASSERT ((vb->ht_matrix_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT)), "Error in vcf_piz_special_FORMAT vb_i=%u: cannot find GT_HT data", vb->vblock_i);
+        ASSERT ((vb_vcf->ht_matrix_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT)), 
+                "Error in vcf_piz_special_FORMAT vb_i=%u: cannot find GT_HT data", vb->vblock_i);
 
         // will exist in case of use of CODEC_HAPMAT but not CODEC_GTSHARK        
-        vb->hapmat_index_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
+        vb_vcf->hapmat_index_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
         
-        if (vb->hapmat_index_ctx)
+        if (vb_vcf->hapmat_index_ctx)
             codec_hapmat_piz_calculate_columns (vb);
     }
 done:

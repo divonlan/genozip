@@ -330,3 +330,8 @@ bug fixes, including major bug with mc:i optional field in SAM
 - VCF: better handling of FORMAT/DP and FORMAT/GQ - transposed matrix
 - Several other bug fixes
 - Backward compatible with Genozip 8 and 9 - v8 and v9-compressed files can be read by v10
+
+10.0.2
+- Better memory usage in ZIP (canceled Context.node_i)
+- Better handling of VCF haplotype matrices with hetreogeneous ploidy
+- Bug fixes

@@ -238,15 +238,15 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
 
             // first encounter with Container for this context - allocate the cache
             if (!cache_exists) {
-                buf_alloc (vb, &ctx->con_index, ctx->word_list.len * sizeof (uint32_t), 1, "contexts->con_index");
-                buf_alloc (vb, &ctx->con_len,   ctx->word_list.len * sizeof (uint16_t),  1, "contexts->con_len");
+                buf_alloc (vb, &ctx->con_index, ctx->word_list.len * sizeof (uint32_t), 1, "context->con_index");
+                buf_alloc (vb, &ctx->con_len,   ctx->word_list.len * sizeof (uint16_t),  1, "context->con_len");
                 buf_zero (&ctx->con_len);
             }
 
             // place Container followed by prefix in the cache
             *ENT (uint32_t, ctx->con_index, word_index) = (uint32_t)ctx->con_cache.len;
 
-            buf_alloc (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 2, "contexts->con_cache");
+            buf_alloc (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 2, "context->con_cache");
             
             char *cached_con = AFTERENT (char, ctx->con_cache);
             buf_add (&ctx->con_cache, con_p, st_size);

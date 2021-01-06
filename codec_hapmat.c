@@ -13,6 +13,7 @@
 #include "context.h"
 #include "dict_id.h"
 #include "reconstruct.h"
+#include "vcf_private.h"
 
 //--------------
 // ZIP side
@@ -24,8 +25,10 @@ typedef struct {
     uint32_t index_in_sorted_line;
 } HaploTypeSortHelperIndex;
 
-void codec_hapmat_comp_init (VBlock *vb)
+void codec_hapmat_comp_init (VBlock *vb_)
 {
+    VBlockVCF *vb = (VBlockVCF *)vb_;
+
     vb->ht_matrix_ctx         = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
     vb->ht_matrix_ctx->ltype  = LT_CODEC;
     vb->ht_matrix_ctx->lcodec = CODEC_HAPM;
@@ -51,7 +54,7 @@ static int sort_by_original_index_comparator(const void *p, const void *q)
     return (l - r); 
 }
 
-static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlock *vb)
+static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlockVCF *vb)
 {
     START_TIMER; 
 
@@ -78,10 +81,11 @@ static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlock *vb)
     return helper_index;
 }
 
-static void codec_hapmat_compress_one_array (VBlockP vb, uint32_t ht_i, 
+static void codec_hapmat_compress_one_array (VBlockP vb_, uint32_t ht_i, 
                                              char **line_data_1, uint32_t *line_data_len_1,
                                              uint32_t unused_maximum_len)
 {
+    VBlockVCF *vb = (VBlockVCF *)vb_;
     uint32_t orig_col_i = ENT (HaploTypeSortHelperIndex, vb->hapmat_helper_index_buf, ht_i)->index_in_original_line; 
     const uint32_t increment = vb->num_haplotypes_per_line; // automatic var that can be optimized to a register
 
@@ -99,7 +103,7 @@ static void codec_hapmat_compress_one_array (VBlockP vb, uint32_t ht_i,
 }
 
 // build the reverse index that will allow access by the original index to the sorted array, to be included in the genozip file
-static void codec_hapmap_compress_build_index (VBlock *vb, HaploTypeSortHelperIndex *helper_index)
+static void codec_hapmap_compress_build_index (VBlockVCF *vb, HaploTypeSortHelperIndex *helper_index)
 {
     for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
         helper_index[ht_i].index_in_sorted_line = ht_i;
@@ -121,7 +125,7 @@ static void codec_hapmap_compress_build_index (VBlock *vb, HaploTypeSortHelperIn
 // sort haplogroups by alt allele count within the variant group, create an index for it, and split
 // it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool codec_hapmat_compress (VBlock *vb, 
+bool codec_hapmat_compress (VBlock *vb_, 
                             SectionHeader *header,    
                             const char *uncompressed, // option 1 - compress contiguous data
                             uint32_t *uncompressed_len, 
@@ -133,6 +137,7 @@ bool codec_hapmat_compress (VBlock *vb,
     
     ASSERT0 (uncompressed && !callback, "Error in codec_hapmat_compress: callback option not supported");
 
+    VBlockVCF *vb = (VBlockVCF *)vb_;
     HaploTypeSortHelperIndex *helper_index = codec_hapmat_count_alt_alleles (vb);
     
     // sort the helper index by number of alt alleles
@@ -152,7 +157,7 @@ bool codec_hapmat_compress (VBlock *vb,
     CodecCompress *compress = codec_args[sub_codec].compress;
 
     PAUSE_TIMER; //  don't include sub-codec compressor - it accounts for itself
-    bool success = compress (vb, header, 0, uncompressed_len, codec_hapmat_compress_one_array, compressed, compressed_len, soft_fail);    
+    bool success = compress ((VBlockP)vb, header, 0, uncompressed_len, codec_hapmat_compress_one_array, compressed, compressed_len, soft_fail);    
     RESUME_TIMER (compressor_hapmat);
 
     // build data in hapmat_index_ctx 
@@ -180,8 +185,10 @@ bool codec_hapmat_compress (VBlock *vb,
 // PIZ: for each haplotype column, retrieve its it address in the haplotype sections. Note that since the haplotype sections are
 // transposed, each column will be a row, or a contiguous array, in the section data. This function returns an array
 // of pointers, each pointer being a beginning of column data within the section array
-void codec_hapmat_piz_calculate_columns (VBlock *vb)
+void codec_hapmat_piz_calculate_columns (VBlock *vb_)
 {
+    VBlockVCF *vb = (VBlockVCF *)vb_;
+
     uint32_t num_haplotypes_per_line = vb->num_haplotypes_per_line = (uint32_t)(vb->ht_matrix_ctx->local.len / vb->lines.len);
 
     vb->hapmat_one_array.len = num_haplotypes_per_line + 7; // +7 because depermuting_loop works on a word (32/64 bit) boundary
@@ -208,7 +215,7 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb)
 }
 
 // PIZ: build haplotype for a line - reversing the permutation and the transposal.
-static inline void codec_hapmat_piz_get_one_line (VBlock *vb)
+static inline void codec_hapmat_piz_get_one_line (VBlockVCF *vb)
 {
     START_TIMER;
 
@@ -257,8 +264,10 @@ static inline void codec_hapmat_piz_get_one_line (VBlock *vb)
 //    by PIZ as the LT_CODEC reconstructor for CODEC_HAPM. It takes data from GT_HT, consulting GT_HT_INDEX
 //    to find the correct column in the matrix, and skips '*'s (missing haplotypes due to mixed ploidy, missing samples,
 //    or lines missing GT in FORMAT) until it finds a valid haplotype value.
-void codec_hapmat_reconstruct (VBlock *vb, Codec codec, Context *ctx)
+void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
 {
+    VBlockVCF *vb = (VBlockVCF *)vb_;
+
     if (vb->dont_show_curr_line) return;
 
     // get one row of the haplotype matrix for this line into vb->hapmat_one_array if we don't have it already
@@ -280,6 +289,10 @@ void codec_hapmat_reconstruct (VBlock *vb, Codec codec, Context *ctx)
         case 58 ... 147: { // allele 10 to 99 (ascii 58 to 147)
             RECONSTRUCT_INT (ht - '0'); break;
         }
+        case '\b': // ploidy padding (starting 10.0.2) - appears as the 2nd+ HT - counted in GT.repeats
+            vb->txt_data.len--; // remove previous phase character;
+            break;
+
         case '*':
             ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: unexpected end of hapmat_one_array (len=%u) data in %s (ctx->local.len=%u)", 
                 vb->line_i, vb->vblock_i, (unsigned)vb->hapmat_one_array.len, ctx->name, (uint32_t)ctx->local.len);

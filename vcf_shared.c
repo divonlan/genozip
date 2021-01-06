@@ -11,7 +11,7 @@
 
 unsigned vcf_vb_size (void) { return sizeof (VBlockVCF); }
 unsigned vcf_vb_zip_dl_size (void) { return sizeof (ZipDataLineVCF); }
-bool vcf_vb_has_haplotype_data (VBlockP vb) { return !!vb->ht_matrix_ctx; }
+bool vcf_vb_has_haplotype_data (VBlockP vb) { return !!((VBlockVCFP)vb)->ht_matrix_ctx; }
 
 // cleanup vb (except common) and get it ready for another usage (without freeing memory held in the Buffers)
 void vcf_vb_release_vb (VBlockVCF *vb) 
@@ -22,12 +22,24 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->is_af_before_ac = vb->is_an_before_ac = false;
     vb->gt_prev_ploidy = 0;
     vb->gt_prev_phase = 0;
+    vb->num_haplotypes_per_line = 0;
+    vb->ht_matrix_ctx = NULL;
+    vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
+    vb->gt_has_00 = vb->gt_has_10 = vb->gt_has_dot = vb->gt_has_high = 0;
 
+    buf_free(&vb->hapmat_helper_index_buf);
+    buf_free(&vb->hapmat_columns_data);
+    buf_free(&vb->hapmat_one_array);
+    buf_free(&vb->hapmat_column_of_zeros);
     buf_free(&vb->format_mapper_buf);
 }
 
 void vcf_vb_destroy_vb (VBlockVCF *vb)
 {
+    buf_destroy (&vb->hapmat_helper_index_buf);
+    buf_destroy (&vb->hapmat_columns_data);
+    buf_destroy (&vb->hapmat_one_array);
+    buf_destroy (&vb->hapmat_column_of_zeros);
     buf_destroy (&vb->format_mapper_buf);
 }
 

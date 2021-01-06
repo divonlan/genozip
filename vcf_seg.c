@@ -577,11 +577,11 @@ static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigne
     uint32_t num_samples = vb->line_i * vcf_num_samples + sample_i; // all samples in previous lines + previous samples in current line
     char *ht_data = vb->ht_matrix_ctx->local.data;
 
-    // copy the haplotypes backwards (to avoid overlap), padding with '*'
+    // copy the haplotypes backwards (to avoid overlap), padding with '*' (which are NOT counted in .repeats of the GT container)
     for (int sam_i = num_samples-1; sam_i >= 0; sam_i--) {
 
         int ht_i=new_ploidy-1 ; for (; ht_i >= vb->ploidy; ht_i--) 
-            ht_data[sam_i * new_ploidy + ht_i] = '*';
+            ht_data[sam_i * new_ploidy + ht_i] = '*'; 
 
         for (; ht_i >= 0; ht_i--)
             ht_data[sam_i * new_ploidy + ht_i] = ht_data[sam_i * vb->ploidy + ht_i];
@@ -595,8 +595,11 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
 {
     // the GT field is represented as a Container, with a single item repeating as required by poidy, and the seperator 
     // determined by the phase
-    MiniContainer gt = { .repeats=1, .nitems_lo=1, .drop_final_repeat_sep=true };
-    gt.items[0] = (ContainerItem){ .dict_id = (DictId)dict_id_FORMAT_GT_HT };
+    MiniContainer gt = { .repeats = 1, 
+                         .nitems_lo = 1, 
+                         .drop_final_repeat_sep = true, 
+                         .items = { { .dict_id = (DictId)dict_id_FORMAT_GT_HT } } };
+
     unsigned save_cell_len = cell_len;
 
     // update repeats according to ploidy, and separator according to phase
@@ -626,8 +629,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         buf_overlay ((VBlockP)vb, &vb->ht_matrix_ctx->local, &vb->txt_data, "contexts->local");
     }
 
-    // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample)
-
+    // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
     char *ht_data = ENT (char, vb->ht_matrix_ctx->local, vb->line_i * vb->num_haplotypes_per_line + vb->ploidy * sample_i);
 
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
@@ -666,16 +668,20 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
 
     } // for characters in a sample
 
-    // if the ploidy of the sample is lower than vb->ploidy, set missing ht as '*' ("ploidy padding")
+    // if the ploidy of the sample is lower than vb->ploidy, set missing ht as '\b' (backspace) (which will cause deletion of themselves and their separator)
+    // and set the ploidy to vb->ploidy - to avoid increase in entroy of GT
     if (gt.repeats != vb->ploidy) {
         
         for (unsigned ht_i=gt.repeats; ht_i < vb->ploidy; ht_i++) 
-            ht_data[ht_i] = '*';
+            ht_data[ht_i] = '\b'; // unlike '*', we DO count '\b' in .repeats
+
+        gt.repeats = vb->ploidy;
+        gt.repsep[0] = vb->gt_prev_phase;
     }
 
     ASSSEG (!cell_len, cell, "Invalid GT data in sample_i=%u", sample_i);
 
-    // shortcut if we have the same ploidy and phase as previous GT
+    // shortcut if we have the same ploidy and phase as previous GT (saves re-genetrating base64 in container_seg_by_ctx)
     if (gt.repeats == vb->gt_prev_ploidy && gt.repsep[0] == vb->gt_prev_phase) {
 
         buf_alloc_more (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");

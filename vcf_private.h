@@ -37,6 +37,27 @@ typedef struct VBlockVCF {
 
     // dictionaries stuff 
     Buffer format_mapper_buf;         // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
+
+    // used by HT matrix codec 
+    uint32_t num_haplotypes_per_line; 
+    Context *ht_matrix_ctx; 
+    
+    // used by CODEC_HAPM (for VCF haplotype matrix) 
+    Context *hapmat_index_ctx; 
+    Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
+    Buffer hapmat_columns_data;     // used by codec_hapmat_piz_get_one_line 
+    Buffer hapmat_column_of_zeros;  // used by codec_hapmat_piz_calculate_columns   
+    Buffer hapmat_one_array;        // one line or column 
+    
+    // used by CODEC_GTSHARK 
+    Context *gtshark_gt_ctx, *gtshark_db_ctx, *gtshark_ex_ctx; 
+
+    // characteristics of the diploid haplotype data
+    bool gt_has_10;   // has a 1/0 or 1|0 (NOT including 0/1 or 0|1)
+    bool gt_has_00;   // has a 0/0 or 0|0
+    bool gt_has_dot;  // has a .
+    bool gt_has_high; // has a haplotype other than 0, 1 or .
+
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;

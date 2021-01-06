@@ -115,20 +115,6 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* used by CODEC_ACGT (For SEQ) */ \
     bool has_non_agct;         /* ZIP only */ \
-    \
-    /* used by HT matrix codec */ \
-    uint32_t num_haplotypes_per_line; \
-    Context *ht_matrix_ctx; \
-    \
-    /* used by CODEC_HAPM (for VCF haplotype matrix) */ \
-    Context *hapmat_index_ctx; \
-    Buffer hapmat_helper_index_buf; /* ZIP: used by codec_hapmat_count_alt_alleles */ \
-    Buffer hapmat_columns_data;     /* used by codec_hapmat_piz_get_one_line */ \
-    Buffer hapmat_column_of_zeros;  /* used by codec_hapmat_piz_calculate_columns */  \
-    Buffer hapmat_one_array;        /* one line or column */ \
-    \
-    /* used by CODEC_GTSHARK */ \
-    Context *gtshark_gt_ctx, *gtshark_db_ctx, *gtshark_ex_ctx; \
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS

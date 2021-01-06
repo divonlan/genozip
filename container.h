@@ -49,7 +49,7 @@ typedef struct ContainerItem {
     uint8_t filter_repeats        : 1;  \
     uint8_t filter_items          : 1;  \
     uint8_t is_toplevel           : 1;  \
-    uint8_t keep_empty_item_sep   : 1; /* normally, we delete the separator preceding an empty item. this flag suppresses this deletion */ \
+    uint8_t keep_empty_item_sep   : 1; /* normally, we delete the separator preceding an empty item. this flag supprnor its repeat separator is reconstructed */ \
     char repsep[2];                    /* repeat seperator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 
