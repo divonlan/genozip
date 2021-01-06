@@ -78,9 +78,9 @@ static void stats_show_file_metadata (Buffer *buf)
     if (z_file->data_type == DT_VCF) 
         bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
 
-    bufprintf (evb, buf, "%s: %s   Dictionaries: %u   Vblocks: %u   Sections: %u\n", 
+    bufprintf (evb, buf, "%s: %s   Dictionaries: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines).s, z_file->num_contexts, 
-               z_file->num_vbs, (uint32_t)z_file->section_list_buf.len);
+               z_file->num_vbs, (uint32_t)(flag.vblock_memory >> 20), (uint32_t)z_file->section_list_buf.len);
 
     char timestr[100];
     time_t now = time (NULL);
@@ -186,14 +186,24 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_r
             bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                        s->name, 
                        str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
-                       str_size ((double)s->txt_size).s, (double)s->txt_size / (double)s->z_size, // txt size and ratio z vs txt
-                       s->pc_of_txt); // the % of total txt which is in this line
+                       str_size ((double)s->txt_size).s, s->pc_of_txt, // txt size and % of total txt which is in this line
+                       (double)s->txt_size / (double)s->z_size); // ratio z vs txt
+                       
     
-    bufprintf (evb, &z_file->stats_buf, "TOTAL           "
-                "%9s %5.1f%% %9s %6.1fX %5.1f%%\n", 
+    bufprintf (evb, &z_file->stats_buf, 
+               "%-15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+               txt_ratio > 1 ? "TOTAL vs TXT" : "TOTAL",
+               str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
+               str_size (all_txt_size).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+               all_comp_ratio);
+
+    if (txt_ratio > 1)
+        bufprintf (evb, &z_file->stats_buf, 
+                "TOTAL vs %-6s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                codec_name (codec),
                 str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
-                str_size (all_txt_size).s, all_pc_of_txt, // total txt fize and ratio z vs txt
-                all_comp_ratio);
+                str_size (all_txt_size / txt_ratio).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+                all_comp_ratio / txt_ratio);
 }
 
 static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
@@ -245,8 +255,6 @@ void stats_compress (void)
 
     #define SEC(i) (i<0 ? -(i)-1 : SEC_NONE) // i to section type
     #define ST_NAME(st) (&st_name(st)[4]) // cut off "SEC_" 
-
-    double txt_ratio = (double)z_file->txt_data_so_far_bind / (double)z_file->txt_disk_so_far_bind; // source compression, eg BGZF
 
     for (int i=-NUM_SEC_TYPES; i < (int)z_file->num_contexts; i++) { // sections go into -1 to -NUM_SEC_TYPES (see SEC())
 
@@ -332,6 +340,9 @@ void stats_compress (void)
 
     // short form stats from --show-stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
+
+    double txt_ratio = (double)z_file->txt_data_so_far_bind / (double)z_file->txt_disk_so_far_bind; // source compression, eg BGZF
+
     stats_output_stats (sbl, num_stats, txt_ratio, txt_file->codec, all_txt_size, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
 
     stats_check_count (all_z_size, count_per_section);
