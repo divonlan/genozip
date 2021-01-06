@@ -226,9 +226,9 @@ PosType seg_pos_field (VBlock *vb,
     // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
     // section in every VB just for a single entry in case of a nicely sorted file
     if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value.i) {
-        
+
         // store the value in store it in local - uint32
-        buf_alloc (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, snip_ctx->name);
+        buf_alloc (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, "context->local");
         NEXTENT (uint32_t, snip_ctx->local) = BGEN32 (this_pos);
         snip_ctx->txt_len += add_bytes;
 

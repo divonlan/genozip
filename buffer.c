@@ -287,6 +287,8 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
             
             if (!buf || !buf->memory) continue; // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
 
+            ASSERTW (buf->name && strlen (buf->name) > 0, "FYI: buffer allocated in %s:%u has no name", buf->func, buf->code_line);
+
             bool found = false;
             for (unsigned st_i=0; st_i < num_stats && !found; st_i++) {
                 MemStats *st = &stats[st_i];
