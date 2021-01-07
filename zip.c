@@ -157,7 +157,7 @@ static void zip_dynamically_set_max_memory (void)
         flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
 }
 
-static inline void zip_set_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i,
+static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i,
                                      Buffer *b250_buf, 
                                      WordIndex *prev_word_index,  // in/out
                                      bool show)
@@ -204,7 +204,7 @@ static inline void zip_set_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i,
         if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", word_i)
     }
 
-    else ABORT ("Error in zip_set_one_b250: invalid node_index=%u", node_index);        
+    else ABORT ("Error in zip_generate_one_b250: invalid node_index=%u", node_index);        
 }
 
 // here we generate the b250 data: we convert the b250 buffer data from an index into context->nodes
@@ -215,7 +215,7 @@ static inline void zip_set_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i,
 // 2. for the first VB, we sort the dictionary by frequency returns true if section should be dropped
 static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
 {
-    bool show = flag.show_b250 || dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
+    bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
     
     if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
 
@@ -233,7 +233,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
         if (*ENT(WordIndex, ctx->b250, word_i) != first_node_index) // we found evidence that not all are the same
             all_the_same = false;
 
-        zip_set_one_b250 (vb, ctx, word_i, &ctx->b250, &prev, show);
+        zip_generate_one_b250 (vb, ctx, word_i, &ctx->b250, &prev, show);
     }
 
     // if all the node_index of this context are the same in this VB, we store just one, and set a flag
@@ -385,7 +385,7 @@ static void zip_assign_best_codec (VBlock *vb)
 
             WordIndex prev = WORD_INDEX_NONE; 
             for (uint32_t word_i=0; word_i < num_words; word_i++) 
-                zip_set_one_b250 (vb, ctx, word_i, &vb->compressed, &prev, false);
+                zip_generate_one_b250 (vb, ctx, word_i, &vb->compressed, &prev, false);
 
             // find best codec
             codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
@@ -437,7 +437,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
             bool drop_section = zip_generate_b250_section (vb, ctx);
 
             if (!drop_section) {
-                if (dict_id_printable (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
+                if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
                     ctx_dump_binary (vb, ctx, false);
 
                 if (flag.show_time) codec_show_time (vb, "B250", ctx->name, ctx->bcodec);
@@ -450,7 +450,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
 
             ASSERTE (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->local containing data", did_i);
 
-            if (dict_id_printable (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
+            if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
                 ctx_dump_binary (vb, ctx, true);
 
             if (ctx->ltype == LT_BITMAP) 

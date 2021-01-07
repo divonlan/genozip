@@ -126,9 +126,9 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, ConstCo
             last_non_filtered_item_i = i;
 
             if (flag.show_containers && item_ctxs[i]) // show container reconstruction 
-                fprintf (info_stream, "VB=%u Line=%u Repeat=%u %.*s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
-                            vb->vblock_i, vb->line_i, rep_i, DICT_ID_LEN, dict_id_print (dict_id), item_ctxs[i]->name, 
-                            vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
+                fprintf (info_stream, "VB=%u Line=%u Repeat=%u %s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
+                         vb->vblock_i, vb->line_i, rep_i, dis_dict_id (dict_id).s, item_ctxs[i]->name, 
+                         vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 
             container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len); // item prefix (we will have one per item or none at all)
 

@@ -218,9 +218,9 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
         else // we're at the last section genozip header+footer
             next_offset = this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader);
 
-        fprintf (info_stream, "    %3u. %-24.24s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
+        fprintf (info_stream, "    %3u. %-24.24s %s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
                  i, st_name(ents[i].section_type), 
-                 -DICT_ID_LEN, DICT_ID_LEN, ents[i].dict_id.num ? dict_id_printable (ents[i].dict_id).id : ents[i].dict_id.id, 
+                 dis_dict_id (ents[i].dict_id.num ? ents[i].dict_id : ents[i].dict_id).s, 
                  ents[i].vblock_i, this_offset, next_offset - this_offset);
     }
 }

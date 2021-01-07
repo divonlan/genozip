@@ -16,14 +16,12 @@ static inline DictId dict_id_field (DictId dict_id) { dict_id.id[0] = dict_id.id
 static inline DictId dict_id_type_1(DictId dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
 static inline DictId dict_id_type_2(DictId dict_id) { return dict_id; } // no change - keep Msb 01
 
-#define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str)).num == dict_id_printable (dict_id).num)
+#define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str)).num == dict_id_typeless (dict_id).num)
 static inline bool dict_id_is_field (DictId dict_id) { return ((dict_id.id[0] >> 6) == 0); } // 2 MSb of first byte determine dictionary type
 static inline bool dict_id_is_type_1(DictId dict_id) { return ((dict_id.id[0] >> 6) == 3); }
 static inline bool dict_id_is_type_2(DictId dict_id) { return ((dict_id.id[0] >> 6) == 1); }
 
-
-static inline DictId dict_id_printable(DictId dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
-#define dict_id_print(dict_id) ((dict_id).num ? (char*)dict_id_printable(dict_id).id : "_NONE_") // must used with %.8s
+static inline DictId dict_id_typeless(DictId dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 
 #define DICT_ID_NONE ((DictId)(uint64_t)0)
 

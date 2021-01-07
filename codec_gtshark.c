@@ -129,6 +129,36 @@ void codec_gtshark_comp_init (VBlock *vb_)
 
 typedef struct { VBlockVCFP vb; const char *fifo; } VcfThreadArg;
 
+// in case of a matrix that contains . but no 0|0 or 0/0 - replace .\b with 00
+static void codec_gtshark_00_instead_of_dot (VBlockVCF *vb)
+{
+    if (vb->ploidy > 2) return; // only implemented for ploidy 1 and 2
+
+    ARRAY (uint8_t, ht_data, vb->ht_matrix_ctx->local);
+
+    bool gt_has_00=0, gt_has_dot=0; 
+
+    for (uint32_t i=0; i < vb->ht_matrix_ctx->local.len; i += vb->ploidy) {
+        if (ht_data[i] == '0' && (vb->ploidy == 1 || ht_data[i+1] == '0'))
+            gt_has_00 = true;
+        
+        else if (ht_data[i] == '.' && (vb->ploidy == 1 || ht_data[i+1] == '\b')) 
+            gt_has_dot = true; // a sample eg ".|1" is not considered "has dot", only "." is.
+    }
+        
+    if (!gt_has_00 && gt_has_dot) {
+        for (uint32_t i=0; i < vb->ht_matrix_ctx->local.len; i += vb->ploidy) 
+            if (ht_data[i] == '.') {
+                if (vb->ploidy == 1)
+                    ht_data[i] = '0';
+                else if (ht_data[i+1] == '\b') // ploidy=2
+                    ht_data[i] = ht_data[i+1] = '0';
+            }
+
+        vb->gtshark_gt_ctx->flags.ctxs_dot_is_0 = true;
+    }
+}
+
 static void *codec_gtshark_zip_create_vcf_file (void *arg)
 {
     VBlockVCFP vb = ((VcfThreadArg *)arg)->vb;
@@ -219,6 +249,9 @@ bool codec_gtshark_compress (VBlock *vb_,
     pthread_t vcf_thread, db_thread, gt_thread;
     GET_FILENAMES_FIFOS (vb->vblock_i);
 
+    // case: matrix has . but no 00 - replace . with 00
+    codec_gtshark_00_instead_of_dot (vb);
+
     // create the VCF file to be consumed by gtshark - using a separate thread that will write to a FIFO (named pipe)
     // while gtshark reads from it
     VcfThreadArg vcf_thread_arg = { vb, gtshark_vcf_name };
@@ -300,6 +333,7 @@ static void codec_gtshark_reconstruct_ht_matrix (VBlockVCF *vb)
     const char *substr = strstr (vb->compressed.data, GTSHARK_NUM_HT_PER_LINE);
     ASSERTE (substr, "cannot locate \"" GTSHARK_NUM_HT_PER_LINE "\" within gtshark-produced vcf data for vb_i=%u", vb->vblock_i);
     uint32_t num_hts = vb->num_haplotypes_per_line = atoi (substr + strlen (GTSHARK_NUM_HT_PER_LINE));
+    uint32_t ploidy = num_hts / vcf_header_get_num_samples();
 
     uint32_t num_lines = vb->lines.len;
 
@@ -337,6 +371,24 @@ static void codec_gtshark_reconstruct_ht_matrix (VBlockVCF *vb)
 
         for (uint64_t i=0; i < num_lines * num_hts; i++)
             if (gtshark_ex[i]) ht_matrix[i] = gtshark_ex[i];
+    }
+
+    // recover '.' from '00' (or '0') if needed
+    if (vb->gtshark_gt_ctx->flags.ctxs_dot_is_0) {        
+        if (ploidy == 1)
+            for (uint32_t i=0; i < vb->ht_matrix_ctx->local.len; i++) {
+                if (ht_matrix[i] == '0') ht_matrix[i] = '.'; 
+            }
+        
+        else if (ploidy == 2)
+            for (uint32_t i=0; i < vb->ht_matrix_ctx->local.len; i += 2) {
+                if (ht_matrix[i] == '0' && ht_matrix[i+1] == '0') {
+                    ht_matrix[i]   = '.' ;
+                    ht_matrix[i+1] = '\b';
+                }
+            }
+        else
+            ABORT ("Error in codec_gtshark_reconstruct_ht_matrix: ctxs_dot_is_0 not expected for ploidy=%u", ploidy);
     }
 
     buf_free (&vb->compressed); // free the gtshark-generated reconstructed vcf file data

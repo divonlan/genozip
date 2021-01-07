@@ -335,3 +335,6 @@ bug fixes, including major bug with mc:i optional field in SAM
 - Better memory usage in ZIP (canceled Context.node_i)
 - Better handling of VCF haplotype matrices with hetreogeneous ploidy
 - Bug fixes
+
+10.0.3
+- Better --gtshark mode for VCF

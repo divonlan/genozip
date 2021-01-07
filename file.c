@@ -1123,7 +1123,7 @@ const char *file_guess_original_filename (const File *file)
     if (org_len >= 4 && !strcmp (&org_name[org_len-4], ".bam")) {
         // don't add extension to .bam
     }
-    else // add new extension
+    else if (!file_has_ext (org_name, &ext[1])) // add new extension
         strcpy (&org_name[org_len], &ext[1]);
 
     return org_name;

@@ -18,6 +18,8 @@
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
+static void vcf_seg_complete_missing_lines (VBlockVCF *vb);
+
 // called from seg_all_data_lines
 void vcf_seg_initialize (VBlock *vb_)
 {
@@ -39,7 +41,6 @@ void vcf_seg_initialize (VBlock *vb_)
     else              codec_hapmat_comp_init  (vb_);
 }             
 
-static void vcf_seg_complete_missing_lines (VBlockVCF *vb);
 void vcf_seg_finalize (VBlockP vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
@@ -231,7 +232,7 @@ static inline void vcf_seg_INFO_array (VBlock *vb, Context *container_ctx, DidIT
     if (!container_ctx->con_cache.len) {
         const uint8_t *id = container_ctx->dict_id.id;
         arr_dict_id = (DictId){ .id = { id[0], 
-                                        subarray_sep ? id[1]+1 : FLIP_CASE(id[1]), // different IDs for top array, subarray and items
+                                        (id[1]+1) % 256, // different IDs for top array, subarray and items
                                         id[2], id[3], id[4], id[5], id[6], id[7] } };
         
         buf_alloc (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "contexts->con_cache");
@@ -286,60 +287,6 @@ static inline void vcf_seg_INFO_array (VBlock *vb, Context *container_ctx, DidIT
     container_seg_by_ctx (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes);
 }
 
-/*
-// Looks like this: DP_HIST=7458|1998|549|119|34|7|0|0|0|0|0|0|0|0|0|0|0|0|0|0,297|494|158|41|8|2|0|0|0|0|0|0|0|0|0|0|0|0|0|0
-// We create a two-item, 1 repeat container, each item is a array
-static inline void vcf_seg_INFO_double_array (VBlock *vb, DictId dict_id, const char *field, int32_t field_len)
-{
-    Context *container_ctx = ctx_get_ctx (vb, dict_id);
-
-    // we cache the container in con_coche
-    if (!container_ctx->con_cache.len) {
-
-        buf_alloc (vb, &container_ctx->con_cache, sizeof (SmallContainer) * 2, 1, "contexts->con_cache");
-        const uint8_t *id = dict_id.id;
-
-        // single item
-        DictId dict_id_1 = { .id = { id[0], id[1]+1, id[2], id[3], id[4], id[5], id[6], id[7] } };
-        ctx_get_ctx (vb, dict_id_1)->st_did_i = container_ctx->did_i;
-        NEXTENT (SmallContainer, container_ctx->con_cache) = 
-            (SmallContainer){ .nitems_lo = 1, 
-                              .repeats   = 1, 
-                              .items     = { { .dict_id = dict_id_1 } } };
-
-        // two items
-        DictId dict_id_2 = { .id = { id[0], id[1]+2, id[2], id[3], id[4], id[5], id[6], id[7] } };
-        ctx_get_ctx (vb, dict_id_2)->st_did_i = container_ctx->did_i;
-        NEXTENT (SmallContainer, container_ctx->con_cache) = 
-            (SmallContainer){ .nitems_lo = 2, 
-                              .repeats   = 1, 
-                              .items     = { { .dict_id = dict_id_1, .seperator = { ',' } },
-                                             { .dict_id = dict_id_2,                    } } };
-    }
-
-    const char *comma = NULL;
-    for (unsigned i=0; i < field_len; i++) 
-        if (field[i] == ',') {
-            comma = &field[i];
-            break;
-        }
-
-    SmallContainer *con = ENT (SmallContainer, container_ctx->con_cache, comma != NULL);
-
-    int32_t array_0_len = comma ? (int32_t)(comma-field) : field_len;
-    int32_t array_1_len = comma ? field_len - array_0_len - 1 : 1; // 1 is a dummy value 
-
-    ASSSEG (array_0_len > 0 && array_1_len > 0, field, "Invalid %s field: array_0_len=%d array_1_len=%d", 
-            dis_dict_id (dict_id).s, array_0_len, array_1_len);
-
-    vcf_seg_INFO_array (vb, ctx_get_ctx (vb, con->items[0].dict_id), container_ctx->did_i, field, array_0_len, '|');
-    
-    if (comma)
-        vcf_seg_INFO_array (vb, ctx_get_ctx (vb, con->items[1].dict_id), container_ctx->did_i, comma+1, array_1_len, '|');
-
-    container_seg_by_ctx (vb, container_ctx, (ContainerP)con, 0, 0, comma != NULL); // 1 for the comma
-}
-*/
 // INFO fields with a format originating from the VEP software, eg
 // vep=T|intergenic_variant|MODIFIER|||Intergenic||||||||||||1|||SNV||||||||||||||||||||||||
 static inline void vcf_seg_INFO_vep_field (VBlock *vb, DictId dict_id, const char *field, unsigned field_len)
@@ -630,11 +577,11 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     }
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
-    char *ht_data = ENT (char, vb->ht_matrix_ctx->local, vb->line_i * vb->num_haplotypes_per_line + vb->ploidy * sample_i);
+    uint8_t *ht_data = ENT (uint8_t, vb->ht_matrix_ctx->local, vb->line_i * vb->num_haplotypes_per_line + vb->ploidy * sample_i);
 
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
 
-        char ht = *(cell++); 
+        uint8_t ht = *(cell++); 
         cell_len--;
 
         ASSSEG (IS_DIGIT(ht) || ht == '.', cell,

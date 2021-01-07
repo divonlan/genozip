@@ -427,9 +427,10 @@ batch_external_tools()
 {
     batch_print_header
 
-    # VCF gtshark test
+    # VCF gtshark tests
     if `command -v gtshark >& /dev/null`; then
         test_standard --gtshark " " basic.vcf
+        test_standard --gtshark " " test/test.360_merged_2.50.vcf.gz # test replacement of . with 00
     fi
 
     # CRAM hg19

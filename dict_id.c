@@ -10,6 +10,7 @@
 #include "zfile.h"
 #include "sections.h"
 #include "vblock.h"
+#include "libdeflate/libdeflate.h"
 
 // globals externed in dict_id.h and initialized in dict_id_initialize
 static Buffer dict_id_aliases_buf  = EMPTY_BUFFER;
@@ -57,8 +58,35 @@ uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_s
 // our stuff used in multiple data types
 uint64_t dict_id_WindowsEOL=0;         
 
-DictId dict_id_make(const char *str, unsigned str_len) 
-{ 
+DictId dict_id_make (const char *str, unsigned str_len) 
+{ /*
+    DictId dict_id = DICT_ID_NONE; 
+
+    if (!str_len) str_len = strlen (str);
+
+    if (str_len <= DICT_ID_LEN) 
+        memcpy (dict_id.id, str, str_len);
+    
+    // case: name is too long - compress it
+    else { 
+        union { uint32_t i; uint8_t s[4]; } adler = {
+            .i = libdeflate_adler32 (1, str, str_len)
+        };
+        
+        // compressed dict_id uses 2 characters from the Adler32 to disambiguate, including one in id[1] that
+        // goes into the map, hopefully avoiding a map contention
+        dict_id.id[0] = str[0];
+        dict_id.id[1] = adler.s[0];
+        dict_id.id[2] = str[2];
+        dict_id.id[3] = str[3];
+        dict_id.id[4] = adler.s[1];
+        dict_id.id[5] = str[str_len-3];
+        dict_id.id[6] = str[str_len-2];
+        dict_id.id[7] = str[str_len-1];
+    }
+
+    return dict_id;
+*/
     DictId dict_id = DICT_ID_NONE; 
 
     if (!str_len) str_len = strlen (str);
@@ -221,9 +249,8 @@ static void dict_id_show_aliases (void)
 {
     fprintf (info_stream, "Contents of SEC_DICT_ID_ALIASES section:\n");
     for (unsigned i=0; i < dict_id_num_aliases; i++) 
-        fprintf (info_stream, "alias=%.*s dst=%.*s\n", 
-                    DICT_ID_LEN, dict_id_printable (dict_id_aliases[i].alias).id,
-                    DICT_ID_LEN, dict_id_printable (dict_id_aliases[i].dst).id);
+        fprintf (info_stream, "alias=%s dst=%s\n", 
+                 dis_dict_id (dict_id_aliases[i].alias).s, dis_dict_id (dict_id_aliases[i].dst).s);
 }
 
 // called by ZIP I/O thread for writing to global section
@@ -308,7 +335,23 @@ const char *dict_id_display_type (DataType dt, DictId dict_id)
 // print the dict_id - NOT thread safe, for use in execution-termination messages
 DisplayPrintId dis_dict_id (DictId dict_id)
 {
-    DisplayPrintId s;
-    sprintf (s.s, "%.*s", DICT_ID_LEN, dict_id.num ? (char*)dict_id_printable(dict_id).id : "<null>");
+    DisplayPrintId s = {};
+
+    if (!dict_id.num) return (DisplayPrintId){ .s = "<none>" };
+
+    s.s[0] = (dict_id.id[0] & 0x7f) | 0x40;  // set 2 Msb to 01
+
+    for (unsigned i=1; i < DICT_ID_LEN; i++) 
+        s.s[i] = dict_id.id[i] == 0  ? ' '
+               : dict_id.id[i] < 32  ? '?' // non printable char is converted to '?'
+               : dict_id.id[i] > 126 ? '?'
+               :                       dict_id.id[i];
+
+    // trim final ' '
+    for (int i=DICT_ID_LEN-1; i >= 0; i--) {
+        if (s.s[i] != ' ') break;
+        s.s[i] = 0;
+    }
+
     return s;
 }

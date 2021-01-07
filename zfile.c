@@ -123,15 +123,17 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         SectionHeaderCtx *h = (SectionHeaderCtx *)header;
         static const char *store[4] = { [STORE_NONE]="NONE", [STORE_INT]="INT", [STORE_FLOAT]="FLOAT", [STORE_INDEX]="INDEX"};
 
-        sprintf (str, SEC_TAB "%s param=%u store=%s paired=%u copy_param=%u all_the_same=%u\n",
-                 dis_dict_id (h->dict_id).s, h->param, store[h->h.flags.ctx.store], h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.all_the_same); 
+        sprintf (str, SEC_TAB "%s param=%u store=%s paired=%u copy_param=%u all_the_same=%u ctx_specific=%u\n",
+                 dis_dict_id (h->dict_id).s, h->param, store[h->h.flags.ctx.store], 
+                 h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.all_the_same, h->h.flags.ctx.ctx_specific); 
         break;
     }
 
     case SEC_LOCAL: {
         SectionHeaderCtx *h = (SectionHeaderCtx *)header;
-        sprintf (str, SEC_TAB "%s ltype=%s param=%u paired=%u copy_param=%u\n",
-                 dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, h->h.flags.ctx.paired, h->h.flags.ctx.copy_param); 
+        sprintf (str, SEC_TAB "%s ltype=%s param=%u paired=%u copy_param=%u ctx_specific=%u\n",
+                 dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, 
+                 h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.ctx_specific); 
         break;
     }
 
@@ -154,12 +156,12 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
 
     SectionHeaderCtx *header = (SectionHeaderCtx *)section_header_p;
 
-    if (!flag.show_b250 && dict_id_printable (header->dict_id).num != flag.dict_id_show_one_b250.num) return;
+    if (!flag.show_b250 && dict_id_typeless (header->dict_id).num != flag.dict_id_show_one_b250.num) return;
 
     mutex_initialize (show_b250_mutex); // possible unlikely race condition on initializing - good enough for debugging purposes
     mutex_lock (show_b250_mutex);
 
-    fprintf (info_stream, "vb_i=%u %*.*s: ", BGEN32 (header->h.vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
+    fprintf (info_stream, "vb_i=%u %*.*s: ", BGEN32 (header->h.vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_typeless (header->dict_id).id);
 
     const uint8_t *data  = FIRSTENT (const uint8_t, *b250_data);
     const uint8_t *after = AFTERENT (const uint8_t, *b250_data);
@@ -186,12 +188,12 @@ static void zfile_dump_section (Buffer *uncompressed_data, SectionHeader *sectio
     uint32_t vb_i = BGEN32 (section_header->vblock_i);
 
     // header
-    sprintf (filename, "%s.%u.%s.header", st_name (section_header->section_type), vb_i, dict_id_print (dict_id));
+    sprintf (filename, "%s.%u.%s.header", st_name (section_header->section_type), vb_i, dis_dict_id (dict_id).s);
     file_put_data (filename, section_header, section_header_len);
 
     // body
     if (uncompressed_data->len) {
-        sprintf (filename, "%s.%u.%s.body", st_name (section_header->section_type), vb_i, dict_id_print (dict_id));
+        sprintf (filename, "%s.%u.%s.body", st_name (section_header->section_type), vb_i, dis_dict_id (dict_id).s);
         buf_dump_to_file (filename, uncompressed_data, 1, false);
     }
 }

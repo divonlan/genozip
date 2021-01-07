@@ -370,7 +370,7 @@ void ctx_clone (VBlock *vb)
         if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this dict_id
 
             // overlay the global dict and nodes - these will not change by this (or any other) VB
-            //fprintf (info_stream,  ("ctx_clone: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dict_id_printable (zf_ctx->dict_id).id, vb->vblock_i, did_i);
+            //fprintf (info_stream,  ("ctx_clone: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dis_dict_id (zf_ctx->dict_id).s, vb->vblock_i, did_i);
             buf_overlay (vb, &vb_ctx->ol_dict, &zf_ctx->dict, "ctx->ol_dict");   
             buf_overlay (vb, &vb_ctx->ol_nodes, &zf_ctx->nodes, "ctx->ol_nodes");   
 
@@ -407,8 +407,7 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
     ctx->st_did_i = DID_I_NONE;
     ctx->dict_id  = dict_id;
     
-    memcpy ((char*)ctx->name, dict_id_printable (dict_id).id, DICT_ID_LEN);
-    ((char*)ctx->name)[DICT_ID_LEN] = 0;
+    strcpy ((char*)ctx->name, dis_dict_id (dict_id).s);
 
     ctx_init_iterator (ctx);
     
@@ -541,7 +540,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     }
 
     START_TIMER; // note: careful not to count time spent waiting for the mutex
-    //fprintf (info_stream,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, merging_vb->vblock_i, did_i, z_did_i);
+    //fprintf (info_stream,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dis_dict_id (vb_ctx->dict_id).s, merging_vb->vblock_i, did_i, z_did_i);
 
     zf_ctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
     zf_ctx->txt_len += vb_ctx->txt_len; // for stats
@@ -673,7 +672,7 @@ Context *ctx_get_ctx_if_not_found_by_inline (
     
     Context *ctx = &contexts[did_i]; 
 
-    //fprintf (info_stream, "New context: dict_id=%.8s in did_i=%u \n", dict_id_print (dict_id), did_i);
+    //fprintf (info_stream, "New context: dict_id=%s in did_i=%u \n", dis_dict_id (dict_id).s, did_i);
     ASSERTE (*num_contexts+1 < MAX_DICTS, 
              "cannot create a context for %s because number of dictionaries would exceed MAX_DICTS=%u", 
              dis_dict_id (dict_id).s, MAX_DICTS);
@@ -701,6 +700,8 @@ void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
 
     for (int f=0; f < dt_fields[dt].num_fields; f++) {
         const char *fname  = dt_fields[dt].names[f];
+        ASSERTE (strlen (fname) <= DICT_ID_LEN, "A primary field's name is limited to %u characters", DICT_ID_LEN); // to avoid dict_id_make name compression which might change between genozip releases
+
         DictId dict_id = dict_id_field (dict_id_make (fname, strlen(fname)));
         Context *dst_ctx  = NULL;
 
@@ -1021,7 +1022,7 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
         str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, true, false);
     }
     
-    if (dict_id_printable (vb->fragment_ctx->dict_id).num == flag.dict_id_show_one_dict.num)
+    if (dict_id_typeless (vb->fragment_ctx->dict_id).num == flag.dict_id_show_one_dict.num)
         str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, false, false);
 
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
@@ -1186,7 +1187,7 @@ void ctx_read_all_dictionaries (ReadChromeType read_chrom)
 
 #define MAX_PRINTABLE_DICT_LEN 100000
 
-            if (dict_id_printable (ctx->dict_id).num == flag.dict_id_show_one_dict.num) 
+            if (dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_dict.num) 
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, false);
             
             if (flag.list_chroms && ctx->did_i == CHROM)

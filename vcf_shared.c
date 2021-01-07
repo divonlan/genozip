@@ -25,7 +25,6 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->num_haplotypes_per_line = 0;
     vb->ht_matrix_ctx = NULL;
     vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
-    vb->gt_has_00 = vb->gt_has_10 = vb->gt_has_dot = vb->gt_has_high = 0;
 
     buf_free(&vb->hapmat_helper_index_buf);
     buf_free(&vb->hapmat_columns_data);

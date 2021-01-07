@@ -57,7 +57,8 @@ static void stats_check_count (uint64_t all_z_size, const int *count_per_section
         if (!count_per_section[i]) 
             fprintf (stderr, "Section not counted: %s section_i=%u\n", st_name (sections[i].section_type), i);
         else if (count_per_section[i] > 1) 
-            fprintf (stderr, "Section overcounted: %s section_i=%u dict=%.8s counted %u times\n", st_name (sections[i].section_type), i, dict_id_printable (sections[i].dict_id).id, count_per_section[i]);
+            fprintf (stderr, "Section overcounted: %s section_i=%u dict=%s counted %u times\n", 
+                     st_name (sections[i].section_type), i, dis_dict_id (sections[i].dict_id).s, count_per_section[i]);
 
     ASSERTW (false, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
              str_uint_commas (all_z_size).s, str_uint_commas (z_file->disk_so_far).s, (int32_t)(z_file->disk_so_far - all_z_size));
@@ -189,14 +190,6 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_r
                        str_size ((double)s->txt_size).s, s->pc_of_txt, // txt size and % of total txt which is in this line
                        (double)s->txt_size / (double)s->z_size); // ratio z vs txt
                        
-    
-    bufprintf (evb, &z_file->stats_buf, 
-               "%-15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-               txt_ratio > 1 ? "TOTAL vs TXT" : "TOTAL",
-               str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
-               str_size (all_txt_size).s, all_pc_of_txt, // total txt fize and ratio z vs txt
-               all_comp_ratio);
-
     if (txt_ratio > 1)
         bufprintf (evb, &z_file->stats_buf, 
                 "TOTAL vs %-6s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
@@ -204,6 +197,13 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_r
                 str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
                 str_size (all_txt_size / txt_ratio).s, all_pc_of_txt, // total txt fize and ratio z vs txt
                 all_comp_ratio / txt_ratio);
+    
+    bufprintf (evb, &z_file->stats_buf, 
+               "%-15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+               txt_ratio > 1 ? "TOTAL vs TXT" : "TOTAL",
+               str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
+               str_size (all_txt_size).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+               all_comp_ratio);
 }
 
 static void stats_output_STATS (StatsByLine *s, unsigned num_stats,

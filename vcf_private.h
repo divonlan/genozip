@@ -50,14 +50,7 @@ typedef struct VBlockVCF {
     Buffer hapmat_one_array;        // one line or column 
     
     // used by CODEC_GTSHARK 
-    Context *gtshark_gt_ctx, *gtshark_db_ctx, *gtshark_ex_ctx; 
-
-    // characteristics of the diploid haplotype data
-    bool gt_has_10;   // has a 1/0 or 1|0 (NOT including 0/1 or 0|1)
-    bool gt_has_00;   // has a 0/0 or 0|0
-    bool gt_has_dot;  // has a .
-    bool gt_has_high; // has a haplotype other than 0, 1 or .
-
+    Context *gtshark_gt_ctx, *gtshark_db_ctx, *gtshark_ex_ctx;
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;

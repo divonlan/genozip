@@ -71,10 +71,10 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
                                       is_pair_section ? pair_vb_i : vb->vblock_i,
                                       header->h.section_type); 
 
-            if (!is_pair_section && is_local && dict_id_printable (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
+            if (!is_pair_section && is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
                 ctx_dump_binary (vb, ctx, true);
 
-            if (!is_pair_section && !is_local && dict_id_printable (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
+            if (!is_pair_section && !is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
                 ctx_dump_binary (vb, ctx, false);
 
 #           define adjust_lens(buf) { \
