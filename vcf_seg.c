@@ -786,7 +786,8 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
         else if (dict_id.num == dict_id_FORMAT_MIN_DP) 
             node_index = seg_delta_vs_other ((VBlockP)vb, ctx, dp_ctx, cell, cell_len, -1);
 
-        else if (dict_id.num == dict_id_FORMAT_AD || dict_id.num == dict_id_FORMAT_ADALL) 
+        else if (dict_id.num == dict_id_FORMAT_AD  || dict_id.num == dict_id_FORMAT_ADALL || 
+                 dict_id.num == dict_id_FORMAT_ADF || dict_id.num == dict_id_FORMAT_ADR) 
             node_index = vcf_seg_hetero_array_field ((VBlockP)vb, dict_id, cell, cell_len);
 
         else

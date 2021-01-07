@@ -23,7 +23,8 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
          dict_id_FORMAT_PS=0, dict_id_FORMAT_GT=0, dict_id_FORMAT_GT_HT=0, dict_id_FORMAT_GT_HT_INDEX=0,
          dict_id_FORMAT_GT_SHARK_DB=0, dict_id_FORMAT_GT_SHARK_GT=0, dict_id_FORMAT_GT_SHARK_EX=0,
-         dict_id_FORMAT_AD=0, dict_id_FORMAT_ADALL=0, dict_id_FORMAT_GQ=0, dict_id_FORMAT_DS=0,
+         dict_id_FORMAT_AD=0, dict_id_FORMAT_ADF=0, dict_id_FORMAT_ADR=0, dict_id_FORMAT_ADALL=0, 
+         dict_id_FORMAT_GQ=0, dict_id_FORMAT_DS=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0, dict_id_INFO_DP4=0, dict_id_INFO_SF=0,
          
@@ -134,6 +135,8 @@ void dict_id_initialize (DataType data_type)
         dict_id_FORMAT_GL     = dict_id_vcf_format_sf (dict_id_make ("GL", 2)).num;
         dict_id_FORMAT_GQ     = dict_id_vcf_format_sf (dict_id_make ("GQ", 2)).num;
         dict_id_FORMAT_AD     = dict_id_vcf_format_sf (dict_id_make ("AD", 2)).num;
+        dict_id_FORMAT_ADF    = dict_id_vcf_format_sf (dict_id_make ("ADF", 3)).num;
+        dict_id_FORMAT_ADR    = dict_id_vcf_format_sf (dict_id_make ("ADR", 3)).num;
         dict_id_FORMAT_ADALL  = dict_id_vcf_format_sf (dict_id_make ("^ADALL", 6)).num; // different 2 letters than AD
         dict_id_INFO_AC       = dict_id_vcf_info_sf   (dict_id_make ("AC", 2)).num;
         dict_id_INFO_AF       = dict_id_vcf_info_sf   (dict_id_make ("AF", 2)).num;
