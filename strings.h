@@ -34,6 +34,9 @@ extern _Bool str_is_in_range (const char *str, uint32_t str_len, char first_c, c
 
 extern StrText str_pointer (const void *p);
 
+extern double str_get_positive_float (const char *float_str, unsigned float_str_len);
+extern unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str /* out */);
+
 extern const char *type_name (unsigned item, 
                               const char * const *name, // the address in which a pointer to name is found, if item is in range
                               unsigned num_names);

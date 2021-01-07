@@ -487,6 +487,24 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
     return seg_delta_vs_other ((VBlockP)vb, ctx, &vb->contexts[VCF_POS], cell, cell_len, 1000);
 }
 
+// the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,
+// along with the floating point format to allow exact reconstruction
+static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
+{
+    int64_t dosage = ctx_get_ctx (vb, (DictId)dict_id_FORMAT_GT)->last_value.i; // dosage store here by vcf_seg_FORMAT_GT
+    double ds_val;
+
+    if (dosage < 0 || (ds_val = str_get_positive_float (cell, cell_len)) < 0) 
+        return seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
+
+    char snip[30] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
+    unsigned snip_len = 2 + str_get_float_format (cell, cell_len, &snip[2]);
+    snip[snip_len++] = ' ';
+    snip_len += str_int ((int64_t)((ds_val - dosage) * 1000000), &snip[snip_len]);
+
+    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, cell_len, NULL);
+}
+
 // used for DP and GQ - store in transposed matrix in local 
 static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
 {
@@ -579,6 +597,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
     uint8_t *ht_data = ENT (uint8_t, vb->ht_matrix_ctx->local, vb->line_i * vb->num_haplotypes_per_line + vb->ploidy * sample_i);
 
+    int64_t dosage=0; // sum of allele values
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
 
         uint8_t ht = *(cell++); 
@@ -589,6 +608,12 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
 
         // single-digit allele numbers
         ht_data[ht_i] = ht;
+
+        // calculate dosage contribution of this ht (to be used in vcf_seg_FORMAT_DS)
+        if (dosage >= 0 && (ht == '0' || ht == '1'))
+            dosage += ht - '0'; // dosage only works if alleles are 0 or 1
+        else
+            dosage = -1; // no dosage
 
         if (!cell_len) break;
 
@@ -601,6 +626,8 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
             ASSSEG (!cell_len || !IS_DIGIT (*cell), cell, "VCF file sample %u - genozip currently supports only alleles up to 99", sample_i+1);
 
             ht_data[ht_i] = '0' + allele; // use ascii 48->147
+
+            dosage = -1; // no dosage (since allele is not 0 or 1)
         }
 
         // read and verify phase
@@ -612,7 +639,6 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
             ASSSEG (phase != ' ', cell, "invalid VCF file - expecting a tab or newline after sample %u but seeing a space", sample_i+1);
             ASSSEG (phase == gt.repsep[0], cell, "invalid VCF file -  unable to parse sample %u: expecting a %c but seeing %c", sample_i+1, gt.repsep[0], phase);
         }
-
     } // for characters in a sample
 
     // if the ploidy of the sample is lower than vb->ploidy, set missing ht as '\b' (backspace) (which will cause deletion of themselves and their separator)
@@ -625,6 +651,8 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         gt.repeats = vb->ploidy;
         gt.repsep[0] = vb->gt_prev_phase;
     }
+
+    ctx->last_value.i = dosage; // to be used in vcf_seg_FORMAT_DS
 
     ASSSEG (!cell_len, cell, "Invalid GT data in sample_i=%u", sample_i);
 
@@ -722,6 +750,10 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
 
         else if (dict_id.num == dict_id_FORMAT_GT)
             node_index = vcf_seg_FORMAT_GT (vb, ctx, dl, cell, cell_len, sample_i);
+
+        else if (dict_id.num == dict_id_FORMAT_DS && // DS special only works if we also have GT
+                 samples->items[0].dict_id.num == dict_id_FORMAT_GT)
+            node_index = vcf_seg_FORMAT_DS (vb, ctx, cell, cell_len);
 
         else if (flag.optimize_PL && dict_id.num == dict_id_FORMAT_PL && 
             optimize_vcf_pl (cell, cell_len, optimized_snip, &optimized_snip_len)) 

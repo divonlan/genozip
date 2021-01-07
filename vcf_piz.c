@@ -148,6 +148,29 @@ done:
     return false; // no new value
 }
 
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DS)
+{
+    if (!reconstruct) goto done;
+
+    Context *ctx_gt = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT);
+
+    // we are guaranteed that if we have a special snip, then all values are either '0' or '1';
+    char *gt = ENT (char, vb->txt_data, ctx_gt->last_value.i);
+    unsigned dosage=0;
+    for (unsigned i=0; i < ctx_gt->last_delta; i+=2) // last_delta contains container reconstruction length ; +2 to skip phase character
+        dosage += gt[i]-'0';
+
+    char float_format[10];
+    int32_t val;
+    sscanf (snip, "%s %d", float_format, &val); // snip looks like eg: "%5.3f 50000"
+
+    bufprintf (vb, &vb->txt_data, float_format, (double)val / 1000000 + dosage);
+
+done:
+    return false; // no new value
+}
+
+
 // the case where SVLEN is minus the delta between END and POS
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVLEN)
 {

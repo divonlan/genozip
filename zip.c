@@ -311,11 +311,11 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
     buf_alloc (vb, &vb->compressed, ctx->local.len * lt_desc[ctx->ltype].width, 1, "compressed");
 
     uint32_t cols = ctx->local.param;
-    if (!cols) cols = vcf_header_get_num_samples(); // 0 if not vcf/bcf
-    
     // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
-    ASSERTE (cols > 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->name);
+    ASSERTE (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->name);
 
+    if (!cols) cols = vcf_header_get_num_samples(); // 0 if not vcf/bcf (not restricted to 255)
+    
     // case: matrix is not transposable - just BGEN it
     if (ctx->local.len % cols) {
         ctx->ltype = LT_UINT32; // not transposed

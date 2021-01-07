@@ -80,7 +80,7 @@ static inline void container_reconstruct_prefix (VBlockP vb, ConstContainerP con
     (*prefixes_len) -= len + 1;
 }
 
-static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, ConstContainerP con, const char *prefixes, uint32_t prefixes_len)
+static inline void container_reconstruct_do (VBlock *vb, Context *ctx, ConstContainerP con, const char *prefixes, uint32_t prefixes_len)
 {
     #define IS_CI_SET(flag) (CI_ITEM_HAS_FLAG (item) && ((uint8_t)item->seperator[0] & ~(uint8_t)0x80 & flag))
 
@@ -89,6 +89,9 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, ConstCo
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
     
     int32_t last_non_filtered_item_i = -1;
+
+    // for containers, last_value is the index in txt_data where this container was reconstructed
+    ctx->last_value.i = (int64_t)vb->txt_data.len;
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, con, &prefixes, &prefixes_len); 
@@ -112,7 +115,7 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, ConstCo
             vb->dont_show_curr_line = flag.downsample && (vb->line_i % flag.downsample); 
         }
     
-        if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, -1))) continue; // repeat is filtered out
+        if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1))) continue; // repeat is filtered out
 
         const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
         uint32_t item_prefixes_len = prefixes_len;
@@ -121,13 +124,13 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, ConstCo
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
 
-            if (con->filter_items && !(DT_FUNC (vb, container_filter) (vb, dict_id, con, rep_i, i))) continue; // item is filtered out
+            if (con->filter_items && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, i))) continue; // item is filtered out
 
             last_non_filtered_item_i = i;
 
             if (flag.show_containers && item_ctxs[i]) // show container reconstruction 
                 fprintf (info_stream, "VB=%u Line=%u Repeat=%u %s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
-                         vb->vblock_i, vb->line_i, rep_i, dis_dict_id (dict_id).s, item_ctxs[i]->name, 
+                         vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctxs[i]->name, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 
             container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len); // item prefix (we will have one per item or none at all)
@@ -185,6 +188,9 @@ static inline void container_reconstruct_do (VBlock *vb, DictId dict_id, ConstCo
                                                    : (!!item->seperator[0] + !!item->seperator[1]);
     }
 
+    // for containers, last_delta is the length of the reconstruction
+    ctx->last_delta = (int64_t)vb->txt_data.len - ctx->last_value.i;
+     
     if (con->is_toplevel)   
         COPY_TIMER (reconstruct_vb);
 }
@@ -272,7 +278,7 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
         }
     }
 
-    container_reconstruct_do (vb, ctx->dict_id, con_p, prefixes, prefixes_len); 
+    container_reconstruct_do (vb, ctx, con_p, prefixes, prefixes_len); 
 }
 
 // display

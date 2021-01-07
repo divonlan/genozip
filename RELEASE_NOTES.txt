@@ -338,3 +338,7 @@ bug fixes, including major bug with mc:i optional field in SAM
 
 10.0.3
 - Better --gtshark mode for VCF
+
+10.0.4
+- VCF: better handling of FORMAT/DS
+- Bug fixes

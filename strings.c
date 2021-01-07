@@ -164,6 +164,52 @@ StrText str_uint_commas (int64_t n)
     return s;
 }
 
+// "3.123" -> "%5.3f" ;  returns length of format string
+unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str /* out */)
+{
+    unsigned decimal_digits=0;
+    for (int i=(int)float_str_len-1; i >= 0; i--)
+        if (float_str[i] == '.') {
+            decimal_digits = (float_str_len-1) - i;
+            break;
+        }
+
+    unsigned next=0;
+    str[next++] = '%';
+    next += str_int (float_str_len, &str[next]);    
+    str[next++] = '.';
+    next += str_int (decimal_digits, &str[next]);
+    str[next++] = 'f';
+    str[next] = 0;
+
+    return next;
+}
+
+// returns float value, or -1 if not a positive float of at most 9 digits after the decimal point
+double str_get_positive_float (const char *float_str, unsigned float_str_len)
+{
+    bool in_decimals=false;
+    unsigned num_decimals=0;
+    double val = 0;
+
+    for (unsigned i=0; i < float_str_len; i++) {
+        if (float_str[i] == '.' && !in_decimals)
+            in_decimals = true;
+    
+        else if (IS_DIGIT (float_str[i])) {
+            val = (val * 10) + (float_str[i] - '0');
+            if (in_decimals) num_decimals++;
+        }
+    
+        else return -1; // not a positive float
+    }
+
+    static const double pow10[10] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000 };
+    if (num_decimals >= sizeof (pow10) / sizeof (pow10[0])) return -1; // too many decimals
+
+    return val / pow10[num_decimals];
+}
+
 StrText str_pointer (const void *p)
 {
     StrText s;
