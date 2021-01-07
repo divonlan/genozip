@@ -942,13 +942,19 @@ void BGEN_u64_buf (Buffer *buf, LocalType *lt)
     }
 }
 
-void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
+static inline uint32_t BGEN_transpose_num_cols (const Buffer *buf)
 {
     uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix
-    
-    if (!cols && z_file->data_type == DT_VCF) cols = vcf_header_get_num_samples();
-    ASSERTE0 (cols, "cols=0");
 
+    if (!cols) cols = vcf_header_get_num_samples(); // 0 if not VCF
+    ASSERTE0 (cols, "cols=0");
+    
+    return cols;
+}
+
+void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
+{
+    uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
     buf_alloc (buf->vb, &buf->vb->compressed, buf->len, 1, "compressed");
@@ -969,11 +975,7 @@ void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
 
 void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
 {
-    uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix
-
-    if (!cols && z_file->data_type == DT_VCF) cols = vcf_header_get_num_samples();
-    ASSERTE0 (cols, "cols=0");
-
+    uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
     buf_alloc (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint16_t), 1, "compressed");
@@ -994,11 +996,7 @@ void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
 
 void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
 {
-    uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix
-
-    if (!cols && z_file->data_type == DT_VCF) cols = vcf_header_get_num_samples();
-    ASSERTE0 (cols, "cols=0");
-
+    uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
     buf_alloc (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint32_t), 1, "compressed");
@@ -1019,11 +1017,7 @@ void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
 
 void BGEN_transpose_u64_buf (Buffer *buf, LocalType *lt)
 {
-    uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix
-
-    if (!cols && z_file->data_type == DT_VCF) cols = vcf_header_get_num_samples();
-    ASSERTE0 (cols, "cols=0");
-
+    uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
     buf_alloc (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint64_t), 1, "compressed");

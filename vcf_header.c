@@ -92,6 +92,7 @@ bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bool soft
 
             //count samples
             vcf_num_samples = (tab_count >= 9) ? tab_count-8 : 0; 
+            
             // note: a VCF file without samples may or may not have a "FORMAT" in the header, i.e. tab_count==7 or 8 (8 or 9 fields).
             // however, even if it has a FORMAT in the header, it won't have a FORMAT column in the data
             
@@ -138,5 +139,8 @@ void vcf_header_keep_only_last_line (Buffer *vcf_header_buf)
 
 uint32_t vcf_header_get_num_samples (void)
 {
-    return vcf_num_samples;
+    if (z_file->data_type == DT_VCF || z_file->data_type == DT_BCF)
+        return vcf_num_samples;
+    else
+        return 0;
 }

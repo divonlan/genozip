@@ -423,31 +423,39 @@ batch_misc_cases()
     test_multi_bound test.human-unsorted.sam
 }
 
-batch_external_tools()
+# VCF gtshark tests
+batch_external_gtshark()
 {
-    batch_print_header
-
-    # VCF gtshark tests
     if `command -v gtshark >& /dev/null`; then
+        batch_print_header
         test_standard --gtshark " " basic.vcf
         test_standard --gtshark " " test.360_merged_2.50.vcf.gz # test replacement of . with 00
     fi
+}
 
-    # CRAM hg19
+# CRAM hg19
+batch_external_cram()
+{
     if `command -v samtools >& /dev/null`; then
-        echo "CRAM" 
+        batch_print_header
         test_standard "-E$hg19" " " test.human2.cram   
     fi
+}
 
-    # BCF
+# BCF
+batch_external_bcf()
+{
     if `command -v bcftools >& /dev/null`; then
-        echo "BCF"
+        batch_print_header
         test_standard " " " " test.human2.filtered.snp.bcf    
     fi
+}
 
-    # unzip
+# unzip
+batch_external_unzip()
+{
     if `command -v unzip >& /dev/null`; then
-        echo "unzip"
+        batch_print_header
         test_standard " " " " test.genome_Full.zip    
     fi
 }
@@ -590,9 +598,12 @@ if (( $1 <= 8  )) ; then  batch_genocat_tests          ; fi
 if (( $1 <= 9  )) ; then  batch_backward_compatability ; fi
 if (( $1 <= 10 )) ; then  batch_real_world_subsets     ; fi
 if (( $1 <= 11 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 12 )) ; then  batch_external_tools         ; fi
-if (( $1 <= 13 )) ; then  batch_reference              ; fi
-if (( $1 <= 14 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 12 )) ; then  batch_external_gtshark       ; fi
+if (( $1 <= 13 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 14 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 15 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 16 )) ; then  batch_reference              ; fi
+if (( $1 <= 17 )) ; then  batch_make_reference         ; fi
 
 printf "\nALL GOOD!\n"
 
