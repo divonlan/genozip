@@ -23,7 +23,7 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
          dict_id_FORMAT_PS=0, dict_id_FORMAT_GT=0, dict_id_FORMAT_GT_HT=0, dict_id_FORMAT_GT_HT_INDEX=0,
          dict_id_FORMAT_GT_SHARK_DB=0, dict_id_FORMAT_GT_SHARK_GT=0, dict_id_FORMAT_GT_SHARK_EX=0,
-         dict_id_FORMAT_AD=0, dict_id_FORMAT_ADALL=0, dict_id_FORMAT_GQ=0,
+         dict_id_FORMAT_AD=0, dict_id_FORMAT_ADALL=0, dict_id_FORMAT_GQ=0, dict_id_FORMAT_DS=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0, dict_id_INFO_DP4=0, dict_id_INFO_SF=0,
          
@@ -121,6 +121,8 @@ void dict_id_initialize (DataType data_type)
     switch (data_type) { 
     case DT_VCF:
     case DT_BCF:
+        dict_id_FORMAT_DP     = dict_id_vcf_format_sf (dict_id_make ("DP", 2)).num;
+        dict_id_FORMAT_DS     = dict_id_vcf_format_sf (dict_id_make ("DS", 2)).num;
         dict_id_FORMAT_GT     = dict_id_vcf_format_sf (dict_id_make ("GT", 2)).num;
         dict_id_FORMAT_GT_HT  = dict_id_vcf_format_sf (dict_id_make ("@HT", 3)).num; // different first 2 letters than GT, for lookup table
         dict_id_FORMAT_GT_HT_INDEX = dict_id_vcf_format_sf (dict_id_make ("@INDEXHT", 8)).num; // different first 2 letters
@@ -130,23 +132,22 @@ void dict_id_initialize (DataType data_type)
         dict_id_FORMAT_PL     = dict_id_vcf_format_sf (dict_id_make ("PL", 2)).num;
         dict_id_FORMAT_GP     = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
         dict_id_FORMAT_GL     = dict_id_vcf_format_sf (dict_id_make ("GL", 2)).num;
-        dict_id_FORMAT_DP     = dict_id_vcf_format_sf (dict_id_make ("DP", 2)).num;
         dict_id_FORMAT_GQ     = dict_id_vcf_format_sf (dict_id_make ("GQ", 2)).num;
         dict_id_FORMAT_AD     = dict_id_vcf_format_sf (dict_id_make ("AD", 2)).num;
         dict_id_FORMAT_ADALL  = dict_id_vcf_format_sf (dict_id_make ("^ADALL", 6)).num; // different 2 letters than AD
         dict_id_INFO_AC       = dict_id_vcf_info_sf   (dict_id_make ("AC", 2)).num;
         dict_id_INFO_AF       = dict_id_vcf_info_sf   (dict_id_make ("AF", 2)).num;
-        dict_id_INFO_AN       = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
-        dict_id_INFO_DP       = dict_id_vcf_info_sf   (dict_id_make ("DP", 2)).num;
-        dict_id_INFO_DP4      = dict_id_vcf_info_sf   (dict_id_make ("DP4", 3)).num;
-        dict_id_INFO_SF       = dict_id_vcf_info_sf   (dict_id_make ("SF", 2)).num;
-        dict_id_INFO_VQSLOD   = dict_id_vcf_info_sf   (dict_id_make ("VQSLOD", 6)).num;
-        dict_id_INFO_CSQ      = dict_id_vcf_info_sf   (dict_id_make ("CSQ", 3)).num;
-        dict_id_INFO_vep      = dict_id_vcf_info_sf   (dict_id_make ("vep", 3)).num;
-        dict_id_INFO_DP_HIST  = dict_id_vcf_info_sf   (dict_id_make ("DP_HIST", 7)).num; // unfortunately there's a 2-letter conflict with DP, but we can't change names of INFO fields 
-        dict_id_INFO_GQ_HIST  = dict_id_vcf_info_sf   (dict_id_make ("GQ_HIST", 7)).num;
         dict_id_INFO_AGE_HISTOGRAM_HET = dict_id_vcf_info_sf (dict_id_make ("AGE_HISTOGRAM_HET", 17)).num; 
         dict_id_INFO_AGE_HISTOGRAM_HOM = dict_id_vcf_info_sf (dict_id_make ("AGE_HISTOGRAM_HOM", 17)).num;
+        dict_id_INFO_AN       = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
+        dict_id_INFO_CSQ      = dict_id_vcf_info_sf   (dict_id_make ("CSQ", 3)).num;
+        dict_id_INFO_DP       = dict_id_vcf_info_sf   (dict_id_make ("DP", 2)).num;
+        dict_id_INFO_DP4      = dict_id_vcf_info_sf   (dict_id_make ("DP4", 3)).num;
+        dict_id_INFO_DP_HIST  = dict_id_vcf_info_sf   (dict_id_make ("DP_HIST", 7)).num; // unfortunately there's a 2-letter conflict with DP, but we can't change names of INFO fields 
+        dict_id_INFO_GQ_HIST  = dict_id_vcf_info_sf   (dict_id_make ("GQ_HIST", 7)).num;
+        dict_id_INFO_SF       = dict_id_vcf_info_sf   (dict_id_make ("SF", 2)).num;
+        dict_id_INFO_vep      = dict_id_vcf_info_sf   (dict_id_make ("vep", 3)).num;
+        dict_id_INFO_VQSLOD   = dict_id_vcf_info_sf   (dict_id_make ("VQSLOD", 6)).num;
 
         // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
         dict_id_INFO_END      = dict_id_vcf_info_sf   (dict_id_make ("END", 3)).num;
