@@ -25,8 +25,7 @@ extern unsigned gff3_vb_size (void);
 
 #define GFF3_LOCAL_GET_LINE_CALLBACKS
 
-#define dict_id_is_gff3_attr_sf dict_id_is_type_1
-#define dict_id_gff3_attr_sf dict_id_type_1
-
+#define DTYPE_GFF3_ATTR    DTYPE_1
+#define DTYPE_GFF3_ENST DTYPE_2
 #endif
 

@@ -229,14 +229,14 @@ void flags_init_from_command_line (int argc, char **argv)
             case 11  : flag.genobwa       = optarg  ; break;
             case 'z' : flags_set_bgzf (optarg)      ; break;
             case 4   : flag.show_mutex    = optarg ? optarg : (char*)1; break;
-            case 2   : if (optarg) flag.dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); 
+            case 2   : if (optarg) flag.dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 
                        else        flag.show_b250 = 1;
                        break;
-            case 3   : if (optarg) flag.dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); 
+            case 3   : if (optarg) flag.dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 
                        else        flag.show_dict = 1;
                        break;
-            case 5   : flag.dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg)); break;
-            case 6   : flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg)); break;
+            case 5   : flag.dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
+            case 6   : flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 8   : flag.one_vb = atoi (optarg);  break;
             case 9   : flag.downsample = atoi (optarg); break;
             case 10  : flag.show_headers = 1 + sections_st_by_name (optarg); break; // +1 so SEC_NONE maps to 0

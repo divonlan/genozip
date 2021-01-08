@@ -393,7 +393,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
                     InfoItem *ii = &info_items[con_nitems(con)];
                     ii->start    = this_name; 
                     ii->len      = this_name_len + valueful; // include the '=' if there is one 
-                    ii->dict_id  = valueful ? dict_id_type_1 (dict_id_make (this_name, this_name_len)) 
+                    ii->dict_id  = valueful ? dict_id_make (this_name, this_name_len, DTYPE_1) 
                                             : DICT_ID_NONE;
 
                     this_value = &info_str[i+1]; 
@@ -495,9 +495,9 @@ Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_
         const uint8_t *id = dict_id.id;
         uint8_t char2 = (i < 10) ? ('0' + i) : ('a' + (i-10));
         
-        con.items[i].dict_id = (DictId){ .id = { id[0], char2, id[1], id[2], id[3], id[4], id[5], id[6] }};
+        char dict_id_str[8] = { id[0], char2, id[1], id[2], id[3], id[4], id[5], id[6] };
         
-        if (type_1_items) con.items[i].dict_id = dict_id_type_1 (con.items[i].dict_id);
+        con.items[i].dict_id = dict_id_make (dict_id_str, 8, type_1_items ? DTYPE_1 : DTYPE_2);
     }
 
     return con;

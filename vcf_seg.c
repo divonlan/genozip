@@ -138,12 +138,12 @@ static DictId vcf_seg_get_format_subfield (const char **str, uint32_t *len) // r
     DictId dict_id;
     // case: normal field - starts with a letter or another character in the range
     if ((*str)[0] >= 64 && (*str)[0] <= 127) 
-        dict_id = dict_id_vcf_format_sf (dict_id_make (*str, i));
+        dict_id = dict_id_make (*str, i, DTYPE_VCF_FORMAT);
     
     // case: unusual field - starts with an out-range character, eg a digit - prefix with @ so its a legal FORMAT dict_id
     else {
         SAFE_ASSIGN (*str - 1, '@');
-        dict_id = dict_id_vcf_format_sf (dict_id_make (*str-1, i+1));
+        dict_id = dict_id_make (*str-1, i+1, DTYPE_VCF_FORMAT);
         SAFE_RESTORE;
     }
 
@@ -314,7 +314,7 @@ static inline void vcf_seg_INFO_vep_field (VBlock *vb, DictId dict_id, const cha
                 
                 char name[8];
                 sprintf (name, "%c%c_%.3s", item_i < 63 ? '_' : '`', '@' + (item_i % 63), vep_ctx->name);
-                DictId dict_id = dict_id_vcf_info_sf (dict_id_make (name, 6));
+                DictId dict_id = dict_id_make (name, 6, DTYPE_VCF_INFO);
 
                 sf_ctxs[item_i] = ctx_get_ctx (vb, dict_id);
                 sf_ctxs[item_i]->st_did_i = vep_ctx->did_i;
@@ -529,17 +529,6 @@ static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const ch
         return vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len, cell_len); // this handles DP that is an integer or '.'
 
     return seg_delta_vs_other ((VBlockP)vb, ctx, ctx_get_existing_ctx (vb, dict_id_FORMAT_AD), cell, cell_len, -1);
-/*
-    // if DP is not an integer number or is not equal to ad_sum - store as regular snip
-    if (!str_get_int (cell, cell_len, &ctx->last_value.i)) 
-        return seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL); 
-
-    ctx->flags.store = STORE_INT;
-
-    // store DP as delta vs the sum of AD components. It is usually exactly equal, but sometimes DP is a bit lower
-    char snip[20] = { SNIP_SPECIAL, VCF_SPECIAL_DP };
-    unsigned snip_len = 2 + str_int (ad_sum - ctx->last_value.i, &snip[2]);
-    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, cell_len, NULL);     */
 }
 
 // the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,

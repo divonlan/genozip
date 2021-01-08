@@ -60,7 +60,7 @@ uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_s
 // our stuff used in multiple data types
 uint64_t dict_id_WindowsEOL=0;         
 
-DictId dict_id_make (const char *str, unsigned str_len) 
+DictId dict_id_make (const char *str, unsigned str_len, DictIdType dict_id_type) 
 { /*
     DictId dict_id = DICT_ID_NONE; 
 
@@ -104,6 +104,12 @@ DictId dict_id_make (const char *str, unsigned str_len)
         memcpy (dict_id.id + half1_len, str+str_len-half2_len, half2_len);
     }
 
+    switch (dict_id_type) {
+        case DTYPE_FIELD  : dict_id.id[0] = dict_id.id[0] & 0x3f; break;
+        case DTYPE_1      : dict_id.id[0] = dict_id.id[0] | 0xc0; break;
+        case DTYPE_2      : break;
+        default: ABORT ("Error in dict_id_make: invalid type %d", dict_id_type);
+    }
     return dict_id;
 }
 
@@ -115,113 +121,113 @@ void dict_id_initialize (DataType data_type)
         const char *field_name = dt_fields[data_type].names[f];
 
         ASSERT (field_name, "Data type %s is missing a field name in DATA_TYPE_FIELDS for field %u", dt_name (data_type), f);
-        dict_id_fields[f] = dict_id_field (dict_id_make (field_name, strlen (field_name))).num; 
+        dict_id_fields[f] = dict_id_make (field_name, strlen (field_name), DTYPE_FIELD).num; 
     }
 
-    dict_id_WindowsEOL = dict_id_type_1 (dict_id_make ("#", 1)).num; 
+    dict_id_WindowsEOL = dict_id_make ("#", 1, DTYPE_1).num; 
 
     switch (data_type) { 
     case DT_VCF:
     case DT_BCF:
-        dict_id_FORMAT_DP     = dict_id_vcf_format_sf (dict_id_make ("DP", 2)).num;
-        dict_id_FORMAT_DS     = dict_id_vcf_format_sf (dict_id_make ("DS", 2)).num;
-        dict_id_FORMAT_GT     = dict_id_vcf_format_sf (dict_id_make ("GT", 2)).num;
-        dict_id_FORMAT_GT_HT  = dict_id_vcf_format_sf (dict_id_make ("@HT", 3)).num; // different first 2 letters than GT, for lookup table
-        dict_id_FORMAT_GT_HT_INDEX = dict_id_vcf_format_sf (dict_id_make ("@INDEXHT", 8)).num; // different first 2 letters
-        dict_id_FORMAT_GT_SHARK_DB = dict_id_vcf_format_sf (dict_id_make ("@1SHRKDB", 8)).num; // different first 2 letters, 
-        dict_id_FORMAT_GT_SHARK_GT = dict_id_vcf_format_sf (dict_id_make ("@2SHRKGT", 8)).num;
-        dict_id_FORMAT_GT_SHARK_EX = dict_id_vcf_format_sf (dict_id_make ("@3SHRKEX", 8)).num;  
-        dict_id_FORMAT_PL     = dict_id_vcf_format_sf (dict_id_make ("PL", 2)).num;
-        dict_id_FORMAT_GP     = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
-        dict_id_FORMAT_GL     = dict_id_vcf_format_sf (dict_id_make ("GL", 2)).num;
-        dict_id_FORMAT_GQ     = dict_id_vcf_format_sf (dict_id_make ("GQ", 2)).num;
-        dict_id_FORMAT_AD     = dict_id_vcf_format_sf (dict_id_make ("AD", 2)).num;
-        dict_id_FORMAT_ADF    = dict_id_vcf_format_sf (dict_id_make ("ADF", 3)).num;
-        dict_id_FORMAT_ADR    = dict_id_vcf_format_sf (dict_id_make ("ADR", 3)).num;
-        dict_id_FORMAT_ADALL  = dict_id_vcf_format_sf (dict_id_make ("^ADALL", 6)).num; // different 2 letters than AD
-        dict_id_INFO_AC       = dict_id_vcf_info_sf   (dict_id_make ("AC", 2)).num;
-        dict_id_INFO_AF       = dict_id_vcf_info_sf   (dict_id_make ("AF", 2)).num;
-        dict_id_INFO_AGE_HISTOGRAM_HET = dict_id_vcf_info_sf (dict_id_make ("AGE_HISTOGRAM_HET", 17)).num; 
-        dict_id_INFO_AGE_HISTOGRAM_HOM = dict_id_vcf_info_sf (dict_id_make ("AGE_HISTOGRAM_HOM", 17)).num;
-        dict_id_INFO_AN       = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
-        dict_id_INFO_BaseCounts = dict_id_vcf_info_sf (dict_id_make ("BaseCounts", 10)).num;
-        dict_id_INFO_CSQ      = dict_id_vcf_info_sf   (dict_id_make ("CSQ", 3)).num;
-        dict_id_INFO_DP       = dict_id_vcf_info_sf   (dict_id_make ("DP", 2)).num;
-        dict_id_INFO_DP4      = dict_id_vcf_info_sf   (dict_id_make ("DP4", 3)).num;
-        dict_id_INFO_DP_HIST  = dict_id_vcf_info_sf   (dict_id_make ("DP_HIST", 7)).num; // unfortunately there's a 2-letter conflict with DP, but we can't change names of INFO fields 
-        dict_id_INFO_GQ_HIST  = dict_id_vcf_info_sf   (dict_id_make ("GQ_HIST", 7)).num;
-        dict_id_INFO_SF       = dict_id_vcf_info_sf   (dict_id_make ("SF", 2)).num;
-        dict_id_INFO_vep      = dict_id_vcf_info_sf   (dict_id_make ("vep", 3)).num;
-        dict_id_INFO_VQSLOD   = dict_id_vcf_info_sf   (dict_id_make ("VQSLOD", 6)).num;
+        dict_id_FORMAT_DP     = dict_id_make ("DP", 2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_DS     = dict_id_make ("DS", 2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GT     = dict_id_make ("GT", 2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GT_HT  = dict_id_make ("@HT", 3, DTYPE_VCF_FORMAT).num; // different first 2 letters than GT, for lookup table
+        dict_id_FORMAT_GT_HT_INDEX = dict_id_make ("@INDEXHT", 8, DTYPE_VCF_FORMAT).num; // different first 2 letters
+        dict_id_FORMAT_GT_SHARK_DB = dict_id_make ("@1SHRKDB", 8, DTYPE_VCF_FORMAT).num; // different first 2 letters, 
+        dict_id_FORMAT_GT_SHARK_GT = dict_id_make ("@2SHRKGT", 8, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GT_SHARK_EX = dict_id_make ("@3SHRKEX", 8, DTYPE_VCF_FORMAT).num;  
+        dict_id_FORMAT_PL     = dict_id_make ("PL", 2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GP     = dict_id_make ("GP", 2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GL     = dict_id_make ("GL", 2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GQ     = dict_id_make ("GQ", 2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_AD     = dict_id_make ("AD", 2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_ADF    = dict_id_make ("ADF", 3, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_ADR    = dict_id_make ("ADR", 3, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_ADALL  = dict_id_make ("^ADALL", 6, DTYPE_VCF_FORMAT).num; // different 2 letters than AD
+        dict_id_INFO_AC       = dict_id_make ("AC", 2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_AF       = dict_id_make ("AF", 2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_AGE_HISTOGRAM_HET = dict_id_make ("AGE_HISTOGRAM_HET", 17, DTYPE_VCF_INFO).num; 
+        dict_id_INFO_AGE_HISTOGRAM_HOM = dict_id_make ("AGE_HISTOGRAM_HOM", 17, DTYPE_VCF_INFO).num;
+        dict_id_INFO_AN       = dict_id_make ("AN", 2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_BaseCounts = dict_id_make ("BaseCounts", 10, DTYPE_VCF_INFO).num;
+        dict_id_INFO_CSQ      = dict_id_make ("CSQ", 3, DTYPE_VCF_INFO).num;
+        dict_id_INFO_DP       = dict_id_make ("DP", 2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_DP4      = dict_id_make ("DP4", 3, DTYPE_VCF_INFO).num;
+        dict_id_INFO_DP_HIST  = dict_id_make ("DP_HIST", 7, DTYPE_VCF_INFO).num; // unfortunately there's a 2-letter conflict with DP, but we can't change names of INFO fields 
+        dict_id_INFO_GQ_HIST  = dict_id_make ("GQ_HIST", 7, DTYPE_VCF_INFO).num;
+        dict_id_INFO_SF       = dict_id_make ("SF", 2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_vep      = dict_id_make ("vep", 3, DTYPE_VCF_INFO).num;
+        dict_id_INFO_VQSLOD   = dict_id_make ("VQSLOD", 6, DTYPE_VCF_INFO).num;
 
         // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
-        dict_id_INFO_END      = dict_id_vcf_info_sf   (dict_id_make ("END", 3)).num;
-        dict_id_INFO_SVLEN    = dict_id_vcf_info_sf   (dict_id_make ("SVLEN", 5)).num;
-        dict_id_FORMAT_MIN_DP = dict_id_vcf_format_sf (dict_id_make ("MIN_DP", 6)).num;
+        dict_id_INFO_END      = dict_id_make ("END", 3, DTYPE_VCF_INFO).num;
+        dict_id_INFO_SVLEN    = dict_id_make ("SVLEN", 5, DTYPE_VCF_INFO).num;
+        dict_id_FORMAT_MIN_DP = dict_id_make ("MIN_DP", 6, DTYPE_VCF_FORMAT).num;
 
         // This appears if the VCF line has a Windows-style \r\n line ending
         break;
 
     case DT_SAM:
     case DT_BAM:
-        dict_id_OPTION_AM = sam_dict_id_optnl_sf (dict_id_make ("AM:i", 4)).num;
-        dict_id_OPTION_AS = sam_dict_id_optnl_sf (dict_id_make ("AS:i", 4)).num;
-        dict_id_OPTION_CC = sam_dict_id_optnl_sf (dict_id_make ("CC:Z", 4)).num;
-        dict_id_OPTION_BD = sam_dict_id_optnl_sf (dict_id_make ("BD:Z", 4)).num;
-        dict_id_OPTION_BI = sam_dict_id_optnl_sf (dict_id_make ("BI:Z", 4)).num;
-        dict_id_OPTION_BD_BI = sam_dict_id_optnl_sf (dict_id_make ("BD_BI", 5)).num;
-        dict_id_OPTION_CM = sam_dict_id_optnl_sf (dict_id_make ("CM:i", 4)).num;
-        dict_id_OPTION_E2 = sam_dict_id_optnl_sf (dict_id_make ("E2:Z", 4)).num;
-        dict_id_OPTION_FI = sam_dict_id_optnl_sf (dict_id_make ("FI:i", 4)).num;
-        dict_id_OPTION_H0 = sam_dict_id_optnl_sf (dict_id_make ("H0:i", 4)).num;
-        dict_id_OPTION_H1 = sam_dict_id_optnl_sf (dict_id_make ("H1:i", 4)).num;
-        dict_id_OPTION_H2 = sam_dict_id_optnl_sf (dict_id_make ("H2:i", 4)).num;
-        dict_id_OPTION_LB = sam_dict_id_optnl_sf (dict_id_make ("LB:Z", 4)).num;
-        dict_id_OPTION_MC = sam_dict_id_optnl_sf (dict_id_make ("MC:Z", 4)).num;
-        dict_id_OPTION_MD = sam_dict_id_optnl_sf (dict_id_make ("MD:Z", 4)).num;
-        dict_id_OPTION_MQ = sam_dict_id_optnl_sf (dict_id_make ("MQ:i", 4)).num;
-        dict_id_OPTION_NH = sam_dict_id_optnl_sf (dict_id_make ("NH:i", 4)).num;
-        dict_id_OPTION_NM = sam_dict_id_optnl_sf (dict_id_make ("NM:i", 4)).num;
-        dict_id_OPTION_OA = sam_dict_id_optnl_sf (dict_id_make ("OA:Z", 4)).num;
-        dict_id_OPTION_OC = sam_dict_id_optnl_sf (dict_id_make ("OC:Z", 4)).num;
-        dict_id_OPTION_PG = sam_dict_id_optnl_sf (dict_id_make ("PG:Z", 4)).num;
-        dict_id_OPTION_PQ = sam_dict_id_optnl_sf (dict_id_make ("PQ:i", 4)).num;
-        dict_id_OPTION_PU = sam_dict_id_optnl_sf (dict_id_make ("PU:Z", 4)).num;
-        dict_id_OPTION_RG = sam_dict_id_optnl_sf (dict_id_make ("RG:Z", 4)).num;
-        dict_id_OPTION_SA = sam_dict_id_optnl_sf (dict_id_make ("SA:Z", 4)).num;
-        dict_id_OPTION_SM = sam_dict_id_optnl_sf (dict_id_make ("SM:i", 4)).num;
-        dict_id_OPTION_TC = sam_dict_id_optnl_sf (dict_id_make ("TC:i", 4)).num;
-        dict_id_OPTION_UQ = sam_dict_id_optnl_sf (dict_id_make ("UQ:i", 4)).num;
-        dict_id_OPTION_U2 = sam_dict_id_optnl_sf (dict_id_make ("U2:Z", 4)).num;
+        dict_id_OPTION_AM = dict_id_make ("AM:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_AS = dict_id_make ("AS:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_CC = dict_id_make ("CC:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_BD = dict_id_make ("BD:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_BI = dict_id_make ("BI:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_BD_BI = dict_id_make ("BD_BI", 5, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_CM = dict_id_make ("CM:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_E2 = dict_id_make ("E2:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_FI = dict_id_make ("FI:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_H0 = dict_id_make ("H0:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_H1 = dict_id_make ("H1:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_H2 = dict_id_make ("H2:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_LB = dict_id_make ("LB:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_MC = dict_id_make ("MC:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_MD = dict_id_make ("MD:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_MQ = dict_id_make ("MQ:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_NH = dict_id_make ("NH:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_NM = dict_id_make ("NM:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_OA = dict_id_make ("OA:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_OC = dict_id_make ("OC:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_PG = dict_id_make ("PG:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_PQ = dict_id_make ("PQ:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_PU = dict_id_make ("PU:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_RG = dict_id_make ("RG:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_SA = dict_id_make ("SA:Z", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_SM = dict_id_make ("SM:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_TC = dict_id_make ("TC:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_UQ = dict_id_make ("UQ:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_U2 = dict_id_make ("U2:Z", 4, DTYPE_SAM_OPTIONAL).num;
                 
         // Ion Torrent flow signal array
-        dict_id_OPTION_ZM = sam_dict_id_optnl_sf (dict_id_make ("ZM:B", 4)).num;
+        dict_id_OPTION_ZM = dict_id_make ("ZM:B", 4, DTYPE_SAM_OPTIONAL).num;
 
         // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
-        dict_id_OPTION_X0 = sam_dict_id_optnl_sf (dict_id_make ("X0:i", 4)).num; 
-        dict_id_OPTION_X1 = sam_dict_id_optnl_sf (dict_id_make ("X1:i", 4)).num; 
-        dict_id_OPTION_XA = sam_dict_id_optnl_sf (dict_id_make ("XA:Z", 4)).num; 
-        dict_id_OPTION_XN = sam_dict_id_optnl_sf (dict_id_make ("XN:i", 4)).num; 
-        dict_id_OPTION_XM = sam_dict_id_optnl_sf (dict_id_make ("XM:i", 4)).num; 
-        dict_id_OPTION_XO = sam_dict_id_optnl_sf (dict_id_make ("XO:i", 4)).num;
-        dict_id_OPTION_XG = sam_dict_id_optnl_sf (dict_id_make ("XG:i", 4)).num; 
-        dict_id_OPTION_XS = sam_dict_id_optnl_sf (dict_id_make ("XS:i", 4)).num; 
-        dict_id_OPTION_XE = sam_dict_id_optnl_sf (dict_id_make ("XE:i", 4)).num;
+        dict_id_OPTION_X0 = dict_id_make ("X0:i", 4, DTYPE_SAM_OPTIONAL).num; 
+        dict_id_OPTION_X1 = dict_id_make ("X1:i", 4, DTYPE_SAM_OPTIONAL).num; 
+        dict_id_OPTION_XA = dict_id_make ("XA:Z", 4, DTYPE_SAM_OPTIONAL).num; 
+        dict_id_OPTION_XN = dict_id_make ("XN:i", 4, DTYPE_SAM_OPTIONAL).num; 
+        dict_id_OPTION_XM = dict_id_make ("XM:i", 4, DTYPE_SAM_OPTIONAL).num; 
+        dict_id_OPTION_XO = dict_id_make ("XO:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_XG = dict_id_make ("XG:i", 4, DTYPE_SAM_OPTIONAL).num; 
+        dict_id_OPTION_XS = dict_id_make ("XS:i", 4, DTYPE_SAM_OPTIONAL).num; 
+        dict_id_OPTION_XE = dict_id_make ("XE:i", 4, DTYPE_SAM_OPTIONAL).num;
 
         // biobambam tags
-        dict_id_OPTION_mc = sam_dict_id_optnl_sf (dict_id_make ("mc:i", 4)).num;
-        dict_id_OPTION_ms = sam_dict_id_optnl_sf (dict_id_make ("ms:i", 4)).num;
+        dict_id_OPTION_mc = dict_id_make ("mc:i", 4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_ms = dict_id_make ("ms:i", 4, DTYPE_SAM_OPTIONAL).num;
 
         // added by GATK's BQSR (Base Quality Score Recalibration)
-        dict_id_OPTION_BD = sam_dict_id_optnl_sf (dict_id_make ("BD:Z", 4)).num; // not used in newer versions of GATK
-        dict_id_OPTION_BI = sam_dict_id_optnl_sf (dict_id_make ("BI:Z", 4)).num; // not used in newer versions of GATK
+        dict_id_OPTION_BD = dict_id_make ("BD:Z", 4, DTYPE_SAM_OPTIONAL).num; // not used in newer versions of GATK
+        dict_id_OPTION_BI = dict_id_make ("BI:Z", 4, DTYPE_SAM_OPTIONAL).num; // not used in newer versions of GATK
 
         // our private dictionary for + or 0 strands
-        dict_id_OPTION_STRAND = sam_dict_id_optnl_sf (dict_id_make ("@STRAND", 7)).num;
-        dict_id_OPTION_RNAME  = sam_dict_id_optnl_sf (dict_id_make ("@RNAME",  6)).num;
-        dict_id_OPTION_POS    = sam_dict_id_optnl_sf (dict_id_make ("@POS",    4)).num;
-        dict_id_OPTION_CIGAR  = sam_dict_id_optnl_sf (dict_id_make ("@CIGAR",  6)).num;
-        dict_id_OPTION_MAPQ   = sam_dict_id_optnl_sf (dict_id_make ("@MAPQ",   5)).num;
+        dict_id_OPTION_STRAND = dict_id_make ("@STRAND", 7, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_RNAME  = dict_id_make ("@RNAME",  6, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_POS    = dict_id_make ("@POS",    4, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_CIGAR  = dict_id_make ("@CIGAR",  6, DTYPE_SAM_OPTIONAL).num;
+        dict_id_OPTION_MAPQ   = dict_id_make ("@MAPQ",   5, DTYPE_SAM_OPTIONAL).num;
 
         break;
 
@@ -230,20 +236,20 @@ void dict_id_initialize (DataType data_type)
 
     case DT_GFF3:
         // standard GVF fields (ID is also a standard GFF3 field)
-        dict_id_ATTR_ID               = dict_id_gff3_attr_sf (dict_id_make ("ID", 2)).num;
-        dict_id_ATTR_Variant_seq      = dict_id_gff3_attr_sf (dict_id_make ("Variant_seq", 0)).num;
-        dict_id_ATTR_Reference_seq    = dict_id_gff3_attr_sf (dict_id_make ("Reference_seq", 0)).num;
-        dict_id_ATTR_Variant_freq     = dict_id_gff3_attr_sf (dict_id_make ("Variant_freq", 0)).num;
+        dict_id_ATTR_ID               = dict_id_make ("ID", 2, DTYPE_GFF3_ATTR).num;
+        dict_id_ATTR_Variant_seq      = dict_id_make ("Variant_seq", 0, DTYPE_GFF3_ATTR).num;
+        dict_id_ATTR_Reference_seq    = dict_id_make ("Reference_seq", 0, DTYPE_GFF3_ATTR).num;
+        dict_id_ATTR_Variant_freq     = dict_id_make ("Variant_freq", 0, DTYPE_GFF3_ATTR).num;
 
         // fields added in the GVFs of GRCh37/38
-        dict_id_ATTR_Dbxref           = dict_id_gff3_attr_sf (dict_id_make ("Dbxref", 6)).num;
-        dict_id_ATTR_ancestral_allele = dict_id_gff3_attr_sf (dict_id_make ("ancestral_allele", 0)).num;
-        dict_id_ATTR_Variant_effect   = dict_id_gff3_attr_sf (dict_id_make ("Variant_effect", 0)).num;
-        dict_id_ATTR_sift_prediction  = dict_id_gff3_attr_sf (dict_id_make ("sift_prediction", 0)).num;
-        dict_id_ATTR_polyphen_prediction = dict_id_gff3_attr_sf (dict_id_make ("polyphen_prediction", 0)).num;
-        dict_id_ATTR_variant_peptide  = dict_id_gff3_attr_sf (dict_id_make ("variant_peptide", 0)).num;
+        dict_id_ATTR_Dbxref           = dict_id_make ("Dbxref", 6, DTYPE_GFF3_ATTR).num;
+        dict_id_ATTR_ancestral_allele = dict_id_make ("ancestral_allele", 0, DTYPE_GFF3_ATTR).num;
+        dict_id_ATTR_Variant_effect   = dict_id_make ("Variant_effect", 0, DTYPE_GFF3_ATTR).num;
+        dict_id_ATTR_sift_prediction  = dict_id_make ("sift_prediction", 0, DTYPE_GFF3_ATTR).num;
+        dict_id_ATTR_polyphen_prediction = dict_id_make ("polyphen_prediction", 0, DTYPE_GFF3_ATTR).num;
+        dict_id_ATTR_variant_peptide  = dict_id_make ("variant_peptide", 0, DTYPE_GFF3_ATTR).num;
 
-        dict_id_ENSTid                = dict_id_type_2 (dict_id_make ("ENSTid", 0)).num; // type 2 is ENST subsubfields
+        dict_id_ENSTid                = dict_id_make ("ENSTid", 0, DTYPE_GFF3_ENST).num; 
         break;
 
     default:

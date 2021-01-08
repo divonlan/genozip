@@ -702,7 +702,7 @@ void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
         const char *fname  = dt_fields[dt].names[f];
         ASSERTE (strlen (fname) <= DICT_ID_LEN, "A primary field's name is limited to %u characters", DICT_ID_LEN); // to avoid dict_id_make name compression which might change between genozip releases
 
-        DictId dict_id = dict_id_field (dict_id_make (fname, strlen(fname)));
+        DictId dict_id = dict_id_make (fname, strlen(fname), DTYPE_FIELD);
         Context *dst_ctx  = NULL;
 
         // check if its an alias (PIZ only)

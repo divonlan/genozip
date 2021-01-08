@@ -67,7 +67,7 @@ SPECIAL (VCF, 5, BaseCounts, vcf_piz_special_BaseCounts);
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2
 
-#define dict_id_vcf_info_sf      dict_id_type_1
-#define dict_id_vcf_format_sf    dict_id_type_2
+#define DTYPE_VCF_INFO   DTYPE_1
+#define DTYPE_VCF_FORMAT DTYPE_2
 
 #endif

@@ -10,11 +10,9 @@
 #include "genozip.h"
 #include "data_types.h"
 
-extern DictId dict_id_make (const char *str, unsigned str_len);
-
-static inline DictId dict_id_field (DictId dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
-static inline DictId dict_id_type_1(DictId dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
-static inline DictId dict_id_type_2(DictId dict_id) { return dict_id; } // no change - keep Msb 01
+typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
+#define DTYPE_PLAIN DTYPE_2
+extern DictId dict_id_make (const char *str, unsigned str_len, DictIdType dict_id_type);
 
 #define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str)).num == dict_id_typeless (dict_id).num)
 static inline bool dict_id_is_field (DictId dict_id) { return ((dict_id.id[0] >> 6) == 0); } // 2 MSb of first byte determine dictionary type

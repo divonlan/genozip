@@ -841,10 +841,10 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
     int str_len = (int)value_len - 2; // must be int, not unsigned, for the for loop
 
     // prepare context where array elements will go in
-    DictId arr_dict_id        = dict_id_make ("XX_ARRAY", 8);
-    arr_dict_id.id[0]         = FLIP_CASE (dict_id.id[0]);
-    arr_dict_id.id[1]         = FLIP_CASE (dict_id.id[1]);
-    con.items[1].dict_id      = sam_dict_id_optnl_sf (arr_dict_id);
+    char arr_dict_id_str[8]   = "XX_ARRAY";
+    arr_dict_id_str[0]        = FLIP_CASE (dict_id.id[0]);
+    arr_dict_id_str[1]        = FLIP_CASE (dict_id.id[1]);
+    con.items[1].dict_id      = dict_id_make (arr_dict_id_str, 8, DTYPE_SAM_OPTIONAL);
     con.items[1].translator   = optional_field_translator ((uint8_t)value[0]); // instructions on how to transform array items if reconstructing as BAM (value[0] is the subtype of the array)
     con.items[1].seperator[0] = optional_sep_by_type[IS_BAM][(uint8_t)value[0]];
     
@@ -891,7 +891,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 {
     char sam_type = sam_seg_bam_type_to_sam_type (bam_type);
     char dict_name[4] = { tag[0], tag[1], ':', sam_type };
-    DictId dict_id = sam_dict_id_optnl_sf (dict_id_make (dict_name, 4));
+    DictId dict_id = dict_id_make (dict_name, 4, DTYPE_SAM_OPTIONAL);
 
     unsigned add_bytes = sam_seg_optional_add_bytes (bam_type, value_len, is_bam);
 

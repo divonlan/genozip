@@ -65,11 +65,8 @@ SPECIAL (SAM, 6, BIN,   bam_piz_special_BIN);
 #define NUM_SAM_SPECIAL 7
 
 // SAM field types 
-#define sam_dict_id_is_qname_sf  dict_id_is_type_1
-#define sam_dict_id_is_optnl_sf  dict_id_is_type_2
-
-#define sam_dict_id_qname_sf     dict_id_type_1
-#define sam_dict_id_optnl_sf     dict_id_type_2
+#define DTYPE_QNAME    DTYPE_1
+#define DTYPE_SAM_OPTIONAL DTYPE_2
 
 // note: we can't alias RNEXT to RNAME, because we can't alias to CHROM - see comment in reconstruct_from_ctx_do 
 #define SAM_DICT_ID_ALIASES \
