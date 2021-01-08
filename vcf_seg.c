@@ -748,6 +748,7 @@ static WordIndex vcf_seg_FORMAT_AD (VBlockVCF *vb, Context *ctx, const char *val
         
         Context *ctx_item = ctx_get_ctx (vb, con.items[con.nitems_lo].dict_id);
         ctx_item->flags.store = STORE_INT;
+        ctx_item->st_did_i = ctx->did_i;
 
         if (con.nitems_lo == 0)
             // the first value is usually somewhat related to the overall sample depth, therefore values within 
