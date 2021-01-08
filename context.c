@@ -407,7 +407,7 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
     ctx->st_did_i = DID_I_NONE;
     ctx->dict_id  = dict_id;
     
-    strcpy ((char*)ctx->name, dis_dict_id (dict_id).s);
+    strcpy ((char*)ctx->name, dis_dict_id_name (dict_id).s);
 
     ctx_init_iterator (ctx);
     
@@ -918,6 +918,7 @@ void ctx_free_context (Context *ctx)
     ctx->last_line_i = 0;
     ctx->last_value.i = 0;
     ctx->last_delta = 0;
+    ctx->last_txt = ctx->last_txt_len = 0;
     ctx->semaphore = 0;
 }
 

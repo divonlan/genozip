@@ -66,16 +66,11 @@ typedef struct { // initialize with ctx_init_iterator()
 #define INTERLACE(type,n) ((((type)n) < 0) ? ((SAFE_NEGATE(type,n) << 1) - 1) : (((u##type)n) << 1))
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
-typedef union LastValueType { // 64 bit
-    int64_t i;
-    double f;
-} LastValueType;
-
 typedef struct Context {
     // ----------------------------
     // common fields for ZIP & PIZ
     // ----------------------------
-    const char name[DICT_ID_LEN+1]; // nul-terminated printable dict_id
+    const char name[DICT_ID_LEN+8]; // nul-terminated printable dict_id (+8 for "FORMAT/" and \0)
     DidIType did_i;            // the index of this ctx within the array vb->contexts
     DidIType st_did_i;         // in --stats, consolidate this context into st_did_i
     LocalType ltype;           // LT_* - type of local data - included in the section header
@@ -91,6 +86,8 @@ typedef struct Context {
     Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if inst.pair_b250 or inst.pair_local is set)
     LastValueType last_value;  // last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
     int64_t last_delta;        // last delta value calculated
+    uint32_t last_txt;         // index into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
+    uint32_t last_txt_len;     // length (in vb->txt_data) of last seg/reconstruction (always in PIZ, sometimes in Seg)
     SnipIterator pair_b250_iter; // Iterator on pair, if it contains b250 data
 
     // ----------------------------
@@ -147,11 +144,11 @@ typedef struct Context {
     // ----------------------------
     // PIZ only fields
     // ----------------------------
-    Buffer word_list;          // PIZ only. word list. an array of CtxWord - listing the snips in dictionary
-    SnipIterator iterator;     // PIZ only: used to iterate on the context, reading one b250 word_index at a time
-    uint32_t next_local;       // PIZ only: iterator on Context.local
+    Buffer word_list;          // word list. an array of CtxWord - listing the snips in dictionary
+    SnipIterator iterator;     // used to iterate on the context, reading one b250 word_index at a time
+    uint32_t next_local;       // iterator on Context.local
 
-    uint32_t last_line_i;      // PIZ only: the last line_i this ctx was encountered
+    uint32_t last_line_i;      // the last line_i this ctx was encountered
 
     // PIZ-only instructions
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.

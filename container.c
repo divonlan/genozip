@@ -80,7 +80,8 @@ static inline void container_reconstruct_prefix (VBlockP vb, ConstContainerP con
     (*prefixes_len) -= len + 1;
 }
 
-static inline void container_reconstruct_do (VBlock *vb, Context *ctx, ConstContainerP con, const char *prefixes, uint32_t prefixes_len)
+static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, ConstContainerP con, 
+                                                      const char *prefixes, uint32_t prefixes_len)
 {
     #define IS_CI_SET(flag) (CI_ITEM_HAS_FLAG (item) && ((uint8_t)item->seperator[0] & ~(uint8_t)0x80 & flag))
 
@@ -89,9 +90,6 @@ static inline void container_reconstruct_do (VBlock *vb, Context *ctx, ConstCont
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
     
     int32_t last_non_filtered_item_i = -1;
-
-    // for containers, last_value is the index in txt_data where this container was reconstructed
-    ctx->last_value.i = (int64_t)vb->txt_data.len;
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, con, &prefixes, &prefixes_len); 
@@ -103,6 +101,9 @@ static inline void container_reconstruct_do (VBlock *vb, Context *ctx, ConstCont
     Context *item_ctxs[num_items];
     for (unsigned i=0; i < num_items; i++) 
         item_ctxs[i] = con->items[i].dict_id.num ? ctx_get_existing_ctx (vb, con->items[i].dict_id) : NULL;
+
+    // for containers, new_value is the some of all its items, all repeats last_value (either int or float)
+    LastValueType new_value = {};
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
@@ -142,6 +143,13 @@ static inline void container_reconstruct_do (VBlock *vb, Context *ctx, ConstCont
                                    !IS_CI_SET (CI_TRANS_NOR); // no prohibition on reconstructing when translating
 
                 reconstructed_len = reconstruct_from_ctx (vb, item_ctxs[i]->did_i, 0, reconstruct);
+
+                // sum up items' values if needed
+                if (ctx->flags.store == STORE_INT)
+                    new_value.i += item_ctxs[i]->last_value.i;
+                
+                else if (ctx->flags.store == STORE_FLOAT)
+                    new_value.f += item_ctxs[i]->last_value.f;
 
                 // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item
                 // using the designated "translator" function, if one is available
@@ -187,15 +195,14 @@ static inline void container_reconstruct_do (VBlock *vb, Context *ctx, ConstCont
         vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (flag.trans_containers ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
                                                    : (!!item->seperator[0] + !!item->seperator[1]);
     }
-
-    // for containers, last_delta is the length of the reconstruction
-    ctx->last_delta = (int64_t)vb->txt_data.len - ctx->last_value.i;
      
     if (con->is_toplevel)   
         COPY_TIMER (reconstruct_vb);
+
+    return new_value;
 }
 
-void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, const char *snip, unsigned snip_len)
+LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, const char *snip, unsigned snip_len)
 {
     Container con, *con_p=NULL;
     const char *prefixes;
@@ -278,7 +285,7 @@ void container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_index, cons
         }
     }
 
-    container_reconstruct_do (vb, ctx, con_p, prefixes, prefixes_len); 
+    return container_reconstruct_do (vb, ctx, con_p, prefixes, prefixes_len); 
 }
 
 // display

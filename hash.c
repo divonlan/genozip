@@ -94,8 +94,7 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
         // typically big - use large hash table
         else 
         if (vb_ctx->dict_id.num == dict_id_INFO_VQSLOD ||
-            vb_ctx->dict_id.num == dict_id_FORMAT_GL   ||
-            vb_ctx->dict_id.num == dict_id_FORMAT_PL)
+            vb_ctx->dict_id.num == dict_id_FORMAT_GL)
 
             vb_ctx->local_hash_prime = hash_next_size_up((uint32_t)segging_vb->lines.len);
         break;

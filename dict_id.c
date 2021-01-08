@@ -27,7 +27,8 @@ uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_
          dict_id_FORMAT_GQ=0, dict_id_FORMAT_DS=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0, dict_id_INFO_DP4=0, dict_id_INFO_SF=0,
-         
+         dict_id_INFO_BaseCounts=0,
+
          // tags from VEP (Varient Effect Predictor) and similar tools
          dict_id_INFO_CSQ=0, dict_id_INFO_vep=0, dict_id_INFO_DP_HIST=0, dict_id_INFO_GQ_HIST=0, 
          dict_id_INFO_AGE_HISTOGRAM_HET=0, dict_id_INFO_AGE_HISTOGRAM_HOM=0; 
@@ -143,6 +144,7 @@ void dict_id_initialize (DataType data_type)
         dict_id_INFO_AGE_HISTOGRAM_HET = dict_id_vcf_info_sf (dict_id_make ("AGE_HISTOGRAM_HET", 17)).num; 
         dict_id_INFO_AGE_HISTOGRAM_HOM = dict_id_vcf_info_sf (dict_id_make ("AGE_HISTOGRAM_HOM", 17)).num;
         dict_id_INFO_AN       = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
+        dict_id_INFO_BaseCounts = dict_id_vcf_info_sf (dict_id_make ("BaseCounts", 10)).num;
         dict_id_INFO_CSQ      = dict_id_vcf_info_sf   (dict_id_make ("CSQ", 3)).num;
         dict_id_INFO_DP       = dict_id_vcf_info_sf   (dict_id_make ("DP", 2)).num;
         dict_id_INFO_DP4      = dict_id_vcf_info_sf   (dict_id_make ("DP4", 3)).num;
@@ -337,24 +339,30 @@ const char *dict_id_display_type (DataType dt, DictId dict_id)
 }
 
 // print the dict_id - NOT thread safe, for use in execution-termination messages
-DisplayPrintId dis_dict_id (DictId dict_id)
+DisplayPrintId dis_dict_id_ex (DictId dict_id, bool with_type_if_vcf)
 {
     DisplayPrintId s = {};
 
     if (!dict_id.num) return (DisplayPrintId){ .s = "<none>" };
 
-    s.s[0] = (dict_id.id[0] & 0x7f) | 0x40;  // set 2 Msb to 01
+    unsigned start=0;
+    if (with_type_if_vcf && z_file && (z_file->data_type == DT_VCF || z_file->data_type == DT_BCF)) {
+        if      (dict_id_is_vcf_format_sf (dict_id)) { memcpy (s.s, "FORMAT/", 7); start = 7; }
+        else if (dict_id_is_vcf_info_sf   (dict_id)) { memcpy (s.s, "INFO/",   5); start = 5; }
+    }
+
+    s.s[start] = (dict_id.id[0] & 0x7f) | 0x40;  // set 2 Msb to 01
 
     for (unsigned i=1; i < DICT_ID_LEN; i++) 
-        s.s[i] = dict_id.id[i] == 0  ? ' '
-               : dict_id.id[i] < 32  ? '?' // non printable char is converted to '?'
-               : dict_id.id[i] > 126 ? '?'
-               :                       dict_id.id[i];
+        s.s[start+i] = dict_id.id[i] == 0  ? ' '
+                     : dict_id.id[i] < 32  ? '?' // non printable char is converted to '?'
+                     : dict_id.id[i] > 126 ? '?'
+                     :                       dict_id.id[i];
 
     // trim final ' '
     for (int i=DICT_ID_LEN-1; i >= 0; i--) {
-        if (s.s[i] != ' ') break;
-        s.s[i] = 0;
+        if (s.s[start+i] != ' ') break;
+        s.s[start+i] = 0;
     }
 
     return s;

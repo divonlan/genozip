@@ -218,73 +218,75 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         *con = format_mapper; 
 }
 
-// an array or array of arrays
-static inline void vcf_seg_INFO_array (VBlock *vb, Context *container_ctx, DidIType sf_did_i, 
-                                       const char *field, int32_t field_len /* must be signed */, 
-                                       char sep, 
-                                       char subarray_sep) // if non-zero, will attempt to find internal arrays
-{   
-    MiniContainer *con;
-    DictId arr_dict_id;
-    Context *arr_ctx;
+// return true if caller still needs to seg 
+static bool vcf_seg_INFO_DP (VBlockVCF *vb, const char *value, int value_len)
+{
+    ContextP ctx_dp = ctx_get_ctx (vb, dict_id_INFO_DP);
 
-    // first use in this VB - prepare context where array elements will go in
-    if (!container_ctx->con_cache.len) {
-        const uint8_t *id = container_ctx->dict_id.id;
-        arr_dict_id = (DictId){ .id = { id[0], 
-                                        (id[1]+1) % 256, // different IDs for top array, subarray and items
-                                        id[2], id[3], id[4], id[5], id[6], id[7] } };
-        
-        buf_alloc (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "contexts->con_cache");
-
-        con = FIRSTENT (MiniContainer, container_ctx->con_cache);
-        *con = (MiniContainer){ .nitems_lo = 1, 
-                                .drop_final_item_sep = true,
-                                .items     = { { .dict_id   = arr_dict_id, // only one item
-                                                 .seperator = { sep } } } };
-
-        arr_ctx = ctx_get_ctx (vb, arr_dict_id);
-        arr_ctx->st_did_i     = sf_did_i;
+    if (vb->has_basecounts) {
+        seg_delta_vs_other ((VBlockP)vb, ctx_dp, ctx_get_existing_ctx (vb, dict_id_INFO_BaseCounts), 
+                            value, value_len, -1);
+        return false; // caller needn't seg
     }
-    else { 
-        con         = FIRSTENT (MiniContainer, container_ctx->con_cache);
-        arr_dict_id = con->items[0].dict_id;
-        arr_ctx     = ctx_get_ctx (vb, arr_dict_id);
+    else {
+        // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample)
+        ctx_dp->last_value.i = atoi (value);
+        return true; // caller should seg
     }
+}
 
-    uint32_t add_bytes = (uint32_t)field_len; // we will deduct bytes added by sub-arrays
+// return true if caller still needs to seg 
+static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value_len)
+{
+    Context *ctx_basecounts= ctx_get_ctx (vb, dict_id_INFO_BaseCounts);
+    Context *ctx_refalt = &vb->contexts[VCF_REFALT];
 
-    // count fields (1 + number of seperators)
-    con->repeats=1;
-    for (int32_t i=0; i < field_len; i++) 
-        if (field[i] == sep) con->repeats++;
+    if (ctx_refalt->last_txt_len != 3) return true; // not simple two bases - caller should seg
 
-    for (uint32_t i=0; i < con->repeats; i++) { // field_len will be -1 after last number
+    char *str = (char *)value;
+    ctx_basecounts->last_value.i = 0;
 
-        const char *this_item = field;
-        bool is_subarray = false;
-        for (; field_len && *field != sep; field++, field_len--) 
-            if (*field == subarray_sep) 
-                is_subarray = true;
+    uint32_t counts[4], sorted_counts[4] = {}; // corresponds to A, C, G, T
 
-        unsigned this_item_len  = (unsigned)(field - this_item);
-
-        // case: its a sub-array
-        if (is_subarray) {
-            vcf_seg_INFO_array (vb, arr_ctx, sf_did_i, this_item, this_item_len, subarray_sep, 0);
-            add_bytes -= this_item_len; // sub-array will account for itself
-            arr_ctx->numeric_only = false;
-        }
-
-        // case: its an scalar
-        else 
-            seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, 0);
-
-        field_len--; // skip seperator
-        field++;
+    SAFE_ASSIGN (&value[value_len], 0);
+    for (unsigned i=0; i < 4; i++) {
+        counts[i] = strtoul (str, &str, 10);
+        str++; // skip comma seperator
+        ctx_basecounts->last_value.i += counts[i];
     }
+    SAFE_RESTORE;
 
-    container_seg_by_ctx (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes);
+    if (str - value != value_len + 1 /* +1 due to final str++ */) return true; // invalid BaseCounts data - caller should seg
+
+    const char *refalt = ENT (const char, vb->txt_data, ctx_refalt->last_txt);
+
+    unsigned ref_i = acgt_encode[(int)refalt[0]];
+    unsigned alt_i = acgt_encode[(int)refalt[2]];
+
+    bool used[4] = {};
+    sorted_counts[0] = counts[ref_i]; // first - the count of the REF base
+    sorted_counts[1] = counts[alt_i]; // second - the count of the ALT base
+    used[ref_i] = used[alt_i] = true;
+
+    // finally - the other two cases in their original order (usually these are 0)
+    for (unsigned sc_i=2; sc_i <= 3; sc_i++)
+        for (unsigned c_i=0; c_i <= 3; c_i++)
+            if (!used[c_i]) { // found a non-zero count
+                sorted_counts[sc_i] = counts[c_i];
+                used[c_i] = true;
+                break;
+            }
+
+    char snip[2 + value_len + 1]; // +1 for \0
+    sprintf (snip, "%c%c%u,%u,%u,%u", SNIP_SPECIAL, VCF_SPECIAL_BaseCounts, 
+             sorted_counts[0], sorted_counts[1], sorted_counts[2], sorted_counts[3]);
+
+    seg_by_ctx ((VBlockP)vb, snip, value_len+2, ctx_basecounts, value_len, NULL); 
+    
+    ctx_basecounts->flags.store = STORE_INT;
+    vb->has_basecounts = true;
+
+    return false; // we already segged - caller needn't seg
 }
 
 // INFO fields with a format originating from the VEP software, eg
@@ -354,8 +356,8 @@ static inline bool vcf_seg_test_svlen (VBlockVCF *vb, const char *svlen_str, uns
     return last_delta == -svlen;
 }
 
-static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id, 
-                                           const char **this_value, unsigned *this_value_len, char *optimized_snip)
+static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id, 
+                                            const char **this_value, unsigned *this_value_len, char *optimized_snip)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     unsigned optimized_snip_len;
@@ -382,9 +384,11 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         return false; // do not add to dictionary/b250 - we already did it
     }
 
-    // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample)
+    else if (dict_id.num == dict_id_INFO_BaseCounts)
+        return vcf_seg_INFO_BaseCounts (vb, *this_value, *this_value_len);
+    
     else if (dict_id.num == dict_id_INFO_DP) 
-        ctx_get_ctx (vb_, dict_id)->last_value.i = atoi (*this_value);
+        return vcf_seg_INFO_DP (vb, *this_value, *this_value_len);
 
     // in case of AC, AN and AF - we store the values, and we postpone handling AC to the finalization
     else if (dict_id.num == dict_id_INFO_AC) { 
@@ -423,14 +427,14 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
              dict_id.num == dict_id_INFO_AGE_HISTOGRAM_HOM) {
 
         Context *ctx = ctx_get_ctx (vb, dict_id);
-        vcf_seg_INFO_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',', '|');
+        seg_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',', '|');
         return false;
     }
 
     else if (dict_id.num == dict_id_INFO_DP4) {
         // tested also for dict_id_INFO_SF, but it makes it worse
         Context *ctx = ctx_get_ctx (vb, dict_id);
-        vcf_seg_INFO_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',', 0);
+        seg_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',', 0);
         return false;
     }
 
@@ -512,17 +516,20 @@ static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, 
     return 0;
 }
 
-static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len, int64_t ad_sum)
+static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len,
+                                           bool ad_has_sum)
 {
     // case: if there is only one sample there is an INFO/DP too, and it is the same - we store a delta of 0 
     Context *info_dp_ctx;
-    if (vcf_num_samples == 1 && (info_dp_ctx = ctx_get_existing_ctx ((VBlockP)vb, dict_id_INFO_DP))) 
-        return seg_delta_vs_other ((VBlockP)vb, ctx, info_dp_ctx, cell, cell_len, 0);
+    if (vcf_num_samples == 1 && (info_dp_ctx = ctx_get_existing_ctx (vb, dict_id_INFO_DP))) 
+        return seg_delta_vs_other ((VBlockP)vb, ctx, info_dp_ctx, cell, cell_len, -1);
 
     // case: no valid AD in this sample - store in transposed matrix
-    if (ad_sum < 0)
+    if (!ad_has_sum)
         return vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len, cell_len); // this handles DP that is an integer or '.'
 
+    return seg_delta_vs_other ((VBlockP)vb, ctx, ctx_get_existing_ctx (vb, dict_id_FORMAT_AD), cell, cell_len, -1);
+/*
     // if DP is not an integer number or is not equal to ad_sum - store as regular snip
     if (!str_get_int (cell, cell_len, &ctx->last_value.i)) 
         return seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL); 
@@ -532,7 +539,7 @@ static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const ch
     // store DP as delta vs the sum of AD components. It is usually exactly equal, but sometimes DP is a bit lower
     char snip[20] = { SNIP_SPECIAL, VCF_SPECIAL_DP };
     unsigned snip_len = 2 + str_int (ad_sum - ctx->last_value.i, &snip[2]);
-    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, cell_len, NULL);     
+    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, cell_len, NULL);     */
 }
 
 // the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,
@@ -708,12 +715,16 @@ static inline unsigned seg_snip_len_tnc (const char *snip, bool *has_13)
 // a comma-separated array - each element goes into its own item context, single repeat (somewhat similar to compound, but 
 // intended for simple arrays - just comma separators, no delta between lines or optimizations)
 #define MAX_AD_ARRAY_ITEMS 36
-static WordIndex vcf_seg_FORMAT_AD (VBlockVCF *vb, DictId dict_id, const char *value, int value_len,
-                                    int64_t *ad_sum) // optional out - sum of elements, or -1 if cannot sum
+static WordIndex vcf_seg_FORMAT_AD (VBlockVCF *vb, Context *ctx, const char *value, int value_len,
+                                    bool *ad_has_sum) // optional out
 {   
-    Container con = seg_initialize_container_array ((VBlockP)vb, dict_id, false);    
+    Container con = seg_initialize_container_array ((VBlockP)vb, ctx->dict_id, false);    
 
-    if (ad_sum) *ad_sum = 0; // initialize
+    if (ad_has_sum) {
+        ctx->last_value.i = 0; // initialize
+        ctx->flags.store = STORE_INT;
+        *ad_has_sum = true;
+    }
     
     for (con.nitems_lo=0; con.nitems_lo < MAX_AD_ARRAY_ITEMS && value_len > 0; con.nitems_lo++) { // value_len will be -1 after last number
 
@@ -722,12 +733,12 @@ static WordIndex vcf_seg_FORMAT_AD (VBlockVCF *vb, DictId dict_id, const char *v
 
         unsigned number_len = (unsigned)(value - snip);
 
-        if (ad_sum && *ad_sum >= 0) {
+        if (ad_has_sum && *ad_has_sum) {
             int64_t number;
             if (str_get_int (snip, number_len, &number))
-                *ad_sum += number;
+                ctx->last_value.i += number;
             else
-                *ad_sum = -1; // not a valid number - we cannot return a sum
+                *ad_has_sum = false; // not a valid number - we cannot return a sum
         }
 
         if (con.nitems_lo == MAX_AD_ARRAY_ITEMS-1) // final permitted repeat - take entire remaining string
@@ -735,18 +746,21 @@ static WordIndex vcf_seg_FORMAT_AD (VBlockVCF *vb, DictId dict_id, const char *v
 
         if (value_len > 0) con.items[con.nitems_lo].seperator[0] = ','; 
         
+        Context *ctx_item = ctx_get_ctx (vb, con.items[con.nitems_lo].dict_id);
+        ctx_item->flags.store = STORE_INT;
+
         if (con.nitems_lo == 0)
             // the first value is usually somewhat related to the overall sample depth, therefore values within 
             // a sample are expected to be correlated - so we store it transposed
-            vcf_seg_FORMAT_transposed (vb, ctx_get_ctx (vb, con.items[con.nitems_lo].dict_id), snip, number_len, number_len + (value_len>0 /* has comma */));
+            vcf_seg_FORMAT_transposed (vb, ctx_item, snip, number_len, number_len + (value_len>0 /* has comma */));
         else
-            seg_by_dict_id (vb, snip, number_len, con.items[con.nitems_lo].dict_id, number_len + (value_len>0 /* has comma */));
+            seg_by_ctx ((VBlockP)vb, snip, number_len, ctx_item, number_len + (value_len>0 /* has comma */), NULL);
         
         value_len--; // skip comma
         value++;
     }
 
-    return container_seg_by_dict_id (vb, dict_id, (ContainerP)&con, 0);
+    return container_seg_by_ctx ((VBlockP)vb, ctx, (ContainerP)&con, 0, 0, 0);
 }
 
 static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP samples, uint32_t sample_i,
@@ -758,7 +772,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
 {
     Context *dp_ctx = NULL;
     bool end_of_sample = !sample_len;
-    int64_t ad_sum = -1; // sum of components of AD field (-1 means sum not available)
+    bool ad_has_sum = false; // field AD has a valid last_value
 
     uint32_t num_items = con_nitems (*samples);
     for (unsigned sf=0; sf < num_items; sf++) { // iterate on the order as in the line
@@ -783,6 +797,8 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
         if (!cell || !cell_len)
             node_index = seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
 
+        // note: cannot use switch bc dict_id_* are variables, not constants
+
         else if (dict_id.num == dict_id_FORMAT_GT)
             node_index = vcf_seg_FORMAT_GT (vb, ctx, dl, cell, cell_len, sample_i);
 
@@ -802,6 +818,9 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
             optimize_vector_2_sig_dig (cell, cell_len, optimized_snip, &optimized_snip_len))
             EVAL_OPTIMIZED
 
+        else if (dict_id.num == dict_id_FORMAT_PL) // not optimized
+            node_index = seg_array ((VBlockP)vb, ctx, ctx->did_i, cell, cell_len, ',', 0);
+
         // case: PS ("Phase Set") - might be the same as POS (for example, if set by Whatshap: https://whatshap.readthedocs.io/en/latest/guide.html#features-and-limitations)
         // or might be the same as the previous line
         else if (dict_id.num == dict_id_FORMAT_PS) 
@@ -811,7 +830,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
             node_index = vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len, cell_len);
             
         else if (dict_id.num == dict_id_FORMAT_DP) 
-            node_index = vcf_seg_FORMAT_DP (vb, ctx, cell, cell_len, ad_sum);
+            node_index = vcf_seg_FORMAT_DP (vb, ctx, cell, cell_len, ad_has_sum);
             
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
@@ -820,8 +839,8 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
 
         else if (dict_id.num == dict_id_FORMAT_AD  || dict_id.num == dict_id_FORMAT_ADALL || 
                  dict_id.num == dict_id_FORMAT_ADF || dict_id.num == dict_id_FORMAT_ADR) 
-            node_index = vcf_seg_FORMAT_AD (vb, dict_id, cell, cell_len, 
-                                            dict_id.num == dict_id_FORMAT_AD ? &ad_sum : NULL);
+            node_index = vcf_seg_FORMAT_AD (vb, ctx, cell, cell_len, 
+                                            dict_id.num == dict_id_FORMAT_AD ? &ad_has_sum : NULL);
 
         else // default
             node_index = seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
@@ -914,6 +933,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     VBlockVCF *vb = (VBlockVCF *)vb_;
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
     vb->ac = vb->an = vb->af = NULL;
+    vb->has_basecounts = false;
 
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;
@@ -950,6 +970,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         vcf_seg_optimize_ref_alt (vb_, field_start_line, *field_start, *alt_start);
     else
         seg_by_did_i (vb, field_start, field_len + alt_len + 1, VCF_REFALT, field_len + alt_len + 2);
+
+    vb->contexts[VCF_REFALT].last_txt = field_start - vb->txt_data.data; // used by vcf_seg_INFO_BaseCounts
+    vb->contexts[VCF_REFALT].last_txt_len = field_len + alt_len + 1;
 
     SEG_NEXT_ITEM (VCF_QUAL);
     SEG_NEXT_ITEM (VCF_FILTER);

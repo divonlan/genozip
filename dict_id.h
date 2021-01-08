@@ -41,7 +41,8 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_FORMAT_GQ, dict_id_FORMAT_DS,
                 dict_id_INFO_AC,  dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD, // some VCF INFO subfields
                 dict_id_INFO_DP4, dict_id_INFO_SF, dict_id_INFO_END, dict_id_INFO_SVLEN, dict_id_WindowsEOL,
-
+                dict_id_INFO_BaseCounts,
+                
                 // tags from VEP (Varient Effect Predictor) and similar tools
                 dict_id_INFO_CSQ, dict_id_INFO_vep, dict_id_INFO_DP_HIST, dict_id_INFO_GQ_HIST, 
                 dict_id_INFO_AGE_HISTOGRAM_HET, dict_id_INFO_AGE_HISTOGRAM_HOM,
@@ -90,7 +91,8 @@ extern bool dict_id_is_match (DictId template, DictId candidate);
 
 extern const char *dict_id_display_type (DataType dt, DictId dict_id);
 
-typedef struct { char s[DICT_ID_LEN+1]; } DisplayPrintId;
-extern DisplayPrintId dis_dict_id (DictId dict_id);
-
+typedef struct { char s[20]; } DisplayPrintId;
+extern DisplayPrintId dis_dict_id_ex (DictId dict_id, bool with_type_if_vcf);
+#define dis_dict_id(dict_id) dis_dict_id_ex ((DictId)(dict_id), false)
+#define dis_dict_id_name(dict_id) dis_dict_id_ex ((DictId)(dict_id), true) // display with FORMAT/ or INFO/ if VCF/BCF
 #endif

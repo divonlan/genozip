@@ -124,7 +124,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         static const char *store[4] = { [STORE_NONE]="NONE", [STORE_INT]="INT", [STORE_FLOAT]="FLOAT", [STORE_INDEX]="INDEX"};
 
         sprintf (str, SEC_TAB "%s param=%u store=%s paired=%u copy_param=%u all_the_same=%u ctx_specific=%u\n",
-                 dis_dict_id (h->dict_id).s, h->param, store[h->h.flags.ctx.store], 
+                 dis_dict_id_name (h->dict_id).s, h->param, store[h->h.flags.ctx.store], 
                  h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.all_the_same, h->h.flags.ctx.ctx_specific); 
         break;
     }
@@ -132,7 +132,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     case SEC_LOCAL: {
         SectionHeaderCtx *h = (SectionHeaderCtx *)header;
         sprintf (str, SEC_TAB "%s ltype=%s param=%u paired=%u copy_param=%u ctx_specific=%u\n",
-                 dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, 
+                 dis_dict_id_name (h->dict_id).s, lt_name (h->ltype), h->param, 
                  h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.ctx_specific); 
         break;
     }

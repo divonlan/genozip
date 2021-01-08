@@ -84,6 +84,11 @@ typedef uint64_t CharIndex;   // index within dictionary
 typedef int32_t WordIndex;    // used for word and node indices
 typedef int64_t PosType;      // used for position coordinate within a genome
 
+typedef union LastValueType { // 64 bit
+    int64_t i;
+    double f;
+} LastValueType;
+
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads;
 extern const char *global_cmd;            // set once in main()

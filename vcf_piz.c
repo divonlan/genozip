@@ -155,9 +155,9 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DS)
     Context *ctx_gt = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT);
 
     // we are guaranteed that if we have a special snip, then all values are either '0' or '1';
-    char *gt = ENT (char, vb->txt_data, ctx_gt->last_value.i);
+    char *gt = ENT (char, vb->txt_data, ctx_gt->last_txt);
     unsigned dosage=0;
-    for (unsigned i=0; i < ctx_gt->last_delta; i+=2) // last_delta contains container reconstruction length ; +2 to skip phase character
+    for (unsigned i=0; i < ctx_gt->last_txt_len; i+=2) 
         dosage += gt[i]-'0';
 
     char float_format[10];
@@ -170,33 +170,41 @@ done:
     return false; // no new value
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_BaseCounts)
 {
-    if (!reconstruct) goto done;
+    Context *ctx_refalt = &vb->contexts[VCF_REFALT];
+    ASSERTE (ctx_refalt->last_txt_len == 3, "Expecting ctx_refalt->last_txt_len=%u to be 3", ctx_refalt->last_txt_len);
+    const char *refalt = ENT (const char, vb->txt_data, ctx_refalt->last_txt);
 
-    // get sum of elements in AD field
-    Context *ctx_ad = ctx_get_existing_ctx (vb, dict_id_FORMAT_AD);
-    char *ad = ENT (char, vb->txt_data, ctx_ad->last_value.i); // for containers, last_value is index into txt_data of its reconstruction
-    char *after = &ad[ctx_ad->last_delta]; // for containers, last_delta is the length of the reconstruction
-    uint64_t ad_sum = 0;
+    uint32_t counts[4], sorted_counts[4] = {}; // counts of A, C, G, T
 
-    SAFE_ASSIGN (after, 0);
-    
-    while (ad < after) {
-        ad_sum += strtoull (ad, &ad, 10);
-        ad++; // skip ',' seperator
+    new_value->i = 0;
+    char *str = (char *)snip;
+
+    for (unsigned i=0; i < 4; i++) {
+        sorted_counts[i] = strtoul (str, &str, 10);
+        str++; // skip comma seperator
+        new_value->i += sorted_counts[i];
     }
 
-    SAFE_RESTORE;
+    if (!reconstruct) goto done; // just return the new value
 
-    int64_t ad_minus_dp;
-    ASSERTE (str_get_int (snip, snip_len, &ad_minus_dp), "snip is not an integer: %.*s", snip_len, snip);
+    ASSERTE (str - snip == snip_len + 1, "expecting (str-snip)=%d == (snip_len+1)=%u", (int)(str - snip), snip_len+1);
 
-    // reconstruct from ad_sum and delta stored in snip
-    RECONSTRUCT_INT (ad_sum - ad_minus_dp);
+    unsigned ref_i = acgt_encode[(int)refalt[0]];
+    unsigned alt_i = acgt_encode[(int)refalt[2]];
+    
+    counts[ref_i] = sorted_counts[0];
+    counts[alt_i] = sorted_counts[1];
+    
+    unsigned sc_i=2;
+    for (unsigned i=0; i <= 3; i++)
+        if (ref_i != i && alt_i != i) counts[i] = sorted_counts[sc_i++];
+
+    bufprintf (vb, &vb->txt_data, "%u,%u,%u,%u", counts[0], counts[1], counts[2], counts[3]);
 
 done:
-    return false; // no new value
+    return true; // has new value
 }
 
 // the case where SVLEN is minus the delta between END and POS

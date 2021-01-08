@@ -19,7 +19,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->ploidy = 0;
     vb->ac = vb->an = vb->af = NULL;
     vb->ac_len = vb->an_len = vb->af_len = 0;
-    vb->is_af_before_ac = vb->is_an_before_ac = false;
+    vb->is_af_before_ac = vb->is_an_before_ac = vb->has_basecounts = false;
     vb->gt_prev_ploidy = 0;
     vb->gt_prev_phase = 0;
     vb->num_haplotypes_per_line = 0;

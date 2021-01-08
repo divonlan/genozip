@@ -479,6 +479,7 @@ WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, cons
     other_ctx->no_stons = true;
     other_ctx->flags.store = STORE_INT;
 
+    ctx->numeric_only = false;
     return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, value_len, NULL);
 
 fallback:
@@ -640,12 +641,80 @@ void seg_compound_field (VBlock *vb,
     container_seg_by_ctx (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con_nitems(con) + num_double_sep - 1) + add_for_eol);
 }
 
+// an array or array of arrays
+WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslidation_did_i, 
+                     const char *value, int32_t value_len, // must be signed
+                     char sep, 
+                     char subarray_sep) // if non-zero, will attempt to find internal arrays
+{
+    MiniContainer *con;
+    DictId arr_dict_id;
+    Context *arr_ctx;
+
+    // first use in this VB - prepare context where array elements will go in
+    if (!container_ctx->con_cache.len) {
+        const uint8_t *id = container_ctx->dict_id.id;
+        arr_dict_id = (DictId){ .id = { id[0], 
+                                        ((id[1]+1) % 256) | 128, // different IDs for top array, subarray and items
+                                        id[2], id[3], id[4], id[5], id[6], id[7] } };
+        
+        buf_alloc (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "contexts->con_cache");
+
+        con = FIRSTENT (MiniContainer, container_ctx->con_cache);
+        *con = (MiniContainer){ .nitems_lo = 1, 
+                                .drop_final_item_sep = true,
+                                .items     = { { .dict_id   = arr_dict_id, // only one item
+                                                 .seperator = { sep } } } };
+
+        arr_ctx = ctx_get_ctx (vb, arr_dict_id);
+        arr_ctx->st_did_i = stats_conslidation_did_i;
+    }
+    else { 
+        con         = FIRSTENT (MiniContainer, container_ctx->con_cache);
+        arr_dict_id = con->items[0].dict_id;
+        arr_ctx     = ctx_get_ctx (vb, arr_dict_id);
+    }
+
+    uint32_t add_bytes = (uint32_t)value_len; // we will deduct bytes added by sub-arrays
+
+    // count repeats (1 + number of seperators)
+    con->repeats=1;
+    for (int32_t i=0; i < value_len; i++) 
+        if (value[i] == sep) con->repeats++;
+
+    for (uint32_t i=0; i < con->repeats; i++) { // value_len will be -1 after last number
+
+        const char *this_item = value;
+        bool is_subarray = false;
+        for (; value_len && *value != sep; value++, value_len--) 
+            if (*value == subarray_sep) 
+                is_subarray = true;
+
+        unsigned this_item_len  = (unsigned)(value - this_item);
+
+        // case: its a sub-array
+        if (is_subarray) {
+            seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0);
+            add_bytes -= this_item_len; // sub-array will account for itself
+            arr_ctx->numeric_only = false;
+        }
+
+        // case: its an scalar
+        else 
+            seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, 0);
+
+        value_len--; // skip seperator
+        value++;
+    }
+
+    return container_seg_by_ctx (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes);
+}
+
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 
                             const char *snip, unsigned snip_len, 
                             unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
     buf_alloc_more (vb, &ctx->local, snip_len + 1, vb->lines.len * (snip_len+1), char, CTX_GROWTH, "contexts->local");
-    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + snip_len + 1, vb->lines.len * (snip_len+1)), 2, ctx->name); 
     if (snip_len) buf_add (&ctx->local, snip, snip_len); 
     
     static const char sep[1] = { SNIP_SEP };
@@ -658,7 +727,6 @@ void seg_add_to_local_fixed (VBlock *vb, Context *ctx, const void *data, unsigne
 {
     if (data_len) {
         buf_alloc_more (vb, &ctx->local, data_len, vb->lines.len * data_len, char, CTX_GROWTH, "contexts->local")
-        //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + data_len, vb->lines.len * data_len), CTX_GROWTH, ctx->name); 
         buf_add (&ctx->local, data, data_len); 
     }
 }
@@ -666,7 +734,6 @@ void seg_add_to_local_fixed (VBlock *vb, Context *ctx, const void *data, unsigne
 void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned add_bytes)
 {
     buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint8_t, CTX_GROWTH, "contexts->local");
-    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint8_t), CTX_GROWTH, ctx->name);
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int8_t, value);
     NEXTENT (uint8_t, ctx->local) = value;
@@ -677,7 +744,6 @@ void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned a
 void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned add_bytes)
 {
     buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint16_t, CTX_GROWTH, "contexts->local");
-    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint16_t), CTX_GROWTH, ctx->name);
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int16_t, value);
     NEXTENT (uint16_t, ctx->local) = BGEN16 (value);
@@ -688,7 +754,6 @@ void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned
 void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes)
 {
     buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
-    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name);
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int32_t, value);
     NEXTENT (uint32_t, ctx->local) = BGEN32 (value);
@@ -699,7 +764,6 @@ void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned
 void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned add_bytes)
 {
     buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint64_t, CTX_GROWTH, "contexts->local");
-    //buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint64_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int64_t, value);
     NEXTENT (uint64_t, ctx->local) = BGEN64 (value);

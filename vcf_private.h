@@ -29,7 +29,7 @@ typedef struct VBlockVCF {
     // as a function of AN and AF if possible
     const char *ac, *an, *af;  
     uint32_t ac_len, af_len, an_len;
-    bool is_an_before_ac, is_af_before_ac;
+    bool is_an_before_ac, is_af_before_ac, has_basecounts;
 
     // used for segging FORMAT/GT
     uint32_t gt_prev_ploidy;

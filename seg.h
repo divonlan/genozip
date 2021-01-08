@@ -62,6 +62,8 @@ extern void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, u
 
 extern WordIndex seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
 
+extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep);
+
 typedef struct { bool slash, pipe, colon, dot, whitespace; /* seperators */ } SegCompoundArg; 
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
                                 SegCompoundArg arg, unsigned nonoptimized_len, unsigned add_for_eol);

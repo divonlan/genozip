@@ -228,7 +228,8 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     }
 
     case SNIP_CONTAINER:
-        container_reconstruct (vb, snip_ctx, word_index, snip+1, snip_len-1);
+        new_value = container_reconstruct (vb, snip_ctx, word_index, snip+1, snip_len-1);
+        have_new_value = true;
         break;
 
     case SNIP_SPECIAL:
@@ -302,7 +303,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     if (!ctx->dict_id.num) 
         ctx = &vb->contexts[ctx->did_i]; // ctx->did_i is different than did_i if its an alias
 
-    uint64_t start = vb->txt_data.len;
+    ctx->last_txt = (uint32_t)vb->txt_data.len;
 
     // case: we have b250 data
     if (ctx->b250.len ||
@@ -310,8 +311,11 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         DECLARE_SNIP;
         uint32_t word_index = LOAD_SNIP(ctx->did_i); // if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
 
-        if (!snip) return -1; // WORD_INDEX_MISSING_SF - remove preceding separator
-        
+        if (!snip) {
+            ctx->last_txt_len = 0;
+            return -1; // WORD_INDEX_MISSING_SF - remove preceding separator
+        }
+
         reconstruct_one_snip (vb, ctx, word_index, snip, snip_len, reconstruct);        
 
         // handle chrom and pos to determine whether this line should be grepped-out in case of --regions
@@ -372,5 +376,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 
-    return (int32_t)(vb->txt_data.len - start);
+    ctx->last_txt_len = (uint32_t)vb->txt_data.len - ctx->last_txt;
+
+    return (int32_t)ctx->last_txt_len;
 } 
