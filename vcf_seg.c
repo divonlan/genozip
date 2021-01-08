@@ -142,9 +142,9 @@ static DictId vcf_seg_get_format_subfield (const char **str, uint32_t *len) // r
     
     // case: unusual field - starts with an out-range character, eg a digit - prefix with @ so its a legal FORMAT dict_id
     else {
-        SAFE_ASSIGN (save, *str - 1, '@')
+        SAFE_ASSIGN (*str - 1, '@');
         dict_id = dict_id_vcf_format_sf (dict_id_make (*str-1, i+1));
-        SAFE_RESTORE (save);
+        SAFE_RESTORE;
     }
 
     *str += i+1;
@@ -487,26 +487,8 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
     return seg_delta_vs_other ((VBlockP)vb, ctx, &vb->contexts[VCF_POS], cell, cell_len, 1000);
 }
 
-// the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,
-// along with the floating point format to allow exact reconstruction
-static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
-{
-    int64_t dosage = ctx_get_ctx (vb, (DictId)dict_id_FORMAT_GT)->last_value.i; // dosage store here by vcf_seg_FORMAT_GT
-    double ds_val;
-
-    if (dosage < 0 || (ds_val = str_get_positive_float (cell, cell_len)) < 0) 
-        return seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
-
-    char snip[30] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
-    unsigned snip_len = 2 + str_get_float_format (cell, cell_len, &snip[2]);
-    snip[snip_len++] = ' ';
-    snip_len += str_int ((int64_t)((ds_val - dosage) * 1000000), &snip[snip_len]);
-
-    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, cell_len, NULL);
-}
-
 // used for DP and GQ - store in transposed matrix in local 
-static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
+static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len, unsigned add_bytes)
 {
     ctx->ltype = LT_UINT32_TR;
     ctx->flags.store = STORE_INT;
@@ -525,11 +507,50 @@ static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, 
 
     // add a LOOKUP to b250
     static const char lookup[1] = { SNIP_LOOKUP };
-    seg_by_ctx ((VBlockP)vb, lookup, 1, ctx, 0, NULL);
-
-    ctx->txt_len += cell_len;
+    seg_by_ctx ((VBlockP)vb, lookup, 1, ctx, add_bytes, NULL);
 
     return 0;
+}
+
+static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len, int64_t ad_sum)
+{
+    // case: if there is only one sample there is an INFO/DP too, and it is the same - we store a delta of 0 
+    Context *info_dp_ctx;
+    if (vcf_num_samples == 1 && (info_dp_ctx = ctx_get_existing_ctx ((VBlockP)vb, dict_id_INFO_DP))) 
+        return seg_delta_vs_other ((VBlockP)vb, ctx, info_dp_ctx, cell, cell_len, 0);
+
+    // case: no valid AD in this sample - store in transposed matrix
+    if (ad_sum < 0)
+        return vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len, cell_len); // this handles DP that is an integer or '.'
+
+    // if DP is not an integer number or is not equal to ad_sum - store as regular snip
+    if (!str_get_int (cell, cell_len, &ctx->last_value.i)) 
+        return seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL); 
+
+    ctx->flags.store = STORE_INT;
+
+    // store DP as delta vs the sum of AD components. It is usually exactly equal, but sometimes DP is a bit lower
+    char snip[20] = { SNIP_SPECIAL, VCF_SPECIAL_DP };
+    unsigned snip_len = 2 + str_int (ad_sum - ctx->last_value.i, &snip[2]);
+    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, cell_len, NULL);     
+}
+
+// the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,
+// along with the floating point format to allow exact reconstruction
+static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
+{
+    int64_t dosage = ctx_get_ctx (vb, (DictId)dict_id_FORMAT_GT)->last_value.i; // dosage store here by vcf_seg_FORMAT_GT
+    double ds_val;
+
+    if (dosage < 0 || (ds_val = str_get_positive_float (cell, cell_len)) < 0) 
+        return seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
+
+    char snip[30] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
+    unsigned snip_len = 2 + str_get_float_format (cell, cell_len, &snip[2]);
+    snip[snip_len++] = ' ';
+    snip_len += str_int ((int64_t)((ds_val - dosage) * 1000000), &snip[snip_len]);
+
+    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, cell_len, NULL);
 }
 
 // increase ploidy of the previous lines, if higher ploidy was encountered
@@ -686,23 +707,40 @@ static inline unsigned seg_snip_len_tnc (const char *snip, bool *has_13)
 
 // a comma-separated array - each element goes into its own item context, single repeat (somewhat similar to compound, but 
 // intended for simple arrays - just comma separators, no delta between lines or optimizations)
-#define MAX_HETERO_ARRAY_ITEMS 36
-static WordIndex vcf_seg_hetero_array_field (VBlock *vb, DictId dict_id, const char *value, int value_len)
+#define MAX_AD_ARRAY_ITEMS 36
+static WordIndex vcf_seg_FORMAT_AD (VBlockVCF *vb, DictId dict_id, const char *value, int value_len,
+                                    int64_t *ad_sum) // optional out - sum of elements, or -1 if cannot sum
 {   
-    Container con = seg_initialize_container_array (vb, dict_id, false);    
+    Container con = seg_initialize_container_array ((VBlockP)vb, dict_id, false);    
 
-    for (con.nitems_lo=0; con.nitems_lo < MAX_HETERO_ARRAY_ITEMS && value_len > 0; con.nitems_lo++) { // value_len will be -1 after last number
+    if (ad_sum) *ad_sum = 0; // initialize
+    
+    for (con.nitems_lo=0; con.nitems_lo < MAX_AD_ARRAY_ITEMS && value_len > 0; con.nitems_lo++) { // value_len will be -1 after last number
 
         const char *snip = value;
         for (; value_len && *value != ','; value++, value_len--) {};
 
         unsigned number_len = (unsigned)(value - snip);
 
-        if (con.nitems_lo == MAX_HETERO_ARRAY_ITEMS-1) // final permitted repeat - take entire remaining string
+        if (ad_sum && *ad_sum >= 0) {
+            int64_t number;
+            if (str_get_int (snip, number_len, &number))
+                *ad_sum += number;
+            else
+                *ad_sum = -1; // not a valid number - we cannot return a sum
+        }
+
+        if (con.nitems_lo == MAX_AD_ARRAY_ITEMS-1) // final permitted repeat - take entire remaining string
             number_len += value_len;
 
         if (value_len > 0) con.items[con.nitems_lo].seperator[0] = ','; 
-        seg_by_dict_id (vb, snip, number_len, con.items[con.nitems_lo].dict_id, number_len + (value_len>0 /* has comma */));
+        
+        if (con.nitems_lo == 0)
+            // the first value is usually somewhat related to the overall sample depth, therefore values within 
+            // a sample are expected to be correlated - so we store it transposed
+            vcf_seg_FORMAT_transposed (vb, ctx_get_ctx (vb, con.items[con.nitems_lo].dict_id), snip, number_len, number_len + (value_len>0 /* has comma */));
+        else
+            seg_by_dict_id (vb, snip, number_len, con.items[con.nitems_lo].dict_id, number_len + (value_len>0 /* has comma */));
         
         value_len--; // skip comma
         value++;
@@ -718,9 +756,10 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
                                 unsigned *num_colons,
                                 bool *has_13)
 {
-    Context *dp_ctx = NULL, *info_dp_ctx = NULL;    
+    Context *dp_ctx = NULL;
     bool end_of_sample = !sample_len;
-    
+    int64_t ad_sum = -1; // sum of components of AD field (-1 means sum not available)
+
     uint32_t num_items = con_nitems (*samples);
     for (unsigned sf=0; sf < num_items; sf++) { // iterate on the order as in the line
 
@@ -729,12 +768,8 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
         DictId dict_id = samples->items[sf].dict_id;
         Context *ctx = ctx_get_ctx (vb, dict_id);
 
-        // just initialize DP stuff, we're going to seg DP a bit later
-        if (cell && ctx->dict_id.num == dict_id_FORMAT_DP) {
-            dp_ctx = ctx;
-            info_dp_ctx = ctx_get_existing_ctx ((VBlockP)vb, dict_id_INFO_DP);
-            ctx->last_value.i = atoi (cell); // an integer terminated by : \t or \n
-        }
+        // DP here means we can use it for delta of MIN_DP
+        if (cell && ctx->dict_id.num == dict_id_FORMAT_DP) dp_ctx = ctx;
 
         WordIndex node_index;
         unsigned optimized_snip_len;
@@ -772,14 +807,11 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
         else if (dict_id.num == dict_id_FORMAT_PS) 
             node_index = vcf_seg_FORMAT_PS (vb, ctx, cell, cell_len);
 
-        // case: DP - if there is an INFO/DP too, and it is the same - we store a delta of 0 
-        // (this usually means there's one sample) - if they are not the same don't delta
-        else if (dict_id.num == dict_id_FORMAT_DP && vcf_num_samples == 1) 
-            node_index = seg_delta_vs_other ((VBlockP)vb, ctx, info_dp_ctx, cell, cell_len, 0);
-
-        else if (dict_id.num == dict_id_FORMAT_DP ||
-                 dict_id.num == dict_id_FORMAT_GQ) 
-            node_index = vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len);
+        else if (dict_id.num == dict_id_FORMAT_GQ) 
+            node_index = vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len, cell_len);
+            
+        else if (dict_id.num == dict_id_FORMAT_DP) 
+            node_index = vcf_seg_FORMAT_DP (vb, ctx, cell, cell_len, ad_sum);
             
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
@@ -788,9 +820,10 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
 
         else if (dict_id.num == dict_id_FORMAT_AD  || dict_id.num == dict_id_FORMAT_ADALL || 
                  dict_id.num == dict_id_FORMAT_ADF || dict_id.num == dict_id_FORMAT_ADR) 
-            node_index = vcf_seg_hetero_array_field ((VBlockP)vb, dict_id, cell, cell_len);
+            node_index = vcf_seg_FORMAT_AD (vb, dict_id, cell, cell_len, 
+                                            dict_id.num == dict_id_FORMAT_AD ? &ad_sum : NULL);
 
-        else
+        else // default
             node_index = seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
         
         if (node_index != WORD_INDEX_MISSING_SF) 

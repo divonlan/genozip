@@ -197,9 +197,9 @@ PosType seg_pos_field (VBlock *vb,
         if (snip_did_i != base_did_i && err == ERR_SEG_OUT_OF_RANGE) err = ERR_SEG_NO_ERROR;
 
         if (err) {
-            SAFE_ASSIGN (1, pos_str-1, SNIP_DONT_STORE);
+            SAFE_ASSIGN (pos_str-1, SNIP_DONT_STORE);
             seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, add_bytes, NULL); 
-            SAFE_RESTORE (1);
+            SAFE_RESTORE;
             snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
             return 0; // invalid pos
         }
@@ -310,9 +310,9 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;
-    SAFE_ASSIGN (1, &id_snip[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
+    SAFE_ASSIGN (&id_snip[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
     seg_by_ctx (vb, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len + !!account_for_separator, NULL); // account for the entire length, and sometimes with \t
-    SAFE_RESTORE (1);
+    SAFE_RESTORE;
 }
 
 void seg_integer_or_not (VBlockP vb, ContextP ctx, 
@@ -467,10 +467,9 @@ WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, cons
 {
     if (!other_ctx) goto fallback;
 
-    int64_t my_value;
-    if (!str_get_int (value, value_len, &my_value)) goto fallback;
+    if (!str_get_int (value, value_len, &ctx->last_value.i)) goto fallback;
 
-    int64_t delta = my_value - other_ctx->last_value.i; 
+    int64_t delta = ctx->last_value.i - other_ctx->last_value.i; 
     if (max_delta >= 0 && (delta > max_delta || delta < -max_delta)) goto fallback;
 
     char snip[100]; 

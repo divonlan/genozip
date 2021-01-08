@@ -48,13 +48,15 @@ extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 // Samples stuff
 extern void vcf_samples_add  (const char *samples_str);
 
-#define VCF_SPECIAL { vcf_piz_special_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_AC, vcf_piz_special_SVLEN, vcf_piz_special_DS }
+#define VCF_SPECIAL { vcf_piz_special_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_AC, vcf_piz_special_SVLEN, \
+                      vcf_piz_special_DS, vcf_piz_special_DP }
 SPECIAL (VCF, 0, REFALT, vcf_piz_special_REFALT);
 SPECIAL (VCF, 1, FORMAT, vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2, AC,     vcf_piz_special_AC);
 SPECIAL (VCF, 3, SVLEN,  vcf_piz_special_SVLEN);
 SPECIAL (VCF, 4, DS,     vcf_piz_special_DS);
-#define NUM_VCF_SPECIAL 5
+SPECIAL (VCF, 5, DP,     vcf_piz_special_DP);
+#define NUM_VCF_SPECIAL 6
 
 #define VCF_DICT_ID_ALIASES \
     /*         alias                           maps to this ctx          */  \

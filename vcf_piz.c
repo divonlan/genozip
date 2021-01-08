@@ -170,6 +170,34 @@ done:
     return false; // no new value
 }
 
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP)
+{
+    if (!reconstruct) goto done;
+
+    // get sum of elements in AD field
+    Context *ctx_ad = ctx_get_existing_ctx (vb, dict_id_FORMAT_AD);
+    char *ad = ENT (char, vb->txt_data, ctx_ad->last_value.i); // for containers, last_value is index into txt_data of its reconstruction
+    char *after = &ad[ctx_ad->last_delta]; // for containers, last_delta is the length of the reconstruction
+    uint64_t ad_sum = 0;
+
+    SAFE_ASSIGN (after, 0);
+    
+    while (ad < after) {
+        ad_sum += strtoull (ad, &ad, 10);
+        ad++; // skip ',' seperator
+    }
+
+    SAFE_RESTORE;
+
+    int64_t ad_minus_dp;
+    ASSERTE (str_get_int (snip, snip_len, &ad_minus_dp), "snip is not an integer: %.*s", snip_len, snip);
+
+    // reconstruct from ad_sum and delta stored in snip
+    RECONSTRUCT_INT (ad_sum - ad_minus_dp);
+
+done:
+    return false; // no new value
+}
 
 // the case where SVLEN is minus the delta between END and POS
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVLEN)

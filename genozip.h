@@ -170,6 +170,13 @@ void func (VBlockP vb, uint32_t vb_line_i, \
 
 typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 
+#define SAFE_ASSIGN(addr,char_val) /* we are careful to evaluate addr, char_val only once, lest they contain eg ++ */ \
+    char *__addr = (char*)(addr); \
+    char __save = *__addr; \
+    *__addr = (char_val)
+
+#define SAFE_RESTORE *__addr = __save
+
 // sanity checks
 extern void main_exit (bool show_stack, bool is_error);
 #define exit_on_error(show_stack) main_exit (show_stack, true)

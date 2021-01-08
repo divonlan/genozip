@@ -194,7 +194,7 @@ extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vb_ctx, bool is_lco
 extern Context *ctx_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType map_did_i, DidIType *num_contexts, DictId dict_id);
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts, (DictId)(dict_id))
+#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id))
 static inline Context *ctx_get_ctx_do (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id)
 {
     DidIType did_i = dict_id_to_did_i_map[dict_id.map_key];

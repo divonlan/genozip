@@ -99,13 +99,6 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
     dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
 }
 
-#define SAFE_ASSIGN(reg,addr,char_val) /* we are careful to evaluate addr, char_val only once, lest they contain eg ++ */ \
-    char *__addr##reg = (char*)(addr); \
-    char __save##reg = *__addr##reg; \
-    *__addr##reg = (char_val);
-
-#define SAFE_RESTORE(reg) *__addr##reg = __save##reg; 
-
 #define SEG_EOL(f,account_for_ascii10) seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); 
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
