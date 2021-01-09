@@ -155,6 +155,7 @@ typedef uint8_t TranslatorId;
     enum { src_dt##2##dst_dt##_##name = num }; // define constant
 
 #define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item)
+#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, unsigned rep, char *reconstructed, int32_t reconstructed_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (BufferP txtheader_buf)
 

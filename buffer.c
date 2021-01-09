@@ -801,9 +801,16 @@ void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
 void buf_add_string (VBlockP vb, Buffer *buf, const char *str) 
 { 
     unsigned len = strlen (str); 
-    buf_alloc_more (vb, buf, len+1, 1000, char, 2, "string_buf");
+    buf_alloc_more (vb, buf, len+1, 1000, char, 2, buf->name ? buf->name : "string_buf");
     buf_add (buf, str, len);
     buf->data[buf->len] = '\0'; // string terminator without increasing buf->len
+}
+
+void buf_add_int (VBlockP vb, Buffer *buf, int64_t value)
+{
+    char s[20];
+    unsigned len = str_int (value, s);
+    buf_add (buf, s, len);
 }
 
 void buf_print (Buffer *buf, bool add_newline)

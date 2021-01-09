@@ -33,7 +33,7 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, ContainerP con,
     ctx->no_stons = true; // we need the word index to for container caching
 
     // con=NULL means MISSING Container (see container_reconstruct_do)
-    if (!con) return seg_by_ctx (vb, NULL, 0, ctx, 0, NULL); 
+    if (!con) return seg_by_ctx (vb, NULL, 0, ctx, 0); 
 
     ASSERTE (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is beyond maximum of %u in ctx=%s",
              prefixes_len, CONTAINER_MAX_PREFIXES_LEN, ctx->name);
@@ -53,7 +53,7 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, ContainerP con,
     uint32_t snip_len = 1 + b64_len + prefixes_len;
 
     // store in struct cache
-    return seg_by_ctx (vb, snip, snip_len, ctx, add_bytes, NULL); 
+    return seg_by_ctx (vb, snip, snip_len, ctx, add_bytes); 
 }
 
 //----------------------
@@ -118,6 +118,8 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
     
         if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1))) continue; // repeat is filtered out
 
+        char *rep_reconstruction_start = AFTERENT (char, vb->txt_data);
+
         const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
         uint32_t item_prefixes_len = prefixes_len;
 
@@ -139,7 +141,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             int32_t reconstructed_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
-                bool reconstruct = !flag.trans_containers ||      // not translating Or...
+                bool reconstruct = !flag.trans_containers ||  // not translating Or...
                                    !IS_CI_SET (CI_TRANS_NOR); // no prohibition on reconstructing when translating
 
                 reconstructed_len = reconstruct_from_ctx (vb, item_ctxs[i]->did_i, 0, reconstruct);
@@ -182,6 +184,10 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             if (con->repsep[0]) RECONSTRUCT1 (con->repsep[0]);
             if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
         }
+
+        // call callback if needed now that repeat reconstruction is done
+        if (con->callback)
+            DT_FUNC(vb, container_cb)(vb, ctx->dict_id, rep_i, rep_reconstruction_start, AFTERENT (char, vb->txt_data) - rep_reconstruction_start);
 
         // in top level: after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
         if (con->is_toplevel && vb->dont_show_curr_line) 

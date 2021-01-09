@@ -20,12 +20,16 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->ac = vb->an = vb->af = NULL;
     vb->ac_len = vb->an_len = vb->af_len = 0;
     vb->is_af_before_ac = vb->is_an_before_ac = vb->has_basecounts = false;
+    vb->use_special_sf = 0;
     vb->gt_prev_ploidy = 0;
     vb->gt_prev_phase = 0;
     vb->num_haplotypes_per_line = 0;
     vb->ht_matrix_ctx = NULL;
     vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
+    vb->sf_ctx = NULL;
 
+    buf_free(&vb->last_sf);
+    buf_free(&vb->sf_snip);
     buf_free(&vb->hapmat_helper_index_buf);
     buf_free(&vb->hapmat_columns_data);
     buf_free(&vb->hapmat_one_array);
@@ -35,6 +39,8 @@ void vcf_vb_release_vb (VBlockVCF *vb)
 
 void vcf_vb_destroy_vb (VBlockVCF *vb)
 {
+    buf_destroy (&vb->last_sf);
+    buf_destroy (&vb->sf_snip);
     buf_destroy (&vb->hapmat_helper_index_buf);
     buf_destroy (&vb->hapmat_columns_data);
     buf_destroy (&vb->hapmat_one_array);

@@ -405,11 +405,10 @@ batch_real_world_subsets()
     cleanup # unfortunately, these go to TESTDIR not OUTDIR
 
     if [ -x "$(command -v xz)" ] ; then # xz available
-        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* test.*vcf* test.*gvf* test.*txt*` )
+        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* test.*phy* test.*gvf* test.*txt*` )
     else
-        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* test.*vcf* test.*gvf* test.*txt*|grep -v xz` )
+        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* test.*phy* test.*gvf* test.*txt*|grep -v xz` )
     fi
-    
     echo "subsets (~3 VBs) or real world files"
     test_standard "-m" " " ${files[@]}
 }

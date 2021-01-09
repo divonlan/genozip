@@ -30,13 +30,17 @@ typedef struct VBlockVCF {
     const char *ac, *an, *af;  
     uint32_t ac_len, af_len, an_len;
     bool is_an_before_ac, is_af_before_ac, has_basecounts;
+    
+    Context *sf_ctx;
+    enum { USE_SF_UNKNOWN, USE_SF_YES, USE_SF_NO } use_special_sf;
+    Buffer last_sf, sf_snip; // INFO/SF data as it appears in the snip being constructed
 
     // used for segging FORMAT/GT
     uint32_t gt_prev_ploidy;
     char gt_prev_phase;
 
     // dictionaries stuff 
-    Buffer format_mapper_buf;         // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
+    Buffer format_mapper_buf;      // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
 
     // used by HT matrix codec 
     uint32_t num_haplotypes_per_line; 

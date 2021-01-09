@@ -22,10 +22,11 @@ extern const char *seg_get_next_item (void *vb, const char *str, int *str_len,
                                       const char *item_name);
 extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name);
 
-extern WordIndex seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
-#define seg_by_dict_id(vb,snip,snip_len,dict_id,add_bytes)       seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx_get_ctx (vb, (DictId)dict_id), add_bytes, NULL)
-#define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx ((VBlockP)vb, snip, snip_len, &vb->contexts[did_i], add_bytes, is_new);
-#define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx ((VBlockP)vb, snip, snip_len, &vb->contexts[did_i], add_bytes, NULL);
+extern WordIndex seg_by_ctx_do (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
+#define seg_by_ctx(vb,snip,snip_len,ctx,add_bytes)               seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), (ctx), (add_bytes), NULL)
+#define seg_by_dict_id(vb,snip,snip_len,dict_id,add_bytes)       seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), ctx_get_ctx ((vb), (DictId)(dict_id)), (add_bytes), NULL)
+#define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), &vb->contexts[did_i], (add_bytes), (is_new))
+#define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), &vb->contexts[did_i], (add_bytes), NULL);
 
 extern WordIndex seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 

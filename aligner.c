@@ -303,11 +303,11 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 
             char delta_snip[30] = { SNIP_PAIR_DELTA };
             unsigned delta_str_len = str_int (gpos_delta, &delta_snip[1]);
-            seg_by_ctx ((VBlockP)vb, delta_snip, delta_str_len + 1, gpos_ctx, 0, NULL);
+            seg_by_ctx (vb, delta_snip, delta_str_len + 1, gpos_ctx, 0);
         }
         else {
             static const char lookup[1] = { SNIP_LOOKUP }; // lookup from local
-            seg_by_ctx ((VBlockP)vb, lookup, 1, gpos_ctx, 0, NULL);
+            seg_by_ctx (vb, lookup, 1, gpos_ctx, 0);
         }
     }
     

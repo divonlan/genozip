@@ -28,6 +28,7 @@ extern void vcf_seg_finalize (VBlockP vb_);
 // PIZ stuff
 extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 CONTAINER_FILTER_FUNC (vcf_piz_filter);
+CONTAINER_CALLBACK (vcf_piz_container_cb);
 
 // VCF Header stuff
 extern void vcf_header_initialize (void);
@@ -49,14 +50,15 @@ extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 extern void vcf_samples_add  (const char *samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_AC, vcf_piz_special_SVLEN, \
-                      vcf_piz_special_DS, vcf_piz_special_BaseCounts }
+                      vcf_piz_special_DS, vcf_piz_special_BaseCounts, vcf_piz_special_SF }
 SPECIAL (VCF, 0, REFALT,     vcf_piz_special_REFALT);
 SPECIAL (VCF, 1, FORMAT,     vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2, AC,         vcf_piz_special_AC);
 SPECIAL (VCF, 3, SVLEN,      vcf_piz_special_SVLEN);
 SPECIAL (VCF, 4, DS,         vcf_piz_special_DS);
 SPECIAL (VCF, 5, BaseCounts, vcf_piz_special_BaseCounts);
-#define NUM_VCF_SPECIAL 6
+SPECIAL (VCF, 6, SF,         vcf_piz_special_SF);
+#define NUM_VCF_SPECIAL 7
 
 #define VCF_DICT_ID_ALIASES \
     /*         alias                           maps to this ctx          */  \

@@ -346,3 +346,6 @@ bug fixes, including major bug with mc:i optional field in SAM
 10.0.5
 - VCF: better handling of FORMAT fields DP, AD, ADF, ADR, AD_ALL, PL and INFO fields DP, BaseCounts
 
+10.0.6
+- VCF: better handling of INFO/SF
+

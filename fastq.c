@@ -395,7 +395,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
     char snip[10];
     snip[0] = SNIP_LOOKUP;
     unsigned seq_len_str_len = str_int (dl->seq_len, &snip[1]);
-    seg_by_ctx ((VBlockP)vb, snip, 1 + seq_len_str_len, &vb->contexts[FASTQ_SQBITMAP], 0, 0); 
+    seg_by_ctx (vb, snip, 1 + seq_len_str_len, &vb->contexts[FASTQ_SQBITMAP], 0); 
     vb->contexts[FASTQ_NONREF].txt_len += dl->seq_len; // account for the txt data in NONREF
 
     SEG_EOL (FASTQ_E2L, true);

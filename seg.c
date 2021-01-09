@@ -22,8 +22,8 @@
 #include "codec.h"
 #include "reference.h"
 
-WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
-                     bool *is_new) // optional out
+WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
+                         bool *is_new) // optional out
 {
     ASSERTE0 (ctx, "ctx is NULL");
 
@@ -48,7 +48,7 @@ WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *
 void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
 {
     static const char lookup[1] = { SNIP_LOOKUP };
-    seg_by_ctx (vb, lookup, 1, ctx, add_bytes, NULL);
+    seg_by_ctx (vb, lookup, 1, ctx, add_bytes);
 }
 
 const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
@@ -198,7 +198,7 @@ PosType seg_pos_field (VBlock *vb,
 
         if (err) {
             SAFE_ASSIGN (pos_str-1, SNIP_DONT_STORE);
-            seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, add_bytes, NULL); 
+            seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, add_bytes); 
             SAFE_RESTORE;
             snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
             return 0; // invalid pos
@@ -211,7 +211,7 @@ PosType seg_pos_field (VBlock *vb,
             err = ERR_SEG_OUT_OF_RANGE;
             char snip[15] = { SNIP_DONT_STORE };
             unsigned snip_len = 1 + str_int (this_pos, &snip[1]);
-            seg_by_ctx (vb, snip, snip_len, snip_ctx, add_bytes, NULL); 
+            seg_by_ctx (vb, snip, snip_len, snip_ctx, add_bytes); 
             snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
             return 0; // invalid pos
         }
@@ -235,7 +235,7 @@ PosType seg_pos_field (VBlock *vb,
 
         // add a LOOKUP to b250
         static const char lookup[1] = { SNIP_LOOKUP };
-        seg_by_ctx (vb, lookup, 1, snip_ctx, 0, NULL);
+        seg_by_ctx (vb, lookup, 1, snip_ctx, 0);
 
         snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
         return this_pos;
@@ -264,7 +264,7 @@ PosType seg_pos_field (VBlock *vb,
         unsigned delta_len = str_int (pos_delta, &pos_delta_str[total_len]);
         total_len += delta_len;
 
-        seg_by_ctx (vb, pos_delta_str, total_len, snip_ctx, add_bytes, NULL);
+        seg_by_ctx (vb, pos_delta_str, total_len, snip_ctx, add_bytes);
     }
     // case: the delta is the negative of the previous delta - add a SNIP_SELF_DELTA with no payload - meaning negated delta
     else {
@@ -311,7 +311,7 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;
     SAFE_ASSIGN (&id_snip[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
-    seg_by_ctx (vb, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len + !!account_for_separator, NULL); // account for the entire length, and sometimes with \t
+    seg_by_ctx (vb, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len + !!account_for_separator); // account for the entire length, and sometimes with \t
     SAFE_RESTORE;
 }
 
@@ -345,7 +345,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx,
 
     // case: non-numeric snip
     else { 
-        seg_by_ctx (vb, this_value, this_value_len, ctx, add_bytes, 0);
+        seg_by_ctx (vb, this_value, this_value_len, ctx, add_bytes);
         ctx->numeric_only = false;
         return false;
     }
@@ -482,10 +482,10 @@ WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, cons
     other_ctx->flags.store = STORE_INT;
 
     ctx->numeric_only = false;
-    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, value_len, NULL);
+    return seg_by_ctx (vb, snip, snip_len, ctx, value_len);
 
 fallback:
-    return seg_by_ctx ((VBlockP)vb, value, value_len, ctx, value_len, NULL);
+    return seg_by_ctx (vb, value, value_len, ctx, value_len);
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
@@ -725,7 +725,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
             char delta_snip[30] = { SNIP_SELF_DELTA };
             unsigned delta_snip_len = 1 + str_int (this_item_value - arr_ctx->last_value.i, &delta_snip[1]);
 
-            seg_by_ctx (vb, delta_snip, delta_snip_len, arr_ctx, 0, 0);
+            seg_by_ctx (vb, delta_snip, delta_snip_len, arr_ctx, 0);
 
             arr_ctx->last_value.i = this_item_value;
             arr_ctx->numeric_only = false;
@@ -733,7 +733,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         // non-integer that cannot be delta'd - store as-is
         else {
-            seg_by_ctx (vb, this_item, this_item_len, arr_ctx, 0, 0);
+            seg_by_ctx (vb, this_item, this_item_len, arr_ctx, 0);
             arr_ctx->numeric_only = false;
         }
 
@@ -897,7 +897,6 @@ void seg_all_data_lines (VBlock *vb)
     ctx_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
 
     ctx_verify_field_ctxs (vb);
-    
  
     // allocate the b250 for the fields which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 

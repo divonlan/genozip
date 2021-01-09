@@ -50,19 +50,20 @@ void vcf_seg_finalize (VBlockP vb_)
 
     // top level snip
     SmallContainer top_level = { 
-        .repeats   = vb->lines.len,
+        .repeats     = vb->lines.len,
         .is_toplevel = true,
-        .nitems_lo = 10,
-        .items     = { { .dict_id = (DictId)dict_id_fields[VCF_CHROM],   .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[VCF_POS],     .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[VCF_ID],      .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[VCF_REFALT],  .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[VCF_QUAL],    .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[VCF_FILTER],  .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[VCF_INFO],    .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[VCF_FORMAT],  .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[VCF_SAMPLES], .seperator = ""   },
-                       { .dict_id = (DictId)dict_id_fields[VCF_EOL],     .seperator = ""   } }
+        .callback    = (vb->use_special_sf == USE_SF_YES),
+        .nitems_lo   = 10,
+        .items       = { { .dict_id = (DictId)dict_id_fields[VCF_CHROM],   .seperator = "\t" },
+                         { .dict_id = (DictId)dict_id_fields[VCF_POS],     .seperator = "\t" },
+                         { .dict_id = (DictId)dict_id_fields[VCF_ID],      .seperator = "\t" },
+                         { .dict_id = (DictId)dict_id_fields[VCF_REFALT],  .seperator = "\t" },
+                         { .dict_id = (DictId)dict_id_fields[VCF_QUAL],    .seperator = "\t" },
+                         { .dict_id = (DictId)dict_id_fields[VCF_FILTER],  .seperator = "\t" },
+                         { .dict_id = (DictId)dict_id_fields[VCF_INFO],    .seperator = "\t" },
+                         { .dict_id = (DictId)dict_id_fields[VCF_FORMAT],  .seperator = "\t" },
+                         { .dict_id = (DictId)dict_id_fields[VCF_SAMPLES], .seperator = ""   },
+                         { .dict_id = (DictId)dict_id_fields[VCF_EOL],     .seperator = ""   } },
     };
     
     container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
@@ -236,6 +237,115 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, const char *value, int value_len)
     }
 }
 
+
+// Algorithm: SF is segged either as an as-is string, or as a SPECIAL that includes the index of all the non-'.' samples. 
+// if use_special_sf=YES, we use SNIP_SPECIAL and we validate the correctness during vcf_seg_FORMAT_GT -
+// if it is wrong we set use_special_sf=NO. The assumption is that normally, it is either true for all lines or false.
+static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, const char *value, int value_len)
+{
+    switch (vb->use_special_sf) {
+
+        case USE_SF_NO: 
+            return true; // "special" is suppressed - caller should go ahead and seg normally
+
+        case USE_SF_UNKNOWN: 
+            vb->use_special_sf = USE_SF_YES; // first call to this function, after finding that we have an INFO/SF field - set and fall through
+            vb->sf_ctx = ctx_get_ctx (vb, dict_id_INFO_SF);
+
+        case USE_SF_YES: 
+            // we store the SF value in a buffer, since seg_FORMAT_GT overlays the haplotype buffer onto txt_data and may override the SF field
+            // we will need the SF data if the field fails verification in vcf_seg_INFO_SF_one_sample
+            buf_alloc (vb, &vb->last_sf, value_len + 1, 2, "last_sf"); // +1 for nul-terminator
+            memcpy (FIRSTENT (char, vb->last_sf), value, value_len);
+            vb->last_sf.len = value_len;
+            *AFTERENT (char, vb->last_sf) = 0; // nul-terminate
+            vb->last_sf.param = 0; // iterator index
+            vb->sf_ctx->last_delta = 0; // skip counter
+            
+            // snip being contructed - including value_len
+            buf_alloc (vb, &vb->sf_snip, value_len + 20, 2, "sf_snip"); // initial value - we will increase if needed
+            NEXTENT (char, vb->sf_snip) = SNIP_SPECIAL;
+            NEXTENT (char, vb->sf_snip) = VCF_SPECIAL_SF;
+            vb->sf_snip.len += str_int (value_len, AFTERENT (char, vb->sf_snip));
+            NEXTENT (char, vb->sf_snip) = ',';
+
+            return false; // caller should not seg as we already did
+
+        default:
+            ABORT_R ("Error in vcf_seg_INFO_SF_init: invalid use_special_sf=%d", vb->use_special_sf);
+    }
+}
+
+// verify next number on the list of the SF field is sample_i (called from vcf_seg_FORMAT_GT)
+static inline void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
+{
+    #define adjustment vb->sf_ctx->last_delta
+
+    // case: no more SF values left to compare - we ignore this sample
+    while (vb->last_sf.param < vb->last_sf.len) {
+
+        buf_alloc_more (vb, &vb->sf_snip, 10, 0, char, 2, "sf_snip");
+
+        char *sf_one_value = ENT (char, vb->last_sf, vb->last_sf.param); // param is the index of this element within the SF string
+        char *after;
+        int32_t value = strtol (sf_one_value, &after, 10);
+
+        int32_t adjusted_sample_i = (int32_t)(sample_i + adjustment); // adjustment is the number of values in SF that are not in samples
+
+        // case: badly formatted SF field
+        if (*after != ',' && *after != 0) {
+            vb->use_special_sf = USE_SF_NO; // failed - turn off for the remainder of this vb
+            break;
+        }
+        
+        // case: value exists in SF and samples
+        else if (value == adjusted_sample_i) {
+            NEXTENT (char, vb->sf_snip) = ',';
+            vb->last_sf.param = (after - vb->last_sf.data) + 1; // +1 to skip comma
+            break;
+        }
+
+        // case: value in SF file doesn't appear in samples - keep the value in the snip
+        else if (value < adjusted_sample_i) {
+printf ("line:%u adding value=%u bc adjusted_sample_i=%u\n", vb->line_i, value, adjusted_sample_i);        
+            vb->sf_snip.len += str_int (value, AFTERENT (char, vb->sf_snip));
+            NEXTENT (char, vb->sf_snip) = ',';
+            adjustment++;
+            vb->last_sf.param = (after - vb->last_sf.data) + 1; // +1 to skip comma
+            // continue and read the next value
+        }
+
+        // case: value in SF is larger than current sample - don't advance iterator - perhaps future sample will cover it
+        else { // value > adjusted_sample_i
+printf ("line:%u skipping sample_i=%u adjusted_sample_i=%u because value=%u\n", vb->line_i, sample_i, adjusted_sample_i, value);        
+            NEXTENT (char, vb->sf_snip) = '~'; // skipped sample
+            break; 
+        }
+    }
+
+    #undef adjustment
+}
+
+static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
+{   
+    // case: SF data remains after all samples - copy it
+    int32_t remaining_len = (uint32_t)(vb->last_sf.len - vb->last_sf.param); // -1 if all done, because we skipped a non-existing comma
+    if (remaining_len > 0) {
+        buf_alloc_more (vb, &vb->sf_snip, remaining_len, 0, char, 2, "sf_snip");
+        buf_add (&vb->sf_snip, ENT (char, vb->last_sf, vb->last_sf.param), remaining_len);
+        NEXTENT (char, vb->sf_snip) = ',';
+    }
+
+    if (vb->use_special_sf == USE_SF_YES) 
+        seg_by_ctx (vb, vb->sf_snip.data, vb->sf_snip.len, vb->sf_ctx, vb->last_sf.len);
+    
+    else if (vb->use_special_sf == USE_SF_NO)
+        seg_by_ctx (vb, vb->last_sf.data, vb->last_sf.len, vb->sf_ctx, vb->last_sf.len);
+
+    buf_free (&vb->last_sf);
+    buf_free (&vb->sf_snip);
+}
+
 // return true if caller still needs to seg 
 static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value_len)
 {
@@ -282,7 +392,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value
     sprintf (snip, "%c%c%u,%u,%u,%u", SNIP_SPECIAL, VCF_SPECIAL_BaseCounts, 
              sorted_counts[0], sorted_counts[1], sorted_counts[2], sorted_counts[3]);
 
-    seg_by_ctx ((VBlockP)vb, snip, value_len+2, ctx_basecounts, value_len, NULL); 
+    seg_by_ctx (vb, snip, value_len+2, ctx_basecounts, value_len); 
     
     ctx_basecounts->flags.store = STORE_INT;
     vb->has_basecounts = true;
@@ -326,7 +436,7 @@ static inline void vcf_seg_INFO_CSQ (VBlock *vb, DictId dict_id, const char *fie
             }
 
             unsigned item_len = &field[i] - item_start;
-            seg_by_ctx (vb, item_start, item_len, sf_ctxs[item_i], item_len + (i != field_len), NULL);
+            seg_by_ctx (vb, item_start, item_len, sf_ctxs[item_i], item_len + (i != field_len));
 
             item_i++;
             item_start = &field[i+1];
@@ -381,15 +491,20 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
     // if SVLEN is negative, it is expected to be minus the delta between END and POS
     else if (dict_id.num == dict_id_INFO_SVLEN && vcf_seg_test_svlen (vb, *this_value, *this_value_len)) {
         Context *ctx = ctx_get_ctx (vb, dict_id_INFO_SVLEN);
-        seg_by_ctx ((VBlockP)vb, (char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }, 2, ctx, *this_value_len, NULL);
+        seg_by_ctx (vb, ((char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
     else if (dict_id.num == dict_id_INFO_BaseCounts)
         return vcf_seg_INFO_BaseCounts (vb, *this_value, *this_value_len);
     
+    // Depth
     else if (dict_id.num == dict_id_INFO_DP) 
         return vcf_seg_INFO_DP (vb, *this_value, *this_value_len);
+
+    // Source File
+    else if (dict_id.num == dict_id_INFO_SF) 
+        return vcf_seg_INFO_SF_init (vb, *this_value, *this_value_len);
 
     // in case of AC, AN and AF - we store the values, and we postpone handling AC to the finalization
     else if (dict_id.num == dict_id_INFO_AC) { 
@@ -420,13 +535,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         vcf_seg_INFO_CSQ (vb_, dict_id, *this_value, *this_value_len);
         return false; // caller shouldn't seg because we already did
     }
-
-    //else if (dict_id.num == dict_id_INFO_SF) {
-    //   tried: seg_array - with or without delta
-    //          storing as bitmap (aligned to 64bits boundary per line) - set bits for SFs used
-    //          all resulted in inferior compression to the default
-    //}
-
+    
     else if (dict_id.num == dict_id_INFO_vep ||
              dict_id.num == dict_id_INFO_DP_HIST ||
              dict_id.num == dict_id_INFO_GQ_HIST ||
@@ -439,7 +548,6 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
     }
 
     else if (dict_id.num == dict_id_INFO_DP4) {
-        // note: I tried this for dict_id_INFO_SF too, but it made it worse (both with/without delta)
         Context *ctx = ctx_get_ctx (vb, dict_id);
         seg_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',', 0, false);
         return false;
@@ -473,7 +581,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
 
                     Context *ctx = ctx_get_ctx (vb, dict_id_INFO_AC);
                     ctx->no_stons = true;
-                    seg_by_ctx ((VBlockP)vb, special_snip, sizeof(special_snip), ctx, vb->ac_len, NULL);
+                    seg_by_ctx (vb, special_snip, sizeof(special_snip), ctx, vb->ac_len);
                 }
             }
 
@@ -493,7 +601,7 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
 
     int64_t ps_value=0;
     if (str_get_int (cell, cell_len, &ps_value) && ps_value == ctx->last_value.i) // same as previous line
-        return seg_by_ctx ((VBlockP)vb, (char []){ SNIP_SELF_DELTA, '0' }, 2, ctx, cell_len, NULL);
+        return seg_by_ctx (vb, ((char []){ SNIP_SELF_DELTA, '0' }), 2, ctx, cell_len);
 
     return seg_delta_vs_other ((VBlockP)vb, ctx, &vb->contexts[VCF_POS], cell, cell_len, 1000);
 }
@@ -517,8 +625,7 @@ static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, 
     }
 
     // add a LOOKUP to b250
-    static const char lookup[1] = { SNIP_LOOKUP };
-    seg_by_ctx ((VBlockP)vb, lookup, 1, ctx, add_bytes, NULL);
+    seg_by_ctx (vb, (char []){ SNIP_LOOKUP }, 1, ctx, add_bytes);
 
     return 0;
 }
@@ -546,14 +653,14 @@ static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const ch
     double ds_val;
 
     if (dosage < 0 || (ds_val = str_get_positive_float (cell, cell_len)) < 0) 
-        return seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
+        return seg_by_ctx (vb, cell, cell_len, ctx, cell_len);
 
     char snip[30] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
     unsigned snip_len = 2 + str_get_float_format (cell, cell_len, &snip[2]);
     snip[snip_len++] = ' ';
     snip_len += str_int ((int64_t)((ds_val - dosage) * 1000000), &snip[snip_len]);
 
-    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, cell_len, NULL);
+    return seg_by_ctx (vb, snip, snip_len, ctx, cell_len);
 }
 
 // increase ploidy of the previous lines, if higher ploidy was encountered
@@ -587,7 +694,9 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     MiniContainer gt = { .repeats = 1, 
                          .nitems_lo = 1, 
                          .drop_final_repeat_sep = true, 
-                         .items = { { .dict_id = (DictId)dict_id_FORMAT_GT_HT } } };
+                         .callback = (vb->use_special_sf == USE_SF_YES),
+                         .items = { { .dict_id = (DictId)dict_id_FORMAT_GT_HT } },
+                       };
 
     unsigned save_cell_len = cell_len;
 
@@ -676,6 +785,10 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         gt.repsep[0] = vb->gt_prev_phase;
     }
 
+    // in case we have INFO/SF, we verify that it is indeed the list of samples for which the first ht is not '.'
+    if (vb->use_special_sf == USE_SF_YES && ht_data[0] != '.') 
+        vcf_seg_INFO_SF_one_sample (vb, sample_i);
+
     ctx->last_value.i = dosage; // to be used in vcf_seg_FORMAT_DS
 
     ASSSEG (!cell_len, cell, "Invalid GT data in sample_i=%u", sample_i);
@@ -751,7 +864,7 @@ static WordIndex vcf_seg_FORMAT_AD (VBlockVCF *vb, Context *ctx, const char *val
             // a sample are expected to be correlated - so we store it transposed
             vcf_seg_FORMAT_transposed (vb, ctx_item, snip, number_len, number_len + (value_len>0 /* has comma */));
         else
-            seg_by_ctx ((VBlockP)vb, snip, number_len, ctx_item, number_len + (value_len>0 /* has comma */), NULL);
+            seg_by_ctx (vb, snip, number_len, ctx_item, number_len + (value_len>0 /* has comma */));
         
         value_len--; // skip comma
         value++;
@@ -787,12 +900,12 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
         char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
 
 #       define EVAL_OPTIMIZED { \
-            node_index = seg_by_ctx ((VBlockP)vb, optimized_snip, optimized_snip_len, ctx, cell_len, NULL); \
+            node_index = seg_by_ctx (vb, optimized_snip, optimized_snip_len, ctx, cell_len); \
             vb->vb_data_size -= (int)cell_len - (int)optimized_snip_len; \
         }
 
         if (!cell || !cell_len)
-            node_index = seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
+            node_index = seg_by_ctx (vb, cell, cell_len, ctx, cell_len);
 
         // note: cannot use switch bc dict_id_* are variables, not constants
 
@@ -840,7 +953,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
                                             dict_id.num == dict_id_FORMAT_AD ? &ad_has_sum : NULL);
 
         else // default
-            node_index = seg_by_ctx ((VBlockP)vb, cell, cell_len, ctx, cell_len, NULL);
+            node_index = seg_by_ctx (vb, cell, cell_len, ctx, cell_len);
         
         if (node_index != WORD_INDEX_MISSING_SF) 
             cell += cell_len + 1 + *has_13; // skip separator too
@@ -1006,6 +1119,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         seg_by_did_i (vb, NULL, 0, VCF_FORMAT, 0); 
         seg_by_did_i (vb, NULL, 0, VCF_SAMPLES, 0);
     }
+
+    // seg INFO/SF, if there is one
+    if (vb->last_sf.len) vcf_seg_INFO_SF_seg (vb);
 
     ASSERTW (has_samples || !vcf_num_samples, "Warning: vb->line_i=%u has no samples", vb->line_i);
 

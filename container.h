@@ -46,10 +46,11 @@ typedef struct ContainerItem {
     /* container flags */               \
     uint8_t drop_final_item_sep   : 1;  \
     uint8_t drop_final_repeat_sep : 1;  \
-    uint8_t filter_repeats        : 1;  \
-    uint8_t filter_items          : 1;  \
+    uint8_t filter_repeats        : 1; /* filter called before reconstruction of each repeat to determine if it should be reconstructed */ \
+    uint8_t filter_items          : 1; /* filter called before reconstruction of each item to determine if it should be reconstructed */ \
     uint8_t is_toplevel           : 1;  \
     uint8_t keep_empty_item_sep   : 1; /* normally, we delete the separator preceding an empty item. this flag supprnor its repeat separator is reconstructed */ \
+    uint8_t callback              : 1; /* callback called after reconstruction of each repeat (introduced 10.0.6) */ \
     char repsep[2];                    /* repeat seperator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 

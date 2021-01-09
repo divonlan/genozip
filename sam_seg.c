@@ -281,23 +281,23 @@ void sam_seg_tlen_field (VBlockSAM *vb,
     // case 1
     if (tlen_value && tlen_value == -ctx->last_value.i) {
         char snip_delta[2] = { SNIP_SELF_DELTA, '-' };
-        seg_by_ctx ((VBlockP)vb, snip_delta, 2, ctx, add_bytes, NULL);
+        seg_by_ctx (vb, snip_delta, 2, ctx, add_bytes);
     }
     // case 2:
     else if (tlen_value > 0 && pnext_pos_delta > 0 && cigar_seq_len > 0) {
         char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN };
         unsigned tlen_by_calc_len = str_int (tlen_value - pnext_pos_delta - (int64_t)cigar_seq_len, &tlen_by_calc[2]);
-        seg_by_ctx ((VBlockP)vb, tlen_by_calc, tlen_by_calc_len + 2, ctx, add_bytes, NULL);
+        seg_by_ctx (vb, tlen_by_calc, tlen_by_calc_len + 2, ctx, add_bytes);
     }
     // case default: add as is (option 1)
     else if (tlen)
-        seg_by_ctx ((VBlockP)vb, tlen, tlen_len, ctx, add_bytes, NULL);
+        seg_by_ctx (vb, tlen, tlen_len, ctx, add_bytes);
 
     // case default: add as is (option 2)
     else {
         char snip[20];
         unsigned snip_len = str_int (tlen_value, snip);
-        seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, add_bytes, NULL);
+        seg_by_ctx (vb, snip, snip_len, ctx, add_bytes);
     }
 
     ctx->last_value.i = tlen_value;
@@ -864,7 +864,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
         if (optimize && snip_len < 25)
             optimize (&snip, &snip_len, new_number_str);
 
-        seg_by_ctx (vb, snip, snip_len, element_ctx, IS_BAM ? 0 : number_len+1, NULL);
+        seg_by_ctx (vb, snip, snip_len, element_ctx, IS_BAM ? 0 : number_len+1);
         
         str_len--; // skip comma
         str++;
