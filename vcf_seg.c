@@ -307,7 +307,6 @@ static inline void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
 
         // case: value in SF file doesn't appear in samples - keep the value in the snip
         else if (value < adjusted_sample_i) {
-printf ("line:%u adding value=%u bc adjusted_sample_i=%u\n", vb->line_i, value, adjusted_sample_i);        
             vb->sf_snip.len += str_int (value, AFTERENT (char, vb->sf_snip));
             NEXTENT (char, vb->sf_snip) = ',';
             adjustment++;
@@ -317,7 +316,6 @@ printf ("line:%u adding value=%u bc adjusted_sample_i=%u\n", vb->line_i, value, 
 
         // case: value in SF is larger than current sample - don't advance iterator - perhaps future sample will cover it
         else { // value > adjusted_sample_i
-printf ("line:%u skipping sample_i=%u adjusted_sample_i=%u because value=%u\n", vb->line_i, sample_i, adjusted_sample_i, value);        
             NEXTENT (char, vb->sf_snip) = '~'; // skipped sample
             break; 
         }
