@@ -1186,17 +1186,15 @@ void ctx_read_all_dictionaries (ReadChromeType read_chrom)
         for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
             Context *ctx = &z_file->contexts[did_i];
 
-#define MAX_PRINTABLE_DICT_LEN 100000
-
             if (dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_dict.num) 
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, false);
+                str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
             
             if (flag.list_chroms && ctx->did_i == CHROM)
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, z_file->data_type == DT_SAM);
+                str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, z_file->data_type == DT_SAM);
             
             if (flag.show_dict) {
                 fprintf (info_stream, "%s (did_i=%u, num_snips=%u):\t", ctx->name, did_i, (uint32_t)ctx->word_list.len);
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), true, false);
+                str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
             }
         }
         fprintf (info_stream, "\n");
