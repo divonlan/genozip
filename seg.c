@@ -315,15 +315,14 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
     SAFE_RESTORE;
 }
 
-void seg_integer_or_not (VBlockP vb, ContextP ctx, 
+// returns true if it was an integer
+bool seg_integer_or_not (VBlockP vb, ContextP ctx, 
                          const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
-    int64_t value;
-
     // case: its an integer
     if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actual be a float)
-        str_get_int (this_value, this_value_len, &value) &&
-        value >= 0 && value <= 0xffffffffULL) {
+        str_get_int (this_value, this_value_len, &ctx->last_value.i) &&
+        ctx->last_value.i >= 0 && ctx->last_value.i <= 0xffffffffULL) {
 
         // if this is the first snip in the ctx, 
         if (!ctx->local.len) { // first number
@@ -336,16 +335,19 @@ void seg_integer_or_not (VBlockP vb, ContextP ctx,
 
         // add to local
         buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
-        NEXTENT (uint32_t, ctx->local) = value;
+        NEXTENT (uint32_t, ctx->local) = ctx->last_value.i;
         
         // add to b250
         seg_simple_lookup ((VBlockP)vb, ctx, add_bytes);
+
+        return true;
     }
 
     // case: non-numeric snip
     else { 
         seg_by_ctx (vb, this_value, this_value_len, ctx, add_bytes, 0);
         ctx->numeric_only = false;
+        return false;
     }
 }
 
@@ -642,10 +644,13 @@ void seg_compound_field (VBlock *vb,
 }
 
 // an array or array of arrays
+// note: if container_ctx->flags.store=STORE_INT, container_ctx->last_value.i will be set to sum of integer
+// elements including recursively from sub-arrays (non-integer elements will be ignored)
 WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslidation_did_i, 
                      const char *value, int32_t value_len, // must be signed
                      char sep, 
-                     char subarray_sep) // if non-zero, will attempt to find internal arrays
+                     char subarray_sep,      // if non-zero, will attempt to find internal arrays
+                     bool use_integer_delta) // first item stored as is, subsequent items stored as deltas
 {
     MiniContainer *con;
     DictId arr_dict_id;
@@ -675,6 +680,9 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
         arr_ctx     = ctx_get_ctx (vb, arr_dict_id);
     }
 
+    if (use_integer_delta || container_ctx->flags.store == STORE_INT) 
+        arr_ctx->flags.store = STORE_INT;
+
     uint32_t add_bytes = (uint32_t)value_len; // we will deduct bytes added by sub-arrays
 
     // count repeats (1 + number of seperators)
@@ -682,9 +690,14 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
     for (int32_t i=0; i < value_len; i++) 
         if (value[i] == sep) con->repeats++;
 
+    if (container_ctx->flags.store == STORE_INT)
+        container_ctx->last_value.i = 0; // initialize for summing elements
+
     for (uint32_t i=0; i < con->repeats; i++) { // value_len will be -1 after last number
 
         const char *this_item = value;
+        int64_t this_item_value=0;
+
         bool is_subarray = false;
         for (; value_len && *value != sep; value++, value_len--) 
             if (*value == subarray_sep) 
@@ -694,14 +707,38 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         // case: its a sub-array
         if (is_subarray) {
-            seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0);
+            seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0, use_integer_delta);
             add_bytes -= this_item_len; // sub-array will account for itself
+            arr_ctx->numeric_only = false;
+            this_item_value = arr_ctx->last_value.i;
+        }
+
+        // case: its an scalar (we don't delta arrays that have sub-arrays and we don't delta the first item)
+        else if (!use_integer_delta || subarray_sep || i==0) {
+            bool is_int = seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, 0);
+            if (is_int) this_item_value = arr_ctx->last_value.i;
+        }
+
+        // case: delta of 2nd+ item
+        else if (str_get_int (this_item, this_item_len, &this_item_value)) {
+
+            char delta_snip[30] = { SNIP_SELF_DELTA };
+            unsigned delta_snip_len = 1 + str_int (this_item_value - arr_ctx->last_value.i, &delta_snip[1]);
+
+            seg_by_ctx (vb, delta_snip, delta_snip_len, arr_ctx, 0, 0);
+
+            arr_ctx->last_value.i = this_item_value;
             arr_ctx->numeric_only = false;
         }
 
-        // case: its an scalar
-        else 
-            seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, 0);
+        // non-integer that cannot be delta'd - store as-is
+        else {
+            seg_by_ctx (vb, this_item, this_item_len, arr_ctx, 0, 0);
+            arr_ctx->numeric_only = false;
+        }
+
+        if (container_ctx->flags.store == STORE_INT)
+            container_ctx->last_value.i += this_item_value;
 
         value_len--; // skip seperator
         value++;
@@ -827,7 +864,7 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
     // allocate more to the b250 buffer of the fields, which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
         if (buf_is_allocated (&vb->contexts[f].b250))
-            buf_alloc_more_zero (vb, &vb->contexts[f].b250, vb->lines.len - num_old_lines, 0, uint32_t, 1);
+            buf_alloc_more_zero (vb, &vb->contexts[f].b250, vb->lines.len - num_old_lines, 0, uint32_t, 1, "contexts->b250");
 }
 
 static void seg_verify_file_size (VBlock *vb)

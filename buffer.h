@@ -83,9 +83,9 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 #define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor,name) \
     buf_alloc ((vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
 
-#define buf_alloc_more_zero(vb, buf, more, at_least, type, grow_at_least_factor) { \
+#define buf_alloc_more_zero(vb, buf, more, at_least, type, grow_at_least_factor,name) { \
     uint64_t size_before = (buf)->size; \
-    buf_alloc_more((vb), (buf), (more), (at_least), type, (grow_at_least_factor), 0); \
+    buf_alloc_more((vb), (buf), (more), (at_least), type, (grow_at_least_factor), (name)); \
     if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 }
 

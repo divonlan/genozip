@@ -35,7 +35,7 @@ extern void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_
 #define seg_integer(vb,did_i,n,account_for_bytes) seg_integer_do((VBlockP)(vb), (did_i), (n), (account_for_bytes) ? sizeof(n) : 0)
 
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
-extern void seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
+extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
 
 #define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 extern PosType seg_pos_field (VBlockP vb, 
@@ -62,7 +62,7 @@ extern void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, u
 
 extern WordIndex seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
 
-extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep);
+extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta);
 
 typedef struct { bool slash, pipe, colon, dot, whitespace; /* seperators */ } SegCompoundArg; 
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 

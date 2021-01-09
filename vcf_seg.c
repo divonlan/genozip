@@ -223,6 +223,7 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, const char *value, int value_len)
 {
     ContextP ctx_dp = ctx_get_ctx (vb, dict_id_INFO_DP);
 
+    // also tried delta vs DP4, but it made it worse
     if (vb->has_basecounts) {
         seg_delta_vs_other ((VBlockP)vb, ctx_dp, ctx_get_existing_ctx (vb, dict_id_INFO_BaseCounts), 
                             value, value_len, -1);
@@ -291,7 +292,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value
 
 // INFO fields with a format originating from the VEP software, eg
 // vep=T|intergenic_variant|MODIFIER|||Intergenic||||||||||||1|||SNV||||||||||||||||||||||||
-static inline void vcf_seg_INFO_vep_field (VBlock *vb, DictId dict_id, const char *field, unsigned field_len)
+static inline void vcf_seg_INFO_CSQ (VBlock *vb, DictId dict_id, const char *field, unsigned field_len)
 {
     Container con = { .repsep = { ',' }, 
                       .drop_final_repeat_sep = true,
@@ -416,9 +417,15 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
     }
 
     else if (dict_id.num == dict_id_INFO_CSQ) {
-        vcf_seg_INFO_vep_field (vb_, dict_id, *this_value, *this_value_len);
+        vcf_seg_INFO_CSQ (vb_, dict_id, *this_value, *this_value_len);
         return false; // caller shouldn't seg because we already did
     }
+
+    //else if (dict_id.num == dict_id_INFO_SF) {
+    //   tried: seg_array - with or without delta
+    //          storing as bitmap (aligned to 64bits boundary per line) - set bits for SFs used
+    //          all resulted in inferior compression to the default
+    //}
 
     else if (dict_id.num == dict_id_INFO_vep ||
              dict_id.num == dict_id_INFO_DP_HIST ||
@@ -427,14 +434,14 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
              dict_id.num == dict_id_INFO_AGE_HISTOGRAM_HOM) {
 
         Context *ctx = ctx_get_ctx (vb, dict_id);
-        seg_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',', '|');
+        seg_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',', '|', false);
         return false;
     }
 
     else if (dict_id.num == dict_id_INFO_DP4) {
-        // tested also for dict_id_INFO_SF, but it makes it worse
+        // note: I tried this for dict_id_INFO_SF too, but it made it worse (both with/without delta)
         Context *ctx = ctx_get_ctx (vb, dict_id);
-        seg_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',', 0);
+        seg_array (vb_, ctx, ctx->did_i, *this_value, *this_value_len, ',', 0, false);
         return false;
     }
 
@@ -809,7 +816,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
             EVAL_OPTIMIZED
 
         else if (dict_id.num == dict_id_FORMAT_PL) // not optimized
-            node_index = seg_array ((VBlockP)vb, ctx, ctx->did_i, cell, cell_len, ',', 0);
+            node_index = seg_array ((VBlockP)vb, ctx, ctx->did_i, cell, cell_len, ',', 0, false);
 
         // case: PS ("Phase Set") - might be the same as POS (for example, if set by Whatshap: https://whatshap.readthedocs.io/en/latest/guide.html#features-and-limitations)
         // or might be the same as the previous line
