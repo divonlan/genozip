@@ -239,12 +239,22 @@ SectionType sections_st_by_name (char *name)
 
     str_toupper (name, name); // name is case insesitive (compare uppercase)
 
-    for (SectionType st=0; st < NUM_SEC_TYPES; st++)
-        if (strstr (abouts[st].name, name)) // found if name is a substring of the section name
-            return st;
+    SectionType candidate=-1;
+    unsigned candidate_len=100000;
 
-    ABORT_R ("%s: bad argument for --show-headers - \"%s\", is not a recognized section type", 
-           global_cmd, name);
+    // choose the shortest section for which name is a case-insensitive substring (eg "dict" will result in SEC_DICT not SEC_DICT_ID_ALIASES)
+    for (SectionType st=0; st < NUM_SEC_TYPES; st++)
+        if (strstr (abouts[st].name, name)) { // found if name is a substring of the section name
+            unsigned len = strlen (abouts[st].name);
+            if (len < candidate_len) { // best candidate so far
+                candidate     = st;
+                candidate_len = len;
+            }
+        }
+
+    ASSINP (candidate >= 0, "bad argument - \"%s\", is not a recognized section type (or a case-insensitive sub-string of a section type)", name);
+
+    return candidate;
 }
 
 uint32_t st_header_size (SectionType sec_type)
