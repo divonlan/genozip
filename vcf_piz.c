@@ -218,22 +218,18 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SF)
 
     if (reconstruct) {
         vcf_vb->sf_ctx = ctx;
-        adjustment = 0;
-        sample_i = 0; 
-        snip_i = 0;
+        adjustment    = 0;
+        sample_i      = 0; 
+        snip_i        = 0;
 
-        // make room for SF
-        char *after;
-        buf_set_overlayable (&vb->txt_data);
-        buf_overlay_partial (vb, &vcf_vb->last_sf, &vb->txt_data, vb->txt_data.len, "last_sf");
-        vcf_vb->last_sf.len = 0;
-        vcf_vb->last_sf.param += strtoul (snip, &after, 10); // SF field length
-        vb->txt_data.len += vcf_vb->last_sf.param;
+        // temporary place for SF
+        buf_alloc (vb, &vcf_vb->sf_txt, 5 * vcf_header_get_num_samples(), 1, "sf_txt" ); // initial estimate, we may further grow it later
+        vcf_vb->sf_txt.len = 0;
 
-        // copy snip to sf_snip
+        // copy snip to sf_snip (note: the SNIP_SPECIAL+code are already removed)
         buf_alloc (vb, &vcf_vb->sf_snip, snip_len, 2, "sf_snip");
-        vcf_vb->sf_snip.len = snip + snip_len - (after+1); // remaining snip length after first item "len" removed
-        memcpy (vcf_vb->sf_snip.data, after+1, vcf_vb->sf_snip.len); 
+        vcf_vb->sf_snip.len = snip_len; 
+        memcpy (vcf_vb->sf_snip.data, snip, snip_len); 
     }
 
     return false; // no new value
@@ -256,16 +252,18 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
 
         while (snip_i < vcf_vb->sf_snip.len) {
 
+            buf_alloc_more (vb, &vcf_vb->sf_txt, 12, 0, char, 2, "sf_txt"); // sufficient for int32 + ','
+
             int32_t adjusted_sample_i = (int32_t)(sample_i + adjustment); // last_delta is the number of values in SF that are not in samples
 
             // case: we derive the value from sample_i
             if (snip[snip_i] == ',') {
                 snip_i++;
 
-                buf_add_int (vb, &vcf_vb->last_sf, adjusted_sample_i);
+                buf_add_int (vb, &vcf_vb->sf_txt, adjusted_sample_i);
 
-                if (vcf_vb->last_sf.len < vcf_vb->last_sf.param) // add comma if not done yet
-                    NEXTENT (char, vcf_vb->last_sf) = ',';
+                if (snip_i < vcf_vb->sf_snip.len) // add comma if not done yet
+                    NEXTENT (char, vcf_vb->sf_txt) = ',';
 
                 break;
             }
@@ -280,9 +278,9 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
             else {
                 char *comma = strchr (&snip[snip_i], ',');
                 unsigned len = comma - &snip[snip_i];
-                bool add_comma = (vcf_vb->last_sf.len + len < vcf_vb->last_sf.param); // add comma if not last
+                bool add_comma = (snip_i + len + 1 < vcf_vb->sf_snip.len); // add comma if not last
 
-                buf_add (&vcf_vb->last_sf, &snip[snip_i], len + add_comma);
+                buf_add (&vcf_vb->sf_txt, &snip[snip_i], len + add_comma);
                 snip_i += len + 1;
 
                 adjustment++;
@@ -294,13 +292,23 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
 
     // case: we have an INFO/SF field (since this callback is set) and we reconstructed the completed one VCF line - finish reconstructing the SF field 
     else if (dict_id.num == dict_id_fields[VCF_TOPLEVEL] && vcf_vb->sf_snip.len) {
-        
+
         // if there are some items remaining in the snip (values that don't appear in samples) - copy them
-        if (snip_i < vcf_vb->sf_snip.len)
-            buf_add (&vcf_vb->last_sf, ENT (char, vcf_vb->sf_snip, snip_i), vcf_vb->sf_snip.len - snip_i - 1); // copy all except the final comma
-        
+        if (snip_i < vcf_vb->sf_snip.len) {
+            unsigned remaining_len = vcf_vb->sf_snip.len - snip_i - 1; // all except the final comma
+            buf_alloc_more (vb, &vcf_vb->sf_txt, remaining_len, 0, char, 2, "sf_txt");
+            buf_add (&vcf_vb->sf_txt, ENT (char, vcf_vb->sf_snip, snip_i), remaining_len); 
+        }
+
+        // make room for the SF txt and copy it to its final location
+        char *sf_txt = ENT (char, vb->txt_data, vcf_vb->sf_ctx->last_txt);
+        memmove (sf_txt + vcf_vb->sf_txt.len, sf_txt, AFTERENT (char, vb->txt_data) - sf_txt); // make room
+        memcpy (sf_txt, vcf_vb->sf_txt.data, vcf_vb->sf_txt.len); // copy
+
+        vb->txt_data.len += vcf_vb->sf_txt.len;
+
         buf_free (&vcf_vb->sf_snip);
-        buf_free (&vcf_vb->last_sf);
+        buf_free (&vcf_vb->sf_txt);
     }
 }
 

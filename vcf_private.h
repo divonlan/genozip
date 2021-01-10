@@ -33,7 +33,7 @@ typedef struct VBlockVCF {
     
     Context *sf_ctx;
     enum { USE_SF_UNKNOWN, USE_SF_YES, USE_SF_NO } use_special_sf;
-    Buffer last_sf, sf_snip; // INFO/SF data as it appears in the snip being constructed
+    Buffer sf_txt, sf_snip; // INFO/SF data as it appears in the snip being constructed
 
     // used for segging FORMAT/GT
     uint32_t gt_prev_ploidy;

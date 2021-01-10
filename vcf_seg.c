@@ -69,10 +69,10 @@ void vcf_seg_finalize (VBlockP vb_)
     container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
 
     if (flag.show_alleles && vb->ht_matrix_ctx) {
-        printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_matrix_ctx->local.len);
+        fprintf (info_stream, "After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_matrix_ctx->local.len);
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++)
-            printf ("Line %-2u: %.*s\n", line_i, vb->num_haplotypes_per_line, ENT (char, vb->ht_matrix_ctx->local, line_i * vb->num_haplotypes_per_line));
+            fprintf (info_stream,"Line %-2u: %.*s\n", line_i, vb->num_haplotypes_per_line, ENT (char, vb->ht_matrix_ctx->local, line_i * vb->num_haplotypes_per_line));
     }
 }
 
@@ -237,6 +237,8 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, const char *value, int value_len)
     }
 }
 
+#define adjustment vb->sf_ctx->last_delta
+#define next param
 
 // Algorithm: SF is segged either as an as-is string, or as a SPECIAL that includes the index of all the non-'.' samples. 
 // if use_special_sf=YES, we use SNIP_SPECIAL and we validate the correctness during vcf_seg_FORMAT_GT -
@@ -255,19 +257,17 @@ static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, const char *value, int value_le
         case USE_SF_YES: 
             // we store the SF value in a buffer, since seg_FORMAT_GT overlays the haplotype buffer onto txt_data and may override the SF field
             // we will need the SF data if the field fails verification in vcf_seg_INFO_SF_one_sample
-            buf_alloc (vb, &vb->last_sf, value_len + 1, 2, "last_sf"); // +1 for nul-terminator
-            memcpy (FIRSTENT (char, vb->last_sf), value, value_len);
-            vb->last_sf.len = value_len;
-            *AFTERENT (char, vb->last_sf) = 0; // nul-terminate
-            vb->last_sf.param = 0; // iterator index
-            vb->sf_ctx->last_delta = 0; // skip counter
+            buf_alloc (vb, &vb->sf_txt, value_len + 1, 2, "sf_txt"); // +1 for nul-terminator
+            memcpy (FIRSTENT (char, vb->sf_txt), value, value_len);
+            vb->sf_txt.len = value_len;
+            *AFTERENT (char, vb->sf_txt) = 0; // nul-terminate
+            vb->sf_txt.next = 0; 
+            adjustment = 0;      
             
-            // snip being contructed - including value_len
+            // snip being contructed 
             buf_alloc (vb, &vb->sf_snip, value_len + 20, 2, "sf_snip"); // initial value - we will increase if needed
             NEXTENT (char, vb->sf_snip) = SNIP_SPECIAL;
             NEXTENT (char, vb->sf_snip) = VCF_SPECIAL_SF;
-            vb->sf_snip.len += str_int (value_len, AFTERENT (char, vb->sf_snip));
-            NEXTENT (char, vb->sf_snip) = ',';
 
             return false; // caller should not seg as we already did
 
@@ -279,14 +279,12 @@ static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, const char *value, int value_le
 // verify next number on the list of the SF field is sample_i (called from vcf_seg_FORMAT_GT)
 static inline void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
 {
-    #define adjustment vb->sf_ctx->last_delta
-
     // case: no more SF values left to compare - we ignore this sample
-    while (vb->last_sf.param < vb->last_sf.len) {
+    while (vb->sf_txt.next < vb->sf_txt.len) {
 
         buf_alloc_more (vb, &vb->sf_snip, 10, 0, char, 2, "sf_snip");
 
-        char *sf_one_value = ENT (char, vb->last_sf, vb->last_sf.param); // param is the index of this element within the SF string
+        char *sf_one_value = ENT (char, vb->sf_txt, vb->sf_txt.next); 
         char *after;
         int32_t value = strtol (sf_one_value, &after, 10);
 
@@ -301,7 +299,7 @@ static inline void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
         // case: value exists in SF and samples
         else if (value == adjusted_sample_i) {
             NEXTENT (char, vb->sf_snip) = ',';
-            vb->last_sf.param = (after - vb->last_sf.data) + 1; // +1 to skip comma
+            vb->sf_txt.next = (after - vb->sf_txt.data) + 1; // +1 to skip comma
             break;
         }
 
@@ -310,7 +308,7 @@ static inline void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
             vb->sf_snip.len += str_int (value, AFTERENT (char, vb->sf_snip));
             NEXTENT (char, vb->sf_snip) = ',';
             adjustment++;
-            vb->last_sf.param = (after - vb->last_sf.data) + 1; // +1 to skip comma
+            vb->sf_txt.next = (after - vb->sf_txt.data) + 1; // +1 to skip comma
             // continue and read the next value
         }
 
@@ -320,29 +318,30 @@ static inline void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
             break; 
         }
     }
-
-    #undef adjustment
 }
 
 static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
 {   
     // case: SF data remains after all samples - copy it
-    int32_t remaining_len = (uint32_t)(vb->last_sf.len - vb->last_sf.param); // -1 if all done, because we skipped a non-existing comma
+    int32_t remaining_len = (uint32_t)(vb->sf_txt.len - vb->sf_txt.next); // -1 if all done, because we skipped a non-existing comma
     if (remaining_len > 0) {
         buf_alloc_more (vb, &vb->sf_snip, remaining_len, 0, char, 2, "sf_snip");
-        buf_add (&vb->sf_snip, ENT (char, vb->last_sf, vb->last_sf.param), remaining_len);
+        buf_add (&vb->sf_snip, ENT (char, vb->sf_txt, vb->sf_txt.next), remaining_len);
         NEXTENT (char, vb->sf_snip) = ',';
     }
 
     if (vb->use_special_sf == USE_SF_YES) 
-        seg_by_ctx (vb, vb->sf_snip.data, vb->sf_snip.len, vb->sf_ctx, vb->last_sf.len);
+        seg_by_ctx (vb, vb->sf_snip.data, vb->sf_snip.len, vb->sf_ctx, vb->sf_txt.len);
     
     else if (vb->use_special_sf == USE_SF_NO)
-        seg_by_ctx (vb, vb->last_sf.data, vb->last_sf.len, vb->sf_ctx, vb->last_sf.len);
+        seg_by_ctx (vb, vb->sf_txt.data, vb->sf_txt.len, vb->sf_ctx, vb->sf_txt.len);
 
-    buf_free (&vb->last_sf);
+    buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);
 }
+
+#undef adjustment
+#undef param
 
 // return true if caller still needs to seg 
 static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value_len)
@@ -1119,7 +1118,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     }
 
     // seg INFO/SF, if there is one
-    if (vb->last_sf.len) vcf_seg_INFO_SF_seg (vb);
+    if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
 
     ASSERTW (has_samples || !vcf_num_samples, "Warning: vb->line_i=%u has no samples", vb->line_i);
 

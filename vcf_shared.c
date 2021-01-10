@@ -28,7 +28,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
     vb->sf_ctx = NULL;
 
-    buf_free(&vb->last_sf);
+    buf_free(&vb->sf_txt);
     buf_free(&vb->sf_snip);
     buf_free(&vb->hapmat_helper_index_buf);
     buf_free(&vb->hapmat_columns_data);
@@ -39,7 +39,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
 
 void vcf_vb_destroy_vb (VBlockVCF *vb)
 {
-    buf_destroy (&vb->last_sf);
+    buf_destroy (&vb->sf_txt);
     buf_destroy (&vb->sf_snip);
     buf_destroy (&vb->hapmat_helper_index_buf);
     buf_destroy (&vb->hapmat_columns_data);
