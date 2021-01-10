@@ -25,7 +25,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->gt_prev_phase = 0;
     vb->num_haplotypes_per_line = 0;
     vb->ht_matrix_ctx = NULL;
-    vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = NULL;
+    vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = vb->gt_ctx = NULL;
     vb->sf_ctx = NULL;
 
     buf_free(&vb->sf_txt);

@@ -36,6 +36,7 @@ typedef struct VBlockVCF {
     Buffer sf_txt, sf_snip; // INFO/SF data as it appears in the snip being constructed
 
     // used for segging FORMAT/GT
+    Context *gt_ctx;
     uint32_t gt_prev_ploidy;
     char gt_prev_phase;
 

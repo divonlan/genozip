@@ -646,7 +646,7 @@ static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const ch
 // along with the floating point format to allow exact reconstruction
 static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
 {
-    int64_t dosage = ctx_get_ctx (vb, (DictId)dict_id_FORMAT_GT)->last_value.i; // dosage store here by vcf_seg_FORMAT_GT
+    int64_t dosage = vb->gt_ctx->last_value.i; // dosage store here by vcf_seg_FORMAT_GT
     double ds_val;
 
     if (dosage < 0 || (ds_val = str_get_positive_float (cell, cell_len)) < 0) 
@@ -686,6 +686,8 @@ static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigne
 
 static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataLineVCF *dl, const char *cell, unsigned cell_len, unsigned sample_i)
 {
+    vb->gt_ctx = ctx;
+
     // the GT field is represented as a Container, with a single item repeating as required by poidy, and the seperator 
     // determined by the phase
     MiniContainer gt = { .repeats = 1, 

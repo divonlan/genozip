@@ -152,12 +152,14 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DS)
 {
     if (!reconstruct) goto done;
 
-    Context *ctx_gt = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT);
+    VBlockVCFP vcf_vb = (VBlockVCFP)vb;
+
+    if (!vcf_vb->gt_ctx) vcf_vb->gt_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT);
 
     // we are guaranteed that if we have a special snip, then all values are either '0' or '1';
-    char *gt = ENT (char, vb->txt_data, ctx_gt->last_txt);
+    char *gt = ENT (char, vb->txt_data, vcf_vb->gt_ctx->last_txt);
     unsigned dosage=0;
-    for (unsigned i=0; i < ctx_gt->last_txt_len; i+=2) 
+    for (unsigned i=0; i < vcf_vb->gt_ctx->last_txt_len; i+=2) 
         dosage += gt[i]-'0';
 
     char float_format[10];
