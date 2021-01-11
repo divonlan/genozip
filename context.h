@@ -114,7 +114,7 @@ typedef struct Context {
     bool local_always;         // always create a local section in zfile, even if it is empty 
     bool dynamic_size_local;   // resize LT_UINT32 according to data during generate (also do BGEN)
     bool numeric_only;         // if both numeric_only and dynamic_size_local are set, 
-    
+
     // hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and the rest of linked to them by linked list

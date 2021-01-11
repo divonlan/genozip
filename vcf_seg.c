@@ -638,7 +638,7 @@ static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const ch
     // case: no valid AD in this sample - store in transposed matrix
     if (!ad_has_sum)
         return vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len, cell_len); // this handles DP that is an integer or '.'
-
+    
     return seg_delta_vs_other ((VBlockP)vb, ctx, ctx_get_existing_ctx (vb, dict_id_FORMAT_AD), cell, cell_len, -1);
 }
 

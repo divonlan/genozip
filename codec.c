@@ -168,16 +168,18 @@ Codec codec_assign_best_codec (VBlockP vb,
     Codec *selected_codec = is_local ? &ctx->lcodec : 
                             is_b250  ? &ctx->bcodec :
                                        &non_ctx_codec;
-
     // set data
     switch (st) {
-        case SEC_DICT  : data = &ctx->dict      ; break;
-        case SEC_B250  : data = &vb->compressed ; break; // set in zip_generate_b250_sample
-        case SEC_LOCAL : data = &ctx->local     ; break;
-        default: ASSERT0 (data, "Error in codec_assign_best_codec: no data");
+        case SEC_DICT  : data = &ctx->dict  ; break;
+        case SEC_B250  : data = &ctx->b250  ; break; 
+        case SEC_LOCAL : data = &ctx->local ; break;
+        default: ASSERTE (data, "expecting non-NULL data for section=%s", st_name (st));
     }
 
-    if (data->len < MIN_LEN_FOR_COMPRESSION ||  // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
+    uint64_t save_data_len = data->len;
+    data->len = MIN (data->len * (is_local ? lt_desc[ctx->ltype].width : 1), CODEC_ASSIGN_SAMPLE_SIZE);
+
+    if (data->len < MIN_LEN_FOR_COMPRESSION ||       // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
         *selected_codec != CODEC_UNKNOWN) goto done; // if already selected - don't assign
      
     // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
@@ -190,9 +192,6 @@ Codec codec_assign_best_codec (VBlockP vb,
         *selected_codec = zf_codec;
         goto done;
     }
-
-    uint64_t save_data_len = data->len;
-    data->len = MIN (data->len, CODEC_ASSIGN_SAMPLE_SIZE);
 
     // measure the compressed size and duration for a small sample of of the local data, for each codec
     for (unsigned t=0; t < num_tests; t++) {
@@ -214,8 +213,6 @@ Codec codec_assign_best_codec (VBlockP vb,
         tests[t].clock = (clock() - start_time);
     }
     
-    data->len = save_data_len;
-
     // sort codec by our selection criteria
     qsort (tests, num_tests, sizeof (CodecTest), (int (*)(const void *, const void*))codec_assign_sorter);
 
@@ -236,7 +233,8 @@ Codec codec_assign_best_codec (VBlockP vb,
 
 done:
     // roll back
-    vb->z_data.len = save_z_data;
+    data->len                = save_data_len;
+    vb->z_data.len           = save_z_data;
     vb->section_list_buf.len = save_section_list; 
 
     COPY_TIMER (codec_assign_best_codec);

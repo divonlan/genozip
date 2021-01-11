@@ -349,3 +349,5 @@ bug fixes, including major bug with mc:i optional field in SAM
 10.0.7 + 10.0.8
 - VCF: better handling of INFO/SF
 
+10.0.9
+- bug fixes

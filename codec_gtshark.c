@@ -367,6 +367,10 @@ static void codec_gtshark_reconstruct_ht_matrix (VBlockVCF *vb)
     // case: we have exceptions - update the ht_matrix with the "exceptional" alleles
     if (vb->gtshark_ex_ctx) { // has exceptions
 
+        ASSERTE (vb->gtshark_ex_ctx->local.len == num_lines * num_hts, 
+                 "Expecting vb->gtshark_ex_ctx->local.len=%u == num_lines=%u * num_hts=%u",
+                 (unsigned)vb->gtshark_ex_ctx->local.len, num_lines, num_hts);
+                 
         ARRAY (uint8_t, gtshark_ex, vb->gtshark_ex_ctx->local);
 
         for (uint64_t i=0; i < num_lines * num_hts; i++)

@@ -19,7 +19,8 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(compressor_bsc);
     ADD(compressor_domq);
     ADD(compressor_actg);
-    ADD(zip_generate_and_compress_ctxs);
+    ADD(zip_generate_ctxs);
+    ADD(zip_compress_ctxs);
     ADD(codec_assign_best_codec);
     ADD(bgzf_io_thread);
     ADD(bgzf_compute_thread);
@@ -130,7 +131,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (lock_mutex_zf_ctx, 2);
         PRINT (ctx_merge_in_vb_ctx_one_dict_id, 2);
-        PRINT (zip_generate_and_compress_ctxs, 1);
+        PRINT (zip_generate_ctxs, 1);
+        PRINT (zip_compress_ctxs, 1);
         PRINT (ctx_compress_one_dict_fragment, 1);
         PRINT (codec_assign_best_codec, 1);
         PRINT (md5, 1);
