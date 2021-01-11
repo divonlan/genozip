@@ -219,13 +219,15 @@ Codec codec_assign_best_codec (VBlockP vb,
     // sort codec by our selection criteria
     qsort (tests, num_tests, sizeof (CodecTest), (int (*)(const void *, const void*))codec_assign_sorter);
 
-    if (flag.show_codec)
+    if (flag.show_codec) {
         fprintf (info_stream, "vb_i=%-2u %-12s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
                  vb->vblock_i, ctx ? ctx->name : "", &st_name (st)[4],
                  codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
                  codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
                  codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,
                  codec_name (tests[3].codec), (int)tests[3].size, tests[3].clock);
+        fflush (info_stream);
+    }
 
     // assign the best codec - the first one in the sorted array - and commit it to zf_ctx
     *selected_codec = tests[0].codec;
