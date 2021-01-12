@@ -55,13 +55,13 @@ static void stats_check_count (uint64_t all_z_size, const int *count_per_section
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) 
         if (!count_per_section[i]) 
-            fprintf (stderr, "Section not counted: %s section_i=%u\n", st_name (sections[i].section_type), i);
+            WARN ("stats_check_count: Section not counted: %s section_i=%u\n", st_name (sections[i].section_type), i)
         else if (count_per_section[i] > 1) 
-            fprintf (stderr, "Section overcounted: %s section_i=%u dict=%s counted %u times\n", 
-                     st_name (sections[i].section_type), i, dis_dict_id (sections[i].dict_id).s, count_per_section[i]);
+            WARN ("stats_check_count: Section overcounted: %s section_i=%u dict=%s counted %u times\n", 
+                   st_name (sections[i].section_type), i, dis_dict_id (sections[i].dict_id).s, count_per_section[i]);
 
-    ASSERTW (false, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             str_uint_commas (all_z_size).s, str_uint_commas (z_file->disk_so_far).s, (int32_t)(z_file->disk_so_far - all_z_size));
+    WARN ("Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
+          str_uint_commas (all_z_size).s, str_uint_commas (z_file->disk_so_far).s, (int32_t)(z_file->disk_so_far - all_z_size));
 }
 
 static void stats_show_file_metadata (Buffer *buf)
