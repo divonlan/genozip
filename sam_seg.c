@@ -303,25 +303,6 @@ void sam_seg_tlen_field (VBlockSAM *vb,
     ctx->last_value.i = tlen_value;
 }
 
-// returns length of string ending with separator, or -1 if separator was not found
-static inline int sam_seg_get_next_subitem (const char *str, int str_len, char separator)
-{
-    for (int i=0; i < str_len; i++) {
-        if (str[i] == separator) return i;
-        if (str[i] == ',' || str[i] == ';') return -1; // wrong separator encountered
-    }
-    return -1;
-}
-
-#define DO_SSF(ssf,sep) \
-        ssf = &field[i]; \
-        ssf##_len = sam_seg_get_next_subitem (&field[i], field_len-i, sep); \
-        if (ssf##_len == -1) goto error; /* bad format */ \
-        i += ssf##_len + 1; /* skip snip and separator */        
-
-#define DEC_SSF(ssf) const char *ssf; \
-                     int ssf##_len;
-
 // Creates a bitmap from seq data - exactly one bit per base that is mapped to the reference (e.g. not for INSERT bases)
 // - Normal SEQ: tracking CIGAR, we compare the sequence to the reference, indicating in a SAM_SQBITMAP whether this
 //   base in the same as the reference or not. In case of REF_INTERNAL, if the base is not already in the reference, we add it.
@@ -549,31 +530,57 @@ done:
     COPY_TIMER (sam_seg_seq_field);
 }
 
+// returns length of string ending with separator, or -1 if separator was not found
+static inline int sam_seg_get_next_subitem (const char *str, int str_len, char separator)
+{
+    for (int i=0; i < str_len; i++) {
+        if (str[i] == separator) return i;
+        if (str[i] == ',' || str[i] == ';') return -1; // wrong separator encountered
+    }
+    return -1;
+}
+
+#define DO_SSF(ssf,sep) \
+        ssf = &field[i]; \
+        ssf##_len = sam_seg_get_next_subitem (&field[i], field_len-i, sep); \
+        if (ssf##_len == -1) goto error; /* bad format */ \
+        i += ssf##_len + 1; /* skip snip and separator */        
+
+#define DEC_SSF(ssf) const char *ssf; \
+                     int ssf##_len;   \
+                     Context *ssf##_ctx = ctx_get_ctx (vb, con.items[item_i++].dict_id); \
+                     ssf##_ctx->st_did_i = ctx->did_i; 
+
 static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id, 
                                     const char *field, unsigned field_len, const char *field_name)
 {
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
     // Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
     // See: https://samtools.github.io/hts-specs/SAMtags.pdf
-    static const SmallContainer container_SA_OA = {
-        .repeats     = 0, 
-        .nitems_lo   = 6, 
-        .repsep      = {0,0},
-        .items       = { { .dict_id = {.id="@RNAME" }, .seperator = {','} },  // we don't mix with primary as primary is often sorted, and mixing will ruin its b250 compression
-                         { .dict_id = {.id="@POS"   }, .seperator = {','} },  // we don't mix with primary as these are local-stored random numbers anyway - no advantage for mixing, and it would obscure the stats
-                         { .dict_id = {.id="@STRAND"}, .seperator = {','} },
-                         { .dict_id = {.id="@CIGAR" }, .seperator = {','} },  // we don't mix the primary as the primary has a SNIP_SPECIAL
-                         { .dict_id = {.id="@MAPQ"  }, .seperator = {','} },  // we don't mix with primary as primary often has a small number of values, and mixing will ruin its b250 compression
-                         { .dict_id = {.id="NM:i"   }, .seperator = {';'} } } // we mix together with the NM option field
-    };
+    // note: even though SA, OA, XA contain similar fields amongst each other and similar to the primary fields,
+    // the values of subsequent lines tend to be similar for each one of them seperately, so we maintain separate contexts
+    #define CONTAINER_SA_OA(s) {   \
+        .repeats     = 0,          \
+        .nitems_lo   = 6,          \
+        .repsep      = {0,0},      \
+        .items       = { { .dict_id = {.id=s "0ARNAME" }, .seperator = {','} },  \
+                         { .dict_id = {.id=s "1APOS"   }, .seperator = {','} },  \
+                         { .dict_id = {.id=s "2ASTRAN" }, .seperator = {','} },  \
+                         { .dict_id = {.id=s "3ACIGAR" }, .seperator = {','} },  \
+                         { .dict_id = {.id=s "4AMAPQ"  }, .seperator = {','} },  \
+                         { .dict_id = {.id=s "5ANM"    }, .seperator = {';'} } } \
+    }
+    static const SmallContainer container_SA = CONTAINER_SA_OA("S"), container_OA = CONTAINER_SA_OA("O");
 
+    SmallContainer con = (subfield_dict_id.num == dict_id_OPTION_SA) ? container_SA : container_OA; // make a copy
+    Context *ctx = ctx_get_ctx (vb, subfield_dict_id);
+
+    unsigned item_i=0;
     DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(strand); DEC_SSF(cigar); DEC_SSF(mapq); DEC_SSF(nm); 
 
-    SmallContainer sa_oa = container_SA_OA;
+    for (uint32_t i=0; i < field_len; con.repeats++) {
 
-    for (uint32_t i=0; i < field_len; sa_oa.repeats++) {
-
-        ASSSEG (sa_oa.repeats <= CONTAINER_MAX_REPEATS, field, "exceeded maximum repeats allowed (%u) while parsing %s",
+        ASSSEG (con.repeats <= CONTAINER_MAX_REPEATS, field, "exceeded maximum repeats allowed (%u) while parsing %s",
                 CONTAINER_MAX_REPEATS, dis_dict_id (subfield_dict_id).s);
 
         DO_SSF (rname,  ','); // these also do sanity checks
@@ -586,22 +593,17 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         // sanity checks before adding to any dictionary
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
         
-        SegError err;
-        PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, pos, pos_len, &err);
-        if (err != ERR_SEG_NO_ERROR) goto error;
-
-        seg_by_dict_id (vb, rname,  rname_len,  container_SA_OA.items[0].dict_id, 1 + rname_len);
-        seg_by_dict_id (vb, strand, strand_len, container_SA_OA.items[2].dict_id, 1 + strand_len);
-        seg_by_dict_id (vb, cigar,  cigar_len,  container_SA_OA.items[3].dict_id, 1 + cigar_len);
-        seg_by_dict_id (vb, mapq,   mapq_len,   container_SA_OA.items[4].dict_id, 1 + mapq_len);
-        seg_by_dict_id (vb, nm,     nm_len,     container_SA_OA.items[5].dict_id, 1 + nm_len);
+        seg_by_ctx (vb, rname,  rname_len,  rname_ctx,  1 + rname_len);
+        seg_by_ctx (vb, strand, strand_len, strand_ctx, 1 + strand_len);
+        seg_by_ctx (vb, cigar,  cigar_len,  cigar_ctx,  1 + cigar_len);
+        seg_by_ctx (vb, mapq,   mapq_len,   mapq_ctx,   1 + mapq_len);
+        seg_by_ctx (vb, nm,     nm_len,     nm_ctx,     1 + nm_len);
         
-        Context *pos_ctx = ctx_get_ctx (vb, container_SA_OA.items[1].dict_id);
-        pos_ctx->ltype   = LT_UINT32;
-        seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
+        Context *pos_ctx = ctx_get_ctx (vb, con.items[1].dict_id);
+        seg_pos_field ((VBlockP)vb, pos_ctx->did_i, pos_ctx->did_i, false, pos, pos_len, 0, 1 + pos_len);
     }
 
-    container_seg_by_dict_id (vb, subfield_dict_id, (ContainerP)&sa_oa, 1 /* 1 for \t in SAM and \0 in BAM */);
+    container_seg_by_dict_id (vb, subfield_dict_id, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);
     
     return;
 
@@ -609,8 +611,8 @@ error:
     // if the error occurred on on the first repeat - this file probably has a different
     // format - we just store as a normal subfield
     // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
-    ASSSEG (!sa_oa.repeats, field, "Invalid format in repeat #%u of field %s. snip: %.*s",
-            sa_oa.repeats+1, dis_dict_id (subfield_dict_id).s, field_len, field);
+    ASSSEG (!con.repeats, field, "Invalid format in repeat #%u of field %s. snip: %.*s",
+            con.repeats+1, dis_dict_id (subfield_dict_id).s, field_len, field);
 
     seg_by_dict_id (vb, field, field_len, subfield_dict_id, field_len + 1 /* 1 for \t in SAM and \0 in BAM */); 
 }
@@ -624,53 +626,66 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         .repeats     = 0, 
         .nitems_lo   = 5, 
         .repsep      = {0,0},
-        .items       = { { .dict_id = {.id="@RNAME"  }, .seperator = {','}  },
-                         { .dict_id = {.id="@STRAND" }, .seperator = { 0 }  },
-                         { .dict_id = {.id="@POS"    }, .seperator = {','}  },
-                         { .dict_id = {.id="@CIGAR"  }, .seperator = {','} },  // we don't mix the primary as the primary has a SNIP_SPECIAL
-                         { .dict_id = {.id="NM:i"    }, .seperator = {';'}  } }     
+        .items       = { { .dict_id = {.id="X0ARNAME" }, .seperator = {','} }, // note: optional fields are DTYPE_2, in which short ids are left as-is, so we can skip dict_id_make
+                         { .dict_id = {.id="X1ASTRAN" }, .seperator = { 0 } },
+                         { .dict_id = {.id="X2APOS"   }, .seperator = {','} },
+                         { .dict_id = {.id="X3ACIGAR" }, .seperator = {','} }, // we don't mix the primary as the primary has a SNIP_SPECIAL
+                         { .dict_id = {.id="X4ANM"    }, .seperator = {';'} } }     
     };
 
-    SmallContainer xa = container_XA;
+    Context *ctx = ctx_get_ctx (vb, dict_id_OPTION_XA);
 
-    DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(cigar); DEC_SSF(nm); 
+    SmallContainer con = container_XA;
 
-    for (uint32_t i=0; i < field_len; xa.repeats++) {
+    unsigned item_i=0;
+    DEC_SSF(rname); DEC_SSF(strand); DEC_SSF(pos); DEC_SSF(cigar); DEC_SSF(nm); 
 
-        ASSSEG (xa.repeats <= CONTAINER_MAX_REPEATS, field, "exceeded maximum repeats allowed (%u) while parsing XA",
+    for (uint32_t i=0; i < field_len; con.repeats++) {
+
+        ASSSEG (con.repeats <= CONTAINER_MAX_REPEATS, field, "exceeded maximum repeats allowed (%u) while parsing XA",
                 CONTAINER_MAX_REPEATS);
 
         DO_SSF (rname,  ','); 
-        DO_SSF (pos,    ','); 
+        DO_SSF (pos,    ','); // includes strand
         DO_SSF (cigar,  ','); 
         DO_SSF (nm,     ';'); 
 
-        // sanity checks before adding to any dictionary
+        // split the pos string, eg "-10000" to strand "-" and pos "10000"
         if (pos_len < 2 || (pos[0] != '+' && pos[0] != '-')) goto error; // invalid format - expecting pos to begin with the strand
+        strand = pos++;
+        pos_len--;
+        strand_len = 1;
 
-        SegError err;
-        PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, &pos[1], pos_len-1, &err);
-        if (err != ERR_SEG_NO_ERROR) goto error;
-
-        seg_by_dict_id (vb, rname,  rname_len, container_XA.items[0].dict_id, 1 + rname_len);
-        seg_by_dict_id (vb, pos,    1,         container_XA.items[1].dict_id, 1); // strand is first character of pos
-        seg_by_dict_id (vb, cigar,  cigar_len, container_XA.items[3].dict_id, 1 + cigar_len);
-        seg_by_dict_id (vb, nm,     nm_len,    container_XA.items[4].dict_id, 1 + nm_len);
+        seg_by_ctx (vb, rname,  rname_len,  rname_ctx,  1 + rname_len);
+        seg_by_ctx (vb, strand, strand_len, strand_ctx, strand_len); // strand is first character of pos - no separator
+        seg_by_ctx (vb, cigar,  cigar_len,  cigar_ctx,  1 + cigar_len);
+        seg_by_ctx (vb, nm,     nm_len,     nm_ctx,     1 + nm_len);
         
-        Context *pos_ctx = ctx_get_ctx (vb, container_XA.items[2].dict_id);
-        pos_ctx->ltype  = LT_UINT32;
+        // if its an "important" chrom (heuristic: rname_len <= 5) - have its own POS context (pos values of the same chr in subsequent XA fields are often
+        // similar, but can be placed in different positions within their respective XA arrays)
+        if (rname_len <= 5) {
+            char id[DICT_ID_LEN] = "X2A";
+            memcpy (&id[3], rname, rname_len);
 
-        seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
+            Context *chr_ctx = ctx_get_ctx (vb, dict_id_make (id, 3 + rname_len, DTYPE_SAM_OPTIONAL));
+            chr_ctx->st_did_i = ctx->did_i;
+            seg_pos_field ((VBlockP)vb, chr_ctx->did_i, chr_ctx->did_i, false, pos, pos_len, 0, 1 + pos_len); // +1 for separator
+            
+            seg_by_ctx (vb, ((char []){ SNIP_SPECIAL, (char)SAM_SPECIAL_XA_POS }), 2, pos_ctx, 0); 
+            pos_ctx->no_stons = true;
+        }
+        else 
+            seg_integer_or_not ((VBlockP)vb, pos_ctx, pos, pos_len, 1+pos_len);
     }
 
-    container_seg_by_dict_id (vb, dict_id_OPTION_XA, (ContainerP)&xa, 1 /* 1 for \t in SAM and \0 in BAM */);
+    container_seg_by_dict_id (vb, dict_id_OPTION_XA, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);
     return;
 
 error:
     // if the error occurred on on the first repeat - this file probably has a different
     // format - we just store as a normal subfield
     // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
-    ASSSEG (!xa.repeats, field, "Invalid format in repeat #%u of field XA. snip: %.*s", xa.repeats+1, field_len, field);
+    ASSSEG (!con.repeats, field, "Invalid format in repeat #%u of field XA. snip: %.*s", con.repeats+1, field_len, field);
 
     seg_by_dict_id (vb, field, field_len, dict_id_OPTION_XA, field_len + 1 /* 1 for \t in SAM and \0 in BAM */); 
 }

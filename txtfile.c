@@ -630,7 +630,7 @@ int64_t txtfile_estimate_txt_data_size (VBlock *vb)
 
         case CODEC_XZ:   ratio = is_no_ht_vcf ? 171 : 12.7; break;
 
-        case CODEC_CRAM: ratio = 9; break;
+        case CODEC_CRAM: ratio = 25; break;
 
         case CODEC_ZIP:  ratio = 3; break;
 

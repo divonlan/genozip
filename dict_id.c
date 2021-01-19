@@ -39,7 +39,7 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          dict_id_OPTION_OA=0, dict_id_OPTION_OC=0, dict_id_OPTION_PG=0, dict_id_OPTION_E2=0, dict_id_OPTION_U2=0,
          dict_id_OPTION_PQ=0, dict_id_OPTION_PU=0, dict_id_OPTION_RG=0, dict_id_OPTION_SA=0, dict_id_OPTION_SM=0, dict_id_OPTION_TC=0, 
          dict_id_OPTION_UQ=0, dict_id_OPTION_CC=0, dict_id_OPTION_MC=0,
-         dict_id_OPTION_X0=0, dict_id_OPTION_X1=0, dict_id_OPTION_XA=0, dict_id_OPTION_XN=0, dict_id_OPTION_XM=0, dict_id_OPTION_XO=0,
+         dict_id_OPTION_X0=0, dict_id_OPTION_X1=0, dict_id_OPTION_XA=0, dict_id_OPTION_XA_RNAME=0, dict_id_OPTION_XN=0, dict_id_OPTION_XM=0, dict_id_OPTION_XO=0,
          dict_id_OPTION_XG=0, dict_id_OPTION_XS=0, dict_id_OPTION_XE=0,
          dict_id_OPTION_mc=0, dict_id_OPTION_ms=0,
          dict_id_OPTION_BD=0, dict_id_OPTION_BI=0, dict_id_OPTION_BD_BI=0,
@@ -207,6 +207,7 @@ void dict_id_initialize (DataType data_type)
         dict_id_OPTION_X0 = dict_id_make ("X0:i", 4, DTYPE_SAM_OPTIONAL).num; 
         dict_id_OPTION_X1 = dict_id_make ("X1:i", 4, DTYPE_SAM_OPTIONAL).num; 
         dict_id_OPTION_XA = dict_id_make ("XA:Z", 4, DTYPE_SAM_OPTIONAL).num; 
+        dict_id_OPTION_XA_RNAME = dict_id_make ("X0ARNAME", 8, DTYPE_SAM_OPTIONAL).num; 
         dict_id_OPTION_XN = dict_id_make ("XN:i", 4, DTYPE_SAM_OPTIONAL).num; 
         dict_id_OPTION_XM = dict_id_make ("XM:i", 4, DTYPE_SAM_OPTIONAL).num; 
         dict_id_OPTION_XO = dict_id_make ("XO:i", 4, DTYPE_SAM_OPTIONAL).num;
