@@ -351,6 +351,3 @@ bug fixes, including major bug with mc:i optional field in SAM
 
 10.0.9
 - bug fixes
-
-10.0.10
-- SAM: better handling of optional fields SA, OA, XA

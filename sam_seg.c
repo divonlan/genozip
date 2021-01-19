@@ -663,7 +663,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         
         // if its an "important" chrom (heuristic: rname_len <= 5) - have its own POS context (pos values of the same chr in subsequent XA fields are often
         // similar, but can be placed in different positions within their respective XA arrays)
-        if (rname_len <= 5) {
+        /*if (rname_len <= 5) {
             char id[DICT_ID_LEN] = "X2A";
             memcpy (&id[3], rname, rname_len);
 
@@ -674,7 +674,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
             seg_by_ctx (vb, ((char []){ SNIP_SPECIAL, (char)SAM_SPECIAL_XA_POS }), 2, pos_ctx, 0); 
             pos_ctx->no_stons = true;
         }
-        else 
+        else // we will add this ^ back in the next release */  
             seg_integer_or_not ((VBlockP)vb, pos_ctx, pos, pos_len, 1+pos_len);
     }
 
