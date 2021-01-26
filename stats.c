@@ -372,9 +372,9 @@ void stats_display (void)
 
     if (z_file->disk_size < (1<<20))  // no need to print this note if total size > 1MB, as the ~2K of overhead is rounded off anyway
         // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 2 sections in the file - since stats text is generated before these sections are compressed
-        printf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (z_file->disk_size - sl->offset).s);
+        iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (z_file->disk_size - sl->offset).s);
 
-    printf ("\n");
+    iprint0 ("\n");
 }
 
 void stats_read_and_display (void)

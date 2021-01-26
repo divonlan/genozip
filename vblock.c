@@ -90,6 +90,8 @@ void vb_destroy_vb (VBlockP *vb_p)
 {
     VBlockP vb = *vb_p;
 
+    if (!vb) return;
+
     buf_destroy (&vb->ra_buf);
     buf_destroy (&vb->compressed);
     buf_destroy (&vb->txt_data);
@@ -183,6 +185,8 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void vb_cleanup_memory (void)
 {
+    if (!pool) return;
+
     for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {
         VBlock *vb = pool->vb[vb_i];
         if (vb && 
@@ -195,6 +199,17 @@ void vb_cleanup_memory (void)
         DTPZ(cleanup_memory)(evb);
 
     ref_unload_reference();
+}
+
+// frees memory of all VBs, except for evb
+void vb_destroy_all_vbs (void)
+{
+    if (!pool) return;
+
+    for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) 
+        vb_destroy_vb (&pool->vb[vb_i]);
+
+    FREE (pool);
 }
 
 // NOT thread safe, use only in execution-terminating messages

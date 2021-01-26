@@ -13,6 +13,7 @@
 #define IS_CLETTER(c) ((c)>='A' && (c)<='Z')
 #define IS_SLETTER(c) ((c)>='a' && (c)<='z')
 #define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
+#define IS_NON_WS_PRINTABLE(c) (((c)>=33) && ((c)<=126))
 #define IS_VALID_URL_CHAR(c) (IS_LETTER(c) || IS_DIGIT(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
 #define FLIP_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
 

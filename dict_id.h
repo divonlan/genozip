@@ -34,6 +34,7 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 
                 dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, dict_id_FORMAT_DP, dict_id_FORMAT_MIN_DP, // some VCF FORMAT subfields
                 dict_id_FORMAT_PS, dict_id_FORMAT_GT, dict_id_FORMAT_GT_HT, dict_id_FORMAT_GT_HT_INDEX,
+                dict_id_PBWT_RUNS, dict_id_PBWT_FGRC,
                 dict_id_FORMAT_GT_SHARK_DB, dict_id_FORMAT_GT_SHARK_GT, dict_id_FORMAT_GT_SHARK_EX,
                 dict_id_FORMAT_AD, dict_id_FORMAT_ADF, dict_id_FORMAT_ADR, dict_id_FORMAT_ADALL, 
                 dict_id_FORMAT_GQ, dict_id_FORMAT_DS,

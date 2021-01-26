@@ -19,6 +19,8 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(compressor_bsc);
     ADD(compressor_domq);
     ADD(compressor_actg);
+    ADD(compressor_pbwt);
+    ADD(compressor_hapmat);
     ADD(zip_generate_ctxs);
     ADD(zip_compress_ctxs);
     ADD(codec_assign_best_codec);
@@ -27,7 +29,6 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(reconstruct_vb);
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
-    ADD(compressor_hapmat);
     ADD(codec_hapmat_piz_get_one_line);
     ADD(sam_seg_seq_field);
     ADD(ctx_compress_one_dict_fragment);
@@ -106,6 +107,13 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (write, 1);
         fprintf (info_stream, "GENOUNZIP compute threads: %u\n", ms(p->compute));
         PRINT (zfile_uncompress_section, 1);
+        PRINT (compressor_bz2,  2);
+        PRINT (compressor_lzma, 2);
+        PRINT (compressor_bsc,  2);
+        PRINT (compressor_domq, 2);
+        PRINT (compressor_actg, 2);
+        PRINT (compressor_hapmat, 2);
+        PRINT (compressor_pbwt, 2);
         PRINT (reconstruct_vb, 1);
         PRINT (md5, 1);
         PRINT (bgzf_compute_thread, 1);
@@ -143,6 +151,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (compressor_domq, 1);
         PRINT (compressor_actg, 1);
         PRINT (compressor_hapmat, 1);
+        PRINT (compressor_pbwt, 1);
         PRINT (codec_hapmat_count_alt_alleles, 2);
     }    
 
@@ -159,4 +168,6 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     fprintf (info_stream, "  Average compute time: %u\n", ms(p->compute) / num_vbs);
     fprintf (info_stream, "  Average write time: %u\n", ms(p->write) / num_vbs);
     fprintf (info_stream, "\n");
+
+    fflush (info_stream);
 }

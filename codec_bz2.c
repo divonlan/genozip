@@ -138,11 +138,13 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
     return success;
 }
 
-void codec_bz2_uncompress (VBlock *vb, Codec codec,
+void codec_bz2_uncompress (VBlock *vb, Codec codec, uint8_t param,
                            const char *compressed, uint32_t compressed_len,
                            Buffer *uncompressed_buf, uint64_t uncompressed_len, 
                            Codec unused)
 {
+    START_TIMER;
+
     bz_stream strm;
     strm.bzalloc = codec_bz2_alloc;
     strm.bzfree  = codec_free;
@@ -160,4 +162,6 @@ void codec_bz2_uncompress (VBlock *vb, Codec codec,
     ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "Error: BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", BZ2_errstr(ret), strm.avail_in, strm.avail_out);
 
     BZ2_bzDecompressEnd (&strm);
+
+    COPY_TIMER (compressor_bz2);
 }

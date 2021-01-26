@@ -390,26 +390,26 @@ unsigned regions_max_num_chregs (void)
 
 void regions_display(const char *title)
 {
-    fprintf (info_stream, "regions_display: %s\n", title);
+    iprintf ("regions_display: %s\n", title);
 
     if (buf_is_allocated (&regions_buf)) {
 
-        fprintf (info_stream, "Showing %u %s regions:\n", (uint32_t)regions_buf.len, is_negative_regions ? "NEGATIVE" : "POSITIVE");
+        iprintf ("Showing %u %s regions:\n", (uint32_t)regions_buf.len, is_negative_regions ? "NEGATIVE" : "POSITIVE");
 
         for (unsigned reg_i = 0; reg_i < regions_buf.len; reg_i++) {
             Region *reg = &((Region *)regions_buf.data)[reg_i];
-            fprintf (info_stream, "chrom=%s start=%"PRId64" end=%"PRId64"\n", 
+            iprintf ("chrom=%s start=%"PRId64" end=%"PRId64"\n", 
                      reg->chrom ? reg->chrom : "ALL", reg->start_pos, reg->end_pos); 
         }
     }
 
     if (chregs) {
-        fprintf (info_stream, "Showing %s chromosomeXregions (\"chregs\") across %u chromosomes:\n", is_negative_regions ? "NEGATIVE" : "POSITIVE", num_chroms);
+        iprintf ("Showing %s chromosomeXregions (\"chregs\") across %u chromosomes:\n", is_negative_regions ? "NEGATIVE" : "POSITIVE", num_chroms);
 
         for (unsigned chr_i = 0; chr_i < num_chroms; chr_i++)
             for (unsigned chreg_i=0; chreg_i < chregs[chr_i].len; chreg_i++) {
                 Chreg *chreg = ENT (Chreg, chregs[chr_i], chreg_i);
-                fprintf (info_stream, "chrom_word_index=%d start=%"PRId64" end=%"PRId64"\n", chr_i, chreg->start_pos, chreg->end_pos); 
+                iprintf ("chrom_word_index=%d start=%"PRId64" end=%"PRId64"\n", chr_i, chreg->start_pos, chreg->end_pos); 
             }
     }
 }

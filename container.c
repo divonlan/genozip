@@ -52,6 +52,17 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, ContainerP con,
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
     uint32_t snip_len = 1 + b64_len + prefixes_len;
 
+    if (flag.show_containers) { 
+        fprintf (info_stream, "VB=%u Line=%u Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
+                 vb->vblock_i, vb->line_i, ctx->did_i, ctx->name, con->repeats, con->repsep[0], con->repsep[1]);
+        for (unsigned i=0; i < con_nitems (*con); i++) {
+            ContainerItem *item = &con->items[i];
+            if (item->dict_id.num) 
+                fprintf (info_stream, "%u:%s ", ctx_get_existing_ctx (vb, item->dict_id)->did_i, dis_dict_id (item->dict_id).s); 
+        }
+        iprint0 ("\n");
+    }
+
     // store in struct cache
     return seg_by_ctx (vb, snip, snip_len, ctx, add_bytes); 
 }
@@ -99,8 +110,12 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
     uint32_t num_items = con_nitems(*con);
     Context *item_ctxs[num_items];
+    
+    // we can cache did_i up to 254. dues historical reasons the field is only 8 bit. that's enough in most cases anyway.
     for (unsigned i=0; i < num_items; i++) 
-        item_ctxs[i] = con->items[i].dict_id.num ? ctx_get_existing_ctx (vb, con->items[i].dict_id) : NULL;
+        item_ctxs[i] = !con->items[i].dict_id.num      ? NULL 
+                     : con->items[i].did_i_small < 255 ? &vb->contexts[con->items[i].did_i_small]
+                     :                                   ctx_get_existing_ctx (vb, con->items[i].dict_id);
 
     // for containers, new_value is the some of all its items, all repeats last_value (either int or float)
     LastValueType new_value = {};
@@ -132,7 +147,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             last_non_filtered_item_i = i;
 
             if (flag.show_containers && item_ctxs[i]) // show container reconstruction 
-                fprintf (info_stream, "VB=%u Line=%u Repeat=%u %s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
+                iprintf ("VB=%u Line=%u Repeat=%u %s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
                          vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctxs[i]->name, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 
@@ -236,6 +251,18 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
         ASSERTE (con_nitems (con) <= MAX_SUBFIELDS, "A container of %s has %u items which is beyond MAX_SUBFIELDS=%u. Please upgrade to latest version of genozip to access this file.",
                  ctx->name, con_nitems (con), MAX_SUBFIELDS);
 
+        // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
+        for (uint32_t item_i=0; item_i < con_nitems (con); item_i++)
+            if (con.items[item_i].dict_id.num) { // not a prefix-only item
+                DidIType did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
+                ASSERT (did_i != DID_I_NONE, "Error in container_reconstruct analyzing a %s container: unable to find did_i for item %s",
+                        ctx->name, dis_dict_id (con.items[item_i].dict_id).s);
+
+                con.items[item_i].did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
+            }
+            else 
+                con.items[item_i].did_i_small = 255;
+ 
         // get prefixes
         unsigned st_size = con_sizeof (con);
         con_p         = &con;
@@ -308,6 +335,8 @@ void container_display (ConstContainerP con)
         fprintf (info_stream, "item %u: dict_id=%s seperator={ %u %u } translator=%u\n",
                  i, dis_dict_id (con->items[i].dict_id).s,  
                  con->items[i].seperator[0], con->items[i].seperator[1], con->items[i].translator);
+    
+    fflush (info_stream);
 }
 
 // Translators reconstructing last_value as a little endian binary

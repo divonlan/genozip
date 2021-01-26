@@ -382,7 +382,10 @@ extern char *file_compressible_extensions (bool plain_only);
 #define FILENAME_STDIN  "(stdin)"
 #define FILENAME_STDOUT "(stdout)"
 
-#define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? FILENAME_STDIN : FILENAME_STDOUT))
+#define file_printname(file) (!file             ? "(none)"       \
+                           : (file)->name       ? (file)->name   \
+                           : (file)->mode==READ ? FILENAME_STDIN \
+                           :                      FILENAME_STDOUT)
 #define txt_name file_printname(txt_file)
 #define z_name   file_printname(z_file)
 

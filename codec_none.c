@@ -36,7 +36,7 @@ bool codec_none_compress (VBlock *vb, SectionHeader *header,
     return true;
 }
 
-void codec_none_uncompress (VBlock *vb, Codec codec,
+void codec_none_uncompress (VBlock *vb, Codec codec, uint8_t param,
                            const char *compressed, uint32_t compressed_len,
                            Buffer *uncompressed_buf, uint64_t uncompressed_len, 
                            Codec unused)

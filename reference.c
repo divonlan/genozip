@@ -339,7 +339,7 @@ static void ref_show_sequence (void)
             !regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, &first_pos, &last_pos)) continue;
 
         if (r->ref.nbits) {
-            fprintf (info_stream, "%.*s\n", r->chrom_name_len, r->chrom_name);
+            iprintf ("%.*s\n", r->chrom_name_len, r->chrom_name);
             ref_print_bases (info_stream, &r->ref, first_pos, last_pos-first_pos+1, true);
         }
     }
@@ -373,7 +373,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     bool is_compacted = (header->h.section_type == SEC_REF_IS_SET); // we have a SEC_REF_IS_SET if  SEC_REFERENCE was compacted
 
     if (flag.show_reference && primary_command == PIZ && r)  // in ZIP, we show the compression of SEC_REFERENCE into z_file, not the uncompression of the reference file
-        fprintf (info_stream, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
+        iprintf ("vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
                  vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
                  BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
@@ -425,7 +425,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         header = (SectionHeaderReference *)&vb->z_data.data[*ENT (uint32_t, vb->z_section_headers, 1)];
 
         if (flag.show_reference && primary_command == PIZ && r) 
-            fprintf (info_stream, "vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
+            iprintf ("vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
                      vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
                      BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
@@ -646,7 +646,7 @@ bool ref_mmap_cached_reference (void)
 
 static void *ref_create_cache (void *unused_arg)
 {
-    buf_dump_to_file (ref_get_cache_fn(), &genome_cache, 1, true);
+    buf_dump_to_file (ref_get_cache_fn(), &genome_cache, 1, true, false);
     return NULL;
 }
 
@@ -910,7 +910,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
     if (flag.show_reference) {
         Context *ctx = &z_file->contexts[CHROM];
         CtxNode *node = ENT (CtxNode, ctx->nodes, BGEN32 (header->chrom_word_index));
-        fprintf (info_stream, "Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
+        iprintf ("Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
                  ref_filename, BGEN32 (header->chrom_word_index), 
                  ENT (char, ctx->dict, node->char_index), 
                  BGEN64(header->gpos), BGEN64(header->pos), 
@@ -1061,7 +1061,7 @@ static void ref_compress_one_range (VBlockP vb)
         comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, (char *)r->is_set.words, NULL);
 
         if (flag.show_reference && r) 
-            fprintf (info_stream, "vb_i=%u Compressing SEC_REF_IS_SET chrom=%u (%.*s) gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
+            iprintf ("vb_i=%u Compressing SEC_REF_IS_SET chrom=%u (%.*s) gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
                      vb->vblock_i, BGEN32 (header.chrom_word_index), r->chrom_name_len, r->chrom_name,
                      BGEN64 (header.gpos), BGEN64 (header.pos), BGEN32 (header.num_bases), 
                      BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
@@ -1078,7 +1078,7 @@ static void ref_compress_one_range (VBlockP vb)
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NULL);
 
     if (flag.show_reference && r) 
-        fprintf (info_stream, "vb_i=%u Compressing SEC_REFERENCE chrom=%u (%.*s) %s gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
+        iprintf ("vb_i=%u Compressing SEC_REFERENCE chrom=%u (%.*s) %s gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
                  vb->vblock_i, BGEN32 (header.chrom_word_index), r->chrom_name_len, r->chrom_name, is_compacted ? "compacted " : "",
                  BGEN64 (header.gpos), BGEN64 (header.pos), BGEN32 (header.num_bases), 
                  BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
@@ -1344,7 +1344,8 @@ void ref_load_external_reference (bool display, bool is_last_z_file)
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict = 
     flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = 0;
     flag.grep = flag.show_time = flag.unbind = 0;
-    flag.dict_id_show_one_b250 = flag.dict_id_show_one_dict = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE;
+    flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE;
+    flag.show_one_dict = NULL;
 
     TEMP_VALUE (command, PIZ);
 

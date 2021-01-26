@@ -33,7 +33,7 @@ void mutex_lock_do (Mutex *mutex, const char *func)
 
     bool show = mutex_is_show (mutex->name);
 
-    if (show) fprintf (info_stream, "LOCKING : Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
+    if (show) iprintf ("LOCKING : Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
 
     int ret = pthread_mutex_lock (&mutex->mutex); 
     ASSERT (!ret, "Error in mutex_lock_do called from %s by %"PRIu64": pthread_mutex_lock failed: %s", 
@@ -41,7 +41,7 @@ void mutex_lock_do (Mutex *mutex, const char *func)
 
     mutex->lock_func = func; // mutex->lock_func is protected by the mutex
 
-    if (show) fprintf (info_stream, "LOCKED  : Mutex %s by thread %"PRIu64"\n", mutex->name, (uint64_t)pthread_self());
+    if (show) iprintf ("LOCKED  : Mutex %s by thread %"PRIu64"\n", mutex->name, (uint64_t)pthread_self());
 
 }
 
@@ -57,5 +57,5 @@ void mutex_unlock_do (Mutex *mutex, const char *func, uint32_t line)
     ASSERT (!ret, "Error in mutex_unlock_do called from %s:%u: pthread_mutex_unlock failed for %s: %s", func, line, mutex->name, strerror (ret)); 
 
     if (mutex_is_show (mutex->name))
-        fprintf (info_stream, "UNLOCKED: Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
+        iprintf ("UNLOCKED: Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
 }

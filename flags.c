@@ -164,7 +164,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me,      _s5, _sM, _sA, _sc, _sI, _gt,                _bw,     _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me,      _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,     _00 };
         static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                              _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,          _00 };
         static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,         _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,           _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw,     _00 };
         static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                              _u,     _p, _e,                                                                                                          _st, _sm,                                       _dm,                                                                                                                                                             _sM,                                         _b, _00 };
@@ -232,7 +232,7 @@ void flags_init_from_command_line (int argc, char **argv)
             case 2   : if (optarg) flag.dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 
                        else        flag.show_b250 = 1;
                        break;
-            case 3   : if (optarg) flag.dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 
+            case 3   : if (optarg) flag.show_one_dict = optarg;
                        else        flag.show_dict = 1;
                        break;
             case 5   : flag.dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
@@ -345,6 +345,7 @@ static void flags_test_conflicts (void)
     ASSINP (flag.reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "option %s supported only for viewing the reference file itself", OT("REFERENCE", "E"));
     ASSINP0 (global_max_threads >= 2 || !flag.genobwa, "--genobwa requires at least 2 threads");
     ASSINP0 (global_max_threads >= 2 || !flag.interleave, "--interleave requires at least 2 threads");
+    ASSINP0 (!flag.gtshark, "the --gtshark option is no longer supported, because the native VCF haplotype compression of Genozip is now superior to GTShark");
 }
 
 // --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
@@ -398,7 +399,7 @@ void flags_update (unsigned num_txt_files, const char **filenames)
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag.show_dict || flag.show_b250 || flag.show_headers || flag.show_threads || flag.show_bgzf || flag.show_mutex ||
-        flag.dict_id_show_one_b250.num || flag.dict_id_show_one_dict.num || flag.show_reference || flag.show_digest ||
+        flag.dict_id_show_one_b250.num || flag.show_one_dict || flag.show_reference || flag.show_digest ||
         flag.show_alleles || flag.show_vblocks || flag.show_codec || (flag.show_index && command==PIZ))
         flag.quiet=true; // don't show progress
 
@@ -449,7 +450,7 @@ void flags_update (unsigned num_txt_files, const char **filenames)
 
     // cases where genocat is used to view some information, but not the file contents
     flag.genocat_info_only = exe_type == EXE_GENOCAT &&
-        (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.dict_id_show_one_dict.num ||
+        (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
          flag.show_index || flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || flag.dump_section || flag.show_headers ||
          flag.show_reference || flag.show_ref_contigs || flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
          flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs || flag.show_gheader);

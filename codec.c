@@ -62,7 +62,7 @@ static bool codec_compress_error (VBlock *vb, SectionHeader *header, const char 
 }
 
 
-static void codec_uncompress_error (VBlock *vb, Codec codec, 
+static void codec_uncompress_error (VBlock *vb, Codec codec, uint8_t param,
                                     const char *compressed, uint32_t compressed_len,
                                     Buffer *uncompressed_buf, uint64_t uncompressed_len,
                                     Codec sub_codec)
@@ -217,7 +217,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     qsort (tests, num_tests, sizeof (CodecTest), (int (*)(const void *, const void*))codec_assign_sorter);
 
     if (flag.show_codec) {
-        fprintf (info_stream, "vb_i=%-2u %-12s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
+        iprintf ("vb_i=%-2u %-12s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
                  vb->vblock_i, ctx ? ctx->name : "", &st_name (st)[4],
                  codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
                  codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,

@@ -32,7 +32,7 @@ Digest digest_finalize (DigestContext *ctx, const char *msg)
                              : md5_finalize (&ctx->md5_ctx);
 
     if (flag.show_digest) 
-        fprintf (info_stream, "%s finalize %s: %s\n", DIGEST_NAME, msg, digest_display (digest).s);
+        iprintf ("%s finalize %s: %s\n", DIGEST_NAME, msg, digest_display (digest).s);
 
     return digest;
 }
@@ -76,7 +76,7 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
     }
 
     if (flag.show_digest) 
-        fprintf (info_stream, "vb=%05d %s update %s (len=%"PRIu64") 50chars=\"%.*s\": before=%s after=%s\n", 
+        iprintf ("vb=%05d %s update %s (len=%"PRIu64") 50chars=\"%.*s\": before=%s after=%s\n", 
                  buf->vb->vblock_i, DIGEST_NAME, msg, buf->len, 
                  MIN (50, (int)buf->len), buf->data, 
                  digest_display (digest_snapshot (&before)).s, 

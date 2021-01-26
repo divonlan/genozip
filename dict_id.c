@@ -22,6 +22,7 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 // VCF stuff
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
          dict_id_FORMAT_PS=0, dict_id_FORMAT_GT=0, dict_id_FORMAT_GT_HT=0, dict_id_FORMAT_GT_HT_INDEX=0,
+         dict_id_PBWT_RUNS=0, dict_id_PBWT_FGRC=0,
          dict_id_FORMAT_GT_SHARK_DB=0, dict_id_FORMAT_GT_SHARK_GT=0, dict_id_FORMAT_GT_SHARK_EX=0,
          dict_id_FORMAT_AD=0, dict_id_FORMAT_ADF=0, dict_id_FORMAT_ADR=0, dict_id_FORMAT_ADALL=0, 
          dict_id_FORMAT_GQ=0, dict_id_FORMAT_DS=0,
@@ -137,6 +138,8 @@ void dict_id_initialize (DataType data_type)
         dict_id_FORMAT_GT_SHARK_DB = dict_id_make ("@1SHRKDB", 8, DTYPE_VCF_FORMAT).num; // different first 2 letters, 
         dict_id_FORMAT_GT_SHARK_GT = dict_id_make ("@2SHRKGT", 8, DTYPE_VCF_FORMAT).num;
         dict_id_FORMAT_GT_SHARK_EX = dict_id_make ("@3SHRKEX", 8, DTYPE_VCF_FORMAT).num;  
+        dict_id_PBWT_RUNS     = dict_id_make ("@1BWTRUN", 8, DTYPE_VCF_FORMAT).num; // PBWT runs
+        dict_id_PBWT_FGRC     = dict_id_make ("@2BWTFGR", 8, DTYPE_VCF_FORMAT).num; // PBWT foreground run count
         dict_id_FORMAT_PL     = dict_id_make ("PL", 2, DTYPE_VCF_FORMAT).num;
         dict_id_FORMAT_GP     = dict_id_make ("GP", 2, DTYPE_VCF_FORMAT).num;
         dict_id_FORMAT_GL     = dict_id_make ("GL", 2, DTYPE_VCF_FORMAT).num;
@@ -264,6 +267,7 @@ static void dict_id_show_aliases (void)
     for (unsigned i=0; i < dict_id_num_aliases; i++) 
         fprintf (info_stream, "alias=%s dst=%s\n", 
                  dis_dict_id (dict_id_aliases[i].alias).s, dis_dict_id (dict_id_aliases[i].dst).s);
+    fflush (info_stream);
 }
 
 // called by ZIP I/O thread for writing to global section

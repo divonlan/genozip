@@ -107,6 +107,8 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_HAPM    = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
     CODEC_DOMQ    = 13, // compress SAM/FASTQ quality scores, if dominated by a single character
     CODEC_GTSHARK = 14, // compress VCF haplotype matrix with gtshark
+    CODEC_PBWT    = 15, // compress VCF haplotype matrix with pbwt
+    
     // external compressors (used by executing an external application)
     CODEC_BGZF=20, CODEC_XZ=21, CODEC_BCF=22, 
     V8_CODEC_BAM=23,    // in v8 BAM was a codec which was compressed using samtools as external compressor. since v9 it is a full data type, and no longer a codec.
@@ -127,6 +129,8 @@ extern VBlockP evb;
 #define MIN(a, b) (((a) < (b)) ? (a) : (b) )
 #define MAX(a, b) (((a) > (b)) ? (a) : (b) )
 #endif
+
+#define SWAP(a,b) do { typeof(a) tmp = a; a = b; b = tmp; } while(0);
 
 // we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
 #ifndef __bool_true_false_are_defined
@@ -187,6 +191,10 @@ typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 extern void main_exit (bool show_stack, bool is_error);
 #define exit_on_error(show_stack) main_exit (show_stack, true)
 #define exit_ok main_exit (false, false)
+
+#define iputc(c)                             fputc ((c), info_stream)
+#define iprintf(format, ...)                 { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); }
+#define iprint0(str)                         { fprintf (info_stream, (str)); fflush (info_stream); }
 
 // check for a user error
 #define ASSINP(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false); }}

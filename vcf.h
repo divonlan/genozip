@@ -18,8 +18,6 @@
 #error "VCF_MAX_PLOIDY cannot go beyond 65535 VBlockVCF.ploidy are uint16_t"
 #endif
 
-#define VCF_MAX_ALLELE_VALUE 99 // the code currently allows for 2-digit alleles.
-
 // SEG stuff
 extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void vcf_seg_initialize (VBlockP vb_);

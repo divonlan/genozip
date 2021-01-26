@@ -29,7 +29,6 @@ void codec_hapmat_comp_init (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    vb->ht_matrix_ctx         = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
     vb->ht_matrix_ctx->ltype  = LT_CODEC;
     vb->ht_matrix_ctx->lcodec = CODEC_HAPM;
 
@@ -58,20 +57,20 @@ static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlockVCF *vb)
 {
     START_TIMER; 
 
-    buf_alloc (vb, &vb->hapmat_helper_index_buf, vb->num_haplotypes_per_line * sizeof(HaploTypeSortHelperIndex), 0, "hapmat_helper_index_buf");
+    buf_alloc (vb, &vb->hapmat_helper_index_buf, vb->ht_per_line * sizeof(HaploTypeSortHelperIndex), 0, "hapmat_helper_index_buf");
     buf_zero (&vb->hapmat_helper_index_buf);
     ARRAY (HaploTypeSortHelperIndex, helper_index, vb->hapmat_helper_index_buf);
 
     // build index array 
-    for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) 
+    for (uint32_t ht_i=0; ht_i < vb->ht_per_line; ht_i++) 
         helper_index[ht_i].index_in_original_line = ht_i;
 
     for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
-        for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
+        for (uint32_t ht_i=0; ht_i < vb->ht_per_line; ht_i++) {
 
             // we count as alt alleles : 1 - 99 (ascii 49 to 147)
             //             ref alleles : 0 . (unknown) * (missing)
-            uint8_t one_ht = *ENT (uint8_t, vb->ht_matrix_ctx->local, line_i * vb->num_haplotypes_per_line + ht_i);
+            uint8_t one_ht = *ENT (uint8_t, vb->ht_matrix_ctx->local, line_i * vb->ht_per_line + ht_i);
             if (one_ht >= '1')
                 helper_index[ht_i].num_alt_alleles++;
         }
@@ -87,7 +86,7 @@ static void codec_hapmat_compress_one_array (VBlockP vb_, uint32_t ht_i,
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     uint32_t orig_col_i = ENT (HaploTypeSortHelperIndex, vb->hapmat_helper_index_buf, ht_i)->index_in_original_line; 
-    const uint32_t increment = vb->num_haplotypes_per_line; // automatic var that can be optimized to a register
+    const uint32_t increment = vb->ht_per_line; // automatic var that can be optimized to a register
 
     uint8_t *ht_data_ptr = ENT (uint8_t, vb->ht_matrix_ctx->local, orig_col_i);
     ARRAY (uint8_t, column, vb->hapmat_one_array);
@@ -105,20 +104,20 @@ static void codec_hapmat_compress_one_array (VBlockP vb_, uint32_t ht_i,
 // build the reverse index that will allow access by the original index to the sorted array, to be included in the genozip file
 static void codec_hapmap_compress_build_index (VBlockVCF *vb, HaploTypeSortHelperIndex *helper_index)
 {
-    for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
+    for (uint32_t ht_i=0; ht_i < vb->ht_per_line ; ht_i++)
         helper_index[ht_i].index_in_sorted_line = ht_i;
 
     // sort array back to its original order
-    qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_original_index_comparator);
+    qsort (helper_index, vb->ht_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_original_index_comparator);
 
     // create a permutation index for the vblock
     // we populate the hapmat_hapmat_index_ctx local, and it will be written after us, as the context is create after the hapmat_ctx 
-    buf_alloc (vb, &vb->hapmat_index_ctx->local, vb->num_haplotypes_per_line * sizeof(uint32_t), 
+    buf_alloc (vb, &vb->hapmat_index_ctx->local, vb->ht_per_line * sizeof(uint32_t), 
                0, "contexts->local");
-    vb->hapmat_index_ctx->local.len = vb->num_haplotypes_per_line;
+    vb->hapmat_index_ctx->local.len = vb->ht_per_line;
     
     ARRAY (uint32_t, hp_index, vb->hapmat_index_ctx->local);
-    for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
+    for (uint32_t ht_i=0; ht_i < vb->ht_per_line ; ht_i++)
         hp_index[ht_i] = BGEN32 (helper_index[ht_i].index_in_sorted_line);    
 }
 
@@ -141,7 +140,7 @@ bool codec_hapmat_compress (VBlock *vb_,
     HaploTypeSortHelperIndex *helper_index = codec_hapmat_count_alt_alleles (vb);
     
     // sort the helper index by number of alt alleles
-    qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
+    qsort (helper_index, vb->ht_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
 
     vb->hapmat_one_array.len = vb->lines.len;
     buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array");
@@ -151,7 +150,7 @@ bool codec_hapmat_compress (VBlock *vb_,
 
     // compress the matrix one column at a time, by the order of helper index
     uint64_t save_lines_len = vb->lines.len;
-    vb->lines.len = vb->num_haplotypes_per_line; // temporarily set vb->lines.len to number of columns, as this is the number of time the callback will be called
+    vb->lines.len = vb->ht_per_line; // temporarily set vb->lines.len to number of columns, as this is the number of time the callback will be called
     
     Codec sub_codec = codec_args[CODEC_HAPM].sub_codec;
     CodecCompress *compress = codec_args[sub_codec].compress;
@@ -170,7 +169,7 @@ bool codec_hapmat_compress (VBlock *vb_,
     // since codecs were already assigned to contexts before compression of all contexts begun, but
     // we just created this context now, we assign a codec manually
     // BUG: I can't this to work... reconstruction failed. no idea why. bug 215.
-    //codec_assign_best_codec (vb, vb->hapmat_index_ctx, NULL, SEC_LOCAL, vb->num_haplotypes_per_line * sizeof(uint32_t));
+    //codec_assign_best_codec (vb, vb->hapmat_index_ctx, NULL, SEC_LOCAL, vb->ht_per_line * sizeof(uint32_t));
     vb->hapmat_index_ctx->lcodec = CODEC_BSC; // in the mean time, until bug 215 is fixed
 
     COPY_TIMER (compressor_hapmat);
@@ -189,9 +188,9 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    uint32_t num_haplotypes_per_line = vb->num_haplotypes_per_line = (uint32_t)(vb->ht_matrix_ctx->local.len / vb->lines.len);
+    uint32_t ht_per_line = vb->ht_per_line = (uint32_t)(vb->ht_matrix_ctx->local.len / vb->lines.len);
 
-    vb->hapmat_one_array.len = num_haplotypes_per_line + 7; // +7 because depermuting_loop works on a word (32/64 bit) boundary
+    vb->hapmat_one_array.len = ht_per_line + 7; // +7 because depermuting_loop works on a word (32/64 bit) boundary
     buf_alloc (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array");
     buf_alloc (vb, &vb->hapmat_columns_data, sizeof (char *) * vb->hapmat_one_array.len, 1, "hapmat_columns_data"); // realloc for exact size (+15 is padding for 64b operations)
 
@@ -207,10 +206,10 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb_)
     buf_alloc (vb, &vb->hapmat_column_of_zeros, MAX (txt_file->max_lines_per_vb, vb->lines.len), 1, "hapmat_column_of_zeros");
     buf_zero (&vb->hapmat_column_of_zeros);
 
-    for (uint32_t ht_i = 0; ht_i < num_haplotypes_per_line; ht_i++) 
+    for (uint32_t ht_i = 0; ht_i < ht_per_line; ht_i++) 
         hapmat_columns_data[ht_i] = ENT (char, vb->ht_matrix_ctx->local, permutatation_index[ht_i] * vb->lines.len);
 
-    for (unsigned ht_i=num_haplotypes_per_line; ht_i < num_haplotypes_per_line + 7; ht_i++)
+    for (unsigned ht_i=ht_per_line; ht_i < ht_per_line + 7; ht_i++)
         hapmat_columns_data[ht_i] = vb->hapmat_column_of_zeros.data;
 }
 
@@ -222,7 +221,7 @@ static inline void codec_hapmat_piz_get_one_line (VBlockVCF *vb)
     if (flag.samples) buf_zero (&vb->hapmat_one_array); // if we're not filling in all samples, initialize to 0;
 
     ARRAY (const char *, hapmat_columns_data, vb->hapmat_columns_data); 
-    uint32_t ht_i_after = vb->num_haplotypes_per_line; // automatic variable - faster
+    uint32_t ht_i_after = vb->ht_per_line; // automatic variable - faster
     uint64_t *next = FIRSTENT (uint64_t, vb->hapmat_one_array);
     uint32_t vb_line_i = vb->line_i - vb->first_line;
 
@@ -239,7 +238,7 @@ static inline void codec_hapmat_piz_get_one_line (VBlockVCF *vb)
                     ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 4][vb_line_i] << 32) |
                     ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 5][vb_line_i] << 40) |
                     ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 6][vb_line_i] << 48) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 7][vb_line_i] << 56) ;  // no worries if num_haplotypes_per_line is not a multiple of 4 - we have extra columns of zero
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 7][vb_line_i] << 56) ;  // no worries if ht_per_line is not a multiple of 4 - we have extra columns of zero
 #else
         *(next++) = ((uint64_t)(uint8_t)hapmat_columns_data[ht_i    ][vb_line_i] << 56) |  // this is BIG ENDIAN order
                     ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 1][vb_line_i] << 48) |
@@ -268,8 +267,6 @@ void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    if (vb->dont_show_curr_line) return;
-
     // get one row of the haplotype matrix for this line into vb->hapmat_one_array if we don't have it already
     if (vb->hapmat_one_array.param != vb->line_i) { // we store the line_i in param
         codec_hapmat_piz_get_one_line (vb);
@@ -279,8 +276,10 @@ void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
 
     // find next allele - skipping unused spots ('*')
     uint8_t ht = '*';
-    while (ht == '*' && vb->hapmat_one_array.len < vb->num_haplotypes_per_line)
+    while (ht == '*' && vb->hapmat_one_array.len < vb->ht_per_line)
         ht = *ENT(uint8_t, vb->hapmat_one_array, vb->hapmat_one_array.len++);
+
+    if (vb->dont_show_curr_line) return;
 
     switch (ht) {
         case '.': case '0' ... '9':
@@ -289,13 +288,20 @@ void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
         case 58 ... 147: { // allele 10 to 99 (ascii 58 to 147)
             RECONSTRUCT_INT (ht - '0'); break;
         }
-        case '\b': // ploidy padding (starting 10.0.2) - appears as the 2nd+ HT - unlike '*', these are counted in GT.repeats
+        case '-': // ploidy padding (starting 10.0.2) - appears as the 2nd+ HT - unlike '*', these are counted in GT.repeats
             vb->txt_data.len--; // remove previous phase character;
             break;
 
-        case '*':
-            ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: unexpected end of hapmat_one_array (len=%u) data in %s (ctx->local.len=%u)", 
-                vb->line_i, vb->vblock_i, (unsigned)vb->hapmat_one_array.len, ctx->name, (uint32_t)ctx->local.len);
+        // "%|%" is used instead of "./." in case the previous sample had a | phase. This is meant to reduce entroy of GT.b250
+        // in the case we have phased data, but missing samples appear as "./.".
+        case '%': 
+            if (*LASTENT (char, vb->txt_data) == '|' || *LASTENT (char, vb->txt_data) == '/') { // second % in "%|%" and act on the 2nd
+                vb->txt_data.len -= 1;  // remove | or /
+                RECONSTRUCT ("/.", 2);
+            }
+            else
+                RECONSTRUCT1 ('.'); // first % in "%|%" 
+            break;
 
         default: 
             ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: Invalid character found in decompressed HT array: '%c' (ASCII %u)", 

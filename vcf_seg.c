@@ -31,14 +31,12 @@ void vcf_seg_initialize (VBlock *vb_)
     vb->contexts[VCF_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 
     ctx_get_ctx (vb, dict_id_FORMAT_GT)->no_stons = true; // we store the GT matrix in local, so cannot accomodate singletons
+    vb->ht_matrix_ctx = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_nodes.len;
     buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf");
     buf_zero (&vb->format_mapper_buf);
-
-    if (flag.gtshark) codec_gtshark_comp_init (vb_);
-    else              codec_hapmat_comp_init  (vb_);
 }             
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -68,12 +66,8 @@ void vcf_seg_finalize (VBlockP vb_)
     
     container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
 
-    if (flag.show_alleles && vb->ht_matrix_ctx) {
-        fprintf (info_stream, "After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_matrix_ctx->local.len);
-
-        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++)
-            fprintf (info_stream,"Line %-2u: %.*s\n", line_i, vb->num_haplotypes_per_line, ENT (char, vb->ht_matrix_ctx->local, line_i * vb->num_haplotypes_per_line));
-    }
+    // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
+    if (vcf_num_samples) codec_pbwt_comp_init (vb_);
 }
 
 // optimize REF and ALT, for simple one-character REF/ALT (i.e. mostly a SNP or no-variant)
@@ -668,7 +662,7 @@ static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigne
              "haplotype data overflow due to increased ploidy on line %u", vb->line_i);
 
     uint32_t num_samples = vb->line_i * vcf_num_samples + sample_i; // all samples in previous lines + previous samples in current line
-    char *ht_data = vb->ht_matrix_ctx->local.data;
+    char *ht_data = FIRSTENT (char, vb->ht_matrix_ctx->local);
 
     // copy the haplotypes backwards (to avoid overlap), padding with '*' (which are NOT counted in .repeats of the GT container)
     for (int sam_i = num_samples-1; sam_i >= 0; sam_i--) {
@@ -681,7 +675,7 @@ static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigne
     }
 
     vb->ploidy = new_ploidy;
-    vb->num_haplotypes_per_line = vb->ploidy * vcf_num_samples;
+    vb->ht_per_line = vb->ploidy * vcf_num_samples;
 }
 
 static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataLineVCF *dl, const char *cell, unsigned cell_len, unsigned sample_i)
@@ -716,7 +710,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
 
     if (!vb->ploidy) {
         vb->ploidy = gt.repeats; // very first sample in the vb
-        vb->num_haplotypes_per_line = vb->ploidy * vcf_num_samples;
+        vb->ht_per_line = vb->ploidy * vcf_num_samples;
     }
 
     if (sample_i == 0 && vb->line_i == 0) {
@@ -727,7 +721,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     }
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
-    uint8_t *ht_data = ENT (uint8_t, vb->ht_matrix_ctx->local, vb->line_i * vb->num_haplotypes_per_line + vb->ploidy * sample_i);
+    uint8_t *ht_data = ENT (uint8_t, vb->ht_matrix_ctx->local, vb->line_i * vb->ht_per_line + vb->ploidy * sample_i);
 
     int64_t dosage=0; // sum of allele values
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
@@ -773,15 +767,23 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         }
     } // for characters in a sample
 
-    // if the ploidy of the sample is lower than vb->ploidy, set missing ht as '\b' (backspace) (which will cause deletion of themselves and their separator)
-    // and set the ploidy to vb->ploidy - to avoid increase in entroy of GT
+    // if the ploidy of the sample is lower than vb->ploidy, set missing ht as '-' (which will cause deletion of themselves and their separator)
+    // and set the ploidy to vb->ploidy - to avoid increase in entroy of GT.b250
     if (gt.repeats != vb->ploidy) {
         
         for (unsigned ht_i=gt.repeats; ht_i < vb->ploidy; ht_i++) 
-            ht_data[ht_i] = '\b'; // unlike '*', we DO count '\b' in .repeats
+            ht_data[ht_i] = '-'; // unlike '*', we DO count '-' in .repeats (so that we can have the same number of repeats = lower entroy in GT.b250)
 
         gt.repeats = vb->ploidy;
-        gt.repsep[0] = vb->gt_prev_phase;
+        if (!gt.repsep[0]) gt.repsep[0] = vb->gt_prev_phase; // this happens in case if a 1-ploid sample
+    }
+
+    // if this sample is a "./." - replace it with "%|%" or "%/%" according to the previous sample's phase -  
+    // so that the gt container is likely identical and we reduce GT.b250 entropy. Reason: many tools
+    // (including bcftools merge) produce "./." for missing samples even if all other samples are phased
+    if (ht_data[0]=='.' && gt.repeats==2 && ht_data[1]=='.' && gt.repsep[0]=='/') {
+        gt.repsep[0] = vb->gt_prev_phase ? vb->gt_prev_phase : '|'; // '|' is arbitrary
+        ht_data[0] = ht_data[1] = '%';
     }
 
     // in case we have INFO/SF, we verify that it is indeed the list of samples for which the first ht is not '.'
@@ -995,6 +997,9 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
                 "invalid VCF file - expecting a newline after the last sample (sample #%u)", vcf_num_samples);
     }
 
+    ASSSEG (samples.repeats <= vcf_num_samples, field_start, "according the VCF header, there should be %u sample%s per line, but this line has %u samples - that's too many",
+            vcf_num_samples, vcf_num_samples==1 ? "" : "s", samples.repeats);
+
     // in some real-world files I encountered have too-short lines due to human errors. we pad them
     if (samples.repeats < vcf_num_samples) {
         ASSERTW (false, "Warning: the number of samples in vb->line_i=%u is %u, different than the VCF column header line which has %u samples",
@@ -1002,14 +1007,15 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
 
         if (dl->has_haplotype_data) {
             char *ht_data = ENT (char, vb->ht_matrix_ctx->local, vb->line_i * vb->ploidy * vcf_num_samples + vb->ploidy * samples.repeats);
-            memset (ht_data, '*', vb->ploidy * (vcf_num_samples - samples.repeats));
+            unsigned num_missing = vb->ploidy * (vcf_num_samples - samples.repeats); 
+            memset (ht_data, '*', num_missing);
         }
     }
     
     container_seg_by_ctx ((VBlockP)vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
 
     if (vb->ht_matrix_ctx)
-        vb->ht_matrix_ctx->local.len = (vb->line_i+1) * vb->num_haplotypes_per_line;
+        vb->ht_matrix_ctx->local.len = (vb->line_i+1) * vb->ht_per_line;
  
     return next_field;
 }
@@ -1021,15 +1027,15 @@ static void vcf_seg_complete_missing_lines (VBlockVCF *vb)
     for (vb->line_i=0; vb->line_i < (uint32_t)vb->lines.len; vb->line_i++) {
 
         if (vb->ht_matrix_ctx && !DATA_LINE (vb->line_i)->has_haplotype_data) {
-            char *ht_data = ENT (char, vb->ht_matrix_ctx->local, vb->line_i * vb->num_haplotypes_per_line);
-            memset (ht_data, '*', vb->num_haplotypes_per_line);
+            char *ht_data = ENT (char, vb->ht_matrix_ctx->local, vb->line_i * vb->ht_per_line);
+            memset (ht_data, '*', vb->ht_per_line);
 
             // NOTE: we DONT set dl->has_haplotype_data to true bc downstream we still
             // count this row as having no GT field when analyzing gt data
         }
     }
 
-    vb->ht_matrix_ctx->local.len = vb->lines.len * vb->num_haplotypes_per_line;
+    vb->ht_matrix_ctx->local.len = vb->lines.len * vb->ht_per_line;
 }
 
 /* segment a VCF line into its fields:

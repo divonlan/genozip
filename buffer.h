@@ -171,7 +171,7 @@ extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uin
 #define MALLOC(size) buf_low_level_malloc (size, false, __FUNCTION__, __LINE__)
 #define CALLOC(size) buf_low_level_malloc (size, true,  __FUNCTION__, __LINE__)
 
-extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region);
+extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs);
 
 // bitmap stuff
 extern uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits);

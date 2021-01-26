@@ -177,6 +177,8 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
     }
     fprintf (info_stream, "\n");
 
+    fflush (info_stream);
+
     mutex_unlock (show_b250_mutex);
 }
 
@@ -194,7 +196,7 @@ static void zfile_dump_section (Buffer *uncompressed_data, SectionHeader *sectio
     // body
     if (uncompressed_data->len) {
         sprintf (filename, "%s.%u.%s.body", st_name (section_header->section_type), vb_i, dis_dict_id (dict_id).s);
-        buf_dump_to_file (filename, uncompressed_data, 1, false);
+        buf_dump_to_file (filename, uncompressed_data, 1, false, false);
     }
 }
 
@@ -210,10 +212,14 @@ void zfile_uncompress_section (VBlock *vb,
     START_TIMER;
 
     DictId dict_id = DICT_ID_NONE;
+    uint8_t param = 0;
+
     if (expected_section_type == SEC_DICT)
         dict_id = ((SectionHeaderDictionary *)section_header_p)->dict_id;
-    else if (expected_section_type == SEC_B250 || expected_section_type == SEC_LOCAL)
+    else if (expected_section_type == SEC_B250 || expected_section_type == SEC_LOCAL) {
         dict_id = ((SectionHeaderCtx *)section_header_p)->dict_id;
+        param   = ((SectionHeaderCtx *)section_header_p)->param;
+    }
 
     if (piz_is_skip_section (vb, expected_section_type, dict_id)) return; // we skip some sections based on flags
 
@@ -242,7 +248,8 @@ void zfile_uncompress_section (VBlock *vb,
             uncompressed_data->len = data_uncompressed_len;
         }
 
-        comp_uncompress (vb, section_header->codec, section_header->sub_codec, (char*)section_header + compressed_offset, data_compressed_len, 
+        comp_uncompress (vb, section_header->codec, section_header->sub_codec, param,
+                         (char*)section_header + compressed_offset, data_compressed_len, 
                          uncompressed_data, data_uncompressed_len);
     }
  
@@ -517,7 +524,7 @@ SectionHeader *zfile_read_section_header (VBlockP vb, uint64_t offset,
     ASSERTE (!vb->compressed.len, "vb_i=%u expected_sec_type=%s: expecting vb->compressed to be free, but it's not: %s",
              vb->vblock_i, st_name (expected_sec_type), buf_desc (&vb->compressed).s);
     
-    buf_alloc (evb, &vb->compressed, header_size, 4, "compressed"); 
+    buf_alloc (vb, &vb->compressed, header_size, 4, "compressed"); 
 
     SectionHeader *header = zfile_read_from_disk (z_file, evb, &vb->compressed, header_size, expected_sec_type); 
 
@@ -576,7 +583,7 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
     ASSERTGOTO (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
-                "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
+                "Error: %s cannot be opened because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
                 "You might want to consider upgrading genozip to the newest version.\n",
                 z_name, header->genozip_version, GENOZIP_CODE_VERSION);
 
@@ -662,7 +669,7 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
                     "%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
 
         if (flag.show_reference && !md5_is_zero (header->ref_file_md5)) {
-            fprintf (info_stream, "%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
+            iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
                      z_name, header->ref_filename, digest_display (header->ref_file_md5).s);
             if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
         }
@@ -930,7 +937,7 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
     vb_header->first_line   = BGEN32 (txt_first_line_i);
 
     if (flag.show_vblocks) 
-        fprintf (info_stream, "vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
+        iprintf ("vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
                  vb->vblock_i, z_file->num_txt_components_so_far, txt_first_line_i, BGEN32 (vb_header->num_lines), 
                  BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
                  BGEN32 (vb_header->longest_line_len));

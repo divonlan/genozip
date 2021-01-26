@@ -22,7 +22,7 @@ typedef bool CodecCompress (VBlockP vb,
                             uint32_t *compressed_len,   // in/out
                             bool soft_fail);
 
-typedef void CodecUncompress (VBlockP vb, Codec codec,
+typedef void CodecUncompress (VBlockP vb, Codec codec, uint8_t param,
                               const char *compressed, uint32_t compressed_len,
                               Buffer *uncompressed_buf, uint64_t uncompressed_len,
                               Codec sub_codec);
@@ -66,8 +66,8 @@ typedef struct {
     { 0, "XCGT", "+",      NA0,           USE_SUBCODEC,          codec_xcgt_uncompress, NA3,                    USE_SUBCODEC,       CODEC_BZ2  /* NONREF_X */ }, \
     { 0, "HAPM", "+",      NA0,           codec_hapmat_compress, USE_SUBCODEC,          codec_hapmat_reconstruct, USE_SUBCODEC,     CODEC_BZ2  /* GT_HT    */ }, \
     { 0, "DOMQ", "+",      NA0,           codec_domq_compress,   USE_SUBCODEC,          codec_domq_reconstruct, USE_SUBCODEC,       CODEC_BSC  /* QUAL     */ }, \
-    { 0, "GTSH", "+",      NA0,           codec_gtshark_compress, codec_gtshark_uncompress, codec_gtshark_reconstruct, NA4,         }, \
-    { 0, "FF15", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
+    { 0, "GTSH", "+",      NA0,           codec_gtshark_compress, codec_gtshark_uncompress, codec_pbwt_reconstruct, NA4,            }, \
+    { 0, "PBWT", "+",      NA0,           codec_pbwt_compress,   codec_pbwt_uncompress, codec_pbwt_reconstruct, codec_none_est_size }, \
     { 0, "FF16", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
     { 0, "FF17", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
     { 0, "FF18", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
@@ -83,12 +83,12 @@ typedef struct {
 extern CodecArgs codec_args[NUM_CODECS];
 
 extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compress, codec_hapmat_compress, codec_bsc_compress, 
-                     codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_gtshark_compress;
+                     codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_gtshark_compress, codec_pbwt_compress;
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
-                       codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress;
+                       codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress, codec_pbwt_uncompress;
 
-extern CodecReconstruct codec_hapmat_reconstruct, codec_domq_reconstruct, codec_gtshark_reconstruct;
+extern CodecReconstruct codec_hapmat_reconstruct, codec_domq_reconstruct, codec_pbwt_reconstruct;
 
 extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_hapmat_est_size, codec_domq_est_size;
 
@@ -132,5 +132,8 @@ extern void *lzma_alloc (ISzAllocPtr alloc_stuff, size_t size);
 extern void lzma_free (ISzAllocPtr alloc_stuff, void *addr);
 extern const char *lzma_errstr (SRes res);
 extern const char *lzma_status (ELzmaStatus status);
+
+// PBWWT stuff
+extern void codec_pbwt_comp_init (VBlockP vb);
 
 #endif

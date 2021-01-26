@@ -78,15 +78,6 @@
 
 
 /*- Macros -*/
-#ifndef SWAP
-# define SWAP(_a, _b) do { t = (_a); (_a) = (_b); (_b) = t; } while(0)
-#endif /* SWAP */
-#ifndef MIN
-# define MIN(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
-#endif /* MIN */
-#ifndef MAX
-# define MAX(_a, _b) (((_a) > (_b)) ? (_a) : (_b))
-#endif /* MAX */
 #define STACK_PUSH(_a, _b, _c, _d)\
   do {\
     assert(ssize < STACK_SIZE);\
@@ -311,7 +302,6 @@ static inline
 int *
 ss_median3(const unsigned char *Td, const int *PA,
            int *v1, int *v2, int *v3) {
-  int *t;
   if(Td[PA[*v1]] > Td[PA[*v2]]) { SWAP(v1, v2); }
   if(Td[PA[*v2]] > Td[PA[*v3]]) {
     if(Td[PA[*v1]] > Td[PA[*v3]]) { return v1; }
@@ -325,7 +315,6 @@ static inline
 int *
 ss_median5(const unsigned char *Td, const int *PA,
            int *v1, int *v2, int *v3, int *v4, int *v5) {
-  int *t;
   if(Td[PA[*v2]] > Td[PA[*v3]]) { SWAP(v2, v3); }
   if(Td[PA[*v4]] > Td[PA[*v5]]) { SWAP(v4, v5); }
   if(Td[PA[*v2]] > Td[PA[*v4]]) { SWAP(v2, v4); SWAP(v3, v5); }
@@ -973,7 +962,6 @@ tr_heapsort(const int *ISAd, int *SA, int size) {
 static inline
 int *
 tr_median3(const int *ISAd, int *v1, int *v2, int *v3) {
-  int *t;
   if(ISAd[*v1] > ISAd[*v2]) { SWAP(v1, v2); }
   if(ISAd[*v2] > ISAd[*v3]) {
     if(ISAd[*v1] > ISAd[*v3]) { return v1; }
@@ -987,7 +975,6 @@ static inline
 int *
 tr_median5(const int *ISAd,
            int *v1, int *v2, int *v3, int *v4, int *v5) {
-  int *t;
   if(ISAd[*v2] > ISAd[*v3]) { SWAP(v2, v3); }
   if(ISAd[*v4] > ISAd[*v5]) { SWAP(v4, v5); }
   if(ISAd[*v2] > ISAd[*v4]) { SWAP(v2, v4); SWAP(v3, v5); }
@@ -1166,7 +1153,6 @@ tr_introsort(int *ISA, const int *ISAd,
 #define STACK_SIZE TR_STACKSIZE
   struct { const int *a; int *b, *c; int d, e; }stack[STACK_SIZE];
   int *a, *b, *c;
-  int t;
   int v, x = 0;
   int incr = ISAd - ISA;
   int limit, next;

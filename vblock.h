@@ -124,6 +124,7 @@ extern void vb_cleanup_memory(void);
 extern VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i);
 extern void vb_initialize_evb(void);
 extern void vb_release_vb (VBlock *vb);
+extern void vb_destroy_all_vbs (void);
 
 typedef struct {
     unsigned num_vbs; // length of array of pointers to VBlock

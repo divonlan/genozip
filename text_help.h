@@ -78,7 +78,7 @@ static const char *help_genozip[] = {
     "",
     "   -@ --threads      <number>. Specify the maximum number of threads. By default, genozip uses all the threads it needs to maximize usage of all available cores",
     "",
-    "   -B --vblock       <number between 1 and 2048>. Set the maximum size of data (in megabytes) of the source textual (VCF, SAM, FASTQ etc) data that can go into one vblock. By default, this is set to a value between 16 and 128 MB depending on the characateristics of the file. Smaller values will result in faster subsetting with --regions and --grep, while larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression",
+    "   -B --vblock       <number between 1 and 2048>. Set the maximum size of data (in megabytes) of the textual input (VCF, SAM, FASTQ etc) data that a thread processes at any given time. By default, Genozip sets this value dynamically based on the characateristics of the file, and it is reported in --show-stats. Smaller values will result in faster subsetting with --regions and --grep, while larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression",
     "",
     "   -e --reference    <filename>.ref.genozip Use a reference file - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat.",    
     "                     While genozip is capabale of compressing without a reference, in the following cases providing a reference may result in better compression:",
@@ -134,14 +134,7 @@ static const char *help_genozip[] = {
     "FASTQ-specific options (ignored for other file types):",
     "   -2 --pair         Compress pairs of paired-end FASTQ files, resulting in compression ratios better than compressing the files individually. When using this option, every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names, and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display interleaved, use genocat --interleaved, and to unbind the genozip file back to its original FASTQ files, use genounzip --unbind.",
     "",
-#ifndef _WIN32
-    "VCF-specific options (ignored for other file types):",
-    "   --gtshark         Uses gtshark as the codec for compressing FORMAT/GT data. This options provides better compression than both genozip without this option, and native gtshark, for files with a large number of samples. It works best when combined with -B128.",
-    "                     Note: For this to work, gtshark needs to be installed - it is a separate software package that is not affiliated with genozip in any way. It can be found here: https://github.com/refresh-bio/GTShark",
-    "                     Note: gtshark also needs to be installed for decompressing files that were compressed with this option. ",
-    "",
-#endif
-     "genozip is available for free for non-commercial use and some other limited use cases. See 'genozip -L for details'. Commercial use requires a commercial license",
+    "genozip is available for free for non-commercial use and some other limited use cases. See 'genozip -L for details'. Commercial use requires a commercial license",
 };
 
 static const char *help_genozip_developer[] = {
@@ -202,7 +195,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-aliases    See contents of SEC_DICT_ID_ALIASES section",
     "",
-    "    UC  --show-containers Show flow of container reconstruction",
+    "   ZUC  --show-containers Show flow of container reconstruction",
     "",
     "   Z    --seg-only        Debug segmenting - runs the segmenter, but doesn't compress and doesn't write the output",
     "",

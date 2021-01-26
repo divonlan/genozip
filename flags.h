@@ -72,9 +72,9 @@ typedef struct {
     char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
 
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
-           dict_id_show_one_dict,   // argument of --show-dict-one
            dump_one_b250_dict_id,   // argument of --dump-b250-one
            dump_one_local_dict_id;  // argument of --dump-local-one
+    char *show_one_dict;    // argument of --show-dict-one
 
     // internal flags set by the system, not the command line
     bool ref_use_aligner,    // ZIP: compression requires using the aligner

@@ -71,10 +71,10 @@ void progress_new_component (const char *new_component_name,
 
         if (!flag.quiet) {
             if (test_mode) 
-                fprintf (info_stream, "testing: %s%s --test %s : ", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
-                        new_component_name); 
+                iprintf ("testing: %s%s --test %s : ", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
+                        new_component_name)
             else
-                fprintf (info_stream, "%s %s : ", global_cmd, new_component_name); 
+                iprintf ("%s %s : ", global_cmd, new_component_name); 
         }
     }
 
@@ -135,12 +135,12 @@ void progress_update_status (const char *status)
     static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
     static const char *spaces = "                                                                                ";
 
-    fprintf (info_stream, "%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
+    iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
 
     last_len = strlen (status);
 
     if (flag.debug_progress) { // if we're debugging progress, show every status on its own line
-        fprintf (info_stream, "\n");
+        iprint0 ("\n");
         last_len = 0;
     }
 
@@ -151,7 +151,7 @@ void progress_finalize_component (const char *status)
 {
     if (!flag.quiet) {
         progress_update_status (status);
-        fprintf (info_stream, "\n");
+        iprint0 ("\n");
     }
 
     component_name = NULL;

@@ -189,7 +189,7 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
     
     unsigned num_sections = BGEN32 (header->num_sections);
 
-    fprintf (info_stream, "Contents of the genozip header (output of --show-gheader) of %s:\n", z_name);
+    iprintf ("Contents of the genozip header (output of --show-gheader) of %s:\n", z_name);
     fprintf (info_stream, "  genozip_version: %u\n",         header->genozip_version);
     fprintf (info_stream, "  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
     fprintf (info_stream, "  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
@@ -223,6 +223,8 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
                  dis_dict_id (ents[i].dict_id.num ? ents[i].dict_id : ents[i].dict_id).s, 
                  ents[i].vblock_i, this_offset, next_offset - this_offset);
     }
+
+    fflush (info_stream);
 }
 
 const char *st_name (SectionType sec_type)

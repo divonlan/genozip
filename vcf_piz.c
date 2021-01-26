@@ -247,7 +247,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         
         if (rep != 0) return; // we only look at the first ht in a sample, and only if its not '.'
 
-        if (*reconstructed == '.') {
+        if (*reconstructed == '.' || *reconstructed == '%') { // . can be written as % in vcf_seg_FORMAT_GT
             sample_i++;
             return;
         }

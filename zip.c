@@ -42,7 +42,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bo
     double ratio_vs_comp  = -1;
 
     if (flag.debug_progress) 
-        fprintf (info_stream, "Ratio calculation: ratio_vs_plain=%f = plain_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
+        iprintf ("Ratio calculation: ratio_vs_plain=%f = plain_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
                     ratio_vs_plain, (uint64_t)plain_bytes, (uint64_t)z_bytes);
 
     // in bind mode, we don't show compression ratio for files except for the last one
@@ -65,7 +65,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bo
         if (is_final_component) { 
             ratio_vs_comp = comp_bytes_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
             if (flag.debug_progress) 
-                fprintf (info_stream, "Ratio calculation: ratio_vs_comp=%f = comp_bytes_bind=%"PRIu64" / z_bytes=%"PRIu64"\n",
+                iprintf ("Ratio calculation: ratio_vs_comp=%f = comp_bytes_bind=%"PRIu64" / z_bytes=%"PRIu64"\n",
                          ratio_vs_comp, (uint64_t)comp_bytes_bind, (uint64_t)z_bytes);
         }
         else 
@@ -74,7 +74,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bo
     else {
         ratio_vs_comp = comp_bytes / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
         if (flag.debug_progress) 
-            fprintf (info_stream, "Ratio calculation: ratio_vs_comp=%f = comp_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
+            iprintf ("Ratio calculation: ratio_vs_comp=%f = comp_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
                      ratio_vs_comp, (uint64_t)comp_bytes, (uint64_t)z_bytes);
     }
 
@@ -125,19 +125,37 @@ static void zip_dynamically_set_max_memory (void)
 
             // segment this VB
             ctx_clone (vb);
+
+            SAVE_FLAGS;
+            flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
+            flag.show_reference = flag.show_vblocks = false;
+
             seg_all_data_lines (vb);
 
+            RESTORE_FLAGS;
+
             // formula - 1MB for each contexts, 128K for each VCF sample
-            uint64_t mb = ((uint64_t)vb->num_contexts << 20) + 
-                          (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
+            uint64_t bytes = ((uint64_t)vb->num_contexts << 20) + 
+                              (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
 
             // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
-            flag.vblock_memory = MIN (MAX (mb, VBLOCK_MEMORY_MIN_DYN), VBLOCK_MEMORY_MAX_DYN);
+            flag.vblock_memory = MIN (MAX (bytes, VBLOCK_MEMORY_MIN_DYN), VBLOCK_MEMORY_MAX_DYN);
 
             if (flag.show_memory)
-                fprintf (info_stream, "\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
+                iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
                          (unsigned)(flag.vblock_memory >> 20), vb->num_contexts, vcf_header_get_num_samples());
 
+            // on Windows and Mac - which tend to have less memory in typical configurations, warn if we need a lot
+#if defined _WIN32 || defined APPLE
+            ASSERTW (flag.vblock_memory * (uint64_t)global_max_threads < (1 << 30),  // 1 GB
+                     "\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
+                     "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
+                     "To reduce RAM consumption, you may use:\n"
+                     "   --threads to set the number of threads (affects speed)\n"
+                     "   --vblock to set the amount of input data (in MB) a thread processes (affects compression ratio)\n"
+                     "   --quiet to silence this warning",
+                     global_max_threads, (uint32_t)(flag.vblock_memory >> 20));
+#endif
             // return the data tp txt_file->unconsumed_txt - squeeze it in before the passed-up data
             buf_alloc_more (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
             memcpy (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
@@ -257,7 +275,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
 
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
-        fprintf (info_stream, "%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
+        iprintf ("%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
 
@@ -348,50 +366,6 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
 
     buf_free (&vb->compressed);
 }
-/*
-// Codecs for contexts may be assigned in 3 stages:
-// 1. During Seg (a must for all complex codecs - eg HT, DOMQ, ACGT...)
-// 2. At merge - inherit from z_file->context if not set in Seg
-// 3. After merge before compress - if still not assigned - zip_assign_best_codec - which also commits back to z_file->context
-//    (this is the only place we commit to z_file, therefore z_file will only contain simple codecs)
-// Note: if vb=1 commits a codec, it will be during its lock, so that all subsequent VBs will inherit it. But for
-// contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
-static void zip_assign_best_codec (VBlock *vb)
-{
-    if (flag.show_codec && vb->vblock_i == 1)
-        fprintf (info_stream, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
-                 "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
-
-    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = &vb->contexts[did_i];
-       
-        // local
-        if (ctx->local.len) {
-            ctx->local.len *= lt_desc[ctx->ltype].width;
-            codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
-            ctx->local.len /= lt_desc[ctx->ltype].width;
-        }
-
-        // b250 is not yet "generated", it still contains node indices
-        if (ctx->b250.len * sizeof (uint32_t) >= MIN_LEN_FOR_COMPRESSION) { // not too small
-
-            // generate a sample of b250 data, in vb->compressed, from a sample of ctx.b250 data
-            uint32_t num_words = MIN ((uint32_t)ctx->b250.len, CODEC_ASSIGN_SAMPLE_SIZE / sizeof (uint32_t));
-
-            ASSERTE (vb->compressed.len==0, "ctx->compressed is not empty. Ctx=%s", ctx->name);
-            buf_alloc (vb, &vb->compressed, num_words * MAX_BASE250_NUMERALS, 1, "vb->compressed");
-
-            WordIndex prev = WORD_INDEX_NONE; 
-            for (uint32_t word_i=0; word_i < num_words; word_i++) 
-                zip_generate_one_b250 (vb, ctx, word_i, &vb->compressed, &prev, false);
-
-            // find best codec
-            codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
-
-            buf_free (&vb->compressed);
-        }
-    }
-}*/
 
 // after segging - if any context appears to contain only singleton snips (eg a unique ID),
 // we move it to local instead of needlessly cluttering the global dictionary
@@ -426,8 +400,8 @@ static void zip_generate_ctxs (VBlock *vb)
     //    (this is the only place we commit to z_file, therefore z_file will only contain simple codecs)
     // Note: if vb=1 commits a codec, it will be during its lock, so that all subsequent VBs will inherit it. But for
     // contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
-    if (flag.show_codec && vb->vblock_i == 1)
-        fprintf (info_stream, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
+    if (flag.show_codec && vb->vblock_i == 1) 
+        iprintf ("\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
                  "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
 
     // generate & write b250 data for all primary fields

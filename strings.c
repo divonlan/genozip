@@ -252,7 +252,7 @@ void str_print_null_seperated_data (const char *data, unsigned len, bool add_new
             case '\t'       : fwrite ("\\t", 1, 2, info_stream); break;
             case '\n'       : fwrite ("\\n", 1, 2, info_stream); break;
             case '\r'       : fwrite ("\\r", 1, 2, info_stream); break;
-            default         : fprintf (info_stream, "\\x%x", data[i]);
+            default         : iprintf ("\\x%x", data[i]);
         }
         }
 }

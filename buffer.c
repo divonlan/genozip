@@ -268,7 +268,7 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     if (memory_full)
         fprintf (stderr, "\n\nError memory is full:\n");
     else
-        fprintf (info_stream, "\n-------------------------------------------------------------------------------------\n");
+        iprint0 ("\n-------------------------------------------------------------------------------------\n");
 
     VBlockPool *vb_pool = vb_get_pool ();
 
@@ -349,7 +349,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
     ((Buffer **)bl->data)[bl->len++] = buf;
 
     if (flag.debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-        fprintf (info_stream, "buf_add_to_buffer_list: %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
+        iprintf ("buf_add_to_buffer_list: %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
                  buf_desc(buf).s, buf->size, str_pointer(buf).s, vb->id, (uint32_t)vb->buffer_list.len-1);
     
     buf->vb = vb; // successfully added to buf list
@@ -664,7 +664,15 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 
             buf->data        = NULL; 
             buf->overlayable = false;
-            // fall through (name, memory and size are not changed)
+
+            // In Windows, we observe that free() operations are expensive and significantly slow down execution - so we
+            // just recycle the same memory
+#ifndef _WIN32
+            buf_low_level_free (buf->memory, func, code_line);
+            buf->memory = 0;
+            buf->size   = 0;
+#endif
+            // fall through (name (and in Windows also memory and size) are not changed, and buffer is still in buffer list)
 
         case BUF_UNALLOCATED: // reset len and param that may be used even without allocating the buffer
             buf->len         = 0;
@@ -718,7 +726,7 @@ void buf_remove_from_buffer_list (Buffer *buf)
         if (buf_list[i] == buf) {
             
             if (flag.debug_memory) 
-                fprintf (info_stream, "Destroy %s: buf_addr=%s buf->vb->id=%d buf_i=%u\n", buf_desc (buf).s, str_pointer(buf).s, buf->vb->id, i);
+                iprintf ("Destroy %s: buf_addr=%s buf->vb->id=%d buf_i=%u\n", buf_desc (buf).s, str_pointer(buf).s, buf->vb->id, i);
 
             buf_list[i] = NULL;
             buf->vb = NULL;
@@ -769,8 +777,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
     uint64_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
-    buf_alloc_do (dst_vb, dst, num_entries * bytes_per_entry, 1, func, code_line,
-                  name ? name : src->name); // use realloc rather than malloc to allocate exact size
+    buf_alloc (dst_vb, dst, num_entries * bytes_per_entry, 1, name ? name : src->name); // use realloc rather than malloc to allocate exact size
 
     memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);
 
@@ -816,15 +823,15 @@ void buf_add_int (VBlockP vb, Buffer *buf, int64_t value)
 void buf_print (Buffer *buf, bool add_newline)
 {
     for (uint64_t i=0; i < buf->len; i++) 
-        putchar (buf->data[i]);  // safer than printf %.*s ?
+        fputc (buf->data[i], info_stream);  // safer than printf %.*s ?
 
-    if (add_newline) putchar ('\n');
+    iprint0 (add_newline ? "\n" : "");
 }
 
 void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 {
     if (flag.debug_memory) 
-        fprintf (info_stream, "Memory freed by free(): %s %s:%u\n", str_pointer (p).s, func, code_line);
+        iprintf ("Memory freed by free(): %s %s:%u\n", str_pointer (p).s, func, code_line);
 
     if (p == BUFFER_BEING_MODIFIED) {
         fprintf (stderr, "Warning in buf_low_level_free: corrupt pointer = 0x777 while attempting free()\n");
@@ -840,7 +847,7 @@ void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t co
     ASSERT (new, "Error in %s:%u: REALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
 
     if (flag.debug_memory) 
-        fprintf (info_stream, "realloc(): old=%s new=%s size=%"PRIu64" %s:%u\n", 
+        iprintf ("realloc(): old=%s new=%s size=%"PRIu64" %s:%u\n", 
                  str_pointer (p).s, str_pointer (new).s, (uint64_t)size, func, code_line);
 
     return new;
@@ -852,7 +859,7 @@ void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t c
     ASSERT (new, "Error in %s:%u: MALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
 
     if (flag.debug_memory) 
-        fprintf (info_stream, "malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new).s, (uint64_t)size, func, code_line);
+        iprintf ("malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new).s, (uint64_t)size, func, code_line);
 
     if (zero) memset (new, 0, size);
     
@@ -907,18 +914,30 @@ bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits)
 }
 
 // writes a buffer to a file, return true if successful
-bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region)
+bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs)
 {
     ASSERT (buf->type == BUF_REGULAR, "Error in buf_dump_to_file: buffer.type=%s while putting %s", buf_display_type (buf), filename);
+
+    char update_filename[strlen(filename) + 1];
+    strcpy (update_filename, filename);
+
+    if (no_dirs) {
+        for (unsigned i=0; i < strlen(filename); i++)
+            if (filename[i] == '/' || filename[i] == '\\')
+                update_filename[i] = '-';
+        filename = update_filename;
+    }
+
+    iprintf ("Dumping file %s\n", update_filename);
 
     if (including_control_region) {
         ASSERT (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "Error in buf_dump_to_file of %s: buffer has underflowed", filename);
         ASSERT (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "Error in buf_dump_to_file of %s: buffer has underflowed", filename);
 
-        return file_put_data (filename, buf->memory, buf->size + control_size);
+        return file_put_data (update_filename, buf->memory, buf->size + control_size);
     }
     else
-        return file_put_data (filename, buf->data, buf->len * buf_word_width);
+        return file_put_data (update_filename, buf->data, buf->len * buf_word_width);
 }
  
 void BGEN_u8_buf (Buffer *buf, LocalType *lt)
@@ -951,16 +970,18 @@ void BGEN_u64_buf (Buffer *buf, LocalType *lt)
 
 static inline uint32_t BGEN_transpose_num_cols (const Buffer *buf)
 {
-    uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix
+    uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix (0 if VCF)
 
-    if (!cols) cols = vcf_header_get_num_samples(); // 0 if not VCF
-    ASSERTE0 (cols, "cols=0");
+    if (!cols) cols = vcf_header_get_num_samples(); 
+    ASSERTE0 (cols, "vcf_header_get_num_samples=0");
     
     return cols;
 }
 
 void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
 {
+    if (!buf->len) return;
+
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
@@ -982,6 +1003,8 @@ void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
 
 void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
 {
+    if (!buf->len) return;
+
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
@@ -1003,6 +1026,8 @@ void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
 
 void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
 {
+    if (!buf->len) return;
+
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
@@ -1024,6 +1049,8 @@ void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
 
 void BGEN_transpose_u64_buf (Buffer *buf, LocalType *lt)
 {
+    if (!buf->len) return;
+
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 

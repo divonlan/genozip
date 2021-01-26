@@ -173,11 +173,13 @@ bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
     return success;
 }
 
-void codec_lzma_uncompress (VBlock *vb, Codec codec,
+void codec_lzma_uncompress (VBlock *vb, Codec codec, uint8_t param,
                            const char *compressed, uint32_t compressed_len,
                            Buffer *uncompressed_buf, uint64_t uncompressed_len, 
                            Codec unused)
 {
+    START_TIMER;
+    
     ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
     ELzmaStatus status;
 
@@ -190,4 +192,6 @@ void codec_lzma_uncompress (VBlock *vb, Codec codec,
 
     ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
             "Error in codec_lzma_uncompress: LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status)); 
+
+    COPY_TIMER (compressor_lzma);
 }

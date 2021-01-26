@@ -79,14 +79,17 @@ bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
     return true;
 }
 
-void codec_bsc_uncompress (VBlock *vb, Codec codec,
+void codec_bsc_uncompress (VBlock *vb, Codec codec, uint8_t param,
                           const char *compressed, uint32_t compressed_len,
                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
                           Codec unused)
 {
+    START_TIMER;
     int ret = bsc_decompress (vb, (const uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
     ASSERT (ret >= LIBBSC_NO_ERROR, "Error in codec_bsc_uncompress: %s", codec_bsc_errstr (ret));    
+
+    COPY_TIMER (compressor_bsc);
 }
 
 uint32_t codec_bsc_est_size (Codec codec, uint64_t uncompressed_len)

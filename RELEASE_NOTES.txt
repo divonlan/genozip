@@ -351,3 +351,10 @@ bug fixes, including major bug with mc:i optional field in SAM
 
 10.0.9
 - bug fixes
+
+11.0.0
+- VCF: introduce a PBWT based codec for compression of the haplotype matrix. Retire hapmat and gtshark codecs. 
+  backward compatability is providing for decompressing VCF files compressed in earlier versions of genozip with hapmat or gtshark
+- SAM: better handling of optional fields SA, OA, XA
+- Better memory management in Linux and MacOS
+- Reduce core oversubscription from 1.4 to 1.2

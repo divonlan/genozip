@@ -67,7 +67,7 @@ void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_
     int diff_micro = 0;
     if (initialized) {
         diff_micro = 1000000 *(timer.tv_sec - prev_timer.tv_sec) + (int)((int64_t)timer.tv_nsec - (int64_t)prev_timer.tv_nsec) / 1000;
-        fprintf (info_stream, "TH=%-2d VB=%-3u Stage='%s' Microsec_in_this_stage=%u\n", prev_thread_index, prev_vb_i, prev_stage, diff_micro);
+        iprintf ("TH=%-2d VB=%-3u Stage='%s' Microsec_in_this_stage=%u z=%s\n", prev_thread_index, prev_vb_i, prev_stage, diff_micro, z_name);
     }
 
     initialized = true;

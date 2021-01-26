@@ -405,27 +405,26 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
 {
     const char *password = crypt_get_password();
 
-    // is we have a loaded reference and it is no longer needed, unload it now, to free the memory for the testing process
-    if (is_last_txt_file) {
-        
-        // finish dumping reference and/or refhash to cache before destroying it...
-        ref_create_cache_join();
-        refhash_create_cache_join();
-        
-        ref_destroy_reference();
-    }
+    // finish dumping reference and/or refhash to cache before destroying it...
+    ref_create_cache_join();
+    refhash_create_cache_join();
+    
+    // free memory 
+    ref_destroy_reference();
+    vb_destroy_all_vbs();
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",
                                   exec_name, "--decompress", "--test", z_filename,
-                                  flag.quiet       ? "--quiet"        : SKIP_ARG,
-                                  password         ? "--password"     : SKIP_ARG,
-                                  password         ? password         : SKIP_ARG,
-                                  flag.show_memory ? "--show-memory"  : SKIP_ARG,
-                                  flag.show_time   ? "--show-time"    : SKIP_ARG,
-                                  flag.threads_str ? "--threads"      : SKIP_ARG,
-                                  flag.threads_str ? flag.threads_str : SKIP_ARG,
-                                  flag.xthreads    ? "--xthreads"     : SKIP_ARG,
+                                  flag.quiet        ? "--quiet"        : SKIP_ARG,
+                                  password          ? "--password"     : SKIP_ARG,
+                                  password          ? password         : SKIP_ARG,
+                                  flag.show_memory  ? "--show-memory"  : SKIP_ARG,
+                                  flag.show_time    ? "--show-time"    : SKIP_ARG,
+                                  flag.threads_str  ? "--threads"      : SKIP_ARG,
+                                  flag.threads_str  ? flag.threads_str : SKIP_ARG,
+                                  flag.xthreads     ? "--xthreads"     : SKIP_ARG,
+                                  flag.show_alleles ? "--show-alleles" : SKIP_ARG,
                                   flag.reference == REF_EXTERNAL ? "--reference" : SKIP_ARG,
                                   flag.reference == REF_EXTERNAL ? ref_filename  : SKIP_ARG,
                                   NULL);
@@ -525,9 +524,11 @@ static void main_genozip (const char *txt_filename,
     // test the compression, if the user requested --test
     if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_txt_file);
 
-done:
+done: {
+    SAVE_FLAG(vblock_memory);  
     RESTORE_FLAGS;
-}
+    if (flag.pair) RESTORE_FLAG (vblock_memory); // FASTQ R2 must have the same vblock_memory as R1, so it should not re-calculate in zip_dynamically_set_max_memory - otherwise txtfile_read_vblock will fail
+}}
 
 static void main_list_dir(const char *dirname)
 {
@@ -693,7 +694,7 @@ int main (int argc, char **argv)
         int ret = sscanf (flag.threads_str, "%u", &global_max_threads);
         ASSINP (ret == 1 && global_max_threads >= 1, "%s requires an integer value of at least 1", OT("threads", "@"));
     }
-    else global_max_threads = (double)arch_get_num_cores() * 1.4; // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
+    else global_max_threads = (double)arch_get_num_cores() * 1.2; // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
     
     // handle all commands except for ZIP, PIZ or LIST
     if (command == VERSION) { main_print_version();   return 0; }

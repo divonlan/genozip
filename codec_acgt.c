@@ -162,13 +162,13 @@ COPY_TIMER (tmp2);
 
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
 // if snip_len==0, then the length is taken from seq_len.
-void codec_xcgt_uncompress (VBlock *vb, Codec codec,
+void codec_xcgt_uncompress (VBlock *vb, Codec codec, uint8_t param,
                             const char *compressed, uint32_t compressed_len,
                             Buffer *uncompressed_buf, uint64_t uncompressed_len,
                             Codec sub_codec)
 {
     // uncompress NONREF_X using CODEC_XCGT.sub_codec (passed to us as sub_codec)
-    codec_args[sub_codec].uncompress (vb, sub_codec, compressed, compressed_len, uncompressed_buf, uncompressed_len, CODEC_NONE);
+    codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, uncompressed_buf, uncompressed_len, CODEC_NONE);
 
     const BitArray *acgt_packed = buf_get_bitarray (&vb->compressed); // data from NONREF context (2-bit per base)
     const char *acgt_x = FIRSTENT (const char, *uncompressed_buf); // data from NONREF_X context
@@ -190,7 +190,7 @@ void codec_xcgt_uncompress (VBlock *vb, Codec codec,
 // 1) NONREF contains a 2-bit representation of the bases: is is uncompressed by codec_acgt_uncompress into vb->compressed using sub_codec
 // 2) NONREF_X is a character array of exceptions and is uncompressed into NONREF_X.local by codec_xcgt_uncompress
 // 3) codec_xcgt_uncompress also combines vb->compressed with NONREF_X.local to recreate NONREF.local - an LT_SEQUENCE local buffer
-void codec_acgt_uncompress (VBlock *vb, Codec codec,
+void codec_acgt_uncompress (VBlock *vb, Codec codec, uint8_t param,
                             const char *compressed, uint32_t compressed_len,
                             Buffer *uncompressed_buf, uint64_t num_bases,
                             Codec sub_codec)
@@ -201,7 +201,7 @@ void codec_acgt_uncompress (VBlock *vb, Codec codec,
     buf_alloc (vb, &vb->compressed, bitmap_num_bytes, 1, "compressed");    
 
     // uncompress bitmap using CODEC_ACGT.sub_codec (passed to us as sub_codec) into vb->compressed
-    codec_args[sub_codec].uncompress (vb, sub_codec, compressed, compressed_len, &vb->compressed, bitmap_num_bytes, CODEC_NONE);
+    codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, &vb->compressed, bitmap_num_bytes, CODEC_NONE);
 
     // finalize bitmap structure
     BitArray *packed     = buf_get_bitarray (&vb->compressed);

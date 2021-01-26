@@ -38,7 +38,7 @@ MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c lic
 		  gff3_seg.c me23.c phylip.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
-		  codec_gtshark.c codec_none.c \
+		  codec_gtshark.c codec_pbwt.c codec_none.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c
 
@@ -66,6 +66,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h\
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h phylip.h generic.h \
+			 codec_pbwt_alg.c \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/deflate.h zlib/trees.h	 \
@@ -436,6 +437,7 @@ clean-optimized:
 clean: clean-test.sh-files
 	@echo Cleaning up
 	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES)
+	@rm -f *.good *.bad *.local *.b250 test/*.good test/*.bad test/*.local test/*.b250
 	@rm -Rf $(OBJDIR)
 
 .PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp delete-arch

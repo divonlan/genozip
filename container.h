@@ -19,7 +19,7 @@
 
 typedef struct ContainerItem {
     DictId dict_id;  
-    uint8_t unused;                        // was 8-bit did_i, canceled in 9.0.23, will contain 255 in files created in 9.0.22 and earlier
+    uint8_t did_i_small;                   // PIZ only: can store dids 0->254, 255 means did_i too large to store
 
     // seperator[0] values with bit 7 set (0x80) are interpreted as flags rather than a seperator, in 
     // which case seperator[1] is a parameter of the flags

@@ -59,7 +59,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, z_data->name);
 
     // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec instead
-    Codec comp_codec = codec_args[header->codec].compress ? header->codec : codec_args[header->codec].sub_codec;
+    Codec comp_codec = (codec_args[header->codec].compress != USE_SUBCODEC) ? header->codec : codec_args[header->codec].sub_codec;
 
     // compress the data, if we have it...
     if (data_uncompressed_len) {
@@ -90,7 +90,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             codec_free_all (vb); // just in case
         }
     
-        // update uncompressed length - complex codecs (like domqual) might change it
+        // update uncompressed length - complex codecs (like domqual, pbwt) might change it
         header->data_uncompressed_len = BGEN32 (data_uncompressed_len);
         
         // get encryption related lengths
@@ -155,42 +155,34 @@ done:
     return data_compressed_len;
 }
 
-void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec,
+void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
                       const char *compressed, uint32_t compressed_len,
                       Buffer *uncompressed_data, uint64_t uncompressed_len)
 {
     ASSERT0 (compressed_len, "Error in comp_uncompress: compressed_len=0");
 
-    if (codec && codec_args[codec].uncompress) // might be UNKNOWN (eg GT_X_ALLELES) or not have an uncompressor (eg: HT, DOMQ don't have a special uncompressor) and only a sub-codec available
-        codec_args[codec].uncompress (vb, codec, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
-
     // if this is (1) a simple codec (including CODEC_UNKNOWN) that has a sub-codec or
     // (2) or no codec uncompressor - the sub-codec now run it now
-    // note: for non-simple codecs, the sub-codec is used in the codec decompression
-    if (sub_codec && (codec_args[codec].is_simple || !codec_args[codec].uncompress))
-        codec_args[sub_codec].uncompress (vb, sub_codec, compressed, compressed_len, uncompressed_data, uncompressed_len, CODEC_UNKNOWN);
+    // for non-simple codecs, the subcodec is handled within the main codec decompressor. run_subcodec is true if we need to handle it here.
+    bool run_subcodec = sub_codec && (codec_args[codec].is_simple || !codec_args[codec].uncompress);
+
+    if (codec && codec_args[codec].uncompress) { // might be UNKNOWN (eg GT_X_ALLELES) or not have an uncompressor (eg: HT, DOMQ don't have a special uncompressor) and only a sub-codec available
+        codec_args[codec].uncompress (vb, codec, param, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
+
+        // case: uncompressed data is now going to be the compressed data for the sub-codec
+        if (run_subcodec) {
+            // move the intermediary data after primary codec decompression to vb->compressed
+            buf_copy (vb, &vb->compressed, uncompressed_data, 0,0,0, "compressed");
+            compressed     = vb->compressed.data;
+            compressed_len = vb->compressed.len;
+            
+            // free uncompressed_data to accept the uncompressed data after subcodec decompression
+            buf_free (uncompressed_data);
+            uncompressed_len = 0; // the header doesn't say the uncompressed len after the subcodec - the subcodec should know this using its own means
+        }
+    }
+
+    if (run_subcodec) // might run with or without first running the primary codec
+        codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, uncompressed_data, uncompressed_len, CODEC_UNKNOWN);
 }
 
-void comp_unit_test (SectionHeader *header)
-{
-    uint32_t size = 1000000;
-    //int size = 3380084;
-    char *data = MALLOC (size);
-    for (int i=0; i < size; i++) data[i] = 'A' + (i%26);
-
-    //FILE *fp = fopen ("bugq.bz2", "rb");
-    //ASSERT0 (fread (data, 1, size, fp) == size, "read failed");
-
-    uint32_t comp_len = codec_args[header->codec].est_size (header->codec, size);
-    char *comp = MALLOC (comp_len);
-    
-    codec_args[header->codec].compress (evb, header, data, &size, 0, comp, &comp_len, false);
-
-    Buffer uncomp = EMPTY_BUFFER;
-    buf_alloc (evb, &uncomp, size, 1, "uncomp");
-    codec_args[header->codec].uncompress (evb, header->codec, comp, comp_len, &uncomp, size, CODEC_NONE);
-
-    printf ("Unit test %s!\n", memcmp (data, uncomp.data, size) ? "failed" : "succeeded");
-
-    exit(0);
-}

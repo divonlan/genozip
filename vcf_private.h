@@ -11,10 +11,10 @@
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
-    bool has_haplotype_data; // FORMAT field contains GT
-    bool has_genotype_data;  // FORMAT field contains subfields other than GT
+    bool has_haplotype_data : 1; // FORMAT field contains GT
+    bool has_genotype_data  : 1; // FORMAT field contains subfields other than GT
 
-    WordIndex format_node_i;  // the node_index into contexts[VCF_FORMAT].nodes and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_node_i]
+    WordIndex format_node_i; // the node_index into contexts[VCF_FORMAT].nodes and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_node_i]
 } ZipDataLineVCF;
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
@@ -39,14 +39,13 @@ typedef struct VBlockVCF {
     Context *gt_ctx;
     uint32_t gt_prev_ploidy;
     char gt_prev_phase;
-
+    
     // dictionaries stuff 
     Buffer format_mapper_buf;      // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
 
-    // used by HT matrix codec 
-    uint32_t num_haplotypes_per_line; 
+    uint32_t ht_per_line; 
     Context *ht_matrix_ctx; 
-    
+
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Context *hapmat_index_ctx; 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 

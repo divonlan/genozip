@@ -380,7 +380,7 @@ void BGEN_random_access (Buffer *ra_buf)
 
 void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *msg)
 {
-    fprintf (info_stream, "\n%s:\n", msg);
+    iprintf ("\n%s:\n", msg);
     
     ARRAY (const RAEntry, ra, *ra_buf);
 
@@ -405,7 +405,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
             chrom_snip = ENT (char, ctx->dict, chrom_word->char_index);
             chrom_snip_len = chrom_word->snip_len;
         }
-        fprintf (info_stream, "vb_i=%u chrom='%.*s' (chrom_word_index=%d) min_pos=%"PRId64" max_pos=%"PRId64"\n",
+        iprintf ("vb_i=%u chrom='%.*s' (chrom_word_index=%d) min_pos=%"PRId64" max_pos=%"PRId64"\n",
                  ra[i].vblock_i, chrom_snip_len, chrom_snip, ra[i].chrom_index, ra[i].min_pos, ra[i].max_pos);
     }
 }

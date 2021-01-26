@@ -94,7 +94,7 @@ typedef union SectionFlags {
         uint8_t v8_container     : 1; // (canceled in 9 - files compressed with 8.0 will have this flag set for any context that contains 1 or more containers)
         uint8_t copy_param       : 1; // copy ctx.b250/local.param from SectionHeaderCtx.param
         uint8_t all_the_same     : 1; // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
-        #define ctxs_dot_is_0    ctx_specific // used in dict_id_FORMAT_GT_SHARK_GT
+        #define ctxs_dot_is_0    ctx_specific // used in dict_id_FORMAT_GT_SHARK_GT between 10.0.3 and 10.0.8
         uint8_t ctx_specific     : 1; // flag specific a context (introduced 10.0.3)
     } ctx;
     
