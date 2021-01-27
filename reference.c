@@ -99,10 +99,12 @@ static void ref_free_denovo_ranges (void)
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void ref_unload_reference (void)
 {
-    if (ranges_type == RT_DENOVO) ref_free_denovo_ranges();
+    if (ranges_type == RT_DENOVO) 
+        ref_free_denovo_ranges();
     
     // in case of REF_EXTERNAL - the reference has not been modified and we can reuse it for the next file
-    if (flag.reference != REF_EXTERNAL) {
+    if (flag.reference != REF_EXTERNAL && 
+        flag.reference != REF_NONE) { // possibly, we have data from a previous REF_EXTERNAL file, and we hold on to it, if REF_NONE
         buf_free (&genome_buf);
         buf_free (&emoneg_buf);
         buf_free (&genome_cache);
@@ -110,7 +112,7 @@ void ref_unload_reference (void)
     }
 
     // in case of REF_EXTERNAL and REF_EXT_STORE - these buffers are immutable so the next file can use them
-    if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE) {
+    if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE && flag.reference != REF_NONE) {
         buf_free (&ref_external_ra);
         buf_free (&ref_file_section_list);
         buf_free (&genome_is_set_buf);
@@ -125,59 +127,6 @@ void ref_unload_reference (void)
     
     buf_free (&region_to_set_list);
     buf_free (&ref_stored_ra);
-
-
-  /*  //REF_EXT_STORE, we keep the reference for other files on the command line
-    // note: in PIZ we never cleanup external references as they can never change (the user can only specify one --reference)
-    if ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && !is_last_file) {  
-        
-        // zip sets 1 to nucleotides used. we clear it for the next file.
-        if (primary_command == ZIP) {
-            bit_array_clear_all (genome_is_set); 
-
-            // REF_EXT_STORE compacts ranges. We fix them in preparation for the next file
-            if (flag.reference == REF_EXT_STORE) { // won't be allocated if we are compressing only one file or if not REF_EXT_STORE
-                memcpy (genome.ref.words, genome_ref_copy.data, genome.ref.nwords * sizeof (word_t));
-                buf_copy (evb, &ranges, &ranges_copy, sizeof (Range), 0, 0, "ranges");
-            }
-    }
-
-    // case ZIP: REF_INTERNAL - we're done with ranges - free so next non-bound file can build its own
-    // case ZIP: REF_EXT_STORE - unfortunately we will need to re-read the FASTA as we damaged it with removing flanking regions
-    // case PIZ: REF_STORED - cleanup for next file with its own reference data
-    // case force_clean_all: happens before start the test process (in ZIP with --test) for the last file
-
-    else {
-        if (buf_is_allocated (&ranges) && ranges_type == RT_DENOVO) {
-            ARRAY (Range, rng, ranges);
-            for (unsigned i=0; i < ranges.len ; i++) {
-                FREE (rng[i].ref.words);
-                FREE (rng[i].is_set.words);
-                if (primary_command == ZIP) 
-                    FREE (rng[i].chrom_name); // allocated only in ZIP/REF_INTERNAL - otherwise a pointer into another Buffer
-            }
-        }
-        
-        if (ranges_type == RT_LOADED) {
-            FREE (genome.ref.words);
-            FREE (genome.is_set.words);
-            FREE (emoneg.ref.words);
-            genome = emoneg = (Range){};
-            genome_nbases = 0;
-        }
-
-        buf_free (&ranges);
-        buf_free (&region_to_set_list);
-        buf_free (&ref_external_ra);
-        buf_free (&ref_stored_ra);
-        buf_free (&ref_file_section_list);
-        buf_free (&genome_ref_copy);
-        buf_free (&ranges_copy);
-
-        ref_contigs_free();
-        ref_lock_free();
-        refhash_free();
-    }*/
 }
 
 void ref_destroy_reference (void)
