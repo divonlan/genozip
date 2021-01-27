@@ -61,10 +61,10 @@ void mutex_unlock_do (MutexP mutex, const char *func, uint32_t line);
 #endif // __MAC_10_12
 
 #else // not mac
-#define spin_initialize(name) { if (! name##_initialized) { \
-                                   int ret; ASSERT (!(ret = pthread_spin_init (&name, PTHREAD_PROCESS_PRIVATE)), "Error: pthread_spin_init failed for %s: %s", #name, strerror (ret)); \
+#define spin_initialize(name) do { if (! name##_initialized) { \
+                                   int ret; ASSERTE (!(ret = pthread_spin_init (&name, PTHREAD_PROCESS_PRIVATE)), "failed for %s: %s", #name, strerror (ret)); \
                                    name##_initialized = true;  \
-                              } }
+                                 } } while (0)
 #define spin_destroy(name) if (name##_initialized) { pthread_spin_destroy (&name); name##_initialized = false; }
 
 #endif // __APPLE__
@@ -79,11 +79,11 @@ void mutex_unlock_do (MutexP mutex, const char *func, uint32_t line);
 #endif // __MAC_10_12
 
 #else
-#define spin_lock(m)   { int ret = pthread_spin_lock (&m); \
-                         ASSERT (!ret, "Error in %s: pthread_spin_lock failed: %s", __FUNCTION__, strerror (ret)); }
+#define spin_lock(m)   do { int ret = pthread_spin_lock (&m); \
+                            ASSERTE (!ret, "pthread_spin_lock failed: %s", strerror (ret)); } while(0)
 
-#define spin_unlock(m) { int ret = pthread_spin_unlock (&m); \
-                         ASSERT (!ret, "Error in %s: pthread_spin_lock failed: %s", __FUNCTION__, strerror (ret)); }
+#define spin_unlock(m) do { int ret = pthread_spin_unlock (&m); \
+                            ASSERTE (!ret, "pthread_spin_lock failed: %s", strerror (ret)); } while(0)
 #endif
 
 #endif

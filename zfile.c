@@ -697,10 +697,9 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
                 ref_set_reference (header->ref_filename);
                 flag.reference = REF_EXTERNAL;
             }
-            else {
+            else 
                 ABORTINP ("%s: please use --reference specify the current path to reference file with which %s was compressed (original path was %s)",
-                          global_cmd, z_name, header->ref_filename)
-            }
+                          global_cmd, z_name, header->ref_filename);
         }
     }
      

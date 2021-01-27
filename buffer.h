@@ -54,8 +54,8 @@ extern const BufDescType buf_desc (const Buffer *buf);
 static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *func, uint32_t code_line) 
 { 
     uint64_t index = (buf->len++) * size;
-    ASSERT (index + size <= buf->size, "Error in %s:%u: NEXTENT went beyond end of buffer: size=%u index=%"PRIu64": %s", 
-            func, code_line, (unsigned)size, index, buf_desc (buf).s);
+    ASSERTE (index + size <= buf->size, "called from %s:%u: NEXTENT went beyond end of buffer: size=%u index=%"PRIu64": %s", 
+             func, code_line, (unsigned)size, index, buf_desc (buf).s);
     return index;
 }
 #define NEXTENT(type, buf)    (*(type *)(&(buf).data[NEXTENT_get_index (&(buf), sizeof(type), __FUNCTION__, __LINE__)]))
@@ -130,9 +130,9 @@ extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 #define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
 
 #define buf_add(buf, new_data, new_data_len) { uint32_t new_len = (new_data_len); /* copy in case caller uses ++ */ \
-                                               ASSERT (buf_has_space(buf, new_len), \
-                                                       "Error in buf_add called from %s:%u: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
-                                                       __FUNCTION__, __LINE__, buf_desc (buf).s, (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
+                                               ASSERTE (buf_has_space(buf, new_len), \
+                                                        "Error in buf_add: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
+                                                        buf_desc (buf).s, (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
                                                memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
                                                (buf)->len += new_len; }
 

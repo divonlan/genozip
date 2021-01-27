@@ -169,7 +169,7 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
         if (!pool->vb[vb_i]->in_use) break;
     }
 
-    ASSERTE (vb_i < pool->num_vbs, "task=%s: VB pool is full - it already has %u VBs", task_name, pool->num_vbs)
+    ASSERTE (vb_i < pool->num_vbs, "task=%s: VB pool is full - it already has %u VBs", task_name, pool->num_vbs);
 
     // initialize VB fields that need to be a value other than 0
     VBlock *vb = pool->vb[vb_i];

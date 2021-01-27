@@ -103,7 +103,7 @@ bool sections_get_next_section_of_type2 (const SectionListEntry **sl_ent, // opt
 void sections_get_prev_component_vb_i (const SectionListEntry *sl, // any sl of the current file
                                   uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i) //out
 {
-#   define SAFTEY ASSERT0 ((char*)sl > z_file->section_list_buf.data, "Error in sections_get_prev_component_vb_i: cannot find previous file VBs")
+#   define SAFTEY ASSERTE0 ((char*)sl > z_file->section_list_buf.data, "cannot find previous file VBs")
 
     // search back to current file's txt header
     do { SAFTEY; sl--; } while (sl->section_type != SEC_TXT_HEADER);
@@ -152,8 +152,7 @@ const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
 // I/O thread: called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
 void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits) // optional outs
 {
-    ASSERT0 (flag.reading_reference || flag.show_ref_hash, 
-             "Error in sections_get_refhash_details: can only be called while reading reference");
+    ASSERTE0 (flag.reading_reference || flag.show_ref_hash, "can only be called while reading reference");
 
     for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the refhash sections are near the end
         const SectionListEntry *sl = ENT (const SectionListEntry, z_file->section_list_buf, i);
@@ -229,7 +228,7 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
 
 const char *st_name (SectionType sec_type)
 {
-    ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "Error in st_name: sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
+    ASSERTE (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
     return (sec_type == SEC_NONE) ? "SEC_NONE" : type_name (sec_type, &abouts[sec_type].name , sizeof(abouts)/sizeof(abouts[0]));
 }
@@ -261,7 +260,7 @@ SectionType sections_st_by_name (char *name)
 
 uint32_t st_header_size (SectionType sec_type)
 {
-    ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "Error in st_header_size: sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
+    ASSERTE (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
     return (sec_type == SEC_NONE) ? 0 : abouts[sec_type].header_size;
 }
@@ -274,7 +273,7 @@ const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool
     for (unsigned i=0; i < z_file->section_list_buf.len; i++)
         if (sl[i].section_type == st) return &sl[i];
 
-    ASSERT (soft_fail, "Error in sections_get_first_section_of_type: Cannot find section_type=%s in z_file", st_name (st));
+    ASSERTE (soft_fail, "Cannot find section_type=%s in z_file", st_name (st));
 
     return NULL;
 }

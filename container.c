@@ -255,8 +255,8 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
         for (uint32_t item_i=0; item_i < con_nitems (con); item_i++)
             if (con.items[item_i].dict_id.num) { // not a prefix-only item
                 DidIType did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
-                ASSERT (did_i != DID_I_NONE, "Error in container_reconstruct analyzing a %s container: unable to find did_i for item %s",
-                        ctx->name, dis_dict_id (con.items[item_i].dict_id).s);
+                ASSERTE (did_i != DID_I_NONE, "analyzing a %s container: unable to find did_i for item %s",
+                         ctx->name, dis_dict_id (con.items[item_i].dict_id).s);
 
                 con.items[item_i].did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
             }
@@ -307,7 +307,7 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
                 int32_t prefixes_len_change = DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len);  
                 ASSERTE (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
                          "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", 
-                         ctx->name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE)
+                         ctx->name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
                 
                 prefixes_len       += prefixes_len_change;
                 ctx->con_cache.len += prefixes_len_change;

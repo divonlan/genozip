@@ -100,10 +100,10 @@ extern void ref_alt_chroms_load (void);
 extern void ref_alt_chroms_compress (void);
 
 #define ref_assert_nucleotide_available(range,pos) \
-    ASSERT (/* piz w stored ref */ (flag.reference == REF_STORED && ref_is_nucleotide_set ((range), pos2range_idx(pos))) ||  \
-            /* zip w ext ref    */ ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && ((pos) >= (range)->first_pos && (pos) <= (range)->last_pos)) || \
-            /* zip internal ref */ flag.reference == REF_INTERNAL, \
-        "Error in %s:%u: reference is not set: chrom=%.*s pos=%"PRId64, __FUNCTION__, __LINE__, (range)->chrom_name_len, (range)->chrom_name, (pos))
+    ASSERTE (/* piz w stored ref */ (flag.reference == REF_STORED && ref_is_nucleotide_set ((range), pos2range_idx(pos))) ||  \
+             /* zip w ext ref    */ ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && ((pos) >= (range)->first_pos && (pos) <= (range)->last_pos)) || \
+             /* zip internal ref */ flag.reference == REF_INTERNAL, \
+             "reference is not set: chrom=%.*s pos=%"PRId64, (range)->chrom_name_len, (range)->chrom_name, (pos));
 
 // note that the following work on idx and not pos! (idx is the index within the range)
 #define ref_set_nucleotide(range,idx,value) { bit_array_assign (&(range)->ref, (idx) * 2,      acgt_encode[(uint8_t)value] & 1)       ;  \

@@ -363,7 +363,7 @@ static void flags_verify_pair_rules (unsigned num_txt_files, const char **filena
 
     // verify all are fastq
     for (unsigned i=0; i < num_txt_files; i++)
-        ASSERT (txtfile_get_file_dt (filenames[i]) == DT_FASTQ, "when using %s, all input files are expected to be FASTQ files, but %s is not", OT("pair", "2"), filenames[i]);
+        ASSINP (txtfile_get_file_dt (filenames[i]) == DT_FASTQ, "when using %s, all input files are expected to be FASTQ files, but %s is not", OT("pair", "2"), filenames[i]);
 
     // if which --output is missing, we check if every pair of files has a consistent name
     if (!flag.out_filename) 

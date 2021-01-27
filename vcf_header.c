@@ -98,7 +98,7 @@ bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bool soft
             
             vcf_num_displayed_samples = vcf_num_samples;
 
-            ASSERT (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
+            ASSINP (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
 
             // if --samples is used, update vcf_header and vcf_num_displayed_samples
             if (flag.samples) samples_digest_vcf_header (vcf_header);

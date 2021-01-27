@@ -92,7 +92,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
     Context *nonref_ctx   = &vb->contexts[DTF(nonref)];
     Context *nonref_x_ctx = nonref_ctx + 1;
 
-    ASSERT0 (!vb->compressed.len && !vb->compressed.param, "Error in codec_acgt_compress_nonref: expecting vb->compressed to be free, but its not");
+    ASSERTE0 (!vb->compressed.len && !vb->compressed.param, "expecting vb->compressed to be free, but its not");
 
     // we will pack into vb->compressed
     buf_alloc (vb, &vb->compressed, roundup_bits2bytes64 (*uncompressed_len * 2), 1, "compress");
@@ -195,7 +195,7 @@ void codec_acgt_uncompress (VBlock *vb, Codec codec, uint8_t param,
                             Buffer *uncompressed_buf, uint64_t num_bases,
                             Codec sub_codec)
 {
-    ASSERT0 (!vb->compressed.len && !vb->compressed.param, "Error in codec_acgt_uncompress: expected vb->compressed to be free, but its not");
+    ASSERTE0 (!vb->compressed.len && !vb->compressed.param, "expected vb->compressed to be free, but its not");
 
     uint64_t bitmap_num_bytes = roundup_bits2bytes64 (num_bases * 2); // 4 nucleotides per byte, rounded up to whole 64b words
     buf_alloc (vb, &vb->compressed, bitmap_num_bytes, 1, "compressed");    

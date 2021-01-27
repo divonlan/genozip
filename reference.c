@@ -223,6 +223,8 @@ MemStats ref_memory_consumption (void)
 // PIZ: returns a range which is the entire contig
 const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed)
 {
+    ASSERTE0 (ranges.len, "ranges is NULL");
+
     // caching
     if (vb->prev_range && vb->prev_range_chrom_node_index == vb->chrom_node_index)
         return vb->prev_range;
@@ -266,8 +268,8 @@ static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, co
             start_0_offset = last_bit + 1; // this is the last region of 1s
 
         len_1 = start_0_offset - start_1_offset;
-        ASSERT (len_1 > 0, "Error in ref_uncompact_ref: len_1 is not positive: start_0_offset=%"PRId64" start_1_offset=%"PRId64" first_bit=%"PRId64" last_bit=%"PRId64, 
-                start_0_offset, start_1_offset, first_bit, last_bit);
+        ASSERTE (len_1 > 0, "len_1 is not positive: start_0_offset=%"PRId64" start_1_offset=%"PRId64" first_bit=%"PRId64" last_bit=%"PRId64, 
+                 start_0_offset, start_1_offset, first_bit, last_bit);
 
         // do actual uncompacting
         bit_array_copy (&r->ref, start_1_offset * 2, compacted, next_compacted * 2, len_1 * 2);
@@ -277,26 +279,26 @@ static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, co
 
         // skip the clear region
         has_any_bit = bit_array_find_next_set_bit (&r->is_set, start_0_offset, &start_1_offset); 
-        ASSERT0 (has_any_bit, "Error in ref_uncompact_ref: cannot find next set bit");
-        ASSERT (start_1_offset <= last_bit, "Error in ref_uncompact_ref: expecting start_1_offset(%"PRId64") <= last_bit(%"PRId64")",
+        ASSERTE0 (has_any_bit, "cannot find next set bit");
+        ASSERTE (start_1_offset <= last_bit, "expecting start_1_offset(%"PRId64") <= last_bit(%"PRId64")",
                 start_1_offset, last_bit); // we removed the flanking regions, so there is always an 1 after a 0 within the region
     }
 
-    ASSERT (next_compacted * 2 == compacted->nbits, "Error in ref_uncompact_ref: expecting next_compacted(%"PRId64") * 2 == compacted->nbits(%"PRId64")",
-            next_compacted, compacted->nbits);
+    ASSERTE (next_compacted * 2 == compacted->nbits, "expecting next_compacted(%"PRId64") * 2 == compacted->nbits(%"PRId64")",
+             next_compacted, compacted->nbits);
 }
 
 // Compute thread: called by ref_uncompress_one_range
 Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
 {
     Context *ctx = &z_file->contexts[CHROM];
-    ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "Error in ref_get_range_by_chrom: chrom=%d out of range - ctx->word_list.len=%u",
-            chrom, (uint32_t)ctx->word_list.len);
+    ASSERTE (chrom >= 0 && chrom < ctx->word_list.len, "chrom=%d out of range - ctx->word_list.len=%u",
+             chrom, (uint32_t)ctx->word_list.len);
 
     if (chrom_name)
         *chrom_name = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom, 0, 0);
 
-    ASSERT (chrom < ranges.len, "Error in ref_get_range_by_chrom: expecting chrom=%d < ranges.len=%"PRIu64, chrom, ranges.len);
+    ASSERTE (chrom < ranges.len, "expecting chrom=%d < ranges.len=%"PRIu64, chrom, ranges.len);
     
     Range *r = ENT (Range, ranges, chrom); // in PIZ, we have one range per chrom
     return r;
@@ -397,14 +399,14 @@ static void ref_uncompress_one_range (VBlockP vb)
     if (is_compacted) {
 
         // if compacted, the section must be within the boundaries of the contig (this is not true if the section was copied with ref_copy_one_compressed_section)
-        ASSERT (sec_start_within_contig >= 0 && ref_sec_last_pos <= r->last_pos, 
-                "Error in ref_uncompress_one_range: section range out of bounds for chrom=%d \"%s\": in SEC_REFERENCE being uncompressed: first_pos=%"PRId64" last_pos=%"PRId64" but in reference contig as initialized: first_pos=%"PRId64" last_pos=%"PRId64,
+        ASSERTE (sec_start_within_contig >= 0 && ref_sec_last_pos <= r->last_pos, 
+                "section range out of bounds for chrom=%d \"%s\": in SEC_REFERENCE being uncompressed: first_pos=%"PRId64" last_pos=%"PRId64" but in reference contig as initialized: first_pos=%"PRId64" last_pos=%"PRId64,
                 chrom, r->chrom_name, ref_sec_pos, ref_sec_last_pos, r->first_pos, r->last_pos);
 
-        ASSERT (uncomp_len == roundup_bits2bytes64 (ref_sec_len), "Error in ref_uncompress_one_range: when uncompressing SEC_REF_IS_SET: uncomp_len=%u inconsistent with len=%"PRId64, uncomp_len, ref_sec_len); 
+        ASSERTE (uncomp_len == roundup_bits2bytes64 (ref_sec_len), "when uncompressing SEC_REF_IS_SET: uncomp_len=%u inconsistent with len=%"PRId64, uncomp_len, ref_sec_len); 
 
         // uncompress into r->is_set, via vb->compressed
-        ASSERT0 (!vb->compressed.len, "Error in ref_uncompress_one_range: expecting vb->compressed to be free, but its not");
+        ASSERTE0 (!vb->compressed.len, "expecting vb->compressed to be free, but its not");
         zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", 0, SEC_REF_IS_SET);
 
         BitArray *is_set = buf_zfile_buf_to_bitarray (&vb->compressed, ref_sec_len);
@@ -432,16 +434,16 @@ static void ref_uncompress_one_range (VBlockP vb)
         compacted_ref_len  = (PosType)BGEN32(header->num_bases);
         uncomp_len         = BGEN32 (header->h.data_uncompressed_len);
 
-        ASSERT (uncomp_len == roundup_bits2bytes64 (compacted_ref_len*2), 
-                "Error: uncomp_len=%u inconsistent with compacted_ref_len=%"PRId64, uncomp_len, compacted_ref_len); 
+        ASSERTE (uncomp_len == roundup_bits2bytes64 (compacted_ref_len*2), 
+                "uncomp_len=%u inconsistent with compacted_ref_len=%"PRId64, uncomp_len, compacted_ref_len); 
 
-        ASSERT0 (BGEN32 (header->chrom_word_index) == chrom && BGEN64 (header->pos) == ref_sec_pos && BGEN64 (header->gpos) == ref_sec_gpos, // chrom should be the same between the two sections
-                "Error in ref_uncompress_one_range: header mismatch between SEC_REF_IS_SET and SEC_REFERENCE sections");
+        ASSERTE0 (BGEN32 (header->chrom_word_index) == chrom && BGEN64 (header->pos) == ref_sec_pos && BGEN64 (header->gpos) == ref_sec_gpos, // chrom should be the same between the two sections
+                  "header mismatch between SEC_REF_IS_SET and SEC_REFERENCE sections");
     }
     
     // case: not compacted means that entire range is set
     else {
-        ASSERT (uncomp_len == roundup_bits2bytes64 (ref_sec_len*2), "Error: uncomp_len=%u inconsistent with ref_len=%"PRId64, uncomp_len, ref_sec_len); 
+        ASSERTE (uncomp_len == roundup_bits2bytes64 (ref_sec_len*2), "uncomp_len=%u inconsistent with ref_len=%"PRId64, uncomp_len, ref_sec_len); 
 
         if (primary_command == ZIP && flag.reference == REF_EXT_STORE) { // initialization of is_set - case 1
             RefLock lock = ref_lock (sec_start_gpos, ref_sec_len);
@@ -459,8 +461,8 @@ static void ref_uncompress_one_range (VBlockP vb)
 
             bit_index_t start = MAX (sec_start_within_contig, 0);
             bit_index_t len   = ref_sec_len - initial_flanking_len - final_flanking_len;
-            ASSERT (len >= 0 && len <= ref_sec_len, "Error in ref_uncompress_one_range: expecting ref_sec_len=%"PRIu64" >= initial_flanking_len=%"PRIu64" + final_flanking_len=%"PRIu64,
-                    ref_sec_len, initial_flanking_len, final_flanking_len);
+            ASSERTE (len >= 0 && len <= ref_sec_len, "expecting ref_sec_len=%"PRIu64" >= initial_flanking_len=%"PRIu64" + final_flanking_len=%"PRIu64,
+                     ref_sec_len, initial_flanking_len, final_flanking_len);
 
             RefLock lock = ref_lock (start + r->gpos, len);
             bit_array_set_region (&r->is_set, start, len);
@@ -479,7 +481,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     }
 
     // uncompress into r->ref, via vb->compressed
-    ASSERT0 (!vb->compressed.len, "Error in ref_uncompress_one_range: expecting vb->compressed to be free, but its not");
+    ASSERTE0 (!vb->compressed.len, "expecting vb->compressed to be free, but its not");
     zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", 0, SEC_REFERENCE);
 
     // lock - while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
@@ -515,9 +517,9 @@ static void ref_read_one_range (VBlockP vb)
     if (sl_ent->vblock_i == 0) // section was created with ref_copy_one_compressed_section
         z_file->num_copied_ref_sections++;
     else        
-        ASSERT (sl_ent->vblock_i + z_file->num_copied_ref_sections == vb->vblock_i, 
-                "Error in ref_read_one_range: mismatch: sl_ent->vblock_i=%u but vb->vblock_i=%u, z_file->num_copied_ref_sections=%u",
-                sl_ent->vblock_i, vb->vblock_i, z_file->num_copied_ref_sections);
+        ASSERTE (sl_ent->vblock_i + z_file->num_copied_ref_sections == vb->vblock_i, 
+                 "mismatch: sl_ent->vblock_i=%u but vb->vblock_i=%u, z_file->num_copied_ref_sections=%u",
+                 sl_ent->vblock_i, vb->vblock_i, z_file->num_copied_ref_sections);
 
     // if the user specified --regions, check if this ref range is needed
     bool range_is_included = true;
@@ -526,8 +528,7 @@ static void ref_read_one_range (VBlockP vb)
         if (vb->vblock_i > ref_stored_ra.len) return; // we're done - no more ranges to read, per random access (this is the empty section)
 
         ra = ENT (RAEntry, ref_stored_ra, vb->vblock_i-1);
-        ASSERT (ra->vblock_i == vb->vblock_i, "Error in ref_read_one_range: expecting ra->vblock_i(%u) == vb->vblock_i(%u)", 
-                ra->vblock_i, vb->vblock_i);
+        ASSERTE (ra->vblock_i == vb->vblock_i, "expecting ra->vblock_i(%u) == vb->vblock_i(%u)", ra->vblock_i, vb->vblock_i);
 
         range_is_included = regions_is_ra_included (ra);
     }
@@ -536,12 +537,12 @@ static void ref_read_one_range (VBlockP vb)
 
         buf_alloc (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers"); // room for 2 section headers  
 
-        ASSERT0 (vb->z_section_headers.len < 2, "Error in ref_read_one_range: unexpected 3rd recursive entry");
+        ASSERTE0 (vb->z_section_headers.len < 2, "unexpected 3rd recursive entry");
 
         int32_t section_offset = 
             zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, "z_data", sl_ent->section_type, sl_ent);    
 
-        ASSERT (section_offset != EOF, "Error in ref_read_one_range: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
+        ASSERTE (section_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
 
         NEXTENT (int32_t, vb->z_section_headers) = section_offset;
 
@@ -566,7 +567,7 @@ static void ref_read_one_range (VBlockP vb)
 // or this could be a .ref.genozip file (called from load_external->piz_one_file)
 void ref_load_stored_reference (void)
 {
-    ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
+    ASSERTE0 (!buf_is_allocated (&ranges), "expecting ranges to be unallocated");
     
     if (!(flag.show_headers && exe_type == EXE_GENOCAT)) {
 
@@ -624,7 +625,7 @@ void ref_remove_cache (void)
 // mmap the reference cached file, as copy-on-write - modifications are private to process and not written to the file
 bool ref_mmap_cached_reference (void)
 {
-    ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
+    ASSERTE0 (!buf_is_allocated (&ranges), "expecting ranges to be unallocated");
     
     if (!file_exists (ref_get_cache_fn())) return false; // file doesn't exist
 
@@ -656,7 +657,7 @@ void ref_create_cache_in_background (void)
     if (!flag.regions) { 
         ref_get_cache_fn(); // generate name before closing z_file
         unsigned err = pthread_create (&ref_cache_creation_thread_id, NULL, ref_create_cache, NULL);
-        ASSERT (!err, "Error in ref_create_cache_in_background: pthread_create failed: err=%u", err);
+        ASSERTE (!err, "pthread_create failed: err=%u", err);
         ref_creating_cache = true;
     }
 }
@@ -678,7 +679,7 @@ void ref_create_cache_join (void)
 // because we have multiple threads in parallel that might have the same node_index for different chroms
 static inline uint32_t ref_range_id_by_hash (VBlockP vb, uint32_t range_i)
 {
-    ASSERT0 (vb->chrom_name_len > 0, "Error in ref_range_id_by_hash: vb->chrom_name_len==0");
+    ASSERTE0 (vb->chrom_name_len > 0, "vb->chrom_name_len==0");
 
     uint32_t value, n=0;
     bool is_major_chrom=false;
@@ -856,7 +857,7 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
 Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, RefLock *lock)  
 {
     // sanity checks
-    ASSERT0 (vb->chrom_name, "Error in ref_seg_get_locked_range: vb->chrom_name=NULL");
+    ASSERTE0 (vb->chrom_name, "vb->chrom_name=NULL");
 
     switch (ranges_type) {
         case RT_DENOVO : return ref_seg_get_locked_range_denovo (vb, pos, field, lock);
@@ -878,7 +879,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
            !((*sl)->vblock_i == ra->vblock_i && (*sl)->section_type == SEC_REFERENCE)) 
         (*sl)++;
 
-    ASSERT (*sl < AFTERENT (SectionListEntry, ref_file_section_list), "Error in ref_copy_one_compressed_section: cannot find FASTA_NONREF of vb_i=%u in section list of reference file", ra->vblock_i);
+    ASSERTE (*sl < AFTERENT (SectionListEntry, ref_file_section_list), "cannot find FASTA_NONREF of vb_i=%u in section list of reference file", ra->vblock_i);
 
     static Buffer ref_seq_section = EMPTY_BUFFER;
 
@@ -888,8 +889,8 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 
     SectionHeaderReference *header = (SectionHeaderReference *)ref_seq_section.data;
 
-    ASSERT0 (BGEN32 (header->chrom_word_index) == ra->chrom_index && BGEN64 (header->pos) == ra->min_pos,
-            "Error in ref_copy_one_compressed_section: RA and Section don't agree on chrom or pos");
+    ASSERTE0 (BGEN32 (header->chrom_word_index) == ra->chrom_index && BGEN64 (header->pos) == ra->min_pos,
+              "RA and Section don't agree on chrom or pos");
 
     // some minor changes to the header...
     header->h.vblock_i  = 0; // we don't belong to any VB and there is no encryption of external ref
@@ -924,8 +925,8 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 // ZIP copying parts of external reference to fine - called by I/O thread from zip_write_global_area->ref_compress_ref
 static void ref_copy_compressed_sections_from_reference_file (void)
 {
-    ASSERT (primary_command == ZIP && flag.reference == REF_EXT_STORE, 
-            "Error in ref_copy_compressed_sections_from_reference_file: not expecting to be here: primary_command=%u flag.reference=%u", primary_command, flag.reference);
+    ASSERTE (primary_command == ZIP && flag.reference == REF_EXT_STORE, 
+             "not expecting to be here: primary_command=%u flag.reference=%u", primary_command, flag.reference);
 
     File *ref_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);
 
@@ -965,10 +966,10 @@ static bool ref_remove_flanking_regions (Range *r, uint64_t r_num_set_bits, uint
     uint64_t end_flanking_region_len, last_1;
     
     char has_any_bit = bit_array_find_first_set_bit (&r->is_set, start_flanking_region_len);
-    ASSERT (has_any_bit, "Error in ref_remove_flanking_regions: range %u (%s) has no bits set in r->is_set", (uint32_t)(r-(Range*)ranges.data), r->chrom_name); // ref_prepare_range_for_compress is responsible not to send us 0-bit ranges
+    ASSERTE (has_any_bit, "range %u (%s) has no bits set in r->is_set", (uint32_t)(r-(Range*)ranges.data), r->chrom_name); // ref_prepare_range_for_compress is responsible not to send us 0-bit ranges
 
     has_any_bit = bit_array_find_prev_set_bit (&r->is_set, r->is_set.nbits, &last_1);
-    ASSERT (has_any_bit, "Error in ref_remove_flanking_regions: range %u (%s) has no bits set in r->is_set (#2)", (uint32_t)(r-(Range*)ranges.data), r->chrom_name); // this should definitely never happen, since we already know the range has bits
+    ASSERTE (has_any_bit, "range %u (%s) has no bits set in r->is_set (#2)", (uint32_t)(r-(Range*)ranges.data), r->chrom_name); // this should definitely never happen, since we already know the range has bits
     end_flanking_region_len = r->is_set.nbits - last_1 - 1;
 
     uint64_t num_clear_bits_excluding_flanking_regions = 
@@ -981,8 +982,8 @@ static bool ref_remove_flanking_regions (Range *r, uint64_t r_num_set_bits, uint
     if (ranges_type == RT_LOADED || ranges_type == RT_CACHED) // note: for RT_DENOVO, gpos is still 0 at this point
         r->gpos  += *start_flanking_region_len;
 
-    ASSERT (r->last_pos >= r->first_pos, "Error in ref_compact_ref: bad removal of flanking regions: r->first_pos=%"PRId64" r->last_pos=%"PRId64,
-            r->first_pos, r->last_pos);
+    ASSERTE (r->last_pos >= r->first_pos, "bad removal of flanking regions: r->first_pos=%"PRId64" r->last_pos=%"PRId64,
+             r->first_pos, r->last_pos);
 
     bit_array_remove_flanking (&r->is_set, *start_flanking_region_len, end_flanking_region_len);
 
@@ -1000,7 +1001,7 @@ static bool ref_compact_ref (Range *r, uint64_t r_num_set_bits)
 {
     if (!r || !r_num_set_bits) return false;
 
-    ASSERT0 (r->is_set.nbits, "Error in ref_compact_ref: r->is_set.nbits=0");
+    ASSERTE0 (r->is_set.nbits, "r->is_set.nbits=0");
 
     // remove flanking regions
     uint64_t start_flanking_region_len;
@@ -1022,7 +1023,7 @@ static bool ref_compact_ref (Range *r, uint64_t r_num_set_bits)
 
         // find length of clear region
         has_any_bit = bit_array_find_next_set_bit (&r->is_set, start_0_offset, &start_1_offset);
-        ASSERT0 (has_any_bit, "Error in ref_compact_ref: cannot find set bits"); // this should never happen as we removed the flanking regions
+        ASSERTE0 (has_any_bit, "cannot find set bits"); // this should never happen as we removed the flanking regions
     }
 
     // set length of ref - this is the data that will be compressed
@@ -1228,7 +1229,7 @@ void ref_compress_ref (void)
 
 void ref_set_reference (const char *filename)
 {
-    ASSERT0 (filename, "Error in ref_set_reference: filename is NULL");
+    ASSERTE0 (filename, "filename is NULL");
 
     ref_filename = MALLOC (strlen (filename) + 1);
 
@@ -1310,19 +1311,7 @@ void ref_generate_reverse_complement_genome (void)
                              NULL);
     COPY_TIMER_VB (evb, generate_rev_complement_genome);
 }
-/*
-// make a copy of genome and ranges
-static void ref_save_genome_copy (void)
-{
-    ASSERT0 (genome.ref.words, "Error in ref_save_genome_copy: genome.ref is not allocated");
 
-    buf_alloc_bitarr (evb, &genome_ref_copy, genome.ref.nbits, "genome_ref_copy");
-    memcpy (genome_ref_copy.data, genome.ref.words, genome.ref.nwords * sizeof (word_t));
-
-    // copy initial state of ranges, before they are modifed by compacting
-    buf_copy (evb, &ranges_copy, &ranges, sizeof (Range), 0, 0, "ranges_copy");
-}
-*/
 bool ref_is_reference_loaded (void)
 {
     return buf_is_allocated (&ranges);
@@ -1331,7 +1320,7 @@ bool ref_is_reference_loaded (void)
 // ZIP & PIZ: import external reference
 void ref_load_external_reference (bool display, bool is_last_z_file)
 {
-    ASSERT0 (ref_filename, "Error: ref_filename is NULL");
+    ASSERTE0 (ref_filename, "ref_filename is NULL");
     SAVE_FLAGS;
 
     flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
@@ -1424,8 +1413,8 @@ static void overlay_ranges_on_loaded_genome (void)
             
             PosType nbases = rc->max_pos - rc->min_pos + 1;
 
-            ASSERT (r->gpos + nbases <= genome->nbits / 2, "Error in overlay_ranges_on_loaded_genome: adding range \"%s\": r->gpos(%"PRId64") + nbases(%"PRId64") (=%"PRId64") is beyond genome_nbases=%"PRId64,
-                    r->chrom_name, r->gpos, nbases, r->gpos+nbases, genome_nbases);
+            ASSERTE (r->gpos + nbases <= genome->nbits / 2, "adding range \"%s\": r->gpos(%"PRId64") + nbases(%"PRId64") (=%"PRId64") is beyond genome_nbases=%"PRId64,
+                     r->chrom_name, r->gpos, nbases, r->gpos+nbases, genome_nbases);
 
             bit_array_overlay (&r->ref, genome, r->gpos*2, nbases*2);
 
@@ -1449,8 +1438,8 @@ void ref_initialize_ranges (RangesType type)
             buf_alloc (evb, &genome_cache, genome_nbases / 4 * 2, 1, "genome_cache") // contains both forward and rev. compliment
         
         else  // RT_CACHED 
-            ASSERT0 (buf_mmap (evb, &genome_cache, ref_get_cache_fn(), "genome_cache"),  // we map the entire file (forward and revese complement genomes) onto genome_cache
-                     "Error in ref_initialize_ranges: failed to map cache. Please try again");
+            ASSERTE0 (buf_mmap (evb, &genome_cache, ref_get_cache_fn(), "genome_cache"),  // we map the entire file (forward and revese complement genomes) onto genome_cache
+                      "failed to map cache. Please try again");
 
         // overlay genome and emoneg. we do it this was so we can use just a single file
         buf_set_overlayable (&genome_cache);

@@ -76,7 +76,7 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
     strm.opaque  = vb; // just passed to malloc/free
     
     int init_ret = BZ2_bzCompressInit (&strm, flag.fast ? 1 : 9, 0, 30); // we optimize for size (normally) or speed (if user selected --fast)
-    ASSERT (init_ret == BZ_OK, "Error: BZ2_bzCompressInit failed: %s", BZ2_errstr(init_ret));
+    ASSERTE (init_ret == BZ_OK, "BZ2_bzCompressInit failed: %s", BZ2_errstr(init_ret));
 
     strm.next_out  = compressed;
     strm.avail_out = *compressed_len;
@@ -92,7 +92,7 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
         if (soft_fail && ret == BZ_FINISH_OK)
             success = false; // data_compressed_len too small
         else 
-            ASSERT (ret == BZ_STREAM_END, "Error: BZ2_bzCompress failed: %s", BZ2_errstr (ret));
+            ASSERTE (ret == BZ_STREAM_END, "BZ2_bzCompress failed: %s", BZ2_errstr (ret));
     }
     
     // option 2 - compress data one line at a time
@@ -101,7 +101,7 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
         uint32_t in_so_far = 0;
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
-            ASSERT (!strm.avail_in, "Error in codec_bz2_compress: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
+            ASSERTE (!strm.avail_in, "expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
 
             // initialize to 0
             strm.next_in=0;
@@ -121,15 +121,15 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
                 success = false; // data_compressed_len too small
                 break;
             }
-            else ASSERT (ret == (final ? BZ_STREAM_END : BZ_RUN_OK), 
-                         "Error: BZ2_bzCompress failed: %s", BZ2_errstr (ret));
+            else 
+                ASSERTE (ret == (final ? BZ_STREAM_END : BZ_RUN_OK), "BZ2_bzCompress failed: %s", BZ2_errstr (ret));
         }
     }
     else 
         ABORT0 ("Error in codec_bz2_compress: neither src_data nor callback is provided");
     
     ret = BZ2_bzCompressEnd (&strm);
-    ASSERT (ret == BZ_OK, "Error: BZ2_bzCompressEnd failed: %s", BZ2_errstr (ret));
+    ASSERTE (ret == BZ_OK, "BZ2_bzCompressEnd failed: %s", BZ2_errstr (ret));
 
     *compressed_len -= strm.avail_out;
 
@@ -151,7 +151,7 @@ void codec_bz2_uncompress (VBlock *vb, Codec codec, uint8_t param,
     strm.opaque  = vb; // just passed to malloc/free
 
     int ret = BZ2_bzDecompressInit (&strm, 0, 0);
-    ASSERT0 (ret == BZ_OK, "Error: BZ2_bzDecompressInit failed");
+    ASSERTE0 (ret == BZ_OK, "BZ2_bzDecompressInit failed");
 
     strm.next_in   = (char *)compressed;
     strm.avail_in  = compressed_len;
@@ -159,7 +159,7 @@ void codec_bz2_uncompress (VBlock *vb, Codec codec, uint8_t param,
     strm.avail_out = uncompressed_len;
 
     ret = BZ2_bzDecompress (&strm);
-    ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "Error: BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", BZ2_errstr(ret), strm.avail_in, strm.avail_out);
+    ASSERTE (ret == BZ_STREAM_END || ret == BZ_OK, "BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", BZ2_errstr(ret), strm.avail_in, strm.avail_out);
 
     BZ2_bzDecompressEnd (&strm);
 

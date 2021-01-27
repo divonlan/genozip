@@ -39,7 +39,7 @@ static inline int fasta_is_end_of_line (VBlock *vb, uint32_t first_i,
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    ASSERT (*i >= 0 && *i < vb->txt_data.len, "Error in def_unconsumed: *i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ASSERTE (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
     // case: reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
     // (note: first_i=0 when flag.make_reference)
@@ -48,7 +48,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
         ARRAY (char, txt, vb->txt_data);
         for (uint32_t i=0; i < vb->txt_data.len; i++) {
             // just don't allow now-obsolete ';' rather than trying to disentangle comments from descriptions
-            ASSERT (txt[i] != ';', "Error: %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
+            ASSINP (txt[i] != ';', "Error: %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
         
             // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
             // everything following to the next VB
@@ -100,7 +100,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
 {
     START_TIMER;
 
-    ASSERT (vb->vblock_i > 1 || *FIRSTENT (char, vb->txt_data) == '>' || *FIRSTENT (char, vb->txt_data) == ';',
+    ASSINP (vb->vblock_i > 1 || *FIRSTENT (char, vb->txt_data) == '>' || *FIRSTENT (char, vb->txt_data) == ';',
             "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
 
     if (!flag.make_reference) {
@@ -189,7 +189,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t
         WordIndex chrom_node_index = ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[FASTA_CONTIG], chrom_name, chrom_name_len, &is_new);
         random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_name, chrom_name_len);
 
-        ASSERT (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
+        ASSINP (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
                 flag.bind ? " (possibly in another FASTA being bound)" : 
                 (flag.reference==REF_EXTERNAL || flag.reference==REF_EXT_STORE) ? " (possibly the contig size exceeds vblock size, try enlarging with --vblock)" : "");
             

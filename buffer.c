@@ -89,8 +89,8 @@ static inline bool buf_has_overflowed (const Buffer *buf, const char *msg)
     char *memory = buf->memory;
     if (buf->vb && buf->vb->id==-1 && memory == BUFFER_BEING_MODIFIED) return false;
 
-    ASSERT (memory != BUFFER_BEING_MODIFIED, "%s: Error in buf_has_overflowed: buf->memory=BUFFER_BEING_MODIFIED. buffer %s size=%"PRIu64,
-            msg, buf_desc(buf).s, buf->size);
+    ASSERTE (memory != BUFFER_BEING_MODIFIED, "%s: buf->memory=BUFFER_BEING_MODIFIED. buffer %s size=%"PRIu64,
+             msg, buf_desc(buf).s, buf->size);
 
     return *((uint64_t*)(memory + buf->size + sizeof(uint64_t))) != OVERFLOW_TRAP; // note on evb: if another thread reallocs the memory concurrently, this might seg-fault
 }
@@ -103,8 +103,8 @@ static inline bool buf_has_underflowed (const Buffer *buf, const char *msg)
     char *memory = buf->memory;
     if (buf->vb && buf->vb->id==-1 && memory == BUFFER_BEING_MODIFIED) return false;
 
-    ASSERT (memory != BUFFER_BEING_MODIFIED, "%s: Error in buf_has_underflowed: buf->memory=BUFFER_BEING_MODIFIED. buffer %s size=%"PRIu64,
-            msg, buf_desc(buf).s, buf->size);
+    ASSERTE (memory != BUFFER_BEING_MODIFIED, "%s: buf->memory=BUFFER_BEING_MODIFIED. buffer %s size=%"PRIu64,
+             msg, buf_desc(buf).s, buf->size);
 
     return *(uint64_t*)memory != UNDERFLOW_TRAP; // note on evb: if another thread reallocs the memory concurrently, this might seg-fault
 }
@@ -237,7 +237,7 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
         }
     }
     
-    ASSERT (!primary || !corruption, "Aborting due to memory corruption #%u", corruption); // primary will exit on corruption
+    ASSERTE (!primary || !corruption, "Aborting due to memory corruption #%u", corruption); // primary will exit on corruption
 
     return corruption;
 }
@@ -281,7 +281,7 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
 
         for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) {
     
-            ASSERT (buf_list->memory, "Error: memory of buffer_list of vb_i=%u is not allocated", vb_i); // this should never happen
+            ASSERTE (buf_list->memory, "memory of buffer_list of vb_i=%u is not allocated", vb_i); // this should never happen
 
             Buffer *buf = ((Buffer **)buf_list->data)[buf_i];
             
@@ -305,7 +305,7 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
                 stats[num_stats].bytes   = buf->size + control_size;
                 stats[num_stats].buffers = 1;
                 num_stats++;
-                ASSERT (num_stats < MAX_MEMORY_STATS, "# memory stats exceeded %u, consider increasing MAX_MEMORY_STATS", MAX_MEMORY_STATS);
+                ASSERTE (num_stats < MAX_MEMORY_STATS, "# memory stats exceeded %u, consider increasing MAX_MEMORY_STATS", MAX_MEMORY_STATS);
             }
 
             num_buffers++;
@@ -338,7 +338,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 {
     if (buf->vb == vb) return; // already in buf_list - nothing to do
 
-    ASSERT (!buf->vb, "Error in buf_add_to_buffer_list: cannot add buffer %s to buf_list of vb_i=%u because it is already in buf_list of vb_i=%u.",
+    ASSERTE (!buf->vb, "cannot add buffer %s to buf_list of vb_i=%u because it is already in buf_list of vb_i=%u.",
             buf_desc(buf).s, vb->vblock_i, buf->vb->vblock_i);    
 
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
@@ -363,7 +363,7 @@ static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_siz
     buf->code_line   = code_line;
 
     if (name) buf->name  = name;
-    ASSERT (buf->name, "Error: buffer has no name. func=%s:%u", buf->func, buf->code_line);
+    ASSERTE (buf->name, "buffer has no name. func=%s:%u", buf->func, buf->code_line);
 
     if (!memory) {
         if (flag.show_memory)
@@ -408,10 +408,10 @@ uint64_t buf_alloc_do (VBlock *vb,
              func, code_line, str_size (requested_size).s, buf_desc (buf).s);
 
     // sanity checks
-    ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "Error in buf_alloc_do called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
-            func, code_line, buf_display_type (buf), buf_desc (buf).s);
+    ASSERTE (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
+             func, code_line, buf_display_type (buf), buf_desc (buf).s);
 
-    ASSERT0 (vb, "Error in buf_alloc_do: null vb");
+    ASSERTE0 (vb, "null vb");
 
     // case 1: we have enough memory already
     if (requested_size <= buf->size) {
@@ -425,8 +425,8 @@ uint64_t buf_alloc_do (VBlock *vb,
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
     uint64_t new_size = (uint64_t)(requested_size * grow_at_least_factor + 7) & 0xfffffffffffffff8ULL; // aligned to 8 bytes
 
-    ASSERT (new_size >= requested_size, "Error in buf_alloc_do called from %s:%u: allocated too little memory for buffer %s: requested=%"PRIu64", allocated=%"PRIu64". vb_i=%u", 
-            func, code_line, buf_desc (buf).s, requested_size, new_size, vb->vblock_i); // floating point paranoia
+    ASSERTE (new_size >= requested_size, "called from %s:%u: allocated too little memory for buffer %s: requested=%"PRIu64", allocated=%"PRIu64". vb_i=%u", 
+             func, code_line, buf_desc (buf).s, requested_size, new_size, vb->vblock_i); // floating point paranoia
 
     // case 2: buffer was allocated already in the past - allocate new memory and copy over the data
     if (buf->memory) {
@@ -481,8 +481,8 @@ uint64_t buf_alloc_do (VBlock *vb,
     else {
         __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
         char *memory = (char *)malloc (new_size + control_size);
-        ASSERT (memory != BUFFER_BEING_MODIFIED, "Error in buf_alloc_do called from %s:%u: malloc didn't assign, very weird! buffer %s new_size=%"PRIu64,
-                func, code_line, buf_desc(buf).s, new_size);
+        ASSERTE (memory != BUFFER_BEING_MODIFIED, "called from %s:%u: malloc didn't assign, very weird! buffer %s new_size=%"PRIu64,
+                 func, code_line, buf_desc(buf).s, new_size);
 
         buf->type = BUF_REGULAR;
 
@@ -540,9 +540,9 @@ void buf_overlay_do (VBlock *vb,
         overlaid_buf->type = BUF_UNALLOCATED;
     }
     
-    ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error in %s:%u: cannot buf_overlay to a buffer %s already in use", func, code_line, buf_desc (overlaid_buf).s);
-    ASSERT (regular_buf->type == BUF_REGULAR || regular_buf->type == BUF_MMAP, "Error in %s:%u: regular_buf %s in buf_overlay must be a regular or mmap buffer", func, code_line, buf_desc (regular_buf).s);
-    ASSERT (regular_buf->overlayable, "Error in %s:%u: buf_overlay: buffer %s is not overlayble", func, code_line, buf_desc (regular_buf).s);
+    ASSERTE (overlaid_buf->type == BUF_UNALLOCATED, "Error in %s:%u: cannot buf_overlay to a buffer %s already in use", func, code_line, buf_desc (overlaid_buf).s);
+    ASSERTE (regular_buf->type == BUF_REGULAR || regular_buf->type == BUF_MMAP, "Error in %s:%u: regular_buf %s in buf_overlay must be a regular or mmap buffer", func, code_line, buf_desc (regular_buf).s);
+    ASSERTE (regular_buf->overlayable, "Error in %s:%u: buf_overlay: buffer %s is not overlayble", func, code_line, buf_desc (regular_buf).s);
 
     overlaid_buf->type        = BUF_OVERLAY;
     overlaid_buf->memory      = 0;
@@ -554,9 +554,9 @@ void buf_overlay_do (VBlock *vb,
     // full or partial buffer overlay - if size=0, copy len too and update overlay counter
     mutex_lock (overlay_mutex);
 
-    ASSERT (start_in_regular < regular_buf->size, 
-            "Error in buf_overlay_do called from %s:%u: not enough room in regular buffer for overlaid buf: start_in_regular=%"PRIu64" but regular_buf.size=%"PRIu64,
-            func, code_line, start_in_regular, regular_buf->size);
+    ASSERTE (start_in_regular < regular_buf->size, 
+             "called from %s:%u: not enough room in regular buffer for overlaid buf: start_in_regular=%"PRIu64" but regular_buf.size=%"PRIu64,
+             func, code_line, start_in_regular, regular_buf->size);
 
     // note: data+size MUST be at the control region, as we have the overlay counter there
     overlaid_buf->size = regular_buf->size - start_in_regular;
@@ -598,15 +598,15 @@ bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, const char *fun
 #ifdef _WIN32
     HANDLE file = (HANDLE)_get_osfhandle (fd);
     buf->param = (int64_t)CreateFileMapping (file, NULL, PAGE_WRITECOPY, file_size >> 32, file_size & 0xffffffff, NULL);
-    ASSERTGOTO (buf->param, "Error in buf_mmap, deleting %s: CreateFileMapping failed: %s", filename, str_win_error())
+    ASSERTGOTO (buf->param, "Error in buf_mmap, deleting %s: CreateFileMapping failed: %s", filename, str_win_error());
   
     // note that mmap'ed buffers include the Buffer 
     buf->memory = MapViewOfFile ((HANDLE)buf->param, FILE_MAP_COPY, 0, 0, file_size);
-    ASSERTGOTO (buf->memory, "Error in buf_mmap, deleting %s: MapViewOfFile failed: %s", filename, str_win_error())
+    ASSERTGOTO (buf->memory, "Error in buf_mmap, deleting %s: MapViewOfFile failed: %s", filename, str_win_error());
 
 #else
     buf->memory = mmap (NULL, file_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-    ASSERT (buf->memory != MAP_FAILED, "Error in buf_mmap, deleting %s: mmap failed: %s", filename, strerror (errno));
+    ASSERTE (buf->memory != MAP_FAILED, "deleting %s: mmap failed: %s", filename, strerror (errno));
 #endif
     close (fd);
     fd=-1;
@@ -699,10 +699,10 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 
         case BUF_MMAP:
 #ifdef _WIN32
-            ASSERT (UnmapViewOfFile (buf->memory), "Error in buf_free_do called from %s:%u: UnmapViewOfFile failed: %s", buf->func, buf->code_line, str_win_error());
-            ASSERT (CloseHandle ((HANDLE)buf->param), "Error in buf_free_do called from %s:%u: CloseHandle failed: %s", buf->func, buf->code_line, str_win_error());            
+            ASSERTE (UnmapViewOfFile (buf->memory), "called from %s:%u: UnmapViewOfFile failed: %s", buf->func, buf->code_line, str_win_error());
+            ASSERTE (CloseHandle ((HANDLE)buf->param), "called from %s:%u: CloseHandle failed: %s", buf->func, buf->code_line, str_win_error());            
 #else
-            ASSERT (!munmap (buf->memory, buf->size), "Error in buf_free_do called from %s:%u: munmap failed: %s", buf->func, buf->code_line, strerror (errno));
+            ASSERTE (!munmap (buf->memory, buf->size), "called from %s:%u: munmap failed: %s", buf->func, buf->code_line, strerror (errno));
 #endif
             buf_reset (buf);
             break;
@@ -750,7 +750,7 @@ void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
         overlay_count = (*(uint16_t*)(buf->data + buf->size + sizeof(uint64_t)));
         mutex_unlock (overlay_mutex);            
     }
-    ASSERT (overlay_count==1, "Error: cannot destroy buffer %s because it is currently overlaid", buf->name);
+    ASSERTE (overlay_count==1, "cannot destroy buffer %s because it is currently overlaid", buf->name);
 
     switch (buf->type) {
         case BUF_REGULAR     : buf_low_level_free (buf->memory, func, code_line); break;
@@ -769,10 +769,10 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
                   const char *func, unsigned code_line,
                   const char *name) // dst buffer settings, or take from src if 0
 {
-    ASSERT (src->data, "Error in buf_copy call from %s:%u: src->data is NULL", func, code_line);
+    ASSERTE (src->data, "called from %s:%u: src->data is NULL", func, code_line);
     
-    ASSERT (!max_entries || src_start_entry < src->len, 
-            "Error buf_copy of %s called from %s:%u: src_start_entry=%"PRIu64" is larger than src->len=%"PRIu64, buf_desc(src).s, func, code_line, src_start_entry, src->len);
+    ASSERTE (!max_entries || src_start_entry < src->len, 
+             "buf_copy of %s called from %s:%u: src_start_entry=%"PRIu64" is larger than src->len=%"PRIu64, buf_desc(src).s, func, code_line, src_start_entry, src->len);
 
     uint64_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
@@ -790,11 +790,11 @@ void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
 {
     if (dst->type == BUF_REGULAR && !dst->data) buf_destroy (dst);
     
-    ASSERT (dst->type == BUF_UNALLOCATED, "Error in buf_move: attempt to move to an already-allocated src: %s dst: %s", buf_desc (src).s, buf_desc (dst).s);
+    ASSERTE (dst->type == BUF_UNALLOCATED, "attempt to move to an already-allocated src: %s dst: %s", buf_desc (src).s, buf_desc (dst).s);
 
-    ASSERT (src_vb==dst_vb || dst->vb==dst_vb, "Error in buf_move: to move a buffer between VBs, the dst buffer needs to be added"
-                                               " to the dst_vb buffer_list in advance. If dst_vb=evb the dst buffer must be added to"
-                                               " the buffer_list by the I/O thread only. src: %s dst: %s src_vb->vb_i=%d dst_vb->vb_i=%d",
+    ASSERTE (src_vb==dst_vb || dst->vb==dst_vb, "to move a buffer between VBs, the dst buffer needs to be added"
+                                                " to the dst_vb buffer_list in advance. If dst_vb=evb the dst buffer must be added to"
+                                                " the buffer_list by the I/O thread only. src: %s dst: %s src_vb->vb_i=%d dst_vb->vb_i=%d",
             buf_desc (src).s, buf_desc (dst).s, (src_vb ? src_vb->vblock_i : -999), (dst_vb ? dst_vb->vblock_i : -999));
 
     if (!dst->vb) buf_add_to_buffer_list (dst_vb, dst); // this can only happen if src_vb==dst_vb 
@@ -844,7 +844,7 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t code_line)
 {
     void *new = realloc (p, size);
-    ASSERT (new, "Error in %s:%u: REALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
+    ASSERTE (new, "Error in %s:%u: REALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
 
     if (flag.debug_memory) 
         iprintf ("realloc(): old=%s new=%s size=%"PRIu64" %s:%u\n", 
@@ -856,7 +856,7 @@ void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t co
 void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t code_line)
 {
     void *new = malloc (size);
-    ASSERT (new, "Error in %s:%u: MALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
+    ASSERTE (new, "Error in %s:%u: MALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
 
     if (flag.debug_memory) 
         iprintf ("malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new).s, (uint64_t)size, func, code_line);
@@ -869,15 +869,15 @@ void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t c
 // convert a Buffer from a z_file section whose len is in char to a bitarray
 BitArray *buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t nbits)
 {
-    ASSERT (roundup_bits2bytes (nbits) <= buf->len, "Error in buf_zfile_buf_to_bitarray: nbits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
-            nbits, roundup_bits2bytes (nbits), buf->len);
+    ASSERTE (roundup_bits2bytes (nbits) <= buf->len, "nbits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
+             nbits, roundup_bits2bytes (nbits), buf->len);
 
     BitArray *bitarr = buf_get_bitarray (buf);
     bitarr->nbits  = nbits;
     bitarr->nwords = roundup_bits2words64 (bitarr->nbits);
 
-    ASSERT (roundup_bits2bytes64 (nbits) <= buf->size, "Error in buf_zfile_buf_to_bitarray: buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
-            buf->size, bitarr->nwords, bitarr->nwords * sizeof(uint64_t));
+    ASSERTE (roundup_bits2bytes64 (nbits) <= buf->size, "buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
+             buf->size, bitarr->nwords, bitarr->nwords * sizeof(uint64_t));
 
     LTEN_bit_array (bitarr);
 
@@ -888,7 +888,7 @@ void buf_add_bit (Buffer *buf, int64_t new_bit)
 {
     BitArray *bar = buf_get_bitarray (buf);
 
-    ASSERT (bar->nbits < buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
+    ASSERTE (bar->nbits < buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
     bar->nbits++;     
     if (bar->nbits % 64 == 1) { // starting a new word                
         bar->nwords++;
@@ -902,7 +902,7 @@ bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits)
 {
     BitArray *bar = buf_get_bitarray (buf);
 
-    ASSERT (bar->nbits + num_new_bits<= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
+    ASSERTE (bar->nbits + num_new_bits<= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
     
     bit_index_t next_bit = bar->nbits;
 
@@ -916,7 +916,7 @@ bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits)
 // writes a buffer to a file, return true if successful
 bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs)
 {
-    ASSERT (buf->type == BUF_REGULAR, "Error in buf_dump_to_file: buffer.type=%s while putting %s", buf_display_type (buf), filename);
+    ASSERTE (buf->type == BUF_REGULAR, "buffer.type=%s while putting %s", buf_display_type (buf), filename);
 
     char update_filename[strlen(filename) + 1];
     strcpy (update_filename, filename);
@@ -931,8 +931,8 @@ bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_wor
     iprintf ("Dumping file %s\n", update_filename);
 
     if (including_control_region) {
-        ASSERT (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "Error in buf_dump_to_file of %s: buffer has underflowed", filename);
-        ASSERT (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "Error in buf_dump_to_file of %s: buffer has underflowed", filename);
+        ASSERTE (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
+        ASSERTE (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
 
         return file_put_data (update_filename, buf->memory, buf->size + control_size);
     }

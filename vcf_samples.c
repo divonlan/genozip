@@ -19,12 +19,12 @@ static char *vcf_sample_names_data;           // vcf_sample_names point into her
 // called from genozip.c for processing the --samples flag
 void vcf_samples_add  (const char *samples_str)
 {
-    ASSERT0 (samples_str, "Error: samples_str is NULL");
+    ASSERTE0 (samples_str, "samples_str is NULL");
 
     bool is_negated = samples_str[0] == '^';
 
     bool is_conflicting_negation = (cmd_samples_buf.len && (cmd_is_negative_samples != is_negated));
-    ASSERT0 (!is_conflicting_negation, "Error: inconsistent negation - all samples listed must either be negated or not");
+    ASSINP0 (!is_conflicting_negation, "Error: inconsistent negation - all samples listed must either be negated or not");
 
     cmd_is_negative_samples = is_negated;
 

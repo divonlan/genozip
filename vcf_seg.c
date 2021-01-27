@@ -1094,7 +1094,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     // INFO
     if (vcf_num_samples)
-        GET_NEXT_ITEM (DTF(names)[VCF_INFO]) // pointer to string to allow pointer comparison 
+        GET_NEXT_ITEM (DTF(names)[VCF_INFO]); // pointer to string to allow pointer comparison 
     else
         GET_MAYBE_LAST_ITEM (DTF(names)[VCF_INFO]); // may or may not have a FORMAT field
 

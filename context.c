@@ -332,7 +332,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
 
     ASSERTE (node_index_if_new <= MAX_NODE_INDEX, 
              "ctx of %s is full (max allowed words=%u): ol_nodes.len=%u nodes.len=%u",
-             vb_ctx->name, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_nodes.len, (uint32_t)vb_ctx->nodes.len)
+             vb_ctx->name, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_nodes.len, (uint32_t)vb_ctx->nodes.len);
 
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     CtxNode *node;
@@ -865,9 +865,9 @@ void ctx_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 
             Context *ctx = &vb->contexts[f];
 
-            ASSERT (dict_id_fields[f] == ctx->dict_id.num,
-                    "ctx_verify_field_ctxs called from %s:%u: dict_id mismatch with section type: f=%s ctx->dict_id=%s vb_i=%u",
-                    func, code_line, (char*)DTF(names)[f], ctx->name, vb->vblock_i);
+            ASSERTE (dict_id_fields[f] == ctx->dict_id.num,
+                     "called from %s:%u: dict_id mismatch with section type: f=%s ctx->dict_id=%s vb_i=%u",
+                     func, code_line, (char*)DTF(names)[f], ctx->name, vb->vblock_i);
     }
 }
 

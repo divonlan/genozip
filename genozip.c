@@ -330,7 +330,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     txtfile_header_initialize();
     
     // get input FILE
-    ASSERT0 (z_filename, "Error: z_filename is NULL");
+    ASSERTE0 (z_filename, "z_filename is NULL");
 
     // we cannot work with a remote genozip file because the decompression process requires random access
     ASSINP (!url_is_url (z_filename), 
@@ -375,7 +375,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
 
     // open output txt file (except if unbinding or outputting to stdout)
     if (txt_filename || flag.to_stdout) {
-        ASSERT0 (!txt_file, "Error: txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
+        ASSERTE0 (!txt_file, "txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
         txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag.out_dt);
     }
     else if (flag.unbind) {
@@ -488,7 +488,7 @@ static void main_genozip (const char *txt_filename,
 
     if (!txt_file->file) goto done; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
 
-    ASSERT0 (flag.bind || !z_file, "Error: expecting z_file to be NULL in non-bound mode");
+    ASSERTE0 (flag.bind || !z_file, "expecting z_file to be NULL in non-bound mode");
 
     // get output FILE
     if (!z_file) { // skip if we're the second file onwards in bind mode, or pair_2 in unbound list of pairs - nothing to do
@@ -536,10 +536,10 @@ static void main_list_dir(const char *dirname)
     struct dirent *ent;
 
     dir = opendir (dirname);
-    ASSERT (dir, "Error: failed to open directory: %s", strerror (errno));
+    ASSERTE (dir, "failed to open directory: %s", strerror (errno));
 
     int ret = chdir (dirname);
-    ASSERT (!ret, "Error: failed to chdir(%s)", dirname);
+    ASSERTE (!ret, "failed to chdir(%s)", dirname);
 
     while ((ent = readdir(dir))) 
         if (!file_is_dir (ent->d_name))  // don't go down subdirectories recursively
@@ -548,7 +548,7 @@ static void main_list_dir(const char *dirname)
     closedir(dir);    
 
     ret = chdir ("..");
-    ASSERT0 (!ret, "Error: failed to chdir(..)");
+    ASSERTE0 (!ret, "failed to chdir(..)");
 }
 
 static inline DataType main_get_file_dt (const char *filename)

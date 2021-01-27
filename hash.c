@@ -390,8 +390,8 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
 
     while (g_hashent->next != NO_NEXT) {
 
-        ASSERT (g_hashent->next < zf_ctx->global_hash.len, "Error in hash_global_get_entry: g_hashent->next=%d out of range in context=%s, hash.len=%"PRIu64,  
-                g_hashent->next, zf_ctx->name, zf_ctx->global_hash.len);
+        ASSERTE (g_hashent->next < zf_ctx->global_hash.len, "g_hashent->next=%d out of range in context=%s, hash.len=%"PRIu64,  
+                 g_hashent->next, zf_ctx->name, zf_ctx->global_hash.len);
 
         hashent_i = g_hashent->next;
 
@@ -449,7 +449,7 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
     // thread safetey:  VB threads with merge_num < ours, might be segmenting right now, and have this global hash overlayed 
     // and accessing it. We make sure to first prepare the new entry including the merge_num which will prohibit old
     // VBs from using it, before we atomically set the "next"
-    ASSERT (zf_ctx->global_hash.len <= 0xffffffff, "Error in hash_global_get_entry: no more room in global_hash of context %s", zf_ctx->name);
+    ASSERTE (zf_ctx->global_hash.len <= 0xffffffff, "no more room in global_hash of context %s", zf_ctx->name);
     uint32_t next = zf_ctx->global_hash.len++;
 
     GlobalHashEnt *new_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, next);
@@ -461,7 +461,7 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
     new_hashent->node_index    = is_singleton_global ? (-zf_ctx->ol_nodes.len++ - 2) : zf_ctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
     new_hashent->next          = NO_NEXT;
 
-    ASSERT (zf_ctx->nodes.len <= MAX_NODE_INDEX, "Error in hash_global_get_entry: number of nodes in context %s exceeded the maximum of %u", 
+    ASSERTE (zf_ctx->nodes.len <= MAX_NODE_INDEX, "number of nodes in context %s exceeded the maximum of %u", 
             zf_ctx->name, MAX_NODE_INDEX);
     
     // now, with the new g_hashent set, we can atomically update the "next"
@@ -536,8 +536,8 @@ WordIndex hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
 
     while (l_hashent->next != NO_NEXT) {
 
-        ASSERT (l_hashent->next < vb_ctx->local_hash.len, 
-                "Error: l_hashent->next=%d out of range, local_hash.len=%u", l_hashent->next, (uint32_t)vb_ctx->local_hash.len);
+        ASSERTE (l_hashent->next < vb_ctx->local_hash.len, 
+                 "l_hashent->next=%d out of range, local_hash.len=%u", l_hashent->next, (uint32_t)vb_ctx->local_hash.len);
         l_hashent_i = l_hashent->next;
         l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent_i);
 

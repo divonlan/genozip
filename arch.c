@@ -30,8 +30,8 @@ static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread) - d
 void arch_initialize(void)
 {
     // verify CPU architecture and compiler is supported
-    ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
-             "Error: Unsupported C type lengths, check compiler options");
+    ASSERTE0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
+              "Unsupported C type lengths, check compiler options");
     
     // verify endianity is as expected
     arch_get_endianity();
@@ -44,9 +44,9 @@ void arch_initialize(void)
 #endif
 
     // verify that type sizes are as required (types that appear in section headers written to the genozip format)
-    ASSERT0 (sizeof (SectionType) == 1, "Error: expecting sizeof (SectionType)==1");
-    ASSERT0 (sizeof (Codec)       == 1, "Error: expecting sizeof (Codec)==1");
-    ASSERT0 (sizeof (LocalType)   == 1, "Error: expecting sizeof (LocalType)==1");
+    ASSERTE0 (sizeof (SectionType) == 1, "expecting sizeof (SectionType)==1");
+    ASSERTE0 (sizeof (Codec)       == 1, "expecting sizeof (Codec)==1");
+    ASSERTE0 (sizeof (LocalType)   == 1, "expecting sizeof (LocalType)==1");
 
     // verify that order of bit fields in a structure is as expected (this is compiler-implementation dependent, and we go by gcc)
     // it might be endianity-dependent, and we haven't implemented big-endian yet, see: http://mjfrazer.org/mjfrazer/bitfields/
@@ -55,8 +55,8 @@ void arch_initialize(void)
         struct __attribute__ ((__packed__)) { uint8_t a : 1; uint8_t b : 1; } bit_1;
         struct __attribute__ ((__packed__)) { uint8_t a : 3; } bit_3;
     } bittest = { .bit_1 = { .a = 1 } }; // we expect this to set the LSb of .byte and of .bit_3.a
-    ASSERT0 (bittest.byte == 1, "Error: unsupported bit order in a struct, please use gcc to compile (1)");
-    ASSERT0 (bittest.bit_3.a == 1, "Error: unsupported bit order in a struct, please use gcc to compile (2)");
+    ASSERTE0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
+    ASSERTE0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
 
     io_thread_id = pthread_self();
 }
@@ -66,10 +66,10 @@ const char *arch_get_endianity (void)
     // verify endianity is as expected
     uint16_t test_endianity = 0x0102;
 #if defined __LITTLE_ENDIAN__
-    ASSERT0 (*(uint8_t*)&test_endianity==0x02, "Error: expected CPU to be Little Endian but it is not");
+    ASSERTE0 (*(uint8_t*)&test_endianity==0x02, "expected CPU to be Little Endian but it is not");
     return "little";
 #elif defined __BIG_ENDIAN__
-    ASSERT0 (*(uint8_t*)&test_endianity==0x01, "Error: expected CPU to be Big Endian but it is not");
+    ASSERTE0 (*(uint8_t*)&test_endianity==0x01, "expected CPU to be Big Endian but it is not");
     return "big";
 #else
 #error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
@@ -133,7 +133,7 @@ const char *arch_get_os (void)
 #else
 
     struct utsname uts;
-    ASSERT (!uname (&uts), "Error: uname failed: %s", strerror (errno));
+    ASSERTE (!uname (&uts), "uname failed: %s", strerror (errno));
 
     sprintf (os, "%s %s", uts.sysname, uts.release);
 

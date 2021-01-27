@@ -102,8 +102,8 @@ void ref_alt_chroms_load (void)
         WordIndex txt_chrom_index = BGEN32 (ent->txt_chrom);
         WordIndex ref_chrom_index = BGEN32 (ent->ref_chrom);
 
-        ASSERT (txt_chrom_index >= 0 && txt_chrom_index < ctx->word_list.len, "Error in ref_alt_chroms_load: txt_chrom_index=%d out of range [0,%d]", txt_chrom_index, (int32_t)ctx->word_list.len);
-        ASSERT (ref_chrom_index >= 0 && ref_chrom_index < ref_contigs_num_contigs(), "Error in ref_alt_chroms_load: ref_chrom_index=%d out of range [0,%u]", ref_chrom_index, ref_contigs_num_contigs());
+        ASSERTE (txt_chrom_index >= 0 && txt_chrom_index < ctx->word_list.len, "txt_chrom_index=%d out of range [0,%d]", txt_chrom_index, (int32_t)ctx->word_list.len);
+        ASSERTE (ref_chrom_index >= 0 && ref_chrom_index < ref_contigs_num_contigs(), "ref_chrom_index=%d out of range [0,%u]", ref_chrom_index, ref_contigs_num_contigs());
 
         map[txt_chrom_index] = ref_chrom_index;
 

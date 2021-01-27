@@ -44,19 +44,19 @@ static uint32_t license_generate_num(void)
 static char *get_license_filename (bool create_folder_if_needed)
 {
 #ifdef _WIN32
-    ASSERT0 (getenv ("APPDATA"), "%s: cannot store license, because APPDATA env var is not defined");
+    ASSINP0 (getenv ("APPDATA"), "%s: cannot store license, because APPDATA env var is not defined");
 
     char folder[500];
     sprintf (folder, "%s/genozip", getenv ("APPDATA"));
 
     if (create_folder_if_needed) {
         int ret = _mkdir (folder); 
-        ASSERT (ret >= 0 || errno == EEXIST, "Error: failed to created the folder %s", folder);
+        ASSERTE (ret >= 0 || errno == EEXIST, "failed to created the folder %s", folder);
     }
 
 #else
     const char *folder = getenv ("HOME");
-    ASSERT0 (folder, "%s: cannot store license, because HOME env var is not defined");
+    ASSINP0 (folder, "%s: cannot store license, because HOME env var is not defined");
 #endif    
 
     char *filename = MALLOC (strlen(folder) + 50);
@@ -70,10 +70,10 @@ static void license_store_locally (uint32_t license_num)
     char *filename = get_license_filename (true);
 
     FILE *fp = fopen (filename, "wb");
-    ASSERT (fp, "Error: failed to open %s for writing: %s", filename, strerror (errno));
+    ASSINP (fp, "Error: failed to open %s for writing: %s", filename, strerror (errno));
 
     int res = fprintf (fp, "%u\n", license_num);
-    ASSERT (res > 0, "Error: failed to write to %s: %s", filename, strerror (errno));
+    ASSERTE (res > 0, "failed to write to %s: %s", filename, strerror (errno));
 
     fclose (fp);
 
@@ -88,7 +88,7 @@ static uint32_t licence_retrieve_locally (void)
     if (!fp) return 0; // no license
 
     uint32_t license_num=0; // initialize - so that we return 0 if fscanf fails to read a number
-    ASSERT0 (fscanf (fp, "%u", &license_num) == 1, "Error in licence_retrieve_locally: failed to read license_num");
+    ASSERTE0 (fscanf (fp, "%u", &license_num) == 1, "failed to read license_num");
     
     fclose (fp);
     free (filename);
@@ -179,7 +179,7 @@ uint32_t license_get (void)
     // UI flow to generate a new license for the user
 
     // if stdin or stderr is redirected - we cannot ask the user an interactive question
-    ASSERT (isatty(0) && isatty(2), "%s: Use of genozip is free, but requires registration. Please run: genozip --register", global_cmd);
+    ASSINP (isatty(0) && isatty(2), "%s: Use of genozip is free, but requires registration. Please run: genozip --register", global_cmd);
 
     fprintf (stderr, "Welcome to genozip!\n\n"
                      "The use of genozip for non-commercial purposes (as defined in the license) is FREE, but requires registration\n\n");

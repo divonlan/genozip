@@ -68,8 +68,8 @@ RefLock ref_lock (PosType gpos_start, uint32_t seq_len)
     RefLock lock = { .first_mutex = gpos_start / GENOME_BASES_PER_MUTEX,
                      .last_mutex  = last_pos   / GENOME_BASES_PER_MUTEX };
 
-    ASSERT (lock.first_mutex >= 0 && lock.first_mutex <= genome_num_muteces, "Error in ref_lock: lock.first_mutex=%u out of range: [0,%u]", lock.first_mutex, genome_num_muteces);
-    ASSERT (lock.last_mutex  >= 0 && lock.last_mutex  <= genome_num_muteces, "Error in ref_lock: lock.last_mutex=%u out of range: [0,%u]", lock.last_mutex, genome_num_muteces);
+    ASSERTE (lock.first_mutex >= 0 && lock.first_mutex <= genome_num_muteces, "lock.first_mutex=%u out of range: [0,%u]", lock.first_mutex, genome_num_muteces);
+    ASSERTE (lock.last_mutex  >= 0 && lock.last_mutex  <= genome_num_muteces, "lock.last_mutex=%u out of range: [0,%u]", lock.last_mutex, genome_num_muteces);
     
     // lock muteces in order
     for (int i=lock.first_mutex; i <= lock.last_mutex; i++)

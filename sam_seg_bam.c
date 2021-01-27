@@ -42,7 +42,7 @@ void bam_seg_initialize (VBlock *vb)
 // if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
 int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    ASSERT (*i >= 0 && *i < vb->txt_data.len, "Error in def_unconsumed: *i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ASSERTE (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
     *i = MIN (*i, vb->txt_data.len - sizeof(BAMAlignmentFixed));
 
@@ -121,8 +121,8 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t s
 
 static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
-    ASSERT (ref_id >= -1 && ref_id < (int32_t)header_contigs.len, "Error in bam_seg_ref_id: vb=%u line_i=%u: encountered ref_id=%d but header has only %u contigs",
-            vb->vblock_i, vb->line_i, ref_id, (uint32_t)header_contigs.len);
+    ASSERTE (ref_id >= -1 && ref_id < (int32_t)header_contigs.len, "vb=%u line_i=%u: encountered ref_id=%d but header has only %u contigs",
+             vb->vblock_i, vb->line_i, ref_id, (uint32_t)header_contigs.len);
 
     // get snip and snip_len
     DECLARE_SNIP;
@@ -324,9 +324,9 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     uint32_t block_size = NEXT_UINT32;
 
     // a non-sensical block_size might indicate an false-positive identification of a BAM alignment in bam_unconsumed
-    ASSERT (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
-            "Error in bam_seg_txt_line: vb=%u line_i=%u (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
-            vb->vblock_i, vb->line_i, block_size+4, remaining_txt_len);
+    ASSERTE (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
+             "vb=%u line_i=%u (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
+             vb->vblock_i, vb->line_i, block_size+4, remaining_txt_len);
 
     int32_t ref_id      = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
     PosType this_pos    = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown 
@@ -378,9 +378,9 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     // SEQ - calculate diff vs. reference (denovo or loaded)
     bam_rewrite_seq (vb, l_seq, next_field);
 
-    ASSERT (dl->seq_len == l_seq || vb->last_cigar[0] == '*' || !l_seq, 
-            "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
-            vb->last_cigar, dl->seq_len, l_seq, l_seq, vb->textual_seq.data);
+    ASSERTE (dl->seq_len == l_seq || vb->last_cigar[0] == '*' || !l_seq, 
+             "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
+             vb->last_cigar, dl->seq_len, l_seq, l_seq, vb->textual_seq.data);
 
     sam_seg_seq_field (vb, SAM_SQBITMAP, vb->textual_seq.data, vb->textual_seq.len, this_pos, vb->last_cigar, 0, vb->textual_seq.len, 
                        vb->last_cigar, (l_seq+1)/2 + sizeof (uint32_t) /* account for l_seq and seq fields */);

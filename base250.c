@@ -12,7 +12,7 @@
 Base250 base250_encode (WordIndex n) // number to encode
 {
     // note: the actual maximum that the format can carry is 250*256*256*256-1 but we restrict it to MAX_WORD_INDEX
-    ASSERT (n >= 0 && n <= MAX_WORD_INDEX, "Error in base250_encode: n=%d is out of range 0-%u", n, MAX_WORD_INDEX);
+    ASSERTE (n >= 0 && n <= MAX_WORD_INDEX, "n=%d is out of range 0-%u", n, MAX_WORD_INDEX);
 
     // get numberals in base 250 (i.e. each numeral is 0 to 249) - least-signifcant-first order (little endian)
     Base250 result;
@@ -30,7 +30,7 @@ WordIndex base250_decode (const uint8_t **str, bool advance, const char *ctx_nam
 {
     #define ADVANCE(n) if (advance) *str += n
 
-    ASSERT (*str, "Error in base250_decode: *str is NULL in ctx=%s", ctx_name);
+    ASSERTE (*str, "*str is NULL in ctx=%s", ctx_name);
 
     switch ((*str)[0]) {
         case BASE250_MOST_FREQ0: ADVANCE(1); return 0;

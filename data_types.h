@@ -114,8 +114,7 @@ extern DataTypeProperties dt_props[NUM_DATATYPES], dt_props_def;
 #define DTPT(prop) DT_(txt_file,prop)
 
 #define ASSERT_DT_FUNC(src,prop) /* use this to assert the a function exists if it is mandatory */ \
-    ASSERT (DT_(src,prop) || dt_props_def.prop, "Error in %s:%u: undefined callback function " #src "->" #prop " for %s", \
-            __FUNCTION__, __LINE__, dt_name(src->data_type))
+    ASSERTE (DT_(src,prop) || dt_props_def.prop, "undefined callback function " #src "->" #prop " for %s", dt_name(src->data_type))
 
 // expession evaluates to def_value if neither the src nor the default function exists
 #define DT_FUNC_OPTIONAL(src,prop,def_value) (!DT_(src,prop) && !dt_props_def.prop) ? def_value : (DT_(src,prop) ? DT_(src,prop) : dt_props_def.prop) // caller adds function arguments here

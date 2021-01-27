@@ -128,7 +128,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     if (filename)
         dd->filename = filename;
 
-    ASSERT (max_threads <= global_max_threads, "Error in dispatcher_init: expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
+    ASSERTE (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
     
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool throughout the execution
     vb_create_pool (MAX (2,global_max_threads+1 /* one for evb */));
@@ -208,7 +208,7 @@ static void *dispatcher_thread_entry (void *thread_)
 {
     Thread *th = (Thread *)thread_;
 
-    ASSERT0 (th->vb->vblock_i, "Error in dispatcher_thread_entry: vb_i=0");
+    ASSERTE0 (th->vb->vblock_i, "vb_i=0");
 
     th->func (th->vb);
     
@@ -239,11 +239,11 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP))
 
     if (flag.show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->vblock_i);
 
-    ASSERT0 (dd->next_vb->vblock_i, "Error in dispatcher_compute: vb_i=0");
+    ASSERTE0 (dd->next_vb->vblock_i, "vb_i=0");
 
     if (dd->max_threads > 1) {
         unsigned err = pthread_create (&th->thread_id, NULL, dispatcher_thread_entry, th);
-        ASSERT (!err, "Error: failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->vblock_i, err);
+        ASSERTE (!err, "failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->vblock_i, err);
 
         dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % dd->max_threads;
     }

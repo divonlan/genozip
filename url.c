@@ -176,7 +176,7 @@ uint32_t url_read_string (const char *url, char *data, uint32_t data_size,
 
     url_do_curl (url, false, response, &response_len, error, &error_len, reason);
 
-    ASSERT (!error_len || response_len, "Error accessing the Internet: %s", error);
+    ASSINP (!error_len || response_len, "Error accessing the Internet: %s", error);
 
     if (data) {
         unsigned len = MIN (data_size-1, response_len);
@@ -190,7 +190,7 @@ uint32_t url_read_string (const char *url, char *data, uint32_t data_size,
 // returns a FILE* which streams the content of a URL
 FILE *url_open (StreamP parent_stream, const char *url)
 {
-    ASSERT0 (!curl, "Error url_open failed because curl is already running");
+    ASSERTE0 (!curl, "Error url_open failed because curl is already running");
 
     curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
                           "To compress files from a URL", "curl", "--silent", url, NULL);

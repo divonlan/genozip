@@ -21,18 +21,18 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
                         const char *uncompressed_data,  // option 1 - compress contiguous data
                         LocalGetLineCB callback)  // option 2 - compress data one line at a time
 { 
-    ASSERT0 (!uncompressed_data || !callback, "Error in comp_compress: expecting either uncompressed_data or callback but not both");
+    ASSERTE0 (!uncompressed_data || !callback, "expecting either uncompressed_data or callback but not both");
 
-    ASSERT0 (BGEN32 (header->magic) == GENOZIP_MAGIC, "Error in comp_compress: corrupt header - bad magic");
+    ASSERTE0 (BGEN32 (header->magic) == GENOZIP_MAGIC, "corrupt header - bad magic");
 
-    ASSERT (header->codec < NUM_CODECS, "Error in comp_compress: unsupported section compressor=%u", header->codec);
+    ASSERTE (header->codec < NUM_CODECS, "unsupported section compressor=%u", header->codec);
 
     unsigned compressed_offset     = BGEN32 (header->compressed_offset);
     unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
     unsigned data_compressed_len   = 0;
     unsigned data_encrypted_len=0, data_padding=0, header_padding=0;
 
-    ASSERT0 (!data_uncompressed_len || uncompressed_data || callback, "Error in comp_compress: data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided");
+    ASSERTE0 (!data_uncompressed_len || uncompressed_data || callback, "data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided");
 
     bool is_encrypted = false;
     unsigned encryption_padding_reserve = 0;
@@ -159,7 +159,7 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
                       const char *compressed, uint32_t compressed_len,
                       Buffer *uncompressed_data, uint64_t uncompressed_len)
 {
-    ASSERT0 (compressed_len, "Error in comp_uncompress: compressed_len=0");
+    ASSERTE0 (compressed_len, "compressed_len=0");
 
     // if this is (1) a simple codec (including CODEC_UNKNOWN) that has a sub-codec or
     // (2) or no codec uncompressor - the sub-codec now run it now

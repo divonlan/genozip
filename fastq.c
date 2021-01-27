@@ -67,7 +67,7 @@ static inline int fastq_is_end_of_line (VBlock *vb, uint32_t first_i, int32_t tx
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 {    
-    ASSERT (*i >= 0 && *i < vb->txt_data.len, "Error in def_unconsumed: *i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ASSERTE (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
     for (; *i >= (int32_t)first_i; (*i)--) {
         // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
@@ -115,7 +115,7 @@ static void fastq_txtfile_count_lines (VBlockP vb)
     for (uint32_t i=0; i < vb->txt_data.len; i++)
         if (txt[i] == '\n') num_lines++;
 
-    ASSERT (num_lines % 4 == 0, "Error in fastq_txtfile_count_lines: expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
+    ASSERTE (num_lines % 4 == 0, "expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
 
     vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
     txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
@@ -127,8 +127,8 @@ void fastq_txtfile_write_one_vblock_interleave (VBlockP vb1_, VBlockP vb2_)
     VBlockFAST *vb1 = (VBlockFAST *)vb1_;
     VBlockFAST *vb2 = (VBlockFAST *)vb2_;
 
-    ASSERT (vb1->lines.len == vb2->lines.len, "Error fastq_txtfile_write_one_vblock_interleave: in vb1=%u vb2=%u expecting vb1->lines.len=%"PRIu64" == vb2->lines.len=%"PRIu64,
-            vb1->vblock_i, vb2->vblock_i, vb1->lines.len, vb2->lines.len);
+    ASSERTE (vb1->lines.len == vb2->lines.len, "in vb1=%u vb2=%u expecting vb1->lines.len=%"PRIu64" == vb2->lines.len=%"PRIu64,
+             vb1->vblock_i, vb2->vblock_i, vb1->lines.len, vb2->lines.len);
 
     vb1->txt_data.param = vb2->txt_data.param = 0;
     BitArray *show_1 = buf_get_bitarray (&vb1->genobwa_show_line);
@@ -208,8 +208,8 @@ void fastq_seg_initialize (VBlockFAST *vb)
 
      if (flag.pair == PAIR_READ_2) {
 
-        ASSERT (vb->lines.len == vb->pair_num_lines, "Error in fastq_seg_initialize: in vb=%u (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
-                vb->vblock_i, vb->pair_num_lines, (unsigned)vb->lines.len);
+        ASSERTE (vb->lines.len == vb->pair_num_lines, "in vb=%u (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
+                 vb->vblock_i, vb->pair_num_lines, (unsigned)vb->lines.len);
 
         gpos_ctx->pair_local = strand_ctx->pair_local = true;
 
@@ -286,7 +286,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
             
             NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
             int32_t ret = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "data", sl->section_type, sl); // returns 0 if section is skipped
-            ASSERT (ret != EOF, "Error in fastq_read_pair_1_data: vb_i=%u failed to read from pair_vb=%u dict_id=%s", vb->vblock_i, vb->pair_vb_i, dis_dict_id (sl->dict_id).s);
+            ASSERTE (ret != EOF, "vb_i=%u failed to read from pair_vb=%u dict_id=%s", vb->vblock_i, vb->pair_vb_i, dis_dict_id (sl->dict_id).s);
         }
         
         sl++;
@@ -547,7 +547,7 @@ void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_le
     VBlockFAST *vb = (VBlockFAST *)vb_;
  
     int64_t seq_len_64;
-    ASSERT (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "Error in fastq_reconstruct_seq: could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
+    ASSERTE (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
     vb->seq_len = (uint32_t)seq_len_64;
 
     aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));

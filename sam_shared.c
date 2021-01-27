@@ -53,7 +53,7 @@ void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len,
     if (ref_consumed) *ref_consumed = 0;
     if (seq_and_ref)  *seq_and_ref  = 0;
 
-    ASSERT (cigar[0] != '*' || cigar_len == 1, "Invalid CIGAR: %.*s", cigar_len, cigar); // a CIGAR start with '*' must have 1 character
+    ASSERTE (cigar[0] != '*' || cigar_len == 1, "Invalid CIGAR: %.*s", cigar_len, cigar); // a CIGAR start with '*' must have 1 character
 
     // ZIP case: if the CIGAR is "*", later sam_seg_cigar_field uses the length from SEQ and store it as eg "151*". 
     // In PIZ it will be eg "151*" or "1*" if both SEQ and QUAL are "*", so this condition is always false
@@ -75,14 +75,14 @@ void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len,
         char c = cigar[i];
         char lookup = cigar_lookup_sam[(uint8_t)c];
 
-        ASSERT (lookup, "Error: Invalid CIGAR in %s: invalid operation %c. CIGAR=%.*s", txt_name, cigar[i], cigar_len, cigar);
+        ASSINP (lookup, "Invalid CIGAR in %s: invalid operation %c. CIGAR=%.*s", txt_name, cigar[i], cigar_len, cigar);
         lookup &= 0x0f; // remove validity bit
 
         if (lookup == CIGAR_DIGIT) 
             n = n*10 + (c - '0');
         
         else {
-            ASSERT (n, "Error: Invalid CIGAR in %s: operation %c not preceded by a number. CIGAR=%.*s", 
+            ASSINP (n, "Invalid CIGAR in %s: operation %c not preceded by a number. CIGAR=%.*s", 
                     txt_name, c, cigar_len, cigar);
             
             if ((lookup & CIGAR_CONSUMES_QUERY)     && seq_consumed) *seq_consumed += n;
@@ -101,10 +101,10 @@ void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len,
         }
     }                          
 
-    ASSERT (!n, "Error: Invalid CIGAR in %s: expecting it to end with an operation character. CIGAR=%.*s", 
+    ASSINP (!n, "Invalid CIGAR in %s: expecting it to end with an operation character. CIGAR=%.*s", 
             txt_name, cigar_len, cigar);
 
-    ASSERT (!seq_consumed || *seq_consumed, "Error: Invalid CIGAR in %s: CIGAR implies 0-length SEQ. CIGAR=%.*s", txt_name, cigar_len, cigar);
+    ASSINP (!seq_consumed || *seq_consumed, "Invalid CIGAR in %s: CIGAR implies 0-length SEQ. CIGAR=%.*s", txt_name, cigar_len, cigar);
 }
 
 // calculate bin given an alignment covering [first_pos_0,last_pos_0) (0-based positions, half-closed, half-open)

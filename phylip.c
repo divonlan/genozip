@@ -44,7 +44,7 @@ bool phy_header_inspect (BufferP txt_header)
 
     uint32_t num_seqs;
     int ret = sscanf (header, "%u %u", &num_seqs, &phy_seq_len);
-    ASSERT (ret==2, "Error: invalid Phylip header line: \"%.*s\"", (int)txt_header->len, txt_header->data);
+    ASSINP (ret==2, "Error: invalid Phylip header line: \"%.*s\"", (int)txt_header->len, txt_header->data);
 
     return true;
 }

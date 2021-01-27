@@ -274,8 +274,8 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     if (gpos_ctx->pair_local) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
         
-        ASSERT (vb->line_i < pair_strand->nbits, "Error: vb=%u cannot get pair-1 STRAND bit for line_i=%u because pair-1 strand bitarray has only %u bits",
-                vb->vblock_i, vb->line_i, (unsigned)pair_strand->nbits);
+        ASSERTE (vb->line_i < pair_strand->nbits, "vb=%u cannot get pair-1 STRAND bit for line_i=%u because pair-1 strand bitarray has only %u bits",
+                 vb->vblock_i, vb->line_i, (unsigned)pair_strand->nbits);
 
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
         buf_add_bit (&strand_ctx->local, is_forward == pair_is_forward);
@@ -292,8 +292,8 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     bool store_local = true;
     if (gpos_ctx->pair_local) {
 
-        ASSERT (vb->line_i < gpos_ctx->pair.len, "Error: vb=%u cannot get pair-1 GPOS for line_i=%u because pair-1 GPOS.len=%"PRIu64,
-                vb->vblock_i, vb->line_i, gpos_ctx->pair.len);
+        ASSERTE (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair-1 GPOS for line_i=%u because pair-1 GPOS.len=%"PRIu64,
+                 vb->vblock_i, vb->line_i, gpos_ctx->pair.len);
 
         PosType pair_gpos = (PosType)*ENT (uint32_t, gpos_ctx->pair, vb->line_i); // same location, in the pair's local
         PosType gpos_delta = gpos - pair_gpos; 
@@ -407,8 +407,8 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         }
 
         // sanity check - the sequence is supposed to fit in the 
-        ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome->nbits / 2, "Error in aligner_reconstruct_seq: gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,
-                gpos, seq_len, genome->nbits / 2);
+        ASSERTE (gpos == NO_GPOS || gpos + seq_len <= genome->nbits / 2, "gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,
+                 gpos, seq_len, genome->nbits / 2);
 
         if (is_forward)  // normal (note: this condition test is outside of the tight loop)
             for (uint32_t i=0; i < seq_len; i++)
@@ -429,6 +429,6 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         nonref_ctx->next_local += seq_len;
     }
 
-    ASSERT (nonref_ctx->next_local <= nonref_ctx->local.len, "Error in aligner_reconstruct_seq: nonref_ctx->next_local=%u is out of range: nonref_ctx->local.len=%u",
-            nonref_ctx->next_local, (uint32_t)nonref_ctx->local.len);
+    ASSERTE (nonref_ctx->next_local <= nonref_ctx->local.len, "nonref_ctx->next_local=%u is out of range: nonref_ctx->local.len=%u",
+             nonref_ctx->next_local, (uint32_t)nonref_ctx->local.len);
 }

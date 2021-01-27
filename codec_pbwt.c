@@ -66,7 +66,7 @@ static void show_runs (const PbwtState *state)
 #define SHOW(msg, cmd) do { \
     fprintf (info_stream, msg " %-2u: ", line_i); \
     for (uint32_t i=0; i < vb->ht_per_line; i++) cmd; \
-    iprint0 ("\n") } while (0) // flush
+    iprint0 ("\n"); } while (0) // flush
 
 #define show_line if (flag.show_alleles) SHOW ("LINE", (htputc (*ENT (uint8_t, vb->ht_matrix_ctx->local, line_i * vb->ht_per_line + i))))
 #define show_perm(s) if (flag.show_alleles) SHOW ("PERM", (fprintf (info_stream, "%d ", (s)->perm[i].index)));       

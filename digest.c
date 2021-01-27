@@ -98,8 +98,8 @@ void digest_one_vb (VBlock *vb)
         usleep (10000);
 
         // timeout after approx 30 seconds
-        ASSERT (i < DIGEST_TIMEOUT*100, "Timeout (%u sec) while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", 
-                DIGEST_TIMEOUT, vb->vblock_i, vb_digest_last);
+        ASSERTE (i < DIGEST_TIMEOUT*100, "Timeout (%u sec) while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", 
+                 DIGEST_TIMEOUT, vb->vblock_i, vb_digest_last);
     }
 
     if (command == ZIP) {

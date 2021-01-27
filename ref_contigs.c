@@ -72,7 +72,7 @@ static void ref_contigs_show (const Buffer *contigs_buf, bool created)
 
         if (cn[i].snip_len)
             iprintf ("i=%u '%s' gpos=%"PRId64" min_pos=%"PRId64" max_pos=%"PRId64" chrom_index=%d char_index=%"PRIu64" snip_len=%u\n",
-                    i, chrom_name, cn[i].gpos, cn[i].min_pos, cn[i].max_pos, cn[i].chrom_index, cn[i].char_index, cn[i].snip_len)
+                    i, chrom_name, cn[i].gpos, cn[i].min_pos, cn[i].max_pos, cn[i].chrom_index, cn[i].char_index, cn[i].snip_len);
         else
             iprintf ("i=%u chrom_index=%d (unused - not present in txt data)\n", i, cn[i].chrom_index);
     }
@@ -231,7 +231,7 @@ void ref_contigs_load_contigs (void)
     loaded_contigs.len /= sizeof (RefContig);
     BGEN_ref_contigs (&loaded_contigs);
 
-    ASSERT0 (z_file->contexts[CHROM].dict.len, "Error in ref_contigs_load_contigs: CHROM dictionary is empty");
+    ASSERTE0 (z_file->contexts[CHROM].dict.len, "CHROM dictionary is empty");
 
     buf_copy (evb, &loaded_contigs_dict, &z_file->contexts[CHROM].dict, 1, 0, 0, "loaded_contigs_dict");
 
@@ -298,7 +298,7 @@ WordIndex ref_contigs_get_word_index (const char *chrom_name, unsigned chrom_nam
     WordIndex word_index = ref_contigs_get_word_index_do (chrom_name, chrom_name_len, wi_type, 0, 
                                                           wi_type == WI_REF_CONTIG ? loaded_contigs_sorted_index.len-1 : z_file->chroms_sorted_index.len-1);
 
-    ASSERT (soft_fail || word_index != WORD_INDEX_NONE, "Error: contig \"%.*s\" is observed in %s but is not found in the reference %s",
+    ASSINP (soft_fail || word_index != WORD_INDEX_NONE, "Error: contig \"%.*s\" is observed in %s but is not found in the reference %s",
             chrom_name_len, chrom_name, txt_name, ref_filename);
 
     return word_index;
@@ -320,7 +320,7 @@ void ref_contigs_generate_data_if_denovo (void)
     // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
     Context *chrom_ctx = &z_file->contexts[CHROM];
 
-    ASSERT (flag.reference == REF_INTERNAL || (buf_is_allocated (&chrom_ctx->dict) && buf_is_allocated (&chrom_ctx->word_list)),
+    ASSINP (flag.reference == REF_INTERNAL || (buf_is_allocated (&chrom_ctx->dict) && buf_is_allocated (&chrom_ctx->word_list)),
             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);
 
     buf_copy (evb, &loaded_contigs_dict, &chrom_ctx->dict, 1, 0, 0, "contig_dict");
@@ -387,7 +387,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsig
     RefContig *contig = ENT (RefContig, loaded_contigs, ref_chrom);
     const char *ref_chrom_name = ENT (const char, loaded_contigs_dict, contig->char_index); // might be different that chrom_name if we used an alt_name
 
-    ASSERT (last_pos == ref_last_pos, "Error: wrong reference file: %s has an @SQ line 'SN:%.*s LN:%"PRId64"', but in %s '%s' has LN=%"PRId64,
+    ASSINP (last_pos == ref_last_pos, "Error: wrong reference file: %s has an @SQ line 'SN:%.*s LN:%"PRId64"', but in %s '%s' has LN=%"PRId64,
             txt_name, chrom_name_len, chrom_name, last_pos, ref_filename, ref_chrom_name, ref_last_pos);
 
     return ref_chrom;
@@ -428,7 +428,7 @@ const RefContig *ref_contigs_get_contig (WordIndex chrom_index, bool soft_fail)
 {
     const RefContig *rc = ref_contigs_get_contig_do (chrom_index, 0, loaded_contigs.len-1);
 
-    ASSERT (rc || soft_fail, "Error in ref_contigs_get_contig: cannot find contig for chrom_index=%d", chrom_index);
+    ASSERTE (rc || soft_fail, "cannot find contig for chrom_index=%d", chrom_index);
 
     return rc;
 }
@@ -457,9 +457,8 @@ PosType ref_contigs_get_genome_nbases (void)
     // note: gpos can exceed MAX_GPOS if compressed with REF_INTERNAL (and will, if there are a lot of tiny contigs
     // to which we grant 1M gpos space) - this is ok because denovo doesn't use gpos, rather the POS from the SAM alighment
 
-    ASSERT ((rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS) || IS_REF_INTERNAL (z_file),
-            "Error in ref_contigs_get_genome_nbases: gpos=%"PRId64" out of range 0-%"PRId64,
-            rc_with_largest_gpos->gpos, MAX_GPOS);
+    ASSERTE ((rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS) || IS_REF_INTERNAL (z_file),
+             "gpos=%"PRId64" out of range 0-%"PRId64, rc_with_largest_gpos->gpos, MAX_GPOS);
 
     return rc_with_largest_gpos->gpos + (rc_with_largest_gpos->max_pos - rc_with_largest_gpos->min_pos + 1);
 }

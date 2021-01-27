@@ -79,39 +79,39 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 // Seg utilities
 // ------------------
 
-#define GET_NEXT_ITEM(item_name) \
+#define GET_NEXT_ITEM(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, (item_name)); }
+      next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, (item_name)); } while(0)
 
-#define SEG_NEXT_ITEM(f) \
+#define SEG_NEXT_ITEM(f) do \
     { GET_NEXT_ITEM (DTF(names)[f]); \
-      seg_by_did_i (vb, field_start, field_len, f, field_len+1); }
+      seg_by_did_i (vb, field_start, field_len, f, field_len+1); } while(0)
 
-#define GET_LAST_ITEM(item_name) \
+#define GET_LAST_ITEM(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, has_13, item_name); }
+      next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, has_13, item_name); } while(0)
 
-#define GET_MAYBE_LAST_ITEM(item_name) \
+#define GET_MAYBE_LAST_ITEM(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, true, true, false, &field_len, &separator, has_13, item_name); }
+      next_field = seg_get_next_item (vb, field_start, &len, true, true, false, &field_len, &separator, has_13, item_name); } while(0)
 
 // create extendent field contexts in the correct order of the fields
-#define EXTENDED_FIELD_CTX(extended_field, dict_id_num) { \
+#define EXTENDED_FIELD_CTX(extended_field, dict_id_num) do { \
     Context *ctx = ctx_get_ctx (vb, (DictId)dict_id_num); \
-    ASSERT (ctx->did_i == extended_field, "Error: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
+    ASSERTE (ctx->did_i == extended_field, "EXTENDED_FIELD_CTX: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
     dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
-}
+} while(0)
 
 #define SEG_EOL(f,account_for_ascii10) seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); 
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
-    ASSERT (condition, "%s: Error in file %s: "format "\n\nvb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
-                              "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
-                              "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
-                              "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
-                              "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s"\
-                              "\nDumped bad vblock from memory: %s", \
-                                     global_cmd, txt_name, __VA_ARGS__, vb->line_i, vb->vblock_i, \
+    ASSINP (condition, "Error in file %s: "format "\n\nvb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
+                       "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
+                       "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
+                       "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
+                       "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s"\
+                       "\nDumped bad vblock from memory: %s", \
+                                     txt_name, __VA_ARGS__, vb->line_i, vb->vblock_i, \
             /* pos_in_vb:         */ (PosType)(p_into_txt ? (p_into_txt - vb->txt_data.data) : -1), \
             /* pos_in_file:       */ (PosType)(p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1),\
             /* vb start pos file: */ vb->vb_position_txt_file, \

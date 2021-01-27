@@ -105,10 +105,10 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
     PosType this_range_size = ref_size (r);
     PosType next_range_size = ref_size (next_r);
     
-    ASSERT (this_range_size * 2 == r->ref.nbits, 
-            "Error in refhash_calc_one_range: mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64" r->range_id=%u", 
-            this_range_size, this_range_size*2, r->ref.nbits, ENT (char, z_file->contexts[0].dict, ENT (CtxNode, z_file->contexts[0].nodes, r->chrom)->char_index), 
-            r->first_pos, r->last_pos, r->range_id);
+    ASSERTE (this_range_size * 2 == r->ref.nbits, 
+             "mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64" r->range_id=%u", 
+             this_range_size, this_range_size*2, r->ref.nbits, ENT (char, z_file->contexts[0].dict, ENT (CtxNode, z_file->contexts[0].nodes, r->chrom)->char_index), 
+             r->first_pos, r->last_pos, r->range_id);
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
     // end of this one (note: we only look at one next range - even if it is very short, we will not overflow to the next one after)
@@ -261,7 +261,7 @@ static void refhash_create_cache_in_background (void)
     if (!flag.regions) { 
         refhash_get_cache_fn(); // generate name before we close z_file
         unsigned err = pthread_create (&refhash_cache_creation_thread_id, NULL, refhash_create_cache, NULL);
-        ASSERT (!err, "Error in refhash_create_cache_in_background: pthread_create failed: err=%u", err);
+        ASSERTE (!err, "pthread_create failed: err=%u", err);
         refhash_creating_cache = true;
     }
 }
@@ -291,13 +291,11 @@ static void refhash_uncompress_one_vb (VBlockP vb)
                  vb->vblock_i, header->num_layers, layer_i, header->layer_bits, start, size, BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
     // sanity checks
-    ASSERT (layer_i < num_layers, "Error in refhash_uncompress_one_vb: expecting header->layer_i=%u < num_layers=%u", layer_i, num_layers);
+    ASSERTE (layer_i < num_layers, "expecting header->layer_i=%u < num_layers=%u", layer_i, num_layers);
 
-    ASSERT (header->layer_bits == layer_bits[layer_i], "Error in refhash_uncompress_one_vb: expecting header->layer_bits=%u to be %u",
-            header->layer_bits, layer_bits[layer_i]);
+    ASSERTE (header->layer_bits == layer_bits[layer_i], "expecting header->layer_bits=%u to be %u", header->layer_bits, layer_bits[layer_i]);
 
-    ASSERT (start + size <= layer_size[layer_i], "Error in refhash_uncompress_one_vb: expecting start=%u + size=%u <= layer_size=%u",
-            start, size, layer_size[layer_i]);
+    ASSERTE (start + size <= layer_size[layer_i], "expecting start=%u + size=%u <= layer_size=%u", start, size, layer_size[layer_i]);
 
     // a hack for uncompressing to a location withing the buffer - while multiple threads are uncompressing into 
     // non-overlappying regions in the same buffer in parallel
@@ -320,7 +318,7 @@ static void refhash_read_one_vb (VBlockP vb)
     if (((SectionHeaderRefHash *)vb->z_data.data)->layer_i >= num_layers)
         return; // don't read the high layers if beyond the requested num_layers
 
-    ASSERT (section_offset != EOF, "Error in ref_read_one_range: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
+    ASSERTE (section_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
 
     NEXTENT (int32_t, vb->z_section_headers) = section_offset;
 

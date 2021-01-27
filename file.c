@@ -339,7 +339,7 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
 
             if (file->redirected)
                 ABORT ("%s: to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", 
-                        global_cmd, file_compressible_extensions (true))
+                        global_cmd, file_compressible_extensions (true));
             else
                 ABORT ("%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
                         global_cmd, file_printname (file),  file_compressible_extensions (false));
@@ -408,7 +408,7 @@ static bool file_open_txt_read (File *file)
                         "Pipe-in process %s (pid=%u) died without sending any data",
                         flags_pipe_in_process_name(), flags_pipe_in_pid());
 
-                ABORTINP0 ("No input data")
+                ABORTINP0 ("No input data");
             }
 
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
@@ -668,7 +668,7 @@ static bool file_open_z (File *file)
                 FCLOSE (file->file, file_printname (file));
 
                 if (flag.multiple_files) 
-                    RETURNW (false, true, "Skipping %s - it is not a valid genozip file", file_printname (file))
+                    RETURNW (false, true, "Skipping %s - it is not a valid genozip file", file_printname (file));
                 else
                     ABORTINP ("file %s is not a valid genozip file", file_printname (file));
             }
@@ -824,7 +824,7 @@ void file_close (File **file_p,
             bgzf_write_finalize (file);         
 
         if (file->mode == READ && (file->codec == CODEC_GZ))
-            ASSERTW (!gzclose_r((gzFile)file->file), "%s: warning: failed to close file: %s", global_cmd, file_printname (file))
+            ASSERTW (!gzclose_r((gzFile)file->file), "%s: warning: failed to close file: %s", global_cmd, file_printname (file));
 
         else if (file->mode == READ && file->codec == CODEC_BZ2)
             BZ2_bzclose((BZFILE *)file->file);

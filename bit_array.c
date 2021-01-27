@@ -22,7 +22,7 @@
 // Tables of constants
 //
 
-#define assert(x) ASSERT ((x), "Error in %s:%u: %s", __FUNCTION__, __LINE__, #x)
+#define assert(x) ASSERTE ((x), "%s", #x)
 
 // byte reverse look up table
 static const word_t reverse_table[256] =
@@ -136,21 +136,21 @@ static inline WordStr _print_word (word_t word)
 static inline void validate_bitarr (BitArray *arr, const char *file, int lineno)
 {
     // Verify that its allocated
-    ASSERT (arr->type != BITARR_UNALLOCATED, "[%s:%i] bitarray is not allocated", file, lineno);
+    ASSERTE (arr->type != BITARR_UNALLOCATED, "[%s:%i] bitarray is not allocated", file, lineno);
 
     // Check top word is masked (only if not overlayed - the unused bits of top word don't belong to this bit array and might be used eg by another bit array in genome.ref/genome.is_set)
     if (arr->type == BITARR_REGULAR) {
       word_addr_t tw = arr->nwords == 0 ? 0 : arr->nwords - 1;
       bit_index_t top_bits = bits_in_top_word(arr->nbits);
 
-      ASSERT (arr->words[tw] <= bitmask64(top_bits), "[%s:%i] Expected %i bits in top word[%i] but word=%s\n", 
-              file, lineno, (int)top_bits, (int)tw, _print_word(arr->words[tw]).s);
+      ASSERTE (arr->words[tw] <= bitmask64(top_bits), "[%s:%i] Expected %i bits in top word[%i] but word=%s\n", 
+               file, lineno, (int)top_bits, (int)tw, _print_word(arr->words[tw]).s);
     }
 
     // Check num of words is correct
     word_addr_t num_words = roundup_bits2words64(arr->nbits);
-    ASSERT (num_words == arr->nwords, "[%s:%i] num of words wrong [bits: %i, word: %i, actual words: %i]", 
-            file, lineno, (int)arr->nbits, (int)num_words, (int)arr->nwords);
+    ASSERTE (num_words == arr->nwords, "[%s:%i] num of words wrong [bits: %i, word: %i, actual words: %i]", 
+             file, lineno, (int)arr->nbits, (int)num_words, (int)arr->nwords);
 }
 
 #else
@@ -377,16 +377,16 @@ bit_index_t bit_array_length(const BitArray* bit_arr)
 // If bitarr length < num_bits, resizes to num_bits
 char bit_array_ensure_size(BitArray* bitarr, bit_index_t ensure_num_of_bits)
 {
-    ASSERT (bitarr->nbits >= ensure_num_of_bits, "Error: bit_array of out range: bitarr->nbits=%"PRIu64" ensure_num_of_bits=%"PRIu64,
-            bitarr->nbits, ensure_num_of_bits);
+    ASSERTE (bitarr->nbits >= ensure_num_of_bits, "bit_array of out range: bitarr->nbits=%"PRIu64" ensure_num_of_bits=%"PRIu64,
+             bitarr->nbits, ensure_num_of_bits);
 
     return 1;
 }
 
 void bit_array_ensure_size_critical(BitArray* bitarr, bit_index_t nbits)
 {
-    ASSERT (bitarr->nbits >= nbits, "Error: bit_array of out range: bitarr->nbits=%"PRIu64" nbits=%"PRIu64,
-            bitarr->nbits, nbits);
+    ASSERTE (bitarr->nbits >= nbits, "bit_array of out range: bitarr->nbits=%"PRIu64" nbits=%"PRIu64,
+             bitarr->nbits, nbits);
 }
 
 //
@@ -395,8 +395,8 @@ void bit_array_ensure_size_critical(BitArray* bitarr, bit_index_t nbits)
 
 // Get the value of a bit (returns 0 or 1)
 char bit_array_get_bit(const BitArray* bitarr, bit_index_t b)
-  {
-    ASSERT (b < bitarr->nbits, "Error in bit_array_get_bit: Expecting b(%"PRId64") < bitarr->nbits(%"PRId64")", b, bitarr->nbits);
+{
+    ASSERTE (b < bitarr->nbits, "Expecting b(%"PRId64") < bitarr->nbits(%"PRId64")", b, bitarr->nbits);
     return bit_array_get(bitarr, b);
 }
 
@@ -498,8 +498,8 @@ void bit_array_set_region (BitArray *bitarr, bit_index_t start, bit_index_t len)
 {
     if (!len) return; // nothing to do 
 
-    ASSERT (start + len - 1 <= bitarr->nbits, "Error in bit_array_set_region: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->nbits(%"PRId64")",
-            start, len, bitarr->nbits); // divon fixed bug
+    ASSERTE (start + len - 1 <= bitarr->nbits, "Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->nbits(%"PRId64")",
+             start, len, bitarr->nbits); // divon fixed bug
 
     SET_REGION (bitarr, start, len);
     DEBUG_VALIDATE (bitarr);
@@ -511,8 +511,8 @@ void bit_array_clear_region_do (BitArray *bitarr, bit_index_t start, bit_index_t
 {
     if (!len) return; // nothing to do 
 
-    ASSERT (start + len - 1 <= bitarr->nbits, "Error in bit_array_clear_region (called from %s:%u): Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->nbits(%"PRId64")",
-            func, code_line, start, len, bitarr->nbits); // divon fixed bug
+    ASSERTE (start + len - 1 <= bitarr->nbits, "called from %s:%u: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->nbits(%"PRId64")",
+             func, code_line, start, len, bitarr->nbits); // divon fixed bug
 
     CLEAR_REGION (bitarr, start, len);
     DEBUG_VALIDATE (bitarr);
@@ -546,31 +546,31 @@ void bit_array_clear_all (BitArray *bitarr)
 
 uint64_t bit_array_get_word64(const BitArray* bitarr, bit_index_t start)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   return (uint64_t)_get_word(bitarr, start);
 }
 
 uint32_t bit_array_get_word32(const BitArray* bitarr, bit_index_t start)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   return (uint32_t)_get_word(bitarr, start);
 }
 
 uint16_t bit_array_get_word16(const BitArray* bitarr, bit_index_t start)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   return (uint16_t)_get_word(bitarr, start);
 }
 
 uint8_t bit_array_get_word8(const BitArray* bitarr, bit_index_t start)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   return (uint8_t)_get_word(bitarr, start);
 }
 
 uint64_t bit_array_get_wordn(const BitArray* bitarr, bit_index_t start, int n)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   assert(n <= 64);
   return (uint64_t)(_get_word(bitarr, start) & bitmask64(n));
 }
@@ -584,33 +584,33 @@ uint64_t bit_array_get_wordn(const BitArray* bitarr, bit_index_t start, int n)
 
 void bit_array_set_word64(BitArray* bitarr, bit_index_t start, uint64_t word)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   _set_word(bitarr, start, (word_t)word);
 }
 
 void bit_array_set_word32(BitArray* bitarr, bit_index_t start, uint32_t word)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   word_t w = _get_word(bitarr, start);
   _set_word(bitarr, start, bitmask_merge(w, word, 0xffffffff00000000UL));
 }
 
 void bit_array_set_word16(BitArray* bitarr, bit_index_t start, uint16_t word)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   word_t w = _get_word(bitarr, start);
   _set_word(bitarr, start, bitmask_merge(w, word, 0xffffffffffff0000UL));
 }
 
 void bit_array_set_word8(BitArray* bitarr, bit_index_t start, uint8_t byte)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   _set_byte(bitarr, start, byte);
 }
 
 void bit_array_set_wordn(BitArray* bitarr, bit_index_t start, uint64_t word, int n)
 {
-  ASSERT (start < bitarr->nbits, "Error in %s: expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", __FUNCTION__, start, bitarr->nbits);
+  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
   assert(n <= 64);
   word_t w = _get_word(bitarr, start), m = bitmask64(n);
   _set_word(bitarr, start, bitmask_merge(word,w,m));
@@ -691,8 +691,7 @@ bit_index_t bit_array_num_bits_cleared(const BitArray* bitarr)
 #define _next_bit_func_def(FUNC,GET) \
 char FUNC(const BitArray* bitarr, bit_index_t offset, bit_index_t* result) \
 { \
-  ASSERT (offset < bitarr->nbits, "Error in %s: expecting offset(%"PRId64") < bitarr->nbits(%"PRId64")", \
-          #FUNC, offset, bitarr->nbits); \
+  ASSERTE (offset < bitarr->nbits, "expecting offset(%"PRId64") < bitarr->nbits(%"PRId64")", offset, bitarr->nbits); \
   if(bitarr->nbits == 0 || offset >= bitarr->nbits) { return 0; } \
  \
   /* Find first word that is greater than zero */ \
@@ -968,8 +967,8 @@ void bit_array_copy(BitArray* dst, bit_index_t dstindx,
                     const BitArray* src, bit_index_t srcindx,
                     bit_index_t length)
 {
-  ASSERT (dstindx + length <= dst->nbits, "Error in bit_array_copy: dstindx(%"PRIu64") + length(%"PRIu64") > dst->nbits(%"PRIu64")", dstindx, length, dst->nbits);
-  ASSERT (srcindx + length <= src->nbits, "Error in bit_array_copy: srcindx(%"PRIu64") + length(%"PRIu64") > src->nbits(%"PRIu64")", srcindx, length, src->nbits);
+  ASSERTE (dstindx + length <= dst->nbits, "dstindx(%"PRIu64") + length(%"PRIu64") > dst->nbits(%"PRIu64")", dstindx, length, dst->nbits);
+  ASSERTE (srcindx + length <= src->nbits, "srcindx(%"PRIu64") + length(%"PRIu64") > src->nbits(%"PRIu64")", srcindx, length, src->nbits);
 
   _array_copy(dst, dstindx, src, srcindx, length);
 
@@ -978,8 +977,8 @@ void bit_array_copy(BitArray* dst, bit_index_t dstindx,
 
 void bit_array_overlay (BitArray *overlaid_bitarr, BitArray *regular_bitarr, bit_index_t start, bit_index_t nbits)
 {
-    ASSERT (start % 64 == 0, "Error in bit_array_overlay: start=%"PRIu64" must be a multiple of 64", start);
-    ASSERT (start + nbits <= regular_bitarr->nbits, "Error in bit_array_overlay: start(%"PRIu64") + nbits(%"PRIu64") <= regular_bitarr->nbits(%"PRIu64")",
+    ASSERTE (start % 64 == 0, "start=%"PRIu64" must be a multiple of 64", start);
+    ASSERTE (start + nbits <= regular_bitarr->nbits, "start(%"PRIu64") + nbits(%"PRIu64") <= regular_bitarr->nbits(%"PRIu64")",
             start, nbits, regular_bitarr->nbits);
 
     bit_index_t word_i = start / 64;
@@ -1375,12 +1374,12 @@ void bit_array_reverse_complement_all (BitArray *dst, const BitArray *src,
         0b11110000, 0b10110000, 0b01110000, 0b00110000, 0b11100000, 0b10100000, 0b01100000, 0b00100000, 0b11010000, 0b10010000, 0b01010000, 0b00010000, 0b11000000, 0b10000000, 0b01000000, 0b00000000
     };
 
-    ASSERT (src->nbits == src->nwords * 64, "Error in bit_array_reverse_complement: expecting full words, bitarr->nwords=%"PRIu64" and bitarr->num_of_bit=%"PRIu64,
+    ASSERTE (src->nbits == src->nwords * 64, "expecting full words, bitarr->nwords=%"PRIu64" and bitarr->num_of_bit=%"PRIu64,
             src->nwords, src->nbits);
 
-    ASSERT0 (src->nbits == dst->nbits && src->nwords == dst->nwords, "Error in bit_array_reverse_complement: expecting src and dst to have the same number of bits and words");
+    ASSERTE0 (src->nbits == dst->nbits && src->nwords == dst->nwords, "expecting src and dst to have the same number of bits and words");
 
-    ASSERT0 (src_start_base % 32 == 0 && max_num_bases % 32 == 0, "Error in bit_array_reverse_complement: invalid start_base or num_bases");
+    ASSERTE0 (src_start_base % 32 == 0 && max_num_bases % 32 == 0, "invalid start_base or num_bases");
 
   # define REV_COMP(w) ((rev_comp_table[(w)       & 0xff] << 56) | \
                         (rev_comp_table[(w >>  8) & 0xff] << 48) | \
@@ -1479,8 +1478,8 @@ void bit_array_remove_flanking (BitArray *bitarr, bit_index_t lsb_flanking, bit_
 // shortens an array to a certain number of bits (divon)
 void bit_array_truncate (BitArray* bitarr, bit_index_t new_num_of_bits)
 {
-  ASSERT (new_num_of_bits <= bitarr->nbits, "Error in bit_array_truncate: expecting new_num_of_bits=%"PRIu64" to be <= bitarr->nbits=%"PRIu64,
-          new_num_of_bits, bitarr->nbits);
+  ASSERTE (new_num_of_bits <= bitarr->nbits, "expecting new_num_of_bits=%"PRIu64" to be <= bitarr->nbits=%"PRIu64,
+           new_num_of_bits, bitarr->nbits);
 
   bitarr->nbits  = new_num_of_bits;
   bitarr->nwords = roundup_bits2words64 (new_num_of_bits);   

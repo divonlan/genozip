@@ -51,7 +51,8 @@ static bool regions_parse_pos (const char *str, Region *reg)
         if (!str_get_int (str, sep - str, &reg->start_pos)) return false;
         if (!str_get_int (sep+1, str+len-(sep+1), &reg->end_pos)) return false;
 
-        if (reg->start_pos > reg->end_pos) { PosType tmp = reg->start_pos ; reg->start_pos = reg->end_pos ; reg->end_pos = tmp; }
+        if (reg->start_pos > reg->end_pos) SWAP (reg->start_pos, reg->end_pos);
+
         return true;
     }
 
@@ -89,12 +90,12 @@ static bool regions_is_valid_chrom (const char *str)
 // called from main when parsing the command line to add the argument of --regions
 void regions_add (const char *region_str)
 {
-    ASSERT0 (region_str, "Error: region_str is NULL");
+    ASSERTE0 (region_str, "region_str is NULL");
 
     bool is_negated = region_str[0] == '^';
 
     bool is_conflicting_negation = (regions_buf.len && (is_negative_regions != is_negated));
-    ASSERT0 (!is_conflicting_negation, "Error: inconsistent negation - all regions listed must either be negated or not");
+    ASSINP0 (!is_conflicting_negation, "Error: inconsistent negation - all regions listed must either be negated or not");
 
     is_negative_regions = is_negated;
 
@@ -114,17 +115,17 @@ void regions_add (const char *region_str)
         char *after_colon;
         char *before_colon = strtok_r (one_rs, ":", &after_colon);
 
-        ASSERT (before_colon, "Error: invalid region string: %s", region_str);
+        ASSINP (before_colon, "Error: invalid region string: %s", region_str);
 
         Region *reg = &NEXTENT (Region, regions_buf);
         *reg = (Region){ .chrom = NULL, .start_pos = 0, .end_pos = MAX_POS };
 
         // case: we have both chrom and pos - easy!
         if (after_colon && after_colon[0]) {
-            ASSERT (regions_is_valid_chrom (before_colon), "Error: Invalid CHROM in region string: %s", region_str);
+            ASSINP (regions_is_valid_chrom (before_colon), "Error: Invalid CHROM in region string: %s", region_str);
             reg->chrom = before_colon;
             
-            ASSERT (regions_parse_pos (after_colon, reg), "Error: Invalid position range in region string: %s", region_str);
+            ASSINP (regions_parse_pos (after_colon, reg), "Error: Invalid position range in region string: %s", region_str);
         }
 
         // case: only one substring. we need to determine if the single substring is a pos or a chrom. if it
@@ -137,7 +138,7 @@ void regions_add (const char *region_str)
             bool has_pos = regions_parse_pos (before_colon, reg);
 
             // make sure at least one of them is valid
-            ASSERT (reg->chrom || has_pos, "Error: Invalid region string: %s", region_str);
+            ASSINP (reg->chrom || has_pos, "Error: Invalid region string: %s", region_str);
 
             // if both are valid, but the number is <= MAX_NUM_THAT_WE_ASSUME_IS_A_CHROM_AND_NOT_POS, we assume it is a chromosome.
             // Otherwise, we create two regions. Note: the user can always force a region with 10-10 or 1:10
@@ -279,8 +280,7 @@ bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType min_pos, P
 {
     if (!flag.regions) return true; // nothing to do
 
-    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, 
-            "Error in regions_is_range_included: chrom_word_index=%d out of range", chrom_word_index);
+    ASSERTE (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
 
     Buffer *chregs_buf = &chregs[chrom_word_index];
 
@@ -311,7 +311,7 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
     Buffer *chregs_buf = &chregs[chrom_word_index];
     if (!chregs_buf->len) return false; // no intersection with this chromosome
 
-    ASSERT0 (chregs_buf->len==1, "Error: when using --regions to display a reference, you can specify at most on region per chromosome");
+    ASSINP0 (chregs_buf->len==1, "Error: when using --regions to display a reference, you can specify at most on region per chromosome");
 
     Chreg *chreg = FIRSTENT (Chreg, *chregs_buf);
 
@@ -328,8 +328,7 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
 // a specific ra (i.e. chromosome)
 bool regions_is_site_included (WordIndex chrom_word_index, PosType pos)
 {
-    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, 
-            "Error in regions_is_site_included: chrom_word_index=%d out of range", chrom_word_index);
+    ASSERTE (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
 
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];
@@ -343,8 +342,7 @@ bool regions_is_site_included (WordIndex chrom_word_index, PosType pos)
 // PIZ: check if a range (chrom,start_pos,end_pos) overlaps with an included region. used when loading reference ranges.
 bool regions_is_range_included (WordIndex chrom_word_index, PosType start_pos, PosType end_pos, bool completely_included)
 {
-    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, 
-            "Error in regions_is_range_included: chrom_word_index=%d out of range", chrom_word_index);
+    ASSERTE (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
 
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];

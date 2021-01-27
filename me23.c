@@ -187,7 +187,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
 TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
 {
     // Genotype length expected to be 2 or 1 (for MT, Y)
-    ASSERT (reconstructed_len==1 || reconstructed_len==2, "Error in sam_piz_m232vcf_GENOTYPE: bad reconstructed_len=%u", reconstructed_len);
+    ASSERTE (reconstructed_len==1 || reconstructed_len==2, "bad reconstructed_len=%u", reconstructed_len);
 
     PosType pos = vb->contexts[ME23_POS].last_value.i;
 
@@ -199,12 +199,12 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     const Range *range = ref_piz_get_range (vb, pos, 1);
     vb->chrom_node_index = save_chrom_node_index; // restore
 
-    ASSERT (range, "Error: Failed to find the site chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
+    ASSERTE (range, "Failed to find the site chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
 
     uint32_t idx = pos - range->first_pos;
 
-    ASSERT (ref_is_idx_in_range (range, idx), "Error in sam_piz_m232vcf_GENOTYPE: idx=%u but range has only %"PRIu64" nucleotides. pos=%"PRId64" range=%s", 
-            idx, range->ref.nbits / 2, pos, ref_display_range (range).s)
+    ASSERTE (ref_is_idx_in_range (range, idx), "idx=%u but range has only %"PRIu64" nucleotides. pos=%"PRId64" range=%s", 
+            idx, range->ref.nbits / 2, pos, ref_display_range (range).s);
 
     char ref_b = ref_get_nucleotide (range, idx);
 

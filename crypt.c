@@ -32,7 +32,7 @@ bool crypt_prompt_for_password()
     // to do: consider canceling tty echo while getting password: https://stackoverflow.com/questions/1196418/getting-a-password-in-c-without-using-getpass-3
 
     // we can only ask for the password if the user hasn't redirected stdin or stdout
-    ASSERT0 (isatty (1) && isatty(2), "Error: this file is encrypted, please use --password");
+    ASSINP0 (isatty (1) && isatty(2), "Error: this file is encrypted, please use --password");
 
 #define MAX_PASSWORD_LEN 100
     password = CALLOC (MAX_PASSWORD_LEN+1); // allocated once, never freed
@@ -41,7 +41,10 @@ bool crypt_prompt_for_password()
     (void)!fgets (password, MAX_PASSWORD_LEN, stdin); // (void)! to avoid compiler "warning: ignoring return value"
     password[strlen(password)-1] = 0; // truncate the newline
 
-    ASSERT0 (strlen(password), "Goodbye!"); // exit if user clicked Enter only
+    if (!strlen (password)) { // exit if user clicked Enter only
+        printf ("Goodbye!\n"); 
+        exit (0); // not an error
+    }
 
     return true;
 }
@@ -80,7 +83,7 @@ static void crypt_generate_aes_key (VBlock *vb,
     const char *pepper = "vaughan";   
     static uint32_t pw_len=0, salt_len=0, pepper_len=0;
 
-    ASSERT0 (password, "Error in crypt_generate_aes_key - password is NULL");
+    ASSERTE0 (password, "password is NULL");
 
     if (!pw_len) { // first call
         pw_len     = strlen (password);

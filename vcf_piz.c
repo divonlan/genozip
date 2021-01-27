@@ -66,8 +66,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
     // initialize haplotype stuff
     if (has_GT && !vb_vcf->ht_matrix_ctx) {
 
-        ASSERT ((vb_vcf->ht_matrix_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT)), 
-                "Error in vcf_piz_special_FORMAT vb_i=%u: cannot find GT_HT data", vb->vblock_i);
+        ASSERTE ((vb_vcf->ht_matrix_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT)), 
+                 "vb_i=%u: cannot find GT_HT data", vb->vblock_i);
 
         // will exist in case of use of CODEC_HAPMAT but not CODEC_GTSHARK        
         vb_vcf->hapmat_index_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
@@ -84,7 +84,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_REFALT)
 {
     if (!reconstruct) goto done;
 
-    ASSERT (snip_len==2, "Error in vcf_piz_special_REFALT: expecting snip_len=2 but seeing %u", snip_len);
+    ASSERTE (snip_len==2, "expecting snip_len=2 but seeing %u", snip_len);
 
     // snip is 3 characters - REF, \t, ALT
     char ref_alt[3] = { 0, '\t', 0 };
@@ -94,10 +94,10 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_REFALT)
 
     if (snip[0] == '-' || snip[1] == '-') { 
         const Range *range = ref_piz_get_range (vb, pos, 1);
-        ASSERT (range, "Error in vcf_piz_special_REFALT: failed to find range for chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
+        ASSERTE (range, "failed to find range for chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
         
         uint32_t idx = pos - range->first_pos;
-        ASSERT (ref_is_nucleotide_set (range, idx), "Error in vcf_piz_special_REFALT: reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos);
+        ASSERTE (ref_is_nucleotide_set (range, idx), "reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos);
         ref_value = ref_get_nucleotide (range, idx);
     }
 

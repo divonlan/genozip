@@ -33,7 +33,7 @@ static const uint8_t decode_lookup[256] = {
 // data must be allocated base64_sizeof bytes
 unsigned base64_encode (const uint8_t *data, unsigned data_len, char *b64_str)
 {
-    ASSERT0 (data, "Error in base64_encode: data is NULL");
+    ASSERTE0 (data, "data is NULL");
 
 	const uint8_t *end = data + data_len;
 	char *next = b64_str;

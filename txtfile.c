@@ -66,7 +66,7 @@ static inline uint32_t txtfile_read_block_plain (VBlock *vb, uint32_t max_bytes)
     // case: normal read
     else {
         bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
-        ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", txt_name, strerror(errno));
+        ASSERTE (bytes_read >= 0, "read failed from %s: %s", txt_name, strerror(errno));
 
         // bytes_read=0 and we're using an external decompressor - it is either EOF or
         // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
@@ -174,7 +174,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
                 buf_dump_to_file (dump_fn, &dump_buffer, 1, false, false);
 
                 ABORT ("Error in txtfile_read_block_bgzf: Invalid BGZF block in vb=%u block_comp_len=%u. Entire BGZF data of this vblock dumped to %s, bad block stats at offset 0x%X",
-                       vb->vblock_i, block_comp_len, dump_fn, (uint32_t)vb->compressed.len)
+                       vb->vblock_i, block_comp_len, dump_fn, (uint32_t)vb->compressed.len);
             }
 
             // add block to list - including the EOF block (block_comp_len=BGZF_EOF_LEN block_uncomp_len=0)
@@ -290,7 +290,7 @@ static Digest txtfile_read_header (bool is_first_txt)
         if (!bytes_read) {
             if (flags_pipe_in_process_died()) // only works for Linux
                 ABORTINP ("Pipe-in process %s (pid=%u) died before the %s header was fully read; only %"PRIu64" bytes were read",
-                          flags_pipe_in_process_name(), flags_pipe_in_pid(), dt_name(txt_file->data_type), evb->txt_data.len)
+                          flags_pipe_in_process_name(), flags_pipe_in_pid(), dt_name(txt_file->data_type), evb->txt_data.len);
             else
                 ABORT ("Error in txtfile_read_header: unexpected end-of-file while reading the %s header of %s (header_len=%"PRIu64")", 
                        dt_name(txt_file->data_type), txt_name, evb->txt_data.len);

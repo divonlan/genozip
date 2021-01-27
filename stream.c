@@ -98,8 +98,8 @@ static void stream_abort_cannot_exec (const char *exec_name, const char *reason)
 #ifdef _WIN32
 static void stream_set_inheritability (int fd, bool is_inheritable)
 {
-    ASSERT (SetHandleInformation ((HANDLE)_get_osfhandle (fd), HANDLE_FLAG_INHERIT, is_inheritable), 
-            "Error: SetHandleInformation failed: %s", stream_windows_error());
+    ASSERTE (SetHandleInformation ((HANDLE)_get_osfhandle (fd), HANDLE_FLAG_INHERIT, is_inheritable), 
+             "SetHandleInformation failed: %s", stream_windows_error());
 }
 
 static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stderr_to_genozip, int *genozip_to_stream_stdin,
@@ -226,8 +226,8 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
                        const char *reason,
                        const char *exec_name, ...)
 {
-    ASSERT0 (!from_stream_stdout || !redirect_stdout_file, "Error in stream_create: cannot redirect child output to both genozip and a file");
-    ASSERT0 (!to_stream_stdin    || !input_url_name,       "Error in stream_create: cannot redirect child input from both genozip and a url");
+    ASSERTE0 (!from_stream_stdout || !redirect_stdout_file, "cannot redirect child output to both genozip and a file");
+    ASSERTE0 (!to_stream_stdin    || !input_url_name,       "cannot redirect child input from both genozip and a url");
 
     int stream_stdout_to_genozip[2], stream_stderr_to_genozip[2], genozip_to_stream_stdin[2];
     

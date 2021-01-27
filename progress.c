@@ -71,8 +71,7 @@ void progress_new_component (const char *new_component_name,
 
         if (!flag.quiet) {
             if (test_mode) 
-                iprintf ("testing: %s%s --test %s : ", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
-                        new_component_name)
+                iprintf ("testing: %s%s --test %s : ", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", new_component_name);
             else
                 iprintf ("%s %s : ", global_cmd, new_component_name); 
         }
@@ -190,7 +189,7 @@ void progress_finalize_component_time_ratio_better (const char *me, double ratio
 
 void progress_concatenated_md5 (const char *me, Digest md5)
 {
-    ASSERT0 (!component_name, "Error in progress_concatenated_md5: expecting component_name=NULL");
+    ASSERTE0 (!component_name, "expecting component_name=NULL");
 
     FINALIZE ("Bound %s", me);
 }
