@@ -68,7 +68,7 @@ static void show_runs (const PbwtState *state)
     for (uint32_t i=0; i < vb->ht_per_line; i++) cmd; \
     iprint0 ("\n"); } while (0) // flush
 
-#define show_line if (flag.show_alleles) SHOW ("LINE", (htputc (*ENT (uint8_t, vb->ht_matrix_ctx->local, line_i * vb->ht_per_line + i))))
+#define show_line    if (flag.show_alleles) SHOW ("LINE", (htputc (*ENT (uint8_t, vb->ht_matrix_ctx->local, line_i * vb->ht_per_line + i))))
 #define show_perm(s) if (flag.show_alleles) SHOW ("PERM", (fprintf (info_stream, "%d ", (s)->perm[i].index)));       
 
 static PbwtState codec_pbwt_initialize_state (VBlockVCFP vb, Buffer *runs, Buffer *fgrc)
@@ -78,10 +78,10 @@ static PbwtState codec_pbwt_initialize_state (VBlockVCFP vb, Buffer *runs, Buffe
     ARRAY (PermEnt, state_data, vb->codec_bufs[0]);
 
     PbwtState state = {
-        .runs             = runs,
-        .fgrc             = fgrc,
-        .perm             = &state_data[0],                           // size: ht_per_line X uint32_t
-        .temp             = &state_data[vb->ht_per_line],             // size: ht_per_line X uint32_t
+        .runs = runs,
+        .fgrc = fgrc,
+        .perm = &state_data[0],               // size: ht_per_line X uint32_t
+        .temp = &state_data[vb->ht_per_line], // size: ht_per_line X uint32_t
     };
         
     return state;
@@ -205,7 +205,7 @@ static bool inline codec_pbwt_udpate_fgrc (PbwtState *state, uint8_t allele_of_c
 }
 
 // add data to the run-length encoding (may be called with the full ht matrix or just pieces of it)
-static void inline codec_pbwt_run_len_encode (PbwtState *state, const uint8_t *ht_one_line, uint32_t line_len, bool backwards) 
+static void inline codec_pbwt_run_len_encode (PbwtState *state, uint32_t line_len, bool backwards) 
 { 
     for (uint32_t ht_i=0; ht_i < line_len; ) {		
 
@@ -269,7 +269,7 @@ bool codec_pbwt_compress (VBlock *vb_,
         show_line; show_perm(&state); 
         bool backward_permuted_ht_line = line_i % 2; // even rows are forward, odd are backward - better run length encoding 
 
-        codec_pbwt_run_len_encode (&state, &ht_data[line_i * vb->ht_per_line], vb->ht_per_line, backward_permuted_ht_line);
+        codec_pbwt_run_len_encode (&state, vb->ht_per_line, backward_permuted_ht_line);
     }
   
     if (flag.show_alleles) show_runs (&state);   

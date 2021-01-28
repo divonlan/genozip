@@ -81,7 +81,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 }
 
 #define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor,name) \
-    buf_alloc ((vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
+    buf_alloc ((VBlockP)(vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
 
 #define buf_alloc_more_zero(vb, buf, more, at_least, type, grow_at_least_factor,name) { \
     uint64_t size_before = (buf)->size; \
@@ -91,24 +91,25 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 
 extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, const char *func, uint32_t code_line, const char *name);
 #define buf_mmap(vb, buf, filename, name) \
-    buf_mmap_do((vb), (buf), (filename), __FUNCTION__, __LINE__, (name))
+    buf_mmap_do((VBlockP)(vb), (buf), (filename), __FUNCTION__, __LINE__, (name))
 
 extern BitArrayP buf_alloc_bitarr_do (VBlockP vb, Buffer *buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
-#define buf_alloc_bitarr(vb, buf, nbits, name) buf_alloc_bitarr_do((vb), (buf), (nbits), __FUNCTION__, __LINE__, (name))
+#define buf_alloc_bitarr(vb, buf, nbits, name) \
+    buf_alloc_bitarr_do((VBlockP)(vb), (buf), (nbits), __FUNCTION__, __LINE__, (name))
 
 extern BitArrayP buf_overlay_bitarr_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, uint64_t start_byte_in_regular_buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
 #define buf_overlay_bitarr(vb, overlaid_buf, regular_buf, start_byte_in_regular_buf, nbits, name) \
-    buf_overlay_bitarr_do((vb), (overlaid_buf), (regular_buf), (start_byte_in_regular_buf), (nbits), __FUNCTION__, __LINE__, (name))
+    buf_overlay_bitarr_do((VBlockP)(vb), (overlaid_buf), (regular_buf), (start_byte_in_regular_buf), (nbits), __FUNCTION__, __LINE__, (name))
 
 #define buf_set_overlayable(buf) (buf)->overlayable = true
 
 extern void buf_overlay_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf,  uint64_t start_in_regular,  
                             const char *func, uint32_t code_line, const char *name);
 #define buf_overlay(vb, overlaid_buf, regular_buf, name) \
-    buf_overlay_do((vb), (overlaid_buf), (regular_buf), 0, __FUNCTION__, __LINE__, (name)) 
+    buf_overlay_do((VBlockP)(vb), (overlaid_buf), (regular_buf), 0, __FUNCTION__, __LINE__, (name)) 
 
 #define buf_overlay_partial(vb, overlaid_buf, regular_buf, start, name) \
-    buf_overlay_do((vb), (overlaid_buf), (regular_buf), (start), __FUNCTION__, __LINE__, (name)) 
+    buf_overlay_do((VBlockP)(vb), (overlaid_buf), (regular_buf), (start), __FUNCTION__, __LINE__, (name)) 
 
 extern void buf_free_do (Buffer *buf, const char *func, uint32_t code_line);
 #define buf_free(buf) buf_free_do ((buf), __FUNCTION__, __LINE__);
