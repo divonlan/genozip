@@ -137,11 +137,9 @@ OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE) 
 ifeq ($(CC),gcc)
 	OPTFLAGS += -Ofast -std=gnu99
 	DEBUGFLAGS += -std=gnu99 -DDEBUG -g -O0
-	OXXPTFLAGS = -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math 
 else
 	OPTFLAGS += -O2
 	DEBUGFLAGS += -DDEBUG -g -O0
-	OXXPTFLAGS = -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math 
 endif
 
 all   : CFLAGS += $(OPTFLAGS) 
