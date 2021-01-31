@@ -143,7 +143,7 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
     uint32_t refhash_word;
     const PosType seq_len_64 = (PosType)seq_len; // 64 bit version of seq_len
     
-    PosType gpos, best_gpos = NO_GPOS; // match not found yet
+    PosType gpos = NO_GPOS, best_gpos = NO_GPOS; // match not found yet
     bool best_is_forward = false;
 
     // convert seq to a bitmap
