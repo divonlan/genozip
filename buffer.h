@@ -123,8 +123,8 @@ extern void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src, uint64_
                          uint64_t src_start_entry, uint64_t max_entries, // if 0 copies the entire buffer
                          const char *func, uint32_t code_line,
                          const char *name);
-#define buf_copy(dst_vb,dst,src,bytes_per_entry,src_start_entry,max_entries,name) \
-  buf_copy_do ((VBlockP)(dst_vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(name))
+#define buf_copy(dst_vb,dst,src,bytes_per_entry,src_start_entry,max_entries,dst_name) \
+  buf_copy_do ((VBlockP)(dst_vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(dst_name))
 
 extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 
