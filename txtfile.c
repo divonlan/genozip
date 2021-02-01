@@ -398,7 +398,8 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     for (int32_t block_i=0; ; block_i++) {
 
-        uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, max_memory_per_vb - vb->txt_data.len, always_uncompress) : 0;
+        uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, MIN (max_memory_per_vb - vb->txt_data.len, 1<<30 /* read() can't handle moer */), always_uncompress) 
+                                                            : 0;
 
         if (!len || vb->txt_data.len >= max_memory_per_vb) {  // EOF or we have filled up the allocted memory
 
