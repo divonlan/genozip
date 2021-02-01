@@ -13,6 +13,7 @@
 
 extern void piz_one_file (uint32_t component_i, bool is_last_file);
 extern uint32_t piz_uncompress_all_ctxs (VBlockP vb, uint32_t pair_vb_i);
+extern bool piz_test_grep (VBlockP vb);
 
 #endif
 

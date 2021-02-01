@@ -7,6 +7,7 @@
 #define FASTQ_INCLUDED
 
 #include "genozip.h"
+#include "sections.h"
 
 // Txtfile stuff
 extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
@@ -33,11 +34,10 @@ extern void fastq_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, const char *
 extern void fastq_txtfile_write_one_vblock_interleave (VBlockP vb1, VBlockP vb2);
 
 // VBlock stuff
-extern void fast_vb_release_vb();
-extern void fast_vb_destroy_vb();
-
-extern unsigned fast_vb_size (void);
-extern unsigned fast_vb_zip_dl_size (void);
+extern void fastq_vb_release_vb();
+extern void fastq_vb_destroy_vb();
+extern unsigned fastq_vb_size (void);
+extern unsigned fastq_vb_zip_dl_size (void);
 
 // file pairing (--pair) stuff
 extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t first_vb_i_of_pair_1, uint32_t last_vb_i_of_pair_1);

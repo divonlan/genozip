@@ -2,7 +2,7 @@
 #include "codec.h" // must be included before reference.h
 #include "reference.h"
 #include "vblock.h"
-#include "fast_private.h"
+#include "fasta.h"
 #include "ref_private.h"
 #include "mutex.h"
 #include "refhash.h"
@@ -29,7 +29,7 @@ static Range *ref_make_ref_get_range (uint32_t vblock_i)
 void ref_make_create_range (VBlockP vb)
 {
     Range *r = ref_make_ref_get_range (vb->vblock_i);
-    uint64_t seq_len = vb->contexts[FASTA_NONREF].local.len;
+    uint64_t seq_len = vb->contexts[FASTA_SEQ].local.len;
 
     // at this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
     // the missing details will be added during ref_make_prepare_range_for_compress
@@ -39,8 +39,11 @@ void ref_make_create_range (VBlockP vb)
     uint64_t bit_i=0;
     for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
         
-        const uint8_t *line_seq = ENT (uint8_t, vb->txt_data, DATA_LINE(line_i)->seq_data_start);
-        for (uint64_t base_i=0; base_i < DATA_LINE(line_i)->seq_len; base_i++) {
+        uint32_t seq_data_start, seq_len;
+        fasta_get_data_line (vb, line_i, &seq_data_start, &seq_len);
+
+        const uint8_t *line_seq = ENT (uint8_t, vb->txt_data, seq_data_start);
+        for (uint64_t base_i=0; base_i < seq_len; base_i++) {
             uint8_t encoding = acgt_encode[line_seq[base_i]];
             bit_array_assign (&r->ref, bit_i, encoding & 1);
             bit_array_assign (&r->ref, bit_i + 1, (encoding >> 1) & 1);

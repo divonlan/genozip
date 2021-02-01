@@ -3,7 +3,8 @@
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include "fast_private.h"
+#include "fastq.h"
+#include "vblock.h"
 #include "seg.h"
 #include "context.h"
 #include "file.h"
@@ -19,6 +20,44 @@
 #include "codec.h"
 #include "aligner.h"
 #include "stats.h"
+
+#define dict_id_is_fastq_desc_sf dict_id_is_type_1
+#define dict_id_fastq_desc_sf dict_id_type_1
+
+typedef struct {
+    uint32_t seq_data_start, qual_data_start; // start within vb->txt_data
+    uint32_t seq_len;                         // length of SEQ and QUAL within vb->txt_data (they are identical per FASTQ spec)
+} ZipDataLineFASTQ;
+
+// IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb 
+typedef struct VBlockFASTQ {
+    VBLOCK_COMMON_FIELDS
+
+    // pairing stuff - used if we are the 2nd file in the pair 
+    uint32_t pair_vb_i;      // the equivalent vb_i in the first file, or 0 if this is the first file
+    uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
+    char *optimized_desc;    // base of desc in flag.optimize_DESC 
+    uint32_t optimized_desc_len;
+    Buffer genobwa_show_line; // genobwa only: bitmap - 1 if line survived the filter
+
+} VBlockFASTQ;
+
+#define DATA_LINE(i) ENT (ZipDataLineFASTQ, vb->lines, i)
+
+unsigned fastq_vb_size (void) { return sizeof (VBlockFASTQ); }
+unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
+
+void fastq_vb_release_vb (VBlockFASTQ *vb)
+{
+    vb->pair_num_lines = vb->pair_vb_i = vb->optimized_desc_len = 0;
+    FREE (vb->optimized_desc);
+    buf_free (&vb->genobwa_show_line);
+}
+
+void fastq_vb_destroy_vb (VBlockFASTQ *vb)
+{
+    buf_destroy (&vb->genobwa_show_line);
+}
 
 //------------------
 // GENOBWA STUFF
@@ -89,7 +128,7 @@ out_of_data:
 bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len)
 {
 
-    VBlockFAST *vb = (VBlockFAST *)vb_;
+    VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
 
     const char *next  = FIRSTENT (const char, vb->txt_data);
     const char *after = AFTERENT (const char, vb->txt_data);
@@ -124,8 +163,8 @@ static void fastq_txtfile_count_lines (VBlockP vb)
 // PIZ: if --interleave write the VBs - interleaving their lines
 void fastq_txtfile_write_one_vblock_interleave (VBlockP vb1_, VBlockP vb2_)
 {
-    VBlockFAST *vb1 = (VBlockFAST *)vb1_;
-    VBlockFAST *vb2 = (VBlockFAST *)vb2_;
+    VBlockFASTQ *vb1 = (VBlockFASTQ *)vb1_;
+    VBlockFASTQ *vb2 = (VBlockFASTQ *)vb2_;
 
     ASSERTE (vb1->lines.len == vb2->lines.len, "in vb1=%u vb2=%u expecting vb1->lines.len=%"PRIu64" == vb2->lines.len=%"PRIu64,
              vb1->vblock_i, vb2->vblock_i, vb1->lines.len, vb2->lines.len);
@@ -156,7 +195,7 @@ void fastq_zip_read_one_vb (VBlockP vb)
 
 // case of --optimize-DESC: generate the prefix of the read name from the txt file name
 // eg. "../../fqs/sample.1.fq.gz" -> "@sample-1:"
-static void fastq_get_optimized_desc_read_name (VBlockFAST *vb)
+static void fastq_get_optimized_desc_read_name (VBlockFASTQ *vb)
 {
     vb->optimized_desc = MALLOC (strlen (txt_file->basename) + 30); // leave room for the line number to follow
     vb->optimized_desc[0] = '@';
@@ -185,7 +224,7 @@ bool fastq_zip_dts_flag (void)
 }
 
 // called by Compute thread at the beginning of this VB
-void fastq_seg_initialize (VBlockFAST *vb)
+void fastq_seg_initialize (VBlockFASTQ *vb)
 {
     START_TIMER;
 
@@ -259,7 +298,7 @@ void fastq_seg_finalize (VBlockP vb)
 // returns true if successful, false if there isn't a vb with vb_i in the previous file
 bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_t last_vb_i_of_pair_1)
 {
-    VBlockFAST *vb = (VBlockFAST *)vb_;
+    VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint64_t save_offset = file_tell (z_file);
     uint64_t save_disk_so_far = z_file->disk_so_far;
 
@@ -301,7 +340,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
 // I/O thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
 bool fastq_piz_read_one_vb (VBlockP vb_, ConstSectionListEntryP sl)
 {
-    VBlockFAST *vb = (VBlockFAST *)vb_;
+    VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     bool i_am_pair_2 = z_file->z_flags.dts_paired && (vb->component_i % 2);
 
     uint32_t prev_file_first_vb_i, prev_file_last_vb_i;
@@ -316,7 +355,7 @@ bool fastq_piz_read_one_vb (VBlockP vb_, ConstSectionListEntryP sl)
         }
 
         // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
-        if (!fast_piz_test_grep (vb)) return false; // also updates vb->grep_stages
+        if (!piz_test_grep (vb_)) return false; // also updates vb->grep_stages
     }
 
     // in case of this is a paired fastq file, get all the pair_1 data not already fetched for the grep above
@@ -334,15 +373,15 @@ bool fastq_piz_read_one_vb (VBlockP vb_, ConstSectionListEntryP sl)
 
 uint32_t fastq_get_pair_vb_i (VBlockP vb)
 {
-    return ((VBlockFAST *)vb)->pair_vb_i;
+    return ((VBlockFASTQ *)vb)->pair_vb_i;
 }
 
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
-const char *fastq_seg_txt_line (VBlockFAST *vb, const char *line_start, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
-    ZipDataLineFAST *dl = DATA_LINE (vb->line_i);
+    ZipDataLineFASTQ *dl = DATA_LINE (vb->line_i);
 
     const char *next_field, *field_start=line_start;
     unsigned field_len=0;
@@ -430,7 +469,7 @@ void fastq_zip_qual (VBlock *vb, uint32_t vb_line_i,
                                           char **line_qual_data, uint32_t *line_qual_len, // out
                                           uint32_t maximum_len) 
 {
-    ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
+    ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
     *line_qual_len  = MIN (dl->seq_len, maximum_len);
@@ -468,12 +507,12 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         
     // when grepping by I/O thread - skipping all sections but DESC
     if (flag.grep && (vb->grep_stages == GS_TEST) && 
-        dict_id.num != dict_id_fields[FASTQ_DESC] && !dict_id_is_fast_desc_sf (dict_id))
+        dict_id.num != dict_id_fields[FASTQ_DESC] && !dict_id_is_fastq_desc_sf (dict_id))
         return true;
 
     // if grepping, compute thread doesn't need to decompressed DESC again
     if (flag.grep && (vb->grep_stages == GS_UNCOMPRESS) && 
-        (dict_id.num == dict_id_fields[FASTQ_DESC] || dict_id_is_fast_desc_sf (dict_id)))
+        (dict_id.num == dict_id_fields[FASTQ_DESC] || dict_id_is_fastq_desc_sf (dict_id)))
         return true;
 
     return false;
@@ -527,7 +566,7 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
             if (  flag.genobwa && item == 4 && // 2nd EOL
                   !fastq_genobwa_is_seq_included (ENT (char, vb->txt_data, vb->txt_data.len - vb->seq_len), vb->seq_len)) {
                 if (flag.interleave) {
-                    BitArray *genobwa_show_line_bm = buf_get_bitarray (&((VBlockFAST*)vb)->genobwa_show_line);
+                    BitArray *genobwa_show_line_bm = buf_get_bitarray (&((VBlockFASTQ*)vb)->genobwa_show_line);
                     bit_array_clear (genobwa_show_line_bm, rep);
                 } else
                     vb->dont_show_curr_line = true; // container_reconstruct_do will rollback the line
@@ -544,7 +583,7 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
 // PIZ: SEQ reconstruction 
 void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len)
 {
-    VBlockFAST *vb = (VBlockFAST *)vb_;
+    VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
  
     int64_t seq_len_64;
     ASSERTE (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
