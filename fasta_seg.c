@@ -15,16 +15,14 @@
 #include "codec.h"
 #include "stats.h"
 
-// returns true if txt_data[txt_i] is the end of a FASTA read (= next char is > or end-of-file), false if not, 
+// returns true if txt_data[txt_i] is the end of a FASTA contig (= next char is '>' or end-of-file), false if not, 
 // and -1 if more data (lower first_i) is needed 
-static inline int fasta_is_end_of_line (VBlock *vb, uint32_t first_i,
-                                        int32_t txt_i) // index of a \n in txt_data
+static inline int fasta_is_end_of_config (VBlock *vb, uint32_t first_i,
+                                          int32_t txt_i) // index of a \n in txt_data
 {
     ARRAY (char, txt, vb->txt_data);
 
     // if we're not at the end of the data - we can just look at the next character
-    // if it is a @ then that @ is a new record EXCEPT if the previous character is + and then
-    // @ is actually a quality value... (we check two previous characters, as the previous one might be \r)
     if (txt_i < vb->txt_data.len-1)
         return txt[txt_i+1] == '>';
 
@@ -64,13 +62,14 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
         if (vb->txt_data.data[*i] == '\n') {
 
-            // when compressing FASTA with a reference - an "end of line" is one that the next character is >, or it is the end of the file
+            // when compressing FASTA with a reference - an "end of line" means "end of contig" - i.e. one that the next character is >, 
+            // or it is the end of the file
             // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), line cannot be too long - they 
             // must fit in a VB
             if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
-                switch (fasta_is_end_of_line (vb, first_i, *i)) {
-                    case true  : break;            // end of line
-                    case false : continue;         // not end of line
+                switch (fasta_is_end_of_config (vb, first_i, *i)) {
+                    case true  : break;            // end of contig
+                    case false : continue;         // not end of contig
                     default    : goto out_of_data; // need more data (lower first_i)
                 }
 
