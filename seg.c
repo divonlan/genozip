@@ -38,7 +38,7 @@ WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Contex
     NEXTENT (uint32_t, ctx->b250) = node_index;
     ctx->txt_len += add_bytes;
 
-    // a snip who is stored in its entirety in local, with just a LOOKUP in the dictionary, is counted as a singleton
+    // a snip that is stored in its entirety in local, with just a LOOKUP in the dictionary, is counted as a singleton
     if (snip_len==1 && (snip[0] == SNIP_LOOKUP))
         ctx->num_singletons++;
 

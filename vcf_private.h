@@ -43,9 +43,6 @@ typedef struct VBlockVCF {
     // dictionaries stuff 
     Buffer format_mapper_buf;      // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
 
-    uint32_t ht_per_line; 
-    Context *ht_matrix_ctx; 
-
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Context *hapmat_index_ctx; 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 

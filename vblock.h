@@ -115,6 +115,13 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* used by CODEC_ACGT (For SEQ) */ \
     bool has_non_agct;         /* ZIP only */ \
+    \
+    /* used by CODEC_PBWT, CODEC_HAPMAT and CODEC_GTSHARK */ \
+    uint32_t ht_per_line; \
+    Context *ht_matrix_ctx; \
+    \
+    /* used by CODEC_PBWT */ \
+    Context *runs_ctx, *fgrc_ctx;
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS

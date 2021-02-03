@@ -75,3 +75,4 @@ conda/README.md
 *.good
 *.gcache
 *.hcache
+unused-code

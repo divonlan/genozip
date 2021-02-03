@@ -11,7 +11,7 @@
 typedef struct {
     
     // genozip options that affect the compressed file
-    int gtshark, fast, make_reference, md5;
+    int gtshark, fast, make_reference, multifasta, md5;
     char *vblock;
     
     // ZIP: data modifying options

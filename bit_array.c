@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   bit_array.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 //   Copyright claimed on additions and modifications vs public domain.
 //
@@ -60,17 +60,6 @@ static const word_t reverse_table[256] =
   0x0F, 0x8F, 0x4F, 0xCF, 0x2F, 0xAF, 0x6F, 0xEF,
   0x1F, 0x9F, 0x5F, 0xDF, 0x3F, 0xBF, 0x7F, 0xFF,
 };
-
-//
-// Macros
-//
-
-// WORD_SIZE is the number of bits per word
-// sizeof gives size in bytes (8 bits per byte)
-#define WORD_SIZE 64
-// #define WORD_SIZE (sizeof(word_t) * 8)
-
-// POPCOUNT is number of bits set
 
 #ifndef __GNUC__
 
@@ -178,27 +167,6 @@ static inline void _mask_top_word(BitArray* bitarr)
     word_addr_t nwords = MAX(1, bitarr->nwords);
     word_offset_t bits_active = bits_in_top_word(bitarr->nbits);
     bitarr->words[nwords-1] &= bitmask64(bits_active);
-}
-
-//
-// Get and set words (internal use only -- no bounds checking)
-//
-
-static inline word_t _get_word(const BitArray* bitarr, bit_index_t start)
-{
-    word_addr_t word_index = bitset64_wrd(start);
-    word_offset_t word_offset = bitset64_idx(start);
-
-    word_t result = bitarr->words[word_index] >> word_offset;
-
-    word_offset_t bits_taken = WORD_SIZE - word_offset;
-
-    // word_offset is now the number of bits we need from the next word
-    // Check the next word has at least some bits
-    if(word_offset > 0 && start + bits_taken < bitarr->nbits)
-        result |= bitarr->words[word_index+1] << (WORD_SIZE - word_offset);
-
-    return result;
 }
 
 // Set 64 bits from a particular start position
@@ -544,34 +512,11 @@ void bit_array_clear_all (BitArray *bitarr)
 // Get a word at a time
 //
 
-uint64_t bit_array_get_word64(const BitArray* bitarr, bit_index_t start)
+uint64_t bit_array_get_wordn(const BitArray* bitarr, bit_index_t start, int n /* up to 64 */)
 {
-  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
-  return (uint64_t)_get_word(bitarr, start);
-}
-
-uint32_t bit_array_get_word32(const BitArray* bitarr, bit_index_t start)
-{
-  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
-  return (uint32_t)_get_word(bitarr, start);
-}
-
-uint16_t bit_array_get_word16(const BitArray* bitarr, bit_index_t start)
-{
-  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
-  return (uint16_t)_get_word(bitarr, start);
-}
-
-uint8_t bit_array_get_word8(const BitArray* bitarr, bit_index_t start)
-{
-  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
-  return (uint8_t)_get_word(bitarr, start);
-}
-
-uint64_t bit_array_get_wordn(const BitArray* bitarr, bit_index_t start, int n)
-{
-  ASSERTE (start < bitarr->nbits, "expecting start(%"PRIu64") < bitarr->nbits(%"PRIu64")", start, bitarr->nbits);
-  assert(n <= 64);
+  ASSERTE (start + n <= bitarr->nbits, "expecting start=%"PRIu64" + n=%d <= bitarr->nbits=%"PRIu64, 
+           start, n, bitarr->nbits);
+           
   return (uint64_t)(_get_word(bitarr, start) & bitmask64(n));
 }
 
@@ -1483,6 +1428,49 @@ void bit_array_truncate (BitArray* bitarr, bit_index_t new_num_of_bits)
 
   bitarr->nbits  = new_num_of_bits;
   bitarr->nwords = roundup_bits2words64 (new_num_of_bits);   
+}
+
+// create words - if the word is not aligned to the bitmap word boundaries, and hence spans 2 bitmap words, 
+// we take the MSb's from the left word and the LSb's from the right word, to create shift_1 (divon)
+static inline word_t _bit_array_combined_word (word_t word_a, word_t word_b, uint8_t shift)
+{
+    word_t first_word_msb  = word_a >> shift; // first word's MSb are the LSb of our combined word
+    word_t second_word_lsb = (word_b & bitmask64 (shift)) << (64-shift); // second word's LSb are the MSb of our combined word
+    return first_word_msb | second_word_lsb; 
+}
+
+// calculate the number of bits that are different between two bitarrays at arbitrary positions (divon)
+uint32_t bit_array_manhattan_distance (const BitArray *bitarr_1, bit_index_t index_1, 
+                                       const BitArray *bitarr_2, bit_index_t index_2, 
+                                       bit_index_t len)
+{
+    const word_t *words_1 = &bitarr_1->words[index_1 >> 6];
+    uint8_t shift_1 = index_1 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+
+    const word_t *words_2 = &bitarr_2->words[index_2 >> 6];
+    uint8_t shift_2 = index_2 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+
+    word_t word=0;
+    uint32_t nonmatches=0; 
+    uint32_t nwords = roundup_bits2words64 (len);
+
+    for (uint32_t i=0; i < nwords; i++) {
+
+        word_t word_1 = shift_1 ? _bit_array_combined_word (words_1[i], words_1[i+1], shift_1) : words_1[i];
+        word_t word_2 = shift_2 ? _bit_array_combined_word (words_2[i], words_2[i+1], shift_2) : words_2[i];
+        
+        word = word_1 ^ word_2; // xor the words - resulting in 1 in each position they differ and 0 where they're equal
+
+        // we count the number of different bits. note that identical nucleotides results in 2 equal bits while
+        // different nucleotides results in 0 or 1 equal bits (a 64 bit word contains 32 nucleotides x 2 bit each)
+        nonmatches += __builtin_popcountll (word);
+    }
+    
+    // remove non-matches due to the unused part of the last word
+    if (len % 64)
+        nonmatches -= __builtin_popcountll (word & ~bitmask64 (len % 64));
+
+    return nonmatches; // this is the "manhattan distance" between the two vectors - number of non-matches
 }
 
 //

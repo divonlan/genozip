@@ -133,7 +133,9 @@ extern void lzma_free (ISzAllocPtr alloc_stuff, void *addr);
 extern const char *lzma_errstr (SRes res);
 extern const char *lzma_status (ELzmaStatus status);
 
-// PBWWT stuff
-extern void codec_pbwt_comp_init (VBlockP vb);
+// PBWT stuff
+typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to 99, '*' for unused, '%', '-'
+extern void codec_pbwt_seg_init (VBlockP vb, ContextP runs_ctx, ContextP fgrc_ctx, DidIType st_did_i);
+extern void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows);
 
 #endif

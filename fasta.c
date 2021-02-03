@@ -21,8 +21,7 @@
 #define dict_id_fasta_desc_sf dict_id_type_1
 
 typedef struct {
-    uint32_t seq_data_start; // start within vb->txt_data
-    uint32_t seq_len;        // length within vb->txt_data
+    uint32_t seq_data_start, seq_len; // regular fasta and make-reference: start & length within vb->txt_data
 } ZipDataLineFASTA;
 
 // IMPORTANT: if changing fields in VBlockFASTA, also update vb_fast_release_vb 
@@ -32,23 +31,27 @@ typedef struct VBlockFASTA {
     bool contig_grepped_out;
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB is interpreted as a description, not a comment
     enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP & PIZ
+
+    uint32_t lines_this_contig;    // ZIP
+
+    // caching of seq line snips
+    uint32_t std_line_len;         // ZIP: determined by first non-first-line seq line in VB 
+    WordIndex std_line_node_index; // ZIP: node index for non-first lines, with same length as std_line_len
+
 } VBlockFASTA;
 
-#define DATA_LINE(i) ENT (ZipDataLineFASTA, vb->lines, i)
+#define DATA_LINE(i) ENT (ZipDataLineFASTA, vb->lines, (i))
 
 unsigned fasta_vb_size (void) { return sizeof (VBlockFASTA); }
 unsigned fasta_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTA); }
 
 void fasta_vb_release_vb (VBlockFASTA *vb)
 {
-    vb->last_line = 0;
-    vb->contig_grepped_out = false;    
-    vb->contexts[FASTA_SEQ].local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
+    memset ((char *)vb + sizeof (VBlock), 0, sizeof (VBlockFASTA) - sizeof (VBlock)); // zero all data unique to VBlockFASTA
+    vb->contexts[FASTA_NONREF].local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
 }
 
-//-------------------------
-// SEG stuff
-//-------------------------
+void fasta_vb_destroy_vb (VBlockFASTA *vb) {}
 
 // used by ref_make_create_range
 void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start, uint32_t *seq_len)
@@ -58,6 +61,10 @@ void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start
     *seq_data_start = DATA_LINE(line_i)->seq_data_start;
     *seq_len        = DATA_LINE(line_i)->seq_len;
 }
+
+//-------------------------
+// TXTFILE stuff
+//-------------------------
 
 // returns true if txt_data[txt_i] is the end of a FASTA contig (= next char is '>' or end-of-file), false if not, 
 // and -1 if more data (lower first_i) is needed 
@@ -106,10 +113,10 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
         if (vb->txt_data.data[*i] == '\n') {
 
-            // when compressing FASTA with a reference or --multifasta - an "end of line" means "end of contig" - i.e. one that the next character is >, 
-            // or it is the end of the file
-            // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), line cannot be too long - they 
-            // must fit in a VB
+            // when compressing FASTA with a reference or --multifasta - an "end of line" means "end of contig" - 
+            // i.e. one that the next character is >, or it is the end of the file
+            // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), 
+            // line cannot be too long - they must fit in a VB
             if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.multifasta) 
                 switch (fasta_is_end_of_config (vb, first_i, *i)) {
                     case true  : break;            // end of contig
@@ -125,6 +132,10 @@ out_of_data:
     return -1; // cannot find end-of-line in the data starting first_i
 }
 
+//-------------------------
+// SEG & ZIP stuff
+//-------------------------
+
 // callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
 void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i, 
                     char **line_seq_data, uint32_t *line_seq_len,  // out 
@@ -133,7 +144,7 @@ void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i,
     ZipDataLineFASTA *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_seq_len  = MIN (dl->seq_len, maximum_len);
+    *line_seq_len = MIN (dl->seq_len, maximum_len);
     
     if (line_seq_data) // if NULL, only length was requested
         *line_seq_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;
@@ -149,21 +160,28 @@ void fasta_seg_initialize (VBlockFASTA *vb)
     if (!flag.make_reference) {
 
         vb->contexts[FASTA_LINEMETA].no_stons = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
-        
-        codec_acgt_comp_init ((VBlockP)vb);
 
-        if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
-            vb->contexts[FASTA_SEQ].no_callback = true; // override callback if we are segmenting to a reference
+        // if this FASTA contains unrelated contigs, we're better off with ACGT        
+        if (!flag.multifasta)
+            codec_acgt_comp_init ((VBlockP)vb);
 
-            // in --stats, consolidate stats into FASTA_SEQ
-            stats_set_consolidation ((VBlockP)vb, FASTA_SEQ, 1, FASTA_SEQ_X);
+        // if the contigs in this FASTA are related, LZMA will do a better job (but it will consume a lot of memory)
+        else {
+            vb->contexts[FASTA_NONREF].lcodec = CODEC_LZMA;
+            vb->contexts[FASTA_NONREF].ltype  = LT_SEQUENCE;
         }
+  
+        if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
+            vb->contexts[FASTA_NONREF].no_callback = true; // override callback if we are segmenting to a reference
+
+        // in --stats, consolidate stats into FASTA_NONREF
+        stats_set_consolidation ((VBlockP)vb, FASTA_NONREF, 1, FASTA_NONREF_X);
     }
     else { // make-reference
         vb->contexts[FASTA_CONTIG].no_vb1_sort = true; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference
     }
 
-    vb->contexts[FASTA_CONTIG].no_stons = true; // needs b250 node_index for reference
+    vb->contexts[FASTA_CONTIG  ].no_stons = true; // needs b250 node_index for reference
     vb->contexts[FASTA_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 
     COPY_TIMER (seg_initialize);
@@ -221,7 +239,7 @@ static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_
 
 static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool *has_13)
 {
-            if (!flag.make_reference) {
+    if (!flag.make_reference) {
         seg_add_to_local_text ((VBlockP)vb, &vb->contexts[FASTA_COMMENT], line_start, line_len, line_len); 
 
         char special_snip[100]; unsigned special_snip_len;
@@ -237,27 +255,58 @@ static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint
     vb->last_line = FASTA_LINE_COMMENT;
 }
 
-static void fast_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool *has_13)
+static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_first_line_in_contig)
 {
-    DATA_LINE (vb->line_i)->seq_data_start = line_start - vb->txt_data.data;
-    DATA_LINE (vb->line_i)->seq_len        = line_len;
+    Context *lm_ctx  = &vb->contexts[FASTA_LINEMETA];
+    Context *seq_ctx = &vb->contexts[FASTA_NONREF];
 
-    Context *nonref_ctx = &vb->contexts[FASTA_SEQ];
-    nonref_ctx->local.len += line_len;
+    // cached node index
+    if (!is_first_line_in_contig && line_len == vb->std_line_len) {
+        buf_alloc_more (vb, &lm_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
+        NEXTENT (WordIndex, lm_ctx->b250) = vb->std_line_node_index;
+    }
 
-    if (!flag.make_reference) {
-
-        nonref_ctx->txt_len += line_len;
-
+    else { // not cached
         char special_snip[100]; unsigned special_snip_len;
-        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_fields[FASTA_SEQ], true, (int32_t)line_len, &special_snip[3], &special_snip_len);
+        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_fields[FASTA_NONREF], 
+                                true, (int32_t)line_len, &special_snip[3], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_SEQ;
-        special_snip[2] = '0' + (vb->last_line != FASTA_LINE_SEQ); // first seq line in this contig
-        seg_by_did_i (vb, special_snip, 3 + special_snip_len, FASTA_LINEMETA, 0);  // the payload of the special snip, is the OTHER_LOOKUP snip...
+        special_snip[2] = '0' + is_first_line_in_contig; 
+        WordIndex node_index = seg_by_ctx (vb, special_snip, 3 + special_snip_len, lm_ctx, 0);  // the payload of the special snip, is the OTHER_LOOKUP snip...
 
-        SEG_EOL (FASTA_EOL, true); 
+        // create cache if needed
+        if (!is_first_line_in_contig && !vb->std_line_len) {
+            vb->std_line_len = line_len;
+            vb->std_line_node_index = node_index;
+        }
+    }
+
+    seq_ctx->txt_len   += line_len;
+    seq_ctx->local.len += line_len;
+} 
+
+static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool is_last_line_in_contig, bool *has_13)
+{
+    vb->lines_this_contig++;
+
+    *DATA_LINE (vb->line_i) = (ZipDataLineFASTA){ .seq_data_start = line_start - vb->txt_data.data,
+                                                  .seq_len        = line_len };
+
+    if (flag.make_reference)
+        vb->contexts[FASTA_NONREF].local.len += line_len;
+
+    // after last line in contig, we know if its SIMPLE or PBWT and seg all lines in this contig into FASTA_LINEMETA
+    if (!flag.make_reference && is_last_line_in_contig) {
+
+        ZipDataLineFASTA *dl = DATA_LINE (vb->line_i - vb->lines_this_contig + 1);
+
+        for (int32_t i=0; i < vb->lines_this_contig; i++) {
+            fasta_seg_seq_line_do (vb, dl[i].seq_len, i==0);
+            SEG_EOL (FASTA_EOL, true); 
+        }        
+        vb->lines_this_contig = 0;
     }
 
     vb->last_line = FASTA_LINE_SEQ;
@@ -298,7 +347,9 @@ const char *fasta_seg_txt_line (VBlockFASTA *vb, const char *line_start, uint32_
 
     // case: sequence line
     else 
-        fast_seg_seq_line (vb, line_start, line_len, has_13);
+        fasta_seg_seq_line (vb, line_start, line_len, 
+                            !remaining_vb_txt_len || *next_field == '>' || *next_field == ';' || *next_field == '\n' || *next_field == '\r', // is_last_line_in_contig
+                            has_13);
 
     return next_field;
 }
@@ -322,7 +373,7 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
     if (flag.header_only_fast && 
-        (dict_id.num == dict_id_fields[FASTA_SEQ] || dict_id.num == dict_id_fields[FASTA_SEQ_X] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
+        (dict_id.num == dict_id_fields[FASTA_NONREF] || dict_id.num == dict_id_fields[FASTA_NONREF_X] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
         return true;
 
     // when grepping by I/O thread - skipping all sections but DESC
@@ -382,7 +433,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
     else 
         reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, true);    
 
-    // case: --sequencial, and this seq line is the line in the vb, and it continues in the next vb
+    // case: --sequencial, and this seq line is the last line in the vb, and it continues in the next vb
     if (  flag.sequential && // if we are asked for a sequential SEQ
           vb->line_i - vb->first_line == vb->lines.len-1 && // and this is the last line in this vb 
           !vb->dont_show_curr_line && 

@@ -30,13 +30,21 @@ void vcf_seg_initialize (VBlock *vb_)
     vb->contexts[VCF_INFO]  .no_stons   = true;
     vb->contexts[VCF_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 
-    ctx_get_ctx (vb, dict_id_FORMAT_GT)->no_stons = true; // we store the GT matrix in local, so cannot accomodate singletons
+    Context *gt_gtx = ctx_get_ctx (vb, dict_id_FORMAT_GT);
+    gt_gtx->no_stons = true; // we store the GT matrix in local, so cannot accomodate singletons
     vb->ht_matrix_ctx = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_nodes.len;
     buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf");
     buf_zero (&vb->format_mapper_buf);
+
+    // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
+    if (vcf_num_samples) {
+        Context *runs_ctx = ctx_get_ctx (vb, dict_id_PBWT_RUNS); // must be created before FGRC so it is emitted in the file in this order
+        Context *fgrc_ctx = ctx_get_ctx (vb, dict_id_PBWT_FGRC);
+        codec_pbwt_seg_init (vb_, runs_ctx, fgrc_ctx, gt_gtx->did_i);
+    }
 }             
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -65,9 +73,6 @@ void vcf_seg_finalize (VBlockP vb_)
     };
     
     container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
-
-    // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
-    if (vcf_num_samples) codec_pbwt_comp_init (vb_);
 }
 
 // optimize REF and ALT, for simple one-character REF/ALT (i.e. mostly a SNP or no-variant)
@@ -721,12 +726,12 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     }
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
-    uint8_t *ht_data = ENT (uint8_t, vb->ht_matrix_ctx->local, vb->line_i * vb->ht_per_line + vb->ploidy * sample_i);
+    Allele *ht_data = ENT (Allele, vb->ht_matrix_ctx->local, vb->line_i * vb->ht_per_line + vb->ploidy * sample_i);
 
     int64_t dosage=0; // sum of allele values
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
 
-        uint8_t ht = *(cell++); 
+        Allele ht = *(cell++); 
         cell_len--;
 
         ASSSEG (IS_DIGIT(ht) || ht == '.', cell,

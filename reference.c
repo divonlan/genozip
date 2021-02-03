@@ -828,7 +828,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
            !((*sl)->vblock_i == ra->vblock_i && (*sl)->section_type == SEC_REFERENCE)) 
         (*sl)++;
 
-    ASSERTE (*sl < AFTERENT (SectionListEntry, ref_file_section_list), "cannot find FASTA_SEQ of vb_i=%u in section list of reference file", ra->vblock_i);
+    ASSERTE (*sl < AFTERENT (SectionListEntry, ref_file_section_list), "cannot find FASTA_NONREF of vb_i=%u in section list of reference file", ra->vblock_i);
 
     static Buffer ref_seq_section = EMPTY_BUFFER;
 

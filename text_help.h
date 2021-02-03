@@ -101,6 +101,12 @@ static const char *help_genozip[] = {
     "                     Tip: if you're concerned about sharing the computer with other users, rather than using --threads to reduce the number of threads, a better option would be to use the command nice, e.g. 'nice genozip....'. This yields CPU to other users if needed, but still uses all the cores that are available",
 #endif
     "",
+    "FASTQ-specific options (ignored for other file types):",
+    "   -2 --pair         Compress pairs of paired-end FASTQ files, resulting in compression ratios better than compressing the files individually. When using this option, every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names, and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display interleaved, use genocat --interleaved, and to unbind the genozip file back to its original FASTQ files, use genounzip --unbind.",
+    "",
+    "FASTA-specific options (ignored for other file types):",
+    "   --multifasta      All contigs in the FASTA file are variations of a the same contig (i.e. they are somewhat similar to each other). Genozip uses this information to improve the compression.",
+    "",
     "Optimizing:",    
     "   -9 --optimize     Modify the file in ways that are likely insignificant for analytical purposes, but significantly improve compression and somewhat improve the speed of genocat --regions. --optimize activates all these optimizations, or they can be activated individually. These optimizations are:",    
     "",
@@ -130,9 +136,6 @@ static const char *help_genozip[] = {
     "   --optimize-Vf     - Variant_freq data: Number is rounded to 2 significant digits. Example: '0.006351' -> '0.0064'",
     "",
     "                     Note: due to these data modifications, files compressed with --optimize are NOT identical to the original file after decompression. For this reason, it is not possible to use this option in combination with --test or --md5",    
-    "",
-    "FASTQ-specific options (ignored for other file types):",
-    "   -2 --pair         Compress pairs of paired-end FASTQ files, resulting in compression ratios better than compressing the files individually. When using this option, every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names, and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display interleaved, use genocat --interleaved, and to unbind the genozip file back to its original FASTQ files, use genounzip --unbind.",
     "",
     "genozip is available for free for non-commercial use and some other limited use cases. See 'genozip -L for details'. Commercial use requires a commercial license",
 };

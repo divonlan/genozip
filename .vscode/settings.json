@@ -47,7 +47,8 @@
         "reference.h": "c",
         "*.tcc": "c",
         "optional": "c",
-        "system_error": "c"
+        "system_error": "c",
+        "thread": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

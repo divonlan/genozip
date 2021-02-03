@@ -250,7 +250,7 @@ void refhash_remove_cache (void)
 // thread entry for creating refhash cache
 static void *refhash_create_cache (void *unused_arg)
 {
-    buf_dump_to_file (refhash_get_cache_fn(), &refhash_buf, 1, true, false);
+    buf_dump_to_file (refhash_get_cache_fn(), &refhash_buf, 1, true, false, false);
 
     return NULL;
 }

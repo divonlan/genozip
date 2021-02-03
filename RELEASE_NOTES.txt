@@ -358,3 +358,4 @@ bug fixes, including major bug with mc:i optional field in SAM
 - SAM: better handling of optional fields SA, OA, XA
 - Better memory management in Linux and MacOS
 - Reduce core oversubscription from 1.4 to 1.2
+- Add --multifasta option for better compression of a FASTA where the contigs are quite similar to each other

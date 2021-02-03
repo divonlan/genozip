@@ -16,6 +16,8 @@
 // Macros 
 //------------------------------------------------------------------
 
+#define WORD_SIZE 64
+
 // trailing_zeros is number of least significant zeros
 // leading_zeros is number of most significant zeros
 #ifndef __GNUC__
@@ -265,6 +267,8 @@ extern void bit_array_set_region(BitArray* bitarr, bit_index_t start, bit_index_
 #define bit_array_clear_region(bitarr,start,len) bit_array_clear_region_do (bitarr, start, len, __FUNCTION__, __LINE__)
 extern void bit_array_clear_region_do (BitArray* bitarr, bit_index_t start, bit_index_t len, const char *func, unsigned code_line);
 
+extern uint32_t bit_array_manhattan_distance (const BitArray *bitarr1, bit_index_t index1, const BitArray *bitarr2, bit_index_t index2, bit_index_t len);
+
 //
 // Set, clear and toggle all bits at once
 //
@@ -276,15 +280,41 @@ extern void bit_array_set_all(BitArray* bitarr);
 extern void bit_array_clear_all(BitArray* bitarr);
 
 //
+// Get and set words (low level -- no bounds checking)
+//
+static inline word_t _get_word(const BitArray* bitarr, bit_index_t start)
+{
+    word_addr_t word_index = bitset64_wrd(start);
+    word_offset_t word_offset = bitset64_idx(start);
+
+    word_t result = bitarr->words[word_index] >> word_offset;
+
+    word_offset_t bits_taken = WORD_SIZE - word_offset;
+
+    // word_offset is now the number of bits we need from the next word
+    // Check the next word has at least some bits
+    if(word_offset > 0 && start + bits_taken < bitarr->nbits)
+        result |= bitarr->words[word_index+1] << (WORD_SIZE - word_offset);
+
+    return result;
+}
+
+//
 // Get / set a word of a given size
 //
 
-// First bit is in the least significant bit position
-// start index must be within the range of the bit array (0 <= x < length)
-extern uint64_t bit_array_get_word64(const BitArray* bitarr, bit_index_t start);
-extern uint32_t bit_array_get_word32(const BitArray* bitarr, bit_index_t start);
-extern uint16_t bit_array_get_word16(const BitArray* bitarr, bit_index_t start);
-extern uint8_t  bit_array_get_word8(const BitArray* bitarr, bit_index_t start);
+// bitarray is interpreted as an integer in Little Endian - i.e. first bit in the bitarray is LSb
+#define BIT_ARRAY_GET_WORD(width) \
+  static inline uint64_t bit_array_get_word ## width (const BitArray* bitarr, bit_index_t start) \
+  { \
+    ASSERTE (start + width <= bitarr->nbits, "expecting start(%"PRIu64") + " #width " <= bitarr->nbits(%"PRIu64")", start, bitarr->nbits); \
+    return (uint ## width ## _t)_get_word(bitarr, start); \
+  } 
+BIT_ARRAY_GET_WORD(64)
+BIT_ARRAY_GET_WORD(32)
+BIT_ARRAY_GET_WORD(16)
+BIT_ARRAY_GET_WORD(8)
+
 extern uint64_t bit_array_get_wordn(const BitArray* bitarr, bit_index_t start, int n);
 
 // Set 64 bits at once from a particular start position

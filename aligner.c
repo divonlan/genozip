@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   aligner.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -66,40 +66,6 @@ static inline bool aligner_get_word_from_seq (VBlock *vb, const char *seq, uint3
 
     COPY_TIMER (aligner_get_word_from_seq);
     return true;
-}
-
-static inline uint32_t aligner_get_match_len (VBlock *vb, const BitArray *seq_bits, PosType gpos, bool is_forward)
-{
-    START_TIMER;
-
-    bit_index_t bit_i = (is_forward ? gpos : genome_nbases-1 - (gpos + seq_bits->nbits/2 -1)) * 2;
-    const word_t *ref = &(is_forward ? genome : emoneg)->words[bit_i >> 6];
-    uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
-
-    word_t word=0;
-    uint32_t nonmatches=0; 
-    for (uint32_t i=0; i < (uint32_t)seq_bits->nwords; i++) {
-        // create ref_word - the word of the reference to be compared to seq[i] - if the word is not aligned
-        // to the bitmap word boundaries, and hence spans 2 bitmap words, we take the MSb's from the left word and the 
-        // LSb's from the right word, to create ref_word
-        word_t left_word_msb  = (ref[i] >> shift);
-        word_t right_word_lsb = ((ref[i+1] & bitmask64 (shift)) << (64-shift));
-        word_t ref_word       = left_word_msb | right_word_lsb;
-
-        // xor the seq_bits to the ref_bits - resulting in 1 in each position they differ and 0 where they're equal
-        word = seq_bits->words[i] ^ ref_word; 
-
-        // we count the number of different bits. note that identical nucleotides results in 2 equal bits while
-        // different nucleotides results in 0 or 1 equal bits (a 64 bit word contains 32 nucleotides x 2 bit each)
-        nonmatches += __builtin_popcountll (word);
-    }
-    
-    // remove non-matches due to the unused part of the last word
-    if (seq_bits->nbits % 64)
-        nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->nbits % 64));
-
-    COPY_TIMER (aligner_get_match_len);
-    return (uint32_t)seq_bits->nbits - nonmatches; // this is the number of matches
 }
 
 // converts a string sequence to a 2-bit bitmap
@@ -198,7 +164,11 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
 
 #       define UPDATE_BEST(fwd)  {               \
             if (gpos != best_gpos) {             \
-                uint32_t match_len = aligner_get_match_len (vb, &seq_bits, gpos, (fwd)); \
+                uint32_t match_len = (uint32_t)seq_bits.nbits - \
+                    bit_array_manhattan_distance ((fwd) ? genome : emoneg, \
+                                                  ((fwd) ? gpos : genome_nbases-1 - (gpos + seq_bits.nbits/2 -1)) * 2, \
+                                                  &seq_bits, 0, \
+                                                  seq_bits.nbits); \
                 if (match_len > longest_len) {   \
                     longest_len     = match_len; \
                     best_gpos       = gpos;      \

@@ -46,8 +46,9 @@ void vb_release_vb (VBlock *vb)
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->digest_so_far = DIGEST_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
-    vb->fragment_ctx = 0;
+    vb->fragment_ctx = vb->ht_matrix_ctx = vb->runs_ctx = vb->fgrc_ctx = NULL;
     vb->fragment_codec = 0;
+    vb->ht_per_line = 0;
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
 
