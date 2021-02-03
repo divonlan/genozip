@@ -78,6 +78,8 @@ typedef struct Context {
     struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
+
+    #define num_b250_words param // b250.param, when it contains b250 data, holds the number of words (len is the number of bytes)
     Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In zip_generate_b250_section, 
                                //      the "node indices" are converted into "word indices" - indices into the future 
                                //      context->word_list, in base-250. the number of words is moved from .len to .param. 
@@ -114,6 +116,7 @@ typedef struct Context {
     bool local_always;         // always create a local section in zfile, even if it is empty 
     bool dynamic_size_local;   // resize LT_UINT32 according to data during generate (also do BGEN)
     bool numeric_only;         // if both numeric_only and dynamic_size_local are set, 
+    bool is_stats_parent;      // other contexts have this context in st_did_i
 
     // hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)

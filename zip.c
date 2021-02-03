@@ -238,7 +238,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
     if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
 
     // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
-    ctx->b250.param = (int64_t)ctx->b250.len;
+    ctx->b250.num_b250_words = (int64_t)ctx->b250.len;
     ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
 
     WordIndex first_node_index = *ENT (WordIndex, ctx->b250, 0);
@@ -247,7 +247,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
     // we assign the b250 data back onto the same buffer. this words, because the b250 numerals are of length 1 or 4, 
     // therefore smaller than node_index
     WordIndex prev = WORD_INDEX_NONE; 
-    for (uint32_t word_i=0; word_i < (uint32_t)ctx->b250.param; word_i++) {
+    for (uint32_t word_i=0; word_i < (uint32_t)ctx->b250.num_b250_words; word_i++) {
         if (*ENT(WordIndex, ctx->b250, word_i) != first_node_index) // we found evidence that not all are the same
             all_the_same = false;
 

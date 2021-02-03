@@ -508,9 +508,10 @@ static Context *ctx_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
 
     mutex_initialize (zf_ctx->mutex);
 
-    zf_ctx->did_i    = z_file->num_contexts; 
-    zf_ctx->st_did_i = vb_ctx->st_did_i;
-    zf_ctx->dict_id  = vb_ctx->dict_id;
+    zf_ctx->did_i           = z_file->num_contexts; 
+    zf_ctx->st_did_i        = vb_ctx->st_did_i;
+    zf_ctx->is_stats_parent = vb_ctx->is_stats_parent;
+    zf_ctx->dict_id         = vb_ctx->dict_id;
     memcpy ((char*)zf_ctx->name, vb_ctx->name, sizeof(zf_ctx->name));
     // note: lcodec is NOT copied here, see comment in zip_assign_best_codec
 
@@ -565,6 +566,9 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
     if (vb_ctx->st_did_i != DID_I_NONE) 
         zf_ctx->st_did_i = vb_ctx->st_did_i; // we assign stats consolidation, but never revert back to DID_I_NONE
+
+    if (vb_ctx->is_stats_parent)
+        zf_ctx->is_stats_parent = true; // we set, but we never revert back
 
     // we assign VB a codec from zf_ctx, if not already assigned by Seg. See comment in zip_assign_best_codec
     if (!vb_ctx->lcodec) vb_ctx->lcodec = zf_ctx->lcodec;
@@ -881,8 +885,7 @@ void ctx_update_stats (VBlock *vb)
         Context *zf_ctx = ctx_get_zf_ctx (vb_ctx->dict_id);
         if (!zf_ctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
 
-        // b250.param contains the number of base250 words 
-        zf_ctx->b250.param += vb_ctx->b250.param; // thread safety: no issues, this only updated only by the I/O thread
+        zf_ctx->b250.num_b250_words += vb_ctx->b250.num_b250_words; // thread safety: no issues, this only updated only by the I/O thread
     }
 }
 
@@ -950,8 +953,8 @@ void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, fals
     char dump_fn[50];
     sprintf (dump_fn, "%s.%05u.%s", ctx->name, vb->vblock_i, local ? "local" : "b250");
     
-    bool success = local ? buf_dump_to_file (dump_fn, &ctx->local, lt_desc[ctx->ltype].width, false, true)
-                         : buf_dump_to_file (dump_fn, &ctx->b250, 1, false, true);
+    bool success = local ? buf_dump_to_file (dump_fn, &ctx->local, lt_desc[ctx->ltype].width, false, true, true)
+                         : buf_dump_to_file (dump_fn, &ctx->b250, 1, false, true, true);
 
     ASSERTW (success, "Warning: ctx_dump_binary failed to output file %s: %s", dump_fn, strerror (errno));
 }

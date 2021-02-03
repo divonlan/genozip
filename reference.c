@@ -596,7 +596,7 @@ bool ref_mmap_cached_reference (void)
 
 static void *ref_create_cache (void *unused_arg)
 {
-    buf_dump_to_file (ref_get_cache_fn(), &genome_cache, 1, true, false);
+    buf_dump_to_file (ref_get_cache_fn(), &genome_cache, 1, true, false, false);
     return NULL;
 }
 

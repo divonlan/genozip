@@ -131,13 +131,13 @@ void stats_set_consolidation (VBlock *vb, DidIType parent, unsigned num_deps, ..
     va_list args;
     va_start (args, num_deps);
 
-    DidIType deps[num_deps];
-    for (unsigned d=0; d < num_deps; d++) 
-        deps[d] = (DidIType)va_arg (args, int); 
+    for (unsigned d=0; d < num_deps; d++) {
+        DidIType dep = (DidIType)va_arg (args, int); 
+        vb->contexts[dep].st_did_i = parent;
+    }
 
-    for (unsigned d=0; d < num_deps; d++)
-        vb->contexts[deps[d]].st_did_i = parent;
-
+    vb->contexts[parent].is_stats_parent = true;
+    
     va_end (args);
 }
 
@@ -192,11 +192,11 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_r
                        
     if (txt_ratio > 1)
         bufprintf (evb, &z_file->stats_buf, 
-                "TOTAL vs %-6s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-                codec_name (codec),
-                str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
-                str_size (all_txt_size / txt_ratio).s, all_pc_of_txt, // total txt fize and ratio z vs txt
-                all_comp_ratio / txt_ratio);
+                   "TOTAL vs %-6s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                   codec_name (codec),
+                   str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
+                   str_size (all_txt_size / txt_ratio).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+                   all_comp_ratio / txt_ratio);
     
     bufprintf (evb, &z_file->stats_buf, 
                "%-15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
@@ -270,7 +270,8 @@ void stats_compress (void)
 
         ASSERTW (s->z_size >= 0, "Hmm... s->z_size=%"PRId64" is negative for %s", s->z_size, s->name);
 
-        if (ctx && !ctx->b250.param && !ctx->txt_len && !ctx->b250.len && !s->z_size) continue;
+        if (ctx && !ctx->b250.num_b250_words && !ctx->txt_len && !ctx->b250.len && !ctx->is_stats_parent && !s->z_size) 
+            continue;
 
         s->txt_size = ctx ? ctx->txt_len : (i==-SEC_TXT_HEADER ? txtfile_get_bound_headers_len() : 0);
         
@@ -288,10 +289,10 @@ void stats_compress (void)
                              s->my_did_i = ctx->did_i;
                              s->st_did_i = ctx->st_did_i;
         /* did_i          */ s->did_i = str_uint_commas ((uint64_t)ctx->did_i); 
-        /* #Words in file */ s->words = str_uint_commas (ctx->b250.param);
-        /* % dict         */ s->pc_dict              = !ctx->b250.param         ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->b250.param;
-        /* % singletons   */ s->pc_singletons        = !ctx->b250.param         ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->b250.param;
-        /* % failed singl.*/ s->pc_failed_singletons = !ctx->b250.param         ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->b250.param;
+        /* #Words in file */ s->words = str_uint_commas (ctx->b250.num_b250_words);
+        /* % dict         */ s->pc_dict              = !ctx->b250.num_b250_words         ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->b250.num_b250_words;
+        /* % singletons   */ s->pc_singletons        = !ctx->b250.num_b250_words         ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->b250.num_b250_words;
+        /* % failed singl.*/ s->pc_failed_singletons = !ctx->b250.num_b250_words         ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->b250.num_b250_words;
         /* % hash occupn. */ s->pc_hash_occupancy    = !ctx->global_hash_prime  ? 0 : 100.0 * (double)(ctx->nodes.len + ctx->ol_nodes.len) / (double)ctx->global_hash_prime;
         /* Hash           */ s->hash = str_uint_commas (ctx->global_hash_prime);
         /* uncomp dict    */ s->uncomp_dict = str_size (ctx->dict.len);
