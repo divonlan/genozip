@@ -45,7 +45,7 @@ const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char
 const char *txtfile_dump_vb (VBlockP vb, const char *base_name)
 {
     const char *dump_filename = txtfile_dump_filename (vb, base_name, "bad");
-    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false);
+    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, true);
 
     return dump_filename;
 }
@@ -171,7 +171,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
                 sprintf (dump_fn, "%s.vb-%u.bad-bgzf.bad-offset-0x%X", txt_name, vb->vblock_i, (uint32_t)vb->compressed.len);
                 Buffer dump_buffer = vb->compressed; // a copy
                 dump_buffer.len   += block_comp_len; // compressed size
-                buf_dump_to_file (dump_fn, &dump_buffer, 1, false, false);
+                buf_dump_to_file (dump_fn, &dump_buffer, 1, false, false, true);
 
                 ABORT ("Error in txtfile_read_block_bgzf: Invalid BGZF block in vb=%u block_comp_len=%u. Entire BGZF data of this vblock dumped to %s, bad block stats at offset 0x%X",
                        vb->vblock_i, block_comp_len, dump_fn, (uint32_t)vb->compressed.len);

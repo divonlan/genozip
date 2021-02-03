@@ -41,7 +41,9 @@ typedef struct Buffer {
 
 #define EMPTY_BUFFER {}
 
-#define ARRAY(element_type, name, buf) element_type *name = ((element_type *)((buf).data)) 
+#define ARRAY(element_type, name, buf) \
+    element_type *name = ((element_type *)((buf).data)); \
+    const uint64_t name##_len __attribute__((unused)) = (buf).len; // read-only copy of len 
 
 #define ENT(type, buf, index) ((type *)(&(buf).data[(index) * sizeof(type)]))
 #define FIRSTENT(type, buf)   ((type *)( (buf).data))
@@ -130,12 +132,14 @@ extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 
 #define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
 
-#define buf_add(buf, new_data, new_data_len) { uint32_t new_len = (new_data_len); /* copy in case caller uses ++ */ \
-                                               ASSERTE (buf_has_space(buf, new_len), \
-                                                        "Error in buf_add: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
-                                                        buf_desc (buf).s, (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
-                                               memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
-                                               (buf)->len += new_len; }
+#define buf_add(buf, new_data, new_data_len) { \
+    uint32_t new_len = (new_data_len); /* copy in case caller uses ++ */ \
+    ASSERTE (buf_has_space(buf, new_len), \
+            "Error in buf_add: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
+            buf_desc (buf).s, (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
+    memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
+    (buf)->len += new_len; \
+}
 
 extern void buf_add_string (VBlockP vb, Buffer *buf, const char *str);
 extern void buf_add_int (VBlockP vb, Buffer *buf, int64_t value);
@@ -172,7 +176,7 @@ extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uin
 #define MALLOC(size) buf_low_level_malloc (size, false, __FUNCTION__, __LINE__)
 #define CALLOC(size) buf_low_level_malloc (size, true,  __FUNCTION__, __LINE__)
 
-extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs);
+extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs, bool verbose);
 
 // bitmap stuff
 extern uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits);

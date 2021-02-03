@@ -777,7 +777,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
     uint64_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
-    buf_alloc (dst_vb, dst, num_entries * bytes_per_entry, 1, name ? name : src->name); // use realloc rather than malloc to allocate exact size
+    buf_alloc (dst_vb, dst, num_entries * bytes_per_entry, 1, dst_name ? dst_name : src->name); // use realloc rather than malloc to allocate exact size
 
     memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);
 
@@ -844,7 +844,8 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t code_line)
 {
     void *new = realloc (p, size);
-    ASSERTE (new, "Error in %s:%u: REALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
+    ASSERTE (new, "Out of memory in %s:%u: realloc failed (size=%"PRIu64" bytes). %s", func, code_line, (uint64_t)size, 
+             command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
     if (flag.debug_memory) 
         iprintf ("realloc(): old=%s new=%s size=%"PRIu64" %s:%u\n", 
@@ -856,7 +857,8 @@ void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t co
 void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t code_line)
 {
     void *new = malloc (size);
-    ASSERTE (new, "Error in %s:%u: MALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
+    ASSERTE (new, "Out of memory in %s:%u: malloc failed (size=%"PRIu64" bytes). %s", func, code_line, (uint64_t)size,
+             command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
     if (flag.debug_memory) 
         iprintf ("malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new).s, (uint64_t)size, func, code_line);
@@ -914,7 +916,8 @@ bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits)
 }
 
 // writes a buffer to a file, return true if successful
-bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs)
+bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, 
+                       bool no_dirs, bool verbose)
 {
     ASSERTE (buf->type == BUF_REGULAR, "buffer.type=%s while putting %s", buf_display_type (buf), filename);
 
@@ -928,7 +931,7 @@ bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_wor
         filename = update_filename;
     }
 
-    iprintf ("Dumping file %s\n", update_filename);
+    if (verbose) iprintf ("Dumping file %s\n", update_filename);
 
     if (including_control_region) {
         ASSERTE (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
