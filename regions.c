@@ -110,7 +110,7 @@ void regions_add (const char *region_str)
         char *one_rs = strtok_r (next_region_token, ",", &next_region_token);
         if (!one_rs) break;
 
-        buf_alloc (evb, &regions_buf, MAX (regions_buf.len + 1, 100), 2, "regions_buf");
+        buf_alloc_more (evb, &regions_buf, 1, 100, Region, 2, "regions_buf");
 
         char *after_colon;
         char *before_colon = strtok_r (one_rs, ":", &after_colon);

@@ -401,7 +401,7 @@ void flags_update (unsigned num_txt_files, const char **filenames)
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag.show_dict || flag.show_b250 || flag.show_headers || flag.show_threads || flag.show_bgzf || flag.show_mutex ||
-        flag.dict_id_show_one_b250.num || flag.show_one_dict || flag.show_reference || flag.show_digest ||
+        flag.dict_id_show_one_b250.num || flag.show_one_dict || flag.show_reference || flag.show_digest || flag.list_chroms ||
         flag.show_alleles || flag.show_vblocks || flag.show_codec || (flag.show_index && command==PIZ))
         flag.quiet=true; // don't show progress
 
