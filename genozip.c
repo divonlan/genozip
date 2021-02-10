@@ -541,6 +541,8 @@ static void main_list_dir(const char *dirname)
     int ret = chdir (dirname);
     ASSERTE (!ret, "failed to chdir(%s)", dirname);
 
+    flag.multiple_files = true;
+    
     while ((ent = readdir(dir))) 
         if (!file_is_dir (ent->d_name))  // don't go down subdirectories recursively
             main_genols (ent->d_name, false, dirname, true);
