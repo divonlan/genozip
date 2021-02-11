@@ -668,7 +668,7 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
             // In Windows, we observe that free() operations are expensive and significantly slow down execution - so we
             // just recycle the same memory
 /*#ifndef _WIN32
-            buf_low_level_free (buf->memory, func, code_line);
+            buf_low_level_free (buf->memory, func, code_line); <--- TO DO: this causes test.sh to fail on mac, find out why
             buf->memory = 0;
             buf->size   = 0;
 #endif*/
