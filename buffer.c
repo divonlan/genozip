@@ -830,6 +830,8 @@ void buf_print (Buffer *buf, bool add_newline)
 
 void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 {
+    if (!p) return; // nothing to do
+    
     if (flag.debug_memory) 
         iprintf ("Memory freed by free(): %s %s:%u\n", str_pointer (p).s, func, code_line);
 
