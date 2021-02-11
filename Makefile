@@ -292,7 +292,7 @@ delete-arch:
 	@rm -f arch.o
 
 windows/%.exe: CFLAGS += -DDISTRIBUTION=\"InstallForge\"
-windows/%.exe: delete-arch $(OBJS)
+windows/%.exe: delete-arch $(OBJS) %.exe
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 
