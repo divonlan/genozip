@@ -40,6 +40,8 @@ static Mutex overlay_mutex = {}; // used to thread-protect overlay counters (not
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
+static void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line);
+
 void buf_initialize()
 {
     mutex_initialize (overlay_mutex);
@@ -462,7 +464,7 @@ uint64_t buf_alloc_do (VBlock *vb,
                 // still within mutex to prevent another thread from overlaying while we're at it
                 char *old_memory = buf->memory;
                 __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
-                char *new_memory = (char *)buf_low_level_realloc (old_memory, new_size + control_size, func, code_line);
+                char *new_memory = (char *)buf_low_level_realloc (old_memory, new_size + control_size, name, func, code_line);
                 buf_init (buf, new_memory, new_size, old_size, func, code_line, name);
             }
             buf->overlayable = true; // renew this, as it was reset by buf_init
@@ -472,7 +474,7 @@ uint64_t buf_alloc_do (VBlock *vb,
         else { // non-overlayable buffer - regular realloc without mutex
             char *old_memory = buf->memory;
             __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
-            char *new_memory = (char *)buf_low_level_realloc (old_memory, new_size + control_size, func, code_line);
+            char *new_memory = (char *)buf_low_level_realloc (old_memory, new_size + control_size, name, func, code_line);
             buf_init (buf, new_memory, new_size, old_size, func, code_line, name);
         }
     }
@@ -843,15 +845,15 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
     free (p);
 }
 
-void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t code_line)
+static void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line)
 {
     void *new = realloc (p, size);
-    ASSERTE (new, "Out of memory in %s:%u: realloc failed (size=%"PRIu64" bytes). %s", func, code_line, (uint64_t)size, 
+    ASSERTE (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", func, code_line, name, (uint64_t)size, 
              command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
     if (flag.debug_memory) 
-        iprintf ("realloc(): old=%s new=%s size=%"PRIu64" %s:%u\n", 
-                 str_pointer (p).s, str_pointer (new).s, (uint64_t)size, func, code_line);
+        iprintf ("realloc(): old=%s new=%s name=%s size=%"PRIu64" %s:%u\n", 
+                 str_pointer (p).s, str_pointer (new).s, name, (uint64_t)size, func, code_line);
 
     return new;
 }
