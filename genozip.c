@@ -280,7 +280,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             num_lines_count += BGEN64 (header->num_lines);
             bufprintf (evb, &str_buf, item_format, "", str_uint_commas (BGEN64 (header->num_lines)).s, "", 
                        str_size (BGEN64 (header->txt_data_size)).s, 
-                       0, 0.0, digest_display_ex (header->digest_single, DD_MD5_IF_MD5), "", "",
+                       0, 0.0, digest_display_ex (header->digest_single, DD_MD5_IF_MD5).s, "", "",
                        -(int)FILENAME_WIDTH, TXT_FILENAME_LEN, header->txt_filename, "");
 
             buf_free (&evb->compressed);
