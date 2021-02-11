@@ -491,7 +491,7 @@ int32_t zfile_read_section_do (File *file,
              z_name, st_name(expected_sec_type), st_name(header->section_type), 
              sl ? str_uint_commas (sl->offset).s : "N/A", sl ? dis_dict_id (sl->dict_id).s : "N/A");
 
-    ASSERTE (compressed_offset == header_size || expected_sec_type == SEC_GENOZIP_HEADER || // we allow SEC_GENOZIP_HEADER of other sizes, for older versions
+    ASSERTE (compressed_offset == header_size || expected_sec_type == SEC_GENOZIP_HEADER, // we allow SEC_GENOZIP_HEADER of other sizes, for older versions
              "invalid header when reading %s - expecting compressed_offset to be %u but found %u. section_type=%s", 
              z_name, header_size, compressed_offset, st_name(header->section_type));
 
