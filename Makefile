@@ -65,7 +65,6 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h\
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h gff3.h phylip.h generic.h \
-			 codec_pbwt_alg.c \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/deflate.h zlib/trees.h	 \
