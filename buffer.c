@@ -579,10 +579,8 @@ bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, const char *fun
     if (!file_exists (filename)) return false; 
 
     // if this buffer was used by a previous VB as a regular buffer - we need to "destroy" it first
-    if (buf->type == BUF_REGULAR && buf->data == NULL && buf->memory) {
+    if (buf->type == BUF_REGULAR && buf->data == NULL && buf->memory) 
         buf_low_level_free (buf->memory, func, code_line);
-        buf->type = BUF_UNALLOCATED;
-    }
 
     uint64_t file_size = file_get_size (filename);
 
@@ -669,11 +667,11 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 
             // In Windows, we observe that free() operations are expensive and significantly slow down execution - so we
             // just recycle the same memory
-#ifndef _WIN32
+/*#ifndef _WIN32
             buf_low_level_free (buf->memory, func, code_line);
             buf->memory = 0;
             buf->size   = 0;
-#endif
+#endif*/
             // fall through (name (and in Windows also memory and size) are not changed, and buffer is still in buffer list)
 
         case BUF_UNALLOCATED: // reset len and param that may be used even without allocating the buffer
