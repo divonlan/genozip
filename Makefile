@@ -143,6 +143,7 @@ endif
 
 all   : CFLAGS += $(OPTFLAGS) 
 all   : $(OBJDIR) $(EXECUTABLES) LICENSE.non-commercial.txt
+	@chmod +x test.sh
 
 debug : CFLAGS += $(DEBUGFLAGS)
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
