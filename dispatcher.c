@@ -133,7 +133,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool throughout the execution
     vb_create_pool (MAX (2,global_max_threads+1 /* one for evb */));
 
-    buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf");
+    buf_alloc_more (evb, &dd->compute_threads_buf, 0, MAX (1, max_threads), Thread, 1, "compute_threads_buf");
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 

@@ -441,8 +441,7 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
         return NODE_INDEX_NONE;
     }
 
-    buf_alloc (evb, &zf_ctx->global_hash, sizeof (GlobalHashEnt) * (1 + zf_ctx->global_hash.len), 2, 
-               "z_file->contexts->global_hash");
+    buf_alloc_more (evb, &zf_ctx->global_hash, 1, 0, GlobalHashEnt, 2, "z_file->contexts->global_hash");
 
     g_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, hashent_i); // might have changed after realloc
 

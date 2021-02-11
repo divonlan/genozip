@@ -55,8 +55,7 @@ static inline CharIndex ctx_insert_to_dict (VBlock *vb_of_dict, Context *ctx, Di
     Buffer *dict = (type == DICT_ZF_SINGLETON) ? &ctx->ol_dict : &ctx->dict;
 
     static const char *buf_name[3] = { "contexts->dict", "zf_ctx->dict", "zf_ctx->ol_dict" };
-    buf_alloc (vb_of_dict, dict, MAX ((dict->len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 
-               CTX_GROWTH, buf_name[type]);
+    buf_alloc_more (vb_of_dict, dict, snip_len + 1, INITIAL_NUM_NODES * MIN (10, snip_len), char,CTX_GROWTH, buf_name[type]);
     
     if (type == DICT_ZF) buf_set_overlayable (dict); // during merge
     
@@ -283,8 +282,8 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
     ASSERTE (nodes->len <= MAX_WORDS_IN_CTX, 
              "too many words in ctx %s, max allowed number of words is is %u", zf_ctx->name, MAX_WORDS_IN_CTX);
 
-    buf_alloc (evb, nodes, sizeof (CtxNode) * MAX(INITIAL_NUM_NODES, nodes->len), CTX_GROWTH, 
-               is_singleton_in_global ? "zf_ctx->ol_nodes" : "zf_ctx->nodes");
+    buf_alloc_more (evb, nodes, 0, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, 
+                    is_singleton_in_global ? "zf_ctx->ol_nodes" : "zf_ctx->nodes");
 
     // set either singleton node or regular node with this snip
     *node = LASTENT (CtxNode, *nodes);
@@ -346,8 +345,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
     // this snip isn't in the hash table - its a new snip
     ASSERTE (vb_ctx->nodes.len < MAX_NODE_INDEX, "too many words in dictionary %s (MAX_NODE_INDEX=%u)", vb_ctx->name, MAX_NODE_INDEX);
 
-    buf_alloc (segging_vb, &vb_ctx->nodes, sizeof (CtxNode) * MAX(INITIAL_NUM_NODES, 1+vb_ctx->nodes.len), CTX_GROWTH, 
-               "contexts->nodes");
+    buf_alloc_more (segging_vb, &vb_ctx->nodes, 1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, "contexts->nodes");
 
     vb_ctx->nodes.len++; // new hash entry or extend linked list
 

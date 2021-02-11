@@ -57,8 +57,7 @@ static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlockVCF *vb)
 {
     START_TIMER; 
 
-    buf_alloc (vb, &vb->hapmat_helper_index_buf, vb->ht_per_line * sizeof(HaploTypeSortHelperIndex), 0, "hapmat_helper_index_buf");
-    buf_zero (&vb->hapmat_helper_index_buf);
+    buf_alloc_more_zero (vb, &vb->hapmat_helper_index_buf, 0, vb->ht_per_line, HaploTypeSortHelperIndex, 0, "hapmat_helper_index_buf");
     ARRAY (HaploTypeSortHelperIndex, helper_index, vb->hapmat_helper_index_buf);
 
     // build index array 

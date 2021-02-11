@@ -344,7 +344,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     Buffer *bl = &vb->buffer_list;
 
-    buf_alloc (vb, bl, MAX (INITIAL_MAX_MEM_NUM_BUFFERS, bl->len+1) * sizeof(Buffer *), 2, "buffer_list");
+    buf_alloc_more (vb, bl, 1, INITIAL_MAX_MEM_NUM_BUFFERS, Buffer *, 2, "buffer_list");
 
     ((Buffer **)bl->data)[bl->len++] = buf;
 

@@ -284,9 +284,9 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
 
             // first encounter with Container for this context - allocate the cache
             if (!cache_exists) {
-                buf_alloc (vb, &ctx->con_index, ctx->word_list.len * sizeof (uint32_t), 1, "context->con_index");
-                buf_alloc (vb, &ctx->con_len,   ctx->word_list.len * sizeof (uint16_t),  1, "context->con_len");
-                buf_zero (&ctx->con_len);
+                buf_alloc_more (vb, &ctx->con_index, 0, ctx->word_list.len, uint32_t, 1, "context->con_index");
+                buf_alloc_more (vb, &ctx->con_len,   0, ctx->word_list.len, uint16_t, 1, "context->con_len");
+                buf_zero (&ctx->con_len); // zero entire buffer, not just part added
             }
 
             // place Container followed by prefix in the cache
