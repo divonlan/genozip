@@ -190,11 +190,11 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     const char *head_format = "\n%-5.5s %11s %10s %10s %6s %s  %*s %s\n";
     const char *foot_format = "\nTotal:                  %10s %10s %5.*fX\n";
-    const char *item_format = "%-5.5s %11s %10s %10s %5.*fX  %s  %s%s%*s %s\n";
+    const char *item_format = "%-5.5s %11s %10s %10s %5.*fX  %s  %s%s%*.*s %s\n";
 
     const char *head_format_bytes = "\n%-5.5s %11s %15s %15s %6s  %*s\n";
     const char *foot_format_bytes = "\nTotal:            %15s %15s %5.*fX\n";
-    const char *item_format_bytes = "%-5.5s %11s %15s %15s %5.*fX  %s%s%*s\n";
+    const char *item_format_bytes = "%-5.5s %11s %15s %15s %5.*fX  %s%s%*.*s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
@@ -252,14 +252,14 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
         bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_uint_commas (num_lines).s, 
                    str_int_s (z_file->disk_size).s, str_int_s (txt_data_size).s, ratio < 100, ratio, 
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
-                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
+                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
                    z_filename)
     else 
         bufprintf (evb, &str_buf, item_format, dt_name (dt), str_uint_commas (num_lines).s,
                    str_size (z_file->disk_size).s, str_size (txt_data_size).s, ratio < 100, ratio, 
                    digest_display_ex (md5_hash_bound, DD_MD5_IF_MD5).s,
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
-                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
+                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
                    z_filename, created);
 
     total_compressed_len   += z_file->disk_size;
@@ -281,7 +281,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             bufprintf (evb, &str_buf, item_format, "", str_uint_commas (BGEN64 (header->num_lines)).s, "", 
                        str_size (BGEN64 (header->txt_data_size)).s, 
                        0, 0.0, digest_display_ex (header->digest_single, DD_MD5_IF_MD5), "", "",
-                       -(int)FILENAME_WIDTH, header->txt_filename, "");
+                       -(int)FILENAME_WIDTH, TXT_FILENAME_LEN, header->txt_filename, "");
 
             buf_free (&evb->compressed);
         }
@@ -542,7 +542,7 @@ static void main_list_dir(const char *dirname)
     ASSERTE (!ret, "failed to chdir(%s)", dirname);
 
     flag.multiple_files = true;
-    
+
     while ((ent = readdir(dir))) 
         if (!file_is_dir (ent->d_name))  // don't go down subdirectories recursively
             main_genols (ent->d_name, false, dirname, true);
