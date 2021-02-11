@@ -526,8 +526,8 @@ batch_genols()
 {
     batch_print_header
 
-    $genozip $arg1 test/basic.sam test/minimal.sam -fo $output -p abcd
-    $genols $output -p abcd
+    $genozip $arg1 test/basic.sam test/minimal.sam -fo $output -p abcd || exit 1
+    $genols $output -p abcd || exit 1
     rm -f $output
 }
 
