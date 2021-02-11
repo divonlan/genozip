@@ -155,11 +155,6 @@ static void inline codec_pbwt_calculate_permutation (PbwtState *state, const All
 // ZIP side
 // -------------
 
-static inline DictId codec_pbwt_allele_dict_id (Allele allele)
-{
-    return dict_id_make ((char[]){ '@', allele, '-','P','B','W','T' }, 7, DTYPE_VCF_FORMAT);
-}
-
 // called by vcf_seg_finalize to create all contexts - must be done before merge
 void codec_pbwt_seg_init (VBlock *vb, Context *runs_ctx, Context *fgrc_ctx, DidIType st_did_i)
 {
