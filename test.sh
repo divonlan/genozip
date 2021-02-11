@@ -522,6 +522,15 @@ batch_make_reference()
     cleanup
 }
 
+batch_genols()
+{
+    batch_print_header
+
+    $genozip $arg1 test/basic.sam test/minimal.sam -fo $output -p abcd
+    $genols $output -p abcd
+    rm -f $output
+}
+
 output=${OUTDIR}/output.genozip
 
 is_windows=`uname|grep -i mingw`
@@ -600,6 +609,7 @@ if (( $1 <= 14 )) ; then  batch_external_bcf           ; fi
 if (( $1 <= 15 )) ; then  batch_external_unzip         ; fi
 if (( $1 <= 16 )) ; then  batch_reference              ; fi
 if (( $1 <= 17 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 18 )) ; then  batch_genols                 ; fi
 
 printf "\nALL GOOD!\n"
 
