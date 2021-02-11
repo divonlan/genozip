@@ -17,7 +17,7 @@
 #define IS_VALID_URL_CHAR(c) (IS_LETTER(c) || IS_DIGIT(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
 #define FLIP_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
 
-typedef struct { char s[30]; } StrText;
+typedef struct { char s[50]; } StrText;
 
 extern StrText char_to_printable (char c);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
