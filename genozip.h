@@ -192,9 +192,9 @@ extern void main_exit (bool show_stack, bool is_error);
 #define exit_on_error(show_stack) main_exit (show_stack, true)
 #define exit_ok main_exit (false, false)
 
-#define iputc(c)                             fputc ((c), info_stream)
-#define iprintf(format, ...)                 do { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); } while(0)
-#define iprint0(str)                         do { fprintf (info_stream, (str)); fflush (info_stream); } while(0)
+#define iputc(c)                             fputc ((c), info_stream ? info_stream : stderr)
+#define iprintf(format, ...)                 do { fprintf (info_stream ? info_stream : stderr, (format), __VA_ARGS__); fflush (info_stream); } while(0)
+#define iprint0(str)                         do { fprintf (info_stream ? info_stream : stderr, (str)); fflush (info_stream); } while(0)
 
 // check for a user error
 #define ASSINP(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false); }} while(0)

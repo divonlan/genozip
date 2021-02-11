@@ -26,7 +26,7 @@ Flags flag = { .out_dt = DT_NONE,
                .bgzf   = FLAG_BGZF_BY_ZFILE };
 
 bool option_is_short[256] = { }; // indexed by character of short option.
-FILE *info_stream;               // either stdout or stderr - where non-error messages should go
+FILE *info_stream = 0;           // either stdout or stderr - where non-error messages should go
 
 static Buffer command_line = EMPTY_BUFFER;
 
