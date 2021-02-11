@@ -341,7 +341,7 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
         for (unsigned i=0; i < ctx->local.len; i++)
             data[i] = BGEN32 (data[i]);
             
-        return;
+        goto done;
     }
 
     uint32_t rows = ctx->local.len / cols;
@@ -364,6 +364,7 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
     vb->compressed.len = ctx->local.len;
     buf_copy (vb, &ctx->local, &vb->compressed, lt_desc[ctx->ltype].width, 0, 0, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
 
+done:
     buf_free (&vb->compressed);
 }
 
