@@ -315,8 +315,8 @@ static void codec_pbwt_decode_init_ht_matrix (VBlock *vb, const uint32_t *rc_dat
 
     uint64_t uncompressed_len = (uint64_t)rc_data[*rc_data_len] | ((uint64_t)rc_data[*rc_data_len + 1] << 32);
     
-    ASSERTE (vb->lines.len && uncompressed_len && vcf_header_get_num_samples(), 
-                "Expecting num_lines=%u, num_samples=%u and uncompressed_len=%"PRIu64" to be >0", (uint32_t)vb->lines.len, vcf_header_get_num_samples(), uncompressed_len);
+    ASSERTE (vb->lines.len && uncompressed_len, 
+             "Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", (uint32_t)vb->lines.len, uncompressed_len);
 
     buf_alloc (vb, &vb->ht_matrix_ctx->local, uncompressed_len, 1, "contexts->local");
 
@@ -325,7 +325,6 @@ static void codec_pbwt_decode_init_ht_matrix (VBlock *vb, const uint32_t *rc_dat
     vb->ht_matrix_ctx->ltype     = LT_CODEC; // reconstruction will go to codec_pbwt_reconstruct as defined in codec_args for CODEC_PBWT
 
     vb->ht_per_line = uncompressed_len / vb->lines.len; // note: the matrix always includes data for every line, even for lines without a GT field (it would be '*')
-    //vb->ploidy      = vb->ht_per_line / vcf_header_get_num_samples();
 }
 
 #define next param // decode use param as "next";
