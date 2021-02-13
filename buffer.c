@@ -663,7 +663,7 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
                 mutex_unlock (overlay_mutex);            
             }
 
-#ifndef _WIN32
+#ifdef __linux__
             // In Windows, we observe that free() operations are expensive and significantly slow down execution - so we
             // just recycle the same memory
             if (!buf->overlayable) {
