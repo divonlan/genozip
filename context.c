@@ -854,7 +854,7 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
             next += node->snip_len + 1;
         }
 
-        buf_free (&sorter);
+        buf_destroy (&sorter); // destroy and not free as it is first allocated by vb=0 and then again vb=1
         buf_destroy (&old_dict);
     }
 }

@@ -87,15 +87,15 @@ static void show_runs (const PbwtState *state)
 
 static PbwtState codec_pbwt_initialize_state (VBlockP vb, Buffer *runs, Buffer *fgrc)
 {
-    buf_alloc (vb, &vb->codec_bufs[0], vb->ht_per_line * 2 * sizeof (uint32_t), 1, "codec_bufs");
+    buf_alloc_more (vb, &vb->codec_bufs[0], 0, vb->ht_per_line * 2, PermEnt, 1, "codec_bufs");
     buf_zero (&vb->codec_bufs[0]); // re-zero every time
     ARRAY (PermEnt, state_data, vb->codec_bufs[0]);
 
     PbwtState state = {
         .runs = runs,
         .fgrc = fgrc,
-        .perm = &state_data[0],               // size: ht_per_line X uint32_t
-        .temp = &state_data[vb->ht_per_line], // size: ht_per_line X uint32_t
+        .perm = &state_data[0],               // size: ht_per_line X PermEnt
+        .temp = &state_data[vb->ht_per_line], // size: ht_per_line X PermEnt
     };
         
     return state;
@@ -106,8 +106,6 @@ static PbwtState codec_pbwt_initialize_state (VBlockP vb, Buffer *runs, Buffer *
 // (this is why we traverse the permuted line rather than the ht_matrix line)
 static void inline codec_pbwt_calculate_permutation (PbwtState *state, const Allele *line, uint32_t line_len, bool is_first_line)
 {
-    uint32_t temp_i=0;        
-
     // populate permutation index - by re-ordering according to previous line's alleles
     if (!is_first_line) {
 
@@ -128,6 +126,7 @@ static void inline codec_pbwt_calculate_permutation (PbwtState *state, const All
 
         // re-order permutation - first taking the indices of the '0' alleles, then '1', '2' etc - but keeping
         // the order within each allele as it was 
+        uint32_t temp_i=0;        
         for (Allele i=0; i < NUM_VALIDS; i++) {
             Allele bg = valids[i];
         
@@ -143,7 +142,6 @@ static void inline codec_pbwt_calculate_permutation (PbwtState *state, const All
     else // first line - initialize permutation to identity
         for (uint32_t ht_i=0; ht_i < line_len; ht_i++) 
             state->perm[ht_i].index = ht_i;
-
 
     // ZIP: populate alleles
     if (command == ZIP) 

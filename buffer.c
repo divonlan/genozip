@@ -341,7 +341,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
     if (buf->vb == vb) return; // already in buf_list - nothing to do
 
     ASSERTE (!buf->vb, "cannot add buffer %s to buf_list of vb_i=%u because it is already in buf_list of vb_i=%u.",
-            buf_desc(buf).s, vb->vblock_i, buf->vb->vblock_i);    
+             buf_desc(buf).s, vb->vblock_i, buf->vb->vblock_i);    
 
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     Buffer *bl = &vb->buffer_list;
@@ -657,21 +657,24 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 
                     buf_reset (buf);
                 }
-                // if no overlay exists then we just keep .memory and reuse it in future allocations
-
+                else  // case: no overlay exists
+                    buf->overlayable = false;
+                
                 mutex_unlock (overlay_mutex);            
             }
 
+#ifndef _WIN32
+            // In Windows, we observe that free() operations are expensive and significantly slow down execution - so we
+            // just recycle the same memory
+            if (!buf->overlayable) {
+                buf_low_level_free (buf->memory, func, code_line);
+                buf->memory = NULL;
+                buf->size   = 0;
+            }
+#endif
             buf->data        = NULL; 
             buf->overlayable = false;
 
-            // In Windows, we observe that free() operations are expensive and significantly slow down execution - so we
-            // just recycle the same memory
-/*#ifndef _WIN32
-            buf_low_level_free (buf->memory, func, code_line); <--- TO DO: this causes test.sh to fail on mac, find out why
-            buf->memory = 0;
-            buf->size   = 0;
-#endif*/
             // fall through (name (and in Windows also memory and size) are not changed, and buffer is still in buffer list)
 
         case BUF_UNALLOCATED: // reset len and param that may be used even without allocating the buffer
