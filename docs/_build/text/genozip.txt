@@ -1,0 +1,273 @@
+Compress genomics files. Genozip can compress any file, but is
+optimally designed to compress the following file types:
+   VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF and 23andMe
+
+Usage: genozip [options]... [files or urls]...
+
+One or more file names or URLs may be given, or if omitted, standard
+input is used instead
+
+Supported input file types, as recognized by their listed filename
+extension(s):
+   FASTA:   fasta, fa, faa, ffn, fnn, fna (possibly .gz .bgz .bz2 .xz)
+   FASTQ:   fastq, fq (possibly .gz .bgz .bz2 .xz) SAM:     sam
+   (possibly .gz .bgz .bz2 .xz) BAM:     bam CRAM:    cram VCF:
+   vcf (possibly .gz .bgz .bz2 .xz) BCF:     bcf (possibly .gz .bgz)
+   GVF:     gvf (possibly .gz .bgz .bz2 .xz) 23andMe: genome*Full*.txt
+   (possibly zip) Generic: any other file (possibly .gz .bgz .bz2 .xz)
+
+Note: for comressing .bcf, .cram or .xz files requires bcftools,
+samtools or xz, respectively, to be installed, as does
+   using --index
+
+Examples: genozip sample.bam
+   genozip sample.R1.fq.gz sample.R2.fq.gz --pair --reference
+   hg19.ref.genozip -o sample.genozip
+      genozip --optimize -password 12345
+      ftp://ftp.ncbi.nlm.nih.gov/file2.vcf.gz
+
+See also: genounzip genocat genols
+
+Actions - use at most one of these actions:
+   -d --decompress   Same as running genounzip. For more details, run:
+   genounzip --help
+
+   -l --list         Same as running genols. For more details, run:
+   genols --help
+
+   -h --help         <topic> Show this help page. Optional <topic> can
+   be:
+      dev   - list of developer options input - list of possible
+      arguments of --input
+
+   -L --license      Show the license terms and conditions for this
+   product
+
+   -V --version      Display version number
+
+Flags:
+   -i --input        <data-type>. data-type is one of the supported
+   input file types listed above, examples: bam vcf.gz
+      fq.xz. See "genozip --help=input" for full list of accepted file
+      types
+
+      This flag should be used when redirecting input data with a < or
+      >>|<<, or if the input file type cannot be determined by its
+      file name
+
+   -f --force        Force overwrite of the output file, or force
+   writing .genozip data to standard output
+
+   -^ --replace      Replace the source file with the result file,
+   rather than leaving it unchanged
+
+   -o --output       <output-filename>. This option can also be used
+   to bind multiple input files into a single genozip
+         file. The files can be later unbound with 'genounzip
+         --unbind'. To bind files, they must be of the same type (VCF,
+         SAM etc) and if they are VCF files, they must contain the
+         same samples. genozip takes advantage of similarities between
+         the input files so that the bound file is usually smaller
+         than the combined size of individually compressed files
+
+      --best
+
+      Best compression, but slower than --fast mode. This is the
+      default mode of genozip - this flag has no additional effect.
+
+   -F --fast         Fast compression, but lower compression ratio
+   than --best. Files compressed with this option also
+      uncompress faster. Compressing with this option also consumes
+      less memory.
+
+   -p --password     <password>. Password-protected - encrypted with
+   256-bit AES
+
+   -m --md5          Calculate the MD5 digest of the original textual
+   file (vcf, sam...) instead of Adler32. The MD5 is
+      also viewable with genols. Note: for compressed files, e.g.
+      myfile.vcf.gz or myfile.bam, the MD5 calculated is that of the
+      original, uncompressed textual file - myfile.vcf or myfile.sam
+      respectively.
+
+   -I --input-size   <file size in bytes> genozip configures its
+   internal data structures to optimize execution speed
+      based on the file size. When redirecting the input file with <
+      or >>|<<, genozip cannot determine its size, and this might
+      result in slower execution. This problem can be overcome by
+      using this flag to inform genozip of the file size
+
+   -q --quiet        Don't show the progress indicator or warnings
+
+   -Q --noisy        The --quiet is turned on by default when
+   outputting to the terminal. --noisy stops the suppression
+      of warnings
+
+   -t --test         After compressing normally, decompresss in memory
+   (i.e. without writing the decompressed file to
+      disk) - comparing the MD5 of the resulting textual (vcf, sam)
+      decompressed file to that of the original textual file. This
+      option also activates --md5
+
+   -@ --threads      <number>. Specify the maximum number of threads.
+   By default, genozip uses all the threads it needs
+      to maximize usage of all available cores
+
+   -B --vblock       <number between 1 and 2048>. Set the maximum size
+   of data (in megabytes) of the textual input (VCF
+      , SAM, FASTQ etc) data that a thread processes at any given
+      time. By default, Genozip sets this value dynamically based on
+      the characateristics of the file, and it is reported in --show-
+      stats. Smaller values will result in faster subsetting with
+      --regions and --grep, while larger values will result in better
+      compression. Note that memory consumption of both genozip and
+      genounzip is linear with the vblock value used for compression
+
+   -e --reference    <filename>.ref.genozip Use a reference file -
+   this is a FASTA file genozipped with the --make
+      -reference option. The same reference needs to be provided to
+      genounzip or genocat. While genozip is capabale of compressing
+      without a reference, in the following cases providing a
+      reference may result in better compression: 1. FASTQ files 2.
+      SAM/BAM files 3. VCF files with significant REFALT content (see
+      "% of zip" in --show-stats)
+
+   -E --REFERENCE    <filename>.ref.genozip Similar to --reference,
+   except genozip copies the reference (or part of it)
+      to the output file, so there is no need to specify --reference
+      in genounzip and genocat. Note on using with --password: the
+      copy of the reference file stored in the compressed file is
+      never encrypted
+
+   --make-reference
+
+   Compresss a FASTA file to be used as a reference in --reference or
+   --REFERENCE. Ignored for non -FASTA files
+
+   -w --show-stats   Show the internal structure of a genozip file and
+   the associated compression stats
+
+   -W --SHOW-STATS   Show more detailed stats
+
+   --register
+
+   Register (or re-register) a non-commericial license to use genozip
+
+FASTQ-specific options (ignored for other file types):
+   -2 --pair         Compress pairs of paired-end FASTQ files,
+   resulting in compression ratios better than compressing
+      the files individually. When using this option, every two
+      consecutive files on the file list should be paired-end FASTQ
+      files with an identical number of reads and consistent file
+      names, and --reference or --REFERENCE must be specified. The
+      resulting genozip file is a bound file. To display interleaved,
+      use genocat --interleaved, and to unbind the genozip file back
+      to its original FASTQ files, use genounzip --unbind.
+
+FASTA-specific options (ignored for other file types):
+   --multifasta
+
+   All contigs in the FASTA file are variations of a the same contig
+   (i.e. they are somewhat similar to each other). Genozip uses this
+   information to improve the compression.
+
+Optimizing:
+   -9 --optimize     Modify the file in ways that are likely
+   insignificant for analytical purposes, but significantly
+      improve compression and somewhat improve the speed of genocat
+      --regions. --optimize activates all these optimizations, or they
+      can be activated individually. These optimizations are:
+
+   VCF optimizations: --optimize-sort   - INFO subfields are sorted
+   alphabetically.               Example: AN=21;AC=3 -> AC=3;AN=21
+   --optimize-PL     - PL data: Phred values of over 60 are changed to
+   60.     Example: '0,18,270' -> '0,18,60' --optimize-GL     - GL
+   data: Numbers are rounded to 2 significant digits.   Example:
+   '-2.61618,-0.447624,-0.193264'
+
+      -> '-2.6,-0.45,-0.19'
+
+   --optimize-GP
+
+   * GP data: Numbers are rounded to 2 significant digits, as with GL.
+
+   --optimize-VQSLOD - VQSLOD data: Number is rounded to 2 significant
+   digits. Example: '-4.19494' -> '-4.2'
+
+   SAM optimizations: --optimize-QUAL   - The QUAL quality field and
+   the secondary U2 quality field (if it exists), are modified to
+   group
+
+      quality scores into a smaller number of bins:
+         Quality scores of 2-9 are changed to 6; 10-19->15 ; 20-24->22
+         ; 25-29->27 ..... 85-89->87 ; 90
+
+      -92->91 ; 93 unchanged
+         This assumes a standard Sanger format of Phred quality scores
+         0->93 encoded in ASCII 33->126 Note: this follows Illumina's
+         quality bins for values up to Phred 39, and extends with
+
+      additional similar bins for values of 40 and above common in
+      some non-Illumina technologies: https
+      ://sapac.illumina.com/content/dam/illumina-
+      marketing/documents/products/technotes/technote
+      _understanding_quality_scores.pdf
+
+         Example: 'LSVIHINKHK' -> 'IIIIFIIIFI'
+
+   --optimize-ZM
+
+   * ZM:B:s data: negative Ion Torrent flow signal values are changed
+     to zero, and positives are
+
+   rounded to the nearest 10.
+      Example: '-20,212,427' -> '0,210,430'
+
+   FASTQ optimizations: --optimize-DESC   - Replaces the description
+   line with '@filename:read_number'
+
+         Example: '@A00488:61:HMLGNDSXX:4:1101:1561:1000
+         2:N:0:CTGAAGCT+ATAGAGGC' -> '@sample.fq.gz:100'
+
+      (100 is the read sequential number within this fastq file)
+
+   --optimize-QUAL
+
+   * The quality data is optimized as described for SAM above
+
+   GVF optimizations: --optimize-sort   - Attributes are sorted
+   alphabetically.                   Example: Notes=hi;ID=rs12 ->
+   ID=rs12
+
+      ;Notes=hi
+
+   --optimize-Vf
+
+   * Variant_freq data: Number is rounded to 2 significant digits.
+     Example: '0.006351' -> '0.0064'
+
+   Note: due to these data modifications, files compressed with
+   --optimize are NOT identical to the original file after
+   decompression. For this reason, it is not possible to use this
+   option in combination with --test or --md5
+
+genozip is available for free for non-commercial use and some other
+limited use cases. See 'genozip -L for details'.
+   Commercial use requires a commercial license
+
+Citing: Lan, D., et al. Bioinformatics, Volume 36, Issue 13, July
+2020, Pages 4091-4092
+
+Bug reports and feature requests: bugs@genozip.com Commercial license
+inquiries: sales@genozip.com Requests for support for compression of
+additional public or proprietary genomic file formats:
+sales@genozip.com
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-
+INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR ANYONE
+DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER
+LIABILITY, WHETHER IN CONTRACT , TORT OR OTHERWISE, ARISING FROM, OUT
+OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

@@ -51,4 +51,5 @@
         "thread": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
+    "restructuredtext.confPath": "${workspaceFolder}\\docs",
 }

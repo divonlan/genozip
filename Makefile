@@ -199,9 +199,18 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
-LICENSE.non-commercial.txt: text_license.h
+LICENSE.non-commercial.txt: genozip$(EXE)
 	@echo Generating $@
 	@./genozip$(EXE) --license > $@
+
+SPHINX = /home/divon/miniconda3/bin/sphinx-build
+DOCS = docs/genozip.rst docs/index.rst docs/license.rst
+
+docs/_build/html/.buildinfo: LICENSE.non-commercial.txt $(DOCS)
+	@echo Building HTML docs
+	@wsl $(SPHINX) -M html docs docs/_build $(SPHINXOPTS) $(O)
+
+docs: docs/_build/html/.buildinfo
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
@@ -306,7 +315,7 @@ windows/readme.txt: $(EXECUTABLES)
 	@printf '%.s-' {1..120}   >> $@
 	@./genocat$(EXE)   --help >> $@
 
-windows/LICENSE.for-installer.txt: text_license.h
+windows/LICENSE.for-installer.txt: genozip$(EXE)
 	@echo Generating $@
 	@./genozip$(EXE) --license --force > $@
 
@@ -343,7 +352,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@touch $@
 
 distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
-distribution: conda/.conda-timestamp windows/genozip-installer.exe mac/.remote_mac_timestamp
+distribution: docs conda/.conda-timestamp windows/genozip-installer.exe # mac/.remote_mac_timestamp
 	
 endif # Windows
 
@@ -437,5 +446,5 @@ clean: clean-test.sh-files
 	@rm -f *.good *.bad *.local *.b250 test/*.good test/*.bad test/*.local test/*.b250
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp delete-arch
+.PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp delete-arch docs
 

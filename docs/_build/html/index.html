@@ -1,0 +1,155 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to Genozip &#8212; Genozip 11.0 documentation</title>
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="genozip" href="genozip.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="welcome-to-genozip">
+<h1>Welcome to Genozip<a class="headerlink" href="#welcome-to-genozip" title="Permalink to this headline">¶</a></h1>
+<div class="toctree-wrapper compound">
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="genozip.html">genozip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+</div>
+<p>Genozip is a universal compressor for genomic files - it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, Phylip and 23andMe files, but it can also compress any other file (including non-genomic files).</p>
+<p>It can even compress files that are already compressed with .gz .bz2 .xz (for full list of supported file types see <code class="docutils literal notranslate"><span class="pre">genozip</span> <span class="pre">--help=input</span></code>).</p>
+<p>The compression ratio one can expect to see depends on the data being compressed - it is typically about a 1.5-3X ratio when compressing .bam, 2X-5X for .fastq.gz files (i.e. compressing already-compressed files), and up to 200X when compressing an uncompressed high-sample-count .vcf file with only GT data or a Multi-FASTA file with similar contigs.</p>
+<p>The compression is lossless - the decompressed file is 100% identical to the original file (except when using the <code class="docutils literal notranslate"><span class="pre">--optimize</span></code> option).</p>
+<p>While Genozip was designed primarily to allow cost-effective storage and fast transmission of genomic files, it also includes extensive options that allow direct use of genozip-compressed files in analytical pipelines.</p>
+<p>Genozip consists of four command line tools:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><a class="reference internal" href="genozip.html"><span class="doc">genozip</span></a> compresses files</p></li>
+<li><p><span class="xref std std-doc">genounzip</span> decompresses files</p></li>
+<li><dl class="simple">
+<dt><span class="xref std std-doc">genocat</span> is the workhorse for using genozip in analytical pipelines:</dt><dd><ul>
+<li><p>Display the contents of a compressed file - possibly piping it into a downstream tool</p></li>
+<li><p>Subset a compressed file - show a specific part of its contents</p></li>
+<li><p>Translate a compressed file to another format (eg BAM to FASTQ or Multi-FASTA to Phylip)</p></li>
+<li><p>Show various statistics and metadata related to a compressed file</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p><span class="xref std std-doc">genols</span> is similar to ls, just for compressed files</p></li>
+</ul>
+</div></blockquote>
+</div>
+<div class="section" id="installing">
+<h1>Installing<a class="headerlink" href="#installing" title="Permalink to this headline">¶</a></h1>
+</div>
+<div class="section" id="citing">
+<h1>Citing<a class="headerlink" href="#citing" title="Permalink to this headline">¶</a></h1>
+<p>Lan, D., et al. Bioinformatics, 36, 4091–4092, July 2020, <a class="reference external" href="https://doi.org/10.1093/bioinformatics/btaa290">https://doi.org/10.1093/bioinformatics/btaa290</a></p>
+</div>
+<div class="section" id="contact">
+<h1>Contact<a class="headerlink" href="#contact" title="Permalink to this headline">¶</a></h1>
+<p>Bug reports and feature requests: <a class="reference external" href="mailto:bugs&#37;&#52;&#48;genozip&#46;com">bugs<span>&#64;</span>genozip<span>&#46;</span>com</a></p>
+<p>Commercial license inquiries: <a class="reference external" href="mailto:sales&#37;&#52;&#48;genozip&#46;com">sales<span>&#64;</span>genozip<span>&#46;</span>com</a></p>
+<p>Requests for support for compression of additional public or proprietary genomic file formats: <a class="reference external" href="mailto:sales&#37;&#52;&#48;genozip&#46;com">sales<span>&#64;</span>genozip<span>&#46;</span>com</a></p>
+</div>
+<div class="section" id="license">
+<h1>License<a class="headerlink" href="#license" title="Permalink to this headline">¶</a></h1>
+<p>Genozip’s <a class="reference internal" href="license.html"><span class="doc">Non-Commerical License</span></a> allows for free non-commerical use, subject to certain conditions. For a commercial license, please contact <a class="reference external" href="mailto:sales&#37;&#52;&#48;genozip&#46;com">sales<span>&#64;</span>genozip<span>&#46;</span>com</a>.</p>
+<p>THIS SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="#">Genozip</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="genozip.html">genozip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="#">Documentation overview</a><ul>
+      <li>Next: <a href="genozip.html" title="next chapter">genozip</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Divon Lan.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

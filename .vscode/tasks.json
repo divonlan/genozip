@@ -106,13 +106,35 @@
             "presentation": {
                 "clear": true
             }
-        },        {
+        },        
+        {
             "type": "process",
             "label": "Make Linux Debug",
             "command": "c:\\Windows\\system32\\bash.exe",
             "args": [
                 "/home/divon/genozip/wsl-make.sh",
                 "debug"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Make Docs",
+            "command": "make",
+            "args": [
+                "docs"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"

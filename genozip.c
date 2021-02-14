@@ -128,6 +128,21 @@ static void main_print_help (bool explicit)
     if (flag.help && !strcmp (flag.help, "dev")) 
         str_print_text (help_genozip_developer, sizeof(help_genozip_developer) / sizeof(char*), 
                         "                          ",  "\n", 0);
+    else if (flag.help && !strcmp (flag.help, "genozip")) 
+        str_print_text (help_genozip, sizeof(help_genozip) / sizeof(char*), 
+                        "                          ",  "\n", 0);
+
+    else if (flag.help && !strcmp (flag.help, "genounzip")) 
+        str_print_text (help_genounzip, sizeof(help_genounzip) / sizeof(char*), 
+                        "                          ",  "\n", 0);
+
+    else if (flag.help && !strcmp (flag.help, "genols")) 
+        str_print_text (help_genols, sizeof(help_genols) / sizeof(char*), 
+                        "                          ",  "\n", 0);
+
+    else if (flag.help && !strcmp (flag.help, "genocat")) 
+        str_print_text (help_genocat, sizeof(help_genocat) / sizeof(char*), 
+                        "                          ",  "\n", 0);
 
     else if (flag.help && !strcmp (flag.help, "input")) 
         printf ("Supported file types for --input:\n%s\n", file_compressible_extensions (false));

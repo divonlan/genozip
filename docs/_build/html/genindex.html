@@ -1,0 +1,727 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Index &#8212; Genozip 11.0 documentation</title>
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="#" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+
+<h1 id="index">Index</h1>
+
+<div class="genindex-jumpbox">
+ <a href="#Symbols"><strong>Symbols</strong></a>
+ | <a href="#A"><strong>A</strong></a>
+ | <a href="#C"><strong>C</strong></a>
+ 
+</div>
+<h2 id="Symbols">Symbols</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    --best         Best compression but slower than --fast mode. This is the default mode of genozip - this flag has no additional effect.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-best">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --decompress  Same as running genounzip.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-d">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --fast    Fast compression but lower compression ratio than --best. Files compressed with this option also uncompress faster. Compressing with this option also consumes less memory.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-F">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --force        Force overwrite of the output file or force writing the compressed data to standard output.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-f">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --help[=topic]  Show this help page. Optional topic can be:
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-h">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --input data-type. data-type is one of the supported file extensions listed in the table above (eg bam vcf.gz fq.xz. See &#34;genozip --help=input&#34; for full list of accepted file types. This flag should be used when redirecting input data with a &lt; or | or if the input file type cannot be determined by its file name.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-i">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --input-size file-size-in-bytes.  genozip configures its internal data structures to optimize execution speed based on the file size. When redirecting the input file with &lt; or | genozip cannot determine its size and this might result in slower execution. This problem can be overcome by using this flag to inform genozip of the file size.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-I">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --license     Show the license terms and conditions for this product.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-L">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --list        Same as running genols.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-l">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --make-reference  Compresss a FASTA file to be used as a reference in --reference or --REFERENCE.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-make-reference">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --md5  Use MD5 (rather than the default Adler32) to calculate the digest of the original textual file. The MD5 digest is also viewable with genols. Note: for compressed files (e.g. myfile.vcf.gz or myfile.bam) the MD5 calculated is that of the original uncompressed textual file - myfile.vcf or myfile.sam respectively.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-m">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --multifasta  All contigs in the FASTA file are variations of a the same contig (i.e. they are somewhat similar to each other). genozip uses this information to improve the compression.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-x">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --noisy        The --quiet is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-Q">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimise  Modify the file in ways that are likely insignificant for analytical purposes but significantly improve compression and somewhat improve the speed of genocat --regions. This option activates all optimizations. Alternatively they can be activated individually as listed below.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-9">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-9">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-DESC   Replaces the description line with @filename:read_number.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-DESC">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-GL     GL data: Numbers are rounded to 2 significant digits.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-GL">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-GP     GP data: Numbers are rounded to 2 significant digits as with GL.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-GP">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-PL     PL data: Phred values of over 60 are changed to 60.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-PL">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-QUAL   The QUAL quality field and the secondary U2 quality field (if it exists) are modified to group quality scores into a smaller number of bins:
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-QUAL">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-QUAL   The quality data is optimized as described for SAM above.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-3">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-sort   Attributes are sorted alphabetically.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-4">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-sort   INFO subfields are sorted alphabetically.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-sort">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-Vf     Variant_freq data: Number is rounded to 2 significant digits.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-Vf">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-VQSLOD VQSLOD data: Number is rounded to 2 significant digits.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-VQSLOD">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --optimize-ZM     ZM:B:s data: negative Ion Torrent flow signal values are changed to zero
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-ZM">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --output output-filename. This option can also be used to bind multiple input files into a single ``genozip`` file. The files can be later unbound with ``genounzip --unbind``. To bind files they must be of the same type (e.g. VCF or SAM) and if they are VCF files they must contain the same samples. genozip takes advantage of similarities between the input files so that the bound file is usually smaller than the combined size of individually compressed files.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-o">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --pair         Compress pairs of paired-end FASTQ files resulting in compression ratios better than compressing the files individually. When using this option every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display it interleaved use genocat --interleaved. To unbind the genozip file back to its original FASTQ files use genounzip --unbind.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-2">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --password password.  Password-protected - encrypted with 256-bit AES.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-p">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --quiet        Don&#39;t show the progress indicator or warnings.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-q">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --reference filename.  Use a reference file (filename extension .ref.genozip) - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat. While genozip is capabale of compressing without a reference it can utilize a reference file to improve compression of FASTQ SAM/BAM and VCF files. The improvement for FASTQ files is substantial; for SAM/BAM it may be significant; for VCF if it is significant only if REFALT content is a significant percentage of the zip content (see &#34;% of zip&#34; in --show-stats)
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-e">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --REFERENCE filename. Similar to --reference except genozip copies the reference (or part of it) to the output file so there is no need to specify --reference in genounzip and genocat. Note on using with --password: the copy of the reference file stored in the compressed file is never encrypted.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-E">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --register        Register (or re-register) a non-commericial license to use genozip.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-register">command line option</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    --replace      Replace the source file with the result file rather than leaving it unchanged.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-0">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --SHOW-STATS   Show more detailed statistics.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-W">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-stats   Show the internal structure of a genozip file and the associated compression statistics.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-w">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --test         After compressing normally decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual decompressed file to that of the original textual file. This option also activates --md5.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-t">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --threads number.  Specify the maximum number of threads. By default genozip uses all the threads it needs to maximize usage of all available cores.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-1">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --vblock number.  Set the maximum size of data (between 1 and 2048 in megabytes) of the textual input data that a thread processes at any given time. By default genozip sets this value dynamically based on the characateristics of the file and it is reported in --show-stats. Smaller values will result in faster subsetting with genocat --regions and --grep. Larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-B">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --version     Display version number.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-V">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -2
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-2">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -9
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-9">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -@
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-1">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -^
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-0">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -B
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-B">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -d
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-d">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -E
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-E">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -e
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-e">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -F
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-F">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -f
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-f">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -h
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-h">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -I
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-I">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -i
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-i">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -L
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-L">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -l
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-l">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -m
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-m">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -o
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-o">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -p
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-p">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -Q
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-Q">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -q
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-q">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -t
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-t">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -V
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-V">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -W
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-W">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -w
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-w">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -x
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-x">command line option</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="A">A</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    and positives are rounded to the nearest 10.
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-optimize-ZM">command line option</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="C">C</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    command line option
+
+      <ul>
+        <li><a href="genozip.html#cmdoption-best">--best         Best compression but slower than --fast mode. This is the default mode of genozip - this flag has no additional effect.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-d">--decompress  Same as running genounzip.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-F">--fast    Fast compression but lower compression ratio than --best. Files compressed with this option also uncompress faster. Compressing with this option also consumes less memory.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-f">--force        Force overwrite of the output file or force writing the compressed data to standard output.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-h">--help[=topic]  Show this help page. Optional topic can be:</a>
+</li>
+        <li><a href="genozip.html#cmdoption-i">--input data-type. data-type is one of the supported file extensions listed in the table above (eg bam vcf.gz fq.xz. See &#34;genozip --help=input&#34; for full list of accepted file types. This flag should be used when redirecting input data with a &lt; or | or if the input file type cannot be determined by its file name.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-I">--input-size file-size-in-bytes.  genozip configures its internal data structures to optimize execution speed based on the file size. When redirecting the input file with &lt; or | genozip cannot determine its size and this might result in slower execution. This problem can be overcome by using this flag to inform genozip of the file size.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-L">--license     Show the license terms and conditions for this product.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-l">--list        Same as running genols.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-make-reference">--make-reference  Compresss a FASTA file to be used as a reference in --reference or --REFERENCE.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-m">--md5  Use MD5 (rather than the default Adler32) to calculate the digest of the original textual file. The MD5 digest is also viewable with genols. Note: for compressed files (e.g. myfile.vcf.gz or myfile.bam) the MD5 calculated is that of the original uncompressed textual file - myfile.vcf or myfile.sam respectively.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-x">--multifasta  All contigs in the FASTA file are variations of a the same contig (i.e. they are somewhat similar to each other). genozip uses this information to improve the compression.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-Q">--noisy        The --quiet is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-9">--optimise  Modify the file in ways that are likely insignificant for analytical purposes but significantly improve compression and somewhat improve the speed of genocat --regions. This option activates all optimizations. Alternatively they can be activated individually as listed below.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-9">--optimize</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-DESC">--optimize-DESC   Replaces the description line with @filename:read_number.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-GL">--optimize-GL     GL data: Numbers are rounded to 2 significant digits.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-GP">--optimize-GP     GP data: Numbers are rounded to 2 significant digits as with GL.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-PL">--optimize-PL     PL data: Phred values of over 60 are changed to 60.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-QUAL">--optimize-QUAL   The QUAL quality field and the secondary U2 quality field (if it exists) are modified to group quality scores into a smaller number of bins:</a>
+</li>
+        <li><a href="genozip.html#cmdoption-3">--optimize-QUAL   The quality data is optimized as described for SAM above.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-4">--optimize-sort   Attributes are sorted alphabetically.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-sort">--optimize-sort   INFO subfields are sorted alphabetically.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-Vf">--optimize-Vf     Variant_freq data: Number is rounded to 2 significant digits.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-VQSLOD">--optimize-VQSLOD VQSLOD data: Number is rounded to 2 significant digits.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-ZM">--optimize-ZM     ZM:B:s data: negative Ion Torrent flow signal values are changed to zero</a>
+</li>
+        <li><a href="genozip.html#cmdoption-o">--output output-filename. This option can also be used to bind multiple input files into a single ``genozip`` file. The files can be later unbound with ``genounzip --unbind``. To bind files they must be of the same type (e.g. VCF or SAM) and if they are VCF files they must contain the same samples. genozip takes advantage of similarities between the input files so that the bound file is usually smaller than the combined size of individually compressed files.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-2">--pair         Compress pairs of paired-end FASTQ files resulting in compression ratios better than compressing the files individually. When using this option every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display it interleaved use genocat --interleaved. To unbind the genozip file back to its original FASTQ files use genounzip --unbind.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-p">--password password.  Password-protected - encrypted with 256-bit AES.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-q">--quiet        Don&#39;t show the progress indicator or warnings.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-e">--reference filename.  Use a reference file (filename extension .ref.genozip) - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat. While genozip is capabale of compressing without a reference it can utilize a reference file to improve compression of FASTQ SAM/BAM and VCF files. The improvement for FASTQ files is substantial; for SAM/BAM it may be significant; for VCF if it is significant only if REFALT content is a significant percentage of the zip content (see &#34;% of zip&#34; in --show-stats)</a>
+</li>
+        <li><a href="genozip.html#cmdoption-E">--REFERENCE filename. Similar to --reference except genozip copies the reference (or part of it) to the output file so there is no need to specify --reference in genounzip and genocat. Note on using with --password: the copy of the reference file stored in the compressed file is never encrypted.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-register">--register        Register (or re-register) a non-commericial license to use genozip.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-0">--replace      Replace the source file with the result file rather than leaving it unchanged.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-W">--SHOW-STATS   Show more detailed statistics.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-w">--show-stats   Show the internal structure of a genozip file and the associated compression statistics.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-t">--test         After compressing normally decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual decompressed file to that of the original textual file. This option also activates --md5.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-1">--threads number.  Specify the maximum number of threads. By default genozip uses all the threads it needs to maximize usage of all available cores.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-B">--vblock number.  Set the maximum size of data (between 1 and 2048 in megabytes) of the textual input data that a thread processes at any given time. By default genozip sets this value dynamically based on the characateristics of the file and it is reported in --show-stats. Smaller values will result in faster subsetting with genocat --regions and --grep. Larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-V">--version     Display version number.</a>
+</li>
+        <li><a href="genozip.html#cmdoption-2">-2</a>
+</li>
+        <li><a href="genozip.html#cmdoption-9">-9</a>
+</li>
+        <li><a href="genozip.html#cmdoption-1">-@</a>
+</li>
+        <li><a href="genozip.html#cmdoption-0">-^</a>
+</li>
+        <li><a href="genozip.html#cmdoption-B">-B</a>
+</li>
+        <li><a href="genozip.html#cmdoption-d">-d</a>
+</li>
+        <li><a href="genozip.html#cmdoption-e">-e</a>
+</li>
+        <li><a href="genozip.html#cmdoption-E">-E</a>
+</li>
+        <li><a href="genozip.html#cmdoption-f">-f</a>
+</li>
+        <li><a href="genozip.html#cmdoption-F">-F</a>
+</li>
+        <li><a href="genozip.html#cmdoption-h">-h</a>
+</li>
+        <li><a href="genozip.html#cmdoption-i">-i</a>
+</li>
+        <li><a href="genozip.html#cmdoption-I">-I</a>
+</li>
+        <li><a href="genozip.html#cmdoption-l">-l</a>
+</li>
+        <li><a href="genozip.html#cmdoption-L">-L</a>
+</li>
+        <li><a href="genozip.html#cmdoption-m">-m</a>
+</li>
+        <li><a href="genozip.html#cmdoption-o">-o</a>
+</li>
+        <li><a href="genozip.html#cmdoption-p">-p</a>
+</li>
+        <li><a href="genozip.html#cmdoption-q">-q</a>
+</li>
+        <li><a href="genozip.html#cmdoption-Q">-Q</a>
+</li>
+        <li><a href="genozip.html#cmdoption-t">-t</a>
+</li>
+        <li><a href="genozip.html#cmdoption-V">-V</a>
+</li>
+        <li><a href="genozip.html#cmdoption-w">-w</a>
+</li>
+        <li><a href="genozip.html#cmdoption-W">-W</a>
+</li>
+        <li><a href="genozip.html#cmdoption-x">-x</a>
+</li>
+        <li><a href="genozip.html#cmdoption-optimize-ZM">and positives are rounded to the nearest 10.</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Genozip</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="genozip.html">genozip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Divon Lan.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
