@@ -38,7 +38,7 @@ Genozip consists of four command line tools:
       - Show various statistics and metadata related to a compressed file
   
 |
-
+ 
 .. include:: installing.rst
 .. include:: publications.rst
 .. include:: contact.rst
