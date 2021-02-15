@@ -1,7 +1,7 @@
 genols
 =======
 
-View metadata of genomic files compressed with ``genozip``
+View metadata of files compressed with ``genozip``
 
 Usage: ``genols`` [options]... [files or directories]...
 

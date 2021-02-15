@@ -18,7 +18,7 @@ Examples:
 
 .. include:: opt-piz.rst
 
-.. option:: -u, --unbind[=prefix]  Split a bound file back to its original components. If the ``--unbind=prefix`` form is used a prefix is added to each file component. A prefix may include a directory.
+.. option:: -u, --unbind[=prefix]  Split a bound file back to its original components. If the --unbind=prefix form is used a prefix is added to each file component. A prefix may include a directory.
 
           |
 

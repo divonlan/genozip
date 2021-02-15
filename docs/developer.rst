@@ -1,9 +1,9 @@
-developer options
+Developer options
 =================
 
 Options useful mostly for developers of Genozip:
 
-Usage: as flags for genozip (Z), genounzip (U), genocat (C), genols (L)
+Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genols`` (L)
 
 *Note*: When used with ``genocat`` most options show only the requested metadata and not the file data itself.
 

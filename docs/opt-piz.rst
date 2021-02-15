@@ -18,7 +18,7 @@
 
           |
 
-.. option:: -p, --password password. Provide password to access file(s) that were compressed with ``--password``.
+.. option:: -p, --password password. Provide password to access file(s) that were compressed with --password.
 
           |
 

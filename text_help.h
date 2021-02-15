@@ -228,7 +228,7 @@ static const char *help_genozip_developer[] = {
 
 static const char *help_genounzip[] = {
     "",
-    "Uncompress genomic files compressed with genozip",
+    "Uncompress files compressed with genozip",
     "",
     "Usage: genounzip [options]... [files]...",
     "",
@@ -449,7 +449,7 @@ static const char *help_genocat[] = {
 
 static const char *help_genols[] = {
     "",
-    "View metadata of genomic files compressed with genozip",
+    "View metadata of files compressed with genozip",
     "",
     "Usage: genols [options]... [files or directories]...",
     "",
