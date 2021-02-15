@@ -14,7 +14,7 @@
 <!-- To preview in Visual Studio Code: Ctrl+Shift+V with the "HTML Preview" extension                     -->
 <h1>Genozip</h1><br>
 <br>
-(available on <b>Conda</b>, <b>Docker Hub</b> and https://github.com/divonlan/genozip)<br>
+(available on <b>Conda</b>, <b>Docker Hub</b> and https://github.com/divonlan/genozip ; Documentation: http://genozip.com)<br>
 <br>
 <b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, Phylip and 23andMe files. It can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
 <br>
