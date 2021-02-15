@@ -67,8 +67,7 @@ windows-nl.*
 test.*
 test/back-compat
 internal-docs
-docs/_build/doctrees
-docs/_build/*/_sources
+docs/_build
 !docs/*.rst
 utils/*
 conda/README.md
