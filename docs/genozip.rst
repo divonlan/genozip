@@ -2,9 +2,9 @@ genozip
 =======
 Compress files. 
 
-genozip can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF, Phylip and 23andMe
+``genozip`` can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF, Phylip and 23andMe
 
-Usage: genozip [options]... [files or urls]...
+Usage: ``genozip`` [options]... [files or urls]...
 
 One or more file names or URLs may be given, or if omitted, standard input is used instead. ``-`` means standard input.
 
@@ -73,21 +73,12 @@ Examples:
 
                      |
                      
-.. option:: -q, --quiet        Don't show the progress indicator or warnings.
-
-                     |
-                     
-.. option:: -Q, --noisy        The --quiet is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings.
-
-                     |
-                     
 .. option:: -t, --test         After compressing normally decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual decompressed file to that of the original textual file. This option also activates --md5.
 
                      |
                      
-.. option:: -@, --threads number.  Specify the maximum number of threads. By default genozip uses all the threads it needs to maximize usage of all available cores.
-
-                     |
+.. include:: opt-quiet.rst
+.. include:: opt-threads.rst
                      
 .. option:: -B, --vblock number.  Set the maximum size of data (between 1 and 2048 in megabytes) of the textual input data that a thread processes at any given time. By default genozip sets this value dynamically based on the characateristics of the file and it is reported in --show-stats. Smaller values will result in faster subsetting with genocat --regions and --grep. Larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression.
 
@@ -101,14 +92,8 @@ Examples:
 
                      |
                      
-.. option:: -w, --show-stats   Show the internal structure of a genozip file and the associated compression statistics.
+.. include:: opt-stats.rst
 
-                     |
-                     
-.. option:: -W, --SHOW-STATS   Show more detailed statistics.
-
-                     |
-                     
 .. option:: --register        Register (or re-register) a non-commericial license to use genozip.
 
                      |
@@ -217,26 +202,5 @@ Examples:
 
                      |
                      
-.. option:: -h, --help[=topic]  Show this help page. Optional topic can be:
-
-   ============= ========================================
-   *topic*
-   ------------------------------------------------------
-   ``genozip``   list of genozip options
-   ``genounzip`` list of genounzip options
-   ``genocat``   list of genocat options
-   ``genols``    list of genols options
-   ``dev``       list of developer options
-   ``input``     list of possible arguments of --input
-   ============= ========================================
-
-   |
-
-.. option:: -L, --license     Show the license terms and conditions for this product.
-
-                     |
-
-.. option:: -V, --version     Display version number.
-
-                     |
+.. include:: opt-help.rst
                      

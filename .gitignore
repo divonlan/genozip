@@ -69,6 +69,7 @@ test/back-compat
 internal-docs
 docs/_build/doctrees
 docs/_build/*/_sources
+!docs/*.rst
 utils/*
 conda/README.md
 *.local

@@ -5,7 +5,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Index &#8212; Genozip 11.0 documentation</title>
+    <title>Index &#8212; Genozip 11.0.2 documentation</title>
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
     <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
@@ -37,16 +37,59 @@
  <a href="#Symbols"><strong>Symbols</strong></a>
  | <a href="#A"><strong>A</strong></a>
  | <a href="#C"><strong>C</strong></a>
+ | <a href="#T"><strong>T</strong></a>
  
 </div>
 <h2 id="Symbols">Symbols</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li>
+    --bam     (SAM and BAM only) Output as BAM. Note: this option is implicit if --output specifies a filename ending with .bam
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-bam">command line option</a>, <a href="genounzip.html#cmdoption-bam">[1]</a>, <a href="opt-translation.html#cmdoption-bam">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --bcf     (VCF only) Output as BCF. Note: bcftools needs to be installed for this option to work.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-bcf">command line option</a>, <a href="genounzip.html#cmdoption-bcf">[1]</a>, <a href="opt-translation.html#cmdoption-bcf">[2]</a>
+</li>
+      </ul></li>
+      <li>
     --best         Best compression but slower than --fast mode. This is the default mode of genozip - this flag has no additional effect.
 
       <ul>
         <li><a href="genozip.html#cmdoption-best">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --bgzf level.  Compress the output to the BGZF format (.gz extension) using libdeflate at the compression level specified by the argument. Argument specifies the compression level from 0 (no compression) to 12 (best yet slowest compression). If you are not sure what value to choose - 6 is a popular option. Note: by default (absent this option) genozip will attempt to re-create the same BGZF compression as in the original file. Whether genozip succeeds in re-creating the exact same BGZF compression ratio depends on the compression library used by the application that generated the original file.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-z">command line option</a>, <a href="genounzip.html#cmdoption-z">[1]</a>, <a href="opt-piz.html#cmdoption-z">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --bytes  Show sizes in bytes.
+
+      <ul>
+        <li><a href="genols.html#cmdoption-b">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --debug-memory  ZUCL. Show Buffer allocations and destructions.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-debug-memory">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --debug-progress  ZUC. See raw numbers that feed into the progress indicator.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-debug-progress">command line option</a>
 </li>
       </ul></li>
       <li>
@@ -57,10 +100,59 @@
 </li>
       </ul></li>
       <li>
+    --downsample rate.  Show only one in every &lt;rate&gt; lines (or reads in the case of FASTQ). Other subsetting options (if any) will be applied to the surviving lines only.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-downsample">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --drop-genotypes.  (VCF) Output the data without the samples and FORMAT column.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-G">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --dump-b250=field.  ZUC.  Dump the binary content of the b250 data of this field exactly as they appear in the genozip format to a file named &#34;&lt;field&gt;.b250&#34; - specify the field name as it appears in the &#34;Name&#34; column in --SHOW-STATS for fields that have &#34;comp b250&#34; data.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-dump-b250">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --dump-local=field.  ZUC.  Same as --dump-b250 just for the &#34;local&#34; buffer.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-dump-local">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --dump-section section-type.  ZUC. Dump the uncompressed unencrypted contents of all sections of this type (as it appears in --show-gheaders eg SEC_REFERENCE) to a files named &#34;&lt;section-type&gt;.&lt;vb&gt;.&lt;dict_id&gt;.[header|body]&#34;.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-dump-section">command line option</a>
+</li>
+      </ul></li>
+      <li>
     --fast    Fast compression but lower compression ratio than --best. Files compressed with this option also uncompress faster. Compressing with this option also consumes less memory.
 
       <ul>
         <li><a href="genozip.html#cmdoption-F">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --fasta   (Phylip only) Output as Multi-FASTA.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-fasta">command line option</a>, <a href="genounzip.html#cmdoption-fasta">[1]</a>, <a href="opt-translation.html#cmdoption-fasta">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --fastq   (SAM and BAM only) Output as FASTQ. The alignments are outputted as FASTQ reads in the order they appear in the SAM/BAM file. Alignments with FLAG 16 (reverse complimented) have their SEQ reverse complimented and their QUAL reversed. Alignments with FLAG 4 (unmapped) or 256 (secondary) are dropped. Alignments with FLAG 64 (or 128) (the first (or last) segment in the template) have a &#39;1&#39; (or &#39;2&#39;) added after the read name. Usually (if the original order of the SAM/BAM file has not been tampered with) this would result in a valid interleaved FASTQ file. Note: this option is implicit if --output specifies a filename ending with .fq[.gz] or .fastq[.gz]
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-fastq">command line option</a>, <a href="genounzip.html#cmdoption-fastq">[1]</a>, <a href="opt-translation.html#cmdoption-fastq">[2]</a>
 </li>
       </ul></li>
       <li>
@@ -71,10 +163,52 @@
 </li>
       </ul></li>
       <li>
+    --force  Force overwrite of the output file.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-f">command line option</a>, <a href="genounzip.html#cmdoption-f">[1]</a>, <a href="opt-piz.html#cmdoption-f">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --grep string.  (FASTQ FASTA) Show only records in which &lt;string&gt; is a case-sensitive substring of the description.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-g">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --GT-only.  (VCF) Within samples output only genotype (GT) data - dropping the other subfields.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-GT-only.">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --header-one.  (VCF FASTA) VCF: Output only the last line on the header (the line with the field and sample names). FASTA: Output the sequence name up to the first space or tab.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-1">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --header-only.  Output only the header lines.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-header-only.">command line option</a>
+</li>
+      </ul></li>
+      <li>
     --help[=topic]  Show this help page. Optional topic can be:
 
       <ul>
-        <li><a href="genozip.html#cmdoption-h">command line option</a>
+        <li><a href="genocat.html#cmdoption-3">command line option</a>, <a href="genols.html#cmdoption-h">[1]</a>, <a href="genounzip.html#cmdoption-h">[2]</a>, <a href="genozip.html#cmdoption-h">[3]</a>, <a href="opt-help.html#cmdoption-h">[4]</a>
+</li>
+      </ul></li>
+      <li>
+    --index  Create an index file alongside the decompressed file. The index file is created as described:
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-x">command line option</a>, <a href="genounzip.html#cmdoption-x">[1]</a>, <a href="opt-piz.html#cmdoption-x">[2]</a>
 </li>
       </ul></li>
       <li>
@@ -92,10 +226,17 @@
 </li>
       </ul></li>
       <li>
-    --license     Show the license terms and conditions for this product.
+    --interleaved  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file
 
       <ul>
-        <li><a href="genozip.html#cmdoption-L">command line option</a>
+        <li><a href="genocat.html#cmdoption-interleaved">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --license  Show the license terms and conditions for this product.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-L">command line option</a>, <a href="genols.html#cmdoption-L">[1]</a>, <a href="genounzip.html#cmdoption-L">[2]</a>, <a href="genozip.html#cmdoption-L">[3]</a>, <a href="opt-help.html#cmdoption-L">[4]</a>
 </li>
       </ul></li>
       <li>
@@ -106,10 +247,31 @@
 </li>
       </ul></li>
       <li>
+    --list-chroms.  (VCF SAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-list-chroms.">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --list-chroms.  ZUC.  List the names of the chromosomes (or contigs) included in the file.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-list-chroms.">command line option</a>
+</li>
+      </ul></li>
+      <li>
     --make-reference  Compresss a FASTA file to be used as a reference in --reference or --REFERENCE.
 
       <ul>
         <li><a href="genozip.html#cmdoption-make-reference">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --md5  Show the digest of the decompressed file - MD5 if the file was compressed with --md5 or --test and Adler32 if not. Note: for compressed files (e.g. myfile.vcf.gz) the digest calculated is that of the original uncompressed file.
+
+      <ul>
+        <li><a href="genounzip.html#cmdoption-m">command line option</a>
 </li>
       </ul></li>
       <li>
@@ -127,10 +289,31 @@
 </li>
       </ul></li>
       <li>
-    --noisy        The --quiet is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings.
+    --no-header.  Don&#39;t output the header lines.
 
       <ul>
-        <li><a href="genozip.html#cmdoption-Q">command line option</a>
+        <li><a href="genocat.html#cmdoption-H">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --no-PG   (SAM and BAM only) When converting a file from SAM to BAM or vice versa Genozip normally adds a @PG line in the header. With this option it doesn&#39;t.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-no-PG">command line option</a>, <a href="genounzip.html#cmdoption-no-PG">[1]</a>, <a href="opt-translation.html#cmdoption-no-PG">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --noisy  The --quiet option is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-Q">command line option</a>, <a href="genounzip.html#cmdoption-Q">[1]</a>, <a href="genozip.html#cmdoption-Q">[2]</a>, <a href="opt-quiet.html#cmdoption-Q">[3]</a>
+</li>
+      </ul></li>
+      <li>
+    --one-vb vb  C. Reconstruct data from a single VB
+
+      <ul>
+        <li><a href="developer.html#cmdoption-one-vb">command line option</a>
 </li>
       </ul></li>
       <li>
@@ -225,6 +408,13 @@
 </li>
       </ul></li>
       <li>
+    --output output-filename.  Output to this filename.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-o">command line option</a>, <a href="genounzip.html#cmdoption-o">[1]</a>, <a href="opt-piz.html#cmdoption-o">[2]</a>
+</li>
+      </ul></li>
+      <li>
     --output output-filename. This option can also be used to bind multiple input files into a single ``genozip`` file. The files can be later unbound with ``genounzip --unbind``. To bind files they must be of the same type (e.g. VCF or SAM) and if they are VCF files they must contain the same samples. genozip takes advantage of similarities between the input files so that the bound file is usually smaller than the combined size of individually compressed files.
 
       <ul>
@@ -246,10 +436,45 @@
 </li>
       </ul></li>
       <li>
-    --quiet        Don&#39;t show the progress indicator or warnings.
+    --password password. Provide password to access file(s) that were compressed with ``--password``.
 
       <ul>
-        <li><a href="genozip.html#cmdoption-q">command line option</a>
+        <li><a href="genocat.html#cmdoption-p">command line option</a>, <a href="genounzip.html#cmdoption-p">[1]</a>, <a href="opt-piz.html#cmdoption-p">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --phylip  (FASTA only) Output a Multi-FASTA in Phylip format. All sequences must be the same length.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-phylip">command line option</a>, <a href="genounzip.html#cmdoption-phylip">[1]</a>, <a href="opt-translation.html#cmdoption-phylip">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --quiet  Don&#39;t show the progress indicator or warnings.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-q">command line option</a>, <a href="genounzip.html#cmdoption-q">[1]</a>, <a href="genozip.html#cmdoption-q">[2]</a>, <a href="opt-quiet.html#cmdoption-q">[3]</a>
+</li>
+      </ul></li>
+      <li>
+    --quiet  Don&#39;t show warnings
+
+      <ul>
+        <li><a href="genols.html#cmdoption-q">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --reference filename.  Load a reference file prior to decompressing. Required only for files compressed with --reference
+
+      <ul>
+        <li><a href="genounzip.html#cmdoption-e">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --reference filename.  Load a reference file prior to decompressing. Required only for files compressed with --reference. When no non-reference file is specified display the reference data itself (typically used in combination with --regions).
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-e">command line option</a>
 </li>
       </ul></li>
       <li>
@@ -260,10 +485,24 @@
 </li>
       </ul></li>
       <li>
+    --REFERENCE filename.  With no non-reference file specified. Display the reverse complement of the reference data itself. Typically used in combination with --regions.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-E">command line option</a>
+</li>
+      </ul></li>
+      <li>
     --REFERENCE filename. Similar to --reference except genozip copies the reference (or part of it) to the output file so there is no need to specify --reference in genounzip and genocat. Note on using with --password: the copy of the reference file stored in the compressed file is never encrypted.
 
       <ul>
         <li><a href="genozip.html#cmdoption-E">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (FASTA SAM/BAM GVF 23andMe Reference) Show one or more regions of the file. Examples:
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-r">command line option</a>
 </li>
       </ul></li>
       <li>
@@ -273,8 +512,6 @@
         <li><a href="genozip.html#cmdoption-register">command line option</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     --replace      Replace the source file with the result file rather than leaving it unchanged.
 
@@ -283,17 +520,243 @@
 </li>
       </ul></li>
       <li>
+    --replace  Replace the source file with the result file rather than leaving it unchanged.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-0">command line option</a>, <a href="genounzip.html#cmdoption-0">[1]</a>, <a href="opt-piz.html#cmdoption-0">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --sam     (SAM and BAM only) Output as SAM. This option is the default in genocat on SAM and BAM data.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-sam">command line option</a>, <a href="genounzip.html#cmdoption-sam">[1]</a>, <a href="opt-translation.html#cmdoption-sam">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --samples [^]sample[,...]. (VCF) Show a subset of samples (individuals). Examples:
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-s">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --seg-only  Z. Run the segmenter but don&#39;t compress and don&#39;t write the output
+
+      <ul>
+        <li><a href="developer.html#cmdoption-seg-only">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --sequential.  (FASTA) Output in sequential format - each sequence in a single line.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-sequential.">command line option</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    --show-aliases  ZUC. See contents of SEC_DICT_ID_ALIASES section.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-aliases">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-alleles  ZUC. (VCF only) Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded and 2-digit allele values are replaced by an ascii character.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-alleles">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-b250=field  ZUC. Show b250 sections content - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). With optional &lt;field&gt; (eg CHROM ; RNAME ; POS ; AN etc) shows only that one field. This also works with genounzip and genocat but without the line numbers.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-b250">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-bgzf  ZUC. Show BGZF blocks as they are being compressed or decompressed.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-bgzf">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-codec  Z. Genozip tests for the best codec when it first encounters a new type of data. See the results.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-codec">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-containers  ZUC. Show flow of containers.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-containers">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-dict=field  ZUC. Show dictionary fragments written for each vblock (works for genounzip too). With optional &lt;field&gt; (eg CHROM ; RNAME ; POS ; AN etc) shows only that one field.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-dict">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-digest  ZUC. Show digest (MD5 or Adler32) updates.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-digest">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-gheader  ZUC.  Show the content of the genozip header (which also includes the list of all sections in the file).
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-gheader">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-hash  Z. See raw numbers that feed into determining the size of the global hash tables.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-hash">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-headers section-type.  ZUC. Show all the sections headers or those of a specific section type if the optional argument is provided. Argument is a case-insesitive substring of a section name.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-headers">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-index  ZUC. Show the content of the random access index (SEC_RANDOM_ACCESS section).
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-index">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-is-set contig.  UC. Shows the contents of SEC_REF_IS_SET section for the given contig.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-is-set">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-memory  ZUCL. Show what buffers are consuming the most memory.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-memory">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-mutex[=mutex-name].  ZUC. Shows locks and unlocks of all mutexes or a particular mutex.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-mutex">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-ref-alts  ZUC. Show the details of the file contigs that are mapped to a different contig name in the reference (eg &#39;22&#39; -&gt; &#39;chr22&#39;).
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-ref-alts">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-ref-contigs  ZUC. Show the details of the reference contigs.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-ref-contigs">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-ref-hash  ZUC. Show the details of the reference hash table (SEC_REF_HASH) sections.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-ref-hash">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-ref-index  ZUC. Show the content of the random access index of the reference data (SEC_REF_RAND_ACC section).
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-ref-index">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-ref-seq  ZUC. Show the reference sequences as stored in genozip file or a reference file. Combine with --regions to see specific regions (genocat only). Combine with --sequential to omit newlines. &#39;-&#39; appears in unset loci. Note: the sequence stored in a .ref.genozip is NOT 100% identical to the FASTA that was used to generate it.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-ref-seq">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-reference  Show the name and MD5 of the reference file that needs to be provided to uncompress this file.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-show-reference">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-reference  ZUC. Show the ranges included the SEC_REFERENCE sections.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-0">command line option</a>, <a href="developer.html#cmdoption-show-reference">[1]</a>
+</li>
+      </ul></li>
+      <li>
     --SHOW-STATS   Show more detailed statistics.
 
       <ul>
-        <li><a href="genozip.html#cmdoption-W">command line option</a>
+        <li><a href="developer.html#cmdoption-W">command line option</a>, <a href="genocat.html#cmdoption-W">[1]</a>, <a href="genounzip.html#cmdoption-W">[2]</a>, <a href="genozip.html#cmdoption-W">[3]</a>, <a href="opt-stats.html#cmdoption-W">[4]</a>
 </li>
       </ul></li>
       <li>
     --show-stats   Show the internal structure of a genozip file and the associated compression statistics.
 
       <ul>
-        <li><a href="genozip.html#cmdoption-w">command line option</a>
+        <li><a href="developer.html#cmdoption-w">command line option</a>, <a href="genocat.html#cmdoption-w">[1]</a>, <a href="genounzip.html#cmdoption-w">[2]</a>, <a href="genozip.html#cmdoption-w">[3]</a>, <a href="opt-stats.html#cmdoption-w">[4]</a>
+</li>
+      </ul></li>
+      <li>
+    --show-threads  ZUC.  Show thread dispatcher activity.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-threads">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-time=res. ZUCL. Show what functions are consuming the most time. Optional &lt;res&gt; is one of the members of ProfilerRec defined in profiler.h such &#39;compressor_lzma&#39; or a substring such as &#39;compressor_&#39;.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-time">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-txt-contigs  ZUC. (SAM and BAM) Show the details of the contigs appearing the file header (SQ lines).
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-txt-contigs">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --show-vblocks  ZUC.  Show vblock headers as they are read / written.
+
+      <ul>
+        <li><a href="developer.html#cmdoption-show-vblocks">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --stdout  Send output to standard output instead of a file.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-c">command line option</a>, <a href="genounzip.html#cmdoption-c">[1]</a>, <a href="opt-piz.html#cmdoption-c">[2]</a>
 </li>
       </ul></li>
       <li>
@@ -304,10 +767,31 @@
 </li>
       </ul></li>
       <li>
+    --test  Decompress in memory (i.e. without writing the decompressed file to disk) and use the digest (MD5 or Adler32) to verify that the resulting decompressed file is identical to the original file.
+
+      <ul>
+        <li><a href="genounzip.html#cmdoption-t">command line option</a>
+</li>
+      </ul></li>
+      <li>
     --threads number.  Specify the maximum number of threads. By default genozip uses all the threads it needs to maximize usage of all available cores.
 
       <ul>
-        <li><a href="genozip.html#cmdoption-1">command line option</a>
+        <li><a href="genocat.html#cmdoption-2">command line option</a>, <a href="genounzip.html#cmdoption-1">[1]</a>, <a href="genozip.html#cmdoption-1">[2]</a>, <a href="opt-threads.html#cmdoption-0">[3]</a>
+</li>
+      </ul></li>
+      <li>
+    --unbind  Show the components of bound files. This option is implied when running genols on a single file.
+
+      <ul>
+        <li><a href="genols.html#cmdoption-u">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    --unbind[=prefix]  Split a bound file back to its original components. If the ``--unbind=prefix`` form is used a prefix is added to each file component. A prefix may include a directory.
+
+      <ul>
+        <li><a href="genounzip.html#cmdoption-u">command line option</a>
 </li>
       </ul></li>
       <li>
@@ -318,10 +802,31 @@
 </li>
       </ul></li>
       <li>
-    --version     Display version number.
+    --vcf  (23andMe only) Output as VCF. --vcf must be used in combination with --reference to specify the reference file as listed in the header of the 23andMe file (usually this is GRCh37). Note: INDEL genotypes (&#39;DD&#39; &#39;DI&#39; &#39;II&#39;) as well as uncalled sites (&#39;--&#39;) are discarded.
 
       <ul>
-        <li><a href="genozip.html#cmdoption-V">command line option</a>
+        <li><a href="genocat.html#cmdoption-vcf">command line option</a>, <a href="genounzip.html#cmdoption-vcf">[1]</a>, <a href="opt-translation.html#cmdoption-vcf">[2]</a>
+</li>
+      </ul></li>
+      <li>
+    --version  Display Genozip&#39;s version number.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-V">command line option</a>, <a href="genols.html#cmdoption-V">[1]</a>, <a href="genounzip.html#cmdoption-V">[2]</a>, <a href="genozip.html#cmdoption-V">[3]</a>, <a href="opt-help.html#cmdoption-V">[4]</a>
+</li>
+      </ul></li>
+      <li>
+    --xthreads  ZUC. Use only one thread for the main PIZ/ZIP dispatcher. This doesn&#39;t affect thread use of other dispatchers,
+
+      <ul>
+        <li><a href="developer.html#cmdoption-xthreads">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -1
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-1">command line option</a>
 </li>
       </ul></li>
       <li>
@@ -342,14 +847,14 @@
     -@
 
       <ul>
-        <li><a href="genozip.html#cmdoption-1">command line option</a>
+        <li><a href="genocat.html#cmdoption-2">command line option</a>, <a href="genounzip.html#cmdoption-1">[1]</a>, <a href="genozip.html#cmdoption-1">[2]</a>, <a href="opt-threads.html#cmdoption-0">[3]</a>
 </li>
       </ul></li>
       <li>
     -^
 
       <ul>
-        <li><a href="genozip.html#cmdoption-0">command line option</a>
+        <li><a href="genocat.html#cmdoption-0">command line option</a>, <a href="genounzip.html#cmdoption-0">[1]</a>, <a href="genozip.html#cmdoption-0">[2]</a>, <a href="opt-piz.html#cmdoption-0">[3]</a>
 </li>
       </ul></li>
       <li>
@@ -357,6 +862,20 @@
 
       <ul>
         <li><a href="genozip.html#cmdoption-B">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -b
+
+      <ul>
+        <li><a href="genols.html#cmdoption-b">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -c
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-c">command line option</a>, <a href="genounzip.html#cmdoption-c">[1]</a>, <a href="opt-piz.html#cmdoption-c">[2]</a>
 </li>
       </ul></li>
       <li>
@@ -370,14 +889,14 @@
     -E
 
       <ul>
-        <li><a href="genozip.html#cmdoption-E">command line option</a>
+        <li><a href="genocat.html#cmdoption-E">command line option</a>, <a href="genozip.html#cmdoption-E">[1]</a>
 </li>
       </ul></li>
       <li>
     -e
 
       <ul>
-        <li><a href="genozip.html#cmdoption-e">command line option</a>
+        <li><a href="genocat.html#cmdoption-e">command line option</a>, <a href="genounzip.html#cmdoption-e">[1]</a>, <a href="genozip.html#cmdoption-e">[2]</a>
 </li>
       </ul></li>
       <li>
@@ -391,14 +910,35 @@
     -f
 
       <ul>
-        <li><a href="genozip.html#cmdoption-f">command line option</a>
+        <li><a href="genocat.html#cmdoption-f">command line option</a>, <a href="genounzip.html#cmdoption-f">[1]</a>, <a href="genozip.html#cmdoption-f">[2]</a>, <a href="opt-piz.html#cmdoption-f">[3]</a>
+</li>
+      </ul></li>
+      <li>
+    -G
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-G">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -g
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-g">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -H
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-H">command line option</a>
 </li>
       </ul></li>
       <li>
     -h
 
       <ul>
-        <li><a href="genozip.html#cmdoption-h">command line option</a>
+        <li><a href="genocat.html#cmdoption-3">command line option</a>, <a href="genols.html#cmdoption-h">[1]</a>, <a href="genounzip.html#cmdoption-h">[2]</a>, <a href="genozip.html#cmdoption-h">[3]</a>, <a href="opt-help.html#cmdoption-h">[4]</a>
 </li>
       </ul></li>
       <li>
@@ -419,7 +959,7 @@
     -L
 
       <ul>
-        <li><a href="genozip.html#cmdoption-L">command line option</a>
+        <li><a href="genocat.html#cmdoption-L">command line option</a>, <a href="genols.html#cmdoption-L">[1]</a>, <a href="genounzip.html#cmdoption-L">[2]</a>, <a href="genozip.html#cmdoption-L">[3]</a>, <a href="opt-help.html#cmdoption-L">[4]</a>
 </li>
       </ul></li>
       <li>
@@ -433,70 +973,98 @@
     -m
 
       <ul>
-        <li><a href="genozip.html#cmdoption-m">command line option</a>
+        <li><a href="genounzip.html#cmdoption-m">command line option</a>, <a href="genozip.html#cmdoption-m">[1]</a>
 </li>
       </ul></li>
       <li>
     -o
 
       <ul>
-        <li><a href="genozip.html#cmdoption-o">command line option</a>
+        <li><a href="genocat.html#cmdoption-o">command line option</a>, <a href="genounzip.html#cmdoption-o">[1]</a>, <a href="genozip.html#cmdoption-o">[2]</a>, <a href="opt-piz.html#cmdoption-o">[3]</a>
 </li>
       </ul></li>
       <li>
     -p
 
       <ul>
-        <li><a href="genozip.html#cmdoption-p">command line option</a>
+        <li><a href="genocat.html#cmdoption-p">command line option</a>, <a href="genounzip.html#cmdoption-p">[1]</a>, <a href="genozip.html#cmdoption-p">[2]</a>, <a href="opt-piz.html#cmdoption-p">[3]</a>
 </li>
       </ul></li>
       <li>
     -Q
 
       <ul>
-        <li><a href="genozip.html#cmdoption-Q">command line option</a>
+        <li><a href="genocat.html#cmdoption-Q">command line option</a>, <a href="genounzip.html#cmdoption-Q">[1]</a>, <a href="genozip.html#cmdoption-Q">[2]</a>, <a href="opt-quiet.html#cmdoption-Q">[3]</a>
 </li>
       </ul></li>
       <li>
     -q
 
       <ul>
-        <li><a href="genozip.html#cmdoption-q">command line option</a>
+        <li><a href="genocat.html#cmdoption-q">command line option</a>, <a href="genols.html#cmdoption-q">[1]</a>, <a href="genounzip.html#cmdoption-q">[2]</a>, <a href="genozip.html#cmdoption-q">[3]</a>, <a href="opt-quiet.html#cmdoption-q">[4]</a>
+</li>
+      </ul></li>
+      <li>
+    -r
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-r">command line option</a>
+</li>
+      </ul></li>
+      <li>
+    -s
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-s">command line option</a>
 </li>
       </ul></li>
       <li>
     -t
 
       <ul>
-        <li><a href="genozip.html#cmdoption-t">command line option</a>
+        <li><a href="genounzip.html#cmdoption-t">command line option</a>, <a href="genozip.html#cmdoption-t">[1]</a>
+</li>
+      </ul></li>
+      <li>
+    -u
+
+      <ul>
+        <li><a href="genols.html#cmdoption-u">command line option</a>, <a href="genounzip.html#cmdoption-u">[1]</a>
 </li>
       </ul></li>
       <li>
     -V
 
       <ul>
-        <li><a href="genozip.html#cmdoption-V">command line option</a>
+        <li><a href="genocat.html#cmdoption-V">command line option</a>, <a href="genols.html#cmdoption-V">[1]</a>, <a href="genounzip.html#cmdoption-V">[2]</a>, <a href="genozip.html#cmdoption-V">[3]</a>, <a href="opt-help.html#cmdoption-V">[4]</a>
 </li>
       </ul></li>
       <li>
     -W
 
       <ul>
-        <li><a href="genozip.html#cmdoption-W">command line option</a>
+        <li><a href="developer.html#cmdoption-W">command line option</a>, <a href="genocat.html#cmdoption-W">[1]</a>, <a href="genounzip.html#cmdoption-W">[2]</a>, <a href="genozip.html#cmdoption-W">[3]</a>, <a href="opt-stats.html#cmdoption-W">[4]</a>
 </li>
       </ul></li>
       <li>
     -w
 
       <ul>
-        <li><a href="genozip.html#cmdoption-w">command line option</a>
+        <li><a href="developer.html#cmdoption-w">command line option</a>, <a href="genocat.html#cmdoption-w">[1]</a>, <a href="genounzip.html#cmdoption-w">[2]</a>, <a href="genozip.html#cmdoption-w">[3]</a>, <a href="opt-stats.html#cmdoption-w">[4]</a>
 </li>
       </ul></li>
       <li>
     -x
 
       <ul>
-        <li><a href="genozip.html#cmdoption-x">command line option</a>
+        <li><a href="genocat.html#cmdoption-x">command line option</a>, <a href="genounzip.html#cmdoption-x">[1]</a>, <a href="genozip.html#cmdoption-x">[2]</a>, <a href="opt-piz.html#cmdoption-x">[3]</a>
+</li>
+      </ul></li>
+      <li>
+    -z
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-z">command line option</a>, <a href="genounzip.html#cmdoption-z">[1]</a>, <a href="opt-piz.html#cmdoption-z">[2]</a>
 </li>
       </ul></li>
   </ul></td>
@@ -522,31 +1090,83 @@
     command line option
 
       <ul>
+        <li><a href="genocat.html#cmdoption-bam">--bam     (SAM and BAM only) Output as BAM. Note: this option is implicit if --output specifies a filename ending with .bam</a>, <a href="genounzip.html#cmdoption-bam">[1]</a>, <a href="opt-translation.html#cmdoption-bam">[2]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-bcf">--bcf     (VCF only) Output as BCF. Note: bcftools needs to be installed for this option to work.</a>, <a href="genounzip.html#cmdoption-bcf">[1]</a>, <a href="opt-translation.html#cmdoption-bcf">[2]</a>
+</li>
         <li><a href="genozip.html#cmdoption-best">--best         Best compression but slower than --fast mode. This is the default mode of genozip - this flag has no additional effect.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-z">--bgzf level.  Compress the output to the BGZF format (.gz extension) using libdeflate at the compression level specified by the argument. Argument specifies the compression level from 0 (no compression) to 12 (best yet slowest compression). If you are not sure what value to choose - 6 is a popular option. Note: by default (absent this option) genozip will attempt to re-create the same BGZF compression as in the original file. Whether genozip succeeds in re-creating the exact same BGZF compression ratio depends on the compression library used by the application that generated the original file.</a>, <a href="genounzip.html#cmdoption-z">[1]</a>, <a href="opt-piz.html#cmdoption-z">[2]</a>
+</li>
+        <li><a href="genols.html#cmdoption-b">--bytes  Show sizes in bytes.</a>
+</li>
+        <li><a href="developer.html#cmdoption-debug-memory">--debug-memory  ZUCL. Show Buffer allocations and destructions.</a>
+</li>
+        <li><a href="developer.html#cmdoption-debug-progress">--debug-progress  ZUC. See raw numbers that feed into the progress indicator.</a>
 </li>
         <li><a href="genozip.html#cmdoption-d">--decompress  Same as running genounzip.</a>
 </li>
+        <li><a href="genocat.html#cmdoption-downsample">--downsample rate.  Show only one in every &lt;rate&gt; lines (or reads in the case of FASTQ). Other subsetting options (if any) will be applied to the surviving lines only.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-G">--drop-genotypes.  (VCF) Output the data without the samples and FORMAT column.</a>
+</li>
+        <li><a href="developer.html#cmdoption-dump-b250">--dump-b250=field.  ZUC.  Dump the binary content of the b250 data of this field exactly as they appear in the genozip format to a file named &#34;&lt;field&gt;.b250&#34; - specify the field name as it appears in the &#34;Name&#34; column in --SHOW-STATS for fields that have &#34;comp b250&#34; data.</a>
+</li>
+        <li><a href="developer.html#cmdoption-dump-local">--dump-local=field.  ZUC.  Same as --dump-b250 just for the &#34;local&#34; buffer.</a>
+</li>
+        <li><a href="developer.html#cmdoption-dump-section">--dump-section section-type.  ZUC. Dump the uncompressed unencrypted contents of all sections of this type (as it appears in --show-gheaders eg SEC_REFERENCE) to a files named &#34;&lt;section-type&gt;.&lt;vb&gt;.&lt;dict_id&gt;.[header|body]&#34;.</a>
+</li>
         <li><a href="genozip.html#cmdoption-F">--fast    Fast compression but lower compression ratio than --best. Files compressed with this option also uncompress faster. Compressing with this option also consumes less memory.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-fasta">--fasta   (Phylip only) Output as Multi-FASTA.</a>, <a href="genounzip.html#cmdoption-fasta">[1]</a>, <a href="opt-translation.html#cmdoption-fasta">[2]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-fastq">--fastq   (SAM and BAM only) Output as FASTQ. The alignments are outputted as FASTQ reads in the order they appear in the SAM/BAM file. Alignments with FLAG 16 (reverse complimented) have their SEQ reverse complimented and their QUAL reversed. Alignments with FLAG 4 (unmapped) or 256 (secondary) are dropped. Alignments with FLAG 64 (or 128) (the first (or last) segment in the template) have a &#39;1&#39; (or &#39;2&#39;) added after the read name. Usually (if the original order of the SAM/BAM file has not been tampered with) this would result in a valid interleaved FASTQ file. Note: this option is implicit if --output specifies a filename ending with .fq[.gz] or .fastq[.gz]</a>, <a href="genounzip.html#cmdoption-fastq">[1]</a>, <a href="opt-translation.html#cmdoption-fastq">[2]</a>
 </li>
         <li><a href="genozip.html#cmdoption-f">--force        Force overwrite of the output file or force writing the compressed data to standard output.</a>
 </li>
-        <li><a href="genozip.html#cmdoption-h">--help[=topic]  Show this help page. Optional topic can be:</a>
+        <li><a href="genocat.html#cmdoption-f">--force  Force overwrite of the output file.</a>, <a href="genounzip.html#cmdoption-f">[1]</a>, <a href="opt-piz.html#cmdoption-f">[2]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-g">--grep string.  (FASTQ FASTA) Show only records in which &lt;string&gt; is a case-sensitive substring of the description.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-GT-only.">--GT-only.  (VCF) Within samples output only genotype (GT) data - dropping the other subfields.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-1">--header-one.  (VCF FASTA) VCF: Output only the last line on the header (the line with the field and sample names). FASTA: Output the sequence name up to the first space or tab.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-header-only.">--header-only.  Output only the header lines.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-3">--help[=topic]  Show this help page. Optional topic can be:</a>, <a href="genols.html#cmdoption-h">[1]</a>, <a href="genounzip.html#cmdoption-h">[2]</a>, <a href="genozip.html#cmdoption-h">[3]</a>, <a href="opt-help.html#cmdoption-h">[4]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-x">--index  Create an index file alongside the decompressed file. The index file is created as described:</a>, <a href="genounzip.html#cmdoption-x">[1]</a>, <a href="opt-piz.html#cmdoption-x">[2]</a>
 </li>
         <li><a href="genozip.html#cmdoption-i">--input data-type. data-type is one of the supported file extensions listed in the table above (eg bam vcf.gz fq.xz. See &#34;genozip --help=input&#34; for full list of accepted file types. This flag should be used when redirecting input data with a &lt; or | or if the input file type cannot be determined by its file name.</a>
 </li>
         <li><a href="genozip.html#cmdoption-I">--input-size file-size-in-bytes.  genozip configures its internal data structures to optimize execution speed based on the file size. When redirecting the input file with &lt; or | genozip cannot determine its size and this might result in slower execution. This problem can be overcome by using this flag to inform genozip of the file size.</a>
 </li>
-        <li><a href="genozip.html#cmdoption-L">--license     Show the license terms and conditions for this product.</a>
+        <li><a href="genocat.html#cmdoption-interleaved">--interleaved  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file</a>
+</li>
+        <li><a href="genocat.html#cmdoption-L">--license  Show the license terms and conditions for this product.</a>, <a href="genols.html#cmdoption-L">[1]</a>, <a href="genounzip.html#cmdoption-L">[2]</a>, <a href="genozip.html#cmdoption-L">[3]</a>, <a href="opt-help.html#cmdoption-L">[4]</a>
 </li>
         <li><a href="genozip.html#cmdoption-l">--list        Same as running genols.</a>
 </li>
+        <li><a href="genocat.html#cmdoption-list-chroms.">--list-chroms.  (VCF SAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file.</a>
+</li>
+        <li><a href="developer.html#cmdoption-list-chroms.">--list-chroms.  ZUC.  List the names of the chromosomes (or contigs) included in the file.</a>
+</li>
         <li><a href="genozip.html#cmdoption-make-reference">--make-reference  Compresss a FASTA file to be used as a reference in --reference or --REFERENCE.</a>
+</li>
+        <li><a href="genounzip.html#cmdoption-m">--md5  Show the digest of the decompressed file - MD5 if the file was compressed with --md5 or --test and Adler32 if not. Note: for compressed files (e.g. myfile.vcf.gz) the digest calculated is that of the original uncompressed file.</a>
 </li>
         <li><a href="genozip.html#cmdoption-m">--md5  Use MD5 (rather than the default Adler32) to calculate the digest of the original textual file. The MD5 digest is also viewable with genols. Note: for compressed files (e.g. myfile.vcf.gz or myfile.bam) the MD5 calculated is that of the original uncompressed textual file - myfile.vcf or myfile.sam respectively.</a>
 </li>
         <li><a href="genozip.html#cmdoption-x">--multifasta  All contigs in the FASTA file are variations of a the same contig (i.e. they are somewhat similar to each other). genozip uses this information to improve the compression.</a>
 </li>
-        <li><a href="genozip.html#cmdoption-Q">--noisy        The --quiet is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings.</a>
+        <li><a href="genocat.html#cmdoption-H">--no-header.  Don&#39;t output the header lines.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-no-PG">--no-PG   (SAM and BAM only) When converting a file from SAM to BAM or vice versa Genozip normally adds a @PG line in the header. With this option it doesn&#39;t.</a>, <a href="genounzip.html#cmdoption-no-PG">[1]</a>, <a href="opt-translation.html#cmdoption-no-PG">[2]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-Q">--noisy  The --quiet option is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings.</a>, <a href="genounzip.html#cmdoption-Q">[1]</a>, <a href="genozip.html#cmdoption-Q">[2]</a>, <a href="opt-quiet.html#cmdoption-Q">[3]</a>
+</li>
+        <li><a href="developer.html#cmdoption-one-vb">--one-vb vb  C. Reconstruct data from a single VB</a>
 </li>
         <li><a href="genozip.html#cmdoption-9">--optimise  Modify the file in ways that are likely insignificant for analytical purposes but significantly improve compression and somewhat improve the speed of genocat --regions. This option activates all optimizations. Alternatively they can be activated individually as listed below.</a>
 </li>
@@ -574,85 +1194,221 @@
 </li>
         <li><a href="genozip.html#cmdoption-optimize-ZM">--optimize-ZM     ZM:B:s data: negative Ion Torrent flow signal values are changed to zero</a>
 </li>
+        <li><a href="genocat.html#cmdoption-o">--output output-filename.  Output to this filename.</a>, <a href="genounzip.html#cmdoption-o">[1]</a>, <a href="opt-piz.html#cmdoption-o">[2]</a>
+</li>
         <li><a href="genozip.html#cmdoption-o">--output output-filename. This option can also be used to bind multiple input files into a single ``genozip`` file. The files can be later unbound with ``genounzip --unbind``. To bind files they must be of the same type (e.g. VCF or SAM) and if they are VCF files they must contain the same samples. genozip takes advantage of similarities between the input files so that the bound file is usually smaller than the combined size of individually compressed files.</a>
 </li>
         <li><a href="genozip.html#cmdoption-2">--pair         Compress pairs of paired-end FASTQ files resulting in compression ratios better than compressing the files individually. When using this option every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display it interleaved use genocat --interleaved. To unbind the genozip file back to its original FASTQ files use genounzip --unbind.</a>
 </li>
         <li><a href="genozip.html#cmdoption-p">--password password.  Password-protected - encrypted with 256-bit AES.</a>
 </li>
-        <li><a href="genozip.html#cmdoption-q">--quiet        Don&#39;t show the progress indicator or warnings.</a>
+        <li><a href="genocat.html#cmdoption-p">--password password. Provide password to access file(s) that were compressed with ``--password``.</a>, <a href="genounzip.html#cmdoption-p">[1]</a>, <a href="opt-piz.html#cmdoption-p">[2]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-phylip">--phylip  (FASTA only) Output a Multi-FASTA in Phylip format. All sequences must be the same length.</a>, <a href="genounzip.html#cmdoption-phylip">[1]</a>, <a href="opt-translation.html#cmdoption-phylip">[2]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-q">--quiet  Don&#39;t show the progress indicator or warnings.</a>, <a href="genounzip.html#cmdoption-q">[1]</a>, <a href="genozip.html#cmdoption-q">[2]</a>, <a href="opt-quiet.html#cmdoption-q">[3]</a>
+</li>
+        <li><a href="genols.html#cmdoption-q">--quiet  Don&#39;t show warnings</a>
+</li>
+        <li><a href="genounzip.html#cmdoption-e">--reference filename.  Load a reference file prior to decompressing. Required only for files compressed with --reference</a>
+</li>
+        <li><a href="genocat.html#cmdoption-e">--reference filename.  Load a reference file prior to decompressing. Required only for files compressed with --reference. When no non-reference file is specified display the reference data itself (typically used in combination with --regions).</a>
 </li>
         <li><a href="genozip.html#cmdoption-e">--reference filename.  Use a reference file (filename extension .ref.genozip) - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat. While genozip is capabale of compressing without a reference it can utilize a reference file to improve compression of FASTQ SAM/BAM and VCF files. The improvement for FASTQ files is substantial; for SAM/BAM it may be significant; for VCF if it is significant only if REFALT content is a significant percentage of the zip content (see &#34;% of zip&#34; in --show-stats)</a>
 </li>
+        <li><a href="genocat.html#cmdoption-E">--REFERENCE filename.  With no non-reference file specified. Display the reverse complement of the reference data itself. Typically used in combination with --regions.</a>
+</li>
         <li><a href="genozip.html#cmdoption-E">--REFERENCE filename. Similar to --reference except genozip copies the reference (or part of it) to the output file so there is no need to specify --reference in genounzip and genocat. Note on using with --password: the copy of the reference file stored in the compressed file is never encrypted.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-r">--regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (FASTA SAM/BAM GVF 23andMe Reference) Show one or more regions of the file. Examples:</a>
 </li>
         <li><a href="genozip.html#cmdoption-register">--register        Register (or re-register) a non-commericial license to use genozip.</a>
 </li>
         <li><a href="genozip.html#cmdoption-0">--replace      Replace the source file with the result file rather than leaving it unchanged.</a>
 </li>
-        <li><a href="genozip.html#cmdoption-W">--SHOW-STATS   Show more detailed statistics.</a>
+        <li><a href="genocat.html#cmdoption-0">--replace  Replace the source file with the result file rather than leaving it unchanged.</a>, <a href="genounzip.html#cmdoption-0">[1]</a>, <a href="opt-piz.html#cmdoption-0">[2]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-w">--show-stats   Show the internal structure of a genozip file and the associated compression statistics.</a>
+        <li><a href="genocat.html#cmdoption-sam">--sam     (SAM and BAM only) Output as SAM. This option is the default in genocat on SAM and BAM data.</a>, <a href="genounzip.html#cmdoption-sam">[1]</a>, <a href="opt-translation.html#cmdoption-sam">[2]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-s">--samples [^]sample[,...]. (VCF) Show a subset of samples (individuals). Examples:</a>
+</li>
+        <li><a href="developer.html#cmdoption-seg-only">--seg-only  Z. Run the segmenter but don&#39;t compress and don&#39;t write the output</a>
+</li>
+        <li><a href="genocat.html#cmdoption-sequential.">--sequential.  (FASTA) Output in sequential format - each sequence in a single line.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-aliases">--show-aliases  ZUC. See contents of SEC_DICT_ID_ALIASES section.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-alleles">--show-alleles  ZUC. (VCF only) Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded and 2-digit allele values are replaced by an ascii character.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-b250">--show-b250=field  ZUC. Show b250 sections content - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). With optional &lt;field&gt; (eg CHROM ; RNAME ; POS ; AN etc) shows only that one field. This also works with genounzip and genocat but without the line numbers.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-bgzf">--show-bgzf  ZUC. Show BGZF blocks as they are being compressed or decompressed.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-codec">--show-codec  Z. Genozip tests for the best codec when it first encounters a new type of data. See the results.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-containers">--show-containers  ZUC. Show flow of containers.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-dict">--show-dict=field  ZUC. Show dictionary fragments written for each vblock (works for genounzip too). With optional &lt;field&gt; (eg CHROM ; RNAME ; POS ; AN etc) shows only that one field.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-digest">--show-digest  ZUC. Show digest (MD5 or Adler32) updates.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-gheader">--show-gheader  ZUC.  Show the content of the genozip header (which also includes the list of all sections in the file).</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-hash">--show-hash  Z. See raw numbers that feed into determining the size of the global hash tables.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-headers">--show-headers section-type.  ZUC. Show all the sections headers or those of a specific section type if the optional argument is provided. Argument is a case-insesitive substring of a section name.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-index">--show-index  ZUC. Show the content of the random access index (SEC_RANDOM_ACCESS section).</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-is-set">--show-is-set contig.  UC. Shows the contents of SEC_REF_IS_SET section for the given contig.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-memory">--show-memory  ZUCL. Show what buffers are consuming the most memory.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-mutex">--show-mutex[=mutex-name].  ZUC. Shows locks and unlocks of all mutexes or a particular mutex.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-ref-alts">--show-ref-alts  ZUC. Show the details of the file contigs that are mapped to a different contig name in the reference (eg &#39;22&#39; -&gt; &#39;chr22&#39;).</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-ref-contigs">--show-ref-contigs  ZUC. Show the details of the reference contigs.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-ref-hash">--show-ref-hash  ZUC. Show the details of the reference hash table (SEC_REF_HASH) sections.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-ref-index">--show-ref-index  ZUC. Show the content of the random access index of the reference data (SEC_REF_RAND_ACC section).</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-ref-seq">--show-ref-seq  ZUC. Show the reference sequences as stored in genozip file or a reference file. Combine with --regions to see specific regions (genocat only). Combine with --sequential to omit newlines. &#39;-&#39; appears in unset loci. Note: the sequence stored in a .ref.genozip is NOT 100% identical to the FASTA that was used to generate it.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-show-reference">--show-reference  Show the name and MD5 of the reference file that needs to be provided to uncompress this file.</a>
+</li>
+        <li><a href="developer.html#cmdoption-0">--show-reference  ZUC. Show the ranges included the SEC_REFERENCE sections.</a>, <a href="developer.html#cmdoption-show-reference">[1]</a>
+</li>
+        <li><a href="developer.html#cmdoption-W">--SHOW-STATS   Show more detailed statistics.</a>, <a href="genocat.html#cmdoption-W">[1]</a>, <a href="genounzip.html#cmdoption-W">[2]</a>, <a href="genozip.html#cmdoption-W">[3]</a>, <a href="opt-stats.html#cmdoption-W">[4]</a>
+</li>
+        <li><a href="developer.html#cmdoption-w">--show-stats   Show the internal structure of a genozip file and the associated compression statistics.</a>, <a href="genocat.html#cmdoption-w">[1]</a>, <a href="genounzip.html#cmdoption-w">[2]</a>, <a href="genozip.html#cmdoption-w">[3]</a>, <a href="opt-stats.html#cmdoption-w">[4]</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-threads">--show-threads  ZUC.  Show thread dispatcher activity.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-time">--show-time=res. ZUCL. Show what functions are consuming the most time. Optional &lt;res&gt; is one of the members of ProfilerRec defined in profiler.h such &#39;compressor_lzma&#39; or a substring such as &#39;compressor_&#39;.</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-txt-contigs">--show-txt-contigs  ZUC. (SAM and BAM) Show the details of the contigs appearing the file header (SQ lines).</a>
+</li>
+        <li><a href="developer.html#cmdoption-show-vblocks">--show-vblocks  ZUC.  Show vblock headers as they are read / written.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-c">--stdout  Send output to standard output instead of a file.</a>, <a href="genounzip.html#cmdoption-c">[1]</a>, <a href="opt-piz.html#cmdoption-c">[2]</a>
 </li>
         <li><a href="genozip.html#cmdoption-t">--test         After compressing normally decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual decompressed file to that of the original textual file. This option also activates --md5.</a>
 </li>
-        <li><a href="genozip.html#cmdoption-1">--threads number.  Specify the maximum number of threads. By default genozip uses all the threads it needs to maximize usage of all available cores.</a>
+        <li><a href="genounzip.html#cmdoption-t">--test  Decompress in memory (i.e. without writing the decompressed file to disk) and use the digest (MD5 or Adler32) to verify that the resulting decompressed file is identical to the original file.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-2">--threads number.  Specify the maximum number of threads. By default genozip uses all the threads it needs to maximize usage of all available cores.</a>, <a href="genounzip.html#cmdoption-1">[1]</a>, <a href="genozip.html#cmdoption-1">[2]</a>, <a href="opt-threads.html#cmdoption-0">[3]</a>
+</li>
+        <li><a href="genols.html#cmdoption-u">--unbind  Show the components of bound files. This option is implied when running genols on a single file.</a>
+</li>
+        <li><a href="genounzip.html#cmdoption-u">--unbind[=prefix]  Split a bound file back to its original components. If the ``--unbind=prefix`` form is used a prefix is added to each file component. A prefix may include a directory.</a>
 </li>
         <li><a href="genozip.html#cmdoption-B">--vblock number.  Set the maximum size of data (between 1 and 2048 in megabytes) of the textual input data that a thread processes at any given time. By default genozip sets this value dynamically based on the characateristics of the file and it is reported in --show-stats. Smaller values will result in faster subsetting with genocat --regions and --grep. Larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression.</a>
 </li>
-        <li><a href="genozip.html#cmdoption-V">--version     Display version number.</a>
+        <li><a href="genocat.html#cmdoption-vcf">--vcf  (23andMe only) Output as VCF. --vcf must be used in combination with --reference to specify the reference file as listed in the header of the 23andMe file (usually this is GRCh37). Note: INDEL genotypes (&#39;DD&#39; &#39;DI&#39; &#39;II&#39;) as well as uncalled sites (&#39;--&#39;) are discarded.</a>, <a href="genounzip.html#cmdoption-vcf">[1]</a>, <a href="opt-translation.html#cmdoption-vcf">[2]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-V">--version  Display Genozip&#39;s version number.</a>, <a href="genols.html#cmdoption-V">[1]</a>, <a href="genounzip.html#cmdoption-V">[2]</a>, <a href="genozip.html#cmdoption-V">[3]</a>, <a href="opt-help.html#cmdoption-V">[4]</a>
+</li>
+        <li><a href="developer.html#cmdoption-xthreads">--xthreads  ZUC. Use only one thread for the main PIZ/ZIP dispatcher. This doesn&#39;t affect thread use of other dispatchers,</a>
+</li>
+        <li><a href="genocat.html#cmdoption-1">-1</a>
 </li>
         <li><a href="genozip.html#cmdoption-2">-2</a>
 </li>
         <li><a href="genozip.html#cmdoption-9">-9</a>
 </li>
-        <li><a href="genozip.html#cmdoption-1">-@</a>
+        <li><a href="genocat.html#cmdoption-2">-@</a>, <a href="genounzip.html#cmdoption-1">[1]</a>, <a href="genozip.html#cmdoption-1">[2]</a>, <a href="opt-threads.html#cmdoption-0">[3]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-0">-^</a>
+        <li><a href="genocat.html#cmdoption-0">-^</a>, <a href="genounzip.html#cmdoption-0">[1]</a>, <a href="genozip.html#cmdoption-0">[2]</a>, <a href="opt-piz.html#cmdoption-0">[3]</a>
+</li>
+        <li><a href="genols.html#cmdoption-b">-b</a>
 </li>
         <li><a href="genozip.html#cmdoption-B">-B</a>
 </li>
+        <li><a href="genocat.html#cmdoption-c">-c</a>, <a href="genounzip.html#cmdoption-c">[1]</a>, <a href="opt-piz.html#cmdoption-c">[2]</a>
+</li>
         <li><a href="genozip.html#cmdoption-d">-d</a>
 </li>
-        <li><a href="genozip.html#cmdoption-e">-e</a>
+        <li><a href="genocat.html#cmdoption-e">-e</a>, <a href="genounzip.html#cmdoption-e">[1]</a>, <a href="genozip.html#cmdoption-e">[2]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-E">-E</a>
+        <li><a href="genocat.html#cmdoption-E">-E</a>, <a href="genozip.html#cmdoption-E">[1]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-f">-f</a>
+        <li><a href="genocat.html#cmdoption-f">-f</a>, <a href="genounzip.html#cmdoption-f">[1]</a>, <a href="genozip.html#cmdoption-f">[2]</a>, <a href="opt-piz.html#cmdoption-f">[3]</a>
 </li>
         <li><a href="genozip.html#cmdoption-F">-F</a>
 </li>
-        <li><a href="genozip.html#cmdoption-h">-h</a>
+        <li><a href="genocat.html#cmdoption-g">-g</a>
+</li>
+        <li><a href="genocat.html#cmdoption-G">-G</a>
+</li>
+        <li><a href="genocat.html#cmdoption-3">-h</a>, <a href="genols.html#cmdoption-h">[1]</a>, <a href="genounzip.html#cmdoption-h">[2]</a>, <a href="genozip.html#cmdoption-h">[3]</a>, <a href="opt-help.html#cmdoption-h">[4]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-H">-H</a>
 </li>
         <li><a href="genozip.html#cmdoption-i">-i</a>
 </li>
         <li><a href="genozip.html#cmdoption-I">-I</a>
 </li>
+        <li><a href="genocat.html#cmdoption-L">-L</a>, <a href="genols.html#cmdoption-L">[1]</a>, <a href="genounzip.html#cmdoption-L">[2]</a>, <a href="genozip.html#cmdoption-L">[3]</a>, <a href="opt-help.html#cmdoption-L">[4]</a>
+</li>
         <li><a href="genozip.html#cmdoption-l">-l</a>
 </li>
-        <li><a href="genozip.html#cmdoption-L">-L</a>
+        <li><a href="genounzip.html#cmdoption-m">-m</a>, <a href="genozip.html#cmdoption-m">[1]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-m">-m</a>
+        <li><a href="genocat.html#cmdoption-o">-o</a>, <a href="genounzip.html#cmdoption-o">[1]</a>, <a href="genozip.html#cmdoption-o">[2]</a>, <a href="opt-piz.html#cmdoption-o">[3]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-o">-o</a>
+        <li><a href="genocat.html#cmdoption-p">-p</a>, <a href="genounzip.html#cmdoption-p">[1]</a>, <a href="genozip.html#cmdoption-p">[2]</a>, <a href="opt-piz.html#cmdoption-p">[3]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-p">-p</a>
+        <li><a href="genocat.html#cmdoption-q">-q</a>, <a href="genols.html#cmdoption-q">[1]</a>, <a href="genounzip.html#cmdoption-q">[2]</a>, <a href="genozip.html#cmdoption-q">[3]</a>, <a href="opt-quiet.html#cmdoption-q">[4]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-q">-q</a>
+        <li><a href="genocat.html#cmdoption-Q">-Q</a>, <a href="genounzip.html#cmdoption-Q">[1]</a>, <a href="genozip.html#cmdoption-Q">[2]</a>, <a href="opt-quiet.html#cmdoption-Q">[3]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-Q">-Q</a>
+        <li><a href="genocat.html#cmdoption-r">-r</a>
 </li>
-        <li><a href="genozip.html#cmdoption-t">-t</a>
+        <li><a href="genocat.html#cmdoption-s">-s</a>
 </li>
-        <li><a href="genozip.html#cmdoption-V">-V</a>
+        <li><a href="genounzip.html#cmdoption-t">-t</a>, <a href="genozip.html#cmdoption-t">[1]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-w">-w</a>
+        <li><a href="genols.html#cmdoption-u">-u</a>, <a href="genounzip.html#cmdoption-u">[1]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-W">-W</a>
+        <li><a href="genocat.html#cmdoption-V">-V</a>, <a href="genols.html#cmdoption-V">[1]</a>, <a href="genounzip.html#cmdoption-V">[2]</a>, <a href="genozip.html#cmdoption-V">[3]</a>, <a href="opt-help.html#cmdoption-V">[4]</a>
 </li>
-        <li><a href="genozip.html#cmdoption-x">-x</a>
+        <li><a href="developer.html#cmdoption-w">-w</a>, <a href="genocat.html#cmdoption-w">[1]</a>, <a href="genounzip.html#cmdoption-w">[2]</a>, <a href="genozip.html#cmdoption-w">[3]</a>, <a href="opt-stats.html#cmdoption-w">[4]</a>
+</li>
+        <li><a href="developer.html#cmdoption-W">-W</a>, <a href="genocat.html#cmdoption-W">[1]</a>, <a href="genounzip.html#cmdoption-W">[2]</a>, <a href="genozip.html#cmdoption-W">[3]</a>, <a href="opt-stats.html#cmdoption-W">[4]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-x">-x</a>, <a href="genounzip.html#cmdoption-x">[1]</a>, <a href="genozip.html#cmdoption-x">[2]</a>, <a href="opt-piz.html#cmdoption-x">[3]</a>
+</li>
+        <li><a href="genocat.html#cmdoption-z">-z</a>, <a href="genounzip.html#cmdoption-z">[1]</a>, <a href="opt-piz.html#cmdoption-z">[2]</a>
 </li>
         <li><a href="genozip.html#cmdoption-optimize-ZM">and positives are rounded to the nearest 10.</a>
+</li>
+        <li><a href="genocat.html#cmdoption-interleaved">then a read from the second file</a>
+</li>
+        <li><a href="genocat.html#cmdoption-interleaved">then the next read from the first file and so on.</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="T">T</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    then a read from the second file
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-interleaved">command line option</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    then the next read from the first file and so on.
+
+      <ul>
+        <li><a href="genocat.html#cmdoption-interleaved">command line option</a>
 </li>
       </ul></li>
   </ul></td>
@@ -678,8 +1434,15 @@
 <h3>Navigation</h3>
 <p class="caption"><span class="caption-text">Contents:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="genozip.html">genozip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genozip.html">Using genozip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genounzip.html">Using genounzip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genocat.html">Using genocat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genols.html">Using genols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installing.html">Installing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="publications.html">Publications &amp; Citing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="developer.html">Developer options</a></li>
 <li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contact.html">Contact</a></li>
 </ul>
 
 <div class="relations">
@@ -712,7 +1475,7 @@
       <div class="clearer"></div>
     </div>
     <div class="footer">
-      &copy;2021, Divon Lan.
+      &copy;2019-2021, Divon Lan.
       
       |
       Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>

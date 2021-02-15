@@ -5,7 +5,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>genozip &#8212; Genozip 11.0 documentation</title>
+    <title>genozip &#8212; Genozip 11.0.2 documentation</title>
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
     <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
@@ -14,7 +14,7 @@
     <script src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Non-Commerical License" href="license.html" />
+    <link rel="next" title="genounzip" href="genounzip.html" />
     <link rel="prev" title="Welcome to Genozip" href="index.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
@@ -35,8 +35,8 @@
   <div class="section" id="genozip">
 <h1>genozip<a class="headerlink" href="#genozip" title="Permalink to this headline">¶</a></h1>
 <p>Compress files.</p>
-<p>genozip can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF, Phylip and 23andMe</p>
-<p>Usage: genozip [options]… [files or urls]…</p>
+<p><code class="docutils literal notranslate"><span class="pre">genozip</span></code> can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF, Phylip and 23andMe</p>
+<p>Usage: <code class="docutils literal notranslate"><span class="pre">genozip</span></code> [options]… [files or urls]…</p>
 <p>One or more file names or URLs may be given, or if omitted, standard input is used instead. <code class="docutils literal notranslate"><span class="pre">-</span></code> means standard input.</p>
 <p>Supported input file types, as recognized by their listed filename extension(s):</p>
 <blockquote>
@@ -166,8 +166,16 @@
 </dd></dl>
 
 <dl class="std option">
+<dt id="cmdoption-t">
+<span id="cmdoption-test"></span><code class="sig-name descname">-t</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--test</code><code class="sig-prename descclassname">         After compressing normally decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual decompressed file to that of the original textual file. This option also activates --md5.</code><a class="headerlink" href="#cmdoption-t" title="Permalink to this definition">¶</a></dt>
+<dd><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</dd></dl>
+
+<dl class="std option">
 <dt id="cmdoption-q">
-<span id="cmdoption-quiet"></span><code class="sig-name descname">-q</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--quiet</code><code class="sig-prename descclassname">        Don't show the progress indicator or warnings.</code><a class="headerlink" href="#cmdoption-q" title="Permalink to this definition">¶</a></dt>
+<span id="cmdoption-quiet"></span><code class="sig-name descname">-q</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--quiet</code><code class="sig-prename descclassname">  Don't show the progress indicator or warnings.</code><a class="headerlink" href="#cmdoption-q" title="Permalink to this definition">¶</a></dt>
 <dd><div class="line-block">
 <div class="line"><br /></div>
 </div>
@@ -175,15 +183,7 @@
 
 <dl class="std option">
 <dt id="cmdoption-Q">
-<span id="cmdoption-noisy"></span><code class="sig-name descname">-Q</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--noisy</code><code class="sig-prename descclassname">        The --quiet is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings.</code><a class="headerlink" href="#cmdoption-Q" title="Permalink to this definition">¶</a></dt>
-<dd><div class="line-block">
-<div class="line"><br /></div>
-</div>
-</dd></dl>
-
-<dl class="std option">
-<dt id="cmdoption-t">
-<span id="cmdoption-test"></span><code class="sig-name descname">-t</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--test</code><code class="sig-prename descclassname">         After compressing normally decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual decompressed file to that of the original textual file. This option also activates --md5.</code><a class="headerlink" href="#cmdoption-t" title="Permalink to this definition">¶</a></dt>
+<span id="cmdoption-noisy"></span><code class="sig-name descname">-Q</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--noisy</code><code class="sig-prename descclassname">  The --quiet option is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings.</code><a class="headerlink" href="#cmdoption-Q" title="Permalink to this definition">¶</a></dt>
 <dd><div class="line-block">
 <div class="line"><br /></div>
 </div>
@@ -429,7 +429,13 @@
 <dl class="std option">
 <dt id="cmdoption-h">
 <span id="cmdoption-help"></span><code class="sig-name descname">-h</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--help[</code><code class="sig-prename descclassname">=topic]  Show this help page. Optional topic can be:</code><a class="headerlink" href="#cmdoption-h" title="Permalink to this definition">¶</a></dt>
-<dd><table class="docutils align-default">
+<dd></dd></dl>
+
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<blockquote>
+<div><table class="docutils align-default">
 <colgroup>
 <col style="width: 25%" />
 <col style="width: 75%" />
@@ -460,11 +466,10 @@
 <div class="line-block">
 <div class="line"><br /></div>
 </div>
-</dd></dl>
-
+</div></blockquote>
 <dl class="std option">
 <dt id="cmdoption-L">
-<span id="cmdoption-license"></span><code class="sig-name descname">-L</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--license</code><code class="sig-prename descclassname">     Show the license terms and conditions for this product.</code><a class="headerlink" href="#cmdoption-L" title="Permalink to this definition">¶</a></dt>
+<span id="cmdoption-license"></span><code class="sig-name descname">-L</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--license</code><code class="sig-prename descclassname">  Show the license terms and conditions for this product.</code><a class="headerlink" href="#cmdoption-L" title="Permalink to this definition">¶</a></dt>
 <dd><div class="line-block">
 <div class="line"><br /></div>
 </div>
@@ -472,7 +477,7 @@
 
 <dl class="std option">
 <dt id="cmdoption-V">
-<span id="cmdoption-v"></span><span id="cmdoption-version"></span><code class="sig-name descname">-V</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--version</code><code class="sig-prename descclassname">     Display version number.</code><a class="headerlink" href="#cmdoption-V" title="Permalink to this definition">¶</a></dt>
+<span id="cmdoption-v"></span><span id="cmdoption-version"></span><code class="sig-name descname">-V</code><code class="sig-prename descclassname"></code><code class="sig-prename descclassname">, </code><code class="sig-name descname">--version</code><code class="sig-prename descclassname">  Display Genozip's version number.</code><a class="headerlink" href="#cmdoption-V" title="Permalink to this definition">¶</a></dt>
 <dd><div class="line-block">
 <div class="line"><br /></div>
 </div>
@@ -499,8 +504,15 @@
 <h3>Navigation</h3>
 <p class="caption"><span class="caption-text">Contents:</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">genozip</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Using genozip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genounzip.html">Using genounzip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genocat.html">Using genocat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genols.html">Using genols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installing.html">Installing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="publications.html">Publications &amp; Citing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="developer.html">Developer options</a></li>
 <li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contact.html">Contact</a></li>
 </ul>
 
 <div class="relations">
@@ -508,7 +520,7 @@
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
       <li>Previous: <a href="index.html" title="previous chapter">Welcome to Genozip</a></li>
-      <li>Next: <a href="license.html" title="next chapter">Non-Commerical License</a></li>
+      <li>Next: <a href="genounzip.html" title="next chapter">genounzip</a></li>
   </ul></li>
 </ul>
 </div>
@@ -535,7 +547,7 @@
       <div class="clearer"></div>
     </div>
     <div class="footer">
-      &copy;2021, Divon Lan.
+      &copy;2019-2021, Divon Lan.
       
       |
       Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>

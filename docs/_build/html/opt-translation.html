@@ -1,0 +1,174 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>&lt;no title&gt; &#8212; Genozip 11.0.2 documentation</title>
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <p><strong>Translation options (convertion from one format to another)</strong></p>
+<dl class="std option">
+<dt id="cmdoption-bam">
+<code class="sig-name descname">--bam</code><code class="sig-prename descclassname">     (SAM and BAM only) Output as BAM. Note: this option is implicit if --output specifies a filename ending with .bam</code><a class="headerlink" href="#cmdoption-bam" title="Permalink to this definition">¶</a></dt>
+<dd><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</dd></dl>
+
+<dl class="std option">
+<dt id="cmdoption-sam">
+<code class="sig-name descname">--sam</code><code class="sig-prename descclassname">     (SAM and BAM only) Output as SAM. This option is the default in genocat on SAM and BAM data.</code><a class="headerlink" href="#cmdoption-sam" title="Permalink to this definition">¶</a></dt>
+<dd><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</dd></dl>
+
+<dl class="std option">
+<dt id="cmdoption-no-PG">
+<span id="cmdoption-no-pg"></span><code class="sig-name descname">--no-PG</code><code class="sig-prename descclassname">   (SAM and BAM only) When converting a file from SAM to BAM or vice versa Genozip normally adds a &#64;PG line in the header. With this option it doesn't.</code><a class="headerlink" href="#cmdoption-no-PG" title="Permalink to this definition">¶</a></dt>
+<dd><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</dd></dl>
+
+<dl class="std option">
+<dt id="cmdoption-fastq">
+<code class="sig-name descname">--fastq</code><code class="sig-prename descclassname">   (SAM and BAM only) Output as FASTQ. The alignments are outputted as FASTQ reads in the order they appear in the SAM/BAM file. Alignments with FLAG 16 (reverse complimented) have their SEQ reverse complimented and their QUAL reversed. Alignments with FLAG 4 (unmapped) or 256 (secondary) are dropped. Alignments with FLAG 64 (or 128) (the first (or last) segment in the template) have a '1' (or '2') added after the read name. Usually (if the original order of the SAM/BAM file has not been tampered with) this would result in a valid interleaved FASTQ file. Note: this option is implicit if --output specifies a filename ending with .fq[.gz] or .fastq[.gz]</code><a class="headerlink" href="#cmdoption-fastq" title="Permalink to this definition">¶</a></dt>
+<dd><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</dd></dl>
+
+<dl class="std option">
+<dt id="cmdoption-bcf">
+<code class="sig-name descname">--bcf</code><code class="sig-prename descclassname">     (VCF only) Output as BCF. Note: bcftools needs to be installed for this option to work.</code><a class="headerlink" href="#cmdoption-bcf" title="Permalink to this definition">¶</a></dt>
+<dd><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</dd></dl>
+
+<dl class="std option">
+<dt id="cmdoption-phylip">
+<code class="sig-name descname">--phylip</code><code class="sig-prename descclassname">  (FASTA only) Output a Multi-FASTA in Phylip format. All sequences must be the same length.</code><a class="headerlink" href="#cmdoption-phylip" title="Permalink to this definition">¶</a></dt>
+<dd><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</dd></dl>
+
+<dl class="std option">
+<dt id="cmdoption-fasta">
+<code class="sig-name descname">--fasta</code><code class="sig-prename descclassname">   (Phylip only) Output as Multi-FASTA.</code><a class="headerlink" href="#cmdoption-fasta" title="Permalink to this definition">¶</a></dt>
+<dd><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</dd></dl>
+
+<dl class="std option">
+<dt id="cmdoption-vcf">
+<code class="sig-name descname">--vcf</code><code class="sig-prename descclassname">  (23andMe only) Output as VCF. --vcf must be used in combination with --reference to specify the reference file as listed in the header of the 23andMe file (usually this is GRCh37). Note: INDEL genotypes ('DD' 'DI' 'II') as well as uncalled sites ('--') are discarded.</code><a class="headerlink" href="#cmdoption-vcf" title="Permalink to this definition">¶</a></dt>
+<dd><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</dd></dl>
+
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Genozip</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="genozip.html">Using genozip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genounzip.html">Using genounzip</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genocat.html">Using genocat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="genols.html">Using genols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installing.html">Installing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="publications.html">Publications &amp; Citing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="developer.html">Developer options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contact.html">Contact</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2019-2021, Divon Lan.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/opt-translation.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

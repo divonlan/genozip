@@ -204,14 +204,23 @@ LICENSE.non-commercial.txt: genozip$(EXE)
 	@./genozip$(EXE) --license > $@
 
 SPHINX = /home/divon/miniconda3/bin/sphinx-build
-DOCS = docs/genozip.rst docs/index.rst docs/license.rst
+DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/developer.rst docs/index.rst docs/license.rst \
+       docs/publications.rst docs/installing.rst docs/contact.rst \
+	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-translation.rst 
 
-docs/_build/html/.buildinfo: LICENSE.non-commercial.txt $(DOCS)
+docs/conf.py: docs/conf.template.py
+	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
+
+docs/_build/html/.buildinfo: LICENSE.non-commercial.txt docs/conf.py $(DOCS)
 	@echo Building HTML docs
-	@wsl $(SPHINX) -M html docs docs/_build $(SPHINXOPTS) $(O)
+	@cp windows/genozip-installer.exe docs/_static
+	@wsl $(SPHINX) -M html docs docs/_build -q -a 
 
-docs: docs/_build/html/.buildinfo
+docs: windows/genozip-installer.exe docs/_build/html/.buildinfo
 
+docs-debug: docs/_build/html/.buildinfo
+	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe file:///C:/Users/USER/projects/genozip/docs/_build/html/index.html; exit 0)
+	
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
 	@echo Installing in $(PREFIX)/bin

@@ -18,11 +18,11 @@
 # -- Project information -----------------------------------------------------
 
 project = 'Genozip'
-copyright = '2019-2021, Divon Lan'
+copyright = '2019-__YEAR__, Divon Lan'
 author = 'Divon Lan'
 
 # The full version, including alpha/beta/rc tags
-release = '11.0.2'
+release = '__VERSION__'
 
 
 # -- General configuration ---------------------------------------------------

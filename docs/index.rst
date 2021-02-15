@@ -5,14 +5,15 @@ Welcome to Genozip
    :maxdepth: 2
    :caption: Contents:
 
-   Welcome to Genozip
-   genozip
-   genounzip
-   genocat
-   genols
-   developer options <developer>
-   Publications
+   Using genozip <genozip>
+   Using genounzip <genounzip>
+   Using genocat <genocat>
+   Using genols <genols>
+   Installing <installing> 
+   Publications & Citing <publications>
+   Developer options <developer>
    License <license>
+   Contact <contact>
      
 Genozip is a universal compressor for genomic files - it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, Phylip and 23andMe files, but it can also compress any other file (including non-genomic files). 
 
@@ -22,36 +23,25 @@ The compression ratio one can expect to see depends on the data being compressed
 
 The compression is lossless - the decompressed file is 100% identical to the original file (except when using the ``--optimize`` option).
 
-While Genozip was designed primarily to allow cost-effective storage and fast transmission of genomic files, it also includes extensive options that allow direct use of genozip-compressed files in analytical pipelines.
-
 Genozip consists of four command line tools:
   
-   - :doc:`genozip` compresses files
+   * :doc:`genozip` compresses files
   
-   - :doc:`genounzip` decompresses files
+   * :doc:`genounzip` decompresses files
 
-   - :doc:`genocat` is the workhorse for using genozip in analytical pipelines:
+   * :doc:`genols` shows metadata of compressed files and directories
+
+   * :doc:`genocat` is the workhorse for using genozip in analytical pipelines:
       - Display the contents of a compressed file - possibly piping it into a downstream tool
       - Subset a compressed file - show a specific part of its contents
       - Translate a compressed file to another format (eg BAM to FASTQ or Multi-FASTA to Phylip)
       - Show various statistics and metadata related to a compressed file
   
-   - :doc:`genols` is similar to ls, just for compressed files
+|
 
-Installing
-==========
-
-Citing
-======
-Lan, D., et al. Bioinformatics, 36, 4091–4092, July 2020, https://doi.org/10.1093/bioinformatics/btaa290
-
-Contact
-=======
-Bug reports and feature requests: bugs@genozip.com
-
-Commercial license inquiries: sales@genozip.com
-
-Requests for support for compression of additional public or proprietary genomic file formats: sales@genozip.com
+.. include:: installing.rst
+.. include:: publications.rst
+.. include:: contact.rst
 
 License
 =======
