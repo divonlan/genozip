@@ -110,7 +110,7 @@ Examples:
 
                      |
                      
-.. option:: -x, --multifasta  All contigs in the FASTA file are variations of a the same contig (i.e. they are somewhat similar to each other). genozip uses this information to improve the compression.
+.. option:: --multifasta  All contigs in the FASTA file are variations of a the same contig (i.e. they are somewhat similar to each other). genozip uses this information to improve the compression.
 
                      |
                      
