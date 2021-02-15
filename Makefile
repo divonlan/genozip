@@ -211,12 +211,12 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 docs/conf.py: docs/conf.template.py
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
 
-docs/_static/LICENSE.for-docs.txt: genozip$(EXE)
+docs/LICENSE.for-docs.txt: genozip$(EXE)
 	@./genozip$(EXE) --license=74 > $@
 
-docs/_build/html/.buildinfo: docs/_static/LICENSE.for-docs.txt docs/conf.py  $(DOCS)
+docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/conf.py  $(DOCS)
 	@echo Building HTML docs
-	@cp windows/genozip-installer.exe docs/_static
+	@cp windows/genozip-installer.exe docs
 	@wsl $(SPHINX) -M html docs docs/_build -q -a 
 
 docs: windows/genozip-installer.exe docs/_build/html/.buildinfo

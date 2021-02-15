@@ -6,7 +6,7 @@ Installing
       | ``conda config --add channels conda-forge``
       | ``conda install genozip``
 
-   **Using a Windows installer**: :download:`genozip-installer.exe <_static/genozip-installer.exe>` 
+   **Using a Windows installer**: :download:`genozip-installer.exe <genozip-installer.exe>` 
 
    **From Github** (tested on Linux, Mac and Windows):
       | ``git clone https://github.com/divonlan/genozip``
