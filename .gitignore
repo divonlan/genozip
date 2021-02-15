@@ -68,7 +68,7 @@ test.*
 test/back-compat
 internal-docs
 docs/_build
-docs/_static
+!docs/_static/*
 !docs/*.rst
 utils/*
 conda/README.md
