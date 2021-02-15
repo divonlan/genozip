@@ -58,8 +58,8 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _f  {"force",         no_argument,       &flag.force,            1 }
         #define _h  {"help",          optional_argument, 0, 'h'                    }
         #define _l  {"list",          no_argument,       &command, LIST            }
-        #define _L1 {"license",       no_argument,       &command, LICENSE         } // US spelling
-        #define _L2 {"licence",       no_argument,       &command, LICENSE         } // British spelling
+        #define _L1 {"license",       optional_argument, 0, 'L'                    } // US spelling
+        #define _L2 {"licence",       optional_argument, 0, 'L'                    } // British spelling
         #define _q  {"quiet",         no_argument,       &flag.quiet,            1 }
         #define _Q  {"noisy",         no_argument,       &option_noisy,          1 }
         #define _DL {"replace",       no_argument,       &flag.replace,          1 }
@@ -177,7 +177,7 @@ void flags_init_from_command_line (int argc, char **argv)
             "i:I:cdfhlLqQt^Vzm@:o:p:B:9wWFe:E:2z:u", // genozip (note: includes some genounzip options to be used in combination with -d)
             "cz:fhLqQt^V@:uo:p:me:wWx",              // genounzip
             "hLVp:qfub",                             // genols
-            "z:hLV@:p:qQ1r:s:H1Go:fg:e:E:wWx"          // genocat
+            "z:hLV@:p:qQ1r:s:H1Go:fg:e:E:wWx"        // genocat
         };
 
         int option_index = -1;
@@ -189,10 +189,16 @@ void flags_init_from_command_line (int argc, char **argv)
 
         switch (c) {
             case HELP:
-                flag.help = optarg; // fall through
+                flag.help = optarg;
+                goto verify_command;
 
-            case PIZ : case LIST : case LICENSE : 
+            case LICENSE :
+                flag.lic_width = atoi (optarg);
+                goto verify_command;
+
+            case PIZ : case LIST :  
             case VERSION :
+verify_command:
                 ASSINP (command<0 || command==c, "can't have both -%c and -%c", command, c); 
                 command=c; 
                 break;

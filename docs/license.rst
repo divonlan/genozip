@@ -1,4 +1,4 @@
 Non-Commerical License
 ======================
-.. include:: ../LICENSE.non-commercial.txt
+.. include:: _static/LICENSE.for-docs.txt
    :literal:

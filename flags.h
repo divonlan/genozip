@@ -44,6 +44,7 @@ typedef struct {
         to_stdout,   // redirect txt output upon decompression to stdout 
         replace, 
         do_register,
+        lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
         test,        // implies md5
         index_txt;   // create an index
     char *threads_str, *out_filename;

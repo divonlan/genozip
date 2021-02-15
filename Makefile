@@ -201,17 +201,20 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 
 LICENSE.non-commercial.txt: genozip$(EXE)
 	@echo Generating $@
-	@./genozip$(EXE) --license > $@
+	@./genozip$(EXE) --license=100 > $@
 
 SPHINX = /home/divon/miniconda3/bin/sphinx-build
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/developer.rst docs/index.rst docs/license.rst \
-       docs/publications.rst docs/installing.rst docs/contact.rst \
+       docs/publications.rst docs/installing.rst docs/contact.rst docs/examples.rst docs/logo.png \
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-translation.rst 
 
 docs/conf.py: docs/conf.template.py
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
 
-docs/_build/html/.buildinfo: LICENSE.non-commercial.txt docs/conf.py $(DOCS)
+docs/_static/LICENSE.for-docs.txt: genozip$(EXE)
+	@./genozip$(EXE) --license=74 > $@
+
+docs/_build/html/.buildinfo: docs/_static/LICENSE.for-docs.txt docs/conf.py  $(DOCS)
 	@echo Building HTML docs
 	@cp windows/genozip-installer.exe docs/_static
 	@wsl $(SPHINX) -M html docs docs/_build -q -a 
@@ -326,7 +329,7 @@ windows/readme.txt: $(EXECUTABLES)
 
 windows/LICENSE.for-installer.txt: genozip$(EXE)
 	@echo Generating $@
-	@./genozip$(EXE) --license --force > $@
+	@./genozip$(EXE) --license=60 > $@
 
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe \
                          windows/LICENSE.for-installer.txt windows/readme.txt

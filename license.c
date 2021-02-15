@@ -24,8 +24,8 @@
 
 void license_display (void)
 {
-    str_print_text (license, sizeof(license) / sizeof(char*), "", "\n\n", 
-                    flag.force ? 60 : 0); // --license --force means output license in Windows installer format (used by Makefile) - 60 is width of InstallForge license text field
+    // Makefile sets lic_width to a fixed width for Windows Installer and for Docs
+    str_print_text (license, sizeof(license) / sizeof(char*), "", "\n\n", flag.lic_width); 
 }
 
 static uint32_t license_generate_num(void)

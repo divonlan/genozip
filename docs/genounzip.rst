@@ -5,9 +5,15 @@ Uncompress files compressed with ``genozip``.
 Usage: ``genounzip`` [options]... [files]...
 
 One or more file names must be given
-Examples: 
+
+          |
+
+**Examples** 
+
      | ``genounzip file1.vcf.genozip file2.sam.genozip``
+     |
      | ``genounzip file.vcf.genozip --output file.vcf.gz``
+     |
      | ``genounzip bound.vcf.genozip --unbind``
 
 **Options**

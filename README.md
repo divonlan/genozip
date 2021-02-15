@@ -93,7 +93,7 @@ Notes:<br>
 <b><i>Converting 23andMe to VCF:</i></b><br>
 <b>genounzip</b> <i>genome_mydata-Full.txt.genozip</i> --vcf -e GRCh37.ref.genozip<br>
 <br>
-<b><i>Generate a samtools/bcftools index file when uncompressing:</i></b><br>
+<b><i>Generating a samtools/bcftools index file when uncompressing:</i></b><br>
 <b>genounzip</b> <i>file.bam.genozip</i> --index<br>
 <br>
 <b><i>Calculating the MD5 of the underlying textual file (also included in </i>--test<i>):</i></b><br>

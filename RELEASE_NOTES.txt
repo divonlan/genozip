@@ -363,3 +363,5 @@ bug fixes, including major bug with mc:i optional field in SAM
 11.0.2
 - Bug fixes
 
+11.0.3
+- Added registration requirement to the non-commerical license (2.d.)
