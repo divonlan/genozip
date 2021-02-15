@@ -26,7 +26,7 @@ One or more file names must be given.
 
           |
 
-.. option:: --interleaved  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file, then a read from the second file, then the next read from the first file and so on.
+.. option:: --interleaved  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file ; then a read from the second file ; then the next read from the first file and so on.
 
           |
 

@@ -15,7 +15,7 @@
 
    |
 
-.. option:: -L, --license  Show the license terms and conditions for this product.
+.. option:: -L, --license, --licence  Show the license terms and conditions for this product.
 
                      |
 

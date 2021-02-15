@@ -13,4 +13,7 @@ Installing
       | ``make``
       | requires: gcc or clang, make
 
+   **From Docker Hub** `here <https://hub.docker.com/r/divonlan/genozip>`_
+      | 
+
 |
