@@ -37,27 +37,27 @@ Examples:
 
 **Flags**
 
-.. option:: -i, --input data-type. data-type is one of the supported file extensions listed in the table above (eg bam vcf.gz fq.xz. See "genozip --help=input" for full list of accepted file types. This flag should be used when redirecting input data with a < or | or if the input file type cannot be determined by its file name.
+.. option:: -i, --input data-type.  <data-type> is one of the supported file extensions listed in the table above (eg bam vcf.gz fq.xz. See "genozip --help=input" for full list of accepted file types. This flag should be used when redirecting input data with a < or | or if the input file type cannot be determined by its file name.
 
                      |
                      
-.. option:: -f, --force        Force overwrite of the output file or force writing the compressed data to standard output.
+.. option:: -f, --force  Force overwrite of the output file or force writing the compressed data to standard output.
 
                      |
                      
-.. option:: -^, --replace      Replace the source file with the result file rather than leaving it unchanged.
+.. option:: -^, --replace  Replace the source file with the result file rather than leaving it unchanged.
 
                      |
                      
-.. option:: -o, --output output-filename. This option can also be used to bind multiple input files into a single ``genozip`` file. The files can be later unbound with ``genounzip --unbind``. To bind files they must be of the same type (e.g. VCF or SAM) and if they are VCF files they must contain the same samples. genozip takes advantage of similarities between the input files so that the bound file is usually smaller than the combined size of individually compressed files.
+.. option:: -o, --output output-filename.  This option can also be used to bind multiple input files into a single genozip file. The files can be later unbound with ``genounzip --unbind``. To bind files they must be of the same type (e.g. VCF or SAM) and if they are VCF files they must contain the same samples. genozip takes advantage of similarities between the input files so that the bound file is usually smaller than the combined size of individually compressed files.
 
                      |
                      
-.. option:: --best         Best compression but slower than --fast mode. This is the default mode of genozip - this flag has no additional effect.
+.. option:: --best  Best compression but slower than --fast mode. This is the default mode of genozip - this flag has no additional effect.
 
                      |
                      
-.. option:: -F, --fast    Fast compression but lower compression ratio than --best. Files compressed with this option also uncompress faster. Compressing with this option also consumes less memory.
+.. option:: -F, --fast  Fast compression but lower compression ratio than --best. Files compressed with this option also uncompress faster. Compressing with this option also consumes less memory.
 
                      |
                      
@@ -73,7 +73,7 @@ Examples:
 
                      |
                      
-.. option:: -t, --test         After compressing normally decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual decompressed file to that of the original textual file. This option also activates --md5.
+.. option:: -t, --test  After compressing normally decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual decompressed file to that of the original textual file. This option also activates --md5.
 
                      |
                      
@@ -88,19 +88,19 @@ Examples:
 
                      |
                      
-.. option:: -E, --REFERENCE filename. Similar to --reference except genozip copies the reference (or part of it) to the output file so there is no need to specify --reference in genounzip and genocat. Note on using with --password: the copy of the reference file stored in the compressed file is never encrypted.
+.. option:: -E, --REFERENCE filename.  Similar to --reference except genozip copies the reference (or part of it) to the output file so there is no need to specify --reference in genounzip and genocat. Note on using with --password: the copy of the reference file stored in the compressed file is never encrypted.
 
                      |
                      
 .. include:: opt-stats.rst
 
-.. option:: --register        Register (or re-register) a non-commericial license to use genozip.
+.. option:: --register  Register (or re-register) a non-commericial license to use genozip.
 
                      |
                      
 **FASTQ-specific options (ignored for other file types)**
 
-.. option:: -2, --pair         Compress pairs of paired-end FASTQ files resulting in compression ratios better than compressing the files individually. When using this option every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display it interleaved use genocat --interleaved. To unbind the genozip file back to its original FASTQ files use genounzip --unbind.
+.. option:: -2, --pair  Compress pairs of paired-end FASTQ files resulting in compression ratios better than compressing the files individually. When using this option every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display it interleaved use genocat --interleaved. To unbind the genozip file back to its original FASTQ files use genounzip --unbind.
 
                      |
                      
@@ -122,33 +122,33 @@ Examples:
 
 *VCF optimizations* 
 
-.. option:: --optimize-sort   INFO subfields are sorted alphabetically.               
+.. option:: --optimize-sort  INFO subfields are sorted alphabetically.               
 
                               | Example: ``AN=21;AC=3`` -> ``AC=3;AN=21``
                               |
 
 
-.. option:: --optimize-PL     PL data: Phred values of over 60 are changed to 60.     
+.. option:: --optimize-PL  PL data: Phred values of over 60 are changed to 60.     
 
                               | Example: ``0,18,270`` -> ``0,18,60``
                               |
 
-.. option:: --optimize-GL     GL data: Numbers are rounded to 2 significant digits.   
+.. option:: --optimize-GL  GL data: Numbers are rounded to 2 significant digits.   
 
                               | Example: ``-2.61618,-0.447624,-0.193264`` -> ``-2.6,-0.45,-0.19``
                               |
 
-.. option:: --optimize-GP     GP data: Numbers are rounded to 2 significant digits as with GL.
+.. option:: --optimize-GP  GP data: Numbers are rounded to 2 significant digits as with GL.
 
                               |
 
-.. option:: --optimize-VQSLOD VQSLOD data: Number is rounded to 2 significant digits. 
+.. option:: --optimize-VQSLOD  VQSLOD data: Number is rounded to 2 significant digits. 
 
                               | Example: ``-4.19494`` -> ``-4.2``
 
 *SAM and BAM optimizations*
    
-.. option:: --optimize-QUAL   The QUAL quality field and the secondary U2 quality field (if it exists) are modified to group quality scores into a smaller number of bins:
+.. option:: --optimize-QUAL  The QUAL quality field and the secondary U2 quality field (if it exists) are modified to group quality scores into a smaller number of bins:
 
                      ============ ======
                      *Old values* *New value*                 
@@ -167,27 +167,27 @@ Examples:
                      | Example: ``LSVIHINKHK`` -> ``IIIIFIIIFI``
                      |
 
-.. option:: --optimize-ZM     ZM:B:s data: negative Ion Torrent flow signal values are changed to zero, and positives are rounded to the nearest 10.  
+.. option:: --optimize-ZM  ZM:B:s data: negative Ion Torrent flow signal values are changed to zero, and positives are rounded to the nearest 10.  
 
                      Example: ``-20,212,427`` -> ``0,210,430``
 
 *FASTQ optimizations*
    
-.. option:: --optimize-DESC   Replaces the description line with @filename:read_number.
+.. option:: --optimize-DESC  Replaces the description line with @filename:read_number.
                      
                      | Example: ``@A00488:61:HMLGNDSXX:4:1101:1561:1000 2:N:0:CTGAAGCT+ATAGAGGC`` -> ``@sample.fq.gz:100`` (100 is the read sequential number within this fastq file)
                      |
 
-.. option:: --optimize-QUAL   The quality data is optimized as described for SAM above.
+.. option:: --optimize-QUAL  The quality data is optimized as described for SAM above.
 
 *GVF optimizations*
    
-.. option:: --optimize-sort   Attributes are sorted alphabetically.
+.. option:: --optimize-sort  Attributes are sorted alphabetically.
                      
                      | Example: ``Notes=hi;ID=rs12`` -> ``ID=rs12;Notes=hi``
                      |
 
-.. option:: --optimize-Vf     Variant_freq data: Number is rounded to 2 significant digits. 
+.. option:: --optimize-Vf  Variant_freq data: Number is rounded to 2 significant digits. 
                      
                      | Example: ``0.006351`` -> ``0.0064``
                      |
@@ -198,7 +198,7 @@ Examples:
     
                      |
 
-.. option:: -l, --list        Same as running genols.
+.. option:: -l, --list  Same as running genols.
 
                      |
                      

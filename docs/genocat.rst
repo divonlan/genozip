@@ -51,7 +51,7 @@ One or more file names must be given.
    | *Note*: For FASTA files, only whole-contig regions are possible.
    |
 
-.. option:: -s, --samples [^]sample[,...]. (VCF) Show a subset of samples (individuals). Examples:
+.. option:: -s, --samples [^]sample[,...].  (VCF) Show a subset of samples (individuals). Examples:
 
    ================================================== ======================================
    ``genocat myfile.vcf.genozip -s HG00255,HG00256``  show two samples
