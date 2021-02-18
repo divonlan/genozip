@@ -159,14 +159,15 @@ static inline void bam_rewrite_cigar (VBlockSAM *vb, uint16_t n_cigar_op, const 
     // calculate length
     unsigned len=0;
     for (uint16_t i=0; i < n_cigar_op; i++) {
-        uint32_t op_len = LTEN32 (cigar[i]) >> 4;
-        if      (op_len < 10)      len += 2; // 1 for the op, 1 for the number
-        else if (op_len < 100)     len += 3; 
-        else if (op_len < 1000)    len += 4; 
-        else if (op_len < 10000)   len += 5; 
-        else if (op_len < 100000)  len += 6; 
-        else if (op_len < 1000000) len += 7;
-        else ABORT ("op_len=%u too long in vb=%u: ", vb->vblock_i, op_len); 
+        uint32_t op_len = LTEN32 (cigar[i]) >> 4; // maximum is 268,435,455
+        if      (op_len < 10)       len += 2; // 1 for the op, 1 for the number
+        else if (op_len < 100)      len += 3; 
+        else if (op_len < 1000)     len += 4; 
+        else if (op_len < 10000)    len += 5; 
+        else if (op_len < 100000)   len += 6; 
+        else if (op_len < 1000000)  len += 7;
+        else if (op_len < 10000000) len += 8;
+        else                        len += 9;
     }
 
     buf_alloc (vb, &vb->textual_cigar, len + 1 /* for \0 */, 2, "textual_cigar");
