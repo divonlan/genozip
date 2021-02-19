@@ -214,12 +214,11 @@ docs/conf.py: docs/conf.template.py
 docs/LICENSE.for-docs.txt: genozip$(EXE)
 	@./genozip$(EXE) --license=74 > $@
 
-docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/conf.py  $(DOCS)
+docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/conf.py $(DOCS)
 	@echo Building HTML docs
-	@cp windows/genozip-installer.exe docs
 	@wsl $(SPHINX) -M html docs docs/_build -q -a 
 
-docs: windows/genozip-installer.exe docs/_build/html/.buildinfo
+docs: docs/_build/html/.buildinfo
 
 docs-debug: docs/_build/html/.buildinfo
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe file:///C:/Users/USER/projects/genozip/docs/_build/html/index.html; exit 0)
@@ -335,19 +334,20 @@ WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genoc
                          windows/LICENSE.for-installer.txt windows/readme.txt
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-windows/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LICENSE.non-commercial.txt 
+docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LICENSE.non-commercial.txt 
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'WINDOWS: Using the UI:'
-	@echo '  (1) Open windows/genozip.ifp'
+	@echo '  (1) Open genozip-installer.ifp'
 	@echo '  (2) Set General-Program version to $(version)'
-	@echo '  (3) Verify the files Setup-Files, and the license from LICENSE.for-installer.txt are up to date'
-	@echo '  (4) Click Save, then click Build, then click No to the popup question'
+	@echo '  (3) Click Save, then click Build'
+	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
 	@echo '  (5) Exit the UI (close the window)'
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
 	@echo 'Committing Windows installer and pushing to repo'
-	@(git stage windows/genozip.ifp $@ ; exit 0) > /dev/null
-	@(git commit -m windows_files_for_version_$(version) windows/genozip.ifp $@ ; exit 0) > /dev/null
+	@mv windows/genozip-installer.exe docs
+	@(git stage genozip-installer.ifp $@ ; exit 0) > /dev/null
+	@(git commit -m windows_files_for_version_$(version) genozip-installer.ifp $@ ; exit 0) > /dev/null
 	@git push > /dev/null
 	@rm -f arch.o # remove this arch.o which contains DISTRIBUTION
 
@@ -364,7 +364,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@touch $@
 
 distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
-distribution: docs conda/.conda-timestamp windows/genozip-installer.exe # mac/.remote_mac_timestamp
+distribution: docs conda/.conda-timestamp docs/genozip-installer.exe # mac/.remote_mac_timestamp
 	
 endif # Windows
 
@@ -458,5 +458,5 @@ clean: clean-test.sh-files
 	@rm -f *.good *.bad *.local *.b250 test/*.good test/*.bad test/*.local test/*.b250
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp delete-arch docs
+.PHONY: clean clean-debug clean-optimized clean-test.sh-files git-pull macos mac/.remote_mac_timestamp delete-arch docs 
 
