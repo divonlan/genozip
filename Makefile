@@ -340,6 +340,7 @@ docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LIC
 	@echo 'WINDOWS: Using the UI:'
 	@echo '  (1) Open genozip-installer.ifp'
 	@echo '  (2) Set General-Program version to $(version)'
+	@echo '  (3) If changed, update license in Dialogs->License from windows/LICENSE-for-installer.txt'
 	@echo '  (3) Click Save, then click Build'
 	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
 	@echo '  (5) Exit the UI (close the window)'
