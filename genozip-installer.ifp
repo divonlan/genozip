@@ -72,38 +72,43 @@ RunProgs = 0
 Execdlls = 0
 [Languages]
 [Files/Dirs]
-C:\Users\USER\projects\genozip\genocat.exe
-328.2 KB
-exe
-C:\Users\USER\projects\genozip\genols.exe
-328.2 KB
-exe
-C:\Users\USER\projects\genozip\genounzip.exe
-328.2 KB
-exe
-C:\Users\USER\projects\genozip\genozip.exe
-328.2 KB
-exe
 C:\Users\USER\projects\genozip\LICENSE.commercial.txt
 60 Byte
 txt
 C:\Users\USER\projects\genozip\LICENSE.non-commercial.txt
 9.9 KB
 txt
-C:\Users\USER\projects\genozip\readme.txt
-3 KB
+C:\Users\USER\projects\genozip\windows\genocat.exe
+1.6 MB
+exe
+C:\Users\USER\projects\genozip\windows\genols.exe
+1.6 MB
+exe
+C:\Users\USER\projects\genozip\windows\genounzip.exe
+1.6 MB
+exe
+C:\Users\USER\projects\genozip\windows\genozip.exe
+1.6 MB
+exe
+C:\Users\USER\projects\genozip\windows\readme.txt
+30 KB
 txt
-C:\Users\USER\projects\genozip\test-file.vcf
-639 Byte
-vcf
 [Licence_Begin]
-11183
-{\rtf1\ansi\ansicpg1252\deff0\deflang1033{\fonttbl{\f0\fnil\fcharset0 MS Shell Dlg;}}
-\viewkind4\uc1\pard\f0\fs15 This program, "genozip", and all documentation, are\par
-copyright (C) 2019-2020 Divon M Lan.  All rights reserved.\par
+8118
+{\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset0 MS Shell Dlg;}}
+\viewkind4\uc1\pard\lang1033\f0\fs15 This program, "genozip", and all associated, source code,\par
+object code, documentation and other files, are copyright \par
+(C) 2019-2021 Divon M Lan ("Copyright Owner"). All rights\par
+reserved.\par
 \par
-This license covers NON-COMMERCIAL use only. For a\par
-commercial license, please contact sales@genozip.com\par
+This license is limited in scope, and covers NON-COMMERCIAL\par
+and some other limited use cases as described below.\par
+\par
+For a commercial license, please contact sales@genozip.com\par
+\par
+Acknowledgement: portions of the text of this license are\par
+based on Apache License 2.0, however it differs from it\par
+substantially\par
 \par
 TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\par
 \par
@@ -113,9 +118,8 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\par
 reproduction, and distribution as defined by Sections 1\par
 through 9 of this document.\par
 \par
-"Licensor" shall mean the copyright owner or entity\par
-authorized by the copyright owner that is granting the\par
-License.\par
+"Licensor" shall mean Copyright Owner or entity authorized\par
+by Copyright Owner that is granting the License.\par
 \par
 "Legal Entity" shall mean the union of the acting entity\par
 and all other entities that control, are controlled by, or\par
@@ -138,11 +142,15 @@ transformation or translation of a Source form, including\par
 but not limited to compiled object code, generated\par
 documentation, and conversions to other media types.\par
 \par
+"Executable" shall mean a type of Object, for which there\par
+exists an operating system of a computing device, for which\par
+said operating system is capable of running said Object as\par
+an operating system process.\par
+\par
 "Work" shall mean the work of authorship, whether in Source\par
 or Object form, made available under the License, as\par
 indicated by a copyright notice that is included in or\par
-attached to the work (an example is provided in the\par
-Appendix below).\par
+attached to the work.\par
 \par
 "Derivative Works" shall mean any work, whether in Source\par
 or Object form, that is based on (or derived from) the Work\par
@@ -153,152 +161,96 @@ License, Derivative Works shall not include works that\par
 remain separable from, or merely link (or bind by name) to\par
 the interfaces of, the Work and Derivative Works thereof.\par
 \par
-"Contribution" shall mean any work of authorship, including\par
-the original version of the Work and any modifications or\par
-additions to that Work or Derivative Works thereof, that is\par
-intentionally submitted to Licensor for inclusion in the\par
-Work by the copyright owner or by an individual or Legal\par
-Entity authorized to submit on behalf of the copyright\par
-owner. For the purposes of this definition, "submitted"\par
-means any form of electronic, verbal, or written\par
-communication sent to the Licensor or its representatives,\par
-including but not limited to communication on electronic\par
-mailing lists, source code control systems, and issue\par
-tracking systems that are managed by, or on behalf of, the\par
-Licensor for the purpose of discussing and improving the\par
-Work, but excluding communication that is conspicuously\par
-marked or otherwise designated in writing by the copyright\par
-owner as "Not a Contribution."\par
-\par
-"Contributor" shall mean Licensor and any individual or\par
-Legal Entity on behalf of whom a Contribution has been\par
-received by Licensor and subsequently incorporated within\par
-the Work.\par
-\par
-1.5. This License, except for this section 1.5, is\par
-identical to the Apache License 2.0. Section 2 onwards of\par
-this License applies ONLY FOR NON COMMERICAL USE of the\par
-Work or Derivative Works including teaching and research at\par
-educational institutions, research at non-profit research\par
-institutions, and personal non-profit purposes. For using\par
-the Work or Derivative Works for commercial purposes,\par
-including but not restricted to consulting activities, work\par
-that is intended to lead to commercial products or\par
-services, and work at or by a commercial entity, its\par
-employees, consultants and contractors for any purpose, you\par
-have to contact sales@genozip.com for a commercial license.\par
 \par
 2. Grant of Copyright License. Subject to the terms and\par
-conditions of this License, each Contributor hereby grants\par
-to You a perpetual, worldwide, non-exclusive, no-charge,\par
-royalty-free, irrevocable copyright license to reproduce,\par
-prepare Derivative Works of, publicly display, publicly\par
-perform, sublicense, and distribute the Work and such\par
-Derivative Works in Source or Object form.\par
+conditions of this License, Licensor hereby grants to You a\par
+perpetual, worldwide, non-exclusive, no-charge, royalty\par
+-free, revocable copyright license to reproduce, publicly\par
+display, publicly perform, and distribute the Work in\par
+Source or Object form (together: "Using"), subject to the\par
+following details:\par
 \par
-3. Grant of Patent License. Subject to the terms and\par
-conditions of this License, each Contributor hereby grants\par
-to You a perpetual, worldwide, non-exclusive, no-charge,\par
-royalty-free, irrevocable (except as stated in this\par
-section) patent license to make, have made, use, offer to\par
-sell, sell, import, and otherwise transfer the Work, where\par
-such license applies only to those patent claims licensable\par
-by such Contributor that are necessarily infringed by their\par
-Contribution(s) alone or by combination of their\par
-Contribution(s) with the Work to which such Contribution(s)\par
-was submitted. If You institute patent litigation against\par
-any entity (including a cross-claim or counterclaim in a\par
-lawsuit) alleging that the Work or a Contribution\par
-incorporated within the Work constitutes direct or\par
-contributory patent infringement, then any patent licenses\par
-granted to You under this License for that Work shall\par
-terminate as of the date such litigation is filed.\par
+   a. This license does NOT permit creation of Derivative\par
+Works, and does not permit distributing modified Source or\par
+Object based on modified Source\par
 \par
-4. Redistribution. You may reproduce and distribute copies\par
-of the Work or Derivative Works thereof in any medium, with\par
-or without modifications, and in Source or Object form,\par
-provided that You meet the following conditions:\par
+   b. This license does NOT permit Using the features of\par
+the Work intended for compressing data, including the\par
+genozip Executable, for any purpose except b1,b2,b3,b4\par
+hereinafter if (i). you are a commercial entity or working\par
+on behalf or for the benefit of a commercial entity; and/or\par
+(ii). the use of the Work is in the context of a project\par
+that has ultimate commerical goals. \par
 \par
-   a. You must give any other recipients of the Work or\par
-Derivative Works a copy of this License; and\par
+      b1. This license DOES permit Using the Work for\par
+educational or training purposes, including by a commerical\par
+entity.\par
 \par
-   b. You must cause any modified files to carry prominent\par
-notices stating that You changed the files; and\par
+      b2. This license DOES permit Using the Work for the\par
+purpose of evaluating it for a duration of 30 days,\par
+including by a commerical entity.\par
 \par
-   c. You must retain, in the Source form of any Derivative\par
-Works that You distribute, all copyright, patent,\par
-trademark, and attribution notices from the Source form of\par
-the Work, excluding those notices that do not pertain to\par
-any part of the Derivative Works; and\par
+      b3. This license DOES permit Using the Work for the\par
+purpose of distributing it to others in unmodified Source\par
+form or Object derived from unmodified Source, and\par
+including this License via a platform that is both publicly\par
+accessible and free of charge, including but not limited to\par
+an Internet website\par
 \par
-   d. If the Work includes a "NOTICE" text file as part of\par
-its distribution, then any Derivative Works that You\par
-distribute must include a readable copy of the attribution\par
-notices contained within such NOTICE file, excluding those\par
-notices that do not pertain to any part of the Derivative\par
-Works, in at least one of the following places: within a\par
-NOTICE text file distributed as part of the Derivative\par
-Works; within the Source form or documentation, if provided\par
-along with the Derivative Works; or, within a display\par
-generated by the Derivative Works, if and wherever such\par
-third-party notices normally appear. The contents of the\par
-NOTICE file are for informational purposes only and do not\par
-modify the License. You may add Your own attribution\par
-notices within Derivative Works that You distribute,\par
-alongside or as an addendum to the NOTICE text from the\par
-Work, provided that such additional attribution notices\par
-cannot be construed as modifying the License.\par
+      b4. This license DOES permit Using, including\par
+reproducing and distributing, the three Executables\par
+genounzip, genocat and genols for any purpose including\par
+commercial.\par
 \par
-      You may add Your own copyright statement to Your\par
-modifications and may provide additional or different\par
-license terms and conditions for use, reproduction, or\par
-distribution of Your modifications, or for any such\par
-Derivative Works as a whole, provided Your use,\par
-reproduction, and distribution of the Work otherwise\par
-complies with the conditions stated in this License.\par
+   c. This license DOES NOT permit compressing a file,\par
+unless the uncompressed file is also kept or the potential\par
+loss of data due to genozip not being able to uncompress\par
+the compressed file would not cause any harm.\par
 \par
-5. Submission of Contributions. Unless You explicitly state\par
-otherwise, any Contribution intentionally submitted for\par
-inclusion in the Work by You to the Licensor shall be under\par
-the terms and conditions of this License, without any\par
-additional terms or conditions. Notwithstanding the above,\par
-nothing herein shall supersede or modify the terms of any\par
-separate license agreement you may have executed with\par
-Licensor regarding such Contributions.\par
+   d. This license is conditional on You accurately\par
+registering Your name, email and organization which you may\par
+be prompted for by an Executable of the Work, or if not\par
+prompted, you should supply via email to sales@genozip.com.\par
 \par
-6. Trademarks. This License does not grant permission to\par
+\par
+3. Submission of Contributions. Unless You explicitly state\par
+otherwise, any software source code intentionally submitted\par
+for inclusion in the Work by You to the Licensor shall\par
+imply complete and irrevocable assignment by You to\par
+Copyright Owner of all copyright in the submitted source\par
+code.\par
+\par
+4. Trademarks. This License does not grant permission to\par
 use the trade names, trademarks, service marks, or product\par
 names of the Licensor, except as required for reasonable\par
-and customary use in describing the origin of the Work and\par
-reproducing the content of the NOTICE file.\par
+and customary use in describing the origin of the Work\par
 \par
-7. Disclaimer of Warranty. Unless required by applicable\par
-law or agreed to in writing, Licensor provides the Work\par
-(and each Contributor provides its Contributions) on an "AS\par
-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,\par
-either express or implied, including, without limitation,\par
-any warranties or conditions of TITLE, NON-INFRINGEMENT,\par
-MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You\par
-are solely responsible for determining the appropriateness\par
-of using or redistributing the Work and assume any risks\par
-associated with Your exercise of permissions under this\par
-License.\par
+5. Disclaimer of Warranty. Unless required by applicable\par
+law or agreed to in writing, Licensor provides the Work on\par
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\par
+KIND, either express or implied, including, without\par
+limitation, any warranties or conditions of TITLE, NON\par
+-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR\par
+PURPOSE. You are solely responsible for determining the\par
+appropriateness of using or redistributing the Work and\par
+assume any risks associated with Your exercise of\par
+permissions under this License.\par
 \par
-8. Limitation of Liability. In no event and under no legal\par
+6. Limitation of Liability. In no event and under no legal\par
 theory, whether in tort (including negligence), contract,\par
 or otherwise, unless required by applicable law (such as\par
 deliberate and grossly negligent acts) or agreed to in\par
-writing, shall any Contributor be liable to You for\par
-damages, including any direct, indirect, special,\par
-incidental, or consequential damages of any character\par
-arising as a result of this License or out of the use or\par
-inability to use the Work (including but not limited to\par
-damages for loss of goodwill, work stoppage, computer\par
-failure or malfunction, or any and all other commercial\par
-damages or losses), even if such Contributor has been\par
-advised of the possibility of such damages.\par
+writing, shall any Contributor be liable to You for damages\par
+, including any direct, indirect, special, incidental, or\par
+consequential damages of any character arising as a result\par
+of this License or out of the use or inability to use the\par
+Work (including but not limited to damages for loss of\par
+goodwill, work stoppage, computer failure or malfunction,\par
+or any and all other commercial damages or losses), even if\par
+such Contributor has been advised of the possibility of\par
+such damages.\par
 \par
-9. Accepting Warranty or Additional Liability. While\par
+7. Accepting Warranty or Additional Liability. While\par
 redistributing the Work or Derivative Works thereof, You\par
 may choose to offer, and charge a fee for, acceptance of\par
 support, warranty, indemnity, or other liability\par
@@ -312,6 +264,7 @@ Contributor by reason of your accepting any such warranty\par
 or additional liability.\par
 \par
 END OF TERMS AND CONDITIONS\par
+\par
 \par
 }
  [Licence_End]
