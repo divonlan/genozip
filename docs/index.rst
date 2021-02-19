@@ -6,12 +6,12 @@ Genozip
 .. toctree::
    :maxdepth: 2
 
+   Installing <installing> 
+   Examples <examples> 
    Using genozip <genozip>
    Using genounzip <genounzip>
    Using genocat <genocat>
    Using genols <genols>
-   Installing <installing> 
-   Examples <examples> 
    Publications & Citing <publications>
    Source code <source>
    Developer options <developer>
