@@ -13,6 +13,7 @@ Genozip
    Installing <installing> 
    Examples <examples> 
    Publications & Citing <publications>
+   Source code <source>
    Developer options <developer>
    License <license>
    Contact <contact>

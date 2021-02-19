@@ -205,7 +205,7 @@ LICENSE.non-commercial.txt: genozip$(EXE)
 
 SPHINX = /home/divon/miniconda3/bin/sphinx-build
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/developer.rst docs/index.rst docs/license.rst \
-       docs/publications.rst docs/installing.rst docs/contact.rst docs/examples.rst docs/logo.png \
+       docs/publications.rst docs/installing.rst docs/contact.rst docs/examples.rst docs/source.rst docs/logo.png \
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-translation.rst 
 
 docs/conf.py: docs/conf.template.py
