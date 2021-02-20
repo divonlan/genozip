@@ -367,3 +367,6 @@ bug fixes, including major bug with mc:i optional field in SAM
 - Added registration requirement to the non-commerical license (2.d.)
 - Bug fixes
 - windows installer relocated from windows/ to docs/
+
+11.0.3
+- bug fixes
