@@ -193,7 +193,7 @@ void flags_init_from_command_line (int argc, char **argv)
                 goto verify_command;
 
             case LICENSE :
-                flag.lic_width = atoi (optarg);
+                flag.lic_width = optarg ? atoi (optarg) : 0;
                 goto verify_command;
 
             case PIZ : case LIST :  
