@@ -1,5 +1,5 @@
 This program, "genozip", and all associated, source code, object code, documentation and other
-files, are copyright (C) 2019-2021 Divon M Lan ("Copyright Owner"). All rights reserved.
+files, are copyright (C) 2019-2020 Divon M Lan ("Copyright Owner"). All rights reserved.
 
 This license is limited in scope, and covers NON-COMMERCIAL and some other limited use cases as
 described below.
