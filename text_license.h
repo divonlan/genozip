@@ -1,10 +1,10 @@
 // ------------------------------------------------------------------
 //   text-license.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 static const char *license[] = {
-    "This program, \"genozip\", and all associated, source code, object code, documentation and other files, are copyright (C) 2019-2020 Divon M Lan (\"Copyright Owner\"). All rights reserved.",
+    "This program, \"genozip\", and all associated, source code, object code, documentation and other files, are copyright (C) 2019-2021 Divon M Lan (\"Copyright Owner\"). All rights reserved.",
     "This license is limited in scope, and covers NON-COMMERCIAL and some other limited use cases as described below.",
     "For a commercial license, please contact sales@genozip.com",
     "Acknowledgement: portions of the text of this license are based on Apache License 2.0, however it differs from it substantially",
