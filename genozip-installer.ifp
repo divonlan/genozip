@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = genozip
-Program version = 11.0.3
+Program version = 11.0.4
 Windows 2000 = 1
 Windows XP = 1
 Windows Server 2003 = 1
@@ -51,11 +51,11 @@ Shortcut path = <company>\<appname>\
 Allows = 0
 Number = 20
 [SplashScreen]
-Image = 
+Image = C:\Users\USER\projects\genozip\genozip-installer.jpg
 Sound = 
 Time = 2
 PlaySound = 0
-Allow = 0
+Allow = 1
 [Build]
 File = C:\Users\USER\projects\genozip\windows\genozip-installer.exe
 [Updater]
@@ -94,8 +94,8 @@ C:\Users\USER\projects\genozip\windows\readme.txt
 30 KB
 txt
 [Licence_Begin]
-8118
-{\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset0 MS Shell Dlg;}}
+8130
+{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 MS Shell Dlg;}}
 \viewkind4\uc1\pard\lang1033\f0\fs15 This program, "genozip", and all associated, source code,\par
 object code, documentation and other files, are copyright \par
 (C) 2019-2021 Divon M Lan ("Copyright Owner"). All rights\par
@@ -275,6 +275,10 @@ END OF TERMS AND CONDITIONS\par
 [Serials]
 [Serials_End]
 [Commands]
+Execute application
+explorer
+http://genozip.com
+
 Execute application
 explorer
 <installpath>
