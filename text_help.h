@@ -473,13 +473,15 @@ static const char *help_genols[] = {
 
 static const char *help_footer[] = {
     "",
-    "Citing: Lan, D., et al. Bioinformatics, Volume 36, Issue 13, July 2020, Pages 4091-4092",
+    "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
     "",
     "Bug reports and feature requests: bugs@genozip.com",
     "Commercial license inquiries: sales@genozip.com",
     "Requests for support for compression of additional public or proprietary genomic file formats: sales@genozip.com",
     "",
-    "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
-    ""
+    "Citing:",
+    "  Lan, D., et al. (2021) Genozip - A universal extensible genomic data compressor. Bioinformatics",
+    "  Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files. Bioinformatics, 36, 4091-4092",
+    "",
 };
 
