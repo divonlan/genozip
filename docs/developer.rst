@@ -25,7 +25,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-dict=field  ZUC. Show dictionary fragments written for each vblock (works for genounzip too). With optional <field> (eg CHROM ; RNAME ; POS ; AN etc) shows only that one field. 
+.. option:: --show-dict=field  ZUC. Show dictionaries read/written for each vblock. With optional <field> (eg CHROM ; RNAME ; POS ; AN etc) shows only that one field. 
 
           |
 

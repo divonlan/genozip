@@ -163,7 +163,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-alleles    (VCF only) Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character",
     "",
-    "   ZUC  --show-dict=<field>  Show dictionary fragments written for each vblock (works for genounzip too). With optional <field> (eg CHROM, RNAME, POS, AN etc), shows only that one field. When used with genocat, only the dict data is shown, not the file contents",
+    "   ZUC  --show-dict=<field>  Show dictionaries read/written for each vblock. With optional <field> (eg CHROM, RNAME, POS, AN etc), shows only that one field. When used with genocat, only the dict data is shown, not the file contents",
     "",
     "   ZUC  --show-b250=<field>  Show b250 sections content - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). With optional <field> (eg CHROM, RNAME, POS, AN etc), shows only that one field. This also works with genounzip and genocat, but without the line numbers. When used with genocat, only the dict data is shown, not the file contents",
     "",
@@ -480,7 +480,7 @@ static const char *help_footer[] = {
     "Requests for support for compression of additional public or proprietary genomic file formats: sales@genozip.com",
     "",
     "Citing:",
-    "  Lan, D., et al. (2021) Genozip - A universal extensible genomic data compressor. Bioinformatics",
+    "  Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor. Bioinformatics",
     "  Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files. Bioinformatics, 36, 4091-4092",
     "",
 };
