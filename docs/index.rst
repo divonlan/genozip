@@ -27,7 +27,7 @@ Genozip is a universal compressor for genomic files - it is optimized to compres
 
 It can even compress files that are already compressed with .gz .bz2 .xz (for full list of supported file types see ``genozip --help=input``).
 
-The compression ratio one can expect to see depends on the data being compressed - it is typically about a 1.5-3X ratio when compressing .bam, 2X-5X for .fastq.gz files (i.e. compressing already-compressed files), and up to 200X when compressing an uncompressed high-sample-count .vcf file with only GT data or a Multi-FASTA file with similar contigs.
+The compression ratio one can expect to see depends on the data being compressed - it can be 200X or higher in some cases. In typical cases of compressing already-compressed files like .fastq.gz and .bam it is typically achieves a 2X-5X improvement over the existing compression."
 
 The compression is lossless - the decompressed file is 100% identical to the original file (except when using the ``--optimize`` option).
 
