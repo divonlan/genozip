@@ -1202,7 +1202,8 @@ void ctx_read_all_dictionaries (ReadChromeType read_chrom)
     if (flag.show_dict || flag.show_one_dict || flag.list_chroms) {
         for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
             Context *ctx = &z_file->contexts[did_i];
-
+            if (!ctx->dict.len) continue;
+            
             if (ctx_is_show_dict_id (ctx->dict_id))
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
             
