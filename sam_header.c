@@ -258,6 +258,11 @@ static inline void txtheader_sam_add_PG (Buffer *txtheader_buf)
 // PIZ I/O thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
 TXTHEADER_TRANSLATOR (txtheader_bam2sam)
 {
+    if (flag.no_header) {
+        txtheader_buf->len = 0; // remove the BAM header data
+        return;
+    }
+
     ASSERTE0 (buf_is_allocated (txtheader_buf), "txtheader_buf not allocated");
 
     uint32_t l_text = GET_UINT32 (ENT (char, *txtheader_buf, 4));
