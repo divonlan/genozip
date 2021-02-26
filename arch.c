@@ -33,7 +33,10 @@ static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread) - d
 // Note: We do all string operations in Unicode, so as to preserve any Unicode characters in the existing Path
 static void arch_add_to_windows_path (const char *argv0)
 {
-    unsigned genozip_path_len = strrchr (argv0, '\\') - argv0;
+    const char *backslash = strrchr (argv0, '\\');
+    if (!backslash) return; // no directory
+
+    unsigned genozip_path_len = backslash - argv0;
     
     WCHAR genozip_path[genozip_path_len+1];
     MultiByteToWideChar(CP_OEMCP, 0, argv0, -1, genozip_path, genozip_path_len);
