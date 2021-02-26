@@ -24,10 +24,48 @@
 #include "url.h"
 #include "arch.h"
 #include "sections.h"
+#include "flags.h"
 
 static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread) - despite common wisdom, it is NOT always 0 (on Windows it is 1)
 
-void arch_initialize(void)
+#ifdef _WIN32
+// add the genozip path to the user's Path environment variable, if its not already there. 
+// Note: We do all string operations in Unicode, so as to preserve any Unicode characters in the existing Path
+static void arch_add_to_windows_path (const char *argv0)
+{
+    unsigned genozip_path_len = strrchr (argv0, '\\') - argv0;
+    
+    WCHAR genozip_path[genozip_path_len+1];
+    MultiByteToWideChar(CP_OEMCP, 0, argv0, -1, genozip_path, genozip_path_len);
+    genozip_path[genozip_path_len] = 0; 
+    
+    HKEY key;
+    if (RegOpenKeyEx (HKEY_CURRENT_USER, "Environment", 0, KEY_READ | KEY_WRITE, &key))
+        return; // fail silently
+    
+    DWORD value_type;
+    WCHAR value[16384];
+    DWORD value_size = sizeof (value) - (genozip_path_len + 1);
+    LSTATUS ret = RegQueryValueExW (key, L"Path", 0, &value_type, (BYTE *)value, &value_size);
+
+    if (ret == ERROR_FILE_NOT_FOUND)
+        { value[0]=0; value_size=2; }
+
+    else if (ret != ERROR_SUCCESS || value_type != REG_EXPAND_SZ)
+        return; // fail silently
+
+    if (wcsstr (value, genozip_path))
+        return; // path already exists
+    
+    wsprintfW (&value[value_size/2-1], L";%s", genozip_path);
+
+    ret = RegSetValueExW (key, L"Path", 0, REG_EXPAND_SZ, (BYTE *)value, value_size + (genozip_path_len + 1)*2); // ignore errors
+    if (ret == ERROR_SUCCESS)
+        WARN ("%ls has been add to your Path. It will take effect after the next Windows restart.", genozip_path);
+} 
+#endif
+
+void arch_initialize (const char *argv0)
 {
     // verify CPU architecture and compiler is supported
     ASSERTE0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
@@ -59,6 +97,10 @@ void arch_initialize(void)
     ASSERTE0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
 
     io_thread_id = pthread_self();
+
+#ifdef _WIN32
+    arch_add_to_windows_path (argv0);
+#endif
 }
 
 const char *arch_get_endianity (void)

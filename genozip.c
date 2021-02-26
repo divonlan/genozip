@@ -635,7 +635,7 @@ void TEST() {
 
 int main (int argc, char **argv)
 {
-    arch_initialize();
+    arch_initialize (argv[0]);
     buf_initialize(); 
     vb_initialize_evb();
     random_access_initialize();
