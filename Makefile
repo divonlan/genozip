@@ -199,7 +199,8 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
-LICENSE.non-commercial.txt: genozip$(EXE)
+LICENSE.non-commercial.txt: text_license.h # not dependent on genozip.exe, so we don't generate it every compilation
+	@make ./genozip$(EXE) # recursive call 
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 > $@
 

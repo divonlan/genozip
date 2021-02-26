@@ -48,7 +48,7 @@ static void arch_add_to_windows_path (const char *argv0)
     
     DWORD value_type;
     WCHAR value[16384];
-    DWORD value_size = sizeof (value) - (genozip_path_len + 1);
+    DWORD value_size = sizeof (value) - (genozip_path_len + 1)*2; // size in bytes, not unicode characters
     LSTATUS ret = RegQueryValueExW (key, L"Path", 0, &value_type, (BYTE *)value, &value_size);
 
     if (ret == ERROR_FILE_NOT_FOUND)
