@@ -49,6 +49,8 @@ Sex assignment
   | • This method works extremely fast, because just the RNAME and CIGAR data is read from disk - a small subset of the file.
   |
   | • Since this algorithm is based on counting bases rather than counting reads, it would work just as well with data that has highly variable read lengths, as common, for example, in long-read technologies.
+  |
+  | • Since the algorithm uses both X/Y and 1/X, it can detect a XXY.
 
 **Limitations**
   | • This feature has been tested on human data. It may or may not work for other species.
