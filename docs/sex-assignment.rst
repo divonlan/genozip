@@ -35,11 +35,19 @@ Sex assignment
   |
   | 4) Test 1_Depth / X_Depth: >1.75 is "Male" ; <1.25 is "Female".
   |
-  | 5) Final result: 
-  |   - If either test reaches a conclusive result, and the results don't contradict, then that is the result.
-  |   - If the X/Y result is Male but the 1/X is Female, then the result is Male-XXY
-  |   - Otherwise, the result is "Unassigned".
-  |
+  | 5) Decision matrix: 
+
+    =========================== ================================= =============
+    **Assigned Sex**            **1/X value**                     **X/Y value**
+    *Male*                      > 1.75 (single-X)                 < 9 (Has Y)
+    *Female*                    < 1.1 (double-X)                  > 5 (Not enough Y for Male)
+    *Female*                    < 1.3 (not quite double-X)        > 9 (No Y)
+    *Male-XXY*                  < 1.1 (double-X)                  ∈ {1.8,5} (XXY)
+    *Male-XXY or XY/XXY mosaic* ∈ (1.1, 1.3) (not quite double-X) ∈ {1.8,5} (XXY)
+    *Male-XXY or XXYY*          < 1.1 (double-X)                  < 1.8 (Has Y, possibly similar ratio Y to X) 
+    *Unassigned*                All other combinations
+    =========================== ================================= =============
+
   | *Definitions*:
   | • Chromosome X is the contig named "X", "chrX" or "ChrX". Likewise for Y and 1.
   |
