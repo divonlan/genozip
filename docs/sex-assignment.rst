@@ -42,8 +42,8 @@ Sex assignment
     *Male*                      > 1.75 (single-X)                 < 9 (Has Y)
     *Female*                    < 1.1 (double-X)                  > 5 (Not enough Y for Male)
     *Female*                    < 1.3 (not quite double-X)        > 9 (No Y)
-    *Male-XXY*                  < 1.1 (double-X)                  ∈ {1.8,5} (XXY)
-    *Male-XXY or XY/XXY mosaic* ∈ (1.1, 1.3) (not quite double-X) ∈ {1.8,5} (XXY)
+    *Male-XXY*                  < 1.1 (double-X)                  ∈ (1.8,5) (XXY)
+    *Male-XXY or XY/XXY mosaic* ∈ (1.1, 1.3) (not quite double-X) ∈ (1.8,5) (XXY)
     *Male-XXY or XXYY*          < 1.1 (double-X)                  < 1.8 (Has Y, possibly similar ratio Y to X) 
     *Unassigned*                All other combinations
     =========================== ================================= =============
