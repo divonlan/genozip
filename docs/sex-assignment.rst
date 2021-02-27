@@ -29,16 +29,12 @@ Sex assignment
 **Algorithm**
   | 1) Calculate depth of 1, X and Y chromosomes.
   |
-  | 2) Calculate the ratio X_Depth / Y_Depth and 1_Depth / X_Depth.
+  | 2) Calculate the ratio 1_Depth / X_Depth and X_Depth / Y_Depth.
   |
-  | 3) Test X_Depth / Y_Depth: <5 is "Male" ; >10 is "Female".
-  |
-  | 4) Test 1_Depth / X_Depth: >1.75 is "Male" ; <1.25 is "Female".
-  |
-  | 5) Decision matrix: 
+  | 3) Decision matrix: 
 
     =========================== ================================= =============
-    **Assigned Sex**            **1/X value**                     **X/Y value**
+    **Assigned Sex**            **1 / X**                         **X / Y**
     *Male*                      > 1.75 (single-X)                 < 9 (Has Y)
     *Female*                    < 1.1 (double-X)                  > 5 (Not enough Y for Male)
     *Female*                    < 1.3 (not quite double-X)        > 9 (No Y)
