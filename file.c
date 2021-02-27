@@ -661,7 +661,7 @@ static bool file_open_z (File *file)
             // verify that this is a genozip file 
             // we read the Magic at the end of the file (as the magic at the beginning may be encrypted)
             uint32_t magic;
-            if (  fseek (file->file, -(int)sizeof (magic), SEEK_END) || 
+            if (  !file_seek (file, -(int)sizeof (magic), SEEK_END, true) || 
                   !fread (&magic, sizeof (magic), 1, file->file) ||
                   BGEN32 (magic) != GENOZIP_MAGIC) {
 
