@@ -31,11 +31,14 @@ Sex assignment
   |
   | 2) Calculate the ratio X_Depth / Y_Depth and 1_Depth / X_Depth.
   |
-  | 3) Test X_Depth / Y_Depth: <2 is "Male" ; >10 is "Female".
+  | 3) Test X_Depth / Y_Depth: <5 is "Male" ; >10 is "Female".
   |
   | 4) Test 1_Depth / X_Depth: >1.75 is "Male" ; <1.25 is "Female".
   |
-  | 5) Final result: If either test reaches a conclusive result, then that is the result, unless both reach a result and it is conflicting. Otherwise, the output is "Unassigned".
+  | 5) Final result: 
+  |   - If either test reaches a conclusive result, and the results don't contradict, then that is the result.
+  |   - If the X/Y result is Male but the 1/X is Female, then the result is Male-XXY
+  |   - Otherwise, the result is "Unassigned".
   |
   | *Definitions*:
   | • Chromosome X is the contig named "X", "chrX" or "ChrX". Likewise for Y and 1.
@@ -50,7 +53,7 @@ Sex assignment
 **Limitations**
   | • This feature has been tested on human data. It may or may not work for other species.
   |
-  | • Rare sexes such as XXY or XYY are not detected.
+  | • Rare sexes such as XXXY or XYY are not detected.
   |
   | • In case of a bound genozip file (i.e. one created with eg ``genozip file1.sam file2.sam file3.sam --output my-bound.sam.genozip``) calculation will be done on the entire file leading non-sensical results.
   |

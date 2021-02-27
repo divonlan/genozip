@@ -697,7 +697,6 @@ void sam_piz_show_sex (void)
                         : !x_coverage ? 1000 
                         :               a_coverage / x_coverage;
     
-    //  by X/Y ratio →                Male          Female        Unassigned          ↓ by 1/X ratio ↓
     typedef enum { MALE, FEMALE, UNASSIGNED } Sexes;
 
     Sexes by_1_x = !a_coverage || !x_coverage ? UNASSIGNED
@@ -706,12 +705,13 @@ void sam_piz_show_sex (void)
                  :                              UNASSIGNED;
                  
     Sexes by_x_y = !x_coverage                ? UNASSIGNED
-                 : x_y_ratio < 2              ? MALE
-                 : x_y_ratio > 10             ? FEMALE
+                 : x_y_ratio < 4              ? MALE
+                 : x_y_ratio > 9              ? FEMALE
                  :                              UNASSIGNED;
                  
+    //  by X/Y ratio →                Male          Female        Unassigned          ↓ by 1/X ratio ↓
     static char *decision[3][3] = { { "Male",       "Unassigned", "Male",       }, // Male
-                                    { "Unassigned", "Female",     "Female",     }, // Female
+                                    { "Male-XXY",   "Female",     "Female",     }, // Female
                                     { "Male",       "Female",     "Unassigned", }  // Unassigned
                                   };
 
