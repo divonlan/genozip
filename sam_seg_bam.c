@@ -370,7 +370,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     // CIGAR
     bam_rewrite_cigar (vb, n_cigar_op, (uint32_t*)next_field); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
-    sam_analyze_cigar (vb, vb->textual_cigar.data, vb->textual_cigar.len, &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed);
+    sam_analyze_cigar (vb, vb->textual_cigar.data, vb->textual_cigar.len, &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed, NULL);
     next_field += n_cigar_op * sizeof (uint32_t);
 
     // Segment BIN after we've gathered bin, flags, pos and vb->ref_confumed (and before sam_seg_seq_field which ruins vb->ref_consumed)

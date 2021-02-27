@@ -701,6 +701,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     file->is_remote  = filename && url_is_url (filename);
     file->redirected = !filename;
     file->mode       = mode;
+    file->x_index    = file->y_index = file->a_index = WORD_INDEX_NONE; // used by genocat --show-sex
 
     bool is_file_exists = false;
 

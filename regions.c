@@ -176,7 +176,7 @@ void regions_make_chregs (void)
     num_chroms = chrom_ctx->word_list.len;
     chregs = CALLOC (num_chroms * sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom
     
-    for (int i=0; i < regions_buf.len; i++) {
+    for (int i=0; i < regions_len; i++) {
 
         Region *reg = &regions[i];
         

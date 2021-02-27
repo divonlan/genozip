@@ -33,6 +33,8 @@ extern uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md
 extern bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 extern void sam_reconstruct_vb ();
 extern void sam_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
+extern void sam_piz_show_sex (void);
+extern void sam_piz_show_sex_count_one_vb (VBlockP vb);
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);

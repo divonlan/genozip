@@ -1199,7 +1199,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     // CIGAR - we wait to get more info from SEQ and QUAL
     GET_NEXT_ITEM ("CIGAR");
-    sam_analyze_cigar (vb, field_start, field_len, &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed);
+    sam_analyze_cigar (vb, field_start, field_len, &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed, NULL);
     vb->last_cigar = field_start;
     unsigned last_cigar_len = field_len;
     ((char *)vb->last_cigar)[field_len] = 0; // nul-terminate CIGAR string

@@ -30,6 +30,8 @@ void sam_vb_release_vb (VBlockSAM *vb)
 {
     vb->last_cigar = NULL;
     vb->ref_consumed = vb->ref_and_seq_consumed = 0;
+    vb->a_bases = vb->x_bases = vb->y_bases = 0;
+    vb->a_index = vb->x_index = vb->y_index = 0;
     buf_free (&vb->bd_bi_line);
     buf_free (&vb->textual_cigar);
     buf_free (&vb->textual_seq);
@@ -47,11 +49,12 @@ void sam_vb_destroy_vb (VBlockSAM *vb)
 // calculate the expected length of SEQ and QUAL from the CIGAR string
 // A CIGAR looks something like: "109S19M23S", See: https://samtools.github.io/hts-specs/SAMv1.pdf 
 void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len, 
-                        unsigned *seq_consumed, unsigned *ref_consumed, unsigned *seq_and_ref) // optional outs
+                        unsigned *seq_consumed, unsigned *ref_consumed, unsigned *seq_and_ref, unsigned *coverage) // optional outs
 {
     if (seq_consumed) *seq_consumed = 0;
     if (ref_consumed) *ref_consumed = 0;
     if (seq_and_ref)  *seq_and_ref  = 0;
+    if (coverage)     *coverage     = 0;
 
     ASSERTE (cigar[0] != '*' || cigar_len == 1, "Invalid CIGAR: %.*s", cigar_len, cigar); // a CIGAR start with '*' must have 1 character
 
@@ -88,6 +91,11 @@ void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len,
             if ((lookup & CIGAR_CONSUMES_QUERY)     && seq_consumed) *seq_consumed += n;
             if ((lookup & CIGAR_CONSUMES_REFERENCE) && ref_consumed) *ref_consumed += n;
             if ((lookup & CIGAR_CONSUMES_QUERY) && (lookup & CIGAR_CONSUMES_REFERENCE) && seq_and_ref) *seq_and_ref += n;
+
+            if (coverage) {
+                static const bool is_covering[256] = {  ['I']=true, ['M']=true, ['=']=true, ['X']=true };
+                if (is_covering[(uint8_t)c]) *coverage += n;
+            }
 
             // note: piz: in case of eg "151*" - *seq_consumed will be updated to the length, but textual_cigar will be empty
             if (bam_piz && c != '*') { 

@@ -232,8 +232,7 @@ extern const char *ctx_get_snip_by_node_index (const Buffer *nodes, const Buffer
 
 extern void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
 
-typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
-extern void ctx_read_all_dictionaries (ReadChromeType read_chrom);
+extern void ctx_read_all_dictionaries (void);
 extern void ctx_compress_dictionaries (void);
 extern void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs, ConstBufferP contigs_dict);
 

@@ -269,7 +269,7 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag.header_only) {
         
-        ctx_read_all_dictionaries (DICTREAD_ALL); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
+        ctx_read_all_dictionaries(); // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs()
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
         regions_make_chregs();
@@ -587,7 +587,12 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
 
             // read of a normal file - output uncompressed block (unless we're reading a reference - we don't need to output it)
-            if (!flag.reading_reference) txtfile_write_one_vblock (processed_vb);
+            if (!flag.reading_reference) {
+                if (!flag.show_sex) 
+                    txtfile_write_one_vblock (processed_vb);
+                else
+                    sam_piz_show_sex_count_one_vb (processed_vb);
+            }
 
             z_file->num_vbs++;
             z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
@@ -602,6 +607,10 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z
     if (!flag.test) progress_finalize_component_time ("Done", decompressed_file_digest);
 
 finish:
+    // genocat --show-sex - output results
+    if (flag.show_sex && txt_file)
+        sam_piz_show_sex();
+
     // case: we're unbinding and still have more components - we continue with the same dispatcher in the next component.
     if (!no_more_headers) 
         dispatcher_pause (dispatcher);

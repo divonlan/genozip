@@ -60,7 +60,7 @@ typedef struct {
     char *genobwa; // --genobwa=<contig-name> is used by the genobwa script in genozip / genocat to filter a fastq to a superset that includes all the reads that *might* be mapped to a chromosome 
 
     // stats / metadata flags for end users
-    int list_chroms, show_stats; 
+    int list_chroms, show_stats, show_sex; 
     
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest,
@@ -82,6 +82,7 @@ typedef struct {
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
          reading_reference,  // system is currently reading a reference file
          trans_containers,   // PIZ: decompression invokes container translators
+         genocat_analysis,   // User requested an analysis function
          genocat_info_only,  // User requested to genocat with only metadata to be shown, not file contents
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type

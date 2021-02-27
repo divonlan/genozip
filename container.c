@@ -156,8 +156,9 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             int32_t reconstructed_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
-                bool reconstruct = !flag.trans_containers ||  // not translating Or...
-                                   !IS_CI_SET (CI_TRANS_NOR); // no prohibition on reconstructing when translating
+                bool reconstruct = !flag.show_sex &&              // no reconstruction in --show-sex
+                                   (  !flag.trans_containers ||   // not translating OR... 
+                                      !IS_CI_SET (CI_TRANS_NOR)); // no prohibition on reconstructing when translating
 
                 reconstructed_len = reconstruct_from_ctx (vb, item_ctxs[i]->did_i, 0, reconstruct);
 

@@ -69,10 +69,6 @@ One or more file names must be given.
 
           |
 
-.. option:: --list-chroms.  (VCF SAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file.
-    
-          |
-
 .. option:: -G, --drop-genotypes.  (VCF) Output the data without the samples and FORMAT column.
    
           |
@@ -96,6 +92,22 @@ One or more file names must be given.
 .. option:: --sequential.  (FASTA) Output in sequential format - each sequence in a single line.
    
           |
+
+**Analysis options**
+
+.. option:: --list-chroms.  (VCF SAM BAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file.
+    
+          |
+
+.. option:: --show-sex.  (SAM BAM) Determine whether a SAM/BAM is a Male or a Female. See "Sex assignment" use case.
+    
+          |
+
+    "Analysis options (options resulting a report about the data):",    
+    "   --list-chroms     List the names of the chromosomes (or contigs) included in the file",
+    "",
+    "   --        ",
+    "",
 
 .. include:: opt-translation.rst
 

@@ -25,10 +25,14 @@ typedef struct VBlockSAM {
     const char *last_cigar;        // ZIP/PIZ: last CIGAR
     Buffer textual_cigar;          // ZIP: Seg of BAM
     Buffer textual_seq;            // ZIP: Seg of BAM
-    Buffer textual_opt;       // ZIP: Seg of BAM
+    Buffer textual_opt;            // ZIP: Seg of BAM
     uint32_t ref_consumed;         // ZIP/PIZ: how many bp of reference are consumed according to the last_cigar
     uint32_t ref_and_seq_consumed; // ZIP: how many bp in the last seq consumes both ref and seq, according to CIGAR
     Buffer bd_bi_line;             // ZIP: interlaced BD and BI data for one line
+
+    // data used in genocat --show-sex
+    WordIndex x_index, y_index, a_index;    // word index of the X, Y and chr1 chromosomes
+    uint64_t x_bases, y_bases, a_bases;     // counters of number chromosome X, Y and chr1 bases
 } VBlockSAM;
 
 // fixed-field part of a BAM alignment, see https://samtools.github.io/hts-specs/SAMv1.pdf
@@ -69,7 +73,7 @@ extern const uint8_t cigar_lookup_bam[16];
 #define NEXT_UINT16 GET_UINT16 (next_field); next_field += sizeof (uint16_t);
 #define NEXT_UINT32 GET_UINT32 (next_field); next_field += sizeof (uint32_t);
 
-extern void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len, unsigned *seq_consumed, unsigned *ref_consumed, unsigned *seq_and_ref);
+extern void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len, unsigned *seq_consumed, unsigned *ref_consumed, unsigned *seq_and_ref, unsigned *coverage);
 extern void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len, int64_t tlen_value, PosType pnext_pos_delta, int32_t cigar_seq_len);
 extern void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
 extern void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uint32_t seq_len, PosType pos, const char *cigar, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);

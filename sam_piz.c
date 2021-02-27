@@ -21,6 +21,13 @@
 // returns true if section is to be skipped reading / uncompressing
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
+    // if we're doing --show-sex, we only need TOPLEVEL, RNAME and CIGAR
+    if (flag.show_sex && 
+        (st==SEC_B250 || st==SEC_LOCAL || st==SEC_DICT) &&
+        (     dict_id.num != dict_id_fields[SAM_TOPLEVEL] && 
+              dict_id.num != dict_id_fields[SAM_RNAME] && 
+              dict_id.num != dict_id_fields[SAM_CIGAR])) return true;
+
     if (!vb) return false; // we don't skip reading any SEC_DICT sections
 
     return false;
@@ -118,15 +125,18 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (nonref - nonref_start);
 }
 
+static inline void sam_piz_count_x_y_1_bases (VBlockSAM *vb, unsigned coverage);
+
 // CIGAR - calculate vb->seq_len from the CIGAR string, and if original CIGAR was "*" - recover it
 SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
 {
     VBlockSAMP vb_sam = (VBlockSAMP)vb;
+    unsigned coverage;
 
     // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar
-    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL); 
+    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL, flag.show_sex ? &coverage : NULL); 
 
-    if (flag.out_dt == DT_SAM) {
+    if (flag.out_dt == DT_SAM && reconstruct) {
         if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
             RECONSTRUCT1 ('*');
         
@@ -165,6 +175,10 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
     else if (flag.out_dt == DT_FASTQ) {
         // only analyze, but don't reconstruct CIGAR in FASTQ
     }
+
+    // --show-sex we count X and Y sequence lengths
+    else if (flag.show_sex) 
+        sam_piz_count_x_y_1_bases (vb_sam, coverage);
     
     vb_sam->last_cigar = snip;
 
@@ -588,4 +602,119 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
     prefixes[1] = CON_PREFIX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PREFIX_SEP_SHOW_REPEATS }
     
     return -1; // change in prefixes length
+}
+
+//-----------------
+// --show-sex stuff
+//-----------------
+
+// --show-sex we count X and Y sequence lengths
+static inline void sam_piz_count_x_y_1_bases (VBlockSAM *vb, unsigned coverage)
+{
+    WordIndex chrom_index = vb->contexts[SAM_RNAME].last_value.i;
+
+    // initialize
+    if (vb->line_i == vb->first_line) 
+        vb->x_index = vb->y_index = WORD_INDEX_NONE;
+    
+    if (chrom_index == vb->x_index) // shortcut if x_index is already known
+        vb->x_bases += coverage;
+        
+    else if (chrom_index == vb->y_index) // shortcut if y_index is already known
+        vb->y_bases += coverage;
+        
+    else if (chrom_index == vb->a_index) // shortcut if y_index is already known
+        vb->a_bases += coverage;
+        
+    // at least one of the indices is not known yet - this might be it
+    else if (vb->x_index == WORD_INDEX_NONE || vb->y_index == WORD_INDEX_NONE || vb->a_index == WORD_INDEX_NONE) {
+
+        const char *chrom_name;
+        uint32_t chrom_name_len;
+        ctx_get_snip_by_word_index (&vb->contexts[SAM_RNAME].word_list, 
+                                    &vb->contexts[SAM_RNAME].dict,  
+                                    chrom_index, &chrom_name, &chrom_name_len);
+
+        if ((chrom_name_len==1 && chrom_name[0]=='1') || 
+            (chrom_name_len==4 && !memcmp (chrom_name, "chr1", 4)) ||
+            (chrom_name_len==4 && !memcmp (chrom_name, "Chr1", 4))) {
+            vb->a_bases += coverage;
+            vb->a_index = chrom_index;
+        }
+
+        else if ((chrom_name_len==1 && chrom_name[0]=='X') || 
+                 (chrom_name_len==4 && !memcmp (chrom_name, "chrX", 4)) ||
+                 (chrom_name_len==4 && !memcmp (chrom_name, "ChrX", 4))) {
+            vb->x_bases += coverage;
+            vb->x_index = chrom_index;
+        }
+
+        else if ((chrom_name_len==1 && chrom_name[0]=='Y') || 
+                 (chrom_name_len==4 && !memcmp (chrom_name, "chrY", 4)) ||
+                 (chrom_name_len==4 && !memcmp (chrom_name, "ChrY", 4))) {
+            vb->y_bases += coverage;
+            vb->y_index = chrom_index;
+        }
+    }
+}
+
+void sam_piz_show_sex_count_one_vb (VBlockP vb)
+{
+    VBlockSAMP vb_sam = (VBlockSAMP)vb;
+
+    txt_file->a_bases += vb_sam->a_bases;
+    txt_file->x_bases += vb_sam->x_bases;
+    txt_file->y_bases += vb_sam->y_bases;
+
+    if (vb_sam->a_index != WORD_INDEX_NONE) txt_file->a_index = vb_sam->a_index;
+    if (vb_sam->x_index != WORD_INDEX_NONE) txt_file->x_index = vb_sam->x_index;
+    if (vb_sam->y_index != WORD_INDEX_NONE) txt_file->y_index = vb_sam->y_index;
+}
+
+// output of genocat --show-sex, called from piz_one_file
+void sam_piz_show_sex (void)
+{    
+    double a_len = txt_file->a_index == WORD_INDEX_NONE ? 1
+                 : has_header_contigs                   ? ENT (RefContig, header_contigs, txt_file->a_index)->max_pos
+                 :                                        ENT (RefContig, loaded_contigs, txt_file->a_index)->max_pos;
+
+    double x_len = txt_file->x_index == WORD_INDEX_NONE ? 1
+                 : has_header_contigs                   ? ENT (RefContig, header_contigs, txt_file->x_index)->max_pos
+                 :                                        ENT (RefContig, loaded_contigs, txt_file->x_index)->max_pos;
+
+    double y_len = txt_file->y_index == WORD_INDEX_NONE ? 1
+                 : has_header_contigs                   ? ENT (RefContig, header_contigs, txt_file->y_index)->max_pos
+                 :                                        ENT (RefContig, loaded_contigs, txt_file->y_index)->max_pos;
+    double a_coverage = (double)txt_file->a_bases / a_len;
+    double x_coverage = (double)txt_file->x_bases / x_len;
+    double y_coverage = (double)txt_file->y_bases / y_len;
+
+    double x_y_ratio  =   !x_coverage ? 0 
+                        : !y_coverage ? 1000 
+                        :               x_coverage / y_coverage;
+    
+    double a_x_ratio  =   !a_coverage ? 0 
+                        : !x_coverage ? 1000 
+                        :               a_coverage / x_coverage;
+    
+    //  by X/Y ratio →                Male          Female        Unassigned          ↓ by 1/X ratio ↓
+    typedef enum { MALE, FEMALE, UNASSIGNED } Sexes;
+
+    Sexes by_1_x = !a_coverage || !x_coverage ? UNASSIGNED
+                 : a_x_ratio > 1.75           ? MALE
+                 : a_x_ratio < 1.25           ? FEMALE
+                 :                              UNASSIGNED;
+                 
+    Sexes by_x_y = !x_coverage                ? UNASSIGNED
+                 : x_y_ratio < 2              ? MALE
+                 : x_y_ratio > 10             ? FEMALE
+                 :                              UNASSIGNED;
+                 
+    static char *decision[3][3] = { { "Male",       "Unassigned", "Male",       }, // Male
+                                    { "Unassigned", "Female",     "Female",     }, // Female
+                                    { "Male",       "Female",     "Unassigned", }  // Unassigned
+                                  };
+
+    printf ("%s\t%8.5f\t%8.5f\t%8.5f\t%4.1f\t%4.1f\t%s\n", 
+            z_name, a_coverage, x_coverage, y_coverage, a_x_ratio, x_y_ratio, decision[by_1_x][by_x_y]);
 }

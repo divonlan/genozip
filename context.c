@@ -132,7 +132,8 @@ CtxNode *ctx_node_zf_do (const Context *zf_ctx, int32_t node_index,
 WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len)
 {
     CtxWord *words = (CtxWord *)ctx->word_list.data;
-
+    ASSERTE (words, "word_list is empty for context %s", ctx->name);
+    
     for (unsigned i=0; i < ctx->word_list.len; i++)
         if (words[i].snip_len == snip_len && !memcmp (&ctx->dict.data[words[i].char_index], snip, snip_len))
             return i;
@@ -1072,7 +1073,6 @@ void ctx_compress_dictionaries (void)
 // PIZ: Read and decompress dictionaries
 // -------------------------------------
 static const SectionListEntry *dict_sl = NULL; 
-static ReadChromeType read_chrom_policy;
 static Context *dict_ctx;
 
 static void ctx_dict_read_one_vb (VBlockP vb)
@@ -1081,11 +1081,6 @@ static void ctx_dict_read_one_vb (VBlockP vb)
 
     if (!sections_get_next_section_of_type (&dict_sl, SEC_DICT, false, false))
         return; // we're done - no more SEC_DICT sections
-
-    // cases where we can skip reading these dictionaries because we don't be using them
-    bool is_chrom = (dict_sl->dict_id.num == dict_id_fields[CHROM]);
-    if (read_chrom_policy == DICTREAD_CHROM_ONLY  && !is_chrom) return; // we're done - since CHROM is always the first dictionary
-    if (read_chrom_policy == DICTREAD_EXCEPT_CHROM && is_chrom) goto done;
 
     if (piz_is_skip_sectionz (SEC_DICT, dict_sl->dict_id)) goto done;
     
@@ -1177,14 +1172,13 @@ static void ctx_dict_build_word_lists (void)
     COPY_TIMER_VB (evb, ctx_dict_build_word_lists);
 }
 
-void ctx_read_all_dictionaries (ReadChromeType read_chrom)
+void ctx_read_all_dictionaries (void)
 {
     START_TIMER;
 
     ctx_initialize_primary_field_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
 
     dict_sl = NULL;
-    read_chrom_policy = read_chrom;
     dict_ctx = NULL;
 
     dispatcher_fan_out_task (NULL, PROGRESS_NONE, "Reading dictionaries...", 
@@ -1203,7 +1197,7 @@ void ctx_read_all_dictionaries (ReadChromeType read_chrom)
         for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
             Context *ctx = &z_file->contexts[did_i];
             if (!ctx->dict.len) continue;
-            
+
             if (ctx_is_show_dict_id (ctx->dict_id))
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
             

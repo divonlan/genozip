@@ -8,6 +8,7 @@ Genozip
 
    Installing <installing> 
    Examples <examples> 
+   Use cases <use-cases>
    Using genozip <genozip>
    Using genounzip <genounzip>
    Using genocat <genocat>

@@ -553,8 +553,9 @@ SectionHeader *zfile_read_section_header (VBlockP vb, uint64_t offset,
 bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_t *num_items_bound, char *created) // optional outs
 {
     // read the footer from the end of the file
-    if (!file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, 2))
-        goto error; // likely an empty file 
+    if (file_get_size (z_file->name) < sizeof(SectionFooterGenozipHeader) ||
+        !file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, 2))
+        goto error;
 
     SectionFooterGenozipHeader footer;
     int ret = fread (&footer, sizeof (footer), 1, (FILE *)z_file->file);

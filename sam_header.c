@@ -25,7 +25,7 @@
 
 // call a callback for each SQ line (contig). Note: callback function is the same as ref_contigs_iterate
 void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string
-                           RefContigsIteratorCallback callback, void *callback_param)
+                          RefContigsIteratorCallback callback, void *callback_param)
 {
     const char *line = txt_header;
 

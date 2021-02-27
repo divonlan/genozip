@@ -361,7 +361,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
     // 3) identify skip cases (DT_NONE returned) - empty file, unzip of a reference
     // 4) reset flag.unbind if file contains only one component
-    if (!zfile_read_genozip_header (0,0,0,0)) goto done; 
+    if (!z_file->file || !zfile_read_genozip_header (0,0,0,0)) goto done; 
 
     // if we're genocatting a BAM file, output it as a SAM unless user requested otherwise
     if (z_file->data_type == DT_SAM && z_file->z_flags.txt_is_bin && flag.out_dt==-1 && exe_type == EXE_GENOCAT)
