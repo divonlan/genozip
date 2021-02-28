@@ -630,14 +630,18 @@ static void file_initialize_z_file_data (File *file)
 #undef INIT
 #define INIT(buf) file->buf.name = #buf; \
                   buf_add_to_buffer_list (evb, &file->buf);
+    
     INIT (ra_buf);
     INIT (ra_min_max_by_chrom);
     INIT (chroms_sorted_index);
     INIT (alt_chrom_map);
     INIT (section_list_buf);
     INIT (unconsumed_txt);
+    INIT (bgzf_isizes);
+    INIT (coverage);
     INIT (stats_buf);
     INIT (STATS_buf);
+    INIT (bound_txt_names);
 }
 #undef INIT
 
@@ -701,7 +705,6 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     file->is_remote  = filename && url_is_url (filename);
     file->redirected = !filename;
     file->mode       = mode;
-    file->x_index    = file->y_index = file->a_index = WORD_INDEX_NONE; // used by genocat --show-sex
 
     bool is_file_exists = false;
 
@@ -864,6 +867,7 @@ void file_close (File **file_p,
         buf_destroy (&file->section_list_buf);
         buf_destroy (&file->unconsumed_txt);
         buf_destroy (&file->bgzf_isizes);
+        buf_destroy (&file->coverage);
         buf_destroy (&file->stats_buf);
         buf_destroy (&file->STATS_buf);
         buf_destroy (&file->bound_txt_names);

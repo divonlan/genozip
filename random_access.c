@@ -437,7 +437,7 @@ uint32_t random_access_verify_all_contigs_same_length (void)
 
     for (uint32_t contig_i=0; contig_i < ctx->word_list.len; contig_i++) 
         ASSINP (max_lens[contig_i] == max_of_maxes, "file %s cannot be displayed in Phylip format because not all contigs are the same length: contig %s has length=%"PRIu64" which is shorter than other contigs of length=%"PRIu64,
-                z_name, ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, contig_i, 0, 0), max_lens[contig_i], max_of_maxes);
+                z_name, ctx_get_snip_by_word_index (ctx, contig_i, 0, 0), max_lens[contig_i], max_of_maxes);
 
     buf_free (&max_lens_buf);
 

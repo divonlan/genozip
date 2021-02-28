@@ -144,7 +144,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
         
         // get contig length from loaded reference
         uint32_t chrom_name_len;
-        const char *chrom_name = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom_i, 0, &chrom_name_len);
+        const char *chrom_name = ctx_get_snip_by_word_index (ctx, chrom_i, 0, &chrom_name_len);
         PosType contig_len = ref_contigs_get_contig_length (chrom_name, chrom_name_len);
 
         bufprintf (evb, txtheader_buf, VCF_HEAD_2, chrom_name, contig_len);

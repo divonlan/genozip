@@ -370,7 +370,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         if (reconstruct) { RECONSTRUCT1('\n'); }
     }
 
-    else ASSERTE (flag.show_sex, // in --show-sex, we filtered out most contexts in sam_piz_is_skip_section, so this is expected
+    else ASSERTE (flag.show_sex || flag.show_coverage, // in --show-sex/coverage, we filtered out most contexts in sam_piz_is_skip_section, so this is expected
                   "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
                   ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 

@@ -1,7 +1,9 @@
 Sex assignment
 ==============
 
-``genocat --show-sex my-file.bam.genozip`` allows for quick determination of sex directly from a SAM or BAM genozip file.
+Data Types: SAM and BAM
+
+``genocat --show-sex my-file.bam.genozip`` determines *Sex* to the data.
 
 **Output**
   | A tab-seperated table, example:
@@ -26,8 +28,8 @@ Sex assignment
   sample13.bam.genozip  17.39297  8.76055  9.27279  2.0   0.9  Male
 
 
-**Algorithm**
-  | 1) Calculate depth of 1, X and Y chromosomes.
+**Classifier algorithm**
+  | 1) Calculate the per-contig Depth as described in :doc:`coverage`.
   |
   | 2) Calculate the ratio 1_Depth / X_Depth and X_Depth / Y_Depth.
   |

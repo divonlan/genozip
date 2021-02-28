@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vblock.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef VBLOCK_INCLUDED
@@ -74,9 +74,12 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     const char *chrom_name;    \
     unsigned chrom_name_len; \
     uint32_t seq_len;          /* PIZ - last calculated seq_len (as defined by each data_type) */\
-                               \
+    \
     /* regions & filters */ \
     Buffer region_ra_intersection_matrix;  /* PIZ: a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region */\
+    \
+    /* used by --show-coverage and --show-sex */ \
+    Buffer coverage; \
     \
     /* crypto stuff */\
     Buffer spiced_pw;          /* used by crypt_generate_aes_key() */\

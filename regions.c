@@ -168,8 +168,6 @@ void regions_add (const char *region_str)
 // 2. for "all chrom" regions - include them in all chregs
 void regions_make_chregs (void)
 {
-    if (!flag.regions) return; // nothing to do
-
     ARRAY (Region, regions, regions_buf);
     Context *chrom_ctx = &z_file->contexts[CHROM];
 

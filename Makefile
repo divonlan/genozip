@@ -35,7 +35,7 @@ MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c lic
 		  vcf_piz.c vcf_seg.c vcf_shared.c vcf_samples.c vcf_header.c \
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
 		  fasta.c fastq.c gff3_seg.c me23.c phylip.c generic.c \
-		  buffer.c random_access.c sections.c base64.c bgzf.c \
+		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_pbwt.c codec_none.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
@@ -62,7 +62,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
              buffer.h file.h context.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h \
-			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h\
+			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h coverage.h \
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h gff3.h phylip.h generic.h \
              compatibility/mac_gettime.h  \
@@ -208,7 +208,7 @@ SPHINX = /home/divon/miniconda3/bin/sphinx-build
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/developer.rst docs/index.rst docs/license.rst \
        docs/publications.rst docs/installing.rst docs/contact.rst docs/examples.rst docs/source.rst docs/logo.png \
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-translation.rst \
-	   docs/use-cases.rst docs/sex-assignment.rst docs/fastq-to-bam-pipeline.rst
+	   docs/use-cases.rst docs/sex-assignment.rst docs/fastq-to-bam-pipeline.rst docs/coverage.rst
 
 docs/conf.py: docs/conf.template.py
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 

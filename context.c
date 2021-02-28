@@ -133,7 +133,7 @@ WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned sn
 {
     CtxWord *words = (CtxWord *)ctx->word_list.data;
     ASSERTE (words, "word_list is empty for context %s", ctx->name);
-    
+
     for (unsigned i=0; i < ctx->word_list.len; i++)
         if (words[i].snip_len == snip_len && !memcmp (&ctx->dict.data[words[i].char_index], snip, snip_len))
             return i;
@@ -785,16 +785,30 @@ CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index)
 }
 
 // PIZ: get snip by normal word index (doesn't support WORD_INDEX_*)
-const char *ctx_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, WordIndex word_index, 
+const char *ctx_get_snip_by_word_index (const Context *ctx, WordIndex word_index, 
                                         const char **snip, uint32_t *snip_len)
 {
-    CtxWord *word = ENT (CtxWord, *word_list, word_index);
-    const char *my_snip = ENT (const char, *dict, word->char_index);
+    CtxWord *word = ENT (CtxWord, ctx->word_list, word_index);
+    const char *my_snip = ENT (const char, ctx->dict, word->char_index);
     
     if (snip) *snip = my_snip;
     if (snip_len) *snip_len = word->snip_len;
 
     return my_snip; 
+}
+
+// returns word index of the snip, or WORD_INDEX_NONE if it is not in the dictionary
+WordIndex ctx_get_word_index_by_snip (const Context *ctx, const char *snip)
+{
+    unsigned snip_len = strlen (snip);
+    ARRAY (const CtxWord, words, ctx->word_list);
+    ARRAY (const char, dict, ctx->dict);
+
+    for (WordIndex i=0; i < words_len; i++)
+        if (words[i].snip_len == snip_len && !memcmp (&dict[words[i].char_index], snip, snip_len))
+            return i;
+
+    return WORD_INDEX_NONE;
 }
 
 // ZIP

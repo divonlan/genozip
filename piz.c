@@ -27,6 +27,7 @@
 #include "bgzf.h"
 #include "flags.h"
 #include "reconstruct.h"
+#include "coverage.h"
 
 // called by I/O thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
@@ -272,7 +273,8 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
         ctx_read_all_dictionaries(); // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs()
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-        regions_make_chregs();
+        if (flag.regions) 
+            regions_make_chregs();
 
         // if the regions are negative, transform them to the positive complement instead
         regions_transform_negative_to_positive_complement();
@@ -385,6 +387,10 @@ static bool piz_read_one_vb (VBlock *vb)
     if (flag.bgzf == FLAG_BGZF_BY_ZFILE && txt_file->codec == CODEC_BGZF)     
         bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
 
+    // initialize coverage counters
+    if (flag.show_coverage || flag.show_sex)
+        coverage_initialize (vb);
+            
     COPY_TIMER (piz_read_one_vb); 
 
     return ok_to_compute;
@@ -588,10 +594,10 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z
 
             // read of a normal file - output uncompressed block (unless we're reading a reference - we don't need to output it)
             if (!flag.reading_reference) {
-                if (!flag.show_sex) 
+                if (!flag.genocat_analysis) 
                     txtfile_write_one_vblock (processed_vb);
-                else
-                    sam_piz_show_sex_count_one_vb (processed_vb);
+                
+                coverage_add_one_vb (processed_vb);
             }
 
             z_file->num_vbs++;
@@ -607,9 +613,9 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z
     if (!flag.test) progress_finalize_component_time ("Done", decompressed_file_digest);
 
 finish:
-    // genocat --show-sex - output results
-    if (flag.show_sex && txt_file)
-        sam_piz_show_sex();
+    // genocat --show-sex and --show-coverage - output results
+    if (flag.show_sex      && txt_file) coverage_sex_classifier();
+    if (flag.show_coverage && txt_file) coverage_show_coverage();
 
     // case: we're unbinding and still have more components - we continue with the same dispatcher in the next component.
     if (!no_more_headers) 

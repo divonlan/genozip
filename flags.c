@@ -163,14 +163,16 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
         #define _dh {"show-hash",     no_argument,       &flag.show_hash,        1 }  
         #define _sx {"show-sex",      no_argument,       &flag.show_sex,         1 }  
+        #define _sX {"show-coverage", no_argument,       &flag.show_coverage,    1 }  
+        #define _SX {"show-coverage-chrom", no_argument, &flag.show_coverage,  2 }  
         #define _bw {"genobwa",       required_argument, 0, 11                     }  
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,         _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                              _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,              _00 };
-        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,         _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw, _sx,    _00 };
-        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                              _u,     _p, _e,                                                                                                          _st, _sm,                                       _dm,                                                                                                                                                                      _sM,                                             _b, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,                    _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                              _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,                         _00 };
+        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,         _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw, _sx, _sX, _SX,     _00 };
+        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                              _u,     _p, _e,                                                                                                          _st, _sm,                                       _dm,                                                                                                                                                                      _sM,                                                        _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -332,6 +334,9 @@ static void flags_test_conflicts (void)
     CONFLICT (flag.show_sex,    flag.regions==1,     "--show-sex",         OT("regions", "r"));
     CONFLICT (flag.show_sex,    flag.out_filename,   "--show-sex",         OT("output", "o"));
     CONFLICT (flag.show_sex,    flag.unbind,         "--show-sex",         OT("unbind", "u"));
+    CONFLICT (flag.show_coverage, flag.regions==1,   "--show-coverage",    OT("regions", "r"));
+    CONFLICT (flag.show_coverage, flag.out_filename, "--show-coverage",    OT("output", "o"));
+    CONFLICT (flag.show_coverage, flag.unbind,       "--show-coverage",    OT("unbind", "u"));
     CONFLICT (flag.test,        flag.make_reference, "--make-reference",   OT("test", "t"));
     CONFLICT (flag.multifasta,  flag.make_reference, "--make-reference",   "multifasta");
     CONFLICT (flag.reference == REF_EXTERNAL, flag.make_reference, "--make-reference", OT("reference", "e"));
@@ -443,9 +448,10 @@ void flags_update (unsigned num_txt_files, const char **filenames)
     if (flag.show_sex) {
         if (!flag.no_header) printf ("File\t1_Depth\tX_Depth\tY_Depth\t1_Depth/X_Depth\tX_Depth/Y_Depth\tSex\n"); // header of output
         
-        flag.regions   = 2;    // set, but not to 1, to avoid incomtability error
-        flag.no_header = true; // don't show SAM/BAM header
-        regions_add ("X,chrX,ChrX,Y,chrY,ChrY,1,chr1,Chr1");
+        if (!flag.show_coverage) {
+            flag.regions   = 2;    // set, but not to 1, to avoid incomtability error
+            regions_add ("X,chrX,ChrX,Y,chrY,ChrY,1,chr1,Chr1");
+        }
     }
 
     // if --optimize was selected, all optimizations are turned on
@@ -469,8 +475,12 @@ void flags_update (unsigned num_txt_files, const char **filenames)
                     flag.pair         ? BIND_PAIRS : 
                                         BIND_NONE  ;
 
-    flag.genocat_analysis = flag.list_chroms || flag.show_sex;
-    
+    flag.genocat_analysis = exe_type == EXE_GENOCAT && 
+                            (flag.list_chroms || flag.show_sex || flag.show_coverage);
+
+    if (flag.genocat_analysis)
+        flag.no_header = true; // don't show header
+
     // cases where genocat is used to view some information, but not the file contents
     flag.genocat_info_only = exe_type == EXE_GENOCAT &&
         (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
@@ -549,6 +559,11 @@ void flags_update_piz_one_file (void)
     // --show-sex is only possible on SAM/BAM
     ASSINP (!flag.show_sex || flag.out_dt == DT_SAM, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout
             "--show-sex is not supported for %s because it only works on SAM or BAM data, but this file has %s data",
+            z_name, dt_name (z_file->data_type));
+
+    // --show-coverage is only possible on SAM/BAM
+    ASSINP (!flag.show_coverage || flag.out_dt == DT_SAM, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout
+            "--show-coverage is not supported for %s because it only works on SAM or BAM data, but this file has %s data",
             z_name, dt_name (z_file->data_type));
 
     // if using --genobwa in PIZ, z_file must be a FASTQ file with a single component or two paired components

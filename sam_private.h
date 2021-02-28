@@ -14,6 +14,21 @@
 
 #define IS_BAM ((command==ZIP ? txt_file : z_file)->data_type==DT_BAM)
 
+// as defined in https://samtools.github.io/hts-specs/SAMv1.pdf 1.4.2
+#define SAM_FLAG_MULTI_SEGMENTS 0x0001
+#define SAM_FLAG_IS_ALIGNED     0x0002
+#define SAM_FLAG_UNMAPPED       0x0004
+#define SAM_FLAG_NEXT_UNMAPPED  0x0008
+#define SAM_FLAG_REV_COMP       0x0010
+#define SAM_FLAG_NEXT_REV_COMP  0x0020
+#define SAM_FLAG_IS_FIRST       0x0040
+#define SAM_FLAG_IS_LAST        0x0080
+#define SAM_FLAG_SECONDARY      0x0100
+#define SAM_FLAG_FAILED_FILTERS 0x0200
+#define SAM_FLAG_DUPLICATE      0x0400
+#define SAM_FLAG_SUPPLAMENTARY  0x0800
+
+
 typedef struct {
     uint32_t qual_data_start, u2_data_start, bdbi_data_start[2]; // start within vb->txt_data
     uint32_t qual_data_len, u2_data_len; // length within vb->txt_data

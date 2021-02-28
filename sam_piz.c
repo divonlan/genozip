@@ -22,10 +22,11 @@
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     // if we're doing --show-sex, we only need TOPLEVEL, RNAME and CIGAR
-    if (flag.show_sex && 
+    if ((flag.show_sex || flag.show_coverage) && 
         (st==SEC_B250 || st==SEC_LOCAL || st==SEC_DICT) &&
         (     dict_id.num != dict_id_fields[SAM_TOPLEVEL] && 
               dict_id.num != dict_id_fields[SAM_RNAME] && 
+              dict_id.num != dict_id_fields[SAM_FLAG] && 
               dict_id.num != dict_id_fields[SAM_CIGAR])) return true;
 
     if (!vb) return false; // we don't skip reading any SEC_DICT sections
@@ -125,16 +126,21 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (nonref - nonref_start);
 }
 
-static inline void sam_piz_count_x_y_1_bases (VBlockSAM *vb, unsigned coverage);
-
 // CIGAR - calculate vb->seq_len from the CIGAR string, and if original CIGAR was "*" - recover it
 SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
 {
     VBlockSAMP vb_sam = (VBlockSAMP)vb;
-    unsigned coverage;
+    const uint16_t sam_flag = vb->contexts[SAM_FLAG].last_value.i;
+
+    // we calculate coverage only for primary reads (not secodnary, supplementary or duplicate) that are mapped and passed filters
+    // note: for chimeric reads, we count both the representative and the supplementary alignments, because they usually have little
+    // overlap and we count only M,=,X,I parts of the read.
+    uint32_t coverage;
+    bool calc_coverage = !(sam_flag & (SAM_FLAG_UNMAPPED | SAM_FLAG_SECONDARY | SAM_FLAG_FAILED_FILTERS | SAM_FLAG_DUPLICATE)) &&
+                         (flag.show_sex || flag.show_coverage);
 
     // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar
-    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL, flag.show_sex ? &coverage : NULL); 
+    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL, calc_coverage ? &coverage : NULL); 
 
     if (flag.out_dt == DT_SAM && reconstruct) {
         if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
@@ -162,9 +168,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
         if (vb->contexts[SAM_BAM_BIN].semaphore) {
             vb->contexts[SAM_BAM_BIN].semaphore = false;
 
-            uint16_t flag = vb->contexts[SAM_FLAG].last_value.i;
             PosType pos   = vb->contexts[SAM_POS ].last_value.i;
-            bool segment_unmapped = (flag & 0x4);
+            bool segment_unmapped = (sam_flag & SAM_FLAG_UNMAPPED);
             PosType last_pos = segment_unmapped ? pos : (pos + vb_sam->ref_consumed - 1);
             
             uint16_t bin = bam_reg2bin (pos, last_pos); // zero-based, half-closed half-open [start,end)
@@ -176,9 +181,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
         // only analyze, but don't reconstruct CIGAR in FASTQ
     }
 
-    // --show-sex we count X and Y sequence lengths
-    else if (flag.show_sex) 
-        sam_piz_count_x_y_1_bases (vb_sam, coverage);
+    // count coverage, if needed
+    if (calc_coverage)
+        *ENT (uint64_t, vb->coverage, vb->contexts[SAM_RNAME].last_value.i) += coverage;
     
     vb_sam->last_cigar = snip;
 
@@ -416,7 +421,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
 TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
 {
     DECLARE_SNIP;
-    ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, ctx->last_value.i, &snip, &snip_len);
+    ctx_get_snip_by_word_index (ctx, ctx->last_value.i, &snip, &snip_len);
 
     // if it is '*', reconstruct -1
     if (snip_len == 1 && *snip == '*') 
@@ -498,8 +503,8 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 // filtering during reconstruction: called by container_reconstruct_do for each sam alignment (repeat)
 CONTAINER_FILTER_FUNC (sam_piz_sam2fq_filter)
 {
-    uint16_t flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
-    return !(flag & 0x100); // show only if this is a primary alignment (don't show its secondary alignments)
+    uint16_t sam_flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    return !(sam_flag & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLAMENTARY)); // show only if this is a primary alignment (don't show its secondary or supplamentary alignments)
 }
 
 // reverse-complement the sequence if needed, and drop if "*"
@@ -513,14 +518,14 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
                                           't','b','g','d','e','f','c','h','i','j','k','l','m','n','o','p','q','r','s','a','u','v','w','x','y','z'
                                           ,'{','|','}','~' };
 
-    uint16_t flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    uint16_t sam_flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
     
     // case: SEQ is "*" - don't show this fastq record
     if (reconstructed_len==1 && *reconstructed == '*') 
         vb->dont_show_curr_line = true;
 
     // case: this sequence is reverse complemented - reverse-complement it
-    else if (flag & 0x10) {
+    else if (sam_flag & SAM_FLAG_REV_COMP) {
 
         // we move from the outside in, switching the left and right bases while also complementing both
         for (unsigned i=0; i < reconstructed_len / 2; i++) {
@@ -541,14 +546,14 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
 // reverse the sequence if needed, and drop if "*"
 TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
 {
-    uint16_t flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    uint16_t sam_flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
     
     // case: QUAL is "*" - don't show this fastq record
     if (reconstructed_len==1 && *reconstructed == '*') 
         vb->dont_show_curr_line = true;
 
     // case: this sequence is reverse complemented - reverse the QUAL string
-    else if (flag & 0x10) {
+    else if (sam_flag & SAM_FLAG_REV_COMP) {
 
         // we move from the outside in, switching the left and right bases 
         for (unsigned i=0; i < reconstructed_len / 2; i++) 
@@ -561,12 +566,12 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
 // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
 TRANSLATOR_FUNC (sam_piz_sam2fastq_FLAG)
 {
-    uint16_t flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    uint16_t sam_flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
 
-    if (flag & (0x40 | 0x80)) vb->txt_data.len--; // remove newline
+    if (sam_flag & (SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST)) vb->txt_data.len--; // remove newline
 
-    if (flag & 0x40) RECONSTRUCT ("/1\n", 3); // usually R1
-    if (flag & 0x80) RECONSTRUCT ("/2\n", 3); // usually R2
+    if (sam_flag & SAM_FLAG_IS_FIRST) RECONSTRUCT ("/1\n", 3); // usually R1
+    if (sam_flag & SAM_FLAG_IS_LAST)  RECONSTRUCT ("/2\n", 3); // usually R2
 
     return 0;
 }
@@ -602,122 +607,4 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
     prefixes[1] = CON_PREFIX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PREFIX_SEP_SHOW_REPEATS }
     
     return -1; // change in prefixes length
-}
-
-//-----------------
-// --show-sex stuff
-//-----------------
-
-// --show-sex we count X and Y sequence lengths
-static inline void sam_piz_count_x_y_1_bases (VBlockSAM *vb, unsigned coverage)
-{
-    WordIndex chrom_index = vb->contexts[SAM_RNAME].last_value.i;
-
-    // initialize
-    if (vb->line_i == vb->first_line) 
-        vb->x_index = vb->y_index = WORD_INDEX_NONE;
-    
-    if (chrom_index == vb->x_index) // shortcut if x_index is already known
-        vb->x_bases += coverage;
-        
-    else if (chrom_index == vb->y_index) // shortcut if y_index is already known
-        vb->y_bases += coverage;
-        
-    else if (chrom_index == vb->a_index) // shortcut if y_index is already known
-        vb->a_bases += coverage;
-        
-    // at least one of the indices is not known yet - this might be it
-    else if (vb->x_index == WORD_INDEX_NONE || vb->y_index == WORD_INDEX_NONE || vb->a_index == WORD_INDEX_NONE) {
-
-        const char *chrom_name;
-        uint32_t chrom_name_len;
-        ctx_get_snip_by_word_index (&vb->contexts[SAM_RNAME].word_list, 
-                                    &vb->contexts[SAM_RNAME].dict,  
-                                    chrom_index, &chrom_name, &chrom_name_len);
-
-        if ((chrom_name_len==1 && chrom_name[0]=='1') || 
-            (chrom_name_len==4 && !memcmp (chrom_name, "chr1", 4)) ||
-            (chrom_name_len==4 && !memcmp (chrom_name, "Chr1", 4))) {
-            vb->a_bases += coverage;
-            vb->a_index = chrom_index;
-        }
-
-        else if ((chrom_name_len==1 && chrom_name[0]=='X') || 
-                 (chrom_name_len==4 && !memcmp (chrom_name, "chrX", 4)) ||
-                 (chrom_name_len==4 && !memcmp (chrom_name, "ChrX", 4))) {
-            vb->x_bases += coverage;
-            vb->x_index = chrom_index;
-        }
-
-        else if ((chrom_name_len==1 && chrom_name[0]=='Y') || 
-                 (chrom_name_len==4 && !memcmp (chrom_name, "chrY", 4)) ||
-                 (chrom_name_len==4 && !memcmp (chrom_name, "ChrY", 4))) {
-            vb->y_bases += coverage;
-            vb->y_index = chrom_index;
-        }
-    }
-}
-
-void sam_piz_show_sex_count_one_vb (VBlockP vb)
-{
-    VBlockSAMP vb_sam = (VBlockSAMP)vb;
-
-    txt_file->a_bases += vb_sam->a_bases;
-    txt_file->x_bases += vb_sam->x_bases;
-    txt_file->y_bases += vb_sam->y_bases;
-
-    if (vb_sam->a_index != WORD_INDEX_NONE) txt_file->a_index = vb_sam->a_index;
-    if (vb_sam->x_index != WORD_INDEX_NONE) txt_file->x_index = vb_sam->x_index;
-    if (vb_sam->y_index != WORD_INDEX_NONE) txt_file->y_index = vb_sam->y_index;
-}
-
-// output of genocat --show-sex, called from piz_one_file
-void sam_piz_show_sex (void)
-{    
-    double a_len = txt_file->a_index == WORD_INDEX_NONE ? 1
-                 : has_header_contigs                   ? ENT (RefContig, header_contigs, txt_file->a_index)->max_pos
-                 :                                        ENT (RefContig, loaded_contigs, txt_file->a_index)->max_pos;
-
-    double x_len = txt_file->x_index == WORD_INDEX_NONE ? 1
-                 : has_header_contigs                   ? ENT (RefContig, header_contigs, txt_file->x_index)->max_pos
-                 :                                        ENT (RefContig, loaded_contigs, txt_file->x_index)->max_pos;
-
-    double y_len = txt_file->y_index == WORD_INDEX_NONE ? 1
-                 : has_header_contigs                   ? ENT (RefContig, header_contigs, txt_file->y_index)->max_pos
-                 :                                        ENT (RefContig, loaded_contigs, txt_file->y_index)->max_pos;
-    double a_coverage = (double)txt_file->a_bases / a_len;
-    double x_coverage = (double)txt_file->x_bases / x_len;
-    double y_coverage = (double)txt_file->y_bases / y_len;
-
-    double x_y_ratio  =   !x_coverage ? 0 
-                        : !y_coverage ? 1000 
-                        :               x_coverage / y_coverage;
-    
-    double a_x_ratio  =   !a_coverage ? 0 
-                        : !x_coverage ? 1000 
-                        :               a_coverage / x_coverage;
-    
-    typedef enum { MALE, BORDERLINE, FEMALE, UNASSIGNED } Sexes;
-
-    Sexes by_1_x = !a_coverage || !x_coverage ? UNASSIGNED
-                 : a_x_ratio > 1.75           ? MALE
-                 : a_x_ratio < 1.1            ? FEMALE
-                 : a_x_ratio < 1.3            ? BORDERLINE // not enough X for a female or XXY - possibly XY/XXY mosaic 
-                 :                              UNASSIGNED;
-                 
-    Sexes by_x_y = !x_coverage                ? UNASSIGNED
-                 : x_y_ratio < 1.8            ? MALE
-                 : x_y_ratio < 5              ? BORDERLINE // too much X for a male - possible XXY
-                 : x_y_ratio > 9              ? FEMALE
-                 :                              UNASSIGNED;
-                 
-    //  by X/Y ratio →                Male                 Borderline                   Female        Unassigned      ↓ by 1/X ratio ↓
-    static char *decision[4][4] = { { "Male",              "Male",                      "Unassigned", "Male",      }, // Male
-                                    { "Unassigned",        "Male-XXY or XY/XXY mosaic", "Female",     "Unassigned" }, // Borderline
-                                    { "Male-XXY or XXYY",  "Male-XXY",                  "Female",     "Female"     }, // Female
-                                    { "Unassigned",        "Unassigned",                "Unassigned", "Unassigned" }  // Unassigned
-                                  };
-
-    printf ("%s\t%8.5f\t%8.5f\t%8.5f\t%4.1f\t%4.1f\t%s\n", 
-            z_name, a_coverage, x_coverage, y_coverage, a_x_ratio, x_y_ratio, decision[by_1_x][by_x_y]);
 }

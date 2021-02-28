@@ -103,11 +103,13 @@ One or more file names must be given.
     
           |
 
-    "Analysis options (options resulting a report about the data):",    
-    "   --list-chroms     List the names of the chromosomes (or contigs) included in the file",
-    "",
-    "   --        ",
-    "",
+.. option:: --show-coverage.  (SAM BAM) Shows the coverage and depth of each contig. See "Coverage and Depth" use case.
+    
+          |
+
+.. option:: --show-coverage-chrom.  (SAM BAM) Same as --show-coverage but shows only contigs that are chromosomes.
+    
+          |
 
 .. include:: opt-translation.rst
 

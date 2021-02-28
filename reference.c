@@ -245,7 +245,7 @@ Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
              chrom, (uint32_t)ctx->word_list.len);
 
     if (chrom_name)
-        *chrom_name = ctx_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom, 0, 0);
+        *chrom_name = ctx_get_snip_by_word_index (ctx, chrom, 0, 0);
 
     ASSERTE (chrom < ranges.len, "expecting chrom=%d < ranges.len=%"PRIu64, chrom, ranges.len);
     
@@ -1329,7 +1329,7 @@ static void ref_initialize_loaded_ranges (RangesType type)
         r->range_id = r->chrom = range_id;
 
         if (flag.reference == REF_STORED) 
-            ctx_get_snip_by_word_index (&chrom_ctx->word_list, &chrom_ctx->dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
+            ctx_get_snip_by_word_index (chrom_ctx, r->chrom, &r->chrom_name, &r->chrom_name_len);
         else
             ref_contigs_get_chrom_snip (r->chrom, &r->chrom_name, &r->chrom_name_len);
     }

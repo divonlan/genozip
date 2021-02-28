@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vblock.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
@@ -64,6 +64,7 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->section_list_buf);
     buf_free(&vb->region_ra_intersection_matrix);
     buf_free(&vb->bgzf_blocks);
+    buf_free(&vb->coverage);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
@@ -104,6 +105,7 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->show_b250_buf);
     buf_destroy (&vb->section_list_buf);
     buf_destroy (&vb->region_ra_intersection_matrix);
+    buf_destroy (&vb->coverage);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)

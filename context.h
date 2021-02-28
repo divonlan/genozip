@@ -225,10 +225,11 @@ extern void ctx_free_context (Context *ctx);
 extern void ctx_destroy_context (Context *ctx);
 extern void ctx_map_aliases (VBlockP vb);
 extern CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index);
-extern const char *ctx_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, WordIndex word_index, 
+extern const char *ctx_get_snip_by_word_index (const Context *ctx, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);
 extern const char *ctx_get_snip_by_node_index (const Buffer *nodes, const Buffer *dict, WordIndex node_index, 
                                                const char **snip, uint32_t *snip_len);
+extern WordIndex ctx_get_word_index_by_snip (const Context *ctx, const char *snip);
 
 extern void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
 
