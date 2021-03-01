@@ -12,7 +12,7 @@ Sex Classifier algorithm (FASTQ)
     =========================== ================================= =============
     **Assigned Sex**            **AS / X**                         **X / Y**
     *Male*                      > 1.75 (single-X)                 < 9 (Has Y)
-    *Female*                    < 1.3 (almost double-X or more)   > 5 (Not enough Y for Male)
+    *Female*                    < 1.3 (double-X or almsot)   > 5 (Not enough Y for Male)
     *Male-XXY or XXYY*          < 1.1 (double-X)                  < 1.8 (Has Y, possibly similar ratio Y to X) 
     *Unassigned*                All other combinations
     =========================== ================================= =============
