@@ -64,6 +64,8 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
         len_AS      += len;
     }
 
+    ASSERTE0 (len_AS, "Cannot calculate autosome data, because autosome contigs are not loaded");
+
     return (double)coverage_AS / (double)len_AS;
 }
 
@@ -94,29 +96,29 @@ void coverage_sex_classifier (bool is_first_z_file)
     
     // in SAM, it is sufficient to look at chr1 as it is already mapped. this allows as to run with --regions, 10 times faster
     // in FASTQ, we rely on our own approximate aligner, so we compare against all autosomes
-    double depth_AS   = is_sam ? (double)*ENT (uint64_t, txt_file->coverage, index_chr1) / len_chr1
+    double depth_AS   = is_sam ? (len_chr1 ? (double)*ENT (uint64_t, txt_file->coverage, index_chr1) / len_chr1 : 0)
                                : coverage_get_autosome_depth (index_chrX, index_chrY);
 
-    double depth_chrX = (double)*ENT (uint64_t, txt_file->coverage, index_chrX) / len_chrX;
-    double depth_chrY = (double)*ENT (uint64_t, txt_file->coverage, index_chrY) / len_chrY;
+    double depth_chrX = len_chrX ? (double)*ENT (uint64_t, txt_file->coverage, index_chrX) / len_chrX : 0;
+    double depth_chrY = len_chrY ? (double)*ENT (uint64_t, txt_file->coverage, index_chrY) / len_chrY : 0;
 
     // correct for Genozip Aligner's bias in favour X and Y (vs autosomes) in humans (in FASTQ)
     double correction = is_fastq ? 1.333 : 1;
 
-    double ratio_1_X  =   !depth_AS ? 0 
-                        : !depth_chrX ? 1000 
-                        :               correction * depth_AS / depth_chrX;
+    double ratio_AS_X = !depth_AS   ? 0 
+                      : !depth_chrX ? 1000 
+                      :               correction * depth_AS / depth_chrX;
     
-    double ratio_X_Y  =   !depth_chrX ? 0 
-                        : !depth_chrY ? 1000 
-                        :               depth_chrX / depth_chrY;
+    double ratio_X_Y  = !depth_chrX ? 0 
+                      : !depth_chrY ? 1000 
+                      :               depth_chrX / depth_chrY;
     
     typedef enum { XTEST_X, XTEST_XX_MINUS, XTEST_XX, XTEST_NA } XTest;
 
     XTest by_as_x = !depth_AS || !depth_chrX ? XTEST_NA
-                  : ratio_1_X > 1.75         ? XTEST_X
-                  : ratio_1_X < 1.1          ? XTEST_XX
-                  : ratio_1_X < 1.3          ? XTEST_XX_MINUS // not enough X for a female or XXY - possibly XY/XXY mosaic 
+                  : ratio_AS_X > 1.75        ? XTEST_X
+                  : ratio_AS_X < 1.1         ? XTEST_XX
+                  : ratio_AS_X < 1.3         ? XTEST_XX_MINUS // not enough X for a female or XXY - possibly XY/XXY mosaic 
                   :                            XTEST_NA;
                  
     typedef enum { XYTEST_HAS_Y, XYTEST_HAS_Y_MINUS, XYTEST_NO_Y, XYTEST_NA } XYTest;
@@ -147,7 +149,7 @@ void coverage_sex_classifier (bool is_first_z_file)
                 is_sam ? "1_Depth/X_Depth" : "AS_Depth/X_Depth (corrected)"); 
         
     printf ("%s\t%8.5f\t%8.5f\t%8.5f\t%4.1f\t%4.1f\t%s\n", 
-            z_name, depth_AS, depth_chrX, depth_chrY, ratio_1_X, ratio_X_Y, 
+            z_name, depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y, 
             is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y]);
 
     fflush (stdout); // in case output is redirected

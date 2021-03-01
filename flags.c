@@ -473,21 +473,27 @@ void flags_update (unsigned num_txt_files, const char **filenames)
                     flag.pair         ? BIND_PAIRS : 
                                         BIND_NONE  ;
 
-    flag.genocat_analysis = exe_type == EXE_GENOCAT && 
-                            (flag.list_chroms || flag.show_sex || flag.show_coverage);
 
-    if (flag.genocat_analysis)
-        flag.no_header = true; // don't show header
-
-    // cases where genocat is used to view some information, but not the file contents
-    flag.genocat_info_only = exe_type == EXE_GENOCAT &&
+    // cases where genocat is used to view some information, but not the file contents, and no reconstruction is needed
+    flag.genocat_no_reconstruct = exe_type == EXE_GENOCAT &&
         (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
          flag.show_index || flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || flag.dump_section || flag.show_headers ||
          flag.show_reference || flag.show_ref_contigs || flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
          flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs || flag.show_gheader);
 
     // where progress, metadata etc messages should go. data always goes to stdout and errors/warning always go to stderr.
-    info_stream = (!flag.to_stdout || flag.genocat_info_only) ? stdout : stderr;
+    info_stream = (!flag.to_stdout || flag.genocat_no_reconstruct) ? stdout : stderr;
+
+    // cases where genocat is used to view some information, but not the file contents (including cases where reconstruction is needed or analysis)
+    flag.genocat_no_reconstruct_output = exe_type == EXE_GENOCAT &&
+        (flag.genocat_no_reconstruct || flag.show_sex || flag.show_coverage);
+
+    if (flag.genocat_no_reconstruct_output) 
+        flag.no_header = true; // don't show header
+
+    // cases where we don't need to load the reference file at all
+    flag.genocat_no_ref_file = exe_type == EXE_GENOCAT &&
+        (flag.show_stats || flag.show_gheader || flag.show_aliases);
 }
 
 void flags_update_zip_one_file (void)

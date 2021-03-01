@@ -319,7 +319,7 @@ static void main_ask_about_unbind (void)
     if (  flag.to_stdout           || // we don't ask if we're outputing to stdout as we can't unbind
           !isatty(0) || !isatty(2) || // if we stdin or stderr is redirected - we cannot ask the user an interactive question
           flag.test                || // we don't ask if we're just testing          
-          flag.genocat_info_only)     // we don't ask we're not reconstructing bc user only wants metadata
+          flag.genocat_no_reconstruct)     // we don't ask we're not reconstructing bc user only wants metadata
         return; 
 
     fprintf (stderr, "\n%s: %s contains %u bound files. You may either:\n"
@@ -377,7 +377,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     if (flag.reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
         ASSINP0 (flag.reference != REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
-        if (!flag.genocat_info_only) {
+        if (!flag.genocat_no_reconstruct || flag.show_coverage || flag.show_sex) { // in show_sex/cov we read the non-data sections of the reference
             SAVE_VALUE (z_file); // actually, read the reference first
             ref_load_external_reference (false, false /* argument ignored for REF_EXTERNAL */);
             RESTORE_VALUE (z_file);
@@ -602,14 +602,14 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 {
     if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE) return;
 
-    if (exe_type == EXE_GENOCAT && flag.show_stats) return; // we don't need the reference if we're just showing stats (ignore here if user provided it)
+    if (flag.genocat_no_ref_file) return; // we don't need the reference in these cases
     
     int old_ref_use_aligner = flag.ref_use_aligner;
     DataType dt = main_get_file_dt (filename);
     flag.ref_use_aligner = (old_ref_use_aligner || dt == DT_FASTQ || dt == DT_FASTA) && primary_command == ZIP;
 
     // no need to load the reference if genocat just wants to see some sections (unless its genocat of the refernece file itself)
-    if (flag.genocat_info_only && dt != DT_REF) return;
+    if (flag.genocat_no_reconstruct && dt != DT_REF) return;
 
     // we also need the aligner if this is an unaligned SAM 
     if (!flag.ref_use_aligner && dt==DT_SAM && primary_command==ZIP) {

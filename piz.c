@@ -203,7 +203,9 @@ static void piz_uncompress_one_vb (VBlock *vb)
 {
     START_TIMER;
 
-    ASSERTE0 (!flag.reference || (genome && genome->nbits), "reference is not loaded correctly");
+    ASSERTE0 (!flag.reference || (genome && genome->nbits) ||
+              (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage)), // reference data not loaded in genocat --show-sex/coverage
+              "reference is not loaded correctly");
 
     DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
 
@@ -213,7 +215,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     piz_uncompress_all_ctxs (vb, 0);
 
     // genocat flags that with which we needn't reconstruct
-    if (exe_type == EXE_GENOCAT && flag.genocat_info_only) goto done;
+    if (exe_type == EXE_GENOCAT && flag.genocat_no_reconstruct) goto done;
 
     // reconstruct from top level snip
     reconstruct_from_ctx (vb, trans.toplevel, 0, true);
@@ -302,6 +304,11 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
 
         // case: reading reference file
         if (flag.reading_reference) {
+
+            // when reading the reference for genocat genocat --show-sex/coverage, don't need the actual REF sections 
+            if (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage)) 
+                goto done;
+
             bool dispatcher_invoked = false;
 
             // attempt to mmap a cached reference, and if one doesn't exist, uncompress the reference file and cache it
@@ -329,7 +336,7 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
         }
 
         // case: non-reference file has stored reference sections
-        else if (has_ref_sections) { 
+        else if (has_ref_sections && !flag.show_sex && !flag.show_coverage) { 
             ref_load_stored_reference();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
@@ -340,6 +347,7 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
         dict_id_read_aliases();
     }
     
+done:
     file_seek (z_file, 0, SEEK_SET, false);
 
     return z_file->data_type;
@@ -398,7 +406,7 @@ static bool piz_read_one_vb (VBlock *vb)
 
 static Digest piz_one_file_verify_digest (Digest original_file_digest)
 {
-    if (v8_digest_is_zero (original_file_digest) || flag.genocat_info_only || flag.data_modified) return DIGEST_NONE; // we can't calculate the digest for some reason
+    if (v8_digest_is_zero (original_file_digest) || flag.genocat_no_reconstruct || flag.data_modified) return DIGEST_NONE; // we can't calculate the digest for some reason
 
     Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound, "file:digest_ctx_bound"); // z_file might be a bound file - this is the MD5 of the entire bound file
     char s[200]; 
@@ -594,7 +602,7 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
 
             // read of a normal file - output uncompressed block (unless we're reading a reference - we don't need to output it)
             if (!flag.reading_reference) {
-                if (!flag.genocat_analysis) 
+                if (!flag.genocat_no_reconstruct_output) 
                     txtfile_write_one_vblock (processed_vb);
                 
                 coverage_add_one_vb (processed_vb);

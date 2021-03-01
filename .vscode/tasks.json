@@ -217,6 +217,9 @@
             "type": "shell",
             "label": "Test",
             "command": "./test.sh",
+            "args": [
+                "1", "-@3"
+            ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },

@@ -268,6 +268,8 @@ static void dict_id_show_aliases (void)
         fprintf (info_stream, "alias=%s dst=%s\n", 
                  dis_dict_id (dict_id_aliases[i].alias).s, dis_dict_id (dict_id_aliases[i].dst).s);
     fflush (info_stream);
+
+    if (exe_type == EXE_GENOCAT) exit_ok;
 }
 
 // called by ZIP I/O thread for writing to global section

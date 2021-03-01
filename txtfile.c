@@ -779,12 +779,12 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
     if ((is_first_txt || flag.unbind) &&  // this is the first component, or we are unbinding (all components get a header)
         (!flag.no_header || z_file->z_flags.txt_is_bin) && // user didn't specify --no-header (or ignore the request if this is a binary file, eg BAM)
         !flag.reading_reference &&        // nothing is written when reading a reference
-        (!flag.genocat_info_only || z_file->data_type == DT_VCF)) {  // nothing is written when we are just showing info (but in VCF we need the header as we need to count the samples)
+        (!flag.genocat_no_reconstruct || z_file->data_type == DT_VCF)) {  // nothing is written when we are just showing info (but in VCF we need the header as we need to count the samples)
 
         if (evb->txt_data.len)
             DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
 
-        if (!flag.genocat_info_only) {
+        if (!flag.genocat_no_reconstruct) {
             // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
             // note: in a header-less SAM, after translating to BAM, we will have a header
             DtTranslation trans = dt_get_translation();

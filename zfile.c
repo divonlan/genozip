@@ -666,7 +666,7 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
     // case: we are reading a file that is not expected to be a reference file
     else {
         // case: we are attempting to decompress a reference file - this is not supported
-        ASSERTGOTO (data_type != DT_REF || (flag.genocat_info_only && exe_type == EXE_GENOCAT) || exe_type == EXE_GENOLS,
+        ASSERTGOTO (data_type != DT_REF || (flag.genocat_no_reconstruct && exe_type == EXE_GENOCAT) || exe_type == EXE_GENOLS,
                     "%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
 
         if (flag.show_reference && !md5_is_zero (header->ref_file_md5)) {
@@ -694,13 +694,13 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
         if (!md5_is_zero (header->ref_file_md5) && !ref_filename && exe_type != EXE_GENOLS) {
             
             if (file_exists (header->ref_filename)) {
-                ASSERTW (flag.genocat_info_only, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
+                ASSERTW (flag.genocat_no_reconstruct, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
                 ref_set_reference (header->ref_filename);
                 flag.reference = REF_EXTERNAL;
             }
             else 
-                ABORTINP ("%s: please use --reference specify the current path to reference file with which %s was compressed (original path was %s)",
-                          global_cmd, z_name, header->ref_filename);
+                ASSINP (flag.genocat_no_ref_file, "%s: please use --reference specify the current path to reference file with which %s was compressed (original path was %s)",
+                        global_cmd, z_name, header->ref_filename);
         }
     }
      

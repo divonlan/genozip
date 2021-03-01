@@ -53,7 +53,7 @@ typedef struct {
            REF_INTERNAL,  // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
            REF_EXTERNAL,  // ZIP & PIZ: user specified --reference
            REF_EXT_STORE, // ZIP: user specified --REFERENCE
-           REF_STORED     // PIZ: file contains REFERENCE sections (user cannot specify --reference)
+           REF_STORED,    // PIZ: file contains REFERENCE sections (user cannot specify --reference)
     } reference;
 
     // undocumented options for internal use
@@ -82,8 +82,9 @@ typedef struct {
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
          reading_reference,  // system is currently reading a reference file
          trans_containers,   // PIZ: decompression invokes container translators
-         genocat_analysis,   // User requested an analysis function
-         genocat_info_only,  // User requested to genocat with only metadata to be shown, not file contents
+         genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
+         genocat_no_reconstruct,  // User requested to genocat with only metadata to be shown, not file contents
+         genocat_no_reconstruct_output,  // User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          data_modified;      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
