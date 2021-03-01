@@ -33,7 +33,7 @@ Data Types: SAM, BAM and FASTQ
   |
   | 2) Calculate X_Depth / Y_Depth and Autosome_Depth / X_Depth. 
   |
-  | 3) Decision matrix: 
+  | 3) Decision matrix (for SAM / BAM): 
 
     =========================== ================================= =============
     **Assigned Sex**            **AS / X**                         **X / Y**
