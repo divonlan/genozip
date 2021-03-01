@@ -149,6 +149,8 @@ void coverage_sex_classifier (bool is_first_z_file)
     printf ("%s\t%8.5f\t%8.5f\t%8.5f\t%4.1f\t%4.1f\t%s\n", 
             z_name, depth_AS, depth_chrX, depth_chrY, ratio_1_X, ratio_X_Y, 
             is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y]);
+
+    fflush (stdout); // in case output is redirected
 }
 
 // output of genocat --show-coverage, called from piz_one_file
@@ -166,7 +168,9 @@ void coverage_show_coverage (void)
         unsigned cn_len;
         const char *chrom_name = ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
 
-        if (flag.show_coverage==1 || cn_len <= 5)
+        if (flag.show_coverage==1 || cn_len <= 5) 
             printf ("%s\t%"PRIu64"\t%"PRIu64"\t%6.2f\n", chrom_name, len, coverage, len ? (double)coverage / (double)len : 0);
     }
+
+    fflush (stdout); // in case output is redirected
 }
