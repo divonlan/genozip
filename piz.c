@@ -459,7 +459,7 @@ bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSectionListEntryP sl_ent, 
 }
 
 // called once per txt_file created: i.e. if concatenating - a single call, if unbinding there will be multiple calls to this function
-void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z_file)
+void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_z_file, bool is_last_z_file)
 {
     static Dispatcher dispatcher = NULL; // static dispatcher - with flag.unbind, we use the same dispatcher when pizzing components
     static ConstSectionListEntryP sl_ent = NULL, sl_ent_leaf_2=NULL; // preserve for unbinding multiple files
@@ -613,9 +613,11 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_last_z
     if (!flag.test) progress_finalize_component_time ("Done", decompressed_file_digest);
 
 finish:
-    // genocat --show-sex and --show-coverage - output results
-    if (flag.show_sex      && txt_file) coverage_sex_classifier();
-    if (flag.show_coverage && txt_file) coverage_show_coverage();
+    // --show-sex and --show-coverage - output results
+    if (txt_file && !flag.reading_reference) {
+        if (flag.show_coverage) coverage_show_coverage();
+        if (flag.show_sex) coverage_sex_classifier (is_first_z_file);
+    }
 
     // case: we're unbinding and still have more components - we continue with the same dispatcher in the next component.
     if (!no_more_headers) 

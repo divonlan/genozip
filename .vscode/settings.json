@@ -48,7 +48,8 @@
         "*.tcc": "c",
         "optional": "c",
         "system_error": "c",
-        "thread": "c"
+        "thread": "c",
+        "dict_id.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",

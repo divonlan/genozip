@@ -1,7 +1,7 @@
 Coverage and Depth
 ==================
 
-Data Types: SAM and BAM
+Data Types: SAM, BAM and FASTQ
 
 ``genocat --show-coverage my-file.bam.genozip`` displays the per-contig Coverage and Depth.
 
@@ -17,15 +17,15 @@ Fine details:
 
   *Contigs that are chromosomes* are contigs with a name of up to 5 characters. For example ``chr22`` is, but ``chr22_KI270731v1_random`` is not.
 
-  We exclude:
+  In SAM and BAM (but not FASTQ) we exclude:
   
-  #. We excluse bases that have a ``S`` CIGAR (Soft clipping) - in other words, we include only bases with a CIGAR or ``M`` ``=`` ``X`` or ``I``.
+  #. We excluse bases that have a ``S`` CIGAR ("soft clipping") (see 1.4.6 `here <https://samtools.github.io/hts-specs/SAMv1.pdf>`_).
   
   #. We exclude reads that are not mapped (FLAG=0x4), failed filters (FLAG=0x200) are secondary (FLAG=0x100) or are duplicate (FLAG=0x400)
 
 **Output**
   | A tab-seperated table, example:
-
+    
 ::
 
     $ genocat myfile.bam.genozip --show-coverage-chrom
@@ -56,3 +56,7 @@ Fine details:
     chrX    156040895       882316415         5.65
     chrY    57227415        215579644         3.77
     chrM    16569   16851259        1017.04
+
+**Using with FASTQ**
+
+    The data reported is NOT the true coverages and depths when running on FASTQ. Rather, it reports data derived from the assignment of reads to contigs by the Genozip Aligner. The Genozip Aligner is designed to be very fast at the expense of inaccuracies, and does not make the claim of mapping reads consistent with the biological truth. 

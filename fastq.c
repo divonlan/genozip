@@ -20,6 +20,7 @@
 #include "codec.h"
 #include "aligner.h"
 #include "stats.h"
+#include "reconstruct.h"
 
 #define dict_id_is_fastq_desc_sf dict_id_is_type_1
 #define dict_id_fastq_desc_sf dict_id_type_1
@@ -515,6 +516,16 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (dict_id.num == dict_id_fields[FASTQ_DESC] || dict_id_is_fastq_desc_sf (dict_id)))
         return true;
 
+    // if we're doing --show-sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
+    if ((flag.show_sex || flag.show_coverage) && 
+        (st==SEC_B250 || st==SEC_LOCAL || st==SEC_DICT) &&
+        (     dict_id.num == dict_id_fields[FASTQ_DESC] || 
+              dict_id.num == dict_id_fields[FASTQ_QUAL] || 
+              dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] || 
+              dict_id.num == dict_id_fields[FASTQ_STRAND] ||
+              dict_id.num == dict_id_fields[FASTQ_NONREF] || 
+              dict_id.num == dict_id_fields[FASTQ_NONREF_X])) return true;
+
     return false;
 }
 
@@ -580,6 +591,33 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
     return true; // show this item as normal
 }
 
+static void fastq_update_coverage (VBlockFASTQ *vb)
+{
+    PosType gpos;
+    Context *gpos_ctx = &vb->contexts[FASTQ_GPOS];
+
+    if (!vb->pair_vb_i) { // first file of a pair ("pair 1") or a non-pair fastq 
+        if (!gpos_ctx->local.len) return;
+        gpos = NEXTLOCAL (uint32_t, gpos_ctx);
+    }
+
+    // 2nd file of a pair ("pair 2")
+    else {
+        // gpos: reconstruct, then cancel the reconstruction and just use last_value
+        //int32_t reconstructed_len = reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, true);
+        //vb->txt_data.len -= reconstructed_len; // roll back reconstruction
+        reconstruct_from_ctx ((VBlockP)vb, FASTQ_GPOS, 0, false);
+        gpos = gpos_ctx->last_value.i;
+    }
+
+    if (gpos != NO_GPOS) {
+        WordIndex chrom_index = ref_chrom_index_get_by_gpos (gpos);
+
+        if (chrom_index != WORD_INDEX_NONE)
+            *ENT (uint64_t, vb->coverage, chrom_index) += vb->seq_len;
+    }
+}
+
 // PIZ: SEQ reconstruction 
 void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len)
 {
@@ -589,6 +627,12 @@ void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_le
     ASSERTE (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
     vb->seq_len = (uint32_t)seq_len_64;
 
-    aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
+    // normal reconstruction
+    if (!flag.show_sex && !flag.show_coverage) 
+        aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
+
+    // just update coverage
+    else
+        fastq_update_coverage (vb);
 }
 

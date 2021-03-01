@@ -1,7 +1,7 @@
 Sex assignment
 ==============
 
-Data Types: SAM and BAM
+Data Types: SAM, BAM and FASTQ
 
 ``genocat --show-sex my-file.bam.genozip`` determines *Sex* to the data.
 
@@ -31,12 +31,12 @@ Data Types: SAM and BAM
 **Classifier algorithm**
   | 1) Calculate the per-contig Depth as described in :doc:`coverage`.
   |
-  | 2) Calculate the ratio 1_Depth / X_Depth and X_Depth / Y_Depth.
+  | 2) Calculate X_Depth / Y_Depth and Autosome_Depth / X_Depth. 
   |
   | 3) Decision matrix: 
 
     =========================== ================================= =============
-    **Assigned Sex**            **1 / X**                         **X / Y**
+    **Assigned Sex**            **AS / X**                         **X / Y**
     *Male*                      > 1.75 (single-X)                 < 9 (Has Y)
     *Female*                    < 1.1 (double-X)                  > 5 (Not enough Y for Male)
     *Female*                    < 1.3 (not quite double-X)        > 9 (No Y)
@@ -47,16 +47,18 @@ Data Types: SAM and BAM
     =========================== ================================= =============
 
   | *Definitions*:
-  | • Chromosome X is the contig named "X", "chrX" or "ChrX". Likewise for Y and 1.
+  | • Depth is defined here :doc:`coverage`.
   |
-  | • Depth is the total number of bases mapped to the chromosome which are marked by the CIGAR Op ``M``, ``X``, ``=`` or ``I`` (see 1.4.6 `here <https://samtools.github.io/hts-specs/SAMv1.pdf>`_), divided by the length (LN) of the chromosome as defined in the SAM/BAM header.
+  | • Autosome_Depth for SAM/BAM means Depth of chr1, and FASTQ it means Depth of all autosome contigs (i.e. excluding X, Y, MT and non-primary contigs like ``chr22_KI270731v1_random``).
+  |
+  | • Chromosome X is the contig named "X", "chrX" or "ChrX", and similarly for other chromosomes. for MT, contig names based on "M" and "MT" are accepted.
   
 **Advantages**
-  | • This method works extremely fast, because just the RNAME and CIGAR data is read from disk - a small subset of the file.
+  | • This method works fast, because just the relevant fields are read from disk - a small subset of the file.
   |
   | • Since this algorithm is based on counting bases rather than counting reads, it would work just as well with data that has highly variable read lengths, as common, for example, in long-read technologies.
   |
-  | • Since the algorithm uses both X/Y and 1/X, it can detect a XXY.
+  | • Since the algorithm uses both X/Y and Autosome/X, it can detect a XXY.
 
 **Limitations**
   | • This feature has been tested on human data. It may or may not work for other species.
@@ -65,6 +67,13 @@ Data Types: SAM and BAM
   |
   | • In case of a bound genozip file (i.e. one created with eg ``genozip file1.sam file2.sam file3.sam --output my-bound.sam.genozip``) calculation will be done on the entire file leading non-sensical results.
   |
-  | • Lines with an undefined RNAME or CIGAR are ignored, therefore this will not work for unaligned SAM/BAM files.
+  | • SAM/BAM lines with an undefined RNAME or CIGAR are ignored, therefore this will not work for unaligned SAM/BAM files.
   |
   | • This feature should never be used for clinical diagnostics.
+
+**Additional limitations when used with FASTQ**
+  | • Sex assignment of a FASTQ is a an experimental feature, and the results should be taken with a grain of salt.
+  |
+  | • Assignment of reads to contigs is based on the Genozip Aligner which is designed to be very fast at the expense of accuracy. This feature works because the Male vs. Female signal is usually stronger than the Genozip Aligner inaccuracies, however when running on FASTQ, the algorithm will be more conservative than when running on SAM/BAM and will report "Unassigned" in some cases where it would confidently call a Sex when running on SAM/BAM data.
+  |
+  | • This has been tested on fastq.genozip files which consist of human data compressed with the GRCh38 reference genome. It yet unknown if the algorithm would work with other species data or other reference genomes.  

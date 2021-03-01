@@ -488,3 +488,15 @@ WordIndex ref_contigs_get_by_accession_number (const char *ac, unsigned ac_len)
 
     return NODE_INDEX_NONE; // not found
 }
+
+WordIndex ref_chrom_index_get_by_gpos (PosType gpos)
+{
+    // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)
+    for (WordIndex chrom_index=0 ; chrom_index < loaded_contigs.len; chrom_index++) {
+        RefContig *rc = ENT (RefContig, loaded_contigs, chrom_index);
+        if (gpos >= rc->gpos && gpos <= rc->gpos + (rc->max_pos - rc->min_pos)) 
+            return chrom_index;
+    }
+
+    return WORD_INDEX_NONE; // not found
+}

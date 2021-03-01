@@ -94,6 +94,7 @@ extern void ref_contigs_load_contigs (void);
 
 typedef void (*RefContigsIteratorCallback)(const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param);
 extern void ref_contigs_iterate (RefContigsIteratorCallback callback, void *callback_param);
+extern WordIndex ref_chrom_index_get_by_gpos (PosType gpos);
 
 // alt chroms stuff
 extern void ref_alt_chroms_load (void);

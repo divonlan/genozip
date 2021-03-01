@@ -1287,7 +1287,7 @@ void ref_load_external_reference (bool display, bool is_last_z_file)
 
     TEMP_VALUE (command, PIZ);
 
-    piz_one_file (0, false);
+    piz_one_file (0, false, false);
 
     // recover globals
     RESTORE_VALUE (command);

@@ -342,6 +342,8 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;
 
+    static bool is_first_z_file = true;
+
     txtfile_header_initialize();
     
     // get input FILE
@@ -402,11 +404,12 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     
     // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
     for (uint32_t component_i=0; component_i < z_file->num_components; component_i += flag.unbind ? 1 + flag.interleave : z_file->num_components) {
-        piz_one_file (component_i, is_last_z_file);
+        piz_one_file (component_i, is_first_z_file, is_last_z_file);
         file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
     }
 
     file_close (&z_file, false, false);
+    is_first_z_file = false;
 
     if (flag.replace && txt_filename && z_filename) file_remove (z_filename, true); 
 
@@ -743,7 +746,7 @@ int main (int argc, char **argv)
                                       flag.out_filename, file_i, !next_input_file || is_last_txt_file, argv[0]); 
                         break;
 
-            case PIZ  : main_genounzip (next_input_file, flag.out_filename, is_last_txt_file); break;           
+            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i==0); break;           
 
             case LIST : main_genols (next_input_file, false, NULL, false); break;
 

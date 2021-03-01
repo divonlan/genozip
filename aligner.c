@@ -356,7 +356,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
     if (buf_is_allocated (&bitmap_ctx->local)) { // not all non-ref
 
         bool is_forward;
-        int64_t gpos;
+        PosType gpos;
 
         // first file of a pair ("pair 1") or a non-pair fastq or sam
         if (!is_pair_2) {

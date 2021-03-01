@@ -21,7 +21,7 @@
 // returns true if section is to be skipped reading / uncompressing
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
-    // if we're doing --show-sex, we only need TOPLEVEL, RNAME and CIGAR
+    // if we're doing --show-sex/coverage, we only need TOPLEVEL, RNAME and CIGAR
     if ((flag.show_sex || flag.show_coverage) && 
         (st==SEC_B250 || st==SEC_LOCAL || st==SEC_DICT) &&
         (     dict_id.num != dict_id_fields[SAM_TOPLEVEL] && 
