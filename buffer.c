@@ -663,15 +663,16 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
                 mutex_unlock (overlay_mutex);            
             }
 
-#ifdef __linux__
-            // In Windows, we observe that free() operations are expensive and significantly slow down execution - so we
+// this causes crashes in rare cases, see bug 308
+/*#ifdef __linux__
+            // In Windows and Mac, we observe that free() operations are expensive and significantly slow down execution - so we
             // just recycle the same memory
             if (!buf->overlayable) {
                 buf_low_level_free (buf->memory, func, code_line);
                 buf->memory = NULL;
                 buf->size   = 0;
             }
-#endif
+#endif*/
             buf->data        = NULL; 
             buf->overlayable = false;
 

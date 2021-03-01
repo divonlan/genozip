@@ -66,6 +66,8 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         
         data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the alloc, because z_data is pre-allocated
 
+        codec_verify_free_all (vb, "compressor", comp_codec);
+
         bool success = 
             codec_args[comp_codec].compress (vb, header, uncompressed_data, &data_uncompressed_len,
                                              callback,  
@@ -80,6 +82,8 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
             data_uncompressed_len = BGEN32 (header->data_uncompressed_len); // reset
+
+            codec_verify_free_all (vb, "compressor", comp_codec);
 
             codec_args[comp_codec].compress (vb, header,
                                              uncompressed_data, &data_uncompressed_len,
@@ -167,7 +171,12 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
     bool run_subcodec = sub_codec && (codec_args[codec].is_simple || !codec_args[codec].uncompress);
 
     if (codec && codec_args[codec].uncompress) { // might be UNKNOWN (eg GT_X_ALLELES) or not have an uncompressor (eg: HT, DOMQ don't have a special uncompressor) and only a sub-codec available
+
+        codec_verify_free_all (vb, "uncompressor", codec);
+
         codec_args[codec].uncompress (vb, codec, param, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
+
+        codec_free_all (vb); // just in case
 
         // case: uncompressed data is now going to be the compressed data for the sub-codec
         if (run_subcodec) {
@@ -182,7 +191,10 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
         }
     }
 
-    if (run_subcodec) // might run with or without first running the primary codec
+    if (run_subcodec) { // might run with or without first running the primary codec
+        codec_verify_free_all (vb, "uncompressor", sub_codec);
         codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, uncompressed_data, uncompressed_len, CODEC_UNKNOWN);
+        codec_free_all (vb); // just in case
+    }
 }
 

@@ -20,11 +20,14 @@
 // every call to compress/decompress with the same parameters, independent on the contents or size of the compressed/decompressed data.
 void *codec_alloc (VBlock *vb, int size, double grow_at_least_factor)
 {
+    const char *names[NUM_CODEC_BUFS] = { "codec_bufs[0]", "codec_bufs[1]", "codec_bufs[2]", "codec_bufs[3]",
+                                          "codec_bufs[4]", "codec_bufs[5]", "codec_bufs[6]" };
+
     // get the next buffer - allocations are always in the same order in bzlib and lzma -
     // so subsequent VBs will allocate roughly the same amount of memory for each buffer
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (!buf_is_allocated (&vb->codec_bufs[i])) {
-            buf_alloc (vb, &vb->codec_bufs[i], size, grow_at_least_factor, "codec_bufs");
+            buf_alloc (vb, &vb->codec_bufs[i], size, grow_at_least_factor, names[i]);
             //printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;
         }
@@ -53,6 +56,13 @@ void codec_free_all (VBlock *vb)
 {
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         buf_free (&vb->codec_bufs[i]);
+}
+
+void codec_verify_free_all (VBlock *vb, const char *op, Codec codec)
+{
+    for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
+        ASSERTE (!buf_is_allocated (&vb->codec_bufs[i]), "About to call %s for %s, but codec_buf[%u] is allocated, expecting it to be free",
+                 op, codec_name (codec), i);
 }
 
 static bool codec_compress_error (VBlock *vb, SectionHeader *header, const char *uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,

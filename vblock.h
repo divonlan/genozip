@@ -15,6 +15,7 @@
 #include "data_types.h"
 
 #define NUM_CODEC_BUFS 7       // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
+                               // if updating, also update array in codec_alloc()
 
 typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
 
