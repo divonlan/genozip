@@ -19,7 +19,7 @@ Fine details:
 
   In SAM and BAM (but not FASTQ) we exclude:
   
-  #. We excluse bases that have a ``S`` CIGAR ("soft clipping") (see 1.4.6 `here <https://samtools.github.io/hts-specs/SAMv1.pdf>`_).
+  #. We exclude bases that have an ``S`` CIGAR ("soft clipping") (see 1.4.6 `here <https://samtools.github.io/hts-specs/SAMv1.pdf>`_).
   
   #. We exclude reads that are not mapped (FLAG=0x4), failed filters (FLAG=0x200) are secondary (FLAG=0x100) or are duplicate (FLAG=0x400)
 
