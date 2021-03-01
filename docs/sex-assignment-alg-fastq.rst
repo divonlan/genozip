@@ -10,9 +10,9 @@ Sex Classifier algorithm (FASTQ)
   | 4) Decision matrix (for SAM / BAM): 
 
     =========================== ================================= =============
-    **Assigned Sex**            **AS / X**                         **X / Y**
+    **Assigned Sex**            **AS / X**                        **X / Y**
     *Male*                      > 1.75 (single-X)                 < 9 (Has Y)
-    *Female*                    < 1.3 (double-X or almsot)   > 5 (Not enough Y for Male)
+    *Female*                    < 1.3 (double-X or almsot)        > 5 (Not enough Y for Male)
     *Male-XXY or XXYY*          < 1.1 (double-X)                  < 1.8 (Has Y, possibly similar ratio Y to X) 
     *Unassigned*                All other combinations
     =========================== ================================= =============

@@ -24,11 +24,13 @@ Genozip
 About Genozip
 =============
 
+`Sign up <https://tinyurl.com/genozip>`_ to receive low-frequency updates related to Genozip.
+
 Genozip is a universal compressor for genomic files - it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, Phylip and 23andMe files, but it can also compress any other file (including non-genomic files). 
 
-It can even compress files that are already compressed with .gz .bz2 .xz (for full list of supported file types see ``genozip --help=input``).
+Typically, a 2X-5X improvement over the existing compression is achieved when compressing already-compressed files like .fastq.gz and .bam, and much higher ratios in some other cases.
 
-The compression ratio one can expect to see depends on the data being compressed - it can be 200X or higher in some cases. In typical cases of compressing already-compressed files like .fastq.gz and .bam it is typically achieves a 2X-5X improvement over the existing compression."
+Yes, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).
 
 The compression is lossless - the decompressed file is 100% identical to the original file (except when using the ``--optimize`` option).
 
