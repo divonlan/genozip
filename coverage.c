@@ -70,7 +70,8 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
 // output of genocat --show-sex, called from piz_one_file
 void coverage_sex_classifier (bool is_first_z_file)
 {    
-    bool is_sam = (z_file->data_type == DT_SAM);
+    bool is_sam   = (z_file->data_type == DT_SAM);
+    bool is_fastq = (z_file->data_type == DT_FASTQ);
 
     WordIndex index_chr1 = coverage_get_chrom_index ('1');
     WordIndex index_chrX = coverage_get_chrom_index ('X');
@@ -100,15 +101,15 @@ void coverage_sex_classifier (bool is_first_z_file)
     double depth_chrY = (double)*ENT (uint64_t, txt_file->coverage, index_chrY) / len_chrY;
 
     // correct for Genozip Aligner's bias in favour X and Y (vs autosomes) in humans (in FASTQ)
-    double correction = is_sam ? 1 : 0.75;
+    double correction = is_fastq ? 1.333 : 1;
 
+    double ratio_1_X  =   !depth_AS ? 0 
+                        : !depth_chrX ? 1000 
+                        :               correction * depth_AS / depth_chrX;
+    
     double ratio_X_Y  =   !depth_chrX ? 0 
                         : !depth_chrY ? 1000 
                         :               depth_chrX / depth_chrY;
-    
-    double ratio_1_X  =   !depth_AS ? 0 
-                        : !depth_chrX ? 1000 
-                        :               depth_AS / (depth_chrX * correction);
     
     typedef enum { XTEST_X, XTEST_XX_MINUS, XTEST_XX, XTEST_NA } XTest;
 

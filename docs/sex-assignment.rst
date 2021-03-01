@@ -1,9 +1,15 @@
 Sex assignment
 ==============
 
+.. toctree::
+   :hidden:
+
+   sam <sex-assignment-alg-sam>
+   fastq <sex-assignment-alg-fastq>
+
 Data Types: SAM, BAM and FASTQ
 
-``genocat --show-sex my-file.bam.genozip`` determines *Sex* to the data.
+``genocat --show-sex my-file.bam.genozip`` determines the genetic *Sex* of the individual from which the data originated.
 
 **Output**
   | A tab-seperated table, example:
@@ -29,30 +35,8 @@ Data Types: SAM, BAM and FASTQ
 
 
 **Classifier algorithm**
-  | 1) Calculate the per-contig Depth as described in :doc:`coverage`.
-  |
-  | 2) Calculate X_Depth / Y_Depth and Autosome_Depth / X_Depth. 
-  |
-  | 3) Decision matrix (for SAM / BAM): 
+  | See :doc:`sex-assignment-alg-sam` and :doc:`sex-assignment-alg-fastq`
 
-    =========================== ================================= =============
-    **Assigned Sex**            **AS / X**                         **X / Y**
-    *Male*                      > 1.75 (single-X)                 < 9 (Has Y)
-    *Female*                    < 1.1 (double-X)                  > 5 (Not enough Y for Male)
-    *Female*                    < 1.3 (not quite double-X)        > 9 (No Y)
-    *Male-XXY*                  < 1.1 (double-X)                  ∈ (1.8,5) (XXY)
-    *Male-XXY or XY/XXY mosaic* ∈ (1.1, 1.3) (not quite double-X) ∈ (1.8,5) (XXY)
-    *Male-XXY or XXYY*          < 1.1 (double-X)                  < 1.8 (Has Y, possibly similar ratio Y to X) 
-    *Unassigned*                All other combinations
-    =========================== ================================= =============
-
-  | *Definitions*:
-  | • Depth is defined here :doc:`coverage`.
-  |
-  | • Autosome_Depth for SAM/BAM means Depth of chr1, and FASTQ it means Depth of all autosome contigs (i.e. excluding X, Y, MT and non-primary contigs like ``chr22_KI270731v1_random``).
-  |
-  | • Chromosome X is the contig named "X", "chrX" or "ChrX", and similarly for other chromosomes. for MT, contig names based on "M" and "MT" are accepted.
-  
 **Advantages**
   | • This method works fast, because just the relevant fields are read from disk - a small subset of the file.
   |
