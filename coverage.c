@@ -144,13 +144,13 @@ void coverage_sex_classifier (bool is_first_z_file)
                                   };
 
     if (is_first_z_file) 
-        printf ("File\t%s_Depth\tX_Depth\tY_Depth\t%s\tX_Depth/Y_Depth\tSex\n", 
+        printf ("File\tSex\t%s_Depth\tX_Depth\tY_Depth\t%s\tX_Depth/Y_Depth\n", 
                 is_sam ? "1" : "AS", 
                 is_sam ? "1_Depth/X_Depth" : "AS_Depth/X_Depth (corrected)"); 
         
-    printf ("%s\t%8.5f\t%8.5f\t%8.5f\t%4.1f\t%4.1f\t%s\n", 
-            z_name, depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y, 
-            is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y]);
+    printf ("%s\t%s\t%8.5f\t%8.5f\t%8.5f\t%4.1f\t%4.1f\n", z_name, 
+            is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y], 
+            depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y);
 
     fflush (stdout); // in case output is redirected
 }
