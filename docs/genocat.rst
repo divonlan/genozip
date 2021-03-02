@@ -119,4 +119,9 @@ One or more file names must be given.
 .. include:: opt-quiet.rst
 .. include:: opt-threads.rst
 .. include:: opt-stats.rst
+
+.. option:: --validate  Validates that the file(s) are valid genozip files.
+    
+          |
+
 .. include:: opt-help.rst

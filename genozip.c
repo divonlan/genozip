@@ -358,6 +358,11 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
 
     z_file = file_open (z_filename, READ, Z_FILE, DT_NONE);    
 
+    if (flag.validate) {
+        file_close (&z_file, false, false);
+        return; // we're only validating that z_file is valid
+    }
+
     // read the genozip header:
     // 1) verify the data type deduced from the file name, or set the data type if it wasn't deduced
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
@@ -760,6 +765,9 @@ int main (int argc, char **argv)
 
     // if this is "list", finalize
     if (command == LIST) main_genols (NULL, true, NULL, false);
+
+    if (flag.multiple_files && flag.validate==1 /* validating, and no invalid files found */) 
+        WARN0 ("All files are valid genozip files");
 
     // finish dumping reference and/or refhash to cache
     ref_create_cache_join();

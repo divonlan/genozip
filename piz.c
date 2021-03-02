@@ -263,8 +263,8 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
     // check if the genozip file includes a reference
     bool has_ref_sections = !!sections_get_first_section_of_type (SEC_REFERENCE, true);
 
-    ASSINP (!has_ref_sections || flag.reference != REF_EXTERNAL || flag.reading_reference, 
-            "Cannot use --reference with %s because it was not compressed with --reference", z_name);
+    ASSERTW (!has_ref_sections || flag.reference != REF_EXTERNAL || flag.reading_reference, 
+             "%s: ignoring reference file %s because it was not compressed with --reference", z_name, ref_filename);
 
     if (!flag.reading_reference && has_ref_sections) 
         flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
