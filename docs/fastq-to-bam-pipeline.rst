@@ -49,7 +49,7 @@ Genozip adds very little overhead, as its CPU consumption is insignificant in co
             echo Sample $sample
             echo =========================================
 
-            ( genocat --interleave $file                                                                            || >&2 echo "genocat exit=$?" )|\
+            ( genocat --interleave $file -e ${ref%.fa}.ref.genozip                                                  || >&2 echo "genocat exit=$?" )|\
             ( fastp --stdin --interleaved_in --stdout --html ${fastq}/${sample}.html --json ${fastq}/${sample}.json || >&2 echo "fastp exit=$?"   )|\
             ( bwa mem $ref - -p -t 54 -T 0 -R "@RG\tID:$sample\tSM:$study\tPL:Illumina"                             || >&2 echo "bwa exit=$?"     )|\
             ( samtools view -1                                                                                      || >&2 echo "samtools exit=$?")|\
