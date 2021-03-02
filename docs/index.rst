@@ -14,6 +14,7 @@ Genozip
    Using genocat <genocat>
    Using genols <genols>
    Publications & Citing <publications>
+   Algorithms <algorithms>
    Source code <source>
    Developer options <developer>
    License <license>
@@ -32,7 +33,7 @@ Typically, a **2X-5X improvement over the existing compression** is achieved whe
 
 **Yes**, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).
 
-The compression is **lossless** - the decompressed file is 100% identical to the original file (except when using the ``--optimize`` option).
+The compression is **lossless** - the decompressed file is 100% identical to the original file (some :ref:`exceptions<losslessness>` apply).
 
 Genozip consists of four command line tools:
   
@@ -46,7 +47,7 @@ Genozip consists of four command line tools:
       - Display the contents of a compressed file - possibly piping it into a downstream tool
       - Subset a compressed file - show a specific part of its contents
       - Translate a compressed file to another format (eg BAM to FASTQ or Multi-FASTA to Phylip)
-      - Show various statistics and metadata related to a compressed file
+      - Analyze a compressed file (eg showing the :ref:`sex<sex>`, :ref:`coverage<coverage>` or compression statistics)
   
 |
  

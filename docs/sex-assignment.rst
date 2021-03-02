@@ -1,3 +1,5 @@
+.. _sex:
+
 Sex assignment
 ==============
 

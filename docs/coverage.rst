@@ -1,3 +1,5 @@
+.. _coverage:
+
 Coverage and Depth
 ==================
 
