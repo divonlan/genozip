@@ -52,9 +52,9 @@ Genozip adds very little overhead, as its CPU consumption is insignificant in co
             ( genocat --interleave $file -e ${ref%.fa}.ref.genozip                                                  || >&2 echo "genocat exit=$?" )|\
             ( fastp --stdin --interleaved_in --stdout --html ${fastq}/${sample}.html --json ${fastq}/${sample}.json || >&2 echo "fastp exit=$?"   )|\
             ( bwa mem $ref - -p -t 54 -T 0 -R "@RG\tID:$sample\tSM:$study\tPL:Illumina"                             || >&2 echo "bwa exit=$?"     )|\
-            ( samtools view -1                                                                                      || >&2 echo "samtools exit=$?")|\
-            ( bamsort fixmates=1 adddupmarksupport=1 inputthreads=3 outputthreads=3 sortthreads=30 level=0          || >&2 echo "bamsort exit=$?" )|\
-            ( bamstreamingmarkduplicates inputthreads=3 outputthreads=3 level=0                                     || >&2 echo "bamstreamingmarkduplicates exit=$?" )|\
+            ( samtools view -h -OSAM                                                                                || >&2 echo "samtools exit=$?")|\
+            ( bamsort fixmates=1 adddupmarksupport=1 inputformat=sam outputformat=sam inputthreads=5 outputthreads=5 sortthreads=30 level=1  || >&2 echo "bamsort exit=$?" )|\
+            ( bamstreamingmarkduplicates inputformat=sam inputthreads=3 outputthreads=3 level=1                     || >&2 echo "bamstreamingmarkduplicates exit=$?" )|\
             ( genozip -e ${ref%.fa}.ref.genozip -i bam -o $out -t                                                   || >&2 echo "genozip exit=$?" )
 
             rm ${out}.doing_now
