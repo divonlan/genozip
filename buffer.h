@@ -159,6 +159,7 @@ typedef struct {
 } MemStats;
 
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
+extern void buf_display_memory_usage_handler (int sig);
 
 #define buf_set(buf_p,value) { if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); }
 #define buf_zero(buf_p) buf_set(buf_p, 0)

@@ -159,7 +159,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sM {"show-mutex",    optional_argument, 0, 4                      }
         #define _dS {"seg-only",      no_argument,       &flag.seg_only,         1 }  
         #define _xt {"xthreads",      no_argument,       &flag.xthreads,         1 }  
-        #define _dm {"debug-memory",  no_argument,       &flag.debug_memory,     1 }  
+        #define _dm {"debug-memory",  optional_argument, 0, 12                     }  
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
         #define _dh {"show-hash",     no_argument,       &flag.show_hash,        1 }  
         #define _sx {"show-sex",      no_argument,       &flag.show_sex,         1 }  
@@ -239,6 +239,7 @@ verify_command:
             case 7   : flag.dump_section  = optarg  ; break;
             case 'B' : flag.vblock        = optarg  ; break;
             case 11  : flag.genobwa       = optarg  ; break;
+            case 12  : flag.debug_memory  = optarg ? atoi (optarg) : 1; break;
             case 'z' : flags_set_bgzf (optarg)      ; break;
             case 4   : flag.show_mutex    = optarg ? optarg : (char*)1; break;
             case 2   : if (optarg) flag.dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 

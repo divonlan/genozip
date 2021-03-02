@@ -7,19 +7,25 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
 *Note*: When used with ``genocat`` most options show only the requested metadata and not the file data itself.
 
-.. option:: --one-vb vb  C. Reconstruct data from a single VB
-
-          |
-
-.. option:: --show-time=res. ZUCL. Show what functions are consuming the most time. Optional <res> is one of the members of ProfilerRec defined in profiler.h such 'compressor_lzma' or a substring such as 'compressor_'.
-
-          |
+**Memory consumption**
 
 .. option:: --show-memory  ZUCL. Show what buffers are consuming the most memory.
 
           |
 
-.. include:: opt-stats.rst
+.. option:: kill -USR1 <pid>.  ZUCL. Executes --show-memory on a running process. Not available on Windows.
+
+          |
+
+.. option:: --debug-memory[=bytes]  ZUCL. Show Buffer allocations and destructions. If <bytes> is specified then show only allocations of at least <bytes>.
+
+          |
+
+.. option:: --show-hash  Z. See raw numbers that feed into determining the size of the global hash tables.
+
+          |
+
+**genozip file contents**
 
 .. option:: --show-alleles  ZUC. (VCF only) Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded and 2-digit allele values are replaced by an ascii character.
 
@@ -93,35 +99,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-threads  ZUC.  Show thread dispatcher activity.
-
-          |
-
-.. option:: --show-hash  Z. See raw numbers that feed into determining the size of the global hash tables.
-
-          |
-
 .. option:: --show-aliases  ZUC. See contents of SEC_DICT_ID_ALIASES section.
-
-          |
-
-.. option:: --show-containers  ZUC. Show flow of containers.
-
-          |
-
-.. option:: --seg-only  Z. Run the segmenter but don't compress and don't write the output
-
-          |
-
-.. option:: --xthreads  ZUC. Use only one thread for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers,
-
-          |
-
-.. option:: --debug-memory  ZUCL. Show Buffer allocations and destructions.
-
-          |
-
-.. option:: --debug-progress  ZUC. See raw numbers that feed into the progress indicator.
 
           |
 
@@ -133,11 +111,25 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-codec  Z. Genozip tests for the best codec when it first encounters a new type of data. See the results.
+.. option:: --show-bgzf  ZUC. Show BGZF blocks as they are being compressed or decompressed.
 
           |
 
-.. option:: --show-bgzf  ZUC. Show BGZF blocks as they are being compressed or decompressed.
+**Track execution**
+
+.. option:: --show-containers  ZUC. Show flow of containers.
+
+          |
+
+.. option:: --show-threads  ZUC.  Show thread dispatcher activity.
+
+          |
+
+.. option:: --debug-progress  ZUC. See raw numbers that feed into the progress indicator.
+
+          |
+
+.. option:: --show-time=res. ZUCL. Show what functions are consuming the most time. Optional <res> is one of the members of ProfilerRec defined in profiler.h such 'compressor_lzma' or a substring such as 'compressor_'.
 
           |
 
@@ -148,4 +140,27 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 .. option:: --show-mutex[=mutex-name].  ZUC. Shows locks and unlocks of all mutexes or a particular mutex.
 
           |
+
+**Track compression performance**
+
+.. include:: opt-stats.rst
+
+.. option:: --show-codec  Z. Genozip tests for the best codec when it first encounters a new type of data. See the results.
+
+          |
+
+**Control execution**
+
+.. option:: --one-vb vb  C. Reconstruct data from a single VB
+
+          |
+
+.. option:: --seg-only  Z. Run the segmenter but don't compress and don't write the output
+
+          |
+
+.. option:: --xthreads  ZUC. Use only one thread for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers,
+
+          |
+
 

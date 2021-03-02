@@ -327,11 +327,21 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists:\n", str_size (total_bytes).s, num_buffers, vb_pool->num_allocated_vbs);
     if (command == ZIP) 
         fprintf (memory_full ? stderr : info_stream, "vblock_memory = %u MB\n", (unsigned)(flag.vblock_memory >> 20));
-    fprintf (memory_full ? stderr : info_stream, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
+    
+    if (max_threads)
+        fprintf (memory_full ? stderr : info_stream, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
 
     for (unsigned i=0; i < num_stats; i++)
         fprintf (memory_full ? stderr : info_stream, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str_size (stats[i].bytes).s, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
 }
+
+#ifndef _WIN32
+// signal handler of SIGUSR1 
+void buf_display_memory_usage_handler (int sig) 
+{
+    buf_display_memory_usage (false, 0, 0);
+}
+#endif
 
 // thread safety: only the thread owning the VB of the buffer (I/O thread of evb) can add a buffer
 // to the buf list OR it may be added by the I/O thread IF the compute thread of this VB is not 
@@ -350,7 +360,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 
     ((Buffer **)bl->data)[bl->len++] = buf;
 
-    if (flag.debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
+    if (flag.debug_memory==1 && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
         iprintf ("buf_add_to_buffer_list: %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
                  buf_desc(buf).s, buf->size, str_pointer(buf).s, vb->id, (uint32_t)vb->buffer_list.len-1);
     
@@ -729,7 +739,7 @@ void buf_remove_from_buffer_list (Buffer *buf)
 
         if (buf_list[i] == buf) {
             
-            if (flag.debug_memory) 
+            if (flag.debug_memory==1) 
                 iprintf ("Destroy %s: buf_addr=%s buf->vb->id=%d buf_i=%u\n", buf_desc (buf).s, str_pointer(buf).s, buf->vb->id, i);
 
             buf_list[i] = NULL;
@@ -836,7 +846,7 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 {
     if (!p) return; // nothing to do
     
-    if (flag.debug_memory) 
+    if (flag.debug_memory==1) 
         iprintf ("Memory freed by free(): %s %s:%u\n", str_pointer (p).s, func, code_line);
 
     if (p == BUFFER_BEING_MODIFIED) {
@@ -853,7 +863,7 @@ static void *buf_low_level_realloc (void *p, size_t size, const char *name, cons
     ASSERTE (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", func, code_line, name, (uint64_t)size, 
              command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
-    if (flag.debug_memory) 
+    if (flag.debug_memory && size >= flag.debug_memory) 
         iprintf ("realloc(): old=%s new=%s name=%s size=%"PRIu64" %s:%u\n", 
                  str_pointer (p).s, str_pointer (new).s, name, (uint64_t)size, func, code_line);
 
@@ -866,7 +876,7 @@ void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t c
     ASSERTE (new, "Out of memory in %s:%u: malloc failed (size=%"PRIu64" bytes). %s", func, code_line, (uint64_t)size,
              command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
-    if (flag.debug_memory) 
+    if (flag.debug_memory && size >= flag.debug_memory) 
         iprintf ("malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new).s, (uint64_t)size, func, code_line);
 
     if (zero) memset (new, 0, size);
