@@ -24,9 +24,9 @@ Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/1
 <br> 
 Typically, a <b>2X-5X improvement over the existing compression</b> is achieved when compressing already-compressed files like .fastq.gz .bam vcf.gz and much higher ratios in some other cases.<br> 
 <br> 
-Yes, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).<br> 
+<b>Yes</b>, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).<br> 
 <br> 
-The compression is lossless - the decompressed file is 100% identical to the original file (see documentation for exceptions).<br> 
+The compression is <b>lossless</b> - the decompressed file is 100% identical to the original file (see documentation for exceptions).<br> 
 <b>Sign up</b> to receive low-frequency updates related to Genozip: https://tinyurl.com/genozip<br>
 <br>
 The command line options are similar to gzip and samtools/bcftools, so if you are familiar with these, it works pretty much the same. To get started, see: http://genozip.com<br>

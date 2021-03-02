@@ -30,9 +30,9 @@ Genozip is a universal compressor for genomic files - it is optimized to compres
 
 Typically, a **2X-5X improvement over the existing compression** is achieved when compressing already-compressed files like .fastq.gz .bam vcf.gz, and much higher ratios in some other cases.
 
-Yes, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).
+**Yes**, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).
 
-The compression is lossless - the decompressed file is 100% identical to the original file (except when using the ``--optimize`` option).
+The compression is **lossless** - the decompressed file is 100% identical to the original file (except when using the ``--optimize`` option).
 
 Genozip consists of four command line tools:
   
