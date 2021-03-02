@@ -18,9 +18,9 @@
 <br>
 <b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, PHYLIP and 23andMe files.<br>
 <br>
-<b>Citing</b> Do you find Genozip useful? Please cite:<br>
-Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor. Bioinformatics, https://doi.org/10.1093/bioinformatics/btab102<br>
-Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br>
+<b>Citing</b> Do you find Genozip useful? Please cite:<br><br>
+  Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor. <i>Bioinformatics</i>, https://doi.org/10.1093/bioinformatics/btab102<br><br>
+  Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br><br>
 <br> 
 Typically, a <b>2X-5X improvement over the existing compression</b> is achieved when compressing already-compressed files like .fastq.gz .bam vcf.gz and much higher ratios in some other cases.<br> 
 <br> 
