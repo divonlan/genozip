@@ -31,7 +31,6 @@ void *codec_alloc (VBlock *vb, int size, double grow_at_least_factor)
             //printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;
         }
-
     ABORT_R ("Error: codec_alloc could not find a free buffer. vb_i=%d", vb->vblock_i);
 }
 
@@ -61,8 +60,8 @@ void codec_free_all (VBlock *vb)
 void codec_verify_free_all (VBlock *vb, const char *op, Codec codec)
 {
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
-        ASSERTE (!buf_is_allocated (&vb->codec_bufs[i]), "About to call %s for %s, but codec_buf[%u] is allocated, expecting it to be free",
-                 op, codec_name (codec), i);
+        ASSERTE (!buf_is_allocated (&vb->codec_bufs[i]), "About to call %s for %s, but codec_bufs[%u] is allocated, expecting it to be free: %s",
+                 op, codec_name (codec), i, buf_desc (&vb->codec_bufs[i]).s);
 }
 
 static bool codec_compress_error (VBlock *vb, SectionHeader *header, const char *uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,

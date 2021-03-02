@@ -366,6 +366,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memo
              vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec), txtfile_dump_vb (vb, txt_name));
 
 done:
+    libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
     return (uint32_t)passed_up_len;
 }
 
