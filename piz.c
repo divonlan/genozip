@@ -266,8 +266,10 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
     ASSERTW (!has_ref_sections || flag.reference != REF_EXTERNAL || flag.reading_reference, 
              "%s: ignoring reference file %s because it was not compressed with --reference", z_name, ref_filename);
 
-    if (!flag.reading_reference && has_ref_sections) 
+    if (!flag.reading_reference && has_ref_sections) {
+        ref_destroy_reference();     // destroy an old reference, if one is loaded
         flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
+    }
 
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag.header_only) {
