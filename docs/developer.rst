@@ -115,7 +115,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-**Track execution**
+**Tracking execution**
 
 .. option:: --show-containers  ZUC. Show flow of containers.
 
@@ -141,7 +141,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-**Track compression performance**
+**Tracking compression performance**
 
 .. include:: opt-stats.rst
 
@@ -149,7 +149,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-**Control execution**
+**Controlling execution**
 
 .. option:: --one-vb vb  C. Reconstruct data from a single VB
 
