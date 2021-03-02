@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--                                                                                                      -->
 <!-- README.md                                                                                            -->
-<!-- Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>                                                -->
+<!-- Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>                                                -->
 <!-- Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt   -->
 <!--                                                                                                      -->
 <!-- This file needs to be compliant to both Markdown and HTML. It is:                                    -->
@@ -16,12 +16,13 @@
 <br>
 (available on <b>Conda</b>, <b>Docker Hub</b> and https://github.com/divonlan/genozip ; Documentation: http://genozip.com)<br>
 <br>
-<b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, Phylip and 23andMe files. It can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br><br>
+<b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, PHYLIP and 23andMe files.<br>
+<br>
 <b>Citing</b> Do you find Genozip useful? Please cite:<br>
 Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor. Bioinformatics, https://doi.org/10.1093/bioinformatics/btab102<br>
 Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br>
 <br> 
-Typically, a 2X-5X improvement over the existing compression is achieved when compressing already-compressed files like .fastq.gz and .bam, and much higher ratios in some other cases.<br> 
+Typically, a <b>2X-5X improvement over the existing compression</b> is achieved when compressing already-compressed files like .fastq.gz .bam vcf.gz and much higher ratios in some other cases.<br> 
 <br> 
 Yes, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).<br> 
 <br> 
@@ -32,6 +33,6 @@ The command line options are similar to gzip and samtools/bcftools, so if you ar
 <br>
 <b>Genozip</b> is free for non-commercial use. For a commercial license, please contact <b>sales@genozip.com</b> <br>
 <br>
-Usage is subject to terms and conditions. The non-commercial license can be viewed on http://genozip.com/license.html
+Usage is subject to terms and conditions. The non-commercial license can be viewed on http://genozip.com/license.html<br>
 <br>
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.<br>
