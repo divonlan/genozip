@@ -22,7 +22,7 @@ copyright = '2019-2021, Divon Lan'
 author = 'Divon Lan'
 
 # The full version, including alpha/beta/rc tags
-release = '11.0.2'
+release = '11.0.6'
 
 
 # -- General configuration ---------------------------------------------------
@@ -53,6 +53,3 @@ html_theme = 'alabaster'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
-
-html_logo = 'logo.png'
-html_show_sphinx = False

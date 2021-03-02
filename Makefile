@@ -211,7 +211,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/use-cases.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst
 
-docs/conf.py: docs/conf.template.py
+docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
 
 docs/LICENSE.for-docs.txt: genozip$(EXE)
@@ -221,7 +221,7 @@ docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/conf.py $(DOCS)
 	@echo Building HTML docs
 	@wsl $(SPHINX) -M html docs docs/_build -q -a 
 
-docs: docs/_build/html/.buildinfo
+docs: docs/_build/html/.buildinfo 
 
 docs-debug: docs/_build/html/.buildinfo
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe file:///C:/Users/USER/projects/genozip/docs/_build/html/index.html; exit 0)
