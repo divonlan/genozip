@@ -106,7 +106,8 @@ Notes:<br>
 <br>
 <b><i>Citing</i></b><br>
 Do you find Genozip useful? Please support continued development by citing:<br>
-Lan, D., et al. <i>Bioinformatics</i>, 36, 4091–4092, July 2020, https://doi.org/10.1093/bioinformatics/btaa290<br>
+Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor. Bioinformatics, https://doi.org/10.1093/bioinformatics/btab102",
+Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br>
 <br> 
 Feature requests and bug reports: <b>bugs@genozip.com</b> <br>
 <br>
