@@ -380,4 +380,8 @@ bug fixes, including major bug with mc:i optional field in SAM
 11.0.6
 - Added genocat --show-coverage and --show-coverage-chrom
 - Added "Male-XXY" result to genocat --show-sex
+- Added genocat --validate
+- Better hash table sizing algorithm - reduced memory consumption
+- Developer tools: Added <bytes> option to --debug-memory[=bytes]
+- Developer: add kill -USR1 - --show-memory of a running process
 - Bug fixes
