@@ -13,7 +13,7 @@ Fine details:
   
   *Depth* is the Coverage divided by the Length (LN) of the contig.
   
-  *Length* is defined in the header of the SAM/BAM, or in the reference file used to compress it, or in the case of a header-less SAM file that was compressed without a reference - the highest coordinate of the contig that appears in the file, rounded up to the next 1M.
+  *Length* is defined in the header of the SAM/BAM, or in the reference file used to compress it, or in the case of a header-less SAM file that was compressed without a reference - the highest coordinate of the contig that appears in the file, rounded up to the next 1MB.
 
   *Contigs that are chromosomes* are contigs with a name of up to 5 characters. For example ``chr22`` is, but ``chr22_KI270731v1_random`` is not.
 
