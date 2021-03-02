@@ -17,6 +17,11 @@
 (available on <b>Conda</b>, <b>Docker Hub</b> and https://github.com/divonlan/genozip ; Documentation: http://genozip.com)<br>
 <br>
 <b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, Phylip and 23andMe files. It can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --help=input').<br>
+<b><i>Citing</i></b><br>
+Do you find Genozip useful? Please cite:<br>
+Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor. Bioinformatics, https://doi.org/10.1093/bioinformatics/btab102<br>
+Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br>
+<br> 
 <br>
 The compression ratio depends on the data being compressed, and you can usually expect about a 1.5-3X ratio when compressing .bam, 2X-5X for .fastq.gz files (i.e. compressing already-compressed files), and up to 200X when compressing an uncompressed high-sample-count .vcf file with only GT data.<br>
 <br>
@@ -104,11 +109,6 @@ Notes:<br>
 <b><i>Compressing and then verifying that the compressed file decompresses correctly:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --test <br>
 <br>
-<b><i>Citing</i></b><br>
-Do you find Genozip useful? Please support continued development by citing:<br>
-Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor. Bioinformatics, https://doi.org/10.1093/bioinformatics/btab102",
-Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br>
-<br> 
 Feature requests and bug reports: <b>bugs@genozip.com</b> <br>
 <br>
 <b>Genozip</b> is free for non-commercial use. For a commercial license, please contact <b>sales@genozip.com</b> <br>
