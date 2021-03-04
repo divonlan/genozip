@@ -95,6 +95,7 @@ typedef struct {
 
     enum { BIND_NONE, BIND_ALL, BIND_PAIRS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
     uint64_t stdin_size;
+    unsigned longest_filename; // length of longest filename of the txt/z files on the command line
 
     // default max amount of txt data in each variant block. this is user-configurable with --vblock
     #define MAX_VBLOCK_MEMORY      2048       // in MB

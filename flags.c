@@ -281,19 +281,19 @@ verify_command:
     }
 }
 
-static void flags_warn_if_duplicates (int num_txt_files, const char **filenames)
+static void flags_warn_if_duplicates (int num_files, const char **filenames)
 {
-    if (num_txt_files <= 1) return; // nothing to do
+    if (num_files <= 1) return; // nothing to do
 
     # define BASENAME_LEN 256
-    char basenames[num_txt_files * BASENAME_LEN];
+    char basenames[num_files * BASENAME_LEN];
 
-    for (unsigned i=0; i < num_txt_files; i++)
+    for (unsigned i=0; i < num_files; i++)
         file_basename (filenames[i], false, "", &basenames[i*BASENAME_LEN], BASENAME_LEN);
 
-    qsort (basenames, num_txt_files, BASENAME_LEN, (int (*)(const void *, const void *))strcmp);
+    qsort (basenames, num_files, BASENAME_LEN, (int (*)(const void *, const void *))strcmp);
 
-    for (unsigned i=1; i < num_txt_files; i++) 
+    for (unsigned i=1; i < num_files; i++) 
         ASSERTW (strncmp(&basenames[(i-1) * BASENAME_LEN], &basenames[i * BASENAME_LEN], BASENAME_LEN), 
                  "Warning: two files with the same name '%s' - if you later unbind with 'genounzip --unbind %s', these files will overwrite each other", 
                  &basenames[i * BASENAME_LEN], flag.out_filename);
@@ -370,7 +370,7 @@ static void flags_test_conflicts (void)
 }
 
 // --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
-static void flags_verify_pair_rules (unsigned num_txt_files, const char **filenames)
+static void flags_verify_pair_rules (unsigned num_files, const char **filenames)
 {
     // ZIP only
     if (command != ZIP) {
@@ -379,16 +379,16 @@ static void flags_verify_pair_rules (unsigned num_txt_files, const char **filena
     }
 
     // verify even number of files
-    ASSINP (num_txt_files % 2 == 0, "when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", OT("pair", "2"));
+    ASSINP (num_files % 2 == 0, "when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", OT("pair", "2"));
     ASSINP (flag.reference, "either --reference or --REFERENCE must be specified when using %s", OT("pair", "2"));
 
     // verify all are fastq
-    for (unsigned i=0; i < num_txt_files; i++)
+    for (unsigned i=0; i < num_files; i++)
         ASSINP (txtfile_get_file_dt (filenames[i]) == DT_FASTQ, "when using %s, all input files are expected to be FASTQ files, but %s is not", OT("pair", "2"), filenames[i]);
 
     // if which --output is missing, we check if every pair of files has a consistent name
     if (!flag.out_filename) 
-        for (unsigned i=0; i < num_txt_files; i += 2) 
+        for (unsigned i=0; i < num_files; i += 2) 
             ASSINP (file_get_fastq_pair_filename (filenames[i], filenames[i+1], true),  
                     "to use %s without specifying --output, the naming of the files needs to be consistent and include the numbers 1 and 2 respectively, but these files don't: %s %s", 
                     OT("pair", "2"), filenames[i], filenames[i+1]);
@@ -404,12 +404,22 @@ static void flag_set_vblock_memory (void)
     flag.vblock_memory = (uint64_t)mem_size_mb << 20;
 }
 
-void flags_update (unsigned num_txt_files, const char **filenames)
+static unsigned flags_get_longest_filename (unsigned num_files, const char **filenames)
+{
+    unsigned len=0;
+    for (unsigned i=0; i < num_files; i++) {
+        unsigned len_i = strlen (filenames[i]);
+        len = MAX (len, len_i);
+    }
+    return len;
+}
+
+void flags_update (unsigned num_files, const char **filenames)
 {
     flags_test_conflicts();
 
     // verify stuff needed for --pair
-    if (flag.pair) flags_verify_pair_rules (num_txt_files, filenames);
+    if (flag.pair) flags_verify_pair_rules (num_files, filenames);
     
     if (flag.genobwa && command == ZIP)
         flag.seg_only = true;
@@ -443,7 +453,7 @@ void flags_update (unsigned num_txt_files, const char **filenames)
         flag.md5 = true;
         if (!flag.vblock) flag.vblock_memory = VBLOCK_MEMORY_MAKE_REF;
 
-        ASSINP (num_txt_files <= 1, "you can specify only one FASTA file when using --make-reference.\n"
+        ASSINP (num_files <= 1, "you can specify only one FASTA file when using --make-reference.\n"
                 "To create a reference from multiple FASTAs use something like this:\n"
                 "cat *.fa | %s --make-reference --input fasta --output myref.ref.genozip -", global_cmd);
     }
@@ -466,11 +476,13 @@ void flags_update (unsigned num_txt_files, const char **filenames)
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --unbind
-    if (command == ZIP && flag.out_filename && !flag.quiet) flags_warn_if_duplicates (num_txt_files, filenames);
+    if (command == ZIP && flag.out_filename && !flag.quiet) flags_warn_if_duplicates (num_files, filenames);
 
-    flag.multiple_files = (num_txt_files > 1);
+    flag.multiple_files = (num_files > 1);
 
-    if (command == ZIP && num_txt_files > 1) 
+    flag.longest_filename = flags_get_longest_filename (num_files, filenames);
+
+    if (command == ZIP && num_files > 1) 
         flag.bind = flag.out_filename ? BIND_ALL   : 
                     flag.pair         ? BIND_PAIRS : 
                                         BIND_NONE  ;

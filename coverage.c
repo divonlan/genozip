@@ -155,13 +155,14 @@ void coverage_sex_classifier (bool is_first_z_file)
                                   };
 
     if (is_first_z_file) 
-        printf ("%-10s  %-50s  %-6s  %-6s  %-6s  %-4s  %-4s\n",
-                "Sex", "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
+        printf ("%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n",
+                "Sex", flag.longest_filename, "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
                 is_sam ? "1/X" : "AS/X", "X/Y");
                 
-    printf ("%-10s  %-50s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n",  
+    printf ("%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n",  
             is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y], 
-            z_name, depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y);
+            flag.longest_filename, z_name, 
+            depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y);
 
     fflush (stdout); // in case output is redirected
 }
