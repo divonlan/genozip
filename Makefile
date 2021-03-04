@@ -82,7 +82,9 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 libdeflate/common_defs.h           libdeflate/lib_common.h           libdeflate/x86_matchfinder_impl.h \
 			 libdeflate/compiler_gcc.h          libdeflate/libdeflate.h \
 			 libdeflate/cpu_features_common.h   libdeflate/matchfinder_common.h
-			 
+
+BAM_FILES = test/basic.bam test/minimal.bam
+
 ifeq ($(CC),cl) # Microsoft Visual C
 	$(error Only the gcc compiler is currently supported)
 endif
@@ -141,13 +143,13 @@ else
 endif
 
 all   : CFLAGS += $(OPTFLAGS) 
-all   : $(OBJDIR) $(EXECUTABLES) LICENSE.non-commercial.txt
+all   : $(OBJDIR) $(EXECUTABLES) $(BAM_FILES) LICENSE.non-commercial.txt
 	@chmod +x test.sh
 
-debug : CFLAGS += $(DEBUGFLAGS)
+debug : CFLAGS += $(DEBUGFLAGS) $(BAM_FILES)
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
 
-opt   : CFLAGS += -g $(OPTFLAGS)
+opt   : CFLAGS += -g $(OPTFLAGS) $(BAM_FILES)
 opt   : $(OBJDIR) $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 
 -include $(DEPS)
@@ -171,6 +173,10 @@ $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
+
+test/%.bam : test/%.sam
+	@echo "Generating $@ from $<"
+	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools  view $< -OBAM -o $@"
 
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
