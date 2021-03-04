@@ -85,6 +85,8 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 
 BAM_FILES = test/basic.bam test/minimal.bam
 
+testfiles : $(BAM_FILES)
+
 ifeq ($(CC),cl) # Microsoft Visual C
 	$(error Only the gcc compiler is currently supported)
 endif
@@ -143,13 +145,13 @@ else
 endif
 
 all   : CFLAGS += $(OPTFLAGS) 
-all   : $(OBJDIR) $(EXECUTABLES) $(BAM_FILES) LICENSE.non-commercial.txt
+all   : $(OBJDIR) $(EXECUTABLES) LICENSE.non-commercial.txt
 	@chmod +x test.sh
 
-debug : CFLAGS += $(DEBUGFLAGS) $(BAM_FILES)
+debug : CFLAGS += $(DEBUGFLAGS)
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
 
-opt   : CFLAGS += -g $(OPTFLAGS) $(BAM_FILES)
+opt   : CFLAGS += -g $(OPTFLAGS)
 opt   : $(OBJDIR) $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 
 -include $(DEPS)
@@ -374,7 +376,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@touch $@
 
 distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
-distribution: docs conda/.conda-timestamp docs/genozip-installer.exe # mac/.remote_mac_timestamp
+distribution: docs testfiles conda/.conda-timestamp docs/genozip-installer.exe # mac/.remote_mac_timestamp
 	
 endif # Windows
 
@@ -468,5 +470,5 @@ clean: clean-test.sh-files
 	@rm -f *.good *.bad *.local *.b250 test/*.good test/*.bad test/*.local test/*.b250
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized clean-test.sh-files git-pull macos mac/.remote_mac_timestamp delete-arch docs 
+.PHONY: clean clean-debug clean-optimized clean-test.sh-files git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles
 

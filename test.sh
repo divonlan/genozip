@@ -531,6 +531,8 @@ batch_genols()
     rm -f $output
 }
 
+make testfiles
+
 output=${OUTDIR}/output.genozip
 
 is_windows=`uname|grep -i mingw`
