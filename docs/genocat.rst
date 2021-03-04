@@ -103,7 +103,7 @@ One or more file names must be given.
     
           |
 
-.. option:: --show-coverage.  (SAM BAM) Shows the coverage and depth of each contig. See "Coverage and Depth" use case.
+.. option:: --show-coverage[=all].  (SAM BAM) Shows the coverage and depth of each contig. Without =all it shows only contigs that are chromosomes and groups the other contigs under "Other contigs". See "Coverage and Depth" use case.
     
           |
 

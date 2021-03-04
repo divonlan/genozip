@@ -220,6 +220,7 @@ void ref_contigs_sort_chroms (void)
 void ref_contigs_load_contigs (void)
 {
     const SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, true);
+
     if (!sl) return; // section doesn't exist
 
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_REF_CONTIGS, sl);
@@ -383,12 +384,15 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsig
     }
 
     // get info as it appears in reference
-    PosType ref_last_pos = ENT (Range, ranges, ref_chrom)->last_pos;
     RefContig *contig = ENT (RefContig, loaded_contigs, ref_chrom);
+
     const char *ref_chrom_name = ENT (const char, loaded_contigs_dict, contig->char_index); // might be different that chrom_name if we used an alt_name
 
-    ASSINP (last_pos == ref_last_pos, "Error: wrong reference file: %s has an @SQ line 'SN:%.*s LN:%"PRId64"', but in %s '%s' has LN=%"PRId64,
-            txt_name, chrom_name_len, chrom_name, last_pos, ref_filename, ref_chrom_name, ref_last_pos);
+    if (buf_is_allocated (&ranges)) { // it is not allocated in --show-sex/coverage
+        PosType ref_last_pos = ENT (Range, ranges, ref_chrom)->last_pos; // get from ranges because RefContig.LN=0 - we don't populate it at reference creation
+        ASSINP (last_pos == ref_last_pos, "Error: wrong reference file: %s has an @SQ line 'SN:%.*s LN:%"PRId64"', but in %s '%s' has LN=%"PRId64,
+                txt_name, chrom_name_len, chrom_name, last_pos, ref_filename, ref_chrom_name, ref_last_pos);
+    }
 
     return ref_chrom;
 }

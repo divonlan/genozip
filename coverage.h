@@ -5,6 +5,9 @@
 
 #include "genozip.h"
 
+// if updating, update cvr_names in coverage.c too
+typedef enum { CVR_SOFT_CLIP, CVR_UNMAPPED, CVR_SECONDARY, CVR_FAILED, CVR_DUPLICATE, CVR_CONTIGS, NUM_COVER_TYPES } CoverTypes;
+
 extern void coverage_initialize (VBlockP vb);
 extern void coverage_add_one_vb (VBlockP vb);
 extern void coverage_show_coverage (void);

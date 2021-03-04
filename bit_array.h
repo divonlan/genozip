@@ -543,6 +543,9 @@ char* bit_array_word2str(const void *ptr, size_t nbits, char *str);
 // Same as above but in reverse
 char* bit_array_word2str_rev(const void *ptr, size_t nbits, char *str);
 
+// get number of bits in an array, excluding trailing zeros (divon)
+bit_index_t bit_array_effective_length (BitArray *bitarr);
+
 #ifdef __cplusplus
 }
 #endif

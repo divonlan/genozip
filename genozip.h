@@ -23,7 +23,7 @@
 // system parameters
 // -----------------
 #define GENOZIP_EXT ".genozip"
-#define GENOZIP_URL "https://github.com/divonlan/genozip"
+#define GENOZIP_URL "https://genozip.com"
 
 #define MAX_POS ((PosType)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
 

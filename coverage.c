@@ -6,24 +6,35 @@
 #include "coverage.h"
 #include "vblock.h"
 #include "file.h"
+#include "strings.h"
 
 void coverage_initialize (VBlock *vb)
 {
-    vb->coverage.len = vb->contexts[CHROM].word_list.len;
+    vb->coverage.len = vb->contexts[CHROM].word_list.len + NUM_COVER_TYPES;
     buf_alloc_more (vb, &vb->coverage, 0, vb->coverage.len, uint64_t, 1, "coverage");
     buf_zero (&vb->coverage); // zero every VB even if already allocated from prev VB
+
+    vb->read_count.len = vb->contexts[CHROM].word_list.len + NUM_COVER_TYPES;
+    buf_alloc_more (vb, &vb->read_count, 0, vb->read_count.len, uint64_t, 1, "read_count");
+    buf_zero (&vb->read_count); // zero every VB even if already allocated from prev VB
+
 }
 
 void coverage_add_one_vb (VBlockP vb)
 {
     if (!vb->coverage.len) return;
 
-    if (!txt_file->coverage.len)
-        buf_copy (evb, &txt_file->coverage, &vb->coverage, sizeof (uint64_t), 0, 0, "txt_file->coverage");
+    if (!txt_file->coverage.len) {
+        buf_copy (evb, &txt_file->coverage,   &vb->coverage,   sizeof (uint64_t), 0, 0, "txt_file->coverage");
+        buf_copy (evb, &txt_file->read_count, &vb->read_count, sizeof (uint64_t), 0, 0, "txt_file->read_count");
+    }
 
-    else
-        for (uint64_t i=0; i < vb->coverage.len; i++)
-            *ENT (uint64_t, txt_file->coverage, i) += *ENT (uint64_t, vb->coverage, i);
+    else {
+        for (uint64_t i=0; i < vb->coverage.len; i++) {
+            *ENT (uint64_t, txt_file->coverage, i)   += *ENT (uint64_t, vb->coverage, i);
+            *ENT (uint64_t, txt_file->read_count, i) += *ENT (uint64_t, vb->read_count, i);
+        }
+    }
 }
 
 static WordIndex coverage_get_chrom_index (char chrom_char)
@@ -144,13 +155,13 @@ void coverage_sex_classifier (bool is_first_z_file)
                                   };
 
     if (is_first_z_file) 
-        printf ("File\tSex\t%s_Depth\tX_Depth\tY_Depth\t%s\tX_Depth/Y_Depth\n", 
-                is_sam ? "1" : "AS", 
-                is_sam ? "1_Depth/X_Depth" : "AS_Depth/X_Depth (corrected)"); 
-        
-    printf ("%s\t%s\t%8.5f\t%8.5f\t%8.5f\t%4.1f\t%4.1f\n", z_name, 
+        printf ("%-10s  %-50s  %-6s  %-6s  %-6s  %-4s  %-4s\n",
+                "Sex", "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
+                is_sam ? "1/X" : "AS/X", "X/Y");
+                
+    printf ("%-10s  %-50s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n",  
             is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y], 
-            depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y);
+            z_name, depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y);
 
     fflush (stdout); // in case output is redirected
 }
@@ -158,11 +169,19 @@ void coverage_sex_classifier (bool is_first_z_file)
 // output of genocat --show-coverage, called from piz_one_file
 void coverage_show_coverage (void)
 {
-    printf ("Contig\tLN\tCoverage\tDepth\n");
-        
-    for (uint64_t i=0; i < txt_file->coverage.len; i++) {
-        uint64_t coverage = *ENT (uint64_t, txt_file->coverage, i);
-        if (!coverage) continue;
+    unsigned chr_width = flag.show_coverage==1 ? 26 : 13;
+
+    printf ("%-*s  %-8s  %-11s  %-10s  %s\n", chr_width, "Contig", "LN", "Reads", "Bases", "Depth");
+
+    txt_file->coverage.len -= NUM_COVER_TYPES; // real contigs only
+    ARRAY (uint64_t, coverage, txt_file->coverage);
+    ARRAY (uint64_t, read_count, txt_file->read_count);
+
+    uint64_t *coverage_special   = &coverage[coverage_len];
+    uint64_t *read_count_special = &read_count[coverage_len];
+
+    for (uint64_t i=0; i < coverage_len; i++) {
+        if (!coverage[i]) continue;
 
         PosType len = has_header_contigs ? ENT (RefContig, header_contigs, i)->max_pos
                     :                      ENT (RefContig, loaded_contigs, i)->max_pos;
@@ -171,8 +190,21 @@ void coverage_show_coverage (void)
         const char *chrom_name = ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
 
         if (flag.show_coverage==1 || cn_len <= 5) 
-            printf ("%s\t%"PRIu64"\t%"PRIu64"\t%6.2f\n", chrom_name, len, coverage, len ? (double)coverage / (double)len : 0);
+            printf ("%-*s  %-8s  %-11s  %-10s  %-6.2f\n", chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, len ? (double)coverage[i] / (double)len : 0);
+
+        else {
+            coverage_special[CVR_CONTIGS]   += coverage[i]; // other non-chromosome contigs
+            read_count_special[CVR_CONTIGS] += read_count[i];
+        }
     }
+
+    char *cvr_names[NUM_COVER_TYPES] = { "Soft clip", "Unmapped", "Secondary", "Failed filters", "Duplicate", "Other contigs"};
+
+    for (uint64_t i=0; i < NUM_COVER_TYPES; i++) 
+        if (coverage_special[i])
+            printf ("%-*s  %-8s  %-11s  %-10s\n", chr_width, cvr_names[i], "",
+                    (i == CVR_SOFT_CLIP ? "" : str_uint_commas (read_count_special[i]).s),
+                    str_bases(coverage_special[i]).s);
 
     fflush (stdout); // in case output is redirected
 }

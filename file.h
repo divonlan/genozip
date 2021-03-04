@@ -331,6 +331,7 @@ typedef struct File {
 
     // TXT file: data used in --show-sex and show-coverage
     Buffer coverage;
+    Buffer read_count;
 
     // Z_FILE: stats data
     Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)

@@ -5,13 +5,15 @@ Coverage and Depth
 
 Data Types: SAM, BAM and FASTQ
 
-``genocat --show-coverage my-file.bam.genozip`` displays the per-contig Coverage and Depth.
+``genocat --show-coverage=all my-file.bam.genozip`` displays the per-contig Number-of-reads, Number-of-bases and Depth.
 
-``genocat --show-coverage-chrom my-file.bam.genozip`` does the same, but just for contigs that are chromosomes.
+``genocat --show-coverage my-file.bam.genozip`` does the same, but just for contigs that are chromosomes.
 
 Fine details: 
 
-  *Coverage* is the number of bases mapped to a contig. 
+  *Number-of-bases* is the number of bases mapped to a contig, excluding bases with a ``S`` (Soft Clip) CIGAR (see 1.4.6 `here <https://samtools.github.io/hts-specs/SAMv1.pdf>`_).
+
+  *Number-of-reads* is the number of reads mapped to a contig.
   
   *Depth* is the Coverage divided by the Length (LN) of the contig.
   
@@ -19,45 +21,43 @@ Fine details:
 
   *Contigs that are chromosomes* are contigs with a name of up to 5 characters. For example ``chr22`` is, but ``chr22_KI270731v1_random`` is not.
 
-  In SAM and BAM (but not FASTQ) we exclude:
+  *Number-of-bases* and *Number-of-reads* excludes unmapped reads, and in SAM/BAM also excludes reads with a FLAG indicating Duplicate, Secondary and Failed Filters. These are reported separately.
   
-  #. We exclude bases that have an ``S`` CIGAR ("soft clipping") (see 1.4.6 `here <https://samtools.github.io/hts-specs/SAMv1.pdf>`_).
-  
-  #. We exclude reads that are not mapped (FLAG=0x4), failed filters (FLAG=0x200) are secondary (FLAG=0x100) or are duplicate (FLAG=0x400)
-
 **Output**
-  | A tab-seperated table, example:
     
 ::
 
-    $ genocat myfile.bam.genozip --show-coverage-chrom
-
-    Contig  LN      Coverage        Depth
-    chr1    248956422       2667178287       10.71
-    chr2    242193529       2641166618       10.91
-    chr3    198295559       2191671750       11.05
-    chr4    190214555       2105061023       11.07
-    chr5    181538259       1946975026       10.72
-    chr6    170805979       1815243563       10.63
-    chr7    159345973       1733006366       10.88
-    chr8    145138636       1568148827       10.80
-    chr9    138394717       1318887120        9.53
-    chr10   133797422       1481588178       11.07
-    chr11   135086622       1465298907       10.85
-    chr12   133275309       1443045061       10.83
-    chr13   114364328       1130334663        9.88
-    chr14   107043718       953895279         8.91
-    chr15   101991189       881547642         8.64
-    chr16   90338345        975530338        10.80
-    chr17   83257441        870265768        10.45
-    chr18   80373285        884126928        11.00
-    chr19   58617616        601881274        10.27
-    chr20   64444167        737073875        11.44
-    chr21   46709983        483872201        10.36
-    chr22   50818468        414579819         8.16
-    chrX    156040895       882316415         5.65
-    chrY    57227415        215579644         3.77
-    chrM    16569   16851259        1017.04
+    $ genocat.exe --show-coverage my-sample.bam.genozip
+    Contig         LN        Reads        Bases       Depth
+    1              249.3 Mb  61,261,021   9000.6 Mb   36.11 
+    2              243.2 Mb  63,534,042   9314.4 Mb   38.30
+    3              198.0 Mb  50,851,120   7479.4 Mb   37.77
+    4              191.2 Mb  48,167,951   7082.8 Mb   37.05
+    5              180.9 Mb  46,524,643   6842.5 Mb   37.82
+    6              171.1 Mb  43,689,854   6423.2 Mb   37.54
+    7              159.1 Mb  41,213,705   6050.3 Mb   38.02
+    8              146.4 Mb  38,109,245   5602.2 Mb   38.28 
+    9              141.2 Mb  31,779,723   4668.8 Mb   33.06
+    10             135.5 Mb  34,988,073   5137.7 Mb   37.91
+    11             135.0 Mb  35,262,312   5183.1 Mb   38.39
+    12             133.9 Mb  34,551,733   5075.2 Mb   37.92
+    13             115.2 Mb  24,543,420   3608.4 Mb   31.33
+    14             107.3 Mb  23,546,204   3459.0 Mb   32.22
+    15             102.5 Mb  22,632,125   3323.9 Mb   32.42
+    16             90.4 Mb   23,703,488   3471.9 Mb   38.43
+    17             81.2 Mb   22,169,323   3249.4 Mb   40.02
+    18             78.1 Mb   19,555,374   2874.6 Mb   36.82
+    19             59.1 Mb   16,392,666   2395.8 Mb   40.52
+    20             63.0 Mb   16,544,349   2428.3 Mb   38.53
+    21             48.1 Mb   9,823,711    1440.9 Mb   29.94
+    22             51.3 Mb   10,247,743   1501.8 Mb   29.27
+    X              155.3 Mb  20,446,847   2996.6 Mb   19.30
+    Y              59.4 Mb   3,984,478    582.7 Mb    9.81
+    MT             16.6 Kb   106,209      15.5 Mb     938.41
+    Soft clip                             1185.0 Mb
+    Unmapped                 17,071,958   2433.6 Mb
+    Duplicate                71,068,615   10556.8 Mb
+    Other contigs            29,259,649   4138.6 Mb
 
 **Using with FASTQ**
 

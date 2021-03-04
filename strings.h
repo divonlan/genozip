@@ -24,6 +24,7 @@ extern char *str_tolower (const char *in, char *out /* out allocated by caller -
 extern char *str_toupper (const char *in, char *out);
 
 extern StrText str_size (uint64_t size);
+extern StrText str_bases (uint64_t num_bases);
 extern StrText str_uint_commas (int64_t n);
 extern StrText str_int_s (int64_t n);
 extern unsigned str_int (int64_t n, char *str /* out */);

@@ -775,48 +775,50 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
     // now get the text of the txt header itself
     if (!show_headers_only)
         zfile_uncompress_section (evb, header, &evb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
-    
+
+    // analyze header
+    if (evb->txt_data.len && 
+        (is_first_txt || flag.unbind) &&  // this is the first component, or we are unbinding (all components get a header)
+        !flag.reading_reference)          
+        DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
+
     // write txt header if it is needed:
     if ((is_first_txt || flag.unbind) &&  // this is the first component, or we are unbinding (all components get a header)
         (!flag.no_header || z_file->z_flags.txt_is_bin) && // user didn't specify --no-header (or ignore the request if this is a binary file, eg BAM)
         !flag.reading_reference &&        // nothing is written when reading a reference
-        (!flag.genocat_no_reconstruct || z_file->data_type == DT_VCF)) {  // nothing is written when we are just showing info (but in VCF we need the header as we need to count the samples)
+        !flag.genocat_no_reconstruct) {   // nothing is written when we not reconstructing
 
-        if (evb->txt_data.len)
-            DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
+        // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
+        // note: in a header-less SAM, after translating to BAM, we will have a header
+        DtTranslation trans = dt_get_translation();
+        if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
-        if (!flag.genocat_no_reconstruct) {
-            // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
-            // note: in a header-less SAM, after translating to BAM, we will have a header
-            DtTranslation trans = dt_get_translation();
-            if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
+        if (!evb->txt_data.len) goto done; // still no header... nothing more for us to do!
 
-            if (!evb->txt_data.len) goto done; // still no header... nothing more for us to do!
+        bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
+                        !flag.data_modified; // no point calculating digest if we know already the file will be different
 
-            bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
-                            !flag.data_modified; // no point calculating digest if we know already the file will be different
+        if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
 
-            if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
+        // compress the txt header with BGZF if needed
+        if (txt_file->codec == CODEC_BGZF) { 
+            bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
+            bgzf_compress_vb (evb); // compress data (but not if we are re-creating SEC_BGZF blocks and header is too small to fit into the first block)
+            bgzf_write_to_disk (evb); // write blocks to disk and/or move unconsumed data to the next vb
+        } 
+        else
+            txtfile_write_to_disk (&evb->txt_data);
 
-            // compress the txt header with BGZF if needed
-            if (txt_file->codec == CODEC_BGZF) { 
-                bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
-                bgzf_compress_vb (evb); // compress data (but not if we are re-creating SEC_BGZF blocks and header is too small to fit into the first block)
-                bgzf_write_to_disk (evb); // write blocks to disk and/or move unconsumed data to the next vb
-            } 
-            else
-                txtfile_write_to_disk (&evb->txt_data);
-
-            if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
-                Digest reconstructed_header_digest = digest_do (evb->txt_data.data, evb->txt_data.len);
-                
-                ASSERTW (flag.data_modified || digest_is_equal (reconstructed_header_digest, header->digest_header),
-                        "%s of reconstructed %s header (%s) differs from original file (%s)\n"
-                        "Bad reconstructed header has been dumped to: %s\n", digest_name(),
-                        dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
-                        txtfile_dump_vb (evb, z_name));
-            }
+        if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
+            Digest reconstructed_header_digest = digest_do (evb->txt_data.data, evb->txt_data.len);
+            
+            ASSERTW (flag.data_modified || digest_is_equal (reconstructed_header_digest, header->digest_header),
+                    "%s of reconstructed %s header (%s) differs from original file (%s)\n"
+                    "Bad reconstructed header has been dumped to: %s\n", digest_name(),
+                    dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
+                    txtfile_dump_vb (evb, z_name));
         }
+
     }
 
 done:

@@ -17,6 +17,7 @@
 #include "aligner.h"
 #include "file.h"
 #include "container.h"
+#include "coverage.h"
 
 // returns true if section is to be skipped reading / uncompressing
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
@@ -126,21 +127,35 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (nonref - nonref_start);
 }
 
+static inline void sam_piz_update_coverage (VBlockP vb, const uint16_t sam_flag, uint32_t soft_clip)
+{
+    ARRAY (uint64_t, read_count, vb->read_count);
+    ARRAY (uint64_t, coverage, vb->coverage);
+    uint64_t *coverage_special   = AFTERENT (uint64_t, vb->coverage) - NUM_COVER_TYPES;
+    uint64_t *read_count_special = AFTERENT (uint64_t, vb->read_count) - NUM_COVER_TYPES;
+    WordIndex chrom_index = vb->contexts[SAM_RNAME].last_value.i;
+
+    if (chrom_index == WORD_INDEX_NONE ||
+             sam_flag & SAM_FLAG_UNMAPPED)       { coverage_special[CVR_UNMAPPED]  += vb->seq_len; read_count_special[CVR_UNMAPPED] ++; }
+    else if (sam_flag & SAM_FLAG_SECONDARY)      { coverage_special[CVR_SECONDARY] += vb->seq_len; read_count_special[CVR_SECONDARY]++; }
+    else if (sam_flag & SAM_FLAG_FAILED_FILTERS) { coverage_special[CVR_FAILED]    += vb->seq_len; read_count_special[CVR_FAILED]   ++; }
+    else if (sam_flag & SAM_FLAG_DUPLICATE)      { coverage_special[CVR_DUPLICATE] += vb->seq_len; read_count_special[CVR_DUPLICATE]++; }
+    else {
+        coverage_special[CVR_SOFT_CLIP] += soft_clip;
+        coverage[chrom_index] += vb->seq_len - soft_clip;
+        read_count[chrom_index]++;
+    }
+}
+
 // CIGAR - calculate vb->seq_len from the CIGAR string, and if original CIGAR was "*" - recover it
 SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
 {
     VBlockSAMP vb_sam = (VBlockSAMP)vb;
     const uint16_t sam_flag = vb->contexts[SAM_FLAG].last_value.i;
 
-    // we calculate coverage only for primary reads (not secodnary, supplementary or duplicate) that are mapped and passed filters
-    // note: for chimeric reads, we count both the representative and the supplementary alignments, because they usually have little
-    // overlap and we count only M,=,X,I parts of the read.
-    uint32_t coverage;
-    bool calc_coverage = !(sam_flag & (SAM_FLAG_UNMAPPED | SAM_FLAG_SECONDARY | SAM_FLAG_FAILED_FILTERS | SAM_FLAG_DUPLICATE)) &&
-                         (flag.show_sex || flag.show_coverage);
-
     // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar
-    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL, calc_coverage ? &coverage : NULL); 
+    uint32_t soft_clip;
+    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL, &soft_clip); 
 
     if (flag.out_dt == DT_SAM && reconstruct) {
         if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
@@ -182,9 +197,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
     }
 
     // count coverage, if needed
-    if (calc_coverage)
-        *ENT (uint64_t, vb->coverage, vb->contexts[SAM_RNAME].last_value.i) += coverage;
-    
+    if (flag.show_sex || flag.show_coverage) 
+        sam_piz_update_coverage (vb, sam_flag, soft_clip);
+
     vb_sam->last_cigar = snip;
 
     if (flag.regions && vb->chrom_node_index != WORD_INDEX_NONE && vb->contexts[SAM_POS].last_value.i && 

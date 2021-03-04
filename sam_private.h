@@ -12,7 +12,8 @@
 
 #define BAM_MAGIC "BAM\1" // first 4 characters of a BAM file
 
-#define IS_BAM ((command==ZIP ? txt_file : z_file)->data_type==DT_BAM)
+#define IS_BAM (command==ZIP ? txt_file->data_type==DT_BAM \
+                             : (z_file->data_type==DT_SAM && z_file->z_flags.txt_is_bin))
 
 // as defined in https://samtools.github.io/hts-specs/SAMv1.pdf 1.4.2
 #define SAM_FLAG_MULTI_SEGMENTS 0x0001

@@ -21,6 +21,7 @@
 #include "aligner.h"
 #include "stats.h"
 #include "reconstruct.h"
+#include "coverage.h"
 
 #define dict_id_is_fastq_desc_sf dict_id_is_type_1
 #define dict_id_fastq_desc_sf dict_id_type_1
@@ -610,11 +611,16 @@ static void fastq_update_coverage (VBlockFASTQ *vb)
         gpos = gpos_ctx->last_value.i;
     }
 
-    if (gpos != NO_GPOS) {
-        WordIndex chrom_index = ref_chrom_index_get_by_gpos (gpos);
+    WordIndex chrom_index;
+    if (gpos != NO_GPOS && 
+        (chrom_index = ref_chrom_index_get_by_gpos (gpos)) != WORD_INDEX_NONE) {
 
-        if (chrom_index != WORD_INDEX_NONE)
-            *ENT (uint64_t, vb->coverage, chrom_index) += vb->seq_len;
+        *ENT (uint64_t, vb->coverage, chrom_index) += vb->seq_len;
+        (*ENT (uint64_t, vb->read_count, chrom_index))++;
+    }
+    else {
+        *(AFTERENT (uint64_t, vb->coverage) - NUM_COVER_TYPES + CVR_UNMAPPED) += vb->seq_len;
+        (*(AFTERENT (uint64_t, vb->read_count) - NUM_COVER_TYPES + CVR_UNMAPPED))++;
     }
 }
 

@@ -385,3 +385,6 @@ bug fixes, including major bug with mc:i optional field in SAM
 - Developer tools: Added <bytes> option to --debug-memory[=bytes]
 - Developer: add kill -USR1 - --show-memory of a running process
 - Bug fixes
+
+11.0.7
+- Bug fixes

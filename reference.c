@@ -517,7 +517,7 @@ static void ref_read_one_range (VBlockP vb)
 void ref_load_stored_reference (void)
 {
     ASSERTE0 (!buf_is_allocated (&ranges), "expecting ranges to be unallocated (this can happen when specifying --reference for a file that doesn't need it)");
-    
+
     if (!(flag.show_headers && exe_type == EXE_GENOCAT)) {
 
         ref_initialize_ranges (RT_LOADED);
@@ -573,7 +573,7 @@ void ref_remove_cache (void)
 
 // mmap the reference cached file, as copy-on-write - modifications are private to process and not written to the file
 bool ref_mmap_cached_reference (void)
-{
+{  
     ASSERTE0 (!buf_is_allocated (&ranges), "expecting ranges to be unallocated (this can happen when specifying --reference for a file that doesn't need it)");
     
     if (!file_exists (ref_get_cache_fn())) return false; // file doesn't exist
@@ -1113,6 +1113,18 @@ static void ref_finalize_denovo_ranges (void)
     // shorten the array to only used ranges
     Range *r ; for (r=FIRSTENT (Range, ranges); r < AFTERENT (Range, ranges) && ref_is_range_used (r); r++) {};
     ranges.len = r - FIRSTENT (Range, ranges);
+
+    // shorten the last range in each to contig according to usage
+    for (uint32_t range_i=0; range_i < ranges.len; range_i++) {
+        Range *r = ENT (Range, ranges, range_i);
+        
+        if (range_i < ranges.len - 1 && r->chrom == (r+1)->chrom) continue; // not last range of the contig
+
+        bit_index_t effective_len = bit_array_effective_length (&r->is_set);
+        r->last_pos = r->first_pos + effective_len - 1;
+        bit_array_truncate (&r->ref, 2 * effective_len);
+        bit_array_truncate (&r->is_set, effective_len);
+    }
 }
 
 // ZIP: compress and write reference sections. either compressed by us, or copied directly from the reference file.
@@ -1380,7 +1392,6 @@ static void overlay_ranges_on_loaded_genome (void)
 void ref_initialize_ranges (RangesType type)
 {
     if (type == RT_LOADED || type == RT_CACHED) {
-
         ref_initialize_loaded_ranges (type);
 
         if (type == RT_LOADED) 

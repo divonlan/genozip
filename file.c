@@ -673,7 +673,7 @@ static bool file_open_z (File *file)
                 FCLOSE (file->file, file_printname (file));
 
                 if (flag.validate) flag.validate = 2; // invalid files have been found
-                
+
                 if (flag.multiple_files) 
                     RETURNW (false, true, 
                              flag.validate ? "%s is not a valid genozip file" : "Skipping %s - it is not a valid genozip file", 
@@ -873,6 +873,7 @@ void file_close (File **file_p,
         buf_destroy (&file->unconsumed_txt);
         buf_destroy (&file->bgzf_isizes);
         buf_destroy (&file->coverage);
+        buf_destroy (&file->read_count);
         buf_destroy (&file->stats_buf);
         buf_destroy (&file->STATS_buf);
         buf_destroy (&file->bound_txt_names);

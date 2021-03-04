@@ -81,6 +81,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* used by --show-coverage and --show-sex */ \
     Buffer coverage; \
+    Buffer read_count; \
     \
     /* crypto stuff */\
     Buffer spiced_pw;          /* used by crypt_generate_aes_key() */\

@@ -1428,6 +1428,22 @@ void bit_array_truncate (BitArray* bitarr, bit_index_t new_num_of_bits)
 
   bitarr->nbits  = new_num_of_bits;
   bitarr->nwords = roundup_bits2words64 (new_num_of_bits);   
+
+  bit_array_clear_excess_bits_in_top_word (bitarr);
+}
+
+// get number of bits in an array, excluding trailing zeros (divon)
+bit_index_t bit_array_effective_length (BitArray *bitarr)
+{
+    int64_t i;
+    for (i=bitarr->nwords-1; i>=0; i--) 
+        if (bitarr->words[i]) break; // break on last non-zero word
+
+    if (i == -1) return 0;
+
+    word_t last_non_zero_word = bitarr->words[i];
+
+    return 64 * (1+i) - leading_zeros(last_non_zero_word);
 }
 
 // create words - if the word is not aligned to the bitmap word boundaries, and hence spans 2 bitmap words, 
