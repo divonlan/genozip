@@ -175,8 +175,6 @@ void coverage_show_coverage (void)
 
     unsigned chr_width = flag.show_coverage==1 ? 26 : 13;
 
-    printf ("%-*s  %-8s  %-11s  %-10s  %s\n", chr_width, "Contig", "LN", "Reads", "Bases", "Depth");
-
     printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %s\n" : "%*s\t%s\t%s\t%s\t%s\n", 
                        chr_width, "Contig", "LN", "Reads", "Bases", "Depth");
 
