@@ -33,6 +33,8 @@ Fine details:
   
 **Output**
     
+Output is space-seperated if sent to a terminal, and tab-seperated if redirected to a file or pipe.
+
 ::
 
     $ genocat.exe --show-coverage my-sample.bam.genozip

@@ -76,8 +76,10 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
 // output of genocat --show-sex, called from piz_one_file
 void coverage_sex_classifier (bool is_first_z_file)
 {    
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len)
-        ABORTINP0 ("--show-sex for FASTQ only works on files compressed with a reference");
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len) {
+        WARN ("%s: %s: --show-sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
+        return;
+    }
 
     bool is_sam   = (z_file->data_type == DT_SAM);
     bool is_fastq = (z_file->data_type == DT_FASTQ);
@@ -151,11 +153,11 @@ void coverage_sex_classifier (bool is_first_z_file)
                                   };
 
     if (is_first_z_file) 
-        printf ("%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n",
+        printf (isatty(1) ? "%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" : "%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
                 "Sex", flag.longest_filename, "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
                 is_sam ? "1/X" : "AS/X", "X/Y");
                 
-    printf ("%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n",  
+    printf (isatty(1) ? "%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n" : "%s\t%*s\t%f\t%f\t%f\t%f\t%f\n",  
             is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y], 
             flag.longest_filename, z_name, 
             depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y);
@@ -166,12 +168,17 @@ void coverage_sex_classifier (bool is_first_z_file)
 // output of genocat --show-coverage, called from piz_one_file
 void coverage_show_coverage (void)
 {
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len)
-        ABORTINP0 ("--show-coverage for FASTQ only works on files compressed with a reference");
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len) {
+        WARN ("%s: %s: --show-sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
+        return;
+    }
 
     unsigned chr_width = flag.show_coverage==1 ? 26 : 13;
 
     printf ("%-*s  %-8s  %-11s  %-10s  %s\n", chr_width, "Contig", "LN", "Reads", "Bases", "Depth");
+
+    printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %s\n" : "%*s\t%s\t%s\t%s\t%s\n", 
+                       chr_width, "Contig", "LN", "Reads", "Bases", "Depth");
 
     txt_file->coverage.len -= NUM_COVER_TYPES; // real contigs only
     ARRAY (uint64_t, coverage, txt_file->coverage);
@@ -191,7 +198,8 @@ void coverage_show_coverage (void)
                     :                                     ENT (RefContig, loaded_contigs, i)->max_pos;
 
         if (flag.show_coverage==1 || cn_len <= 5) 
-            printf ("%-*s  %-8s  %-11s  %-10s  %-6.2f\n", chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, len ? (double)coverage[i] / (double)len : 0);
+            printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %-6.2f\n" : "%*s\t%s\t%s\t%s\t%f\n", 
+                    chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, len ? (double)coverage[i] / (double)len : 0);
 
         else {
             coverage_special[CVR_CONTIGS]   += coverage[i]; // other non-chromosome contigs
@@ -203,7 +211,8 @@ void coverage_show_coverage (void)
 
     for (uint64_t i=0; i < NUM_COVER_TYPES; i++) 
         if (coverage_special[i])
-            printf ("%-*s  %-8s  %-11s  %-10s\n", chr_width, cvr_names[i], "",
+            printf (isatty(1) ? "%*s  %-8s  %-11s  %-10s\n" : "%*s\t%s\t%s\t%s\n", 
+                    chr_width, cvr_names[i], "",
                     (i == CVR_SOFT_CLIP ? "" : str_uint_commas (read_count_special[i]).s),
                     str_bases(coverage_special[i]).s);
 
@@ -213,8 +222,10 @@ void coverage_show_coverage (void)
 // output of genocat --idxstats - designed to identical to samtools idxstats
 void coverage_show_idxstats (void)
 {
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len)
-        ABORTINP0 ("--idxstats for FASTQ only works on files compressed with a reference");
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len) {
+        WARN ("%s: %s: --show-sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
+        return;
+    }
 
     txt_file->read_count.len -= NUM_COVER_TYPES; // real contigs only
     ARRAY (uint64_t, read_count, txt_file->read_count);

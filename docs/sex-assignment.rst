@@ -23,6 +23,8 @@ Determines the genetic *Sex* of the individual from which the data originated.
 
 **Output**
 
+Output is space-seperated if sent to a terminal, and tab-seperated if redirected to a file or pipe.
+
 ::
 
   $ genocat *.genozip --show-sex
