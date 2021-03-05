@@ -204,7 +204,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
     START_TIMER;
 
     ASSERTE0 (!flag.reference || (genome && genome->nbits) ||
-              (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage)), // reference data not loaded in genocat --show-sex/coverage
+              (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage || flag.idxstats)), // reference data not loaded in genocat --show-sex/coverage
               "reference is not loaded correctly");
 
     DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
@@ -277,7 +277,7 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
         ctx_read_all_dictionaries(); // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs()
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-        if (flag.regions) 
+        if (flag.regions && z_file->contexts[CHROM].word_list.len) // FASTQ compressed without reference, has no CHROMs 
             regions_make_chregs();
 
         // if the regions are negative, transform them to the positive complement instead
@@ -307,8 +307,8 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
         // case: reading reference file
         if (flag.reading_reference) {
 
-            // when reading the reference for genocat genocat --show-sex/coverage, don't need the actual REF sections 
-            if (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage)) 
+            // when reading the reference for genocat --show-sex/coverage/idxstats, don't need the actual REF sections 
+            if (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage || flag.idxstats)) 
                 goto done;
 
             bool dispatcher_invoked = false;
@@ -338,7 +338,7 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
         }
 
         // case: non-reference file has stored reference sections
-        else if (has_ref_sections && !flag.show_sex && !flag.show_coverage) { 
+        else if (has_ref_sections && !flag.show_sex && !flag.show_coverage && !flag.idxstats) { 
             ref_load_stored_reference();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
@@ -398,7 +398,7 @@ static bool piz_read_one_vb (VBlock *vb)
         bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
 
     // initialize coverage counters
-    if (flag.show_coverage || flag.show_sex)
+    if (flag.show_coverage || flag.show_sex || flag.idxstats)
         coverage_initialize (vb);
             
     COPY_TIMER (piz_read_one_vb); 
@@ -627,6 +627,7 @@ finish:
     if (txt_file && !flag.reading_reference) {
         if (flag.show_coverage) coverage_show_coverage();
         if (flag.show_sex) coverage_sex_classifier (is_first_z_file);
+        if (flag.idxstats) coverage_show_idxstats();
     }
 
     // case: we're unbinding and still have more components - we continue with the same dispatcher in the next component.

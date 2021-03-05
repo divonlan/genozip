@@ -329,9 +329,10 @@ typedef struct File {
     uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
     int32_t bzgf_passed_down_len;      // PIZ: bytes at the end of the VB too small for one bgzf block passed to the next block
 
-    // TXT file: data used in --show-sex and show-coverage
+    // TXT file: data used in --show-sex, --show-coverage and --idxstats
     Buffer coverage;
     Buffer read_count;
+    Buffer unmapped_read_count;
 
     // Z_FILE: stats data
     Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)

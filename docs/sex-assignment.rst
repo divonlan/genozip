@@ -11,10 +11,17 @@ Sex assignment
 
 Data Types: SAM, BAM and FASTQ
 
-``genocat --show-sex my-file.bam.genozip`` determines the genetic *Sex* of the individual from which the data originated.
+**Usage**
+
+``genocat --show-sex my-file.bam.genozip`` 
+
+``genocat --show-sex my-file.fq.genozip`` 
+
+**Description**
+
+Determines the genetic *Sex* of the individual from which the data originated.
 
 **Output**
-  | A tab-seperated table, example:
 
 ::
 

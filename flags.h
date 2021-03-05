@@ -64,7 +64,7 @@ typedef struct {
         validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     
     // analysis
-    int list_chroms, show_sex, show_coverage; 
+    int list_chroms, show_sex, show_coverage, idxstats; 
     
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest,

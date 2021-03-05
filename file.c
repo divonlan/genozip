@@ -874,6 +874,7 @@ void file_close (File **file_p,
         buf_destroy (&file->bgzf_isizes);
         buf_destroy (&file->coverage);
         buf_destroy (&file->read_count);
+        buf_destroy (&file->unmapped_read_count);
         buf_destroy (&file->stats_buf);
         buf_destroy (&file->STATS_buf);
         buf_destroy (&file->bound_txt_names);

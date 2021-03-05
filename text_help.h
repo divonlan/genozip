@@ -315,6 +315,8 @@ static const char *help_genocat[] = {
     "",
     "   --show-coverage[=all] (SAM, BAM, FASTQ) Shows the coverage and depth of each contig. Without =all, it shows only contigs that are chromosomes, and groups the other contigs under \"Other contigs\". See http://genozip.com/coverage.html",
     "",
+    "   --idxstats       (SAM, BAM, FASTQ) Shows the count of mapped and unmapped reads by contig - same output format as samtools idxstats",
+    "",
     "Translation options (convertion from one format to another):",    
     "      --bam          (SAM and BAM only) Output as BAM.",
     "                     Note: this option is implicit if --output specifies a filename ending with .bam",

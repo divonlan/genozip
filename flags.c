@@ -164,15 +164,16 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dh {"show-hash",     no_argument,       &flag.show_hash,        1 }  
         #define _sx {"show-sex",      no_argument,       &flag.show_sex,         1 }  
         #define _SX {"show-coverage", optional_argument, 0, 13                     }  
+        #define _ix {"idxstats",      no_argument,       &flag.idxstats,         1 }
         #define _vl {"validate",      no_argument,       &flag.validate,         1 }  
         #define _bw {"genobwa",       required_argument, 0, 11                     }  
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,                    _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                              _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,      _sx, _SX,          _00 };
-        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,         _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw, _sx, _SX, _vl,     _00 };
-        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                              _u,     _p, _e,                                                                                                          _st, _sm,                                       _dm,                                                                                                                                                                      _sM,                                                        _b, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,                         _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                              _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,      _sx, _SX, _ix,          _00 };
+        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,         _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw, _sx, _SX, _ix, _vl,     _00 };
+        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                              _u,     _p, _e,                                                                                                          _st, _sm,                                       _dm,                                                                                                                                                                      _sM,                                                             _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -337,6 +338,8 @@ static void flags_test_conflicts (void)
     CONFLICT (flag.show_sex,    flag.out_filename,   "--show-sex",         OT("output", "o"));
     CONFLICT (flag.show_sex,    flag.unbind,         "--show-sex",         OT("unbind", "u"));
     CONFLICT (flag.show_sex,    flag.grep,           "--show-sex",         OT("grep", "g"));
+    CONFLICT (flag.show_sex,    flag.idxstats,       "--show-sex",         "--idxstats");
+    CONFLICT (flag.show_coverage, flag.idxstats,     "--show-coverage",    "--idxstats");
     CONFLICT (flag.show_coverage, flag.regions==1,   "--show-coverage",    OT("regions", "r"));
     CONFLICT (flag.show_coverage, flag.out_filename, "--show-coverage",    OT("output", "o"));
     CONFLICT (flag.show_coverage, flag.unbind,       "--show-coverage",    OT("unbind", "u"));
@@ -500,7 +503,7 @@ void flags_update (unsigned num_files, const char **filenames)
 
     // cases where genocat is used to view some information, but not the file contents (including cases where reconstruction is needed or analysis)
     flag.genocat_no_reconstruct_output = exe_type == EXE_GENOCAT &&
-        (flag.genocat_no_reconstruct || flag.show_sex || flag.show_coverage);
+        (flag.genocat_no_reconstruct || flag.show_sex || flag.show_coverage || flag.idxstats);
 
     if (flag.genocat_no_reconstruct_output) 
         flag.no_header = true; // don't show header
@@ -574,14 +577,19 @@ void flags_update_piz_one_file (void)
     ASSINP (!flag.interleave || is_paired_fastq, 
             "--interleave is not supported for %s because it only works on FASTQ data that was compressed with --pair", z_name);
 
-    // --show-sex is only possible on SAM/BAM
+    // --show-sex is only possible on SAM/BAM and FASTQ
     ASSINP (!flag.show_sex || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout
-            "--show-sex is not supported for %s because it only works on SAM or BAM data, but this file has %s data",
+            "--show-sex is not supported for %s because it only works on SAM, BAM and FASTQ data, but this file has %s data",
             z_name, dt_name (z_file->data_type));
 
-    // --show-coverage is only possible on SAM/BAM
+    // --show-coverage is only possible on SAM/BAM and FASTQ
     ASSINP (!flag.show_coverage || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout
-            "--show-coverage is not supported for %s because it only works on SAM or BAM data, but this file has %s data",
+            "--show-coverage is not supported for %s because it only works on SAM, BAM and FASTQ data, but this file has %s data",
+            z_name, dt_name (z_file->data_type));
+
+    // --idxstats is only possible on SAM/BAM and FASTQ
+    ASSINP (!flag.idxstats || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout
+            "--idxstats is not supported for %s because it only works on SAM, BAM and FASTQ data, but this file has %s data",
             z_name, dt_name (z_file->data_type));
 
     // if using --genobwa in PIZ, z_file must be a FASTQ file with a single component or two paired components

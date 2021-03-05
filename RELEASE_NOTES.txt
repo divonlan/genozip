@@ -387,4 +387,6 @@ bug fixes, including major bug with mc:i optional field in SAM
 - Bug fixes
 
 11.0.7
+- Add genozip --idxstats - identical output to samtools idxstats
+- Much improved genocat --show-sex --and show-coverage
 - Bug fixes

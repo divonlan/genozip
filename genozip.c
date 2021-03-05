@@ -382,7 +382,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     if (flag.reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
         ASSINP0 (flag.reference != REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
-        if (!flag.genocat_no_reconstruct || flag.show_coverage || flag.show_sex) { // in show_sex/cov we read the non-data sections of the reference
+        if (!flag.genocat_no_reconstruct || flag.show_coverage || flag.show_sex || flag.idxstats) { // in show_sex/coverage/idxstats we read the non-data sections of the reference
             SAVE_VALUE (z_file); // actually, read the reference first
             ref_load_external_reference (false, false /* argument ignored for REF_EXTERNAL */);
             RESTORE_VALUE (z_file);

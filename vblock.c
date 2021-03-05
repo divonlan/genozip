@@ -66,6 +66,7 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->bgzf_blocks);
     buf_free(&vb->coverage);
     buf_free(&vb->read_count);
+    buf_free(&vb->unmapped_read_count);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
@@ -108,6 +109,7 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->region_ra_intersection_matrix);
     buf_destroy (&vb->coverage);
     buf_destroy (&vb->read_count);
+    buf_destroy (&vb->unmapped_read_count);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)

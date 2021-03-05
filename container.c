@@ -156,7 +156,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             int32_t reconstructed_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
-                bool reconstruct = !flag.show_sex &&              // no reconstruction in --show-sex
+                bool reconstruct = !flag.show_sex && !flag.show_coverage && !flag.idxstats && // no reconstruction with these flags
                                    (  !flag.trans_containers ||   // not translating OR... 
                                       !IS_CI_SET (CI_TRANS_NOR)); // no prohibition on reconstructing when translating
 

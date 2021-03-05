@@ -22,8 +22,7 @@
 // returns true if section is to be skipped reading / uncompressing
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
-    // if we're doing --show-sex/coverage, we only need TOPLEVEL, RNAME and CIGAR
-    if ((flag.show_sex || flag.show_coverage) && 
+    if ((flag.show_sex || flag.show_coverage || flag.idxstats) && 
         (st==SEC_B250 || st==SEC_LOCAL || st==SEC_DICT) &&
         (     dict_id.num != dict_id_fields[SAM_TOPLEVEL] && 
               dict_id.num != dict_id_fields[SAM_RNAME] && 
@@ -199,6 +198,13 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
     // count coverage, if needed
     if (flag.show_sex || flag.show_coverage) 
         sam_piz_update_coverage (vb, sam_flag, soft_clip);
+
+    else if (flag.idxstats) {// && (sam_flag & SAM_FLAG_IS_FIRST) && !(sam_flag && SAM_FLAG_SECONDARY)) {
+        if (sam_flag & SAM_FLAG_UNMAPPED)   
+            (*ENT (uint64_t, vb->unmapped_read_count, vb->contexts[SAM_RNAME].last_value.i))++;
+        else
+            (*ENT (uint64_t, vb->read_count, vb->contexts[SAM_RNAME].last_value.i))++;
+    }
 
     vb_sam->last_cigar = snip;
 

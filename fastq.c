@@ -518,7 +518,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
 
     // if we're doing --show-sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
-    if ((flag.show_sex || flag.show_coverage) && 
+    if ((flag.show_sex || flag.show_coverage || flag.idxstats) && 
         (st==SEC_B250 || st==SEC_LOCAL || st==SEC_DICT) &&
         (     dict_id.num == dict_id_fields[FASTQ_DESC] || 
               dict_id.num == dict_id_fields[FASTQ_QUAL] || 
@@ -615,12 +615,18 @@ static void fastq_update_coverage (VBlockFASTQ *vb)
     if (gpos != NO_GPOS && 
         (chrom_index = ref_chrom_index_get_by_gpos (gpos)) != WORD_INDEX_NONE) {
 
-        *ENT (uint64_t, vb->coverage, chrom_index) += vb->seq_len;
-        (*ENT (uint64_t, vb->read_count, chrom_index))++;
+        if (flag.show_coverage || flag.show_sex)
+            *ENT (uint64_t, vb->coverage, chrom_index) += vb->seq_len;
+
+        if (flag.show_coverage || flag.idxstats)
+            (*ENT (uint64_t, vb->read_count, chrom_index))++;
     }
     else {
-        *(AFTERENT (uint64_t, vb->coverage) - NUM_COVER_TYPES + CVR_UNMAPPED) += vb->seq_len;
-        (*(AFTERENT (uint64_t, vb->read_count) - NUM_COVER_TYPES + CVR_UNMAPPED))++;
+        if (flag.show_coverage || flag.show_sex)
+            *(AFTERENT (uint64_t, vb->coverage) - NUM_COVER_TYPES + CVR_UNMAPPED) += vb->seq_len;
+
+        if (flag.show_coverage || flag.idxstats)
+            (*(AFTERENT (uint64_t, vb->read_count) - NUM_COVER_TYPES + CVR_UNMAPPED))++;
     }
 }
 
@@ -634,7 +640,7 @@ void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_le
     vb->seq_len = (uint32_t)seq_len_64;
 
     // normal reconstruction
-    if (!flag.show_sex && !flag.show_coverage) 
+    if (!flag.show_sex && !flag.show_coverage && !flag.idxstats) 
         aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
 
     // just update coverage

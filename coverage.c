@@ -17,24 +17,17 @@ void coverage_initialize (VBlock *vb)
     vb->read_count.len = vb->contexts[CHROM].word_list.len + NUM_COVER_TYPES;
     buf_alloc_more (vb, &vb->read_count, 0, vb->read_count.len, uint64_t, 1, "read_count");
     buf_zero (&vb->read_count); // zero every VB even if already allocated from prev VB
-
+    
+    vb->unmapped_read_count.len = vb->contexts[CHROM].word_list.len;
+    buf_alloc_more (vb, &vb->unmapped_read_count, 0, vb->unmapped_read_count.len, uint64_t, 1, "unmapped_read_count");
+    buf_zero (&vb->unmapped_read_count); // zero every VB even if already allocated from prev VB
 }
 
 void coverage_add_one_vb (VBlockP vb)
 {
-    if (!vb->coverage.len) return;
-
-    if (!txt_file->coverage.len) {
-        buf_copy (evb, &txt_file->coverage,   &vb->coverage,   sizeof (uint64_t), 0, 0, "txt_file->coverage");
-        buf_copy (evb, &txt_file->read_count, &vb->read_count, sizeof (uint64_t), 0, 0, "txt_file->read_count");
-    }
-
-    else {
-        for (uint64_t i=0; i < vb->coverage.len; i++) {
-            *ENT (uint64_t, txt_file->coverage, i)   += *ENT (uint64_t, vb->coverage, i);
-            *ENT (uint64_t, txt_file->read_count, i) += *ENT (uint64_t, vb->read_count, i);
-        }
-    }
+    buf_add_vector (evb, uint64_t, txt_file->coverage, vb->coverage, "txt_file->coverage");
+    buf_add_vector (evb, uint64_t, txt_file->read_count, vb->read_count, "txt_file->read_count");
+    buf_add_vector (evb, uint64_t, txt_file->unmapped_read_count, vb->unmapped_read_count, "txt_file->unmapped_read_count");
 }
 
 static WordIndex coverage_get_chrom_index (char chrom_char)
@@ -83,6 +76,9 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
 // output of genocat --show-sex, called from piz_one_file
 void coverage_sex_classifier (bool is_first_z_file)
 {    
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len)
+        ABORTINP0 ("--show-sex for FASTQ only works on files compressed with a reference");
+
     bool is_sam   = (z_file->data_type == DT_SAM);
     bool is_fastq = (z_file->data_type == DT_FASTQ);
 
@@ -170,6 +166,9 @@ void coverage_sex_classifier (bool is_first_z_file)
 // output of genocat --show-coverage, called from piz_one_file
 void coverage_show_coverage (void)
 {
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len)
+        ABORTINP0 ("--show-coverage for FASTQ only works on files compressed with a reference");
+
     unsigned chr_width = flag.show_coverage==1 ? 26 : 13;
 
     printf ("%-*s  %-8s  %-11s  %-10s  %s\n", chr_width, "Contig", "LN", "Reads", "Bases", "Depth");
@@ -184,11 +183,12 @@ void coverage_show_coverage (void)
     for (uint64_t i=0; i < coverage_len; i++) {
         if (!coverage[i]) continue;
 
-        PosType len = has_header_contigs ? ENT (RefContig, header_contigs, i)->max_pos
-                    :                      ENT (RefContig, loaded_contigs, i)->max_pos;
-
         unsigned cn_len;
         const char *chrom_name = ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
+
+        PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0
+                    : has_header_contigs                ? ENT (RefContig, header_contigs, i)->max_pos
+                    :                                     ENT (RefContig, loaded_contigs, i)->max_pos;
 
         if (flag.show_coverage==1 || cn_len <= 5) 
             printf ("%-*s  %-8s  %-11s  %-10s  %-6.2f\n", chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, len ? (double)coverage[i] / (double)len : 0);
@@ -206,6 +206,35 @@ void coverage_show_coverage (void)
             printf ("%-*s  %-8s  %-11s  %-10s\n", chr_width, cvr_names[i], "",
                     (i == CVR_SOFT_CLIP ? "" : str_uint_commas (read_count_special[i]).s),
                     str_bases(coverage_special[i]).s);
+
+    fflush (stdout); // in case output is redirected
+}
+
+// output of genocat --idxstats - designed to identical to samtools idxstats
+void coverage_show_idxstats (void)
+{
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len)
+        ABORTINP0 ("--idxstats for FASTQ only works on files compressed with a reference");
+
+    txt_file->read_count.len -= NUM_COVER_TYPES; // real contigs only
+    ARRAY (uint64_t, read_count, txt_file->read_count);
+    ARRAY (uint64_t, unmapped_read_count, txt_file->unmapped_read_count);
+
+    for (uint64_t i=0; i < read_count_len; i++) {
+        unsigned cn_len;
+        const char *chrom_name = ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
+
+        PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0
+                    : has_header_contigs                ? ENT (RefContig, header_contigs, i)->max_pos
+                    :                                     ENT (RefContig, loaded_contigs, i)->max_pos;
+
+        printf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", cn_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
+    }
+
+    // FASTQ (but not SAM) unmapped reads
+    uint64_t unmapped_unknown = AFTERENT(uint64_t, txt_file->read_count)[CVR_UNMAPPED]; 
+    if (unmapped_unknown)
+        printf ("*\t0\t0\t%"PRIu64"\n", unmapped_unknown);
 
     fflush (stdout); // in case output is redirected
 }

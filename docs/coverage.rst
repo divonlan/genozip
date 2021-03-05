@@ -5,9 +5,17 @@ Coverage and Depth
 
 Data Types: SAM, BAM and FASTQ
 
-``genocat --show-coverage=all my-file.bam.genozip`` displays the per-contig Number-of-reads, Number-of-bases and Depth.
+**Usage**
 
-``genocat --show-coverage my-file.bam.genozip`` does the same, but just for contigs that are chromosomes.
+``genocat --show-coverage my-file.bam.genozip``
+
+``genocat --show-coverage=all my-file.bam.genozip`` 
+
+``genocat --show-coverage my-file.fq.genozip`` 
+
+**Description**
+
+Displays the per-chromosome Number-of-reads, Number-of-bases and Depth. With the paramater =all, shows all contigs, not just primary chromosomes.
 
 Fine details: 
 
@@ -61,4 +69,4 @@ Fine details:
 
 **Using with FASTQ**
 
-    The data reported is NOT the true coverages and depths when running on FASTQ. Rather, it reports data derived from the assignment of reads to contigs by the Genozip Aligner. The Genozip Aligner is designed to be very fast at the expense of inaccuracies, and does not make the claim of mapping reads consistent with the biological truth. 
+  This works both on SAM/BAM and on FASTQ. For FASTQ, the mapping to contigs is as reported by the Genozip Aligner. The Genozip Aligner maps reads for compression purposes and does not attempt to map them according to the biological truth. However, usually the large majority of reads are in fact mapped to their correct position, so this can give a reasonable approximation of coverage of the data directly from FASTQ without needing to map it to BAM. 

@@ -80,8 +80,9 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer region_ra_intersection_matrix;  /* PIZ: a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region */\
     \
     /* used by --show-coverage and --show-sex */ \
-    Buffer coverage; \
-    Buffer read_count; \
+    Buffer coverage;           /* number of bases of each contig - exluding 'S' CIGAR, excluding reads flagged as Duplicate, Seconday arnd Failed filters */ \
+    Buffer read_count;         /* number of mapped reads of each contig for show-coverage/idxstats (for show-coverage - excluding reads flagged as Duplicate, Seconday arnd Failed filters) */\
+    Buffer unmapped_read_count;   \
     \
     /* crypto stuff */\
     Buffer spiced_pw;          /* used by crypt_generate_aes_key() */\
