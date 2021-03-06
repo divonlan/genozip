@@ -808,7 +808,7 @@ static void file_index_txt (const File *file)
 
         case DT_FASTQ:
         case DT_FASTA:
-            RETURNW (file->codec == CODEC_BGZF && file->codec == CODEC_NONE,, 
+            RETURNW (file->codec == CODEC_BGZF || file->codec == CODEC_NONE,, 
                      "%s: To be indexed, the output file cannot be compressed with %s", global_cmd, codec_name (file->codec)); 
             stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "faidx", file->name, NULL); 
             break;
