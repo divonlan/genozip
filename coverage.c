@@ -177,8 +177,8 @@ void coverage_show_coverage (void)
 
     unsigned chr_width = flag.show_coverage==1 ? 26 : 13;
 
-    printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %s\n" : "%*s\t%s\t%s\t%s\t%s\n", 
-                       chr_width, "Contig", "LN", "Reads", "Bases", "Depth");
+    printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" : "%*s\t%s\t%s\t%s\t%s\t%s\n", 
+                       chr_width, "Contig", "LN", "Reads", "Bases", "Bases", "Depth");
 
     txt_file->coverage.len -= NUM_COVER_TYPES; // real contigs only
     ARRAY (uint64_t, coverage, txt_file->coverage);
@@ -186,6 +186,11 @@ void coverage_show_coverage (void)
 
     uint64_t *coverage_special   = &coverage[coverage_len];
     uint64_t *read_count_special = &read_count[coverage_len];
+
+    for (uint64_t i=0; i < coverage_len + NUM_COVER_TYPES - 1; i++) {
+        coverage_special  [CVR_TOTAL] += coverage[i];
+        read_count_special[CVR_TOTAL] += read_count[i];
+    }
 
     for (uint64_t i=0; i < coverage_len; i++) {
         if (!coverage[i]) continue;
@@ -198,8 +203,10 @@ void coverage_show_coverage (void)
                     :                                     ENT (RefContig, loaded_contigs, i)->max_pos;
 
         if (flag.show_coverage==1 || cn_len <= 5) 
-            printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %-6.2f\n" : "%*s\t%s\t%s\t%s\t%f\n", 
-                    chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, len ? (double)coverage[i] / (double)len : 0);
+            printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %-6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
+                    chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, 
+                    100.0 * (double)coverage[i] / (double)coverage_special[CVR_TOTAL], 
+                    len ? (double)coverage[i] / (double)len : 0);
 
         else {
             coverage_special[CVR_CONTIGS]   += coverage[i]; // other non-chromosome contigs
@@ -207,14 +214,15 @@ void coverage_show_coverage (void)
         }
     }
 
-    char *cvr_names[NUM_COVER_TYPES] = { "Soft clip", "Unmapped", "Secondary", "Failed filters", "Duplicate", "Other contigs"};
+    char *cvr_names[NUM_COVER_TYPES] = { "Soft clip", "Unmapped", "Secondary", "Failed filters", "Duplicate", "Other contigs", "TOTAL"};
 
     for (uint64_t i=0; i < NUM_COVER_TYPES; i++) 
         if (coverage_special[i])
-            printf (isatty(1) ? "%*s  %-8s  %-11s  %-10s\n" : "%*s\t%s\t%s\t%s\n", 
+            printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%\n" : "%*s\t%s\t%s\t%s\t%4.1f\n", 
                     chr_width, cvr_names[i], "",
                     (i == CVR_SOFT_CLIP ? "" : str_uint_commas (read_count_special[i]).s),
-                    str_bases(coverage_special[i]).s);
+                    str_bases(coverage_special[i]).s,
+                    100.0 * (double)coverage_special[i] / (double)coverage_special[CVR_TOTAL]);
 
     fflush (stdout); // in case output is redirected
 }
