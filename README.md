@@ -1,5 +1,3 @@
-[![GitHub Downloads](https://img.shields.io/github/downloads/divonlan/genozip/total.svg?style=flat)](https://github.com/divonlan/genozip/releases)
-
 <!DOCTYPE html>
 <!--                                                                                                      -->
 <!-- README.md                                                                                            -->
