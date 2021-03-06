@@ -1,3 +1,5 @@
+[![GitHub Downloads](https://img.shields.io/github/downloads/seppinho/haplogrep-cmd/total.svg?style=flat)](https://github.com/seppinho/haplogrep-cmd/releases)
+
 <!DOCTYPE html>
 <!--                                                                                                      -->
 <!-- README.md                                                                                            -->
