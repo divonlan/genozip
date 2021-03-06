@@ -91,8 +91,9 @@ typedef struct {
          genocat_no_reconstruct_output,  // User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
-         data_modified;      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
-
+         data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
+         explicit_ref;       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
+         
     enum { BIND_NONE, BIND_ALL, BIND_PAIRS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
     uint64_t stdin_size;
     unsigned longest_filename; // length of longest filename of the txt/z files on the command line

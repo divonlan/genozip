@@ -549,6 +549,56 @@ SectionHeader *zfile_read_section_header (VBlockP vb, uint64_t offset,
     return header;
 }
 
+static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozipHeader *header)
+{
+    if (flag.show_reference && !md5_is_zero (header->ref_file_md5)) {
+        iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
+                    z_name, header->ref_filename, digest_display (header->ref_file_md5).s);
+        if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
+    }
+/*
+    if (!(flag.reference == REF_NONE || flag.reference == REF_INTERNAL || digest_is_equal (header->ref_file_md5, ref_file_md5))) {
+
+        // just warn, don't fail - there are use cases where the user might do this on purpose
+        ASSERTW (md5_is_zero (header->ref_file_md5), // its ok if file doesn't need a reference
+                "WARNING: The reference file has a different MD5 than the reference file used to compress %s\n"
+                "If these two files contain a different sequence in the genomic regions contained in the compressed file, then \n"
+                "THE UNCOMPRESSED FILE WILL BE DIFFERENT THAN ORIGINAL FILE\n"
+                "Reference you are using now: %s MD5=%s\n"
+                "Reference used to compress the file: %s MD5=%s\n", 
+                z_name, ref_filename, digest_display (ref_file_md5).s, 
+                header->ref_filename, digest_display (header->ref_file_md5).s);
+    }
+*/
+    if (flag.reading_reference)
+        ref_file_md5 = header->ref_file_md5;
+
+    else if (!md5_is_zero (header->ref_file_md5) && // reference file specified in the header
+             exe_type != EXE_GENOLS) {              // we don't need the reference for genols
+
+        // case: this file requires an external reference, but command line doesn't include --reference - attempt to use the
+        // reference specified in the header. 
+        // Note: this code will be executed when zfile_read_genozip_header is called from main_genounzip.
+        if (!flag.explicit_ref && // reference NOT was specified on command line
+            !(ref_filename && !strcmp (ref_filename, header->ref_filename))) { // ref_filename already set from a previous file with the same reference
+            
+            if (file_exists (header->ref_filename)) {
+                ASSERTW (flag.genocat_no_reconstruct, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
+                ref_set_reference (header->ref_filename);
+                flag.reference = REF_EXTERNAL;
+            }
+            else 
+                ASSINP (flag.genocat_no_ref_file, "%s: please use --reference specify the current path to reference file with which %s was compressed (original path was %s)",
+                        global_cmd, z_name, header->ref_filename);
+        }
+
+        // test for matching MD5 between specified external reference and reference in the header
+        ASSERTE (!flag.explicit_ref || (digest_is_zero (ref_file_md5) || digest_is_equal (header->ref_file_md5, ref_file_md5)),
+                 "%s: Bad reference file:\n%s (MD5=%s) was used for compressing\n%s (MD5=%s) has a different MD5",
+                 z_name, header->ref_filename, digest_display (header->ref_file_md5).s, ref_filename, digest_display (ref_file_md5).s);
+    }
+}
+
 // returns false if file should be skipped
 bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_t *num_items_bound, char *created) // optional outs
 {
@@ -669,39 +719,8 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
         ASSERTGOTO (data_type != DT_REF || (flag.genocat_no_reconstruct && exe_type == EXE_GENOCAT) || exe_type == EXE_GENOLS,
                     "%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
 
-        if (flag.show_reference && !md5_is_zero (header->ref_file_md5)) {
-            iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
-                     z_name, header->ref_filename, digest_display (header->ref_file_md5).s);
-            if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
-        }
-
-        if (!(flag.reference == REF_NONE || flag.reference == REF_INTERNAL || digest_is_equal (header->ref_file_md5, ref_md5))) {
-    
-            // just warn, don't fail - there are use cases where the user might do this on purpose
-            ASSERTW (md5_is_zero (header->ref_file_md5), // its ok if file doesn't need a reference
-                    "WARNING: The reference file has a different MD5 than the reference file used to compress %s\n"
-                    "If these two files contain a different sequence in the genomic regions contained in the compressed file, then \n"
-                    "THE UNCOMPRESSED FILE WILL BE DIFFERENT THAN ORIGINAL FILE\n"
-                    "Reference you are using now: %s MD5=%s\n"
-                    "Reference used to compress the file: %s MD5=%s\n", 
-                    z_name, ref_filename, digest_display (ref_md5).s, 
-                    header->ref_filename, digest_display (header->ref_file_md5).s);
-        }
-
-        // case: this file requires an external reference, but command line doesn't include --reference - attempt to use the
-        // reference specified in the header. 
-        // Note: this code will be executed when zfile_read_genozip_header is called from main_genounzip.
-        if (!md5_is_zero (header->ref_file_md5) && !ref_filename && exe_type != EXE_GENOLS) {
-            
-            if (file_exists (header->ref_filename)) {
-                ASSERTW (flag.genocat_no_reconstruct, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
-                ref_set_reference (header->ref_filename);
-                flag.reference = REF_EXTERNAL;
-            }
-            else 
-                ASSINP (flag.genocat_no_ref_file, "%s: please use --reference specify the current path to reference file with which %s was compressed (original path was %s)",
-                        global_cmd, z_name, header->ref_filename);
-        }
+        // handle reference file info
+        zfile_read_genozip_header_handle_ref_info (header);
     }
      
     buf_free (&evb->z_data);
@@ -751,7 +770,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
     if (flag.reference == REF_EXTERNAL) {   
         strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
-        header.ref_file_md5 = ref_md5;
+        header.ref_file_md5 = ref_file_md5;
     }
 
     // in --make-ref, we set header.ref_filename to the original fasta file, to be used later in ref_get_cram_ref

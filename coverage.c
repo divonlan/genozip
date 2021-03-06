@@ -77,6 +77,7 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
 void coverage_sex_classifier (bool is_first_z_file)
 {    
     if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len) {
+        flag.quiet = false;
         WARN ("%s: %s: --show-sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
@@ -169,7 +170,8 @@ void coverage_sex_classifier (bool is_first_z_file)
 void coverage_show_coverage (void)
 {
     if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len) {
-        WARN ("%s: %s: --show-sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
+        flag.quiet = false;
+        WARN ("%s: %s: --show-coverage for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
 
@@ -221,7 +223,8 @@ void coverage_show_coverage (void)
 void coverage_show_idxstats (void)
 {
     if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len) {
-        WARN ("%s: %s: --show-sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
+        flag.quiet = false;
+        WARN ("%s: %s: --idxstats for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
 

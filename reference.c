@@ -65,10 +65,11 @@ static char *ref_fasta_name = NULL;
 
 static pthread_t ref_cache_creation_thread_id;
 static bool ref_creating_cache = false;
+static bool external_ref_is_loaded = false;
 
 // globals
 const char *ref_filename = NULL; // filename of external reference file
-Digest ref_md5 = {};
+Digest ref_file_md5 = DIGEST_NONE;
 
 #define CHROM_GENOME 0
 #define CHROM_NAME_GENOME "GENOME"
@@ -127,6 +128,8 @@ void ref_unload_reference (void)
     
     buf_free (&region_to_set_list);
     buf_free (&ref_stored_ra);
+
+    external_ref_is_loaded = false;
 }
 
 void ref_destroy_reference (void)
@@ -145,6 +148,8 @@ void ref_destroy_reference (void)
 
     ref_contigs_destroy();
     refhash_destroy();
+
+    external_ref_is_loaded = false;
 }
 
 // account for memory allocations NOT through Buffers 
@@ -1192,6 +1197,14 @@ void ref_set_reference (const char *filename)
 {
     ASSERTE0 (filename, "filename is NULL");
 
+    if (ref_filename) {
+        if (!strcmp (filename, ref_filename)) return; // same file - we're done
+
+        // in case a different reference is loaded - destroy it
+        ref_destroy_reference ();
+        FREE (ref_filename);
+    }
+
     ref_filename = MALLOC (strlen (filename) + 1);
 
     strcpy ((char*)ref_filename, filename);
@@ -1200,7 +1213,7 @@ void ref_set_reference (const char *filename)
 // called when loading an external reference
 void ref_set_ref_file_info (Digest md5, const char *fasta_name)
 {
-    ref_md5 = md5;
+    ref_file_md5 = md5;
 
     if (fasta_name[0]) {
         ref_fasta_name = MALLOC (strlen (fasta_name) + 1); 
@@ -1275,7 +1288,7 @@ void ref_generate_reverse_complement_genome (void)
 
 bool ref_is_reference_loaded (void)
 {
-    return buf_is_allocated (&ranges);
+    return external_ref_is_loaded;
 }
 
 // ZIP & PIZ: import external reference
@@ -1307,6 +1320,8 @@ void ref_load_external_reference (bool display, bool is_last_z_file)
 
     file_close (&z_file, false, false);
     file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
+
+    external_ref_is_loaded = true;
 
     if (display) ref_display_ref();
 }

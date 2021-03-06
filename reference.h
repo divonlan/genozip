@@ -126,7 +126,7 @@ extern void ref_print_is_set (const Range *r, PosType around_pos, FILE *file);
 
 // globals
 extern const char *ref_filename;
-extern Digest ref_md5;
+extern Digest ref_file_md5;
 extern Buffer ref_stored_ra;
 extern Buffer loaded_contigs, header_contigs, header_contigs_dict;
 extern bool has_header_contigs;

@@ -224,8 +224,8 @@ verify_command:
             case 'b' : flag.bytes         = 1       ; break;         
             case 'r' : flag.regions       = 1       ; regions_add     (optarg); break;
             case 's' : flag.samples       = 1       ; vcf_samples_add (optarg); break;
-            case 'e' : flag.reference     = REF_EXTERNAL  ; ref_set_reference (optarg); break;
-            case 'E' : flag.reference     = REF_EXT_STORE ; ref_set_reference (optarg); break;
+            case 'e' : flag.reference = REF_EXTERNAL  ; flag.explicit_ref = true ; ref_set_reference (optarg); break;
+            case 'E' : flag.reference = REF_EXT_STORE ; flag.explicit_ref = true ; ref_set_reference (optarg); break;
             case 'm' : flag.md5           = 1       ; break;
             case 'u' : flag.unbind    = optarg ? optarg : "" ; break; // unbind with or without a prefix
             case '\1': flag.show_time = optarg ? optarg : "" ; break; // show_time with or without a specific member of ProfilerRec
