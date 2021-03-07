@@ -45,7 +45,7 @@ const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char
 const char *txtfile_dump_vb (VBlockP vb, const char *base_name)
 {
     const char *dump_filename = txtfile_dump_filename (vb, base_name, "bad");
-    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, true);
+    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, false);
 
     return dump_filename;
 }
@@ -362,8 +362,12 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memo
     // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
     if (testing_memory && passed_up_len < 0) return (uint32_t)-1;
 
-    ASSERTE (passed_up_len >= 0, "failed to find a single complete line in the entire vb in vb=%u data_type=%s codec=%s. Sometimes this happens when the file is missing a newline on the last line. VB dumped: %s", 
-             vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec), txtfile_dump_vb (vb, txt_name));
+    ASSERTE (passed_up_len >= 0, "Reason: failed to find a full line (i.e. newline-terminated) in vb=%u data_type=%s codec=%s.\n"
+             "Known possible causes:\n"
+             "- The file is missing a newline on the last line.\n%sVB dumped: %s", 
+             vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec),
+             txt_file->data_type == DT_FASTA ? "- A FASTA file in which each sequence is in a single line (without newlines), and the length of the longest line (sequence) in the file exceeds the vblock size. Solution: use --vblock to increase vblock size to a value (in MB) larger than the length of longest line.\n" : "",
+             txtfile_dump_vb (vb, txt_name));
 
 done:
     libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
