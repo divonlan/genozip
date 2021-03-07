@@ -542,7 +542,7 @@ hg19=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 
 if (( $# < 1 )); then
-    echo "Usage: tesh.sh <batch_id-test> [optional-genozip-arg]"
+    echo "Usage: test.sh <batch_id-test> [optional-genozip-arg]"
     exit 0
 fi
 
