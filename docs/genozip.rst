@@ -2,7 +2,7 @@ genozip
 =======
 Compress files. 
 
-``genozip`` can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF, Phylip and 23andMe
+``genozip`` can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF, PHYLIP, Chain and 23andMe
 
 Usage: ``genozip`` [options]... [files or urls]...
 
@@ -20,8 +20,9 @@ Supported input file types, as recognized by their listed filename extension(s):
    VCF      vcf (possibly .gz .bgz .bz2 .xz)
    BCF      bcf (possibly .gz .bgz)
    GVF      gvf (possibly .gz .bgz .bz2 .xz)
+   PHYLIP   phy (possibly .gz .bgz .bz2 .xz)
+   Chain    chain (possibly .gz .bgz .bz2 .xz)
    23andMe  genome\*Full\*.txt (possibly zip)
-   Phylip   phy (possibly .gz .bgz .bz2 .xz)
    Generic  any other file (possibly .gz .bgz .bz2 .xz)
    ======== ==========================================================
 

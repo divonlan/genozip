@@ -20,6 +20,7 @@ extern int32_t phy_is_header_done (void);
 extern bool phy_header_inspect (BufferP txt_header);
 extern void phy_seg_initialize (VBlockP vb);
 extern void phy_seg_finalize (VBlockP vb);
+extern bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern const char *phy_seg_txt_line (VBlockP vb, const char *line, uint32_t remaining_txt_len, bool *has_13);
 
 // PIZ side

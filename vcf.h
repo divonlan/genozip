@@ -22,6 +22,7 @@
 extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void vcf_seg_initialize (VBlockP vb_);
 extern void vcf_seg_finalize (VBlockP vb_);
+extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
 
 // PIZ stuff
 extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);

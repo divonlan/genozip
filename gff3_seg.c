@@ -47,6 +47,19 @@ void gff3_seg_finalize (VBlockP vb)
     container_seg_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], (Container *)&top_level, 0, 0, 0);
 }
 
+bool gff3_seg_is_small (ConstVBlockP vb, DictId dict_id)
+{
+    return dict_id.num == dict_id_fields[GFF3_TOPLEVEL]  ||
+           dict_id.num == dict_id_fields[GFF3_SEQID]     ||
+           dict_id.num == dict_id_fields[GFF3_SOURCE]    ||
+           dict_id.num == dict_id_fields[GFF3_TYPE]      ||
+           dict_id.num == dict_id_fields[GFF3_END]       ||
+           dict_id.num == dict_id_fields[GFF3_SCORE]     ||
+           dict_id.num == dict_id_fields[GFF3_STRAND]    ||
+           dict_id.num == dict_id_fields[GFF3_PHASE]     ||
+           dict_id.num == dict_id_fields[GFF3_ATTRS]     ||
+           dict_id.num == dict_id_fields[GFF3_EOL];
+}
 
 // returns length of next expected item, and 0 if unsuccessful
 static unsigned gff3_seg_get_aofs_item_len (const char *str, unsigned len, bool is_last_item)

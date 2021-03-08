@@ -17,7 +17,7 @@ typedef enum { ERR_SEG_NO_ERROR=0, ERR_SEG_OUT_OF_RANGE, ERR_SEG_NOT_INTEGER } S
 extern void seg_all_data_lines (VBlockP vb); 
 
 extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, 
-                                      bool allow_newline, bool allow_tab, bool allow_colon, 
+                                      bool allow_newline, bool allow_tab, bool allow_colon, bool allow_space,
                                       unsigned *len, char *separator, bool *has_13, // out
                                       const char *item_name);
 extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name);
@@ -26,17 +26,17 @@ extern WordIndex seg_by_ctx_do (VBlockP vb, const char *snip, unsigned snip_len,
 #define seg_by_ctx(vb,snip,snip_len,ctx,add_bytes)               seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), (ctx), (add_bytes), NULL)
 #define seg_by_dict_id(vb,snip,snip_len,dict_id,add_bytes)       seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), ctx_get_ctx ((vb), (DictId)(dict_id)), (add_bytes), NULL)
 #define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), &vb->contexts[did_i], (add_bytes), (is_new))
-#define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), &vb->contexts[did_i], (add_bytes), NULL);
+#define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), &vb->contexts[did_i], (add_bytes), NULL)
 
 extern WordIndex seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
 extern PosType seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_len, SegError *err);
 
-extern void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes);
-#define seg_integer(vb,did_i,n,account_for_bytes) seg_integer_do((VBlockP)(vb), (did_i), (n), (account_for_bytes) ? sizeof(n) : 0)
+extern void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
+#define seg_integer(vb,did_i,n,add_sizeof_n) seg_integer_do((VBlockP)(vb), (did_i), (n), (add_sizeof_n) ? sizeof(n) : 0)
 
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
-extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
+extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes); // segs integer in local if possible
 
 #define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 extern PosType seg_pos_field (VBlockP vb, 
@@ -79,9 +79,11 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 // Seg utilities
 // ------------------
 
+// TAB separator between fields
+
 #define GET_NEXT_ITEM(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, (item_name)); } while(0)
+      next_field = seg_get_next_item (vb, field_start, &len, false, true, false, false, &field_len, &separator, NULL, (item_name)); } while(0)
 
 #define SEG_NEXT_ITEM(f) do \
     { GET_NEXT_ITEM (DTF(names)[f]); \
@@ -89,11 +91,43 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 
 #define GET_LAST_ITEM(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, has_13, item_name); } while(0)
+      next_field = seg_get_next_item (vb, field_start, &len, true, false, false, false, &field_len, &separator, has_13, item_name); } while(0)
+
+#define SEG_LAST_ITEM(f) do \
+    { GET_LAST_ITEM (DTF(names)[f]); \
+      seg_by_did_i (vb, field_start, field_len, f, field_len+1); } while(0)
 
 #define GET_MAYBE_LAST_ITEM(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, true, true, false, &field_len, &separator, has_13, item_name); } while(0)
+      next_field = seg_get_next_item (vb, field_start, &len, true, true, false, false, &field_len, &separator, has_13, item_name); } while(0)
+
+#define SEG_MAYBE_LAST_ITEM(f) do \
+    { GET_MAYBE_LAST_ITEM (DTF(names)[f]); \
+      seg_by_did_i (vb, field_start, field_len, f, field_len+1); } while(0)
+
+// SPACE separator between fields
+
+#define GET_NEXT_ITEM_SP(item_name) do \
+    { field_start = next_field; \
+      next_field = seg_get_next_item (vb, field_start, &len, false, false, false, true, &field_len, &separator, NULL, (item_name)); } while(0)
+
+#define SEG_NEXT_ITEM_SP(f) do \
+    { GET_NEXT_ITEM_SP (DTF(names)[f]); \
+      seg_by_did_i (vb, field_start, field_len, f, field_len+1); } while(0)
+
+#define GET_LAST_ITEM_SP GET_LAST_ITEM
+
+#define SEG_LAST_ITEM_SP(f) do \
+    { GET_LAST_ITEM_SP (DTF(names)[f]); \
+      seg_by_did_i (vb, field_start, field_len, f, field_len+1); } while(0)
+
+#define GET_MAYBE_LAST_ITEM_SP(item_name) do \
+    { field_start = next_field; \
+      next_field = seg_get_next_item (vb, field_start, &len, true, false, false, true, &field_len, &separator, has_13, item_name); } while(0)
+
+#define SEG_MAYBE_LAST_ITEM_SP(f) do \
+    { GET_MAYBE_LAST_ITEM_SP (DTF(names)[f]); \
+      seg_by_did_i (vb, field_start, field_len, f, field_len+1); } while(0)
 
 // create extendent field contexts in the correct order of the fields
 #define EXTENDED_FIELD_CTX(extended_field, dict_id_num) do { \

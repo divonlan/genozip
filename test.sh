@@ -260,7 +260,7 @@ batch_minimal()
 batch_basic()
 {
     batch_print_header
-    local files=(basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt)
+    local files=(basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt basic.chain)
 # TO DO add back basic.phy - fails redirection on Windows
     local file
     for file in ${files[@]}; do
@@ -405,9 +405,9 @@ batch_real_world_subsets()
     cleanup # unfortunately, these go to TESTDIR not OUTDIR
 
     if [ -x "$(command -v xz)" ] ; then # xz available
-        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* basic.phy test.*gvf* test.*txt*` )
+        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* basic.phy test.*chain* test.*gvf* test.*txt*` )
     else
-        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* basic.phy test.*gvf* test.*txt*|grep -v xz` )
+        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* basic.phy test.*chain* test.*gvf* test.*txt*|grep -v xz` )
     fi
     echo "subsets (~3 VBs) or real world files"
     test_standard "-m" " " ${files[@]}

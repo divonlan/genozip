@@ -51,7 +51,8 @@ void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
     seg_by_ctx (vb, lookup, 1, ctx, add_bytes);
 }
 
-const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
+const char *seg_get_next_item (void *vb_, const char *str, int *str_len, 
+                               bool allow_newline, bool allow_tab, bool allow_colon, bool allow_space,
                                unsigned *len, char *separator, 
                                bool *has_13, // out - only needed if allow_newline=true
                                const char *item_name)
@@ -61,7 +62,8 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
     unsigned i=0; for (; i < *str_len; i++)
         if ((allow_tab     && str[i] == '\t') ||
             (allow_colon   && str[i] == ':')  ||
-            (allow_newline && str[i] == '\n')) {
+            (allow_newline && str[i] == '\n') ||
+            (allow_space   && str[i] == ' ')) {
                 *len = i;
                 *separator = str[i];
                 *str_len -= i+1;
@@ -75,7 +77,7 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
 
                 return str + i+1; // beyond the separator
         }
-        else if ((!allow_tab     && str[i] == '\t') ||  // note: a colon with allow_colon=false is not an error, its just part of the string rather than being a separator
+        else if ((!allow_tab     && str[i] == '\t') ||  // note: a colon with allow_colon/space=false is not an error, its just part of the string rather than being a separator
                  (!allow_newline && str[i] == '\n')) break;
             
     ASSSEG (*str_len, str, "missing %s field", item_name);
@@ -84,9 +86,9 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
             str, "while segmenting %s: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
             item_name);
 
-    ABOSEG (str, "while segmenting %s: expecting a %s %s %s after \"%.*s\"", 
+    ABOSEG (str, "while segmenting %s: expecting a %s %s %s %s after \"%.*s\"", 
             item_name,
-            allow_newline ? "NEWLINE" : "", allow_tab ? "TAB" : "", allow_colon ? "\":\"" : "", 
+            allow_newline ? "NEWLINE" : "", allow_tab ? "TAB" : "", allow_colon ? "\":\"" : "", allow_space ? "\" \"" : "", 
             MIN (i-1, 1000), str);
 
     return 0; // avoid compiler warning - never reaches here
@@ -320,7 +322,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx,
                          const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
     // case: its an integer
-    if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actual be a float)
+    if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
         str_get_int (this_value, this_value_len, &ctx->last_value.i) &&
         ctx->last_value.i >= 0 && ctx->last_value.i <= 0xffffffffULL) {
 
@@ -328,7 +330,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx,
         if (!ctx->local.len) { // first number
             ctx->dynamic_size_local = true;
             ctx->ltype = LT_UINT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
-        
+            
             if (!ctx->b250.len) // no non-numbers yet
                 ctx->numeric_only = true; // until proven otherwise
         }

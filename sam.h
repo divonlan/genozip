@@ -25,6 +25,7 @@ extern void sam_header_get_contigs (ConstBufferP *contigs_dict, ConstBufferP *co
 extern void sam_seg_initialize (VBlockP vb);
 extern void sam_header_finalize (void);
 extern void sam_seg_finalize (VBlockP vb);
+extern bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern const char *sam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern uint32_t sam_seg_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
 extern uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len);

@@ -75,6 +75,14 @@ void me23_seg_finalize (VBlockP vb)
     container_seg_by_ctx (vb, &vb->contexts[ME23_TOP2VCF], (ContainerP)&top_level_to_vcf, 0, 0, 0);
 }
 
+bool me23_seg_is_small (ConstVBlockP vb, DictId dict_id)
+{
+    return dict_id.num == dict_id_fields[ME23_TOPLEVEL] ||
+           dict_id.num == dict_id_fields[ME23_TOP2VCF]  ||
+           dict_id.num == dict_id_fields[ME23_CHROM]    ||
+           dict_id.num == dict_id_fields[ME23_EOL];
+}
+
 const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     const char *next_field=field_start_line, *field_start;

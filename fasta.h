@@ -19,6 +19,7 @@ extern void ref_make_create_range (VBlockP vb);
 // SEG Stuff
 extern void fasta_seg_initialize();
 extern void fasta_seg_finalize (VBlockP vb);
+extern bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern const char *fasta_seg_txt_line();
 
 // PIZ Stuff

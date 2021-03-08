@@ -46,6 +46,7 @@ mac/scripts/*
 *.fasta*
 *.gvf*
 *.gff3*
+*.chain*
 !test/*
 test/*.genozip
 !backward-compatibility-test/*

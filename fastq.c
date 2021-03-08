@@ -295,6 +295,13 @@ void fastq_seg_finalize (VBlockP vb)
     container_seg_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], (ContainerP)&top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
 }
 
+bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
+{
+    return dict_id.num == dict_id_fields[FASTQ_TOPLEVEL] ||
+           dict_id.num == dict_id_fields[FASTQ_DESC]     ||
+           dict_id.num == dict_id_fields[FASTQ_E1L]      ||
+           dict_id.num == dict_id_fields[FASTQ_E2L];
+}
 
 // ZIP/PIZ I/O thread: called ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
 // returns true if successful, false if there isn't a vb with vb_i in the previous file
@@ -420,7 +427,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     // SEQ - just get the whole line
     const char *seq_start = next_field;
     dl->seq_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &dl->seq_len, &separator, has_13, "SEQ");
+    next_field = seg_get_next_item (vb, next_field, &len, true, false, false, false, &dl->seq_len, &separator, has_13, "SEQ");
 
     // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
     if (flag.ref_use_aligner) 

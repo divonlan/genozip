@@ -247,6 +247,67 @@ void sam_seg_finalize (VBlockP vb)
     container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2FQ], (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 }
 
+bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
+{
+    return 
+        // typically small 
+        dict_id.num == dict_id_fields[SAM_TOPLEVEL]  ||
+        dict_id.num == dict_id_fields[SAM_TOP2BAM]   ||
+        dict_id.num == dict_id_fields[SAM_TOP2FQ]    ||
+        dict_id.num == dict_id_fields[SAM_FLAG]      ||
+        dict_id.num == dict_id_fields[SAM_MAPQ]      ||
+        dict_id.num == dict_id_OPTION_MAPQ           ||
+        dict_id.num == dict_id_fields[SAM_QNAME]     ||
+        dict_id.num == dict_id_fields[SAM_OPTIONAL]  ||
+        dict_id.num == dict_id_fields[SAM_EOL]       ||
+
+        // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
+        dict_id.num == dict_id_OPTION_AM ||
+        dict_id.num == dict_id_OPTION_AS ||
+        dict_id.num == dict_id_OPTION_CM ||
+        dict_id.num == dict_id_OPTION_LB ||
+        dict_id.num == dict_id_OPTION_FI ||
+        dict_id.num == dict_id_OPTION_H0 ||
+        dict_id.num == dict_id_OPTION_H1 ||
+        dict_id.num == dict_id_OPTION_H2 ||
+        dict_id.num == dict_id_OPTION_MQ ||
+        dict_id.num == dict_id_OPTION_NH ||
+        dict_id.num == dict_id_OPTION_NM ||
+        dict_id.num == dict_id_OPTION_OC ||
+        dict_id.num == dict_id_OPTION_PG ||
+        dict_id.num == dict_id_OPTION_PQ ||
+        dict_id.num == dict_id_OPTION_PU ||
+        dict_id.num == dict_id_OPTION_RG ||
+        dict_id.num == dict_id_OPTION_SA ||
+        dict_id.num == dict_id_OPTION_SM ||
+        dict_id.num == dict_id_OPTION_TC ||
+        dict_id.num == dict_id_OPTION_UQ ||
+        
+        // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
+        dict_id.num == dict_id_OPTION_X0 ||
+        dict_id.num == dict_id_OPTION_X1 ||
+        dict_id.num == dict_id_OPTION_XA ||
+        dict_id.num == dict_id_OPTION_XN ||
+        dict_id.num == dict_id_OPTION_XM ||
+        dict_id.num == dict_id_OPTION_XO ||
+        dict_id.num == dict_id_OPTION_XG ||
+        dict_id.num == dict_id_OPTION_XS ||
+        dict_id.num == dict_id_OPTION_XE ||
+        
+        // biobambam tags        
+        dict_id.num == dict_id_OPTION_STRAND     ||            
+
+        // typically smallish - a few thousands
+        dict_id.num == dict_id_fields[SAM_RNAME] ||
+        dict_id.num == dict_id_fields[SAM_RNEXT] ||
+        dict_id.num == dict_id_OPTION_RNAME      ||
+        dict_id.num == dict_id_OPTION_CC         ||
+
+        // these require a ~50000 hash, so this is still small
+        dict_id.num == dict_id_fields[SAM_CIGAR] || 
+        dict_id.num == dict_id_OPTION_MC;
+}
+
 void sam_seg_verify_pos (VBlock *vb, PosType this_pos)
 {
     if (flag.reference == REF_INTERNAL && !buf_is_allocated (&header_contigs)) return;
@@ -777,7 +838,7 @@ static inline void sam_seg_mc_field (VBlockSAM *vb, DictId dict_id,
     
     // if snip is "-1", store as simple snip
     if (snip_len == 2 && snip[0] == '-' && snip[1] == '1')
-        seg_by_did_i (vb, snip, snip_len, mc_did_i, add_bytes)
+        seg_by_did_i (vb, snip, snip_len, mc_did_i, add_bytes);
     
     // delta vs PNEXT
     else

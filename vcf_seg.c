@@ -75,6 +75,25 @@ void vcf_seg_finalize (VBlockP vb_)
     container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
 }
 
+bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
+{
+    return 
+        dict_id.num == dict_id_fields[VCF_TOPLEVEL] ||
+        dict_id.num == dict_id_fields[VCF_CHROM]    ||
+        dict_id.num == dict_id_fields[VCF_FORMAT]   ||
+        dict_id.num == dict_id_fields[VCF_INFO]     ||
+        dict_id.num == dict_id_fields[VCF_REFALT]   ||
+        dict_id.num == dict_id_fields[VCF_FILTER]   ||
+        dict_id.num == dict_id_fields[VCF_EOL]      ||
+        dict_id.num == dict_id_INFO_AC              ||
+        dict_id.num == dict_id_INFO_AF              ||
+        dict_id.num == dict_id_INFO_AN              ||
+        dict_id.num == dict_id_INFO_DP              ||
+
+        // AC_* AN_* AF_* are small
+        ((dict_id.id[0] == ('A' | 0xc0)) && (dict_id.id[1] == 'C' || dict_id.id[1] == 'F' || dict_id.id[1] == 'N') && dict_id.id[2] == '_');
+}
+
 // optimize REF and ALT, for simple one-character REF/ALT (i.e. mostly a SNP or no-variant)
 static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char vcf_ref, char vcf_alt)
 {
@@ -991,7 +1010,7 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
     for (char separator=0 ; separator != '\n'; samples.repeats++) {
 
         field_start = next_field;
-        next_field = seg_get_next_item (vb, field_start, len, true, true, false, &field_len, &separator, has_13, "sample-subfield");
+        next_field = seg_get_next_item (vb, field_start, len, true, true, false, false, &field_len, &separator, has_13, "sample-subfield");
 
         ASSSEG (field_len, field_start, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", 
                 samples.repeats+1);
@@ -1083,7 +1102,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     
     unsigned alt_len=0;
     const char *alt_start = next_field;
-    next_field = seg_get_next_item (vb, alt_start, &len, false, true, false, &alt_len, &separator, NULL, "ALT");
+    next_field = seg_get_next_item (vb, alt_start, &len, false, true, false, false, &alt_len, &separator, NULL, "ALT");
 
     // optimize ref/alt in the common case of single-character
     if (field_len == 1 && alt_len == 1) 

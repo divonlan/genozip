@@ -114,7 +114,8 @@ StrText str_int_s (int64_t n)
 }
 
 // similar to strtoull, except it rejects numbers that are shorter than str_len, or that their reconstruction would be different
-// the the original string
+// the the original string.
+// returns true if successfully parsed an integer of the full length of the string
 bool str_get_int (const char *str, unsigned str_len, 
                   int64_t *value) // out - modified only if str is an integer
 {

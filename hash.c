@@ -63,142 +63,6 @@ static void hash_populate_from_nodes (Context *zf_ctx)
     }
 }
 
-static bool hash_is_known_to_be_small (const VBlock *vb, DictId dict_id)
-{
-    switch (vb->data_type) {
-    
-    case DT_VCF:
-    case DT_BCF:
-        // if typically small - use minimal hash table
-        if (dict_id.num == dict_id_fields[VCF_TOPLEVEL] ||
-            dict_id.num == dict_id_fields[VCF_CHROM]    ||
-            dict_id.num == dict_id_fields[VCF_FORMAT]   ||
-            dict_id.num == dict_id_fields[VCF_INFO]     ||
-            dict_id.num == dict_id_fields[VCF_REFALT]   ||
-            dict_id.num == dict_id_fields[VCF_FILTER]   ||
-            dict_id.num == dict_id_fields[VCF_EOL]      ||
-            dict_id.num == dict_id_INFO_AC              ||
-            dict_id.num == dict_id_INFO_AF              ||
-            dict_id.num == dict_id_INFO_AN              ||
-            dict_id.num == dict_id_INFO_DP) return true;
-
-        // AC_* AN_* AF_* are small
-        if ((dict_id.id[0] == ('A' | 0xc0)) && 
-            (dict_id.id[1] == 'C' || dict_id.id[1] == 'F' || dict_id.id[1] == 'N') &&
-             dict_id.id[2] == '_')
-            return true;
-
-        break;
-
-    case DT_SAM:
-    case DT_BAM:
-            // typically small 
-        if (dict_id.num == dict_id_fields[SAM_TOPLEVEL]  ||
-            dict_id.num == dict_id_fields[SAM_TOP2BAM]   ||
-            dict_id.num == dict_id_fields[SAM_TOP2FQ]    ||
-            dict_id.num == dict_id_fields[SAM_FLAG]      ||
-            dict_id.num == dict_id_fields[SAM_MAPQ]      ||
-            dict_id.num == dict_id_OPTION_MAPQ           ||
-            dict_id.num == dict_id_fields[SAM_QNAME]     ||
-            dict_id.num == dict_id_fields[SAM_OPTIONAL]  ||
-            dict_id.num == dict_id_fields[SAM_EOL]       ||
-
-            // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
-            dict_id.num == dict_id_OPTION_AM ||
-            dict_id.num == dict_id_OPTION_AS ||
-            dict_id.num == dict_id_OPTION_CM ||
-            dict_id.num == dict_id_OPTION_LB ||
-            dict_id.num == dict_id_OPTION_FI ||
-            dict_id.num == dict_id_OPTION_H0 ||
-            dict_id.num == dict_id_OPTION_H1 ||
-            dict_id.num == dict_id_OPTION_H2 ||
-            dict_id.num == dict_id_OPTION_MQ ||
-            dict_id.num == dict_id_OPTION_NH ||
-            dict_id.num == dict_id_OPTION_NM ||
-            dict_id.num == dict_id_OPTION_OC ||
-            dict_id.num == dict_id_OPTION_PG ||
-            dict_id.num == dict_id_OPTION_PQ ||
-            dict_id.num == dict_id_OPTION_PU ||
-            dict_id.num == dict_id_OPTION_RG ||
-            dict_id.num == dict_id_OPTION_SA ||
-            dict_id.num == dict_id_OPTION_SM ||
-            dict_id.num == dict_id_OPTION_TC ||
-            dict_id.num == dict_id_OPTION_UQ ||
-            
-            // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
-            dict_id.num == dict_id_OPTION_X0 ||
-            dict_id.num == dict_id_OPTION_X1 ||
-            dict_id.num == dict_id_OPTION_XA ||
-            dict_id.num == dict_id_OPTION_XN ||
-            dict_id.num == dict_id_OPTION_XM ||
-            dict_id.num == dict_id_OPTION_XO ||
-            dict_id.num == dict_id_OPTION_XG ||
-            dict_id.num == dict_id_OPTION_XS ||
-            dict_id.num == dict_id_OPTION_XE ||
-            
-            // biobambam tags
-            
-            dict_id.num == dict_id_OPTION_STRAND ||            
-
-            // typically smallish - a few thousands
-            dict_id.num == dict_id_fields[SAM_RNAME]      ||
-            dict_id.num == dict_id_fields[SAM_RNEXT]      ||
-            dict_id.num == dict_id_OPTION_RNAME           ||
-            dict_id.num == dict_id_OPTION_CC)
-        break;
-
-    case DT_FASTQ:
-        if (dict_id.num == dict_id_fields[FASTQ_TOPLEVEL] ||
-            dict_id.num == dict_id_fields[FASTQ_DESC]     ||
-            dict_id.num == dict_id_fields[FASTQ_E1L])
-            return true;
-        break;
-
-    case DT_FASTA:
-        if (dict_id.num == dict_id_fields[FASTA_TOPLEVEL] ||
-            dict_id.num == dict_id_fields[FASTA_DESC]     ||
-            dict_id.num == dict_id_fields[FASTA_LINEMETA] ||
-            dict_id.num == dict_id_fields[FASTA_EOL])
-            return true;
-        break;
-
-    case DT_REF:
-        break;
-
-    case DT_GFF3:
-        if (dict_id.num == dict_id_fields[GFF3_TOPLEVEL]  ||
-            dict_id.num == dict_id_fields[GFF3_SEQID]     ||
-            dict_id.num == dict_id_fields[GFF3_SOURCE]    ||
-            dict_id.num == dict_id_fields[GFF3_TYPE]      ||
-            dict_id.num == dict_id_fields[GFF3_END]       ||
-            dict_id.num == dict_id_fields[GFF3_SCORE]     ||
-            dict_id.num == dict_id_fields[GFF3_STRAND]    ||
-            dict_id.num == dict_id_fields[GFF3_PHASE]     ||
-            dict_id.num == dict_id_fields[GFF3_ATTRS]     ||
-            dict_id.num == dict_id_fields[GFF3_EOL])
-            return true;
-        break;
-
-    case DT_ME23:
-        if (dict_id.num == dict_id_fields[ME23_TOPLEVEL]  ||
-            dict_id.num == dict_id_fields[ME23_TOP2VCF]   ||
-            dict_id.num == dict_id_fields[ME23_CHROM]     ||
-            dict_id.num == dict_id_fields[ME23_EOL])
-            return true;
-        break;
-
-    case DT_GENERIC : 
-        return true; // GNRIC_TOPLEVEL has only one snip
-
-    case DT_PHYLIP : 
-        return true; // only TOPLEVEL, TOP2FASTA and EOL - all expected to have ~1 snip
-
-    default: ABORT ("hash_alloc_local: unknown data_type=%s", dt_name (vb->data_type));
-    }
-    
-    return false; // not known to be small
-}
-
 // This is called when the VB encounters a first entry that's not in the global dictionary (possibly there is no global dict)
 // allocation algorithm:
 // 1. If we got info on the size of this dict with the previous merged vb - use that size
@@ -212,14 +76,10 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
         // 3X the expected number of entries to reduce spill-over
         vb_ctx->local_hash_prime = hash_next_size_up (vb_ctx->num_new_entries_prev_merged_vb * 3);
 
-    else if (hash_is_known_to_be_small (segging_vb, vb_ctx->dict_id))
+    // if known to small, use hash table of ~ 64K
+    else if (DT_ (segging_vb, seg_is_small)(segging_vb, vb_ctx->dict_id))
         vb_ctx->local_hash_prime = hash_next_size_up(1);
     
-    // typically medium - use hash table ~ 50000
-    else if ((segging_vb->data_type == DT_VCF || segging_vb->data_type == DT_BCF) && 
-             (vb_ctx->dict_id.num == dict_id_fields[SAM_CIGAR]  || vb_ctx->dict_id.num == dict_id_OPTION_MC))
-        vb_ctx->local_hash_prime = hash_next_size_up(50000);
-
     // default: it could be big - start with num_lines / 10 (this is an estimated num_lines that is likely inflated)
     else
         vb_ctx->local_hash_prime = hash_next_size_up ((uint32_t)segging_vb->lines.len / 10);
@@ -254,7 +114,8 @@ uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zf_ctx, const 
                  "est_vbs=%u vb_1_num_lines=%s est_total_lines=%s\n", 
                  (unsigned)ceil(estimated_num_vbs), str_uint_commas (merging_vb->lines.len).s, str_uint_commas ((uint64_t)estimated_num_lines).s);
 
-    if (hash_is_known_to_be_small (merging_vb, zf_ctx->dict_id)) {
+    // if known to small, use hash table of ~ 64K
+    if (DT_ (merging_vb, seg_is_small) (merging_vb, zf_ctx->dict_id)) {
 
         if (flag.show_hash)
             iprintf ("dict=%s : known to be small. hashsize=%s\n", 

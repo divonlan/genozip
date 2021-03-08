@@ -22,6 +22,7 @@ COMPRESSOR_CALLBACK(fastq_zip_qual)
 // SEG Stuff
 extern void fastq_seg_initialize();
 extern void fastq_seg_finalize();
+extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern const char *fastq_seg_txt_line();
 
 // PIZ Stuff

@@ -202,6 +202,14 @@ void fasta_seg_finalize (VBlockP vb)
     container_seg_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
 }
 
+bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
+{
+    return dict_id.num == dict_id_fields[FASTA_TOPLEVEL] ||
+           dict_id.num == dict_id_fields[FASTA_DESC]     ||
+           dict_id.num == dict_id_fields[FASTA_LINEMETA] ||
+           dict_id.num == dict_id_fields[FASTA_EOL];
+}
+
 // description line - we segment it to its components
 // note: we store the DESC container in its own ctx rather than just directly in LINEMETA, to make it easier to grep
 static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool *has_13)

@@ -17,6 +17,7 @@
 #include "reference.h"
 #include "codec.h"
 #include "version.h"
+#include "phylip.h"
 
 #define PHY_ID_LEN 10 
 
@@ -114,6 +115,11 @@ void phy_seg_finalize (VBlockP vb)
                                          '>', CON_PREFIX_SEP }; // sequence ID prefix in fasta
 
     container_seg_by_ctx (vb, &vb->contexts[PHY_TOP2FASTA], (ContainerP)&top_level_to_fasta, fasta_prefix, sizeof (fasta_prefix), 0);
+}
+
+bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id)
+{
+    return true; // contexts are expected to have small dictionaries
 }
 
 const char *phy_seg_txt_line (VBlock *vb, const char *line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts

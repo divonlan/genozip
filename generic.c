@@ -28,6 +28,11 @@ void generic_seg_finalize (VBlockP vb)
     seg_by_ctx (vb, snip, 2, toplevel_ctx, 0); 
 }
 
+bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id)
+{
+    return true; // contexts are expected to have small dictionaries
+}
+
 SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
 {
     buf_destroy (&vb->txt_data);

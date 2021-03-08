@@ -111,13 +111,21 @@
 #define ME23_ZIP_      ".zip" 
 #define ME23_GENOZIP_  ".txt" GENOZIP_EXT
 
-// Phylip files
+// PHYLIP files
 #define PHY_           ".phy"
 #define PHY_GZ_        ".phy.gz"
 #define PHY_BZ2_       ".phy.bz2"
 #define PHY_XZ_        ".phy.xz"
 #define PHY_GENOZIP_   ".phy" GENOZIP_EXT
 
+// chain files
+#define CHAIN_         ".chain"
+#define CHAIN_GZ_      ".chain.gz"
+#define CHAIN_BZ2_     ".chain.bz2"
+#define CHAIN_XZ_      ".chain.xz"
+#define CHAIN_GENOZIP_ ".chain" GENOZIP_EXT
+
+// generic files
 #define GNRIC_           ""
 #define GNRIC_GZ_        ".gz"
 #define GNRIC_BZ2_       ".bz2"
@@ -142,6 +150,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,   GVF_GENOZIP,
                     ME23,  ME23_ZIP,                      ME23_GENOZIP, 
                     PHY,   PHY_GZ,   PHY_BZ2,   PHY_XZ,   PHY_GENOZIP,
+                    CHAIN, CHAIN_GZ, CHAIN_BZ2, CHAIN_XZ, CHAIN_GENOZIP,
                     BAM,                                  BAM_GENOZIP,
                     BCF, BCF_GZ, BCF_BGZF,                BCF_GENOZIP,  
                     // the GNRIC row *must* be the last row, as it consists catch-all extensions (*.gz etc)
@@ -164,6 +173,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    GVF_,   GVF_GZ_,   GVF_BZ2_,   GVF_XZ_,   GVF_GENOZIP_,           \
                    ME23_,  ME23_ZIP_,                        ME23_GENOZIP_,          \
                    PHY_,   PHY_GZ_,   PHY_BZ2_,   PHY_XZ_,   PHY_GENOZIP_,           \
+                   CHAIN_, CHAIN_GZ_, CHAIN_BZ2_, CHAIN_XZ_, CHAIN_GENOZIP_,         \
                    BAM_,                                     BAM_GENOZIP_,           \
                    BCF_,   BCF_GZ_,   BCF_BGZF_,             BCF_GENOZIP_,           \
                    GNRIC_GZ_, GNRIC_BZ2_, GNRIC_XZ_,         GNRIC_GENOZIP_, GNRIC_, \
@@ -209,6 +219,8 @@ extern const char *file_exts[];
                              { GNRIC_BZ2, CODEC_BZ2,  GNRIC_GENOZIP }, { GNRIC_XZ, CODEC_XZ,  GNRIC_GENOZIP }, { } },\
                            { { PHY,       CODEC_NONE, PHY_GENOZIP   }, { PHY_GZ,   CODEC_GZ,  PHY_GENOZIP   },\
                              { PHY_BZ2,   CODEC_BZ2,  PHY_GENOZIP   }, { PHY_XZ,   CODEC_XZ,  PHY_GENOZIP   }, { } },\
+                           { { CHAIN,     CODEC_NONE, CHAIN_GENOZIP }, { CHAIN_GZ, CODEC_GZ,  CHAIN_GENOZIP },\
+                             { CHAIN_BZ2, CODEC_BZ2,  CHAIN_GENOZIP }, { CHAIN_XZ, CODEC_XZ,  CHAIN_GENOZIP }, { } },\
                         }
 
 // Ordered by data_type: Supported output formats for genounzip
@@ -225,6 +237,7 @@ extern const char *file_exts[];
                            { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
                            { GNRIC, GNRIC_GZ, 0 }, \
                            { PHY, PHY_GZ, 0 }, \
+                           { CHAIN, CHAIN_GZ, 0 }, \
                          }                        
 
 // Ordered by data_type
@@ -239,6 +252,7 @@ extern const char *file_exts[];
                      { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
                      { GNRIC_GENOZIP, 0 },                  \
                      { PHY_GENOZIP, 0 },                    \
+                     { CHAIN_GENOZIP, 0 },                  \
                    } 
 
 typedef const char *FileMode;

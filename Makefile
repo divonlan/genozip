@@ -34,7 +34,7 @@ MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c lic
 		  reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c  \
 		  vcf_piz.c vcf_seg.c vcf_shared.c vcf_samples.c vcf_header.c \
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
-		  fasta.c fastq.c gff3_seg.c me23.c phylip.c generic.c \
+		  fasta.c fastq.c gff3_seg.c me23.c phylip.c chain.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_pbwt.c codec_none.c \
@@ -64,7 +64,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h \
 			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h coverage.h \
 			 arch.h license.h data_types.h base64.h \
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h gff3.h phylip.h generic.h \
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h gff3.h phylip.h chain.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/deflate.h zlib/trees.h	 \
