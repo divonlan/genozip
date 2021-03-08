@@ -84,7 +84,7 @@ typedef struct {
     // internal flags set by the system, not the command line
     bool ref_use_aligner,    // ZIP: compression requires using the aligner
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
-         reading_reference,  // system is currently reading a reference file
+         reading_reference,  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
          trans_containers,   // PIZ: decompression invokes container translators
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_reconstruct,  // User requested to genocat with only metadata to be shown, not file contents
@@ -93,7 +93,9 @@ typedef struct {
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
          explicit_ref;       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
-         
+
+    char *reading_chain;     // system is currently reading a chain file by this name
+
     enum { BIND_NONE, BIND_ALL, BIND_PAIRS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
     uint64_t stdin_size;
     unsigned longest_filename; // length of longest filename of the txt/z files on the command line

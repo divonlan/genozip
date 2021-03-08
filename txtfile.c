@@ -716,8 +716,8 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
 
     // 1. in unbind mode - we open the output txt file of the component
     // 2. when reading a reference file - we create txt_file here (but don't actually open the physical file)
-    if (flag.unbind || flag.reading_reference) {
-        ASSERTE0 (!txt_file, "not expecting txt_file to be open already in unbind mode or when reading reference");
+    if (flag.unbind || flag.reading_reference || flag.reading_chain) {
+        ASSERTE0 (!txt_file, "not expecting txt_file to be open already in unbind mode or when reading a reference or chain file");
         
         const char *filename = txtfile_piz_get_filename (header->txt_filename, flag.unbind, false);
         txt_file = file_open (filename, WRITE, TXT_FILE, z_file->data_type);
@@ -783,13 +783,14 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
     // analyze header
     if (evb->txt_data.len && 
         (is_first_txt || flag.unbind) &&  // this is the first component, or we are unbinding (all components get a header)
-        !flag.reading_reference)          
+        !flag.reading_reference && !flag.reading_chain)          
         DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
 
     // write txt header if it is needed:
     if ((is_first_txt || flag.unbind) &&  // this is the first component, or we are unbinding (all components get a header)
         (!flag.no_header || z_file->z_flags.txt_is_bin) && // user didn't specify --no-header (or ignore the request if this is a binary file, eg BAM)
         !flag.reading_reference &&        // nothing is written when reading a reference
+        !flag.reading_chain &&            // nothing is written when reading a chain file
         !flag.genocat_no_reconstruct) {   // nothing is written when we not reconstructing
 
         // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 

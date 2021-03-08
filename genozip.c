@@ -74,7 +74,7 @@ void main_exit (bool show_stack, bool is_error)
     file_kill_external_compressors(); 
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
-    if (primary_command == ZIP && z_file && z_file->name && !flag.reading_reference) {
+    if (primary_command == ZIP && z_file && z_file->name && !flag.reading_reference && !flag.reading_chain) {
         char save_name[strlen (z_file->name)+1];
         strcpy (save_name, z_file->name);
 
@@ -731,6 +731,9 @@ int main (int argc, char **argv)
 
     // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
     if (command == ZIP) license_get(); 
+
+    if (flag.reading_chain)
+        chain_load_chain();
 
     for (unsigned file_i=0, z_file_i=0; file_i < MAX (num_files, 1); file_i++) {
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin

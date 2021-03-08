@@ -158,7 +158,10 @@ typedef uint8_t TranslatorId;
     extern TRANSLATOR_FUNC(func); \
     enum { src_dt##2##dst_dt##_##name = num }; // define constant
 
+// called before every item (if Container.filter_items and/or or repeat (if Container.filter_repeats) 
+// returns false if item or repeat should be filtered out
 #define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item)
+
 #define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, unsigned rep, char *reconstructed, int32_t reconstructed_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (BufferP txtheader_buf)

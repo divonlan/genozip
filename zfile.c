@@ -35,7 +35,7 @@ static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHi
 
 void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */, uint64_t offset, char rw)
 {
-    if (flag.reading_reference) return; // don't show headers of reference file
+    if (flag.reading_reference || flag.reading_chain) return; // don't show headers of reference file
     
     if (  flag.show_headers   != -1 &&                 // we don't need to show all sections
           flag.show_headers-1 != header->section_type) // we don't need to show this section
@@ -556,20 +556,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
                     z_name, header->ref_filename, digest_display (header->ref_file_md5).s);
         if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
     }
-/*
-    if (!(flag.reference == REF_NONE || flag.reference == REF_INTERNAL || digest_is_equal (header->ref_file_md5, ref_file_md5))) {
 
-        // just warn, don't fail - there are use cases where the user might do this on purpose
-        ASSERTW (md5_is_zero (header->ref_file_md5), // its ok if file doesn't need a reference
-                "WARNING: The reference file has a different MD5 than the reference file used to compress %s\n"
-                "If these two files contain a different sequence in the genomic regions contained in the compressed file, then \n"
-                "THE UNCOMPRESSED FILE WILL BE DIFFERENT THAN ORIGINAL FILE\n"
-                "Reference you are using now: %s MD5=%s\n"
-                "Reference used to compress the file: %s MD5=%s\n", 
-                z_name, ref_filename, digest_display (ref_file_md5).s, 
-                header->ref_filename, digest_display (header->ref_file_md5).s);
-    }
-*/
     if (flag.reading_reference)
         ref_file_md5 = header->ref_file_md5;
 

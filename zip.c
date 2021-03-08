@@ -129,6 +129,7 @@ static void zip_dynamically_set_max_memory (void)
             SAVE_FLAGS;
             flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
             flag.show_reference = flag.show_vblocks = false;
+            flag.quiet = true;
 
             seg_all_data_lines (vb);
 

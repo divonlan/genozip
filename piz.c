@@ -225,7 +225,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
         bgzf_compress_vb (vb);
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
-    if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified) 
+    if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified && !flag.reading_chain) 
         digest_one_vb (vb); 
 
 done:
@@ -408,7 +408,8 @@ static bool piz_read_one_vb (VBlock *vb)
 
 static Digest piz_one_file_verify_digest (Digest original_file_digest)
 {
-    if (v8_digest_is_zero (original_file_digest) || flag.genocat_no_reconstruct || flag.data_modified) return DIGEST_NONE; // we can't calculate the digest for some reason
+    if (v8_digest_is_zero (original_file_digest) || flag.genocat_no_reconstruct || flag.data_modified || flag.reading_chain) 
+        return DIGEST_NONE; // we can't calculate the digest for some reason
 
     Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound, "file:digest_ctx_bound"); // z_file might be a bound file - this is the MD5 of the entire bound file
     char s[200]; 
@@ -514,7 +515,7 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
     // 2. Wait for the first thread (by sequential order) to complete and write data
 
-    bool do_interleave = (flag.interleave && !flag.reading_reference);
+    bool do_interleave = (flag.interleave && !flag.reading_reference && !flag.reading_chain);
     bool header_only_file = true; // initialize - true until we encounter a VB header
     bool first_component_this_txtfile = true;
     bool is_leaf_2 = false; // used when interleaving - true if we are reading a VB from the 2nd leaf
@@ -603,7 +604,7 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
 
             // read of a normal file - output uncompressed block (unless we're reading a reference - we don't need to output it)
-            if (!flag.reading_reference) {
+            if (!flag.reading_reference && !flag.reading_chain) {
                 if (!flag.genocat_no_reconstruct_output) 
                     txtfile_write_one_vblock (processed_vb);
                 
@@ -624,7 +625,7 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
 
 finish:
     // --show-sex and --show-coverage - output results
-    if (txt_file && !flag.reading_reference) {
+    if (txt_file && !flag.reading_reference && !flag.reading_chain) {
         if (flag.show_coverage) coverage_show_coverage();
         if (flag.show_sex) coverage_sex_classifier (is_first_z_file);
         if (flag.idxstats) coverage_show_idxstats();

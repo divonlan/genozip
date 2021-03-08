@@ -573,8 +573,8 @@ static bool file_open_txt_write (File *file)
     if (exe_type == EXE_GENOCAT && file->codec == CODEC_BGZF && flag.bgzf == FLAG_BGZF_BY_ZFILE) 
         flag.bgzf = 0;
 
-    // don't actually open the output file if we're just testing in genounzip or PIZing a reference file
-    if (flag.test || flag.reading_reference) return true;
+    // don't actually open the output file if we're just testing in genounzip or PIZing a reference or chain file
+    if (flag.test || flag.reading_reference || flag.reading_chain) return true;
 
     // open the file, based on the codec 
     switch (file->codec) { 
@@ -659,7 +659,12 @@ static bool file_open_z (File *file)
                 "Tip: You can create a genozip reference file from a FASTA file with 'genozip --make-reference myfasta.fa'",
                 file->name, REF_GENOZIP_);
 
-        if (!flag.seg_only || flag.reading_reference) {
+        ASSINP (!flag.reading_chain || file_has_ext (file->name, GENOZIP_EXT), 
+                "You specified file \"%s\", however with --chain, you must specify a genozip chain file (%s extension)\n"
+                "Tip: You can create a genozip chain file from a chain file with eg 'genozip my-chain-file.chain.gz'",
+                file->name, GENOZIP_EXT);
+
+        if (!flag.seg_only || flag.reading_reference || flag.reading_chain) {
             file->file = fopen (file->name, READ);
 
             // verify that this is a genozip file 

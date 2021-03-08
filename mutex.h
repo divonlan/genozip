@@ -27,16 +27,16 @@ typedef struct Mutex {
 } Mutex;
 
 void mutex_initialize_do (MutexP mutex, const char *name, const char *func);
-#define mutex_initialize(mutex) mutex_initialize_do (&mutex, #mutex, __FUNCTION__)
+#define mutex_initialize(mutex) mutex_initialize_do (&(mutex), #mutex, __FUNCTION__)
 
 void mutex_destroy_do (MutexP mutex, const char *func);
-#define mutex_destroy(mutex) mutex_destroy_do (&mutex, __FUNCTION__)
+#define mutex_destroy(mutex) mutex_destroy_do (&(mutex), __FUNCTION__)
 
 void mutex_lock_do (MutexP mutex, const char *func);
-#define mutex_lock(mutex) mutex_lock_do (&mutex, __FUNCTION__)
+#define mutex_lock(mutex) mutex_lock_do (&(mutex), __FUNCTION__)
 
 void mutex_unlock_do (MutexP mutex, const char *func, uint32_t line);
-#define mutex_unlock(mutex) mutex_unlock_do (&mutex, __FUNCTION__, __LINE__)
+#define mutex_unlock(mutex) mutex_unlock_do (&(mutex), __FUNCTION__, __LINE__)
 
 #define mutex_is_show(name) (flag.show_mutex && (flag.show_mutex==(char*)1 || !strncmp ((name), flag.show_mutex, 8))) // only 8 chars so we can catch all genome_muteces[%u]
 

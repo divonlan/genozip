@@ -184,7 +184,7 @@ void BGEN_sections_list()
 
 void sections_show_gheader (const SectionHeaderGenozipHeader *header)
 {
-    if (flag.reading_reference) return; // don't show gheaders of reference file
+    if (flag.reading_reference || flag.reading_chain) return; // don't show gheaders of a reference or chain file
     
     unsigned num_sections = BGEN32 (header->num_sections);
 
