@@ -13,11 +13,13 @@ Data Types: SAM, BAM and FASTQ
 
 **Description**
 
-Generates the list of contigs, along with number of mapped and unmapped reads for each contig. Reads with undefined contig are grouped under "*".
+Generates the list of contigs, along with number of mapped and unmapped reads for each contig. Reads with an undefined contig are grouped under "*".
 
 The output format and contents are identical to `samtools idxstats <http://www.htslib.org/doc/samtools-idxstats.html>`_.
 
-This works both on SAM/BAM and on FASTQ. For FASTQ, the mapping to contigs is as reported by the Genozip Aligner. The Genozip Aligner maps reads for compression purposes and does not attempt to map them according to the biological truth. However, usually the large majority of reads are in fact mapped to their correct position, so this can give a reasonable approximation of idxstats of the data directly from FASTQ without needing to map it to BAM.
+This works both on SAM/BAM and on FASTQ. 
+
+For FASTQ, the mapping to contigs is as reported by the Genozip Aligner. The Genozip Aligner maps reads for compression purposes and does not attempt to map them according to the biological truth. However, usually the large majority of reads are in fact mapped to their correct position, so this can give a reasonable approximation of idxstats of the data directly from FASTQ without needing to map it to BAM.
 
 **Output**
 
