@@ -441,7 +441,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
     else 
         reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, true);    
 
-    // case: --sequencial, and this seq line is the last line in the vb, and it continues in the next vb
+    // case: --sequential, and this seq line is the last line in the vb, and it continues in the next vb
     if (  flag.sequential && // if we are asked for a sequential SEQ
           vb->line_i - vb->first_line == vb->lines.len-1 && // and this is the last line in this vb 
           !vb->dont_show_curr_line && 
@@ -502,14 +502,6 @@ bool fasta_piz_initialize_contig_grepped_out (VBlock *vb_, bool does_vb_have_any
     return !vb->contig_grepped_out;
 }
 
-bool fasta_piz_is_grepped_out_due_to_regions (VBlockP vb, const char *line_start)
-{
-    const char *chrom_name = line_start + 1;
-    unsigned chrom_name_len = strcspn (chrom_name, " \t\r\n");
-    WordIndex chrom_index = ctx_search_for_word_index (&vb->contexts[CHROM], chrom_name, chrom_name_len);
-    return !regions_is_site_included (chrom_index, 1); // we check for POS 1 to include (or not) the whole contig
-}
-
 // Phylip format mandates exact 10 space-padded characters: http://scikit-bio.org/docs/0.2.3/generated/skbio.io.phylip.html
 static inline void fasta_piz_translate_desc_to_phylip (VBlock *vb, char *desc_start)
 {
@@ -543,15 +535,14 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
 
     char *desc_start = AFTERENT (char, vb->txt_data);
     reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
+    *AFTERENT (char, vb->txt_data) = 0; // for strstr and strcspn
 
     // if --grep: here we decide whether to show this contig or not
-    if (flag.grep) {
-        *AFTERENT (char, vb->txt_data) = 0; // for strstr
+    if (flag.grep) 
         fasta_vb->contig_grepped_out = !strstr (desc_start, flag.grep);
-    }
-
-    if (flag.regions && !fasta_vb->contig_grepped_out) 
-        fasta_vb->contig_grepped_out = fasta_piz_is_grepped_out_due_to_regions (vb, desc_start);
+    
+    unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
+    vb->chrom_node_index = ctx_search_for_word_index (&vb->contexts[CHROM], desc_start + 1, chrom_name_len);
 
     // note: this logic allows the to grep contigs even if --no-header 
     if (fasta_vb->contig_grepped_out || flag.no_header)

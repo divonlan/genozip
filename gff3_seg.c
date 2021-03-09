@@ -20,8 +20,8 @@
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlock *vb)
 {
-    vb->contexts[GFF3_SEQID].no_stons = true; // needs b250 node_index for random access
-    vb->contexts[GFF3_ATTRS].no_stons = true;
+    vb->contexts[GFF3_SEQID].no_stons    = true; // needs b250 node_index for random access
+    vb->contexts[GFF3_ATTRS].no_stons    = true;
     vb->contexts[GFF3_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 }
 

@@ -78,9 +78,6 @@ bool piz_test_grep (VBlock *vb)
 
         match = flag.grep && !!strstr (vb->txt_data.data, flag.grep); // note: this function is also called due to --regions in FASTA
 
-        if (!match && flag.regions && vb->data_type == DT_FASTA) 
-            match = fasta_piz_is_grepped_out_due_to_regions (vb, vb->txt_data.data);
-
         vb->txt_data.len = 0; // reset
 
         if (match) { // 
@@ -371,6 +368,7 @@ static bool piz_read_one_vb (VBlock *vb)
     vb->lines.len        = BGEN32 (header->num_lines);       
     vb->longest_line_len = BGEN32 (header->longest_line_len);
     vb->digest_so_far    = header->digest_so_far;
+    vb->chrom_node_index = WORD_INDEX_NONE;
 
     // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every txt component

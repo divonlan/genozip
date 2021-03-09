@@ -47,9 +47,10 @@ int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 
 void chain_seg_initialize (VBlock *vb)
 {
+    vb->contexts[CHAIN_QNAME]   .no_stons  =       // needs b250 node_index for reference
     vb->contexts[CHAIN_TOPLEVEL].no_stons  = 
     vb->contexts[CHAIN_CHAIN]   .no_stons  = 
-    vb->contexts[CHAIN_TSTRAND] .no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
+    vb->contexts[CHAIN_TSTRAND] .no_stons  = true; // (these 3 ^) keep in b250 so it can be eliminated as all_the_same
 
     vb->contexts[CHAIN_TSTART].flags.store = 
     vb->contexts[CHAIN_TEND]  .flags.store = 
@@ -260,7 +261,7 @@ static Buffer chain = EMPTY_BUFFER;
 static Mutex chain_mutex = {};
 static PosType next_primary_pos=0, next_secondary_pos=0;
 
-static void chain_display_alignment (const ChainAlignment *aln)
+void chain_display_alignment (const ChainAlignment *aln) // not static to avoid compiler warning if not used
 {
     fprintf (info_stream, "Primary: %s %"PRId64"-%"PRId64" Secondary: : %s %"PRId64"-%"PRId64"\n",
              aln->primary_chrom,   aln->primary_first_pos,   aln->primary_last_pos,
@@ -335,7 +336,7 @@ CONTAINER_FILTER_FUNC (chain_piz_filter)
 {
     if (!flag.reading_chain) goto done; // only relevant to ingesting the chain due to --chain
 
-    // before alignment-set first EOL but before alignments - initialize next_primary_pos and next_secondary_pos
+    // before alignment-set first EOL and before alignments - initialize next_primary_pos and next_secondary_pos
     if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 13) 
         chain_piz_filter_init_alignment_set (vb);
 

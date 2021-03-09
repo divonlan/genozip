@@ -30,7 +30,7 @@ One or more file names must be given.
 
           |
 
-.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (FASTA SAM/BAM GVF 23andMe Reference) Show one or more regions of the file. Examples:
+.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (FASTA SAM/BAM GVF 23andMe Chain) Show one or more regions of the file. Examples:
 
    ============================================== ======================================
    ``genocat myfile.vcf.genozip -r 22:1000-2000`` Positions 1000 to 2000 on contig 22
@@ -48,7 +48,9 @@ One or more file names must be given.
    |
    | *Note*: Multiple ``-r`` arguments may be specified - this is equivalent to chaining their regions with a comma separator in a single argument.
    |
-   | *Note*: For FASTA files, only whole-contig regions are possible.
+   | *Note*: For FASTA and Chain files, only whole-contig regions are possible.
+   |
+   | *Note*: For Chain files this applies to the source contig (qName).
    |
 
 .. option:: -s, --samples [^]sample[,...].  (VCF) Show a subset of samples (individuals). Examples:

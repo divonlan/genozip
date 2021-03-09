@@ -208,10 +208,6 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
 
     vb_sam->last_cigar = snip;
 
-    if (flag.regions && vb->chrom_node_index != WORD_INDEX_NONE && vb->contexts[SAM_POS].last_value.i && 
-        !regions_is_range_included (vb->chrom_node_index, vb->contexts[SAM_POS].last_value.i, vb->contexts[SAM_POS].last_value.i + vb_sam->ref_consumed - 1, true))
-        vb->dont_show_curr_line = true;
-
     return false; // no new value
 }   
 
