@@ -579,6 +579,10 @@ void flags_update_piz_one_file (void)
     ASSINP (!flag.interleave || is_paired_fastq, 
             "--interleave is not supported for %s because it only works on FASTQ data that was compressed with --pair", z_name);
 
+    // downsample not possible for FASTA
+    ASSINP (!flag.downsample || flag.out_dt != DT_FASTA, 
+            "%s: --downsample is not supported for FASTA files", z_name);
+
     // --show-sex is only possible on SAM/BAM and FASTQ
     ASSINP (!flag.show_sex || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout
             "--show-sex is not supported for %s because it only works on SAM, BAM and FASTQ data, but this file has %s data",
