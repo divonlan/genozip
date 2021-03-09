@@ -390,3 +390,9 @@ bug fixes, including major bug with mc:i optional field in SAM
 - Added genozip --idxstats - identical output to samtools idxstats
 - Much improved genocat --show-sex and --show-coverage
 - Bug fixes
+
+11.0.8
+- Added sharding with genocat --downsample <rate>,<shard>
+- Added support for compressing UCSC chain files
+- Better --show-coverage
+- Bug fixes
