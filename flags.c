@@ -46,6 +46,23 @@ static void flags_set_bgzf (const char *level_str)
     flag.bgzf = (int)level_64;
 }
 
+static void flags_set_downsample (const char *optarg)
+{
+    int64_t downsample_val=0, shard_val=0;
+
+    char *comma = strchr (optarg, ',');
+    unsigned downsample_len = comma ? (comma - optarg) : strlen(optarg);
+
+    ASSINP (str_get_int_range (optarg, downsample_len, 2, 1000000, &downsample_val), 
+            "--downsample: bad rate \"%.*s\", expecting an integer from 2 to 1000000", downsample_len, optarg);
+
+    ASSINP (!comma || str_get_int_range (comma+1, strlen (comma+1), 0, downsample_val-1, &shard_val), 
+            "--downsample: bad shard \"%s\", expecting an integer from 0 to %u", comma+1, (int)downsample_val-1);
+
+    flag.downsample = (uint32_t)downsample_val;
+    flag.shard      = (uint32_t)shard_val;
+}
+
 void flags_init_from_command_line (int argc, char **argv)
 {
     // process command line options
@@ -254,7 +271,7 @@ verify_command:
             case 5   : flag.dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 6   : flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 8   : flag.one_vb = atoi (optarg);  break;
-            case 9   : flag.downsample = atoi (optarg); break;
+            case 9   : flags_set_downsample (optarg); break;
             case 10  : flag.show_headers = 1 + sections_st_by_name (optarg); break; // +1 so SEC_NONE maps to 0
             case 'p' : crypt_set_password (optarg) ; break;
 
@@ -579,9 +596,9 @@ void flags_update_piz_one_file (void)
     ASSINP (!flag.interleave || is_paired_fastq, 
             "--interleave is not supported for %s because it only works on FASTQ data that was compressed with --pair", z_name);
 
-    // downsample not possible for FASTA
-    ASSINP (!flag.downsample || flag.out_dt != DT_FASTA, 
-            "%s: --downsample is not supported for FASTA files", z_name);
+    // downsample not possible for FASTA or Chain
+    ASSINP (!flag.downsample || (flag.out_dt != DT_FASTA && flag.out_dt != DT_CHAIN && flag.out_dt != DT_GENERIC), 
+            "%s: --downsample is not supported for %s files", z_name, dt_name (flag.out_dt));
 
     // --show-sex is only possible on SAM/BAM and FASTQ
     ASSINP (!flag.show_sex || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout

@@ -128,7 +128,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             vb->line_start = vb->txt_data.len;
 
             // show (or not) the line based on our downsampling rate
-            vb->dont_show_curr_line = flag.downsample && (vb->line_i % flag.downsample); 
+            vb->dont_show_curr_line = flag.downsample && ((vb->line_i-1) % flag.downsample != flag.shard); 
         }
     
         if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1))) continue; // repeat is filtered out

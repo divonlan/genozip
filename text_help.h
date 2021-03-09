@@ -261,7 +261,7 @@ static const char *help_genocat[] = {
     "   --show-reference  Show the name and MD5 of the reference file that needs to be provided to uncompress this file",    
     "",
     "Subsetting options (options resulting in modified display of the data):",    
-    "   --downsample      <rate> Show only one in every <rate> lines (or reads in the case of FASTQ). Other subsetting options, if any, will be applied to the surviving lines only.",
+    "   --downsample      <rate>[,<shard>] Show only one in every <rate> lines (or reads in the case of FASTQ), optional <shard> parameter indicates which of the shards is shown. Other subsetting options, if any, will be applied to the surviving lines only.",
     "",
     "   --interleaved     For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file, then a read from the second file, then the next read from the first file and so on.",
     "",
