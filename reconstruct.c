@@ -325,7 +325,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         }
 
         // test for exclusion of the line due to --regions
-        if (flag.regions && did_i == DTF(test_regions) && vb->chrom_node_index >= 0 &&
+        if (flag.regions && did_i == DTF(test_regions) && vb->chrom_node_index != WORD_INDEX_NONE &&
             !regions_is_site_included (vb->chrom_node_index, DTF(pos)!=-1 ? vb->contexts[DTF(pos)].last_value.i : 1))
             vb->dont_show_curr_line = true;
     }
