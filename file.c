@@ -261,7 +261,7 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
 }
 
 static void file_redirect_output_to_stream (File *file, char *exec_name, 
-                                            const char *stdout_option, const char *format_option_1, const char *format_option_2)
+                                            const char *stdout_option, const char *format_option_1, const char *format_option_2, const char *format_option_3)
 {
     char threads_str[20];
     sprintf (threads_str, "%u", global_max_threads);
@@ -279,7 +279,7 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
                                        exec_name, 
                                        stdout_option, // either to the terminal or redirected to output file
                                        "--threads", threads_str,
-                                       format_option_1, format_option_2,
+                                       format_option_1, format_option_2, format_option_3,
                                        NULL);
     file->file = stream_to_stream_stdin (output_compressor);
 }
@@ -546,6 +546,7 @@ static bool file_open_txt_write (File *file)
         (file->data_type == DT_BAM    && dt_by_filename == DT_SAM  )  ||
         (file->data_type == DT_SAM    && dt_by_filename == DT_FASTQ)  ||
         (file->data_type == DT_BAM    && dt_by_filename == DT_FASTQ)  ||
+        (file->data_type == DT_VCF    && dt_by_filename == DT_BCF)    ||
         (file->data_type == DT_FASTA  && dt_by_filename == DT_PHYLIP) ||
         (file->data_type == DT_PHYLIP && dt_by_filename == DT_FASTA)  ||
         (file->data_type == DT_ME23   && dt_by_filename == DT_VCF  ) )
@@ -582,11 +583,11 @@ static bool file_open_txt_write (File *file)
         case CODEC_BGZF : 
         case CODEC_NONE : file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
 
-        case CODEC_CRAM : file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", file_samtools_no_PG()); break;
+        case CODEC_CRAM : file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", file_samtools_no_PG(), NULL); break;
         
         case CODEC_BCF  : {
             char comp_level[4] = { '-', 'l', '0' + MIN (flag.bgzf, 9), 0 };
-            file_redirect_output_to_stream (file, "bcftools", "view", "-Ob", flag.bgzf >= 0 ? comp_level : NULL); 
+            file_redirect_output_to_stream (file, "bcftools", "view", "-Ob", "/dev/stdin", flag.bgzf >= 0 ? comp_level : NULL); 
             break;
         }
 
