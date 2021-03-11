@@ -91,6 +91,9 @@ void digest_one_vb (VBlock *vb)
     // wait for our turn
     for (unsigned i=0; ; i++) {
         mutex_lock (vb_digest_mutex);
+
+        ASSERTE (vb_digest_last < vb->vblock_i, "Expecting vb_digest_last=%u < vb->vblock_i=%u", vb_digest_last, vb->vblock_i);
+        
         if (vb_digest_last == vb->vblock_i - 1) break; // its our turn now
 
         // not our turn, wait 10ms and try again
