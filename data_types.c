@@ -26,7 +26,8 @@ const DtTranslation dt_get_translation (void)
     for (unsigned i=0; i < NUM_TRANSLATIONS; i++)
         if (translations[i].src_z_non_bin_dt == z_file->data_type &&
             translations[i].src_z_is_binary  == i_am_binary &&
-            translations[i].dst_txt_dt       == flag.out_dt) 
+            translations[i].dst_txt_dt       == flag.out_dt &&
+            (!translations[i].is_translation || *translations[i].is_translation)) // if non-NULL, this flag determines if it is a translation
             return translations[i];
 
     // translation not found - return a non-translation "translation"

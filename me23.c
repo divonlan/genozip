@@ -131,9 +131,10 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
                        
     #define VCF_HEAD_2 "##contig=<ID=%s,length=%"PRId64">\n"
     
-    #define VCF_HEAD_3 "##co= Converted 23andMe to VCF format by genozip v%s: https://github.com/divonlan/genozip (also available on conda and DockerHub)\n"  \
-                       "##genozipCommand=%s\n" \
-                       "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%.*s\n"
+    #define VCF_HEAD_3p1 "##co= Converted 23andMe to VCF format by genozip v%s: %s\n"  \
+                         "##genozip_Command=\"" 
+    #define VCF_HEAD_3p2                       "\"\n" \
+                         "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%.*s\n"
     
     // move the me23 and header to the side for a sec
     buf_move (evb, &evb->compressed, evb, txtheader_buf);
@@ -142,7 +143,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     Context *ctx = &z_file->contexts[ME23_CHROM];
     uint32_t num_chroms = (uint32_t)ctx->word_list.len;
     
-    buf_alloc (evb, txtheader_buf, 1.3*evb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3)+50 +
+    buf_alloc (evb, txtheader_buf, 1.3*evb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3p1)+strlen (VCF_HEAD_3p2)+80 +
                num_chroms * (strlen (VCF_HEAD_2) + 100), 1, "txt_data");
     
     bufprintf (evb, txtheader_buf, VCF_HEAD_1, ref_filename);
@@ -185,8 +186,10 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
         sample_name_len = after - start;
     }
 
-    // add final lines
-    bufprintf (evb, txtheader_buf, VCF_HEAD_3, GENOZIP_CODE_VERSION, flags_command_line()->data, sample_name_len, sample_name);
+    // add final lines - the command line length is unbound, careful not to put it in a bufprintf
+    bufprintf (evb, txtheader_buf, VCF_HEAD_3p1, GENOZIP_CODE_VERSION, GENOZIP_URL);
+    buf_add_string (evb, txtheader_buf, flags_command_line()->data);
+    bufprintf (evb, txtheader_buf, VCF_HEAD_3p2, sample_name_len, sample_name);
 
     buf_free (&evb->compressed);
 }
@@ -197,7 +200,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     // Genotype length expected to be 2 or 1 (for MT, Y)
     ASSERTE (reconstructed_len==1 || reconstructed_len==2, "bad reconstructed_len=%u", reconstructed_len);
 
-    PosType pos = vb->contexts[ME23_POS].last_value.i;
+    PosType pos = vb->last_int(ME23_POS);
 
     // chroms don't have the same index in the ME23 z_file and in the reference file - we need to translate chrom_index
     WordIndex save_chrom_node_index = vb->chrom_node_index;

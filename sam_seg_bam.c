@@ -107,12 +107,8 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t s
     
     else {
 #ifdef DEBUG // we show this warning only in DEBUG because I found actual files that have edge cases that don't work with our formula (no harm though)
-        static bool warning_shown = false;
-        if (!warning_shown) { 
-            WARN ("FYI: bad bin value in vb=%u vb->line_i=%u: this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
-                  vb->vblock_i, vb->line_i, this_pos, vb->ref_consumed, sam_flag, last_pos, bin, reg2bin);
-            warning_shown = true;
-        }
+        WARN_ONCE ("FYI: bad bin value in vb=%u vb->line_i=%u: this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
+                    vb->vblock_i, vb->line_i, this_pos, vb->ref_consumed, sam_flag, last_pos, bin, reg2bin);
 #endif
         seg_integer (vb, SAM_BAM_BIN, bin, is_bam);
         vb->contexts[SAM_BAM_BIN].flags.store = STORE_INT;

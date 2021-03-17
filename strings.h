@@ -17,7 +17,7 @@
 #define IS_VALID_URL_CHAR(c) (IS_LETTER(c) || IS_DIGIT(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
 #define FLIP_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
 
-typedef struct { char s[30]; } StrText;
+typedef struct { char s[80]; } StrText;
 
 extern StrText char_to_printable (char c);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
@@ -27,17 +27,28 @@ extern StrText str_size (uint64_t size);
 extern StrText str_bases (uint64_t num_bases);
 extern StrText str_uint_commas (int64_t n);
 extern StrText str_int_s (int64_t n);
+
+// string length of an integer. #include <math.h> if using this.
+#define str_int_len(n) ( (n)>=1          ? ((int)log10(n)) + 1     \
+                       : (n)>-1 && (n)<1 ? 1                       \
+                       :                   ((int)log10(-(n))) + 2)
+
 extern unsigned str_int (int64_t n, char *str /* out */);
 extern _Bool str_get_int (const char *str, unsigned str_len, int64_t *value); // note: for a reason beyond me, Docker hub won't compile if its "bool" and not "_Bool"
-extern _Bool str_get_int_range (const char *str, unsigned str_len, int64_t min_val, int64_t max_val, int64_t *value);
+extern _Bool str_get_int_range64 (const char *str, unsigned str_len, int64_t min_val, int64_t max_val, int64_t *value);
+extern _Bool str_get_int_range32 (const char *str, unsigned str_len, int32_t min_val, int32_t max_val, int32_t *value);
+
 #define str_is_int(str,str_len) str_get_int ((str), (str_len), NULL)
 
 extern _Bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last_c);
 
 extern StrText str_pointer (const void *p);
+extern StrText str_time (void);
 
 extern double str_get_positive_float (const char *float_str, unsigned float_str_len);
 extern unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str /* out */);
+
+extern bool str_split (const char *str, unsigned str_len, unsigned num_items, char sep, const char **items, unsigned *item_lens);
 
 extern const char *type_name (unsigned item, 
                               const char * const *name, // the address in which a pointer to name is found, if item is in range

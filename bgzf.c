@@ -119,8 +119,8 @@ void bgzf_compress_bgzf_section (void)
 {
     if (!txt_file->bgzf_isizes.len) return; // this txt file is not compressed with BGZF - we don't need a BGZF section
 
-    // we don't write a BGZF block if we have optimized, as the file has changed and we can't reconstruct to the same blocks
-    if (flag.optimize) return; 
+    // we don't write a BGZF block if we have data_modified, as the file has changed and we can't reconstruct to the same blocks
+    if (flag.data_modified) return; 
 
     // sanity check
     int64_t total_isize = 0;
@@ -576,10 +576,8 @@ void bgzf_write_to_disk (VBlock *vb)
     uint32_t last_data_index = vb->bgzf_blocks.len ? last_block->txt_index + last_block->txt_size : 0;
     uint32_t last_data_len   = (uint32_t)vb->txt_data.len - last_data_index;
 
-    if (last_data_len) {                             
-        buf_alloc_more (evb, &txt_file->unconsumed_txt, last_data_len, 0, char, 0, "txt_file->unconsumed_txt");
-        buf_add (&txt_file->unconsumed_txt, ENT (char, vb->txt_data, last_data_index), last_data_len);
-    }
+    if (last_data_len)                            
+        buf_add_more (evb, &txt_file->unconsumed_txt, ENT (char, vb->txt_data, last_data_index), last_data_len, "txt_file->unconsumed_txt");
 }
 
 void bgzf_write_finalize (File *file)

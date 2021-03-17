@@ -31,7 +31,7 @@ void vb_release_vb (VBlock *vb)
     ASSERTE (!vb->gzip_compressor, "vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
 
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
-    vb->vb_data_size = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
+    vb->vb_data_size = vb->laft_reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
@@ -49,9 +49,11 @@ void vb_release_vb (VBlock *vb)
     vb->fragment_ctx = vb->ht_matrix_ctx = vb->runs_ctx = vb->fgrc_ctx = NULL;
     vb->fragment_codec = 0;
     vb->ht_per_line = 0;
+    vb->is_rejects_vb = 0;
+    vb->vb_header_flags = (struct FlagsVbHeader){};
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
-
+    
     buf_free(&vb->lines);
     buf_free(&vb->ra_buf);
     buf_free(&vb->compressed);
@@ -67,6 +69,8 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->coverage);
     buf_free(&vb->read_count);
     buf_free(&vb->unmapped_read_count);
+    buf_free(&vb->liftover);
+    buf_free(&vb->liftover_rejects);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
@@ -110,6 +114,8 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->coverage);
     buf_destroy (&vb->read_count);
     buf_destroy (&vb->unmapped_read_count);
+    buf_destroy (&vb->liftover);
+    buf_destroy (&vb->liftover_rejects);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)

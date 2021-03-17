@@ -14,6 +14,7 @@
 #include "piz.h"
 #include "dict_id.h"
 #include "codec.h"
+#include "liftover.h"
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
 
@@ -276,7 +277,7 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
 
     if (separator != '\n') {
         GET_LAST_ITEM (DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
-        seg_info_field (vb, gff3_seg_special_info_subfields, field_start, field_len);
+        seg_info_field (vb, gff3_seg_special_info_subfields, field_start, field_len, LO_NONE);
     }
     else
         seg_by_did_i (vb, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed

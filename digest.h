@@ -27,6 +27,7 @@ typedef union {
 
 typedef struct {
     bool initialized;
+    uint64_t bytes_digested;
     uint32_t     lo, hi;
     uint32_t     a, b, c, d;
     union {
@@ -37,11 +38,15 @@ typedef struct {
 
 typedef struct {
     bool initialized;
+    uint64_t bytes_digested;
     uint32_t adler; // native endianity
 } AdlerContext;
 
 typedef union {
-    bool initialized;
+    struct {
+        bool initialized;
+        uint64_t bytes_digested; 
+    } common;
     Md5Context md5_ctx;
     AdlerContext adler_ctx;
 } DigestContext;

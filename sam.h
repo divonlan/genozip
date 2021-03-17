@@ -37,7 +37,7 @@ extern void sam_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, u
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
-extern int32_t bam_is_header_done (void);
+extern int32_t bam_is_header_done (bool is_eof);
 extern int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern void txtheader_bam2sam (BufferP txt);
 extern void bam_read_vblock (VBlockP vb);

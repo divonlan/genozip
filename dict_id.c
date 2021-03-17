@@ -11,6 +11,7 @@
 #include "sections.h"
 #include "vblock.h"
 #include "libdeflate/libdeflate.h"
+#include "vcf.h"
 
 // globals externed in dict_id.h and initialized in dict_id_initialize
 static Buffer dict_id_aliases_buf  = EMPTY_BUFFER;
@@ -28,6 +29,7 @@ uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_
          dict_id_FORMAT_GQ=0, dict_id_FORMAT_DS=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0, dict_id_INFO_DP4=0, dict_id_INFO_SF=0,
+         dict_id_INFO_LIFTOVER=0, dict_id_INFO_LIFTBACK=0, dict_id_INFO_LIFTREJD=0, 
          dict_id_INFO_BaseCounts=0,
 
          // tags from VEP (Varient Effect Predictor) and similar tools
@@ -162,6 +164,9 @@ void dict_id_initialize (DataType data_type)
         dict_id_INFO_SF       = dict_id_make ("SF", 2, DTYPE_VCF_INFO).num;
         dict_id_INFO_vep      = dict_id_make ("vep", 3, DTYPE_VCF_INFO).num;
         dict_id_INFO_VQSLOD   = dict_id_make ("VQSLOD", 6, DTYPE_VCF_INFO).num;
+        dict_id_INFO_LIFTOVER = dict_id_make (INFO_LIFTOVER, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_LIFTBACK = dict_id_make (INFO_LIFTBACK, INFO_LIFTBACK_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_LIFTREJD = dict_id_make (INFO_LIFTREJD, INFO_LIFTREJD_LEN, DTYPE_VCF_INFO).num;
 
         // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
         dict_id_INFO_END      = dict_id_make ("END", 3, DTYPE_VCF_INFO).num;

@@ -247,7 +247,7 @@ done:
     buf_free (&evb->z_data);
 }
 
-// called by ctx_copy_ref_contigs_to_zf when initializing ZIP for a new file using a pre-loaded external reference
+// called by ctx_build_zf_ctx_from_contigs when initializing ZIP for a new file using a pre-loaded external reference
 void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs)
 {
     if (out_contig_dict) *out_contig_dict = &loaded_contigs_dict;

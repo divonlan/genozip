@@ -176,8 +176,6 @@ static const char *help_genounzip[] = {
     "   -z --bgzf         <level>. Compress the output to the BGZF format (.gz extension) using libdeflate, at the compression level specified by the argument. Argument specifies the compression level from 0 (no compression) to 12 (best, yet slowest, compression). If you are not sure what value to choose, 6 is a popular option.",
     "                     Note: by default, absent this option, genozip will attempt to re-create the same BGZF compression as in the original file. Whether genozip succeeds in re-creating the exact same BGZF compression ratio depends on the compression library used by the application that generated the original file.",
     "",
-    "      --no-PG        (SAM and BAM only) When converting a file from SAM to BAM or vice versa, Genozip normally adds a @PG line in the header. With this option, it doesn't",
-    "",
     "   -f --force        Force overwrite of the output file",
     "",
     "   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged",    
@@ -238,6 +236,8 @@ static const char *help_genounzip[] = {
     "",
     "      --vcf          (23andMe only) Output as VCF. --vcf must be used in combination with --reference to specify the reference file as listed in the header of the 23andMe file (usually this is GRCh37)",
     "                     Note: INDEL genotypes ('DD', 'DI', 'II') as well as uncalled sites ('--') are discarded",
+    "",
+    "      --no-PG        (SAM, BAM) When translating the file, Genozip normally adds information in a @PG header line. With this option, it doesn't",
     "",
 };
 
@@ -354,6 +354,8 @@ static const char *help_genocat[] = {
     "   -q --quiet        Don't show warnings",    
     "",
     "   -Q --noisy        The --quiet option is turned on by default when outputting to the terminal. --noisy stops the suppression of warnings",    
+    "",
+    "      --no-PG        (VCF, SAM, BAM) When modifying the data in a file using genocat, Genozip normally adds information about the modification in the file header. With this option, it doesn't",
     "",
     "   -w --show-stats   Show the internal structure of a genozip file and the associated compression stats",
     "",

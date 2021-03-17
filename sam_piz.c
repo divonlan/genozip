@@ -49,7 +49,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     const char *nonref_start = nonref;
     unsigned subcigar_len    = 0;
     char cigar_op            = 0;
-    const PosType pos        = vb->contexts[SAM_POS].last_value.i;
+    const PosType pos        = vb->last_int(SAM_POS);
     const Range *range       = NULL;
     unsigned seq_consumed=0, ref_consumed=0;
 
@@ -132,7 +132,7 @@ static inline void sam_piz_update_coverage (VBlockP vb, const uint16_t sam_flag,
     ARRAY (uint64_t, coverage, vb->coverage);
     uint64_t *coverage_special   = AFTERENT (uint64_t, vb->coverage) - NUM_COVER_TYPES;
     uint64_t *read_count_special = AFTERENT (uint64_t, vb->read_count) - NUM_COVER_TYPES;
-    WordIndex chrom_index = vb->contexts[SAM_RNAME].last_value.i;
+    WordIndex chrom_index = vb->last_index(SAM_RNAME);
 
     if (chrom_index == WORD_INDEX_NONE ||
              sam_flag & SAM_FLAG_UNMAPPED)       { coverage_special[CVR_UNMAPPED]  += vb->seq_len; read_count_special[CVR_UNMAPPED] ++; }
@@ -150,7 +150,7 @@ static inline void sam_piz_update_coverage (VBlockP vb, const uint16_t sam_flag,
 SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
 {
     VBlockSAMP vb_sam = (VBlockSAMP)vb;
-    const uint16_t sam_flag = vb->contexts[SAM_FLAG].last_value.i;
+    const uint16_t sam_flag = vb->last_int(SAM_FLAG);
 
     // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar
     uint32_t soft_clip;
@@ -161,7 +161,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
             RECONSTRUCT1 ('*');
         
         else if (snip[0] == '-') // eg "-151M" or "-151*" - zip added the "-" to indicate a '*' SEQ field - we don't reconstruct it
-            RECONSTRUCT (snip + 1, snip_len - 1)
+            RECONSTRUCT (snip + 1, snip_len - 1);
 
         else
             RECONSTRUCT (snip, snip_len);    
@@ -182,7 +182,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
         if (vb->contexts[SAM_BAM_BIN].semaphore) {
             vb->contexts[SAM_BAM_BIN].semaphore = false;
 
-            PosType pos   = vb->contexts[SAM_POS ].last_value.i;
+            PosType pos = vb->last_int(SAM_POS);
             bool segment_unmapped = (sam_flag & SAM_FLAG_UNMAPPED);
             PosType last_pos = segment_unmapped ? pos : (pos + vb_sam->ref_consumed - 1);
             
@@ -201,9 +201,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
 
     else if (flag.idxstats) {// && (sam_flag & SAM_FLAG_IS_FIRST) && !(sam_flag && SAM_FLAG_SECONDARY)) {
         if (sam_flag & SAM_FLAG_UNMAPPED)   
-            (*ENT (uint64_t, vb->unmapped_read_count, vb->contexts[SAM_RNAME].last_value.i))++;
+            (*ENT (uint64_t, vb->unmapped_read_count, vb->last_index(SAM_RNAME)))++;
         else
-            (*ENT (uint64_t, vb->read_count, vb->contexts[SAM_RNAME].last_value.i))++;
+            (*ENT (uint64_t, vb->read_count, vb->last_index(SAM_RNAME)))++;
     }
 
     vb_sam->last_cigar = snip;
@@ -305,7 +305,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 
     // binary reconstruction - BAM format
     if (flag.out_dt == DT_BAM)
-        RECONSTRUCT (&machine_en.f, sizeof (float))
+        RECONSTRUCT (&machine_en.f, sizeof (float));
     
     // textual reconstruction - SAM format 
     else { 
@@ -374,8 +374,6 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     
     if (vb->dont_show_curr_line) return 0; // sequence was not reconstructed - nothing to translate
     
-    static bool invalid_char_warning_shown = false; // we show this warning up to once per executipn
-
     BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
     uint32_t l_seq = LTEN32 (alignment->l_seq);
 
@@ -394,9 +392,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
         
         // check for invalid characters - issue warning (only once per execution), and make then into an 'N'
         for (unsigned b=0; b < 2; b++)
-            if (!base[b] && !invalid_char_warning_shown && !(b==1 && (i+1)*2 > l_seq)) {
-                WARN ("Warning when converting SAM sequence data to BAM: invalid character encodered, it will be converted as 'N': '%c' (ASCII %u)", base[b], base[b]);
-                invalid_char_warning_shown = true;
+            if (!base[b] && !(b==1 && (i+1)*2 > l_seq)) {
+                WARN_ONCE ("Warning when converting SAM sequence data to BAM: invalid character encodered, it will be converted as 'N': '%c' (ASCII %u)", base[b], base[b]);
                 base[b] = 0x0f;
             }
 
@@ -442,11 +439,11 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
 
     // if it is '*', reconstruct -1
     if (snip_len == 1 && *snip == '*') 
-        RECONSTRUCT_BIN32 (-1)    
+        RECONSTRUCT_BIN32 (-1);
 
     // if its RNEXT and =, emit the last index of RNAME
     else if (ctx->did_i != CHROM && snip_len == 1 && *snip == '=') 
-        RECONSTRUCT_BIN32 (vb->contexts[CHROM].last_value.i)
+        RECONSTRUCT_BIN32 (vb->last_index (CHROM));
 
     // otherwise - output the word_index which was stored here because of flags.store=STORE_INDEX set in seg 
     else     
@@ -520,7 +517,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 // filtering during reconstruction: called by container_reconstruct_do for each sam alignment (repeat)
 CONTAINER_FILTER_FUNC (sam_piz_sam2fq_filter)
 {
-    uint16_t sam_flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
     return !(sam_flag & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLAMENTARY)); // show only if this is a primary alignment (don't show its secondary or supplamentary alignments)
 }
 
@@ -535,7 +532,7 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
                                           't','b','g','d','e','f','c','h','i','j','k','l','m','n','o','p','q','r','s','a','u','v','w','x','y','z'
                                           ,'{','|','}','~' };
 
-    uint16_t sam_flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
     
     // case: SEQ is "*" - don't show this fastq record
     if (reconstructed_len==1 && *reconstructed == '*') 
@@ -563,7 +560,7 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
 // reverse the sequence if needed, and drop if "*"
 TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
 {
-    uint16_t sam_flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
     
     // case: QUAL is "*" - don't show this fastq record
     if (reconstructed_len==1 && *reconstructed == '*') 
@@ -583,7 +580,7 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
 // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
 TRANSLATOR_FUNC (sam_piz_sam2fastq_FLAG)
 {
-    uint16_t sam_flag = (uint16_t)vb->contexts[SAM_FLAG].last_value.i;
+    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
 
     if (sam_flag & (SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST)) vb->txt_data.len--; // remove newline
 

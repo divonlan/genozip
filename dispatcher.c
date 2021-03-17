@@ -168,6 +168,11 @@ void dispatcher_resume (Dispatcher dispatcher)
     progress_new_component (dd->filename, "0\%", -1);    
 }
 
+uint32_t dispatcher_get_next_vb_i (Dispatcher dispatcher)
+{
+    return ((DispatcherData *)dispatcher)->next_vb_i;
+}
+
 void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 {
     if (! *dispatcher) return; // nothing to do
@@ -303,6 +308,12 @@ bool dispatcher_has_free_thread (Dispatcher dispatcher)
     return dd->num_running_compute_threads < MAX(1, dd->max_threads);
 }
 
+bool dispatcher_has_active_threads (Dispatcher dispatcher)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+    return dd->num_running_compute_threads > 0;
+}
+
 VBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
@@ -370,15 +381,20 @@ bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
 }
 
 // returns the number of VBs successfully outputted
-uint32_t dispatcher_fan_out_task_do (const char *task_name,
-                                     const char *filename,  // NULL to continue with previous filename
-                                     ProgressType prog,
-                                     const char *prog_msg,  // used if prog=PROGRESS_MESSAGE 
-                                     bool test_mode,
-                                     bool force_single_thread, 
-                                     DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
+Dispatcher dispatcher_fan_out_task_do (const char *task_name,
+                                       const char *filename,   // NULL to continue with previous filename
+                                       ProgressType prog,
+                                       const char *prog_msg,   // used if prog=PROGRESS_MESSAGE 
+                                       bool test_mode,
+                                       bool is_last_file, 
+                                       bool cleanup_after_me, 
+                                       bool force_single_thread, 
+                                       uint32_t previous_vb_i, // used if binding file
+                                       uint32_t idle_sleep_microsec,
+                                       DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
-    Dispatcher dispatcher = dispatcher_init (task_name, force_single_thread ? 1 : global_max_threads, 0, test_mode, true, true, filename, prog, prog_msg);
+    Dispatcher dispatcher = dispatcher_init (task_name, force_single_thread ? 1 : global_max_threads, 
+                                             previous_vb_i, test_mode, is_last_file, cleanup_after_me, filename, prog, prog_msg);
     do {
         VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;
@@ -407,17 +423,15 @@ uint32_t dispatcher_fan_out_task_do (const char *task_name,
 
             prepare (next_vb);
 
-            if (!next_vb->ready_to_dispatch) {
+            if (!next_vb->ready_to_dispatch) 
                 dispatcher_set_input_exhausted (dispatcher, true);
-                dispatcher_recycle_vbs (dispatcher); 
-            }
         }
 
         // if no condition was met, we're either done, or we still have some threads processing that are not done yet.
         // we wait a bit to avoid a tight busy loop
-        else usleep (5000); 
+        else usleep (idle_sleep_microsec); 
 
     } while (!dispatcher_is_done (dispatcher));
 
-    return ((DispatcherData *)dispatcher)->next_vb_i;
+    return dispatcher;
 }

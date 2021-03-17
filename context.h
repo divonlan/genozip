@@ -172,7 +172,13 @@ static inline bool PAIRBIT(Context *ctx)      { BitArrayP b = buf_get_bitarray (
 static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); bool ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; }
 
 // factor in which we grow buffers in CTX upon realloc
-#define CTX_GROWTH 1.75
+#define CTX_GROWTH 1.75  
+
+#define last_int(did_i)     contexts[did_i].last_value.i
+#define last_index(did_i)   contexts[did_i].last_value.i
+#define last_float(did_i)   contexts[did_i].last_value.f
+#define last_txt(vb, did_i) ENT (char, (vb)->txt_data, (vb)->contexts[did_i].last_txt)
+#define last_txt_len(did_i) contexts[did_i].last_txt_len
 
 static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
@@ -227,15 +233,19 @@ extern void ctx_map_aliases (VBlockP vb);
 extern CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index);
 extern const char *ctx_get_snip_by_word_index (const Context *ctx, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);
+#define ctx_get_words_snip(ctx, word_index) ctx_get_snip_by_word_index ((ctx), (word_index), 0, 0)
+
 extern const char *ctx_get_snip_by_node_index (const Buffer *nodes, const Buffer *dict, WordIndex node_index, 
                                                const char **snip, uint32_t *snip_len);
+#define ctx_get_nodes_snip(ctx, node_index) ctx_get_snip_by_node_index (&(ctx)->nodes, &(ctx)->dict, (node_index), 0, 0)
+
 extern WordIndex ctx_get_word_index_by_snip (const Context *ctx, const char *snip);
 
 extern void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
 
 extern void ctx_read_all_dictionaries (void);
 extern void ctx_compress_dictionaries (void);
-extern void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs, ConstBufferP contigs_dict);
+extern void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs, ConstBufferP contigs_dict);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 

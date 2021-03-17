@@ -11,6 +11,7 @@
 #include "sections.h"
 #include "context.h"
 #include "container.h"
+#include "liftover.h"
 
 typedef enum { ERR_SEG_NO_ERROR=0, ERR_SEG_OUT_OF_RANGE, ERR_SEG_NOT_INTEGER } SegError;
 
@@ -52,7 +53,7 @@ extern void seg_id_field (VBlockP vb, DictId dict_id, const char *id_snip, unsig
 extern Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_1_items);
 
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip);
-extern void seg_info_field (VBlockP vb, SegSpecialInfoSubfields seg_special_subfields, const char *info_str, unsigned info_len);
+extern void seg_info_field (VBlockP vb, SegSpecialInfoSubfields seg_special_subfields, const char *info_str, unsigned info_len, LiftOverStatus liftover_status);
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, const void *data, unsigned data_len);
@@ -72,7 +73,7 @@ extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *fiel
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 
 extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
-                                    char *snip, unsigned *snip_len);
+                                    char *snip, unsigned *snip_len /* in / out */);
 
 
 // ------------------

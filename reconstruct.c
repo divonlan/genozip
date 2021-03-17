@@ -235,7 +235,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         ASSERTE (snip_len >= 2, "SNIP_SPECIAL expects snip_len >= 2. ctx=%s", snip_ctx->name);
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
 
-        ASSERTE (special < DTP (num_special), "file requires special handler %u which doesn't exist in this version of genounzip - please upgrade to the latest version", special);
+        ASSERTE (special < DTP (num_special), "file requires special handler %u which doesn't exist in this version of genozip - please upgrade to the latest version", special);
         ASSERT_DT_FUNC (vb, special);
 
         have_new_value = DT_FUNC(vb, special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
@@ -372,7 +372,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         if (reconstruct) { RECONSTRUCT1('\n'); }
     }
 
-    else ASSERTE (flag.show_sex || flag.show_coverage || flag.idxstats, // in --show-sex/coverage/idxstats, we filtered out most contexts in sam_piz_is_skip_section, so this is expected
+    else ASSERTE (flag.show_sex || flag.show_coverage || flag.idxstats || flag.drop_genotypes, // in --show-sex/coverage/idxstats, we filtered out most contexts in sam_piz_is_skip_section, so this is expected
                   "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
                   ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 

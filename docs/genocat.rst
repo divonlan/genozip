@@ -119,6 +119,13 @@ One or more file names must be given.
 
 .. include:: opt-piz.rst
 .. include:: opt-quiet.rst
+    
+|
+
+.. option:: --no-PG.  (VCF, SAM, BAM) When modifying the data in a file using genocat Genozip normally adds information about the modification in the file header. With this option it doesn't.
+    
+|
+
 .. include:: opt-threads.rst
 .. include:: opt-stats.rst
 

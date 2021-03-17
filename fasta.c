@@ -224,7 +224,7 @@ static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_
         SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
         seg_compound_field ((VBlockP)vb, &vb->contexts[FASTA_DESC], line_start, line_len, arg, 0, 0);
         
-        char special_snip[100]; unsigned special_snip_len;
+        char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_fields[FASTA_DESC], false, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
@@ -250,7 +250,7 @@ static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint
     if (!flag.make_reference) {
         seg_add_to_local_text ((VBlockP)vb, &vb->contexts[FASTA_COMMENT], line_start, line_len, line_len); 
 
-        char special_snip[100]; unsigned special_snip_len;
+        char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_fields[FASTA_COMMENT], false, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
@@ -275,7 +275,7 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
     }
 
     else { // not cached
-        char special_snip[100]; unsigned special_snip_len;
+        char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_fields[FASTA_NONREF], 
                                 true, (int32_t)line_len, &special_snip[3], &special_snip_len);
 

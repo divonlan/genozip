@@ -33,7 +33,7 @@
 
 static Mutex wait_for_vb_1_mutex = {};
 
-static void zip_display_compression_ratio (Dispatcher dispatcher, Digest md5, bool is_final_component)
+static void zip_display_compression_ratio (Digest md5, bool is_final_component)
 {
     double z_bytes        = MAX ((double)z_file->disk_so_far, 1.0); // at least one, to avoid division by zero in case of a z_bytes=0 issue
     double plain_bytes    = (double)z_file->txt_data_so_far_bind;
@@ -103,7 +103,7 @@ static void zip_dynamically_set_max_memory (void)
 {
     static uint64_t test_vb_sizes[] = { 70000, 250000, 1000000 }; // must be at least BGZF_MAX_BLOCK_SIZE
 
-    if (flag.out_dt == DT_GENERIC) {
+    if (flag.out_dt == DT_GENERIC || (txt_file->disk_size && txt_file->disk_size <= VBLOCK_MEMORY_GENERIC)) {
         flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
         return;
     }
@@ -148,7 +148,10 @@ static void zip_dynamically_set_max_memory (void)
 
             // on Windows and Mac - which tend to have less memory in typical configurations, warn if we need a lot
 #if defined _WIN32 || defined APPLE
-            ASSERTW (flag.vblock_memory * (uint64_t)global_max_threads < (1 << 30),  // 1 GB
+            uint64_t concurrent_vbs = 1 + txt_file->disk_size ? MIN (1+ txt_file->disk_size / flag.vblock_memory, global_max_threads)
+                                                              : global_max_threads;
+
+            ASSERTW (flag.vblock_memory * concurrent_vbs < 0x100000000,  // 4 GB
                      "\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
                      "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
                      "To reduce RAM consumption, you may use:\n"
@@ -195,7 +198,7 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
 
         if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
             NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_ONE_UP;
-            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", word_i)
+            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", word_i);
         }
 
         else {
@@ -206,7 +209,7 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
             else
                 NEXTENT (uint8_t, *b250_buf) = *numerals;
 
-            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", word_i, n)
+            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", word_i, n);
         }
         *prev_word_index = n;
     }
@@ -214,13 +217,13 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
     else if (node_index == WORD_INDEX_MISSING_SF) {
         NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_MISSING_SF;
         *prev_word_index = node_index;
-        if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", word_i)
+        if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", word_i);
     }
     
     else if (node_index == WORD_INDEX_EMPTY_SF) {
         NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_EMPTY_SF;
         *prev_word_index = node_index;
-        if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", word_i)
+        if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", word_i);
     }
 
     else ABORT ("Error in zip_generate_one_b250: invalid node_index=%u", node_index);        
@@ -275,7 +278,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
         ctx->flags.all_the_same = false;
 
     if (show) {
-        bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
+        bufprintf (vb, &vb->show_b250_buf, "%s", "\n");
         iprintf ("%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
@@ -490,13 +493,13 @@ static void zip_update_txt_counters (VBlock *vb)
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
-static void zip_write_global_area (Dispatcher dispatcher, Digest single_component_digest)
+static void zip_write_global_area (Digest single_component_digest)
 {
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
     if (DTPZ(has_random_access)) 
         random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
-    ctx_compress_dictionaries();
+    ctx_compress_dictionaries(); // note: liftover_section_list_move_rejects_to_front() depends on SEC_DICT being the first non-VB sections
     
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL) 
@@ -527,7 +530,7 @@ static void zip_write_global_area (Dispatcher dispatcher, Digest single_componen
     zfile_compress_genozip_header (single_component_digest);    
 }
 
-// entry point for compute thread
+// entry point for ZIP compute thread
 static void zip_compress_one_vb (VBlock *vb)
 {
     START_TIMER; 
@@ -537,7 +540,8 @@ static void zip_compress_one_vb (VBlock *vb)
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
-    if (!flag.make_reference) digest_one_vb (vb); 
+    if (!flag.make_reference && !flag.data_modified) 
+        digest_one_vb (vb); 
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
@@ -613,12 +617,87 @@ void zip_prepopulate_contig_data (void)
         if (!contigs && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) 
             ref_contigs_get (&contigs_dict, &contigs);
 
-        ctx_initialize_primary_field_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
-        ctx_copy_ref_contigs_to_zf (CHROM, contigs, contigs_dict); 
+        ctx_build_zf_ctx_from_contigs (CHROM, contigs, contigs_dict); 
 
         if (z_file->data_type == DT_SAM || z_file->data_type == DT_BAM)
-            ctx_copy_ref_contigs_to_zf (SAM_RNEXT, contigs, contigs_dict);
+            ctx_build_zf_ctx_from_contigs (SAM_RNEXT, contigs, contigs_dict);
     }
+}
+
+// data sent through dispatcher fan out functions - to do: make this an opaque struct
+static uint32_t prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
+static uint32_t txt_line_i; // the next line to be read (first line = 1) (resets in every file)
+static uint32_t max_lines_per_vb; // (resets in every file)
+
+// returns true if successfully prepared a vb 
+static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
+{
+    // if we're compressing the 2nd file in a fastq pair (with --pair) - look back at the z_file data
+    // and copy the data we need for this vb. note: we need to do this before txtfile_read_vblock as
+    // we need the num_lines of the pair file
+    bool read_txt = true;
+    if (flag.pair == PAIR_READ_2) {
+
+        // normally we clone in the compute thread, because it might wait on mutex, but in this
+        // case we need to clone (i.e. create all contexts before we can read the pair file data)
+        ctx_clone (vb); 
+
+        // returns false if their is no vb with vb_i in the previous file
+        read_txt = fastq_read_pair_1_data (vb, prev_file_first_vb_i, prev_file_last_vb_i); // read here, decompressed in fastq_seg_initialize
+    }
+
+    if (read_txt) {
+        if (flag.show_threads) dispatcher_show_time ("Read input data", -1, vb->vblock_i);            
+
+        // if vblock_memory is not already set by user options or previous files, set the size of the VBs for optimal compression
+        if (!flag.vblock_memory)
+            zip_dynamically_set_max_memory();
+
+        txtfile_read_vblock (vb, false);
+
+        // initializations after reading the first vb and before running any compute thread
+        if (vb->vblock_i == 1) { 
+
+            // estimate txt_data_size_single that will be used for the global_hash and the progress indicator
+            txt_file->txt_data_size_single = txtfile_estimate_txt_data_size (vb);
+
+            // we lock, so vb>=2 will block on merge, until vb=1 has completed its merge and unlocked it in zip_compress_one_vb()
+            mutex_initialize (wait_for_vb_1_mutex);
+            mutex_lock (wait_for_vb_1_mutex); 
+        }
+
+        vb->is_rejects_vb = flag.processing_rejects;
+
+        if (flag.show_threads) dispatcher_show_time ("Read input data done", -1, vb->vblock_i);
+    }
+
+    if (vb->txt_data.len)   // we found some data 
+        vb->ready_to_dispatch = true;
+
+    else {
+        // error if stdin is empty - can happen only when redirecting eg "cat empty-file|./genozip -" (we test for empty regular files in main_genozip)
+        ASSINP0 (vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, 
+                    "Error: Cannot compress stdin data because its size is 0");
+    }
+}
+
+static void zip_complete_processing_one_vb (VBlockP vb)
+{
+    if (DTP(zip_after_compute)) DTP(zip_after_compute)(vb);
+
+    // update z_data in memory (its not written to disk yet)
+    zfile_update_compressed_vb_header (vb, txt_line_i); 
+
+    max_lines_per_vb = MAX (max_lines_per_vb, vb->lines.len);
+    txt_line_i += (uint32_t)vb->lines.len;
+
+    if (!flag.make_reference && !flag.seg_only)
+        zfile_output_processed_vb (vb);
+    
+    if (!flag.processing_rejects)
+        zip_update_txt_counters (vb);
+
+    z_file->num_vbs++;
 }
 
 // this is the main dispatcher function. It first processes the txt header, then proceeds to read 
@@ -626,12 +705,12 @@ void zip_prepopulate_contig_data (void)
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
 void zip_one_file (const char *txt_basename, 
-                   bool is_last_file,      // very last file in this execution
+                   bool *is_last_file,     // in/out very last file in this execution
                    bool z_closes_after_me) // we will finalize this z_file after writing this component
 {
     static DataType last_data_type = DT_NONE;
-    static uint32_t prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
-    
+    Dispatcher dispatcher = 0;
+
     if (!flag.bind) prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
 
     // we cannot bind files of different type
@@ -640,125 +719,35 @@ void zip_one_file (const char *txt_basename,
             global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
     last_data_type =  txt_file->data_type;
 
-    // normally global_max_threads would be the number of cores available - we allow up to this number of compute threads, 
-    // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init ("zip", flag.xthreads ? 1 : global_max_threads, 
-                                             prev_file_last_vb_i, false, is_last_file, z_closes_after_me,
-                                             txt_basename, PROGRESS_PERCENT, 0);
-
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
     dict_id_initialize (z_file->data_type);
 
-    uint32_t txt_line_i = 1; // the next line to be read (first line = 1)
+    txt_line_i = 1; // the next line to be read (first line = 1)
     
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
     bool success = txtfile_header_to_genozip (&txt_line_i);
     if (!success) goto finish; // 2nd+ VCF file cannot bind, because of different sample names
 
+    if (z_file->z_flags.dual_coords && !flag.processing_rejects) {
+        *is_last_file = false; // we're not the last file - at leasts, the liftover rejects file is after us
+        z_closes_after_me = false;
+    }
+
     DT_FUNC (txt_file, zip_initialize)();
 
     // copy contigs from reference or SAM/BAM header to CHROM (and RNEXT too, for SAM/BAM)
     zip_prepopulate_contig_data();
 
-    uint32_t max_lines_per_vb=0;
+    max_lines_per_vb=0;
 
-    // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
-    // 1. If there is a new variant block avaialble, and a compute thread available to take it - dispatch it
-    // 2. If there is no new variant block available, but input is not exhausted yet - read one
-    // 3. Wait for the first thread (by sequential order) to complete the compute and output the results
-    VBlock *next_vb;
-    do {
-        next_vb = dispatcher_get_next_vb (dispatcher);
-        bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;
-        bool has_free_thread = dispatcher_has_free_thread (dispatcher);
-
-        // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
-        if (has_vb_ready_to_compute && has_free_thread) 
-            dispatcher_compute (dispatcher, zip_compress_one_vb);
-        
-        // PRIORITY 2: output completed vbs, so they can be released and re-used
-        else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
-                 (has_vb_ready_to_compute && !has_free_thread)) {   // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete
-           
-            VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); // this will block until one is available
-            if (!processed_vb) continue; // no running compute threads 
-
-            // update z_data in memory (its not written to disk yet)
-            zfile_update_compressed_vb_header (processed_vb, txt_line_i); 
-
-            max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
-            txt_line_i += (uint32_t)processed_vb->lines.len;
-
-            if (!flag.make_reference && !flag.seg_only)
-                zfile_output_processed_vb (processed_vb);
-            
-            zip_update_txt_counters (processed_vb);
-
-            z_file->num_vbs++;
-            
-            dispatcher_recycle_vbs (dispatcher);
-        }        
-        
-        // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - read one
-        else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
-
-            next_vb = dispatcher_generate_next_vb (dispatcher, 0);
-
-            // if we're compressing the 2nd file in a fastq pair (with --pair) - look back at the z_file data
-            // and copy the data we need for this vb. note: we need to do this before txtfile_read_vblock as
-            // we need the num_lines of the pair file
-            bool read_txt = true;
-            if (flag.pair == PAIR_READ_2) {
-
-                // normally we clone in the compute thread, because it might wait on mutex, but in this
-                // case we need to clone (i.e. create all contexts before we can read the pair file data)
-                ctx_clone (next_vb); 
-
-                // returns false if their is no vb with vb_i in the previous file
-                read_txt = fastq_read_pair_1_data (next_vb, prev_file_first_vb_i, prev_file_last_vb_i); // read here, decompressed in fastq_seg_initialize
-            }
-
-            if (read_txt) {
-                if (flag.show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);            
-
-                // if vblock_memory is not already set by user options or previous files, set the size of the VBs for optimal compression
-                if (!flag.vblock_memory)
-                    zip_dynamically_set_max_memory();
-
-                txtfile_read_vblock (next_vb, false);
-
-                // initializations after reading the first vb and before running any compute thread
-                if (next_vb->vblock_i == 1) { 
-
-                    // estimate txt_data_size_single that will be used for the global_hash and the progress indicator
-                    txt_file->txt_data_size_single = txtfile_estimate_txt_data_size (next_vb);
-
-                    // we lock, so vb>=2 will block on merge, until vb=1 has completed its merge and unlocked it in zip_compress_one_vb()
-                    mutex_initialize (wait_for_vb_1_mutex);
-                    mutex_lock (wait_for_vb_1_mutex); 
-                }
-
-                if (flag.show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
-            }
-
-            if (next_vb->txt_data.len)   // we found some data 
-                next_vb->ready_to_dispatch = true;
-            
-            else {
-                // error if stdin is empty - can happen only when redirecting eg "cat empty-file|./genozip -" (we test for empty regular files in main_genozip)
-                ASSINP0 (next_vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, 
-                         "Error: Cannot compress stdin data because its size is 0");
-
-                // this vb has no data
-                dispatcher_set_input_exhausted (dispatcher, true);
-            }
-        }
-        else  // nothing for us to do right now, just wait
-            usleep (100000); // 100ms
-
-    } while (!dispatcher_is_done (dispatcher));
+    dispatcher = 
+        dispatcher_fan_out_task (txt_basename, PROGRESS_PERCENT, 0, false, *is_last_file, z_closes_after_me, 
+                                 flag.xthreads, prev_file_last_vb_i, 100000,
+                                 zip_prepare_one_vb_for_dispatching, 
+                                 zip_compress_one_vb, 
+                                 zip_complete_processing_one_vb);
 
     // update to the conclusive size. it might have been 0 (eg STDIN if HTTP) or an estimate (if compressed)
     txt_file->txt_data_size_single = txt_file->txt_data_so_far_single; 
@@ -777,9 +766,9 @@ finish:
     z_file->txt_disk_so_far_bind  += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
     if (z_closes_after_me && !flag.seg_only)
-        zip_write_global_area (dispatcher, single_component_digest);
+        zip_write_global_area (single_component_digest);
 
-    zip_display_compression_ratio (dispatcher, flag.bind ? DIGEST_NONE : single_component_digest, z_closes_after_me); // Done for reference + final compression ratio calculation
+    zip_display_compression_ratio (flag.bind ? DIGEST_NONE : single_component_digest, z_closes_after_me); // Done for reference + final compression ratio calculation
     
     if (flag.md5 && flag.bind && z_file->num_txt_components_so_far > 1 && z_closes_after_me) 
         progress_concatenated_md5 (dt_name (z_file->data_type), digest_finalize (&z_file->digest_ctx_bound, "file:digest_ctx_bound"));

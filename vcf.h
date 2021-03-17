@@ -18,9 +18,13 @@
 #error "VCF_MAX_PLOIDY cannot go beyond 65535 VBlockVCF.ploidy are uint16_t"
 #endif
 
+// ZIP stuff
+extern void vcf_zip_initialize (void);
+
 // SEG stuff
 extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void vcf_seg_initialize (VBlockP vb_);
+extern void vcf_zip_after_compute (VBlockP vb);
 extern void vcf_seg_finalize (VBlockP vb_);
 extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
 
@@ -30,11 +34,8 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter);
 CONTAINER_CALLBACK (vcf_piz_container_cb);
 
 // VCF Header stuff
-extern void vcf_header_initialize (void);
+extern void vcf_header_piz_init (void);
 extern bool vcf_inspect_txt_header (BufferP txt_header);
-extern bool vcf_header_set_globals (const char *filename, BufferP vcf_header, bool soft_fail);
-extern void vcf_header_trim_header_line (BufferP vcf_header_buf);
-extern void vcf_header_keep_only_last_line (BufferP vcf_header_buf);
 extern uint32_t vcf_header_get_num_samples (void);
 
 // VBlock stuff
@@ -45,11 +46,26 @@ extern unsigned vcf_vb_size (void);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 
+// Liftover stuff
+#define HEADER_KEY_LIFTOVER_REJECT "##LIFTOVER_REJECT="
+#define HEADER_KEY_DC "##DUAL_COORDINATES="
+#define HEADER_KEY_DC_PRIMARY "PRIMARY"
+#define HEADER_KEY_DC_LAFT    "LAFT"
+#define INFO_LIFTOVER "LIFTOVER"
+#define INFO_LIFTOVER_LEN 8
+#define INFO_LIFTBACK "LIFTBACK"
+#define INFO_LIFTBACK_LEN 8
+#define INFO_LIFTREJD "LIFTREJD"
+#define INFO_LIFTREJD_LEN 8
+
+extern void vcf_seg_ref_alt (VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len);
+
 // Samples stuff
 extern void vcf_samples_add  (const char *samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_AC, vcf_piz_special_SVLEN, \
-                      vcf_piz_special_DS, vcf_piz_special_BaseCounts, vcf_piz_special_SF }
+                      vcf_piz_special_DS, vcf_piz_special_BaseCounts, vcf_piz_special_SF, \
+                      vcf_piz_special_OREF, vcf_piz_special_LIFTREJD, vcf_piz_special_LIFTBACK }
 SPECIAL (VCF, 0, REFALT,     vcf_piz_special_REFALT);
 SPECIAL (VCF, 1, FORMAT,     vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2, AC,         vcf_piz_special_AC);
@@ -57,7 +73,27 @@ SPECIAL (VCF, 3, SVLEN,      vcf_piz_special_SVLEN);
 SPECIAL (VCF, 4, DS,         vcf_piz_special_DS);
 SPECIAL (VCF, 5, BaseCounts, vcf_piz_special_BaseCounts);
 SPECIAL (VCF, 6, SF,         vcf_piz_special_SF);
-#define NUM_VCF_SPECIAL 7
+SPECIAL (VCF, 7, OREF,       vcf_piz_special_OREF);     // added 11.0.9
+SPECIAL (VCF, 8, LIFTREJD,   vcf_piz_special_LIFTREJD); // added 11.0.9 - maybe be used by other data types too in the future
+SPECIAL (VCF, 9, LIFTBACK,   vcf_piz_special_LIFTBACK); // added 11.0.9 - maybe be used by other data types too in the future
+
+#define NUM_VCF_SPECIAL 10
+
+// Translators for Laft (=secondary coordinates)
+TRANSLATOR (VCF, VCF,   1,  CHROM,  vcf_piz_laft_CHROM)
+TRANSLATOR (VCF, VCF,   2,  POS,    vcf_piz_laft_POS)
+TRANSLATOR (VCF, VCF,   3,  REFALT, vcf_piz_laft_REFALT)
+TRANSLATOR (VCF, VCF,   4,  AC,     vcf_piz_laft_AC)
+TRANSLATOR (VCF, VCF,   5,  AF,     vcf_piz_laft_AF)
+TRANSLATOR (VCF, VCF,   6,  AD,     vcf_piz_laft_AD)
+TRANSLATOR (VCF, VCF,   7,  END,    vcf_piz_laft_END)
+TRANSLATOR (VCF, VCF,   8,  GT,     vcf_piz_laft_GT)
+TRANSLATOR (VCF, VCF,   9,  GL,     vcf_piz_laft_GL)
+
+#define NUM_VCF_TRANS   10 // including "none"
+#define VCF_TRANSLATORS { NULL /* none */, vcf_piz_laft_CHROM, vcf_piz_laft_POS, vcf_piz_laft_REFALT, \
+                          vcf_piz_laft_AC, vcf_piz_laft_AF, \
+                          vcf_piz_laft_AD, vcf_piz_laft_END, vcf_piz_laft_GT, vcf_piz_laft_GL }
 
 #define VCF_DICT_ID_ALIASES \
     /*         alias                           maps to this ctx          */  \

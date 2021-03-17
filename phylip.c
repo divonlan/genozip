@@ -28,13 +28,17 @@ static uint32_t phy_seq_len = 0; // read from txt header
 //-----------------
 
 // returns header length if header read is complete + sets lines.len, -1 not complete yet 
-int32_t phy_is_header_done (void)
+int32_t phy_is_header_done (bool is_eof)
 {
     ARRAY (char, header, evb->txt_data);
 
     for (uint32_t i=0; i < evb->txt_data.len; i++)
         if (header[i] == '\n') 
             return i+1;
+
+    // case: the entire file is just a header
+    if (is_eof && *LASTENT (char, evb->txt_data) == '\n') 
+        return evb->txt_data.len;
 
     return -1;
 }

@@ -3,6 +3,7 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include <time.h>
 #include "genozip.h"
 #include "strings.h"
 #include "flags.h"
@@ -144,10 +145,19 @@ bool str_get_int (const char *str, unsigned str_len,
     return true;
 }
 
-bool str_get_int_range (const char *str, unsigned str_len, int64_t min_val, int64_t max_val, int64_t *value)
+bool str_get_int_range64 (const char *str, unsigned str_len, int64_t min_val, int64_t max_val, int64_t *value)
 {
-    if (!str_get_int (str, str_len, value)) return false;
+    if (!str_get_int (str, str_len ? str_len : strlen (str), value)) return false;
     
+    return *value >= min_val && *value <= max_val;
+}
+
+bool str_get_int_range32 (const char *str, unsigned str_len, int32_t min_val, int32_t max_val, int32_t *value)
+{
+    int64_t value64;
+    if (!str_get_int (str, str_len ? str_len : strlen (str), &value64)) return false;
+    *value = (int32_t)value64;
+
     return *value >= min_val && *value <= max_val;
 }
 
@@ -235,6 +245,30 @@ bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last
     for (; str_len ; str++, str_len--)
         if (*str < first_c || *str > last_c) return false;
     return true;
+}
+
+// splits a string (doesn't need to be nul-terminated) to exactly num_items.
+// returns true is successful
+bool str_split (const char *str, unsigned str_len, unsigned num_items, char sep,
+                const char **items,  // out - array of char*
+                unsigned *item_lens) // out - corresponding lengths
+
+{
+    items[0] = str;
+    unsigned item_i=1;
+
+    for (unsigned i=0; i < str_len ; i++) 
+        if (str[i] == sep) {
+            if (item_i == num_items) return false; // too many separators
+            items[item_i++] = &str[i+1];
+        }
+
+    for (unsigned i=0; i < num_items-1; i++)    
+        item_lens[i] = items[i+1] - items[i] - 1;
+        
+    item_lens[num_items-1] = &str[str_len] - items[num_items-1];
+
+    return item_i == num_items; // false if too few separators
 }
 
 const char *type_name (unsigned item, 
@@ -358,4 +392,14 @@ const char *str_win_error (void)
                     NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg, sizeof (msg), NULL);
 #endif
     return msg;
+}
+
+// current date and time
+StrText str_time (void)
+{
+    StrText s;
+    time_t now = time (NULL);
+    strftime (s.s, 100, "%Y-%m-%d %H:%M:%S ", localtime (&now));
+    strcpy (&s.s[strlen(s.s)], tzname[daylight]);
+    return s;
 }

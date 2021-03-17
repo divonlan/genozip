@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_seg.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <math.h>
@@ -15,23 +15,40 @@
 #include "dict_id.h"
 #include "codec.h"
 #include "reference.h"
+#include "liftover.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
 static void vcf_seg_complete_missing_lines (VBlockVCF *vb);
 
-// called from seg_all_data_lines
+// called by I/O thread after reading the header
+void vcf_zip_initialize (void)
+{
+    liftover_zip_initialize (VCF_oCHROM, VCF_SPECIAL_LIFTBACK);
+}
+
+void vcf_zip_after_compute (VBlockP vb)
+{
+    if (z_file->z_flags.dual_coords && !flag.processing_rejects) // normal file, not zipping rejects
+        liftover_append_rejects_file (vb);
+}   
+
+// called by Compute threadfrom seg_all_data_lines
 void vcf_seg_initialize (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    vb->contexts[VCF_CHROM] .no_stons   = true; // needs b250 node_index for random access
-    vb->contexts[VCF_FORMAT].no_stons   = true;
-    vb->contexts[VCF_INFO]  .no_stons   = true;
-    vb->contexts[VCF_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    vb->contexts[VCF_CHROM]   .no_stons    = true; // needs b250 node_index for random access
+    vb->contexts[VCF_FORMAT]  .no_stons    = true;
+    vb->contexts[VCF_INFO]    .no_stons    = true;
+    vb->contexts[VCF_oSTATUS] .no_stons    = true;
+    vb->contexts[VCF_TOPLEVEL].no_stons    = true; // keep in b250 so it can be eliminated as all_the_same
+    vb->contexts[VCF_oCHROM]  .no_vb1_sort = true; // indices need to remain as in the Chain file
+    vb->contexts[VCF_oSTATUS] .no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
+    vb->contexts[VCF_oSTATUS] .flags.store = STORE_INDEX;
 
-    Context *gt_gtx = ctx_get_ctx (vb, dict_id_FORMAT_GT);
-    gt_gtx->no_stons = true; // we store the GT matrix in local, so cannot accomodate singletons
+    Context *gt_gtx   = ctx_get_ctx (vb, dict_id_FORMAT_GT);
+    gt_gtx->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
     vb->ht_matrix_ctx = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
 
     // room for already existing FORMATs from previous VBs
@@ -45,6 +62,19 @@ void vcf_seg_initialize (VBlock *vb_)
         Context *fgrc_ctx = ctx_get_ctx (vb, dict_id_PBWT_FGRC);
         codec_pbwt_seg_init (vb_, runs_ctx, fgrc_ctx, gt_gtx->did_i);
     }
+
+    // evaluate oSTATUS and oREF snips in order, as we rely on their indices being identical to the LiftOverStatus constants
+    for (int i=0; i < NUM_LO_STATUSES; i++)
+        ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[VCF_oSTATUS], liftover_status_names[i], strlen (liftover_status_names[i]), NULL);
+
+    for (char c='0'; c <= '1'; c++) {
+        char oref_special[3] = { SNIP_SPECIAL, VCF_SPECIAL_OREF, c }; 
+        ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[VCF_oREF], oref_special, 3, NULL);
+    }
+
+    // when compressing a Laft file, some lines are already known to be rejects. we just copy them to liftover_rejects
+    if (vb->laft_reject_bytes)
+        buf_copy (vb, &vb->liftover_rejects, &vb->txt_data, 1, 0, vb->laft_reject_bytes, "liftover_rejects");
 }             
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -54,25 +84,37 @@ void vcf_seg_finalize (VBlockP vb_)
     if (vb->ht_matrix_ctx) 
         vcf_seg_complete_missing_lines (vb);
 
+    // for a dual-coordinate VCF, we offer 2 ways to reconstruct it: normally, it is reconstructed in the
+    // primary coordinates. --laft invokes the translated mode, which reconstructs in laft coordintes.
+    
     // top level snip
     SmallContainer top_level = { 
-        .repeats     = vb->lines.len,
-        .is_toplevel = true,
-        .callback    = (vb->use_special_sf == USE_SF_YES),
-        .nitems_lo   = 10,
-        .items       = { { .dict_id = (DictId)dict_id_fields[VCF_CHROM],   .seperator = "\t" },
-                         { .dict_id = (DictId)dict_id_fields[VCF_POS],     .seperator = "\t" },
-                         { .dict_id = (DictId)dict_id_fields[VCF_ID],      .seperator = "\t" },
-                         { .dict_id = (DictId)dict_id_fields[VCF_REFALT],  .seperator = "\t" },
-                         { .dict_id = (DictId)dict_id_fields[VCF_QUAL],    .seperator = "\t" },
-                         { .dict_id = (DictId)dict_id_fields[VCF_FILTER],  .seperator = "\t" },
-                         { .dict_id = (DictId)dict_id_fields[VCF_INFO],    .seperator = "\t" },
-                         { .dict_id = (DictId)dict_id_fields[VCF_FORMAT],  .seperator = "\t" },
-                         { .dict_id = (DictId)dict_id_fields[VCF_SAMPLES], .seperator = ""   },
-                         { .dict_id = (DictId)dict_id_fields[VCF_EOL],     .seperator = ""   } },
+        .repeats      = vb->lines.len,
+        .is_toplevel  = true,
+        .callback     = (vb->use_special_sf == USE_SF_YES) || z_file->z_flags.dual_coords, // cases where we need a callback
+        .filter_items = true,
+        .nitems_lo    = 11,
+        .items        = { { .dict_id = (DictId)dict_id_fields[VCF_oSTATUS]                                    },
+                          { .dict_id = (DictId)dict_id_fields[VCF_CHROM],   .seperator = "\t", VCF2VCF_CHROM  },
+                          { .dict_id = (DictId)dict_id_fields[VCF_POS],     .seperator = "\t", VCF2VCF_POS    },
+                          { .dict_id = (DictId)dict_id_fields[VCF_ID],      .seperator = "\t"                 },
+                          { .dict_id = (DictId)dict_id_fields[VCF_REFALT],  .seperator = "\t", VCF2VCF_REFALT },
+                          { .dict_id = (DictId)dict_id_fields[VCF_QUAL],    .seperator = "\t"                 },
+                          { .dict_id = (DictId)dict_id_fields[VCF_FILTER],  .seperator = "\t"                 },
+                          { .dict_id = (DictId)dict_id_fields[VCF_INFO],    .seperator = "\t"                 },
+                          { .dict_id = (DictId)dict_id_fields[VCF_FORMAT],  .seperator = "\t"                 },
+                          { .dict_id = (DictId)dict_id_fields[VCF_SAMPLES], .seperator = ""                   },
+                          { .dict_id = (DictId)dict_id_fields[VCF_EOL],     .seperator = ""                   } },
     };
-    
-    container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
+
+    // when processing the liftover rejects file, we add a "##LIFTOVER_REJECT=" prefix to first item of each line, so that
+    // it reconstructs as part of the VCF header 
+    static const char reject_file_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HEADER_KEY_LIFTOVER_REJECT CON_PREFIX_SEP_;
+
+    container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 
+                          vb->is_rejects_vb ? reject_file_prefix          : 0, 
+                          vb->is_rejects_vb ? strlen (reject_file_prefix) : 0, 
+                          0);
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -85,23 +127,32 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == dict_id_fields[VCF_REFALT]   ||
         dict_id.num == dict_id_fields[VCF_FILTER]   ||
         dict_id.num == dict_id_fields[VCF_EOL]      ||
+        dict_id.num == dict_id_fields[VCF_SAMPLES]  ||
+        dict_id.num == dict_id_fields[VCF_oCHROM]   ||
+        dict_id.num == dict_id_fields[VCF_oREF]     ||
+        dict_id.num == dict_id_fields[VCF_oSTRAND]  ||
+        dict_id.num == dict_id_fields[VCF_oALTRULE] ||
+        dict_id.num == dict_id_fields[VCF_oSTATUS]  ||
         dict_id.num == dict_id_INFO_AC              ||
         dict_id.num == dict_id_INFO_AF              ||
         dict_id.num == dict_id_INFO_AN              ||
         dict_id.num == dict_id_INFO_DP              ||
+        dict_id.num == dict_id_INFO_LIFTOVER        ||
+        dict_id.num == dict_id_INFO_LIFTBACK        ||
+        dict_id.num == dict_id_INFO_LIFTREJD        ||
 
         // AC_* AN_* AF_* are small
         ((dict_id.id[0] == ('A' | 0xc0)) && (dict_id.id[1] == 'C' || dict_id.id[1] == 'F' || dict_id.id[1] == 'N') && dict_id.id[2] == '_');
 }
 
 // optimize REF and ALT, for simple one-character REF/ALT (i.e. mostly a SNP or no-variant)
-static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char vcf_ref, char vcf_alt)
+static void vcf_seg_ref_alt_snp (VBlockP vb, const char *start_line /* used for ASSSEG */, char vcf_ref, char vcf_alt)
 {
     char new_ref=0, new_alt=0;
 
     // if we have a reference, we use it
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
-        PosType pos = vb->contexts[VCF_POS].last_value.i;
+        PosType pos = vb->last_int(VCF_POS);
 
         RefLock lock;
         Range *range = ref_seg_get_locked_range (vb, pos, 1, start_line, &lock);
@@ -149,6 +200,22 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
     }
 }
 
+void vcf_seg_ref_alt (VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len)
+{
+    // optimize ref/alt in the common case of single-character
+    if (ref_len == 1 && alt_len == 1) 
+        vcf_seg_ref_alt_snp (vb, ref, *ref, *alt);
+
+    else {
+        char ref_alt[ref_len + 1 + alt_len];
+        memcpy (ref_alt, ref, ref_len);
+        ref_alt[ref_len] = '\t';
+        memcpy (&ref_alt[ref_len+1], alt, alt_len);
+
+        seg_by_did_i (vb, ref_alt, ref_len + alt_len + 1, VCF_REFALT, ref_len + alt_len + 2);
+    }
+}
+
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
 static DictId vcf_seg_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
 {
@@ -185,6 +252,8 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
     Container format_mapper = (Container){ 
         .drop_final_repeat_sep = true,
+        .drop_final_item_sep   = true,
+        .callback              = true,
         .filter_items          = true,
         .filter_repeats        = true,
         .repsep                = "\t"
@@ -258,6 +327,8 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, const char *value, int value_len)
 #define adjustment vb->sf_ctx->last_delta
 #define next param
 
+// INFO/SF contains a comma-seperated list of the 0-based index of the samples that are NOT '.'
+// example: "SF=0,1,15,22,40,51,59,78,88,89,90,112,124,140,147,155,156,164,168,183,189,197,211,215,216,217,222,239,244,256,269,270,277,281,290,291,299,323,338,340,348" 
 // Algorithm: SF is segged either as an as-is string, or as a SPECIAL that includes the index of all the non-'.' samples. 
 // if use_special_sf=YES, we use SNIP_SPECIAL and we validate the correctness during vcf_seg_FORMAT_GT -
 // if it is wrong we set use_special_sf=NO. The assumption is that normally, it is either true for all lines or false.
@@ -317,7 +388,7 @@ static inline void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
         // case: value exists in SF and samples
         else if (value == adjusted_sample_i) {
             NEXTENT (char, vb->sf_snip) = ',';
-            vb->sf_txt.next = (after - vb->sf_txt.data) + 1; // +1 to skip comma
+            vb->sf_txt.next = ENTNUM (vb->sf_txt, after) + 1; // +1 to skip comma
             break;
         }
 
@@ -326,7 +397,7 @@ static inline void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
             vb->sf_snip.len += str_int (value, AFTERENT (char, vb->sf_snip));
             NEXTENT (char, vb->sf_snip) = ',';
             adjustment++;
-            vb->sf_txt.next = (after - vb->sf_txt.data) + 1; // +1 to skip comma
+            vb->sf_txt.next = ENTNUM (vb->sf_txt, after) + 1; // +1 to skip comma
             // continue and read the next value
         }
 
@@ -343,9 +414,8 @@ static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
     // case: SF data remains after all samples - copy it
     int32_t remaining_len = (uint32_t)(vb->sf_txt.len - vb->sf_txt.next); // -1 if all done, because we skipped a non-existing comma
     if (remaining_len > 0) {
-        buf_alloc_more (vb, &vb->sf_snip, remaining_len, 0, char, 2, "sf_snip");
-        buf_add (&vb->sf_snip, ENT (char, vb->sf_txt, vb->sf_txt.next), remaining_len);
-        NEXTENT (char, vb->sf_snip) = ',';
+        buf_add_more (vb, &vb->sf_snip, ENT (char, vb->sf_txt, vb->sf_txt.next), remaining_len, "sf_snip");
+        NEXTENT (char, vb->sf_snip) = ','; // buf_add_more allocates one character extra
     }
 
     if (vb->use_special_sf == USE_SF_YES) 
@@ -361,9 +431,13 @@ static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
 #undef adjustment
 #undef param
 
-// return true if caller still needs to seg 
-static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value_len)
+// ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
+// Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
+static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value_len) // returns true if caller still needs to seg 
 {
+    // don't attempt this optimization if file is a LAFT coordinates, as we might not yet know the values of primary REF and ALT
+    if (txt_file->dual_coords == DC_LAFT) return true; // caller should seg
+
     Context *ctx_basecounts= ctx_get_ctx (vb, dict_id_INFO_BaseCounts);
     Context *ctx_refalt = &vb->contexts[VCF_REFALT];
 
@@ -384,7 +458,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value
 
     if (str - value != value_len + 1 /* +1 due to final str++ */) return true; // invalid BaseCounts data - caller should seg
 
-    const char *refalt = ENT (const char, vb->txt_data, ctx_refalt->last_txt);
+    const char *refalt = last_txt (vb, VCF_REFALT);
 
     unsigned ref_i = acgt_encode[(int)refalt[0]];
     unsigned alt_i = acgt_encode[(int)refalt[2]];
@@ -568,6 +642,51 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         return false;
     }
 
+    else if (dict_id.num == dict_id_INFO_LIFTOVER) { 
+        
+        if (txt_file->dual_coords == DC_PRIMARY) {
+            // values as they appear in the REF and ALT columns of the VCF
+            char *ref        = last_txt (vb, VCF_REFALT);
+            unsigned ref_len = vb->contexts[VCF_oREF].last_txt_len;
+            char *alt        = ref + ref_len + 1; 
+            unsigned alt_len = vb->contexts[VCF_REFALT].last_txt_len - ref_len - 1;
+            
+            liftover_seg_LIFTOVER (vb_, dict_id, (DictId)dict_id_INFO_LIFTBACK, VCF_oCHROM, VCF_SPECIAL_OREF,
+                                   ref, ref_len, alt, alt_len, 
+                                   (char *)*this_value, *this_value_len);
+
+            return false; 
+        }
+        else 
+            WARN_ONCE0 ("FYI: Found an INFO/"INFO_LIFTOVER" subfield, but this is not a dual-coordinates VCF because it is missing \""
+                        HEADER_KEY_DC HEADER_KEY_DC_PRIMARY "\" in the VCF header");
+    }
+
+    else if (dict_id.num == dict_id_INFO_LIFTBACK) { 
+
+        if (txt_file->dual_coords == DC_LAFT) {
+            // values as they appear in the REF and ALT columns of the VCF
+            char *oref        = last_txt (vb, VCF_REFALT);
+            unsigned oref_len = vb->contexts[VCF_oREF].last_txt_len;
+            char *oalt        = oref + oref_len + 1; 
+            unsigned oalt_len = vb->contexts[VCF_REFALT].last_txt_len - oref_len - 1;
+            
+            liftover_seg_LIFTBACK (vb_, (DictId)dict_id_INFO_LIFTOVER, dict_id, VCF_oCHROM, VCF_POS, VCF_SPECIAL_OREF, 
+                                   oref, oref_len, oalt, oalt_len, 
+                                   vcf_seg_ref_alt, (char*)*this_value, *this_value_len);
+
+            return false; 
+        }
+        else
+            WARN_ONCE0 ("FYI: Found an INFO/"INFO_LIFTBACK" subfield, but this is not a dual-coordinates VCF because it is missing \""
+                        HEADER_KEY_DC HEADER_KEY_DC_LAFT "\" in the VCF header");
+    }
+
+    else if (dict_id.num == dict_id_INFO_LIFTREJD) {
+        liftover_seg_LIFTREJD (vb_, dict_id, VCF_oCHROM, *this_value, *this_value_len);
+        return false; 
+    }
+
     // finalization of this INFO field
     else if (!dict_id.num) { 
 
@@ -730,7 +849,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     // we have to increase ploidy of all the haplotypes read in in this VB so far. This can happen for example in 
     // the X chromosome if initial samples are male with ploidy=1 and then a female sample with ploidy=2
     if (vb->ploidy && gt.repeats > vb->ploidy) 
-        vcf_seg_increase_ploidy (vb, gt.repeats, sample_i, (uint32_t)(cell - vb->txt_data.data));
+        vcf_seg_increase_ploidy (vb, gt.repeats, sample_i, ENTNUM (vb->txt_data, cell));
 
     if (!vb->ploidy) {
         vb->ploidy = gt.repeats; // very first sample in the vb
@@ -925,7 +1044,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
         char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
 
 #       define EVAL_OPTIMIZED { \
-            node_index = seg_by_ctx (vb, optimized_snip, optimized_snip_len, ctx, cell_len); \
+            node_index = seg_by_ctx (vb, optimized_snip, optimized_snip_len, ctx, optimized_snip_len); \
             vb->vb_data_size -= (int)cell_len - (int)optimized_snip_len; \
         }
 
@@ -1062,6 +1181,16 @@ static void vcf_seg_complete_missing_lines (VBlockVCF *vb)
     vb->ht_matrix_ctx->local.len = vb->lines.len * vb->ht_per_line;
 }
 
+// returns length of liftover_rejects before the copying
+static void vcf_seg_copy_line_to_reject (VBlockVCF *vb, const char *field_start_line, uint32_t remaining_txt_len)
+{
+    const char *last = memchr (field_start_line, '\n', remaining_txt_len);
+    ASSERTE (last, "Line has no newline: %.*s", remaining_txt_len, field_start_line);
+
+    uint32_t line_len = last - field_start_line + 1;
+    buf_add_more (vb, &vb->liftover_rejects, field_start_line, line_len, "liftover_rejects");
+}
+
 /* segment a VCF line into its fields:
    fields CHROM->FORMAT are normal contexts
    all samples go into the SAMPLES context, which is a Container
@@ -1080,41 +1209,65 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
+    DualCoordinates coords = (txt_file->dual_coords == DC_NONE)    ? DC_PRIMARY // not a dual coordinates file
+                           : (txt_file->dual_coords == DC_PRIMARY) ? DC_PRIMARY // PRIMARY dual coordinates file - coordinates are primary
+                           : vb->laft_reject_bytes                 ? DC_PRIMARY // LAFT dual coordinates file - this line is a rejected line originating from ##LIFTOVER_REJECT) in primary coordinates
+                           :                                         DC_LAFT;   // LAFT dual coordinates file - this line is a laft-over line in laft coordinates
+    
+    // if --chain and this VB is not the rejects data OR 
+    // if this is a dual-coordinates file in primary coordintes (i.e. might have INFO/LIFTREFD) 
+    // Note: when compressing a DC_LAFT file, we already copied the rejects in vcf_seg_initialize
+    // copy line to liftover_rejects now, because we are going to destroy it. We remove it later if its not a reject.
+    uint64_t save_liftover_rejects_len = vb->liftover_rejects.len;
+    if ((chain_is_loaded && !vb->is_rejects_vb) || txt_file->dual_coords == DC_PRIMARY)
+        vcf_seg_copy_line_to_reject (vb, field_start_line, remaining_txt_len);
+        
     GET_NEXT_ITEM ("CHROM");
-    seg_chrom_field (vb_, field_start, field_len);
+    if (coords == DC_PRIMARY)
+        seg_chrom_field (vb_, field_start, field_len);
+    else
+        seg_by_did_i (vb_, field_start, field_len, VCF_oCHROM, field_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
 
     GET_NEXT_ITEM ("POS");
-    seg_pos_field (vb_, VCF_POS, VCF_POS, false, field_start, field_len, 0, field_len+1);
-    
-    // POS <= 0 not expected in a VCF file
-    ASSERTW (vb->contexts[VCF_POS].last_value.i > 0, "Warning: invalid POS=%"PRId64" value in vb_i=%u vb_line_i=%u: line will be compressed, but not indexed", 
-             vb->contexts[VCF_POS].last_value.i, vb->vblock_i, vb->line_i);
-             
-    random_access_update_pos (vb_, VCF_POS);
+    if (coords == DC_PRIMARY) {
+        PosType pos = seg_pos_field (vb_, VCF_POS, VCF_POS, false, field_start, field_len, 0, field_len+1);
+
+        // POS <= 0 not expected in a VCF file
+        ASSERTW (pos > 0, "Warning: invalid POS=%"PRId64" value in vb_i=%u vb_line_i=%u: line will be compressed, but not indexed", 
+                pos, vb->vblock_i, vb->line_i);
+                
+        random_access_update_pos (vb_, VCF_POS);
+    }
+    else
+        seg_pos_field ((VBlockP)vb, VCF_oPOS, VCF_oPOS, false, field_start, field_len, 0, field_len);
 
     GET_NEXT_ITEM ("ID");
     seg_id_field (vb_, (DictId)dict_id_fields[VCF_ID], field_start, field_len, true);
 
-    // REF + ALT
+    // REF + ALT 
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
     // e.g. GG has a probability of 0 and GC has a higher probability than GA.
-    GET_NEXT_ITEM ("REF");
-    
-    unsigned alt_len=0;
-    const char *alt_start = next_field;
-    next_field = seg_get_next_item (vb, alt_start, &len, false, true, false, false, &alt_len, &separator, NULL, "ALT");
+    unsigned ref_len=0, alt_len=0;
+    const char *ref_start = next_field; 
+    const char *alt_start = seg_get_next_item (vb, ref_start, &len, false, true, false, false, &ref_len, &separator, NULL, "REF"); 
+    next_field            = seg_get_next_item (vb, alt_start, &len, false, true, false, false, &alt_len, &separator, NULL, "ALT");
 
-    // optimize ref/alt in the common case of single-character
-    if (field_len == 1 && alt_len == 1) 
-        vcf_seg_optimize_ref_alt (vb_, field_start_line, *field_start, *alt_start);
-    else
-        seg_by_did_i (vb, field_start, field_len + alt_len + 1, VCF_REFALT, field_len + alt_len + 2);
-
-    vb->contexts[VCF_REFALT].last_txt = field_start - vb->txt_data.data; // used by vcf_seg_INFO_BaseCounts
-    vb->contexts[VCF_REFALT].last_txt_len = field_len + alt_len + 1;
+    // save REF and ALT (in primary or laft coordinates) to be used for INFO fields
+    vb->contexts[VCF_REFALT].last_txt = ENTNUM (vb->txt_data, ref_start); // used by vcf_seg_INFO_BaseCounts, INFO/LIFTBACK
+    vb->last_txt_len(VCF_REFALT) = ref_len + alt_len + 1;
+    vb->last_txt_len(VCF_oREF)   = ref_len; // we use this to store ref_len regardless if it is REF or oREF - for liftover_seg_LIFTOVER/BACK
+ 
+    // coords=PRIMARY: REFALT is segged here and oREF is segged in liftover_seg_LIFTOVER()
+    // coords=LAFT: REFALT and oREF are segged in liftover_seg_LIFTBACK()
+    if (coords == DC_PRIMARY) 
+        vcf_seg_ref_alt (vb_, ref_start, ref_len, alt_start, alt_len);
 
     SEG_NEXT_ITEM (VCF_QUAL);
     SEG_NEXT_ITEM (VCF_FILTER);
+    
+    // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to laft coordinates
+    if (chain_is_loaded)
+        liftover_seg_add_chain_data (vb_, VCF_oCHROM, VCF_SPECIAL_OREF, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, (DictId)dict_id_INFO_LIFTREJD);
 
     // INFO
     if (vcf_num_samples)
@@ -1122,7 +1275,13 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     else
         GET_MAYBE_LAST_ITEM (DTF(names)[VCF_INFO]); // may or may not have a FORMAT field
 
-    seg_info_field (vb_, vcf_seg_special_info_subfields, field_start, field_len);
+    seg_info_field (vb_, vcf_seg_special_info_subfields, field_start, field_len, 
+                    flag.processing_rejects ? LO_UNSUPPORTED               : // in the rejects file all have failed - this is some error, we don't yet know the true one
+                    chain_is_loaded         ? vb->last_index (VCF_oSTATUS) : // in --chain  we got the oSTATUS in liftover_seg_add_chain_data
+                    vb->laft_reject_bytes   ? LO_UNSUPPORTED               : // reject lines in a Laft
+                    txt_file->dual_coords   ? LO_OK                        : // dual_coords=DC_LAFT    - non-rejects are all LO_OK. 
+                                                                             // dual_coords=DC_PRIMARY - we don't know yet, we will test for existance of INFO/LEFTREFD in seg_info_field_correct_for_dual_coordinates()
+                                              LO_NONE);                      // z_file is not a dual-coordinates file
 
     bool has_samples = true;
     if (separator != '\n') { // has a FORMAT field
@@ -1155,6 +1314,14 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     ASSERTW (has_samples || !vcf_num_samples, "Warning: vb->line_i=%u has no samples", vb->line_i);
 
     SEG_EOL (VCF_EOL, false);
+
+    // if line was NOT rejected (the default, if not dual coordinates), we can delete the text from liftover_rejects
+    if (vb->last_index(VCF_oSTATUS) == LO_OK) 
+        vb->liftover_rejects.len = save_liftover_rejects_len;
+
+    // in case of a reject line in a LAFT file - update laft_reject_bytes to indicate its consumption
+    if (txt_file->dual_coords == DC_LAFT && coords == DC_PRIMARY)
+        vb->laft_reject_bytes -= next_field - field_start_line;
 
     return next_field;
 }

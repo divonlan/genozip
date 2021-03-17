@@ -1040,7 +1040,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
                 "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                 txt_name, dl->seq_len, value_len, value_len, value);
 
-        PosType this_pos = vb->contexts[SAM_POS].last_value.i;
+        PosType this_pos = vb->last_int(SAM_POS);
         sam_seg_seq_field (vb, SAM_E2_Z, (char *)value, value_len, this_pos, vb->last_cigar, 0, value_len, // remove const bc SEQ data is actually going to be modified
                            vb->last_cigar, add_bytes); 
     }

@@ -14,7 +14,6 @@ Base250 base250_encode (WordIndex n) // number to encode
     // note: the actual maximum that the format can carry is 250*256*256*256-1 but we restrict it to MAX_WORD_INDEX
     ASSERTE (n >= 0 && n <= MAX_WORD_INDEX, "n=%d is out of range 0-%u", n, MAX_WORD_INDEX);
 
-    // get numberals in base 250 (i.e. each numeral is 0 to 249) - least-signifcant-first order (little endian)
     Base250 result;
     result.n = n;
     if (n <= 2) {

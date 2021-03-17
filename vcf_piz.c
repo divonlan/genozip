@@ -22,26 +22,48 @@
 // returns true if section is to be skipped reading / uncompressing
 bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
-    if (flag.drop_genotypes && // note: if all samples are filtered out with --samples then flag.drop_genotypes=true (set in samples_digest_vcf_header)
+    if (flag.drop_genotypes && // note: if all samples are filtered out with --samples then flag.drop_genotypes=true (set in vcf_samples_analyze_field_name_line)
         (dict_id.num == dict_id_fields[VCF_FORMAT] || dict_id.num == dict_id_fields[VCF_SAMPLES] || dict_id_is_vcf_format_sf (dict_id)))
         return true;
 
-    if (flag.gt_only && (dict_id_is_vcf_format_sf (dict_id) && dict_id.num != dict_id_FORMAT_GT))
+    if (flag.gt_only && dict_id_is_vcf_format_sf (dict_id) 
+        && dict_id.num != dict_id_FORMAT_GT
+        && dict_id.num != dict_id_FORMAT_GT_HT
+        && dict_id.num != dict_id_FORMAT_GT_HT_INDEX
+        && dict_id.num != dict_id_FORMAT_GT_SHARK_DB
+        && dict_id.num != dict_id_FORMAT_GT_SHARK_GT
+        && dict_id.num != dict_id_FORMAT_GT_SHARK_EX
+        && dict_id.num != dict_id_PBWT_RUNS
+        && dict_id.num != dict_id_PBWT_FGRC)
         return true;
 
     return false;
 }
 
+// filter is called before reconstruction of a repeat or an item, and returns false if item should 
+// not be reconstructed. contexts are not consumed.
 CONTAINER_FILTER_FUNC (vcf_piz_filter)
 {
-    if (dict_id.num == dict_id_fields[VCF_SAMPLES]) {
-        if (item < 0)  // filter for repeat
-            return samples_am_i_included (rep); 
+    if (flag.gt_only && dict_id.num == dict_id_fields[VCF_SAMPLES] && item >= 0
+        && con->items[item].dict_id.num != dict_id_FORMAT_GT) 
+        return false; 
 
-        else // filter for item
-            if (flag.gt_only) return con->items[item].dict_id.num == dict_id_FORMAT_GT;
+    // in dual-coordinates files - get the oSTATUS at the beginning of each line
+    else if (item >= 0 && con->items[item].dict_id.num == dict_id_fields[VCF_oSTATUS]) {
+        if (z_file->z_flags.dual_coords)
+            *reconstruct = false; // set last_index, without reconstructing
+        else
+            return false; // filter out entirely without consuming (non-DC files have no oStatus data)
     }
 
+    // for dual-coordinate genozip files - in which rows capable of liftover have both 
+    // INFO/LIFTOVER and INFO/LIFTBACK subfields - we select which one to filter out based on flag.laft
+    else if (item >= 0 && con->items[item].dict_id.num == dict_id_INFO_LIFTOVER && flag.laft)
+        return false;
+        
+    else if (item >= 0 && con->items[item].dict_id.num == dict_id_INFO_LIFTBACK && !flag.laft)
+        return false;
+        
     return true;    
 }
 
@@ -57,7 +79,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
     if (reconstruct) {
         if (flag.gt_only) {
             if (has_GT)
-                RECONSTRUCT ("GT\t", 3)
+                RECONSTRUCT ("GT\t", 3);
         }
         else 
             RECONSTRUCT (snip, snip_len);
@@ -90,9 +112,9 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_REFALT)
     char ref_alt[3] = { 0, '\t', 0 };
     char ref_value = 0;
     
-    PosType pos = vb->contexts[VCF_POS].last_value.i;
-
     if (snip[0] == '-' || snip[1] == '-') { 
+        PosType pos = vb->last_int (VCF_POS);
+
         const Range *range = ref_piz_get_range (vb, pos, 1);
         ASSERTE (range, "failed to find range for chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
         
@@ -157,7 +179,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DS)
     if (!vcf_vb->gt_ctx) vcf_vb->gt_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT);
 
     // we are guaranteed that if we have a special snip, then all values are either '0' or '1';
-    char *gt = ENT (char, vb->txt_data, vcf_vb->gt_ctx->last_txt);
+    char *gt = last_txt (vb, vcf_vb->gt_ctx->did_i);
     unsigned dosage=0;
     for (unsigned i=0; i < vcf_vb->gt_ctx->last_txt_len; i+=2) 
         dosage += gt[i]-'0';
@@ -176,7 +198,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_BaseCounts)
 {
     Context *ctx_refalt = &vb->contexts[VCF_REFALT];
     ASSERTE (ctx_refalt->last_txt_len == 3, "Expecting ctx_refalt->last_txt_len=%u to be 3", ctx_refalt->last_txt_len);
-    const char *refalt = ENT (const char, vb->txt_data, ctx_refalt->last_txt);
+    const char *refalt = last_txt (vb, VCF_REFALT);
 
     uint32_t counts[4], sorted_counts[4] = {}; // counts of A, C, G, T
 
@@ -213,7 +235,7 @@ done:
 #define sample_i   vcf_vb->sf_ctx->last_value.i
 #define snip_i     vcf_vb->sf_snip.param
 
-// leave space for reconstructing FS - actual reconstruction will be in vcf_piz_container_cb
+// leave space for reconstructing SF - actual reconstruction will be in vcf_piz_container_cb
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_SF)
 {
     VBlockVCFP vcf_vb = (VBlockVCFP)vb;
@@ -237,87 +259,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SF)
     return false; // no new value
 }
 
-CONTAINER_CALLBACK (vcf_piz_container_cb)
-{
-    VBlockVCFP vcf_vb = (VBlockVCFP)vb;
-    ARRAY (char, snip, vcf_vb->sf_snip);
-
-    // case: we have an INFO/SF field (since this callback is set) and we reconstructed the first ht in a sample 
-    if (dict_id.num == dict_id_FORMAT_GT) {
-        
-        if (rep != 0) return; // we only look at the first ht in a sample, and only if its not '.'
-
-        if (*reconstructed == '.' || *reconstructed == '%') { // . can be written as % in vcf_seg_FORMAT_GT
-            sample_i++;
-            return;
-        }
-
-        while (snip_i < vcf_vb->sf_snip.len) {
-
-            buf_alloc_more (vb, &vcf_vb->sf_txt, 12, 0, char, 2, "sf_txt"); // sufficient for int32 + ','
-
-            int32_t adjusted_sample_i = (int32_t)(sample_i + adjustment); // last_delta is the number of values in SF that are not in samples
-
-            // case: we derive the value from sample_i
-            if (snip[snip_i] == ',') {
-                snip_i++;
-
-                buf_add_int (vb, &vcf_vb->sf_txt, adjusted_sample_i);
-
-                if (snip_i < vcf_vb->sf_snip.len) // add comma if not done yet
-                    NEXTENT (char, vcf_vb->sf_txt) = ',';
-
-                break;
-            }
-
-            // case: sample was not used to derive any value
-            if (snip[snip_i] == '~') {
-                snip_i++;
-                break;
-            }
-
-            // case: value quoted verbatim - output and continue searching for , or ~ for this sample
-            else {
-                char *comma = strchr (&snip[snip_i], ',');
-                unsigned len = comma - &snip[snip_i];
-                bool add_comma = (snip_i + len + 1 < vcf_vb->sf_snip.len); // add comma if not last
-
-                buf_add (&vcf_vb->sf_txt, &snip[snip_i], len + add_comma);
-                snip_i += len + 1;
-
-                adjustment++;
-            }
-        }
-
-        sample_i++;
-    }
-
-    // case: we have an INFO/SF field (since this callback is set) and we reconstructed the completed one VCF line - finish reconstructing the SF field 
-    else if (dict_id.num == dict_id_fields[VCF_TOPLEVEL] && vcf_vb->sf_snip.len) {
-
-        // if there are some items remaining in the snip (values that don't appear in samples) - copy them
-        if (snip_i < vcf_vb->sf_snip.len) {
-            unsigned remaining_len = vcf_vb->sf_snip.len - snip_i - 1; // all except the final comma
-            buf_alloc_more (vb, &vcf_vb->sf_txt, remaining_len, 0, char, 2, "sf_txt");
-            buf_add (&vcf_vb->sf_txt, ENT (char, vcf_vb->sf_snip, snip_i), remaining_len); 
-        }
-
-        // make room for the SF txt and copy it to its final location
-        char *sf_txt = ENT (char, vb->txt_data, vcf_vb->sf_ctx->last_txt);
-        memmove (sf_txt + vcf_vb->sf_txt.len, sf_txt, AFTERENT (char, vb->txt_data) - sf_txt); // make room
-        memcpy (sf_txt, vcf_vb->sf_txt.data, vcf_vb->sf_txt.len); // copy
-
-        vb->txt_data.len += vcf_vb->sf_txt.len;
-
-        buf_free (&vcf_vb->sf_snip);
-        buf_free (&vcf_vb->sf_txt);
-    }
-}
-
-#undef sample_i
-#undef adjustment
-#undef snip_i
-
 // the case where SVLEN is minus the delta between END and POS
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVLEN)
 {
@@ -331,4 +272,291 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVLEN)
 done:
     return false; // no new value
 }
+
+// While reconstructing the GT fields of the samples - calculate the INFO/SF field
+static void inline vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *reconstructed, int32_t reconstructed_len)
+{
+    if (rep != 0) return; // we only look at the first ht in a sample, and only if its not '.'/'%'
+
+    if (*reconstructed == '.' || *reconstructed == '%') { // . can be written as % in vcf_seg_FORMAT_GT
+        sample_i++;
+        return;
+    }
+
+    ARRAY (const char, sf_snip, vcf_vb->sf_snip);
+
+    while (snip_i < sf_snip_len) {
+
+        buf_alloc_more (vcf_vb, &vcf_vb->sf_txt, 12, 0, char, 2, "sf_txt"); // sufficient for int32 + ','
+
+        int32_t adjusted_sample_i = (int32_t)(sample_i + adjustment); // last_delta is the number of values in SF that are not in samples
+
+        // case: we derive the value from sample_i
+        if (sf_snip[snip_i] == ',') {
+            snip_i++;
+
+            buf_add_int ((VBlockP)vcf_vb, &vcf_vb->sf_txt, adjusted_sample_i);
+
+            if (snip_i < sf_snip_len) // add comma if not done yet
+                NEXTENT (char, vcf_vb->sf_txt) = ',';
+
+            break;
+        }
+
+        // case: sample was not used to derive any value
+        if (sf_snip[snip_i] == '~') {
+            snip_i++;
+            break;
+        }
+
+        // case: value quoted verbatim - output and continue searching for , or ~ for this sample
+        else {
+            char *comma = strchr (&sf_snip[snip_i], ',');
+            unsigned len = comma - &sf_snip[snip_i];
+            bool add_comma = (snip_i + len + 1 < sf_snip_len); // add comma if not last
+
+            buf_add (&vcf_vb->sf_txt, &sf_snip[snip_i], len + add_comma);
+            snip_i += len + 1;
+
+            adjustment++;
+        }
+    }
+
+    sample_i++;
+}
+
+// Upon completing the line - insert the calculated INFO/SF field to its place
+static void inline vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
+{
+    ARRAY (const char, sf_snip, vcf_vb->sf_snip);
+
+    // if there are some items remaining in the snip (values that don't appear in samples) - copy them
+    if (snip_i < sf_snip_len) {
+        unsigned remaining_len = sf_snip_len - snip_i - 1; // all except the final comma
+        buf_add_more (vcf_vb, &vcf_vb->sf_txt, &sf_snip[snip_i], remaining_len, "sf_txt"); 
+    }
+
+    // make room for the SF txt and copy it to its final location
+    char *sf_txt = last_txt (vcf_vb, vcf_vb->sf_ctx->did_i);
+    memmove (sf_txt + vcf_vb->sf_txt.len, sf_txt, AFTERENT (char, vcf_vb->txt_data) - sf_txt); // make room
+    memcpy (sf_txt, vcf_vb->sf_txt.data, vcf_vb->sf_txt.len); // copy
+
+    vcf_vb->txt_data.len += vcf_vb->sf_txt.len;
+
+    buf_free (&vcf_vb->sf_snip);
+    buf_free (&vcf_vb->sf_txt);
+}
+
+static void inline vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, int32_t reconstructed_len)
+{
+    if (!samples_am_i_included (rep))
+        vb->txt_data.len -= reconstructed_len;
+}
+
+// ---------------------------------------------------------------------------------
+// Translators and Special functions for Laft (secondary coordinates) reconstruction
+// Invoked by genocat --laft
+// ---------------------------------------------------------------------------------
+
+// Translator called for CHROM (main field) if genocat --laft. if LO_OK, replaces CHROM with oCHROM, and saves CHROM in vb->liftover.
+TRANSLATOR_FUNC (vcf_piz_laft_CHROM)
+{
+    if (vb->is_rejects_vb) return 0;
+
+    // note: we have oSTATUS snips for all lines, but oCHROM, oPOS, oREF snips only for the lines with LO_OK
+    if (vb->last_index (VCF_oSTATUS) != LO_OK) return 0;
+
+    // save the primary-coord chrom in liftback (this is part of INFO/LIFTBACK used in vcf_piz_special_LIFTBACK)
+    Buffer *liftback = &((VBlockVCF *)vb)->liftover;
+    liftback->len = 0;
+    buf_alloc (vb, liftback, reconstructed_len + 100, 0, "liftover"); // enough for POS (9 chars), and usually also REFALT
+    bufprintf (vb, liftback, "%.*s,", reconstructed_len, reconstructed);
+
+    // delete the primary-coord chrom
+    vb->txt_data.len -= reconstructed_len;
+
+    reconstruct_from_ctx (vb, VCF_oCHROM, 0, true);
+    return 0;    
+}
+
+// Translator called for POS (main field) if genocat --laft. if LO_OK, replaces POS with oPOS, and saves POS in vb->liftover.
+// (if not LO_OK, line will be dropped by vcf_piz_container_cb)
+TRANSLATOR_FUNC (vcf_piz_laft_POS)
+{
+    if (vb->is_rejects_vb || vb->last_index (VCF_oSTATUS) != LO_OK) return 0;
+
+    // save the primary-coord chrom in liftback (this is part of INFO/LIFTBACK used in vcf_piz_special_LIFTBACK)
+    bufprintf (vb, &((VBlockVCF *)vb)->liftover, "%.*s,", reconstructed_len, reconstructed);
+
+    // delete the primary-coord pos
+    vb->txt_data.len -= reconstructed_len;
+
+    reconstruct_from_ctx (vb, VCF_oPOS, 0, true);
+    
+    return 0;    
+}
+
+// Translator called for REFALT (main field) if genocat --laft. if LO_OK, replaces REFALT with oREF + calculated oALT
+// and saves REF in vb->liftover (actually liftback).
+// -f REF != oREF and oREF=ALT, swaps REF and ALT, inc. in nagative strand. vb->liftover updated.
+// This is the only form of REF change supported by genozip currently, other changes will 
+// be set by Seg as LO_UNSUPPORTED. 
+TRANSLATOR_FUNC (vcf_piz_laft_REFALT)
+{
+    if (vb->is_rejects_vb || vb->last_index (VCF_oSTATUS) != LO_OK) return 0;
+
+    // save the primary-coord chrom in liftback (this is part of INFO/LIFTBACK used in vcf_piz_special_LIFTBACK)
+    Buffer *liftback = &((VBlockVCF *)vb)->liftover;
+    buf_add_more (vb, liftback, reconstructed, reconstructed_len, "liftover");
+
+    // split REFALT
+    const char *ref_alt[2]; unsigned ref_alt_lens[2];
+    ASSERTE (str_split (reconstructed, reconstructed_len, 2, '\t', ref_alt, ref_alt_lens), 
+             "expecting one tab in the REFALT snip: \"%.*s\"", reconstructed_len, reconstructed);
+
+    liftback->len -= ref_alt_lens[1] + 1; // remove \tALT from INFO/LIFTBACK data (but data is still in the buffer...)
+
+    // reconstruct oREF, overwriting REFALT
+    uint64_t txt_data_len_with_refalt = vb->txt_data.len;    
+    vb->txt_data.len -= reconstructed_len;
+
+    reconstruct_from_ctx (vb, VCF_oREF, '\t', true); // reconstructs special snip using vcf_piz_special_OREF
+
+    // case: REF unchanged - oALT is ALT - just restore the length
+    if (vb->last_int (VCF_oREF) == 0) // oREF value stored in vcf_piz_special_OREF()
+        vb->txt_data.len = txt_data_len_with_refalt;
+
+// TODO - the old ALT to be rev complemented in strand=-
+
+    // case: REF and ALT were switched - oALT is REF
+    else 
+// TODO - the new ALT to be rev complemented in strand=-
+        RECONSTRUCT (ref_alt[0], ref_alt_lens[0]);
+
+    return 0;    
+}
+
+// used for:
+// 1. Primary VCF - reconstruct oREF in INFO/LIFTOVER (reconstruction invoked from LIFTOVER container)
+// 2. Laft VCF    - reconstruct oREF in primary REF field (reconstruction invoked by vcf_piz_laft_REFALT translator)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_OREF)
+{
+    // make a copy of refalt, as we will be overwriting it (since call from from vcf_piz_laft_REFALT)
+    unsigned ref_alt_str_len = vb->last_txt_len (VCF_REFALT);
+    char ref_alt_str[ref_alt_str_len];
+    memcpy (ref_alt_str, last_txt (vb, VCF_REFALT), ref_alt_str_len);
+
+    const char *ref_alt[2]; unsigned ref_alt_len[2];
+    ASSERTE (str_split (ref_alt_str, ref_alt_str_len, 2, '\t', ref_alt, ref_alt_len),
+             "expecting one tab in the REFALT snip: \"%.*s\"", ref_alt_str_len, ref_alt_str);
+
+    if (snip_len==1 && *snip=='0')      // ALT
+        RECONSTRUCT (ref_alt[1], ref_alt_len[1]);
+
+    else if (snip_len==1 && *snip=='1') // REF
+        RECONSTRUCT (ref_alt[0], ref_alt_len[0]);
+
+    else
+        ABORT ("Invalid OREF special snip: %.*s", snip_len, snip);
+
+    new_value->i = *snip - '0';
+    return true; // new_value was set
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFTREJD)
+{
+    ctx_get_snip_by_word_index (&vb->contexts[VCF_oSTATUS], vb->last_index(VCF_oSTATUS), &snip, &snip_len);
+    RECONSTRUCT (snip, snip_len);
+    return false; // new_value was not set
+}
+
+// reconstruct LIFTBACK - from CHROM,POS,REF previously reconstructed and stored in vb->liftover, and oSTRAND, oALTRULE, oSTATUS
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFTBACK)
+{
+    ARRAY (char, liftover, ((VBlockVCF *)vb)->liftover);
+    
+    RECONSTRUCT_SEP (liftover, liftover_len, ',');            
+    reconstruct_from_ctx (vb, VCF_oSTRAND, ',', true);
+    reconstruct_from_ctx (vb, VCF_oALTRULE,  0, true);
+
+    return false; // new_value was not set
+}
+
+// Callback at the end of reconstructing a VCF line with --laft, i.e. with laft coordinates:
+// we drop lines that failed liftovers. Seperately, these lines will be preserved in the VCF header.
+void vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (VBlock *vb)
+{
+    // conditions for dropping a line in --laft
+    if ((!vb->is_rejects_vb && vb->last_index (VCF_oSTATUS) != LO_OK) || // drop primary lines that are rejected
+        ( vb->is_rejects_vb && (flag.no_header || flag.header_one)))     // drop rejects in --no-header or --header-one 
+        vb->txt_data.len = vb->line_start;
+}
+
+TRANSLATOR_FUNC (vcf_piz_laft_AC)
+{
+    
+    return 0;    
+}
+
+TRANSLATOR_FUNC (vcf_piz_laft_AF)
+{
+    
+    return 0;    
+}
+
+TRANSLATOR_FUNC (vcf_piz_laft_AD)
+{
+    
+    return 0;    
+}
+
+TRANSLATOR_FUNC (vcf_piz_laft_END)
+{
+    
+    return 0;    
+}
+
+TRANSLATOR_FUNC (vcf_piz_laft_GT)
+{
+    
+    return 0;    
+}
+
+TRANSLATOR_FUNC (vcf_piz_laft_GL)
+{
+    return 0;    
+}
+
+// ------------------------------------
+// callback called after reconstruction
+// ------------------------------------
+
+CONTAINER_CALLBACK (vcf_piz_container_cb)
+{
+    VBlockVCFP vcf_vb = (VBlockVCFP)vb;
+    bool have_INFO_SF = vcf_vb->sf_snip.len > 0;
+
+    // case: we have an INFO/SF field and we reconstructed and we reconstructed a repeat (i.e. one ht) GT field of a sample 
+    if (dict_id.num == dict_id_FORMAT_GT && have_INFO_SF) 
+        vcf_piz_GT_cb_calc_INFO_SF (vcf_vb, rep, reconstructed, reconstructed_len);
+
+    else if (dict_id.num == dict_id_fields[VCF_TOPLEVEL]) {
+
+        // case: we have an INFO/SF field and we reconstructed one VCF line
+        if (have_INFO_SF) 
+            vcf_piz_TOPLEVEL_cb_insert_INFO_SF (vcf_vb); // cleans up allocations - call even if line will be dropped due oSTATUS
+
+        // case: we are reconstructing with --laft and we reconstructed one VCF line
+        if (flag.laft) 
+            vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (vb);
+    }
+
+    else if (dict_id.num == dict_id_fields[VCF_SAMPLES] && flag.samples) 
+        vcf_piz_SAMPLES_subset_samples (vcf_vb, rep, reconstructed_len);
+}
+
+
+#undef sample_i
+#undef adjustment
+#undef snip_i
 

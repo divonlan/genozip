@@ -64,6 +64,8 @@ static void print_call_stack (void)
 static bool im_in_main_exit = false, exit_completed = false;
 void main_exit (bool show_stack, bool is_error) 
 {
+    fflush (stderr);
+
     im_in_main_exit = true;
 
     if (show_stack) print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
@@ -221,7 +223,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
             if (flag.bytes) 
                 bufprintf (evb, &str_buf, foot_format_bytes, str_int_s (total_compressed_len).s, 
-                           str_int_s (total_uncompressed_len).s, ratio < 100, ratio)
+                           str_int_s (total_uncompressed_len).s, ratio < 100, ratio);
             else 
                 bufprintf (evb, &str_buf, foot_format, str_size(total_compressed_len).s, 
                            str_size(total_uncompressed_len).s, ratio < 100, ratio);
@@ -235,7 +237,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     if (first_file) {
         if (flag.bytes) 
-            bufprintf (evb, &str_buf, head_format_bytes, "Type", "Records", "Compressed", "Original", "Factor", -(int)FILENAME_WIDTH, "Name")
+            bufprintf (evb, &str_buf, head_format_bytes, "Type", "Records", "Compressed", "Original", "Factor", -(int)FILENAME_WIDTH, "Name");
         else
             bufprintf (evb, &str_buf, head_format, "Type", "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
         
@@ -268,7 +270,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
                    str_int_s (z_file->disk_size).s, str_int_s (txt_data_size).s, ratio < 100, ratio, 
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
-                   z_filename)
+                   z_filename);
     else 
         bufprintf (evb, &str_buf, item_format, dt_name (dt), str_uint_commas (num_lines).s,
                    str_size (z_file->disk_size).s, str_size (txt_data_size).s, ratio < 100, ratio, 
@@ -343,8 +345,6 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     SAVE_FLAGS;
 
     static bool is_first_z_file = true;
-
-    txtfile_header_initialize();
     
     // get input FILE
     ASSERTE0 (z_filename, "z_filename is NULL");
@@ -375,7 +375,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         flag.out_dt = DT_SAM;
 
     // if this is a bound file, and we don't have --unbind or --force, we ask the user
-    if (z_file->num_components >= 2 && !flag.unbind && !flag.force && !flag.out_filename)
+    if (z_file->num_components >= (2 + z_file->z_flags.dual_coords) && !flag.unbind && !flag.force && !flag.out_filename)
         main_ask_about_unbind();
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
@@ -434,6 +434,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     
     // free memory 
     ref_destroy_reference();
+
     vb_destroy_all_vbs();
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
@@ -522,15 +523,19 @@ static void main_genozip (const char *txt_filename,
         main_genozip_open_z_file_write (&z_filename);
     }
 
-    stats_add_txt_name (txt_name); // add txt file name to stats data stored in z_file
+    if (!flag.processing_rejects)
+        stats_add_txt_name (txt_name); // add txt file name to stats data stored in z_file
+
+    TEMP_FLAG (quiet, flag.processing_rejects); // no warnings when (re) processing rejects
 
     flags_update_zip_one_file();
 
     bool z_closes_after_me = is_last_txt_file || flag.bind==BIND_NONE || (flag.bind==BIND_PAIRS && txt_file_i%2);
 
-    zip_one_file (txt_file->basename, is_last_txt_file, z_closes_after_me);
+    zip_one_file (txt_file->basename, &is_last_txt_file, z_closes_after_me);
 
-    if (flag.show_stats && z_closes_after_me) stats_display();
+    if (flag.show_stats && z_closes_after_me && 
+        (!z_file->z_flags.dual_coords || flag.processing_rejects)) stats_display();
 
     bool remove_txt_file = z_file && flag.replace && txt_filename;
 
@@ -538,19 +543,36 @@ static void main_genozip (const char *txt_filename,
 
     // close the file if its an open disk file AND we need to close it
     if (!flag.to_stdout && z_file && z_closes_after_me) {
-        if (!z_filename) { z_filename = z_file->name ; z_file->name = 0; } // take over the name if we don't have it (eg 2nd file in a pair)
-        file_close (&z_file, false, !is_last_txt_file); 
+
+        // if this is a dual coords file, recursively call to add the rejects file, and close z_file there.
+        if (z_file->z_flags.dual_coords && !flag.processing_rejects) {
+            flag.processing_rejects = true;
+            z_closes_after_me = false;
+            TEMP_FLAG (bind, BIND_REJECTS);            
+            main_genozip (z_file->rejects_file_name, 0, z_file->name, txt_file_i, true, exec_name);
+            RESTORE_FLAG (bind);
+        }
+        else {
+            if (!z_filename) { z_filename = z_file->name ; z_file->name = 0; } // take over the name if we don't have it (eg 2nd file in a pair)
+            file_close (&z_file, false, !is_last_txt_file); 
+        }
     }
 
     if (remove_txt_file) file_remove (txt_filename, true); 
+
+    RESTORE_FLAG (quiet); // don't pass on quiet to test, just because we turned it on for rejects 
 
     // test the compression, if the user requested --test
     if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_txt_file);
 
 done: {
     SAVE_FLAG(vblock_memory);  
+    SAVE_FLAG(data_modified);
+    
     RESTORE_FLAGS;
+    
     if (flag.pair) RESTORE_FLAG (vblock_memory); // FASTQ R2 must have the same vblock_memory as R1, so it should not re-calculate in zip_dynamically_set_max_memory - otherwise txtfile_read_vblock will fail
+    if (flag.bind) RESTORE_FLAG (data_modified); // When binding, if any of the compressed files is a Laft, we don't store digests
 }}
 
 static void main_list_dir(const char *dirname)
@@ -716,10 +738,10 @@ int main (int argc, char **argv)
     RESTORE_FLAG (quiet);
     
     // determine how many threads we have - either as specified by the user, or by the number of cores
-    if (flag.threads_str) {
-        int ret = sscanf (flag.threads_str, "%u", &global_max_threads);
-        ASSINP (ret == 1 && global_max_threads >= 1, "%s requires an integer value of at least 1", OT("threads", "@"));
-    }
+    if (flag.threads_str) 
+        ASSINP (str_get_int_range32 (flag.threads_str, 0, 1, 10000, (int32_t *)&global_max_threads),
+                "invalid argument of --threads: \"%s\". Expecting an integer between 1 and 10000.", flag.threads_str);
+
     else global_max_threads = (double)arch_get_num_cores() * 1.2; // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
     
     // handle all commands except for ZIP, PIZ or LIST
@@ -732,13 +754,24 @@ int main (int argc, char **argv)
     // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
     if (command == ZIP) license_get(); 
 
-    if (flag.reading_chain)
-        chain_load_chain();
+    if (flag.reading_chain) {
+        chain_load();
+/*        num_files++; // in liftover, we bind with the rejects file
+        flag.bind = BIND_ALL; */
+    }
 
     for (unsigned file_i=0, z_file_i=0; file_i < MAX (num_files, 1); file_i++) {
-        char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
-        
-        if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
+
+        // get file name
+        char *next_input_file;
+   /*     if (command == ZIP && chain_is_loaded && file_i == num_files-1) {
+            next_input_file = z_file->rejects_file_name; // in lift over, last file is the rejects file
+            flag.processing_rejects = true;
+        }
+        else {*/
+            next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
+            if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
+        //}
 
         ASSINP0 (next_input_file || command != PIZ, "filename(s) required (redirecting from stdin is not possible)");
 

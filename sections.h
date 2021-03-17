@@ -80,7 +80,16 @@ typedef union SectionFlags {
         uint8_t txt_is_bin       : 1;        // Source file is binary (BAM)
         uint8_t bgzf             : 1;        // Reconstruct as BGZF (user may override) (determined by the last component)
         uint8_t adler            : 1;        // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
+        uint8_t dual_coords      : 1;        // file supports dual coordinates - last TXT section is the "liftover rejects" data
     } genozip_header;
+
+    struct FlagsTxtHeader {
+        uint8_t liftover_rejects : 1;        // this component is the "liftover rejects" component
+    } txt_header;
+
+    struct FlagsVbHeader {
+        uint8_t unused : 8;
+    } vb_header;
 
     struct FlagsBgzf {
         uint8_t has_eof_block    : 1;

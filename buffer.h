@@ -76,20 +76,20 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                               const char *name);
 
 // efficient wrapper
-#define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name) { \
+#define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name) do { \
     uint64_t new_req_size = (requested_size); /* make copy to allow ++ */ \
     ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name)) \
                                                     : (buf)->size); \
-}
+} while(0)
 
 #define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor,name) \
     buf_alloc ((VBlockP)(vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
 
-#define buf_alloc_more_zero(vb, buf, more, at_least, type, grow_at_least_factor,name) { \
+#define buf_alloc_more_zero(vb, buf, more, at_least, type, grow_at_least_factor,name) do { \
     uint64_t size_before = (buf)->size; \
     buf_alloc_more((vb), (buf), (more), (at_least), type, (grow_at_least_factor), (name)); \
     if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
-}
+} while(0)
 
 extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, const char *func, uint32_t code_line, const char *name);
 #define buf_mmap(vb, buf, filename, name) \
@@ -132,29 +132,39 @@ extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 
 #define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
 
-#define buf_add(buf, new_data, new_data_len) { \
-    uint32_t new_len = (new_data_len); /* copy in case caller uses ++ */ \
+#define buf_add(buf, new_data, new_data_len) do { \
+    uint32_t new_len = (uint32_t)(new_data_len); /* copy in case caller uses ++ */ \
     ASSERTE (buf_has_space(buf, new_len), \
             "Error in buf_add: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
             buf_desc (buf).s, (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
     memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
     (buf)->len += new_len; \
-}
+} while(0)
+
+#define buf_add_more(vb, buf, new_data, new_data_len, name) do { \
+    uint32_t new_len = (uint32_t)(new_data_len); /* copy in case caller uses ++ */ \
+    if (new_len) { \
+        buf_alloc_more ((vb), (buf), (new_len), (buf)->len+(new_len)+1 /* room for \0 or seperator */, char, 1.5, (name)); \
+        memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
+        (buf)->len += new_len; \
+    } \
+} while(0)
 
 extern void buf_add_string (VBlockP vb, Buffer *buf, const char *str);
 extern void buf_add_int (VBlockP vb, Buffer *buf, int64_t value);
 
-#define buf_add_vector(vb, type, dst, src, name)  \
+#define buf_add_vector(vb, type, dst, src, name) do { \
     if ((src).len) { \
         if (!(dst).len) \
             buf_copy ((vb), &(dst), &(src), sizeof (type), 0, 0, name); \
         else \
             for (uint64_t i=0; i < (src).len; i++) \
                 *ENT (type, (dst), i) += *ENT (type, (src), i); \
-    }
+    } \
+} while(0)
 
 #define BUFPRINTF_MAX_LEN 5000
-#define bufprintf(vb, buf, format, ...)  { char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_add_string ((vb), (buf), __s); }
+#define bufprintf(vb, buf, format, ...)  do { char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_add_string ((vb), (buf), __s); } while (0)
 
 extern void buf_print (Buffer *buf, bool add_newline);
 
@@ -170,14 +180,14 @@ typedef struct {
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
 extern void buf_display_memory_usage_handler (int sig);
 
-#define buf_set(buf_p,value) { if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); }
+#define buf_set(buf_p,value) do { if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); } while(0)
 #define buf_zero(buf_p) buf_set(buf_p, 0)
 
 extern void buf_add_to_buffer_list (VBlockP vb, Buffer *buf);
 extern void buf_remove_from_buffer_list (Buffer *buf);
 
 extern void buf_low_level_free (void *p, const char *func, uint32_t code_line);
-#define FREE(p) { if (p) { buf_low_level_free (((void*)p), __FUNCTION__, __LINE__); p=NULL; } }
+#define FREE(p) do { if (p) { buf_low_level_free (((void*)p), __FUNCTION__, __LINE__); p=NULL; } } while(0)
 
 extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t code_line);
 #define MALLOC(size) buf_low_level_malloc (size, false, __FUNCTION__, __LINE__)

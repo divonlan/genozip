@@ -206,7 +206,7 @@ bool sam_header_inspect (BufferP txt_header)
 // returns header length if header read is complete + sets lines.len, -1 not complete yet 
 // note: usually a BAM header fits into a single 512KB READ BUFFER, so this function is called only twice (without and then with data).
 // callback from DataTypeProperties.is_header_done
-int32_t bam_is_header_done (void)
+int32_t bam_is_header_done (bool is_eof)
 {
     uint32_t next=0;
 
@@ -251,8 +251,11 @@ static inline void txtheader_sam_add_PG (Buffer *txtheader_buf)
 
     uint32_t unique_id = libdeflate_adler32 (1, &tb, sizeof (tb));
 
-    bufprintf (evb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:%s\n", 
-               unique_id, GENOZIP_URL, GENOZIP_CODE_VERSION, flags_command_line()->data);
+    // the command line length is unbound, careful not to put it in a bufprintf
+    bufprintf (evb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
+               unique_id, GENOZIP_URL, GENOZIP_CODE_VERSION);
+    buf_add_string (evb, txtheader_buf, flags_command_line()->data);
+    buf_add_string (evb, txtheader_buf, "\n");
 }
 
 // PIZ I/O thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file

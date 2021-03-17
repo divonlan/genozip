@@ -64,7 +64,7 @@ static void stats_check_count (uint64_t all_z_size, const int *count_per_section
           str_uint_commas (all_z_size).s, str_uint_commas (z_file->disk_so_far).s, (int32_t)(z_file->disk_so_far - all_z_size));
 }
 
-static void stats_show_file_metadata (Buffer *buf)
+static void stats_output_file_metadata (Buffer *buf)
 {
     bufprintf (evb, buf, "%s", "\n\n");
     if (txt_file->name) 
@@ -83,11 +83,11 @@ static void stats_show_file_metadata (Buffer *buf)
                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines).s, z_file->num_contexts, 
                z_file->num_vbs, (uint32_t)(flag.vblock_memory >> 20), (uint32_t)z_file->section_list_buf.len);
 
-    char timestr[100];
-    time_t now = time (NULL);
-    strftime (timestr, 100, "%Y-%m-%d %H:%M:%S", localtime (&now));
-    bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s %s\n", 
-               GENOZIP_CODE_VERSION, arch_get_distribution(), timestr, tzname[daylight]);
+    if (chain_is_loaded || txt_file->dual_coords) 
+        bufprintf (evb, buf, "Features: Dual-coordinates\n%s", "");
+
+    bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
+               GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
 }
 
 typedef struct {
@@ -239,8 +239,8 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 
 // generate the stats text - all sections except genozip header and the two stats sections 
 void stats_compress (void)
-{
-    stats_show_file_metadata(&z_file->stats_buf);
+{    
+    stats_output_file_metadata(&z_file->stats_buf);
     buf_copy (evb, &z_file->STATS_buf, &z_file->stats_buf, 0,0,0, "z_file->STATS_buf");
 
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_size=0;
@@ -350,7 +350,7 @@ void stats_compress (void)
 
     // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_so_far is 
     // missing, while txt_data_so_far_single is what was actually processed
-    ASSERTW (all_txt_size == z_file->txt_data_so_far_bind || flag.optimize || flag.make_reference, 
+    ASSERTW (all_txt_size == z_file->txt_data_so_far_bind || flag.data_modified || flag.make_reference, 
              "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), str_uint_commas (all_txt_size).s, str_uint_commas (z_file->txt_data_so_far_bind).s, 
              (int32_t)(z_file->txt_data_so_far_bind - all_txt_size)); 

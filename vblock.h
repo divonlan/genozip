@@ -13,6 +13,7 @@
 #include "context.h"
 #include "bit_array.h"
 #include "data_types.h"
+#include "sections.h"
 
 #define NUM_CODEC_BUFS 7       // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
                                // if updating, also update array in codec_alloc()
@@ -101,6 +102,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     Buffer compressed;         /* helper buffer for writing to/from zfile: used by various functions. user must assert that its free before use, and buf_free after use. */\
     \
+    struct FlagsVbHeader vb_header_flags; /* these will go into the VB header */ \
+    \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
     DidIType num_contexts;     /* total number of dictionaries of all types */\
     Context contexts[MAX_DICTS];    \
@@ -110,6 +113,13 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     RangeP prev_range;         /* previous range returned by ref_seg_get_locked_range */ \
     uint32_t prev_range_range_i; /* range_i used to calculate previous range */ \
     WordIndex prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
+    \
+    /* liftover stuff */ \
+    bool is_rejects_vb; \
+    Buffer liftover;           /* ZIP: map from chrom_node_index (not word index!) to entry in chain_index */ \
+                               /* PIZ VCF: in --laft, the data that will go into INFO/LIFTBACK */ \
+    Buffer liftover_rejects;   /* ZIP generating a dual-coordinate file: txt lines rejected for liftover */ \
+    int32_t laft_reject_bytes; /* ZIP of a Laft file: number of bytes of reject data in this VB */ \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\

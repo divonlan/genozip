@@ -115,6 +115,10 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
+.. option:: --show-chain  Z. Show chain file alignments when loading a chain file with --chain.
+
+          |
+
 **Tracking execution**
 
 .. option:: --show-containers  ZUC. Show flow of containers.

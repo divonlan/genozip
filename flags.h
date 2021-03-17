@@ -8,6 +8,15 @@
 
 #include "genozip.h"
 
+typedef enum { 
+    REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference
+    REF_INTERNAL,  // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
+    REF_EXTERNAL,  // ZIP & PIZ: user specified --reference
+    REF_EXT_STORE, // ZIP: user specified --REFERENCE
+    REF_STORED,    // PIZ: file contains REFERENCE sections (user cannot specify --reference)
+    REF_LIFTOVER,  // ZIP: user specified --liftover
+} ReferenceType;
+
 typedef struct {
     
     // genozip options that affect the compressed file
@@ -32,9 +41,9 @@ typedef struct {
 
     // PIZ: data-modifying genocat options for showing only a subset of the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
-        regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave;
+        regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, laft;
     char *grep;
-    uint32_t one_vb, downsample, shard;
+    uint32_t one_vb, downsample, shard ;
 
     // genols options
     int bytes;
@@ -49,12 +58,7 @@ typedef struct {
         index_txt;   // create an index
     char *threads_str, *out_filename;
 
-    enum { REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference
-           REF_INTERNAL,  // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
-           REF_EXTERNAL,  // ZIP & PIZ: user specified --reference
-           REF_EXT_STORE, // ZIP: user specified --REFERENCE
-           REF_STORED,    // PIZ: file contains REFERENCE sections (user cannot specify --reference)
-    } reference;
+    ReferenceType reference;
 
     // undocumented options for internal use
     char *genobwa; // --genobwa=<contig-name> is used by the genobwa script in genozip / genocat to filter a fastq to a superset that includes all the reads that *might* be mapped to a chromosome 
@@ -69,7 +73,7 @@ typedef struct {
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest,
         show_index, show_gheader, show_ref_contigs, show_ref_seq,
-        show_reference, show_ref_hash, show_ref_index, show_ref_alts,
+        show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         debug_progress, show_hash, debug_memory, show_vblocks, show_threads,
         seg_only, xthreads,
@@ -86,17 +90,19 @@ typedef struct {
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
          reading_reference,  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
          trans_containers,   // PIZ: decompression invokes container translators
+         processing_rejects, // ZIP & PIZ: currently zipping liftover rejects file / component
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_reconstruct,  // User requested to genocat with only metadata to be shown, not file contents
          genocat_no_reconstruct_output,  // User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
+                             // ZIP: txt data is modified during Seg
          explicit_ref;       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
 
     char *reading_chain;     // system is currently reading a chain file by this name
 
-    enum { BIND_NONE, BIND_ALL, BIND_PAIRS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
+    enum { BIND_NONE, BIND_ALL, BIND_PAIRS, BIND_REJECTS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
     uint64_t stdin_size;
     unsigned longest_filename; // length of longest filename of the txt/z files on the command line
 
@@ -118,6 +124,7 @@ extern FILE *info_stream;
 #define RESTORE_FLAGS flag = save_flag
 
 #define SAVE_FLAG(f) typeof(flag.f) save_##f = flag.f 
+#define TEMP_FLAG(f,value) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)value
 #define SET_FLAG(f) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)1
 #define CLEAR_FLAG(f) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)0
 #define RESTORE_FLAG(f) flag.f = save_##f

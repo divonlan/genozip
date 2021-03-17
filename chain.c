@@ -19,6 +19,21 @@
 #include "version.h"
 #include "chain.h"
 #include "reconstruct.h"
+#include "liftover.h"
+
+typedef struct {
+    WordIndex query_chrom; // index in CHAIN_QNAME
+    PosType query_first_pos, query_last_pos;
+
+    WordIndex target_chrom; // index in CHAIN_TNAME - the nodes+dicts copied to the genozipped file (eg as VCF_oCHROM)
+    PosType target_first_pos, target_last_pos;
+} ChainAlignment;
+
+static Buffer chain = EMPTY_BUFFER;   // immutable after loaded
+static Mutex chain_mutex = {};        // protect chain wnile loading
+static PosType next_query_pos=0, next_target_pos=0; // used for loading chain
+
+bool chain_is_loaded = false; // global
 
 //-----------------------
 // TXTFILE stuff
@@ -47,7 +62,8 @@ int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 
 void chain_seg_initialize (VBlock *vb)
 {
-    vb->contexts[CHAIN_QNAME]   .no_stons  =       // needs b250 node_index for reference
+    vb->contexts[CHAIN_QNAME]   .no_stons  =       
+    vb->contexts[CHAIN_TNAME]   .no_stons  =       // (these 2 ^) need b250 node_index for reference
     vb->contexts[CHAIN_TOPLEVEL].no_stons  = 
     vb->contexts[CHAIN_CHAIN]   .no_stons  = 
     vb->contexts[CHAIN_TSTRAND] .no_stons  = true; // (these 3 ^) keep in b250 so it can be eliminated as all_the_same
@@ -104,7 +120,7 @@ static void chain_seg_size_field (VBlock *vb, const char *field_start, int field
 
     Context *ctx = &vb->contexts[CHAIN_SIZE];
 
-    if (vb->contexts[CHAIN_TEND].last_value.i - vb->contexts[CHAIN_TSTART].last_value.i == size) { // happens if the alignment set has only one alignment
+    if (vb->last_int(CHAIN_TEND) - vb->last_int(CHAIN_TSTART) == size) { // happens if the alignment set has only one alignment
         seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_SIZE }), 2, ctx, field_len + 1);
         ctx->numeric_only = false;
     }
@@ -119,8 +135,8 @@ static void chain_seg_qend_field (VBlock *vb, const char *field_start, int field
 
     ASSSEG (str_get_int (field_start, field_len, &ctx->last_value.i), field_start, "Expecting qEnd to be an integer, but found %*s", field_len, field_start);
 
-    if (vb->contexts[CHAIN_TEND].last_value.i - vb->contexts[CHAIN_TSTART].last_value.i ==
-        ctx->last_value.i                     - vb->contexts[CHAIN_QSTART].last_value.i) {
+    if (vb->last_int(CHAIN_TEND) - vb->last_int(CHAIN_TSTART) ==
+        ctx->last_value.i        - vb->last_int(CHAIN_QSTART)) {
         seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_QEND }), 2, ctx, field_len + 1);        
         ctx->numeric_only = false;
     }
@@ -219,6 +235,11 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
 // PIZ functions
 //--------------
 
+void chain_piz_initialize (void)
+{
+    mutex_initialize (chain_mutex);
+}
+
 SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
 {
     ASSERTE0 (vb->txt_data.len, "vb->txt_data.len is 0");
@@ -232,56 +253,50 @@ SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_QEND)
 {
-    new_value->i = vb->contexts[CHAIN_QSTART].last_value.i + 
-                   vb->contexts[CHAIN_TEND].last_value.i - vb->contexts[CHAIN_TSTART].last_value.i;
+    new_value->i = vb->last_int(CHAIN_QSTART) + 
+                   vb->last_int(CHAIN_TEND) - vb->last_int(CHAIN_TSTART);
     RECONSTRUCT_INT (new_value->i);
     return true; // new_value has been set
 }
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_SIZE)
 {
-    new_value->i = vb->contexts[CHAIN_TEND].last_value.i - vb->contexts[CHAIN_TSTART].last_value.i;
+    new_value->i = vb->last_int(CHAIN_TEND) - vb->last_int(CHAIN_TSTART);
     RECONSTRUCT_INT (new_value->i);
     return true; // new_value has been set
 }
 
-//-------------------------
-// "chain" buffer functions
-//-------------------------
+// ---------------------------------------
+// using the chain data in genozip --chain
+// ---------------------------------------
 
-typedef struct {
-    const char *primary_chrom; // pointer into dict of CHAIN_QNAME
-    PosType primary_first_pos, primary_last_pos;
-
-    const char *secondary_chrom; // pointer into dict of CHAIN_TNAME
-    PosType secondary_first_pos, secondary_last_pos;
-} ChainAlignment;
-
-static Buffer chain = EMPTY_BUFFER;
-static Mutex chain_mutex = {};
-static PosType next_primary_pos=0, next_secondary_pos=0;
-
-void chain_display_alignment (const ChainAlignment *aln) // not static to avoid compiler warning if not used
+static void chain_display_alignments (void) 
 {
-    fprintf (info_stream, "Primary: %s %"PRId64"-%"PRId64" Secondary: : %s %"PRId64"-%"PRId64"\n",
-             aln->primary_chrom,   aln->primary_first_pos,   aln->primary_last_pos,
-             aln->secondary_chrom, aln->secondary_first_pos, aln->secondary_last_pos);
+    ARRAY (ChainAlignment, aln, chain);
+
+    for (uint32_t i=0; i < chain.len; i++) {
+        const char *query_chrom  = ctx_get_words_snip (&z_file->contexts[CHAIN_QNAME], aln[i].query_chrom);
+        const char *target_chrom = ctx_get_words_snip (&z_file->contexts[CHAIN_TNAME], aln[i].target_chrom);
+
+        fprintf (info_stream, "Query: %s %"PRId64"-%"PRId64" Target: %s %"PRId64"-%"PRId64"\n",
+                 query_chrom,  aln[i].query_first_pos,  aln[i].query_last_pos,
+                 target_chrom, aln[i].target_first_pos, aln[i].target_last_pos);
+    }
 }
 
 // initialize alignment set from alignment set header
 static inline void chain_piz_filter_init_alignment_set (VBlock *vb)
 {
     mutex_lock (chain_mutex);
-    next_primary_pos   = vb->contexts[CHAIN_QSTART].last_value.i; 
-    next_secondary_pos = vb->contexts[CHAIN_TSTART].last_value.i; 
+    next_query_pos  = vb->last_int(CHAIN_QSTART); 
+    next_target_pos = vb->last_int(CHAIN_TSTART); 
     mutex_unlock (chain_mutex);
 }
 
 // store dt value in local.param, as last_value.i will be overridden by dq, as they share the same context
 static inline void chain_piz_filter_save_dt (VBlock *vb)
 {
-    Context *dtdq_ctx = &vb->contexts[CHAIN_DT_DQ];
-    dtdq_ctx->local.param = dtdq_ctx->last_value.i; 
+    vb->contexts[CHAIN_DT_DQ].local.param = vb->last_int(CHAIN_DT_DQ); 
 }
 
 // ingest one alignment
@@ -291,25 +306,23 @@ static inline void chain_piz_filter_ingest_alignmet (VBlock *vb)
 
     buf_alloc_more (vb, &chain, 1, 0, ChainAlignment, 2, "chain"); 
 
-    int64_t size = vb->contexts[CHAIN_SIZE].last_value.i;
+    int64_t size = vb->last_int(CHAIN_SIZE);
 
     NEXTENT (ChainAlignment, chain) = (ChainAlignment){ 
-        .primary_chrom       = ctx_get_snip_by_word_index (&vb->contexts[CHAIN_QNAME], vb->contexts[CHAIN_QNAME].last_value.i, 0, 0),
-        .primary_first_pos   = next_primary_pos,
-        .primary_last_pos    = next_primary_pos + size - 1,
+        .query_chrom      = vb->last_int(CHAIN_QNAME),
+        .query_first_pos  = next_query_pos,
+        .query_last_pos   = next_query_pos + size - 1,
 
-        .secondary_chrom     = ctx_get_snip_by_word_index (&vb->contexts[CHAIN_TNAME], vb->contexts[CHAIN_TNAME].last_value.i, 0, 0),
-        .secondary_first_pos = next_secondary_pos,
-        .secondary_last_pos  = next_secondary_pos + size - 1
+        .target_chrom     = vb->last_int(CHAIN_TNAME),
+        .target_first_pos = next_target_pos,
+        .target_last_pos  = next_target_pos + size - 1
     };
 
     Context *dtdq_ctx   = &vb->contexts[CHAIN_DT_DQ];
-    next_primary_pos   += size + dtdq_ctx->last_value.i; // dq
-    next_secondary_pos += size + dtdq_ctx->local.param;  // dt
+    next_query_pos   += size + dtdq_ctx->last_value.i; // dq
+    next_target_pos += size + dtdq_ctx->local.param;  // dt
     
     mutex_unlock (chain_mutex);
-
-    //chain_display_alignment (LASTENT (ChainAlignment, chain));
 
     vb->dont_show_curr_line = true;
 }
@@ -319,15 +332,15 @@ static inline void chain_piz_filter_verify_alignment_set (VBlock *vb)
 {
     mutex_lock (chain_mutex);
 
-    ASSERTE (next_primary_pos == vb->contexts[CHAIN_QEND].last_value.i,
-                "Expecting alignments to add up to qEND=%"PRId64", but they add up to %"PRId64":\n%*s",
-                vb->contexts[CHAIN_QEND].last_value.i, next_primary_pos, 
-                (int)(vb->txt_data.len - vb->line_start), ENT (char, vb->txt_data, vb->line_start));
+    ASSINP (next_query_pos == vb->last_int(CHAIN_QEND),
+            "Bad data in chain file %s: Expecting alignments to add up to qEND=%"PRId64", but they add up to %"PRId64":\n%*s",
+            z_name, vb->last_int(CHAIN_QEND), next_query_pos, 
+            (int)(vb->txt_data.len - vb->line_start), ENT (char, vb->txt_data, vb->line_start));
 
-    ASSERTE (next_secondary_pos == vb->contexts[CHAIN_TEND].last_value.i,
-                "Expecting alignments to add up to tEND=%"PRId64", but they add up to %"PRId64":\n%*s",
-                vb->contexts[CHAIN_TEND].last_value.i, next_secondary_pos, 
-                (int)(vb->txt_data.len - vb->line_start), ENT (char, vb->txt_data, vb->line_start));
+    ASSINP (next_target_pos == vb->last_int(CHAIN_TEND),
+            "Bad data in chain file %s: Expecting alignments to add up to tEND=%"PRId64", but they add up to %"PRId64":\n%*s",
+            z_name, vb->last_int(CHAIN_TEND), next_target_pos, 
+            (int)(vb->txt_data.len - vb->line_start), ENT (char, vb->txt_data, vb->line_start));
 
     mutex_unlock (chain_mutex);
 }
@@ -336,7 +349,7 @@ CONTAINER_FILTER_FUNC (chain_piz_filter)
 {
     if (!flag.reading_chain) goto done; // only relevant to ingesting the chain due to --chain
 
-    // before alignment-set first EOL and before alignments - initialize next_primary_pos and next_secondary_pos
+    // before alignment-set first EOL and before alignments - initialize next_query_pos and next_target_pos
     if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 13) 
         chain_piz_filter_init_alignment_set (vb);
 
@@ -356,16 +369,25 @@ done:
     return true;    
 }
 
-// zip: import chain file
-void chain_load_chain (void)
+// sort the alignmants by (qname_index, qstart)
+static int chain_sorter (const void *a_, const void *b_)
+{   
+    ChainAlignment *a = (ChainAlignment *)a_, *b = (ChainAlignment *)b_;
+
+    if (a->query_chrom != b->query_chrom) 
+        return a->query_chrom - b->query_chrom;
+    else 
+        return a->query_first_pos - b->query_first_pos;
+}
+
+// zip: load chain file as a result of genozip --chain
+void chain_load (void)
 {
     ASSERTE0 (flag.reading_chain, "reading_chain is NULL");
     SAVE_FLAGS;
 
     buf_alloc_more (evb, &chain, 0, 1000, ChainAlignment, 1, "chain"); // must be allocated by I/O thread
     
-    mutex_initialize (chain_mutex);
-
     z_file = file_open (flag.reading_chain, READ, Z_FILE, DT_CHAIN);    
     z_file->basename = file_basename (flag.reading_chain, false, "(chain-file)", NULL, 0);
 
@@ -381,15 +403,63 @@ void chain_load_chain (void)
 
     piz_one_file (0, false, false);
 
+    // copy qname and tname dictionaries before z_file of the chain file is freed
+    liftover_copy_data_from_chain_file();
+
+    // sort the alignmants by (qname_index, qstart)
+    qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sorter);
+        
     // recover globals
     RESTORE_VALUE (command);
     RESTORE_FLAGS;
 
+    if (flag.show_chain) {
+        chain_display_alignments();
+        exit_ok;
+    }
+
     file_close (&z_file, false, false);
     file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
     
-    mutex_destroy (chain_mutex);
-
     flag.reading_chain = NULL;
+    chain_is_loaded = true;
 }
 
+// get tname, tpos from qname, qpos (binary search on chain)
+static LiftOverStatus chain_get_liftover_coords_do (WordIndex qname_index, PosType qpos, 
+                                                    int32_t start, int32_t end,
+                                                    WordIndex *tname_index, PosType *tpos) // out
+{
+    // case: no mapping
+    if (end < start) {
+        *tname_index = WORD_INDEX_NONE;
+        *tpos = 0;
+        return LO_NO_MAPPING;
+    }
+
+    uint32_t mid = (start + end) / 2;
+    ChainAlignment *aln = ENT (ChainAlignment, chain, mid);
+
+    // case: success
+    if (aln->query_chrom     == qname_index && 
+        aln->query_first_pos <= qpos && 
+        aln->query_last_pos >= qpos) {
+            *tname_index = aln->target_chrom;
+            *tpos = aln->target_first_pos + (qpos - aln->query_first_pos);
+            return LO_OK;
+        }
+
+    // case: qname,qpos is less than aln - search lower half
+    if (qname_index < aln->query_chrom ||
+        (qname_index == aln->query_chrom && aln->query_first_pos > qpos))
+        return chain_get_liftover_coords_do (qname_index, qpos, start, mid-1, tname_index, tpos);
+    
+    // case: qname,qpos is more than aln - search upper half
+    else
+        return chain_get_liftover_coords_do (qname_index, qpos, mid+1, end, tname_index, tpos);
+}
+
+LiftOverStatus chain_get_liftover_coords (WordIndex qname_index, PosType qpos, WordIndex *tname_index, PosType *tpos)
+{
+    return chain_get_liftover_coords_do (qname_index, qpos, 0, chain.len-1, tname_index, tpos);
+}

@@ -25,7 +25,6 @@ extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
 extern bool txtfile_header_to_genozip (uint32_t *vcf_line_i);
 extern void txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Digest *digest);
 
-extern void txtfile_header_initialize(void);
 uint32_t txtfile_get_bound_headers_len(void); // for stats
 
 extern void txtfile_read_vblock (VBlockP vb, bool force_uncompress);
@@ -33,7 +32,7 @@ extern void txtfile_write_to_disk (BufferP buf);
 
 // callbacks
 extern int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
-extern int32_t def_is_header_done (void);
+extern int32_t def_is_header_done (bool is_eof);
 
 extern DataType txtfile_get_file_dt (const char *filename);
 

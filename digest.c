@@ -60,30 +60,32 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
     DigestContext before = *ctx;
 
     if (IS_ADLER) {
-        if (!ctx->initialized) {
+        if (!ctx->adler_ctx.initialized) {
             ctx->adler_ctx.adler = 1;
-            ctx->initialized = true;
+            ctx->adler_ctx.initialized = true;
         }
         ctx->adler_ctx.adler = libdeflate_adler32 (ctx->adler_ctx.adler, buf->data, buf->len);
     }
 
     else {
-        if (!ctx->initialized) {
+        if (!ctx->md5_ctx.initialized) {
             md5_initialize (&ctx->md5_ctx);
-            ctx->initialized = true;
+            ctx->md5_ctx.initialized = true;
         }
         md5_update (&ctx->md5_ctx, buf->data, buf->len);
     }
 
+    ctx->common.bytes_digested += buf->len;
+
     if (flag.show_digest) 
-        iprintf ("vb=%05d %s update %s (len=%"PRIu64") 50chars=\"%.*s\": before=%s after=%s\n", 
-                 buf->vb->vblock_i, DIGEST_NAME, msg, buf->len, 
-                 MIN (50, (int)buf->len), buf->data, 
+        iprintf ("vb=%05d %s update %s (len=%"PRIu64" so_far=%"PRIu64") 32chars=\"%.*s\": before=%s after=%s\n", 
+                 buf->vb->vblock_i, DIGEST_NAME, msg, buf->len, ctx->common.bytes_digested, 
+                 MIN (32, (int)buf->len), buf->data, 
                  digest_display (digest_snapshot (&before)).s, 
                  digest_display (digest_snapshot (ctx)).s);
 }
 
-// ZIP: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
+// ZIP and PIZ: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
 void digest_one_vb (VBlock *vb)
 {
     #define DIGEST_TIMEOUT (30*60) // 30 min
@@ -125,7 +127,7 @@ void digest_one_vb (VBlock *vb)
             Digest piz_digest_so_far = digest_snapshot (&txt_file->digest_ctx_bound);
 
             // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-            if (!digest_is_equal (vb->digest_so_far, piz_digest_so_far)) {
+            if (!digest_is_equal (vb->digest_so_far, piz_digest_so_far) && !digest_is_equal (vb->digest_so_far, DIGEST_NONE)) {
 
                 // dump bad vb to disk
                 WARN ("%s of reconstructed vblock=%u,component=%u (%s) differs from original file (%s).\n"

@@ -326,8 +326,9 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
     WordIndex node_index_if_new = vb_ctx->ol_nodes.len + vb_ctx->nodes.len;
     
 #ifdef DEBUG // time consuming and only needed during development
-    ASSERTE (strnlen (snip, snip_len) == snip_len, "vb=%u ctx=%s: snip_len=%u but unexpectedly has an 0 in its midst", 
-             segging_vb->vblock_i, vb_ctx->name, snip_len);
+    unsigned actual_len = strnlen (snip, snip_len);
+    ASSERTE (actual_len == snip_len, "vb=%u ctx=%s: snip_len=%u but unexpectedly has an 0 at index %u: \"%.*s\"", 
+             segging_vb->vblock_i, vb_ctx->name, snip_len, actual_len, snip_len, snip);
 #endif
 
     ASSERTE (node_index_if_new <= MAX_NODE_INDEX, 
@@ -377,7 +378,7 @@ void ctx_clone (VBlock *vb)
         Context *vb_ctx = &vb->contexts[did_i];
         Context *zf_ctx = &z_file->contexts[did_i];
 
-        // case: this context doesn't really exist (happens when incrementing num_contexts when adding RNAME and RNEXT in ctx_copy_ref_contigs_to_zf)
+        // case: this context doesn't really exist (happens when incrementing num_contexts when adding RNAME and RNEXT in ctx_build_zf_ctx_from_contigs)
         if (!zf_ctx->mutex.initialized) continue;
 
         mutex_lock (zf_ctx->mutex);
@@ -438,24 +439,28 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
 // 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference FASTA CONTIG
 //    dictionary as the chrom dictionary of the new file
 // 2. in SAM, DENOVO: after creating loaded_contigs from SQ records, we copy them to the RNAME dictionary
-void ctx_copy_ref_contigs_to_zf (DidIType dst_did_i, ConstBufferP contigs_buf, ConstBufferP contigs_dict_buf)
+// 3. When loading a chain file - copy tName word_list/dict read from the chain file to a context
+void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf, ConstBufferP contigs_dict_buf)
 {
     // note: in REF_INTERNAL it is possible that there are no contigs - unaligned SAM
     if (flag.reference == REF_INTERNAL && (!contigs_buf || !contigs_buf->len)) return;
 
     ASSERTE0 (buf_is_allocated (contigs_buf) && buf_is_allocated (contigs_dict_buf),
              "expecting contigs and contigs_dict to be allocated");
-    
+
+    // this is usually not yet initialized
+    ctx_initialize_primary_field_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+
     Context *zf_ctx = &z_file->contexts[dst_did_i];
     zf_ctx->no_stons = true;
 
-    // copy reference dict
+    // copy dict
     ARRAY (RefContig, contigs, *contigs_buf);
 
     buf_copy (evb, &zf_ctx->dict, contigs_dict_buf, 0,0,0, "z_file->contexts->dict");
     buf_set_overlayable (&zf_ctx->dict);
 
-    // build nodes from reference word_list
+    // build nodes from word_list
     buf_alloc (evb, &zf_ctx->nodes, sizeof (CtxNode) * contigs_buf->len, 1, "z_file->contexts->nodes");
     buf_set_overlayable (&zf_ctx->nodes);
     zf_ctx->nodes.len = contigs_buf->len;
@@ -559,9 +564,11 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     //iprintf ( ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dis_dict_id (vb_ctx->dict_id).s, merging_vb->vblock_i, did_i, z_did_i);
 
     zf_ctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
-    zf_ctx->txt_len += vb_ctx->txt_len; // for stats
     zf_ctx->num_new_entries_prev_merged_vb = vb_ctx->nodes.len; // number of new words in this dict from this VB
     zf_ctx->num_singletons += vb_ctx->num_singletons; // add singletons created by seg (i.e. SNIP_LOOKUP_* in b250, and snip in local)
+
+    if (!flag.processing_rejects)
+        zf_ctx->txt_len += vb_ctx->txt_len; // for stats
 
     if (vb_ctx->st_did_i != DID_I_NONE) 
         zf_ctx->st_did_i = vb_ctx->st_did_i; // we assign stats consolidation, but never revert back to DID_I_NONE
@@ -719,7 +726,8 @@ void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
 
     for (int f=0; f < dt_fields[dt].num_fields; f++) {
         const char *fname  = dt_fields[dt].names[f];
-        ASSERTE (strlen (fname) <= DICT_ID_LEN, "A primary field's name is limited to %u characters", DICT_ID_LEN); // to avoid dict_id_make name compression which might change between genozip releases
+        ASSERTE (strlen (fname) <= DICT_ID_LEN, "A primary field's name is limited to %u characters, \"%s\" exceeds it", 
+                 DICT_ID_LEN, fname); // to avoid dict_id_make name compression which might change between genozip releases
 
         DictId dict_id = dict_id_make (fname, strlen(fname), DTYPE_FIELD);
         Context *dst_ctx  = NULL;
@@ -755,20 +763,21 @@ void ctx_overlay_dictionaries_to_vb (VBlock *vb)
 
         if (!zf_ctx->dict_id.num) continue;
 
-        if (buf_is_allocated (&zf_ctx->dict) && buf_is_allocated (&zf_ctx->word_list)) { 
-            
-            vb_ctx->did_i    = did_i;
-            vb_ctx->dict_id  = zf_ctx->dict_id;
-            memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
+        // we create a VB contexts even if there are now dicts (perhaps skipped due to flag) - needed for containers to work
+        vb_ctx->did_i    = did_i;
+        vb_ctx->dict_id  = zf_ctx->dict_id;
+        memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
 
-            if (vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] == DID_I_NONE)
-                vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] = did_i;
+        if (vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] == DID_I_NONE)
+            vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] = did_i;
 
-            ctx_init_iterator (vb_ctx);
+        ctx_init_iterator (vb_ctx);
 
+        if (buf_is_allocated (&zf_ctx->dict))
             buf_overlay (vb, &vb_ctx->dict, &zf_ctx->dict, "ctx->dict");    
+        
+        if (buf_is_allocated (&zf_ctx->word_list))
             buf_overlay (vb, &vb_ctx->word_list, &zf_ctx->word_list, "ctx->word_list");
-        }
     }
     vb->num_contexts = z_file->num_contexts;
 }
@@ -996,9 +1005,12 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
                 continue; // unused context
             }
             frag_next_node = FIRSTENT (const CtxNode, frag_ctx->nodes);
+
+            ASSERTE (frag_next_node->char_index + frag_next_node->snip_len <= frag_ctx->dict.len, 
+                     "Corrupt nodes in ctx=%.8s did_i=%u", frag_ctx->name, (int)(frag_ctx - z_file->contexts));
         }
 
-        vb->fragment_ctx = frag_ctx;
+        vb->fragment_ctx   = frag_ctx;
         vb->fragment_start = ENT (char, frag_ctx->dict, frag_next_node->char_index);
         vb->fragment_codec = frag_codec;
 
@@ -1077,7 +1089,7 @@ void ctx_compress_dictionaries (void)
     frag_ctx = &z_file->contexts[0];
     frag_next_node = NULL;
 
-    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, false,
+    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, true, true, false, 0, 20000,
                              ctx_prepare_for_dict_compress, 
                              ctx_compress_one_dict_fragment, 
                              zfile_output_processed_vb);
@@ -1096,6 +1108,12 @@ static void ctx_dict_read_one_vb (VBlockP vb)
     if (!sections_get_next_section_of_type (&dict_sl, SEC_DICT, false, false))
         return; // we're done - no more SEC_DICT sections
 
+    // create context if if section is skipped, for containters to work (skipping a section should be mirror in 
+    // a container filter)
+    bool new_ctx = (!dict_ctx || dict_sl->dict_id.num != dict_ctx->dict_id.num);
+    if (new_ctx)
+        dict_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, dict_sl->dict_id);
+
     if (piz_is_skip_sectionz (SEC_DICT, dict_sl->dict_id)) goto done;
     
     zfile_read_section (z_file, vb, dict_sl->vblock_i, &vb->z_data, "z_data", SEC_DICT, dict_sl);    
@@ -1104,22 +1122,21 @@ static void ctx_dict_read_one_vb (VBlockP vb)
 
     vb->fragment_len = header ? BGEN32 (header->h.data_uncompressed_len) : 0;
 
+    ASSERTE (!header || header->dict_id.num == dict_sl->dict_id.num, "Expecting dictionary fragment with DictId=%s but found one with DictId=%s",
+             dis_dict_id (dict_sl->dict_id).s, dis_dict_id (header->dict_id).s);
+
     // new context
-    if (header && (!dict_ctx || header->dict_id.num != dict_ctx->dict_id.num)) {
-        dict_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, header->dict_id);
+    // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are FRAGMENT_SIZE or a bit less, allowing pre-allocation
+    if (header && new_ctx && z_file->genozip_version >= 9) {
+        unsigned num_fragments=0; 
+        for (const SectionListEntry *sl=dict_sl; sl->dict_id.num == dict_ctx->dict_id.num; sl++) num_fragments++;
 
-        // in v9+ same-dict fragments are consecutive in the file, and all but the last are FRAGMENT_SIZE or a bit less, allowing pre-allocation
-        if (z_file->genozip_version >= 9) {
-            unsigned num_fragments=0; 
-            for (const SectionListEntry *sl=dict_sl; sl->dict_id.num == dict_ctx->dict_id.num; sl++) num_fragments++;
-
-            // get size: for multi-fragment dictionaries, first fragment will be at or slightly less than FRAGMENT_SIZE, which is a power of 2.
-            // this allows us to calculate the FRAGMENT_SIZE with which this file was compressed and hence an upper bound on the size
-            uint32_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : roundup2pow (vb->fragment_len) * num_fragments;
-            
-            buf_alloc (evb, &dict_ctx->dict, size_upper_bound, 0, "contexts->dict");
-            buf_set_overlayable (&dict_ctx->dict);
-        }
+        // get size: for multi-fragment dictionaries, first fragment will be at or slightly less than FRAGMENT_SIZE, which is a power of 2.
+        // this allows us to calculate the FRAGMENT_SIZE with which this file was compressed and hence an upper bound on the size
+        uint32_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : roundup2pow (vb->fragment_len) * num_fragments;
+        
+        buf_alloc (evb, &dict_ctx->dict, size_upper_bound, 0, "contexts->dict");
+        buf_set_overlayable (&dict_ctx->dict);
     }
 
     // when pizzing a v8 file, we run in single-thread since we need to do the following dictionary enlargement with which fragment
@@ -1197,7 +1214,9 @@ void ctx_read_all_dictionaries (void)
 
     dispatcher_fan_out_task (NULL, PROGRESS_NONE, "Reading dictionaries...", 
                              flag.test, 
+                             true, true, 
                              z_file->genozip_version == 8, // For v8 files, we read all fragments in the I/O thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
+                             0, 20000,
                              ctx_dict_read_one_vb, 
                              ctx_dict_uncompress_one_vb, 
                              NULL);

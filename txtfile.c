@@ -139,7 +139,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
         
     while (vb->compressed.uncomp_len < max_uncomp - BGZF_MAX_BLOCK_SIZE) {
 
-        buf_alloc_more (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, max_uncomp/4, char, 1.5, "compressed")
+        buf_alloc_more (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, max_uncomp/4, char, 1.5, "compressed");
 
         // case: we have data passed to us from file_open_txt_read - handle it first
         if (!vb->txt_data.len && evb->compressed.len) {
@@ -251,7 +251,7 @@ static uint32_t txtfile_read_block (VBlock *vb, uint32_t max_bytes,
 
 // default callback from DataTypeProperties.is_header_done: 
 // returns header length if header read is complete + sets lines.len, 0 if complete but not existant, -1 not complete yet 
-int32_t def_is_header_done (void)
+int32_t def_is_header_done (bool is_eof)
 {
     ARRAY (char, header, evb->txt_data);
     evb->lines.len = 0; // reset in case we've called this function a number of times (in case of a very large header)
@@ -270,6 +270,10 @@ int32_t def_is_header_done (void)
         prev_char = header[i];
     }
 
+    // case: the entire file is just a header
+    if (is_eof && prev_char == '\n') 
+        return evb->txt_data.len;
+
     return -1; // not end of header yet
 }
 
@@ -285,7 +289,7 @@ static Digest txtfile_read_header (bool is_first_txt)
 
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
     #define HEADER_BLOCK (256*1024) // we have no idea how big the header will be... read this much at a time
-    while ((header_len = (DT_FUNC (txt_file, is_header_done)())) < 0) { // we might have data here from txtfile_test_data
+    while ((header_len = (DT_FUNC (txt_file, is_header_done)(bytes_read==0))) < 0) { // we might have data here from txtfile_test_data
         
         if (!bytes_read) {
             if (flags_pipe_in_process_died()) // only works for Linux
@@ -309,10 +313,14 @@ static Digest txtfile_read_header (bool is_first_txt)
     txt_file->txt_data_so_far_single = evb->txt_data.len = header_len; // trim to uncompressed length of txt header
 
     // md5 header - always digest_ctx_single, digest_ctx_bound only if first component 
-    if (flag.bind && is_first_txt) digest_update (&z_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
-    digest_update (&z_file->digest_ctx_single, &evb->txt_data, "txt_header:digest_ctx_single");
+    Digest header_digest = DIGEST_NONE;
 
-    Digest header_digest = digest_snapshot (&z_file->digest_ctx_single);
+    if (!flag.data_modified) {
+        if (flag.bind && is_first_txt) digest_update (&z_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
+        digest_update (&z_file->digest_ctx_single, &evb->txt_data, "txt_header:digest_ctx_single");
+
+        header_digest = digest_snapshot (&z_file->digest_ctx_single);
+    }
 
     COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
 
@@ -324,10 +332,9 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
     ASSERTE (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
-    for (; *i >= (int32_t)first_i; (*i)--) {
+    for (; *i >= (int32_t)first_i; (*i)--) 
         if (vb->txt_data.data[*i] == '\n') 
             return vb->txt_data.len-1 - *i;
-    }
 
     return -1; // cannot find \n in the data starting first_i
 }
@@ -458,6 +465,10 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
 
     vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
+
+    // ZIP of a Laft dual-coordinate file: calculate how much of the VB is rejected liftover lines
+    vb->laft_reject_bytes = MIN (vb->vb_data_size, txt_file->laft_reject_bytes);
+    txt_file->laft_reject_bytes -= vb->laft_reject_bytes;
 
     if (!testing_memory) {
 
@@ -650,13 +661,6 @@ int64_t txtfile_estimate_txt_data_size (VBlock *vb)
      return disk_size * ratio;
 }
 
-// PIZ: called before reading each genozip file
-void txtfile_header_initialize(void)
-{
-    is_first_txt = true;
-    vcf_header_initialize(); // we don't yet know the data type, but we initialize the VCF stuff just in case, no harm.
-}
-
 // ZIP: reads txt header and writes its compressed form to the GENOZIP file
 bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 {    
@@ -676,6 +680,21 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
         // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
         return false;
+    }
+
+    // in the 2nd+ binding file, we require the dual-components status to be consistent with earlier files
+    if (z_file) { 
+        if (z_file->num_components) {
+            ASSERTE (!(txt_file->dual_coords && !z_file->z_flags.dual_coords), 
+                    "All binding files must be either dual-coordinates or not. However %s is a dual-coordinates file while previous file(s) are not", txt_name);
+
+            ASSERTE (!(!txt_file->dual_coords && z_file->z_flags.dual_coords), 
+                    "All binding files must be either dual-coordinates or not. However %s is not a dual-coordinates file while previous file(s) are", txt_name);
+        }
+        else  // first component 
+              // note: in case of --chain, z_flags.dual_coords is set in file_open_z
+              // note: z_flags.dual_coords is bool and txt_file->dual_coords is an enum
+            z_file->z_flags.dual_coords = z_file->z_flags.dual_coords || !!txt_file->dual_coords; 
     }
 
     if (z_file && !flag.seg_only)       
@@ -702,6 +721,9 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
 {
     bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
 
+    is_first_txt = true;
+    if (DTPZ(piz_header_init)) DTPZ(piz_header_init)();
+
     digest_initialize();
 
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
@@ -710,6 +732,8 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
 
     // handle the GENOZIP header of the txt header section
     SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)evb->z_data.data;
+
+    flag.processing_rejects = flag.laft && header->h.flags.txt_header.liftover_rejects;
 
     ASSERTE (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderTxtHeader)), 
              "invalid txt header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderTxtHeader));
@@ -780,14 +804,13 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
     if (!show_headers_only)
         zfile_uncompress_section (evb, header, &evb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
 
-    // analyze header
     if (evb->txt_data.len && 
-        (is_first_txt || flag.unbind) &&  // this is the first component, or we are unbinding (all components get a header)
-        !flag.reading_reference && !flag.reading_chain)          
+        (is_first_txt || flag.unbind || flag.laft) &&  // this is the first component, or we are unbinding (all components get a header)
+        !flag.reading_reference && !flag.reading_chain) 
         DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
 
     // write txt header if it is needed:
-    if ((is_first_txt || flag.unbind) &&  // this is the first component, or we are unbinding (all components get a header)
+    if ((is_first_txt || flag.unbind || flag.laft) &&  // this is the first component, or we are unbinding (all components get a header)
         (!flag.no_header || z_file->z_flags.txt_is_bin) && // user didn't specify --no-header (or ignore the request if this is a binary file, eg BAM)
         !flag.reading_reference &&        // nothing is written when reading a reference
         !flag.reading_chain &&            // nothing is written when reading a chain file
@@ -817,7 +840,9 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
         if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
             Digest reconstructed_header_digest = digest_do (evb->txt_data.data, evb->txt_data.len);
             
-            ASSERTW (flag.data_modified || digest_is_equal (reconstructed_header_digest, header->digest_header),
+            ASSERTW (digest_is_equal (header->digest_header, DIGEST_NONE) || 
+                     digest_is_equal (reconstructed_header_digest, header->digest_header) ||
+                     flag.data_modified,
                     "%s of reconstructed %s header (%s) differs from original file (%s)\n"
                     "Bad reconstructed header has been dumped to: %s\n", digest_name(),
                     dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
@@ -831,7 +856,9 @@ done:
     buf_free (&evb->txt_data);
 
     z_file->num_txt_components_so_far++;
-    is_first_txt = false;
+    
+    if (!flag.reading_chain && !flag.reading_reference)
+        is_first_txt = false;
 }
 
 DataType txtfile_get_file_dt (const char *filename)

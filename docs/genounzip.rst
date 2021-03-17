@@ -41,6 +41,10 @@ One or more file names must be given
 .. include:: opt-stats.rst
 .. include:: opt-translation.rst
 
+|
+
+.. option:: --no-PG.  (SAM, BAM) When translating the file Genozip normally adds information in a @PG header line. With this option it doesn't.
+
 **Other actions - uses other than uncompressing a file**
 
 .. include:: opt-help.rst

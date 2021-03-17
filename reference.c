@@ -250,7 +250,7 @@ Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
              chrom, (uint32_t)ctx->word_list.len);
 
     if (chrom_name)
-        *chrom_name = ctx_get_snip_by_word_index (ctx, chrom, 0, 0);
+        *chrom_name = ctx_get_words_snip (ctx, chrom);
 
     ASSERTE (chrom < ranges.len, "expecting chrom=%d < ranges.len=%"PRIu64, chrom, ranges.len);
     
@@ -538,7 +538,7 @@ void ref_load_stored_reference (void)
     dispatcher_fan_out_task (external ? ref_filename     : z_file->basename, 
                              external ? PROGRESS_MESSAGE : PROGRESS_NONE, 
                              external ? "Reading and caching reference file..." : NULL, 
-                             flag.test, false,
+                             flag.test, true, true, false, 0, 5000,
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NULL);
@@ -1161,11 +1161,13 @@ void ref_compress_ref (void)
     if (flag.show_reference) flag.quiet = true; // show references instead of progress
 
     // proceed to compress all ranges that have still have data in them after copying
-    uint32_t num_vbs_dispatched = 
-        dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing reference...", false, false,
+    Dispatcher dispatcher = 
+        dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing reference...", false, true, true, false, 0, 5000,
                                  flag.make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
                                  zfile_output_processed_vb);
+
+    uint32_t num_vbs_dispatched = dispatcher_get_next_vb_i (dispatcher);
 
     RESTORE_FLAGS;
     
@@ -1193,7 +1195,7 @@ void ref_compress_ref (void)
 // Loading an external reference
 // -------------------------------
 
-void ref_set_reference (const char *filename)
+void ref_set_reference (const char *filename, ReferenceType ref_type, bool is_explicit)
 {
     ASSERTE0 (filename, "filename is NULL");
 
@@ -1205,8 +1207,10 @@ void ref_set_reference (const char *filename)
         FREE (ref_filename);
     }
 
-    ref_filename = MALLOC (strlen (filename) + 1);
+    flag.reference    = ref_type; 
+    flag.explicit_ref = is_explicit;
 
+    ref_filename      = MALLOC (strlen (filename) + 1);
     strcpy ((char*)ref_filename, filename);
 }
 
@@ -1279,7 +1283,7 @@ static void ref_reverse_compliment_genome_do (VBlock *vb)
 void ref_generate_reverse_complement_genome (void)
 {
     START_TIMER;
-    dispatcher_fan_out_task (NULL, PROGRESS_NONE, 0, false, false,
+    dispatcher_fan_out_task (NULL, PROGRESS_NONE, 0, false, true, true, false, 0, 1000,
                              ref_reverse_compliment_genome_prepare, 
                              ref_reverse_compliment_genome_do, 
                              NULL);
@@ -1410,7 +1414,7 @@ void ref_initialize_ranges (RangesType type)
         ref_initialize_loaded_ranges (type);
 
         if (type == RT_LOADED) 
-            buf_alloc (evb, &genome_cache, genome_nbases / 4 * 2, 1, "genome_cache") // contains both forward and rev. compliment
+            buf_alloc (evb, &genome_cache, genome_nbases / 4 * 2, 1, "genome_cache"); // contains both forward and rev. compliment
         
         else  // RT_CACHED 
             ASSERTE0 (buf_mmap (evb, &genome_cache, ref_get_cache_fn(), "genome_cache"),  // we map the entire file (forward and revese complement genomes) onto genome_cache

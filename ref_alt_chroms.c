@@ -108,8 +108,8 @@ void ref_alt_chroms_load (void)
         map[txt_chrom_index] = ref_chrom_index;
 
         if (flag.show_ref_alts) {
-            const char *chrom_name = ctx_get_snip_by_word_index (ctx, txt_chrom_index, 0, 0);
-            const char *alt_name   = ctx_get_snip_by_word_index (ctx, ref_chrom_index, 0, 0);
+            const char *chrom_name = ctx_get_words_snip (ctx, txt_chrom_index);
+            const char *alt_name   = ctx_get_words_snip (ctx, ref_chrom_index);
             iprintf ("In file: '%s' (%d) In reference: '%s' (%d)\n", chrom_name, txt_chrom_index, alt_name, ref_chrom_index);
         }
     }

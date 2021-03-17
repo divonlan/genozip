@@ -12,6 +12,7 @@
 #pragma pack(1)
 #define CONTAINER_MAX_PREFIXES_LEN (32 * MAX_SUBFIELDS)    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
 #define CON_PREFIX_SEP              '\x4'  // starts the prefix string and terminates every prefix within it
+#define CON_PREFIX_SEP_             "\x4"  // string version
 #define CON_PREFIX_SEP_SHOW_REPEATS '\x5'  // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
 
 #define CONTAINER_MAX_REPEATS 0xfffffe     // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
@@ -63,8 +64,10 @@ typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) 
 #define con_nitems(con) ((con).nitems_hi * 256 + (con).nitems_lo)
 #define con_set_nitems(con, n) { (con).nitems_hi = (n) >> 8; (con).nitems_lo = ((n) & 0xff); }
 #define con_inc_nitems(con) con_set_nitems ((con), con_nitems (con) + 1)
+#define con_dec_nitems(con) con_set_nitems ((con), con_nitems (con) - 1)
 #define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
 
+extern void container_prepare_snip (ContainerP con, const char *prefixes, unsigned prefixes_len, char *snip, unsigned *snip_len);
 extern WordIndex container_seg_by_ctx (VBlockP vb, ContextP ctx, ContainerP con, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
 #define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg_by_ctx ((VBlockP)vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
 

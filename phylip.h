@@ -16,7 +16,7 @@ COMPRESSOR_CALLBACK(phy_zip_seq)
     { DT_PHYLIP, &dict_id_fields[PHY_SEQ], phy_zip_seq }, 
 
 extern unsigned phy_vb_zip_dl_size (void);
-extern int32_t phy_is_header_done (void);
+extern int32_t phy_is_header_done (bool is_eof);
 extern bool phy_header_inspect (BufferP txt_header);
 extern void phy_seg_initialize (VBlockP vb);
 extern void phy_seg_finalize (VBlockP vb);

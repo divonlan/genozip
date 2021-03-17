@@ -158,9 +158,12 @@ typedef uint8_t TranslatorId;
     extern TRANSLATOR_FUNC(func); \
     enum { src_dt##2##dst_dt##_##name = num }; // define constant
 
-// called before every item (if Container.filter_items and/or or repeat (if Container.filter_repeats) 
-// returns false if item or repeat should be filtered out
-#define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item)
+// filter is called before reconstruction of a repeat or an item, and returns false if item should 
+// not be processed. if not processed, contexts are not consumed. if we need the contexts consumed,
+// the filter can either set *reconstruct=false and return true, or use a callback instead which is called after reconstruction,
+// and erase the reconstructed txt_data.
+// NOTE: for a callback to be called on items of a container, the Container.callback flag needs to be set
+#define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item, bool *reconstruct)
 
 #define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, unsigned rep, char *reconstructed, int32_t reconstructed_len)
 
@@ -218,6 +221,21 @@ extern void main_exit (bool show_stack, bool is_error);
 #define ABORT0_R(string)                     do { fprintf (stderr, "\n%s\n", string); exit_on_error(true); return 0; } while(0)
 #define WARN(format, ...)                    do { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
 #define WARN0(string)                        do { if (!flag.quiet) fprintf (stderr, "\n%s\n", string); } while(0)
+
+#define WARN_ONCE(format, ...)               do { static bool warning_shown = false; \
+                                                  if (!flag.quiet && !warning_shown) { \
+                                                      fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); \
+                                                      warning_shown = true; \
+                                                  } \
+                                             } while(0) 
+
+#define WARN_ONCE0(string)                   do { static bool warning_shown = false; \
+                                                  if (!flag.quiet && !warning_shown) { \
+                                                      fprintf (stderr, "\n%s\n", string); \
+                                                      warning_shown = true; \
+                                                  } \
+                                             } while(0) 
+
 #define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} while(0)
 
 #endif

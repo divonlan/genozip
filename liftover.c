@@ -1,0 +1,413 @@
+// ------------------------------------------------------------------
+//   liftover.c
+//   Copyright (C) 2021 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
+#include <errno.h>
+#include <math.h>
+#include "liftover.h"
+#include "base250.h"
+#include "context.h"
+#include "flags.h"
+#include "chain.h"
+#include "data_types.h"
+#include "file.h"
+#include "buffer.h"
+#include "vblock.h"
+#include "hash.h"
+#include "container.h"
+#include "seg.h"
+#include "dict_id.h"
+#include "codec.h"
+#include "strings.h"
+#include "random_access.h"
+
+// 1) At the end of PIZ of a chain file: tname (aka tname) and qname are generated from z_file->contexts of a chain file when pizzing a chain file during genozip of a file with --liftover
+// 2) At the beginning of ZIP of a file with --liftover: tname copied to z_file->contexts of the file being compressed
+// 3) liftover_get_liftover_coords qname is consulted to get map the index of the primary chrom from the node_index
+//    of the file being compressed to the word_index of qname in the chain data
+static Buffer tname_dict    = EMPTY_BUFFER;
+static Buffer tname_contigs = EMPTY_BUFFER;
+static Buffer qname_dict    = EMPTY_BUFFER;
+static Buffer qname_words   = EMPTY_BUFFER;
+
+enum { OCHROM_OFFSET, OPOS_OFFSET, OREF_OFFSET, OSTRAND_OFFSET, OALTRULE_OFFSET, OSTATUS_OFFSET };
+
+const char *liftover_status_names[] = LIFTOVER_STATUS_NAMES;
+
+#define WORD_INDEX_MISSING -2 // a value in liftover_chrom2qname
+
+// constant snips initialized at the beginning of the first file zip
+static char liftover_snip[200], *liftback_snip;
+static unsigned liftover_snip_len, liftback_snip_len;
+
+// generate tname dict and nodes at the end of chain_load; to be copied z_file->contexts of file being zipped
+void liftover_copy_data_from_chain_file (void)
+{
+    // save qname  
+    buf_copy (evb, &qname_dict,  &z_file->contexts[CHAIN_QNAME].dict, 1, 0, 0, "qname_dict");
+    buf_copy (evb, &qname_words, &z_file->contexts[CHAIN_QNAME].word_list, sizeof (CtxWord), 0, 0, "qname_words");
+
+    // copy dictionary buffer
+    buf_copy (evb, &tname_dict, &z_file->contexts[CHAIN_TNAME].dict, 1, 0, 0, "tname_dict");
+    ARRAY (CtxWord, tname_words, z_file->contexts[CHAIN_TNAME].word_list);
+
+    // copy word_list into a contigs buffer - for convenience of using ctx_build_zf_ctx_from_contigs later
+    buf_alloc_more (evb, &tname_contigs, 0, tname_words_len, RefContig, 0, "tname_contigs");
+    tname_contigs.len = tname_words_len;
+    ARRAY (RefContig, contigs, tname_contigs);
+
+    for (uint32_t i=0; i < tname_words_len; i++)
+        contigs[i] = (RefContig) { .char_index = tname_words[i].char_index,
+                                   .snip_len   = tname_words[i].snip_len   };
+}
+
+// ---------------
+// ZIP & SEG stuff
+// ---------------
+
+// ZIP: called by the I/O thread from *_zip_initialize 
+// 
+void liftover_zip_initialize (DidIType tname_did_i, char special_liftback_snip_id)
+{
+    // case: --chain : create TNAME context from liftover contigs and dict
+    if (chain_is_loaded)
+        ctx_build_zf_ctx_from_contigs (tname_did_i, &tname_contigs, &tname_dict);
+
+    // prepare (constant) snips. note: we need these snips both for --chain and when zipping dual-coord files
+
+    SmallContainer liftover_con = {
+        .repeats     = 1,
+        .nitems_lo   = 5,
+        .items       = { { .dict_id = (DictId)dict_id_fields[VCF_oCHROM],  .seperator = ","  },
+                         { .dict_id = (DictId)dict_id_fields[VCF_oPOS],    .seperator = ","  },
+                         { .dict_id = (DictId)dict_id_fields[VCF_oREF],    .seperator = ","  },
+                         { .dict_id = (DictId)dict_id_fields[VCF_oSTRAND], .seperator = ","  },
+                         { .dict_id = (DictId)dict_id_fields[VCF_oALTRULE]                   } }
+    };
+
+    liftover_snip_len = sizeof (liftover_snip);
+    container_prepare_snip ((Container*)&liftover_con, 0, 0, liftover_snip, &liftover_snip_len);
+
+    liftback_snip = (char []){ SNIP_SPECIAL, special_liftback_snip_id };
+    liftback_snip_len = 2;
+}
+
+// SEG: map coordinates primary->laft
+LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover_chrom2qname, 
+                                             WordIndex *tname_index, PosType *tpos) // out
+{
+    // extend liftover_chrom2qname if needed
+    if (vb->chrom_node_index >= liftover_chrom2qname->len) { 
+        buf_alloc_more (vb, liftover_chrom2qname, 0, MAX (vb->chrom_node_index+1, 100), WordIndex, 0, "liftover_chrom2qname");
+
+        // initialize new entries allocated to WORD_INDEX_MISSING
+        uint32_t size = liftover_chrom2qname->size / sizeof (WordIndex);
+        for (uint32_t i=liftover_chrom2qname->param; i < size; i++)
+            *ENT (WordIndex, *liftover_chrom2qname, i) = WORD_INDEX_MISSING;
+
+        liftover_chrom2qname->param = size; // param holds the number of entries initialized >= len
+        liftover_chrom2qname->len   = vb->chrom_node_index + 1;
+    }
+
+    ARRAY (WordIndex, map, *liftover_chrom2qname);
+
+    // if chrom is not yet mapped to qname, map it now
+    if (map[vb->chrom_node_index] == WORD_INDEX_MISSING) {
+        WordIndex qname_index;
+        ARRAY (CtxWord, words, qname_words);
+        
+        for (qname_index=0; qname_index < words_len; qname_index++) {
+            const char *qname = ENT (char, qname_dict, words[qname_index].char_index);
+
+            if (words[qname_index].snip_len == vb->chrom_name_len && 
+                !memcmp (vb->chrom_name, qname, vb->chrom_name_len)) break; // found
+        }
+
+        map[vb->chrom_node_index] = (qname_index == words_len) ? WORD_INDEX_NONE : qname_index;
+    }
+
+    WordIndex qname_index = map[vb->chrom_node_index];
+
+    *tpos = 0; // initialize
+    if (qname_index == WORD_INDEX_NONE) 
+        return LO_NO_CHROM;
+    else 
+        return chain_get_liftover_coords (qname_index, vb->last_int(DTF(pos)), tname_index, tpos);
+}                                
+
+// --------------------------------------------------------------
+// Segging a NON-dual-coordinate file called when genozip --chain
+// --------------------------------------------------------------
+
+// Create LIFTOVER / LIFTREJD records when aligning a NON-dual-coordinate file (using --chain)
+LiftOverStatus liftover_seg_add_chain_data (VBlockP vb, DidIType ochrom_did_i, char orefalt_special_snip_id,
+                                            DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejd_dict_id)
+{
+    WordIndex ochrom_node_index;
+    PosType opos;
+    LiftOverStatus ostatus = liftover_get_liftover_coords (vb, &vb->liftover, &ochrom_node_index, &opos);
+    
+    seg_by_did_i (vb, liftover_status_names[ostatus], strlen (liftover_status_names[ostatus]), ochrom_did_i + OSTATUS_OFFSET, 0);
+    vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = ostatus;
+
+    // we add oPOS, oCHROM, oREF and oSTRAND only in case status is OK, they will be consumed by the liftover_snip container
+    if (ostatus == LO_OK) {
+        unsigned opos_len = str_int_len (opos);
+        seg_pos_field (vb, VCF_oPOS, VCF_oPOS, false, 0, 0, opos, opos_len);
+
+        buf_alloc_more (vb, &vb->contexts[VCF_oCHROM].b250, 1, vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250");
+        NEXTENT (WordIndex, vb->contexts[VCF_oCHROM].b250) = ochrom_node_index;
+        
+        unsigned ochrom_len = ENT (CtxNode, vb->contexts[VCF_oCHROM].ol_nodes, ochrom_node_index)->snip_len;
+        vb->contexts[VCF_oCHROM].txt_len += ochrom_len;
+
+// TODO - check with reference if REF changed
+        bool oref_is_ref = true;
+        unsigned ref_len = vb->last_txt_len(VCF_oREF);
+        unsigned alt_len = vb->last_txt_len(VCF_REFALT) - ref_len - 1;
+        unsigned oref_len = oref_is_ref ? ref_len : alt_len; 
+// TODO - get strand - change of strand withour change in REF is no change
+
+        char oref_special[3] = { SNIP_SPECIAL, orefalt_special_snip_id, '0' + oref_is_ref };
+        seg_by_did_i (vb, oref_special, 3, ochrom_did_i + OREF_OFFSET, oref_len); 
+
+        seg_by_did_i (vb, "+", 1, ochrom_did_i + OSTRAND_OFFSET, 1);
+        #define ostrand_len 1
+
+        seg_by_did_i (vb, "N", 1, ochrom_did_i + OALTRULE_OFFSET, 1);
+        #define oaltrule_len 1
+
+        seg_by_dict_id (vb, liftover_snip, liftover_snip_len, liftover_dict_id, 4); // account for 4 commas
+        seg_by_dict_id (vb, liftback_snip, liftback_snip_len, liftback_dict_id, 0); // don't account as this container is not reconstructed by default
+
+        // we modified the txt by adding these 5 fields to INFO/LIFTOVER. We account for them now, and we will account for the INFO name etc in seg_info_field
+        vb->vb_data_size += opos_len + ochrom_len + oref_len + ostrand_len + oaltrule_len + 4 /* commas */;
+    }
+    else {
+        unsigned ostatus_len = strlen (liftover_status_names[ostatus]);
+        seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJD }), 2, liftrejd_dict_id, ostatus_len);
+
+        vb->vb_data_size += ostatus_len; // we modified the txt by adding this string to INFO/LIFTREJD - update
+    }
+
+    return ostatus;
+}
+
+// -----------------------------------------------------------------------
+// Segging LIFTOVER / LIFTBACK / LIFTREJD records of dual-coordinate files
+// Liftover record: CHROM,POS,REF,STRAND,ALTRULE
+// Liftback record: CHROM,POS,REF,STRAND,ALTRULE
+// Liftrejd snip:   REJECTION_REASON
+// -----------------------------------------------------------------------
+
+// parse INFO_LIFTOVER/BACK to its componets. note that it is destructive - it replaces the ','s with 0
+static void liftover_seg_parse_record (VBlockP vb, char *value, int value_len,
+                                       const char **chrom, unsigned *chrom_len,
+                                       PosType *pos,       unsigned *pos_len,
+                                       const char **ref,   unsigned *ref_len,
+                                       char *strand,
+                                       char *altrule)
+{
+    const char *strs[5];
+    unsigned str_lens[5];
+    ASSSEG (str_split (value, value_len, 5, ',', strs, str_lens), value, "Invalid liftover record \"%.*s\"", value_len, value);
+
+    *chrom     = strs[0]; 
+    *chrom_len = str_lens[0];
+    *pos_len   = str_lens[1];
+    *ref       = strs[2];
+    *ref_len   = str_lens[2];
+    *strand    = strs[3][0];
+    *altrule   = strs[4][0];
+
+    ASSSEG (str_get_int_range64 (strs[1], *pos_len, 0, MAX_POS, pos), value, "Invalid POS value in liftover record: \"%s\"", strs[1]);
+}
+
+// parse the of LIFTOVER record, seg all the o* fields, and add the liftover and liftback snips
+void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId liftback_dict_id,
+                            DidIType ochrom_did_i, char orefalt_special_snip_id,
+                            const char *ref, unsigned ref_len, // primary REF
+                            const char *alt, unsigned alt_len, // optional - primary ALT
+                            char *value, int value_len)
+{
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTOVER" tag", txt_name);
+
+    // parse record
+    const char *ochrom, *oref; char ostrand, oaltrule; PosType opos; unsigned ochrom_len, opos_len, oref_len;
+    liftover_seg_parse_record (vb, value, value_len, &ochrom, &ochrom_len, &opos, &opos_len, &oref, &oref_len, &ostrand, &oaltrule); 
+
+    // oCHROM
+    seg_by_did_i (vb, ochrom, ochrom_len, ochrom_did_i + OCHROM_OFFSET, ochrom_len);
+
+    // oPOS
+    seg_pos_field (vb, ochrom_did_i+1, ochrom_did_i + OPOS_OFFSET, false, 0, 0, opos, opos_len);
+
+    // oREF
+    bool oref_is_ref =        (ref_len==oref_len && !strnicmp (ref, oref, oref_len)); // alleles are case insensitive per VCF spec
+    bool oref_is_alt = alt && (alt_len==oref_len && !strnicmp (alt, oref, oref_len));
+    
+    // currently, genozip only supports unchanged REF or switched REF/ALT, variants with other type REF changes should have been rejected
+    ASSSEG (oref_is_ref || oref_is_alt, value, "expecting OREF=\"%.*s\" to be the same as either REF=\"%.*s\" or ALT=\"%.*s\"",
+            oref_len, oref, ref_len, ref, alt_len, alt ? alt : "");
+
+    char oref_special[3] = { SNIP_SPECIAL, orefalt_special_snip_id, '0' + oref_is_ref };
+    seg_by_did_i (vb, oref_special, 3, ochrom_did_i + OREF_OFFSET, oref_len); 
+
+    // oSTRAND, oALTRULE and oSTATUS
+    seg_by_did_i (vb, &ostrand,  1, ochrom_did_i + OSTRAND_OFFSET,  1);
+    seg_by_did_i (vb, &oaltrule, 1, ochrom_did_i + OALTRULE_OFFSET, 1);
+    seg_by_did_i (vb, liftover_status_names[LO_OK], strlen (liftover_status_names[LO_OK]), ochrom_did_i + OSTATUS_OFFSET, 0); // 0 bc doesn't reconstruct
+
+    // LIFTOVER and LIFTBACK container snips (INFO container filter will determine which is reconstructed)
+    seg_by_dict_id (vb, liftover_snip, liftover_snip_len, liftover_dict_id, 4); // account for 4 commas
+    seg_by_dict_id (vb, liftback_snip, liftback_snip_len, liftback_dict_id, 0); // don't account as this container is not reconstructed by default
+
+    vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = LO_OK;
+}
+
+// parse the of LIFTBACK record, seg all the primary coordinate fields, generate oREF, and add the liftover and liftback snips
+void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback_dict_id,
+                            DidIType ochrom_did_i, DidIType pos_did_i, char orefalt_special_snip_id,
+                            const char *oref, unsigned oref_len, 
+                            const char *oalt, unsigned oalt_len, // optional
+                            void (*seg_ref_alt_cb)(VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len), // call back to seg primary REF and ALT
+                            char *value, int value_len)
+{
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTBACK" tag", txt_name);
+
+    // parse record
+    const char *chrom, *ref; char strand, altrule; PosType pos; unsigned pos_len, ref_len, chrom_len;
+    liftover_seg_parse_record (vb, value, value_len, &chrom, &chrom_len, &pos, &pos_len, &ref, &ref_len, &strand, &altrule); 
+
+    // CHROM
+    seg_chrom_field (vb, chrom, chrom_len);
+
+    // POS
+    seg_pos_field (vb, pos_did_i, pos_did_i, false, 0, 0, pos, pos_len+1);
+            
+    random_access_update_pos (vb, pos_did_i);
+
+    // REFALT & OREF
+    bool ref_is_oref =         (ref_len==oref_len && !strnicmp (ref, oref, ref_len)); // alleles are case insensitive per VCF spec
+    bool ref_is_oalt = oalt && (ref_len==oalt_len && !strnicmp (ref, oalt, ref_len));
+    
+    // currently, genozip only supports unchanged REF or switched REF/ALT, variants with other type REF changes should have been rejected
+    ASSSEG (ref_is_oref || ref_is_oalt, value, "expecting REF=\"%.*s\" to be the same as either OREF=\"%.*s\" or OALT=\"%.*s\"",
+            ref_len, ref, oref_len, oref, oalt_len, oalt ? oalt : "");
+
+    // REFALT (primary coords) - to be interpreted the REFALT translator that will translate it to oREF and oALT using oref_special function
+    if (ref_is_oref) 
+        seg_ref_alt_cb (vb, oref, oref_len, oalt, oalt_len); // also accounts for 2 tabs
+    else  // switch ref and alt
+        seg_ref_alt_cb (vb, oalt, oalt_len, oref, oref_len); // also accounts for 2 tabs
+
+    // oREF (we couldn't seg it in the main field, as it refers to REF)
+    char oref_special[3] = { SNIP_SPECIAL, orefalt_special_snip_id, '0' + ref_is_oref }; // should be the same as in vcf_seg_initialize()
+    seg_by_did_i (vb, oref_special, 3, ochrom_did_i + OREF_OFFSET, ref_is_oref ? oref_len : oalt_len); 
+
+    // oSTRAND, oALTRULE and oSTATUS 
+    seg_by_did_i (vb, &strand,  1, ochrom_did_i + OSTRAND_OFFSET,  1); // +1 because displayed by default (in LIFTOVER record)
+    seg_by_did_i (vb, &altrule, 1, ochrom_did_i + OALTRULE_OFFSET, 1);
+    seg_by_did_i (vb, liftover_status_names[LO_OK], strlen (liftover_status_names[LO_OK]), ochrom_did_i + OSTATUS_OFFSET, 0); // not displayed by default
+
+    // LIFTOVER and LIFTBACK container snips (INFO container filter will determine which is reconstructed)
+    seg_by_dict_id (vb, liftover_snip, liftover_snip_len, liftover_dict_id, 4); // account for 4 commas
+    seg_by_dict_id (vb, liftback_snip, liftback_snip_len, liftback_dict_id, 0); // don't account as this container is not reconstructed by default
+
+    vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = LO_OK;
+}
+
+void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len)
+{
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTREJD" tag", txt_name);
+
+    // get status from string
+    char save = value[value_len];
+    ((char *)value)[value_len] = 0; // temporarily nul-terminate
+    
+    for (unsigned i=0; i < NUM_LO_STATUSES; i++)
+        if (!strcmp (value, liftover_status_names[i])) { // found
+
+            unsigned status_len = strlen (value);
+            seg_by_did_i (vb, value, status_len, ochrom_did_i + OSTATUS_OFFSET, status_len);
+            seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJD }), 2, (DictId)dict_id_INFO_LIFTREJD, 0); // 0 bc no comma and name is accounted for by INFO
+
+            ((char *)value)[value_len] = save; // recover
+
+            vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = i;
+
+            return;
+        }
+
+    ASSSEG (false, value, "Invalid oSTATUS name: %.*s", value_len, value);
+}
+
+
+// PIZ with --laft: switch the order of the primary and reject txt files in the section list, to convince
+// piz_one_file to piz them in reverse order
+void liftover_section_list_move_rejects_to_front (void)
+{
+    SectionListEntry *primary = (SectionListEntry *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
+
+    SectionListEntry *rejects = primary;
+    sections_get_next_section_of_type ((const SectionListEntry **)&rejects, SEC_TXT_HEADER, false, true);
+
+    SectionListEntry *after = rejects;
+    sections_get_next_section_of_type ((const SectionListEntry **)&after, SEC_DICT, false, true); // first non-VB section type
+
+    unsigned num_primary_secs = rejects - primary;
+    unsigned num_rejects_sec  = after - rejects;
+
+    // now swap them...
+    SectionListEntry *temp = MALLOC (num_rejects_sec * sizeof (SectionListEntry));
+    memcpy (temp, rejects, num_rejects_sec * sizeof (SectionListEntry));
+    memmove (primary + num_rejects_sec, primary, num_primary_secs * sizeof (SectionListEntry));
+    memcpy (primary, temp, num_rejects_sec * sizeof (SectionListEntry));
+}
+
+// PIZ without --laft: remove rejects
+void liftover_section_list_remove_rejects (void)
+{
+    SectionListEntry *primary = (SectionListEntry *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
+
+    SectionListEntry *rejects = primary;
+    sections_get_next_section_of_type ((const SectionListEntry **)&rejects, SEC_TXT_HEADER, false, true);
+
+    SectionListEntry *after = rejects;
+    sections_get_next_section_of_type ((const SectionListEntry **)&after, SEC_DICT, false, true); // first non-VB section type
+
+    unsigned num_rejects_sec  = after - rejects;
+    unsigned num_after_sec    = AFTERENT (SectionListEntry, z_file->section_list_buf) - after;
+
+    // now remove rejects
+    memmove (rejects, after, num_after_sec * sizeof (SectionListEntry));
+    z_file->section_list_buf.len -= num_rejects_sec;
+}
+
+// ----------------------------------------------------------------
+// Rejects file stuff - file contains data in the native txt format
+// ----------------------------------------------------------------
+
+// ZIP: called when inspecting the txtheader to add header data, and after each VB to add rejected line
+void liftover_append_rejects_file (VBlockP vb)
+{
+    ASSERTE0 (z_file, "zfile is NULL");
+
+    // create rejects file if not already open
+    if (!z_file->rejects_file) {
+        z_file->rejects_file_name = malloc (strlen (z_file->name) + 20);
+        sprintf (z_file->rejects_file_name, "%s.rejects%s", z_file->name, file_plain_ext_by_dt (z_file->data_type));
+        
+        z_file->rejects_file = fopen (z_file->rejects_file_name, "wb+");
+        ASSERTE (z_file->rejects_file, "fopen() failed to open %s: %s", z_file->rejects_file_name, strerror (errno));
+    }
+
+    ASSERTE0 (z_file->rejects_file, "liftover rejects file is not open");
+
+    fwrite (vb->liftover_rejects.data, 1, vb->liftover_rejects.len, z_file->rejects_file);
+    z_file->rejects_disk_size += vb->liftover_rejects.len;
+
+    buf_free (&vb->liftover_rejects);
+}
+

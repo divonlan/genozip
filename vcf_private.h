@@ -9,6 +9,9 @@
 #include "vblock.h"
 #include "vcf.h"
 
+#define VCF_FIELD_NAMES "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
+#define VCF_FIELD_NAMES_LONG VCF_FIELD_NAMES "\tFORMAT"
+
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
     bool has_haplotype_data : 1; // FORMAT field contains GT
@@ -41,7 +44,7 @@ typedef struct VBlockVCF {
     char gt_prev_phase;
     
     // dictionaries stuff 
-    Buffer format_mapper_buf;      // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
+    Buffer format_mapper_buf;       // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
 
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Context *hapmat_index_ctx; 
@@ -58,10 +61,13 @@ typedef VBlockVCF *VBlockVCFP;
 
 // Samples stuff
 extern uint32_t vcf_num_samples; // ZIP
-extern uint32_t vcf_num_displayed_samples; // genocat with --samples
-extern void samples_digest_vcf_header (Buffer *vcf_header_buf);
 extern char *vcf_samples_is_included;
 #define samples_am_i_included(sample_i) (!flag.samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
+
+// Liftover stuff
+extern void vcf_zip_initialize_liftover_constant_snips (void);
+extern LiftOverStatus vcf_seg_liftover (VBlockVCFP vb);
+extern void vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (VBlockP vb);
 
 #endif
 

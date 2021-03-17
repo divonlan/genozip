@@ -258,6 +258,8 @@ extern const char *file_exts[];
 typedef const char *FileMode;
 extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
+typedef enum { DC_NONE, DC_PRIMARY, DC_LAFT } DualCoordinates;
+
 // ---------------------------
 // tests for compression types
 // ---------------------------
@@ -348,6 +350,15 @@ typedef struct File {
     Buffer read_count;
     Buffer unmapped_read_count;
 
+    // Z_FILE: Liftover stuff
+    char *rejects_file_name;            // ZIP: allocated and freed by liftover_*
+    FILE *rejects_file;                 // ZIP: rejects txt file
+    uint64_t rejects_disk_size;         // ZIP
+
+    // TXT_FILE: Liftover stuff
+    DualCoordinates dual_coords;       // ZIP: dual coordinate status of the TXT file. Set when reading TXT header, and immutable thereafter
+    uint64_t laft_reject_bytes;        // ZIP of Laft dual coordinate file: number of bytes of that are rejected lines, not yet assigned to a VB
+
     // Z_FILE: stats data
     Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)
     Buffer bound_txt_names;            // ZIP: a concatenation of all bound txt_names that contributed to this genozip file
@@ -357,7 +368,6 @@ typedef struct File {
 
     // Used for reading txt files
     Buffer unconsumed_txt;             // excess data read from the txt file - moved to the next VB
-
 } File;
 
 // methods
@@ -408,8 +418,8 @@ extern char *file_compressible_extensions (bool plain_only);
 #define txt_name file_printname(txt_file)
 #define z_name   file_printname(z_file)
 
-#define CLOSE(fd,name,quiet)  { ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));}
-#define FCLOSE(fp,name) { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; } }
+#define CLOSE(fd,name,quiet) do { ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));} while (0)
+#define FCLOSE(fp,name) do { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; } } while (0)
  
 // Windows compatibility stuff
 #ifdef _WIN32

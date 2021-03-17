@@ -67,13 +67,13 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         struct FlagsGenozipHeader f = h->h.flags.genozip_header;
         DataType dt = BGEN16 (h->data_type);
         sprintf (str, SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u digest_bound=%s\n" 
-                      SEC_TAB "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u ref=\"%.*s\" md5ref=%s\n"
+                      SEC_TAB "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u dual_coords=%u ref=\"%.*s\" md5ref=%s\n"
                       SEC_TAB "created=\"%.*s\"\n",
                  h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
                  BGEN64 (h->uncompressed_data_size), BGEN64 (h->num_items_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
                  digest_display (h->digest_bound).s, 
                  (dt==DT_FASTQ ? "dts_paired" : "dts_ref_internal"), f.dt_specific, 
-                 f.aligner, f.txt_is_bin, f.bgzf, f.adler,
+                 f.aligner, f.txt_is_bin, f.bgzf, f.adler, f.dual_coords,
                  REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
                  FILE_METADATA_LEN, h->created);
         break;
@@ -82,10 +82,11 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     case SEC_TXT_HEADER: {
         SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
         sprintf (str, SEC_TAB "txt_data_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u md5_single=%s digest_header=%s\n" 
-                      SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) txt_filename=\"%.*s\"\n",
+                      SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) liftover_rejects=%u txt_filename=\"%.*s\"\n",
                  BGEN64 (h->txt_data_size), BGEN64 (h->num_lines), BGEN32 (h->max_lines_per_vb), 
                  digest_display (h->digest_single).s, digest_display (h->digest_header).s, 
-                 codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], TXT_FILENAME_LEN, h->txt_filename);
+                 codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
+                 h->h.flags.txt_header.liftover_rejects, TXT_FILENAME_LEN, h->txt_filename);
         break;
     }
 
@@ -571,8 +572,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
             
             if (file_exists (header->ref_filename)) {
                 ASSERTW (flag.genocat_no_reconstruct, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
-                ref_set_reference (header->ref_filename);
-                flag.reference = REF_EXTERNAL;
+                ref_set_reference (header->ref_filename, REF_EXTERNAL, false);
             }
             else 
                 ASSINP (flag.genocat_no_ref_file, "%s: please use --reference specify the current path to reference file with which %s was compressed (original path was %s)",
@@ -744,7 +744,8 @@ void zfile_compress_genozip_header (Digest single_component_digest)
         .dt_specific  = DT_FUNC (z_file, zip_dts_flag)(),
         .aligner      = (flag.ref_use_aligner > 0),
         .bgzf         = (txt_file->codec == CODEC_BGZF),
-        .adler        = !flag.md5
+        .adler        = !flag.md5,
+        .dual_coords  = z_file->z_flags.dual_coords
     };
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
@@ -776,16 +777,10 @@ void zfile_compress_genozip_header (Digest single_component_digest)
 
     uint32_t license_num_bgen = BGEN32 (license_get());
     header.license_hash = md5_do (&license_num_bgen, sizeof (int32_t));
-
-    if (flag.bind) 
-        header.digest_bound = digest_snapshot (&z_file->digest_ctx_bound);
-    /*{
-        // get the hash from a copy of the md5 context, because we still need it for displaying the compression ratio later
-        Md5Context copy_md5_ctx_bound = z_file->digest_ctx_bound;
-        header.digest_bound.md5 = digest_finalize (&copy_md5_ctx_bound);
-    } */
-    else 
-        header.digest_bound = single_component_digest; // if not in bound mode - just copy the md5 of the single file
+    
+    header.digest_bound = flag.data_modified ? DIGEST_NONE
+                        : flag.bind          ? digest_snapshot (&z_file->digest_ctx_bound)
+                        :                      single_component_digest; // if not in bound mode - just copy the md5 of the single file
 
     zfile_get_metadata (header.created);
 
@@ -834,8 +829,9 @@ void zfile_write_txt_header (Buffer *txt_header_text, Digest header_md5, bool is
         .h.data_uncompressed_len = BGEN32 (txt_header_text->len),
         .h.compressed_offset     = BGEN32 (sizeof (SectionHeaderTxtHeader)),
         .h.codec                 = CODEC_BZ2,
+        .h.flags.txt_header.liftover_rejects = flag.processing_rejects,
         .codec                   = txt_file->codec, 
-        .digest_header           = header_md5,
+        .digest_header           = flag.data_modified ? DIGEST_NONE : header_md5,
     };
 
     // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
@@ -889,7 +885,8 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
     curr_header->num_lines        = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
-    curr_header->digest_single    = digest_finalize (&z_file->digest_ctx_single, "component:digest_ctx_single");
+    curr_header->digest_single    = flag.data_modified ? DIGEST_NONE 
+                                                       : digest_finalize (&z_file->digest_ctx_single, "component:digest_ctx_single");
 
     *md5 = curr_header->digest_single;
 
@@ -911,7 +908,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     return true; // success
 }
 
-// ZaIP compute thread - called from zip_compress_one_vb()
+// ZIP compute thread - called from zip_compress_one_vb()
 void zfile_compress_vb_header (VBlock *vb)
 {
     uint32_t sizeof_header = sizeof (SectionHeaderVbHeader);
@@ -922,10 +919,11 @@ void zfile_compress_vb_header (VBlock *vb)
         .h.compressed_offset = BGEN32 (sizeof_header),
         .h.vblock_i          = BGEN32 (vb->vblock_i),
         .h.codec             = CODEC_NONE,
+        .h.flags.vb_header   = vb->vb_header_flags,
         .num_lines           = BGEN32 ((uint32_t)vb->lines.len),
         .vb_data_size        = BGEN32 (vb->vb_data_size),
         .longest_line_len    = BGEN32 (vb->longest_line_len),
-        .digest_so_far     = vb->digest_so_far
+        .digest_so_far       = flag.data_modified ? DIGEST_NONE : vb->digest_so_far
     };
 
     // copy section header into z_data - to be eventually written to disk by the I/O thread. this section doesn't have data.

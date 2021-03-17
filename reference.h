@@ -11,6 +11,7 @@
 #include "buffer.h"
 #include "digest.h"
 #include "bit_array.h"
+#include "flags.h"
 
 // reference sequences - one per range of 1MB. ranges (chrom, pos) are mapped here with a hash function. In the rare case two unrelated ranges
 // are mapped to the same entry - only the first range will have a reference, and the other ones will not. this will hurt the compression ratio,
@@ -62,7 +63,7 @@ extern void ref_compress_ref (void);
 extern void ref_load_external_reference (bool display, bool is_last_z_file);
 extern void ref_load_stored_reference (void);
 extern bool ref_is_reference_loaded (void);
-extern void ref_set_reference (const char *filename);
+extern void ref_set_reference (const char *filename, ReferenceType ref_type, bool is_explicit);
 extern void ref_set_ref_file_info (Digest md5, const char *fasta_name);
 extern void ref_unload_reference (void);
 extern void ref_destroy_reference (void);
