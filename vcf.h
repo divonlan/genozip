@@ -46,11 +46,18 @@ extern unsigned vcf_vb_size (void);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 
-// Liftover stuff
-#define HEADER_KEY_LIFTOVER_REJECT "##LIFTOVER_REJECT="
-#define HEADER_KEY_DC "##DUAL_COORDINATES="
-#define HEADER_KEY_DC_PRIMARY "PRIMARY"
-#define HEADER_KEY_DC_LAFT    "LAFT"
+// Liftover - header keys
+#define HEADER_KEY_LIFTOVER_CONTIG "##liftover_contig="
+#define HEADER_KEY_LIFTBACK_CONTIG "##liftback_contig="
+#define HEADER_KEY_LIFTOVER_REF    "##liftover_reference="
+#define HEADER_KEY_LIFTBACK_REF    "##liftback_reference="
+#define HEADER_KEY_LIFTOVER_REJECT "##liftover_reject="
+#define HEADER_KEY_CHAIN           "##chain="
+#define HEADER_KEY_DC              "##dual_coordinates="
+#define HEADER_KEY_DC_PRIMARY      "PRIMARY"
+#define HEADER_KEY_DC_LAFT         "LAFT"
+
+// Liftover - header keys - INFO fields
 #define INFO_LIFTOVER "LIFTOVER"
 #define INFO_LIFTOVER_LEN 8
 #define INFO_LIFTBACK "LIFTBACK"

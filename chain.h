@@ -24,11 +24,12 @@ extern CONTAINER_FILTER_FUNC (chain_piz_filter);
 
 // using the chain data in genozip --chain
 extern void chain_load (void);
-extern LiftOverStatus chain_get_liftover_coords (WordIndex qname_index, PosType qpos, WordIndex *tname_index, PosType *tpos);
+extern LiftOverStatus chain_get_liftover_coords (WordIndex src_contig_index,  PosType src_1pos, 
+                                                 WordIndex *dst_contig_index, PosType *dst_1pos);
 
-#define CHAIN_SPECIAL { chain_piz_special_BACKSPACE, chain_piz_special_QEND, chain_piz_special_SIZE }
+#define CHAIN_SPECIAL { chain_piz_special_BACKSPACE, chain_piz_special_ENDDST, chain_piz_special_SIZE }
 SPECIAL (CHAIN, 0, BACKSPACE, chain_piz_special_BACKSPACE);
-SPECIAL (CHAIN, 1, QEND,      chain_piz_special_QEND);
+SPECIAL (CHAIN, 1, ENDDST,      chain_piz_special_ENDDST);
 SPECIAL (CHAIN, 2, SIZE,      chain_piz_special_SIZE);
 #define NUM_CHAIN_SPECIAL 3
 

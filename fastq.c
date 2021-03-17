@@ -427,7 +427,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     // SEQ - just get the whole line
     const char *seq_start = next_field;
     dl->seq_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (vb, next_field, &len, true, false, false, false, &dl->seq_len, &separator, has_13, "SEQ");
+    next_field = seg_get_next_item (vb, next_field, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &dl->seq_len, &separator, has_13, "SEQ");
 
     // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
     if (flag.ref_use_aligner) 

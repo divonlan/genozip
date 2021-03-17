@@ -638,7 +638,7 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
                 z_name);
 
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
-    ASSERTE ((unsigned)data_type < NUM_DATATYPES, "unrecognized data_type=%d", data_type);
+    ASSERTE ((unsigned)data_type < NUM_DATATYPES, "unrecognized data_type=%d: please upgrade genozip to the latest version", data_type);
 
     if (z_file->data_type == DT_NONE || z_file->data_type == DT_GENERIC) {
         z_file->data_type = data_type;

@@ -247,6 +247,25 @@ bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last
     return true;
 }
 
+// returns true if the strings are case-insensitive similar, and *identical if they are case-sensitive identical
+bool str_case_compare (const char *str1, const char *str2, unsigned len, 
+                       bool *identical) // optional out
+{
+    bool my_identical = true; // optimistic (automatic var)
+
+    for (unsigned i=0; i < len; i++)
+        if (str1[i] != str2[i]) {
+            my_identical = false; // NOT case-senstive identical
+            if (UPPER_CASE(str1[i]) != UPPER_CASE(str2[i])) {
+                if (identical) *identical = false;
+                return false;
+            }
+        }
+
+    if (identical) *identical = my_identical;
+    return true; // case-insenstive identical
+}
+
 // splits a string (doesn't need to be nul-terminated) to exactly num_items.
 // returns true is successful
 bool str_split (const char *str, unsigned str_len, unsigned num_items, char sep,

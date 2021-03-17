@@ -562,6 +562,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
     VBlockVCF *vb = (VBlockVCF *)vb_;
     unsigned optimized_snip_len;
 
+    // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
     // Optimize VQSLOD
     if (flag.optimize_VQSLOD && (dict_id.num == dict_id_INFO_VQSLOD) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
@@ -571,6 +572,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         *this_value_len = optimized_snip_len;
     }
 
+    // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
     // POS and END share the same delta stream - the next POS will be a delta vs this END)
     else if (dict_id.num == dict_id_INFO_END) {
         seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, *this_value, *this_value_len, 0, *this_value_len); // END is an alias of POS
@@ -584,10 +586,11 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         return false; // do not add to dictionary/b250 - we already did it
     }
 
+    // ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
     else if (dict_id.num == dict_id_INFO_BaseCounts)
         return vcf_seg_INFO_BaseCounts (vb, *this_value, *this_value_len);
     
-    // Depth
+    // ##INFO=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
     else if (dict_id.num == dict_id_INFO_DP) 
         return vcf_seg_INFO_DP (vb, *this_value, *this_value_len);
 
@@ -595,6 +598,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
     else if (dict_id.num == dict_id_INFO_SF) 
         return vcf_seg_INFO_SF_init (vb, *this_value, *this_value_len);
 
+    // ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
     // in case of AC, AN and AF - we store the values, and we postpone handling AC to the finalization
     else if (dict_id.num == dict_id_INFO_AC) { 
         vb->ac = *this_value; 
@@ -602,6 +606,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         return false; 
     } 
     
+    //##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
     else if (dict_id.num == dict_id_INFO_AN) { 
         vb->an = *this_value; 
         vb->an_len = *this_value_len;
@@ -611,6 +616,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         ctx->no_stons = true;
     }
 
+    // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
     else if (dict_id.num == dict_id_INFO_AF) { 
         vb->af = *this_value; 
         vb->af_len = *this_value_len;
@@ -620,11 +626,16 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         ctx->no_stons = true;
     }
 
+    // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
     else if (dict_id.num == dict_id_INFO_CSQ) {
         vcf_seg_INFO_CSQ (vb_, dict_id, *this_value, *this_value_len);
         return false; // caller shouldn't seg because we already did
     }
     
+    // ##INFO=<ID=DP_HIST,Number=R,Type=String,Description="Histogram for DP; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
+    // ##INFO=<ID=GQ_HIST,Number=R,Type=String,Description="Histogram for GQ; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
+    // ##INFO=<ID=AGE_HISTOGRAM_HET,Number=A,Type=String,Description="Histogram of ages of allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
+    // ##INFO=<ID=AGE_HISTOGRAM_HOM,Number=A,Type=String,Description="Histogram of ages of homozygous allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
     else if (dict_id.num == dict_id_INFO_vep ||
              dict_id.num == dict_id_INFO_DP_HIST ||
              dict_id.num == dict_id_INFO_GQ_HIST ||
@@ -701,7 +712,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
                 char *after_an; int    an = strtol (vb->an, &after_an, 10); 
                 char *after_ac; int    ac = strtol (vb->ac, &after_ac, 10); 
 
-                if (vb->an + vb->an_len == after_an && // conversion to a number consumed the entire snip
+                if (vb->an + vb->an_len == after_an && // conversion to a number consumed the entire snip (i.e. it was a single number)
                     vb->af + vb->af_len == after_af && 
                     vb->ac + vb->ac_len == after_ac && 
                     (int)round (af * an) == ac) { 
@@ -1053,13 +1064,17 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
 
         // note: cannot use switch bc dict_id_* are variables, not constants
 
+        // ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
         else if (dict_id.num == dict_id_FORMAT_GT)
             node_index = vcf_seg_FORMAT_GT (vb, ctx, dl, cell, cell_len, sample_i);
 
+        // ## Allele DoSage
+        // Also: ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
         else if (dict_id.num == dict_id_FORMAT_DS && // DS special only works if we also have GT
                  samples->items[0].dict_id.num == dict_id_FORMAT_GT)
             node_index = vcf_seg_FORMAT_DS (vb, ctx, cell, cell_len);
 
+        // ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
         else if (flag.optimize_PL && dict_id.num == dict_id_FORMAT_PL && 
             optimize_vcf_pl (cell, cell_len, optimized_snip, &optimized_snip_len)) 
             EVAL_OPTIMIZED
@@ -1072,6 +1087,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
             optimize_vector_2_sig_dig (cell, cell_len, optimized_snip, &optimized_snip_len))
             EVAL_OPTIMIZED
 
+        // ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
         else if (dict_id.num == dict_id_FORMAT_PL) // not optimized
             node_index = seg_array ((VBlockP)vb, ctx, ctx->did_i, cell, cell_len, ',', 0, false);
 
@@ -1080,17 +1096,21 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
         else if (dict_id.num == dict_id_FORMAT_PS) 
             node_index = vcf_seg_FORMAT_PS (vb, ctx, cell, cell_len);
 
+        // ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
         else if (dict_id.num == dict_id_FORMAT_GQ) 
             node_index = vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len, cell_len);
             
+        // ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
         else if (dict_id.num == dict_id_FORMAT_DP) 
             node_index = vcf_seg_FORMAT_DP (vb, ctx, cell, cell_len, ad_has_sum);
             
+        // ##FORMAT=<ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         else if (dict_id.num == dict_id_FORMAT_MIN_DP) 
             node_index = seg_delta_vs_other ((VBlockP)vb, ctx, dp_ctx, cell, cell_len, -1);
 
+        // ##FORMAT=<ID=AD,Number=.,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">  
         else if (dict_id.num == dict_id_FORMAT_AD  || dict_id.num == dict_id_FORMAT_ADALL || 
                  dict_id.num == dict_id_FORMAT_ADF || dict_id.num == dict_id_FORMAT_ADR) 
             node_index = vcf_seg_FORMAT_AD (vb, ctx, cell, cell_len, 
@@ -1129,7 +1149,7 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
     for (char separator=0 ; separator != '\n'; samples.repeats++) {
 
         field_start = next_field;
-        next_field = seg_get_next_item (vb, field_start, len, true, true, false, false, &field_len, &separator, has_13, "sample-subfield");
+        next_field = seg_get_next_item (vb, field_start, len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, "sample-subfield");
 
         ASSSEG (field_len, field_start, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", 
                 samples.repeats+1);
@@ -1249,8 +1269,8 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // e.g. GG has a probability of 0 and GC has a higher probability than GA.
     unsigned ref_len=0, alt_len=0;
     const char *ref_start = next_field; 
-    const char *alt_start = seg_get_next_item (vb, ref_start, &len, false, true, false, false, &ref_len, &separator, NULL, "REF"); 
-    next_field            = seg_get_next_item (vb, alt_start, &len, false, true, false, false, &alt_len, &separator, NULL, "ALT");
+    const char *alt_start = seg_get_next_item (vb, ref_start, &len, GN_FORBIDEN, GN_SEP, GN_FORBIDEN, &ref_len, &separator, NULL, "REF"); 
+    next_field            = seg_get_next_item (vb, alt_start, &len, GN_FORBIDEN, GN_SEP, GN_FORBIDEN, &alt_len, &separator, NULL, "ALT");
 
     // save REF and ALT (in primary or laft coordinates) to be used for INFO fields
     vb->contexts[VCF_REFALT].last_txt = ENTNUM (vb->txt_data, ref_start); // used by vcf_seg_INFO_BaseCounts, INFO/LIFTBACK
@@ -1271,9 +1291,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     // INFO
     if (vcf_num_samples)
-        GET_NEXT_ITEM (DTF(names)[VCF_INFO]); // pointer to string to allow pointer comparison 
+        GET_NEXT_ITEM ("INFO"); 
     else
-        GET_MAYBE_LAST_ITEM (DTF(names)[VCF_INFO]); // may or may not have a FORMAT field
+        GET_MAYBE_LAST_ITEM ("INFO"); // may or may not have a FORMAT field
 
     seg_info_field (vb_, vcf_seg_special_info_subfields, field_start, field_len, 
                     flag.processing_rejects ? LO_UNSUPPORTED               : // in the rejects file all have failed - this is some error, we don't yet know the true one
@@ -1287,7 +1307,11 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     if (separator != '\n') { // has a FORMAT field
 
         // FORMAT
-        GET_MAYBE_LAST_ITEM ("FORMAT");
+        if (vcf_num_samples)
+            GET_MAYBE_LAST_ITEM ("FORMAT"); // possibly no samples this line
+        else
+            GET_LAST_ITEM ("FORMAT");
+        
         vcf_seg_format_field (vb, dl, field_start, field_len);
 
         ASSSEG0 (separator == '\n' || dl->has_genotype_data || dl->has_haplotype_data, field_start,

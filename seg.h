@@ -17,8 +17,9 @@ typedef enum { ERR_SEG_NO_ERROR=0, ERR_SEG_OUT_OF_RANGE, ERR_SEG_NOT_INTEGER } S
 
 extern void seg_all_data_lines (VBlockP vb); 
 
+typedef enum { GN_FORBIDEN, GN_SEP, GN_IGNORE } GetNextAllow;
 extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, 
-                                      bool allow_newline, bool allow_tab, bool allow_colon, bool allow_space,
+                                      GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
                                       unsigned *len, char *separator, bool *has_13, // out
                                       const char *item_name);
 extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name);
@@ -84,7 +85,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 
 #define GET_NEXT_ITEM(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, false, true, false, false, &field_len, &separator, NULL, (item_name)); } while(0)
+      next_field = seg_get_next_item (vb, field_start, &len, GN_FORBIDEN, GN_SEP, GN_IGNORE, &field_len, &separator, NULL, (item_name)); } while(0)
 
 #define SEG_NEXT_ITEM(f) do \
     { GET_NEXT_ITEM (DTF(names)[f]); \
@@ -92,7 +93,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 
 #define GET_LAST_ITEM(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, true, false, false, false, &field_len, &separator, has_13, item_name); } while(0)
+      next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &field_len, &separator, has_13, item_name); } while(0)
 
 #define SEG_LAST_ITEM(f) do \
     { GET_LAST_ITEM (DTF(names)[f]); \
@@ -100,7 +101,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 
 #define GET_MAYBE_LAST_ITEM(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, true, true, false, false, &field_len, &separator, has_13, item_name); } while(0)
+      next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, item_name); } while(0)
 
 #define SEG_MAYBE_LAST_ITEM(f) do \
     { GET_MAYBE_LAST_ITEM (DTF(names)[f]); \
@@ -110,13 +111,15 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 
 #define GET_NEXT_ITEM_SP(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, false, false, false, true, &field_len, &separator, NULL, (item_name)); } while(0)
+      next_field = seg_get_next_item (vb, field_start, &len, GN_FORBIDEN, GN_FORBIDEN, GN_SEP, &field_len, &separator, NULL, (item_name)); } while(0)
 
 #define SEG_NEXT_ITEM_SP(f) do \
     { GET_NEXT_ITEM_SP (DTF(names)[f]); \
       seg_by_did_i (vb, field_start, field_len, f, field_len+1); } while(0)
 
-#define GET_LAST_ITEM_SP GET_LAST_ITEM
+#define GET_LAST_ITEM_SP(item_name) do \
+    { field_start = next_field; \
+      next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_FORBIDEN, GN_FORBIDEN, &field_len, &separator, has_13, item_name); } while(0)
 
 #define SEG_LAST_ITEM_SP(f) do \
     { GET_LAST_ITEM_SP (DTF(names)[f]); \
@@ -124,7 +127,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 
 #define GET_MAYBE_LAST_ITEM_SP(item_name) do \
     { field_start = next_field; \
-      next_field = seg_get_next_item (vb, field_start, &len, true, false, false, true, &field_len, &separator, has_13, item_name); } while(0)
+      next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_FORBIDEN, GN_SEP, &field_len, &separator, has_13, item_name); } while(0)
 
 #define SEG_MAYBE_LAST_ITEM_SP(f) do \
     { GET_MAYBE_LAST_ITEM_SP (DTF(names)[f]); \

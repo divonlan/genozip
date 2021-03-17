@@ -115,7 +115,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-chain  Z. Show chain file alignments when loading a chain file with --chain.
+.. option:: --show-chain  Z. Show chain file alignments. Example: ``genozip -C GRCh37_to_GRCh38.chain.genozip --show-chain .``
 
           |
 

@@ -52,44 +52,42 @@ void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
 }
 
 const char *seg_get_next_item (void *vb_, const char *str, int *str_len, 
-                               bool allow_newline, bool allow_tab, bool allow_colon, bool allow_space,
+                               GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
                                unsigned *len, char *separator, 
-                               bool *has_13, // out - only needed if allow_newline=true
+                               bool *has_13, // out - only modified if '\r' detected ; only needed if newline=GN_SEP
                                const char *item_name)
 {
     VBlockP vb = (VBlockP)vb_;
 
-    unsigned i=0; for (; i < *str_len; i++)
-        if ((allow_tab     && str[i] == '\t') ||
-            (allow_colon   && str[i] == ':')  ||
-            (allow_newline && str[i] == '\n') ||
-            (allow_space   && str[i] == ' ')) {
+    unsigned i=0; for (; i < *str_len; i++) {
+        char c = str[i];
+        if ((tab     == GN_SEP && c == '\t') ||
+            (newline == GN_SEP && c == '\n') ||
+            (space   == GN_SEP && c == ' ')) {
                 *len = i;
-                *separator = str[i];
+                *separator = c;
                 *str_len -= i+1;
 
                 // check for Windows-style '\r\n' end of line 
-                if (i && str[i] == '\n' && str[i-1] == '\r') {
+                if (i && c == '\n' && str[i-1] == '\r') {
                     (*len)--;
-                    ASSERTE0 (has_13, "has_13==NULL but expecting it because allow_newline=true");
+                    ASSERTE0 (has_13, "has_13=NULL but expecting it because newline=GN_SEP");
                     *has_13 = true;
                 }
 
                 return str + i+1; // beyond the separator
         }
-        else if ((!allow_tab     && str[i] == '\t') ||  // note: a colon with allow_colon/space=false is not an error, its just part of the string rather than being a separator
-                 (!allow_newline && str[i] == '\n')) break;
-            
+        else if ((tab     == GN_FORBIDEN && c == '\t') ||
+                 (newline == GN_FORBIDEN && c == '\n') ||
+                 (space   == GN_FORBIDEN && c == ' ' ) ) break;
+    }
+
     ASSSEG (*str_len, str, "missing %s field", item_name);
 
-    ASSSEG (str[i] != '\t' || vb->data_type != DT_VCF || (item_name == DTF(names)[VCF_INFO] /* pointer, not string, comparison */), 
-            str, "while segmenting %s: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
-            item_name);
-
-    ABOSEG (str, "while segmenting %s: expecting a %s %s %s %s after \"%.*s\"", 
+    ABOSEG (str, "while segmenting %s: expecting a %s%s%safter \"%.*s\"", 
             item_name,
-            allow_newline ? "NEWLINE" : "", allow_tab ? "TAB" : "", allow_colon ? "\":\"" : "", allow_space ? "\" \"" : "", 
-            MIN (i-1, 1000), str);
+            newline==GN_SEP ? "NEWLINE " : "", tab==GN_SEP ? "TAB " : "", space==GN_SEP ? "\" \" " : "", 
+            MIN (i, 1000), str);
 
     return 0; // avoid compiler warning - never reaches here
 }

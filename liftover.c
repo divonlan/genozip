@@ -22,44 +22,44 @@
 #include "strings.h"
 #include "random_access.h"
 
-// 1) At the end of PIZ of a chain file: tname (aka tname) and qname are generated from z_file->contexts of a chain file when pizzing a chain file during genozip of a file with --liftover
-// 2) At the beginning of ZIP of a file with --liftover: tname copied to z_file->contexts of the file being compressed
-// 3) liftover_get_liftover_coords qname is consulted to get map the index of the primary chrom from the node_index
-//    of the file being compressed to the word_index of qname in the chain data
-static Buffer tname_dict    = EMPTY_BUFFER;
-static Buffer tname_contigs = EMPTY_BUFFER;
-static Buffer qname_dict    = EMPTY_BUFFER;
-static Buffer qname_words   = EMPTY_BUFFER;
+// 1) At the end of PIZ of a chain file: src_contig and dst_contig are generated from z_file->contexts of a chain file when pizzing a chain file during genozip of a file with --liftover
+// 2) At the beginning of ZIP of a file with --liftover: dst_contig copied to z_file->contexts of the file being compressed
+// 3) liftover_get_liftover_coords src_contig is consulted to get map the index of the primary chrom from the node_index
+//    of the file being compressed to the word_index of src_contig in the chain data
+static Buffer src_contig_dict    = EMPTY_BUFFER;
+static Buffer src_contig_words   = EMPTY_BUFFER;
+static Buffer dst_contig_dict    = EMPTY_BUFFER;
+static Buffer dst_contig_contigs = EMPTY_BUFFER;
 
 enum { OCHROM_OFFSET, OPOS_OFFSET, OREF_OFFSET, OSTRAND_OFFSET, OALTRULE_OFFSET, OSTATUS_OFFSET };
 
 const char *liftover_status_names[] = LIFTOVER_STATUS_NAMES;
 
-#define WORD_INDEX_MISSING -2 // a value in liftover_chrom2qname
+#define WORD_INDEX_MISSING -2 // a value in liftover_chrom2chainsrc
 
 // constant snips initialized at the beginning of the first file zip
 static char liftover_snip[200], *liftback_snip;
 static unsigned liftover_snip_len, liftback_snip_len;
 
-// generate tname dict and nodes at the end of chain_load; to be copied z_file->contexts of file being zipped
+// generate dst_contig dict and nodes at the end of chain_load; to be copied z_file->contexts of file being zipped
 void liftover_copy_data_from_chain_file (void)
 {
-    // save qname  
-    buf_copy (evb, &qname_dict,  &z_file->contexts[CHAIN_QNAME].dict, 1, 0, 0, "qname_dict");
-    buf_copy (evb, &qname_words, &z_file->contexts[CHAIN_QNAME].word_list, sizeof (CtxWord), 0, 0, "qname_words");
+    // save src_contig  
+    buf_copy (evb, &src_contig_dict,  &z_file->contexts[CHAIN_NAMESRC].dict, 1, 0, 0, "src_contig_dict");
+    buf_copy (evb, &src_contig_words, &z_file->contexts[CHAIN_NAMESRC].word_list, sizeof (CtxWord), 0, 0, "src_contig_words");
 
     // copy dictionary buffer
-    buf_copy (evb, &tname_dict, &z_file->contexts[CHAIN_TNAME].dict, 1, 0, 0, "tname_dict");
-    ARRAY (CtxWord, tname_words, z_file->contexts[CHAIN_TNAME].word_list);
+    buf_copy (evb, &dst_contig_dict, &z_file->contexts[CHAIN_NAMEDST].dict, 1, 0, 0, "dst_contig_dict");
+    ARRAY (CtxWord, dst_contig_words, z_file->contexts[CHAIN_NAMEDST].word_list);
 
     // copy word_list into a contigs buffer - for convenience of using ctx_build_zf_ctx_from_contigs later
-    buf_alloc_more (evb, &tname_contigs, 0, tname_words_len, RefContig, 0, "tname_contigs");
-    tname_contigs.len = tname_words_len;
-    ARRAY (RefContig, contigs, tname_contigs);
+    buf_alloc_more (evb, &dst_contig_contigs, 0, dst_contig_words_len, RefContig, 0, "dst_contig_contigs");
+    dst_contig_contigs.len = dst_contig_words_len;
+    ARRAY (RefContig, contigs, dst_contig_contigs);
 
-    for (uint32_t i=0; i < tname_words_len; i++)
-        contigs[i] = (RefContig) { .char_index = tname_words[i].char_index,
-                                   .snip_len   = tname_words[i].snip_len   };
+    for (uint32_t i=0; i < dst_contig_words_len; i++)
+        contigs[i] = (RefContig) { .char_index = dst_contig_words[i].char_index,
+                                   .snip_len   = dst_contig_words[i].snip_len   };
 }
 
 // ---------------
@@ -68,11 +68,11 @@ void liftover_copy_data_from_chain_file (void)
 
 // ZIP: called by the I/O thread from *_zip_initialize 
 // 
-void liftover_zip_initialize (DidIType tname_did_i, char special_liftback_snip_id)
+void liftover_zip_initialize (DidIType dst_contig_did_i, char special_liftback_snip_id)
 {
-    // case: --chain : create TNAME context from liftover contigs and dict
+    // case: --chain : create SRCNAME context from liftover contigs and dict
     if (chain_is_loaded)
-        ctx_build_zf_ctx_from_contigs (tname_did_i, &tname_contigs, &tname_dict);
+        ctx_build_zf_ctx_from_contigs (dst_contig_did_i, &dst_contig_contigs, &dst_contig_dict);
 
     // prepare (constant) snips. note: we need these snips both for --chain and when zipping dual-coord files
 
@@ -94,46 +94,46 @@ void liftover_zip_initialize (DidIType tname_did_i, char special_liftback_snip_i
 }
 
 // SEG: map coordinates primary->laft
-LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover_chrom2qname, 
-                                             WordIndex *tname_index, PosType *tpos) // out
+LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover_chrom2chainsrc, 
+                                             WordIndex *dst_contig_index, PosType *dst_1pos) // out
 {
-    // extend liftover_chrom2qname if needed
-    if (vb->chrom_node_index >= liftover_chrom2qname->len) { 
-        buf_alloc_more (vb, liftover_chrom2qname, 0, MAX (vb->chrom_node_index+1, 100), WordIndex, 0, "liftover_chrom2qname");
+    // extend liftover_chrom2chainsrc if needed
+    if (vb->chrom_node_index >= liftover_chrom2chainsrc->len) { 
+        buf_alloc_more (vb, liftover_chrom2chainsrc, 0, MAX (vb->chrom_node_index+1, 100), WordIndex, 0, "liftover_chrom2chainsrc");
 
         // initialize new entries allocated to WORD_INDEX_MISSING
-        uint32_t size = liftover_chrom2qname->size / sizeof (WordIndex);
-        for (uint32_t i=liftover_chrom2qname->param; i < size; i++)
-            *ENT (WordIndex, *liftover_chrom2qname, i) = WORD_INDEX_MISSING;
+        uint32_t size = liftover_chrom2chainsrc->size / sizeof (WordIndex);
+        for (uint32_t i=liftover_chrom2chainsrc->param; i < size; i++)
+            *ENT (WordIndex, *liftover_chrom2chainsrc, i) = WORD_INDEX_MISSING;
 
-        liftover_chrom2qname->param = size; // param holds the number of entries initialized >= len
-        liftover_chrom2qname->len   = vb->chrom_node_index + 1;
+        liftover_chrom2chainsrc->param = size; // param holds the number of entries initialized >= len
+        liftover_chrom2chainsrc->len   = vb->chrom_node_index + 1;
     }
 
-    ARRAY (WordIndex, map, *liftover_chrom2qname);
+    ARRAY (WordIndex, map, *liftover_chrom2chainsrc);
 
-    // if chrom is not yet mapped to qname, map it now
+    // if chrom is not yet mapped to src_contig, map it now
     if (map[vb->chrom_node_index] == WORD_INDEX_MISSING) {
-        WordIndex qname_index;
-        ARRAY (CtxWord, words, qname_words);
+        WordIndex src_contig_index;
+        ARRAY (CtxWord, words, src_contig_words);
         
-        for (qname_index=0; qname_index < words_len; qname_index++) {
-            const char *qname = ENT (char, qname_dict, words[qname_index].char_index);
+        for (src_contig_index=0; src_contig_index < words_len; src_contig_index++) {
+            const char *src_contig = ENT (char, src_contig_dict, words[src_contig_index].char_index);
 
-            if (words[qname_index].snip_len == vb->chrom_name_len && 
-                !memcmp (vb->chrom_name, qname, vb->chrom_name_len)) break; // found
+            if (words[src_contig_index].snip_len == vb->chrom_name_len && 
+                !memcmp (vb->chrom_name, src_contig, vb->chrom_name_len)) break; // found
         }
 
-        map[vb->chrom_node_index] = (qname_index == words_len) ? WORD_INDEX_NONE : qname_index;
+        map[vb->chrom_node_index] = (src_contig_index == words_len) ? WORD_INDEX_NONE : src_contig_index;
     }
 
-    WordIndex qname_index = map[vb->chrom_node_index];
+    WordIndex src_contig_index = map[vb->chrom_node_index];
 
-    *tpos = 0; // initialize
-    if (qname_index == WORD_INDEX_NONE) 
+    *dst_1pos = 0; // initialize
+    if (src_contig_index == WORD_INDEX_NONE) 
         return LO_NO_CHROM;
     else 
-        return chain_get_liftover_coords (qname_index, vb->last_int(DTF(pos)), tname_index, tpos);
+        return chain_get_liftover_coords (src_contig_index, vb->last_int(DTF(pos)), dst_contig_index, dst_1pos);
 }                                
 
 // --------------------------------------------------------------
@@ -244,8 +244,8 @@ void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId liftback
     seg_pos_field (vb, ochrom_did_i+1, ochrom_did_i + OPOS_OFFSET, false, 0, 0, opos, opos_len);
 
     // oREF
-    bool oref_is_ref =        (ref_len==oref_len && !strnicmp (ref, oref, oref_len)); // alleles are case insensitive per VCF spec
-    bool oref_is_alt = alt && (alt_len==oref_len && !strnicmp (alt, oref, oref_len));
+    bool oref_is_ref =        (ref_len==oref_len && str_case_compare (ref, oref, oref_len, NULL)); // alleles are case insensitive per VCF spec
+    bool oref_is_alt = alt && (alt_len==oref_len && str_case_compare (alt, oref, oref_len, NULL));
     
     // currently, genozip only supports unchanged REF or switched REF/ALT, variants with other type REF changes should have been rejected
     ASSSEG (oref_is_ref || oref_is_alt, value, "expecting OREF=\"%.*s\" to be the same as either REF=\"%.*s\" or ALT=\"%.*s\"",
@@ -289,8 +289,8 @@ void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback
     random_access_update_pos (vb, pos_did_i);
 
     // REFALT & OREF
-    bool ref_is_oref =         (ref_len==oref_len && !strnicmp (ref, oref, ref_len)); // alleles are case insensitive per VCF spec
-    bool ref_is_oalt = oalt && (ref_len==oalt_len && !strnicmp (ref, oalt, ref_len));
+    bool ref_is_oref =         (ref_len==oref_len && str_case_compare (ref, oref, ref_len, NULL)); // alleles are case insensitive per VCF spec
+    bool ref_is_oalt = oalt && (ref_len==oalt_len && str_case_compare (ref, oalt, ref_len, NULL));
     
     // currently, genozip only supports unchanged REF or switched REF/ALT, variants with other type REF changes should have been rejected
     ASSSEG (ref_is_oref || ref_is_oalt, value, "expecting REF=\"%.*s\" to be the same as either OREF=\"%.*s\" or OALT=\"%.*s\"",

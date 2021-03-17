@@ -16,12 +16,15 @@
 #define IS_NON_WS_PRINTABLE(c) (((c)>=33) && ((c)<=126))
 #define IS_VALID_URL_CHAR(c) (IS_LETTER(c) || IS_DIGIT(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
 #define FLIP_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
+#define UPPER_CASE(c) (IS_SLETTER(c) ? ((c)-32) : (c))
+#define LOWER_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (c))
 
 typedef struct { char s[80]; } StrText;
 
 extern StrText char_to_printable (char c);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (const char *in, char *out);
+extern bool str_case_compare (const char *str1, const char *str2, unsigned len, bool *identical);
 
 extern StrText str_size (uint64_t size);
 extern StrText str_bases (uint64_t num_bases);
@@ -48,7 +51,8 @@ extern StrText str_time (void);
 extern double str_get_positive_float (const char *float_str, unsigned float_str_len);
 extern unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str /* out */);
 
-extern bool str_split (const char *str, unsigned str_len, unsigned num_items, char sep, const char **items, unsigned *item_lens);
+extern bool str_split (const 
+char *str, unsigned str_len, unsigned num_items, char sep, const char **items, unsigned *item_lens);
 
 extern const char *type_name (unsigned item, 
                               const char * const *name, // the address in which a pointer to name is found, if item is in range

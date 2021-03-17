@@ -146,10 +146,10 @@ typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SC
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPLEVEL, ME23_TOP2VCF, NUM_ME23_FIELDS } Me23Fields;  
 typedef enum { GNRIC_DATA, GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GenericFields;
 typedef enum { PHY_ID, PHY_SEQ, PHY_EOL, PHY_TOPLEVEL, PHY_TOP2FASTA, NUM_PHY_FIELDS } PhyFields;
-typedef enum { CHAIN_QNAME /* must be first = CHROM */, CHAIN_CHAIN, CHAIN_SCORE, CHAIN_TQSIZE,
-               CHAIN_TNAME, CHAIN_TSTRAND, CHAIN_TSTART, CHAIN_TEND, 
-                            CHAIN_QSTRAND, CHAIN_QSTART, CHAIN_QEND, 
-               CHAIN_ID, CHAIN_SET, CHAIN_SIZE, CHAIN_DT_DQ, CHAIN_TOPLEVEL, CHAIN_EOL, NUM_CHAIN_FIELDS } ChainFields;
+typedef enum { CHAIN_NAMESRC, CHAIN_STRNDSRC, CHAIN_STARTSRC, CHAIN_ENDSRC, 
+               CHAIN_NAMEDST, CHAIN_STRNDDST, CHAIN_STARTDST, CHAIN_ENDDST, 
+               CHAIN_CHAIN, CHAIN_SCORE, CHAIN_TQSIZE, CHAIN_ID, CHAIN_SET, 
+               CHAIN_SIZE, CHAIN_GAPS, CHAIN_EOL, CHAIN_TOPLEVEL, NUM_CHAIN_FIELDS } ChainFields;
 
 #define MAX_NUM_FIELDS_PER_DATA_TYPE MAX ((int) NUM_REF_FIELDS,    \
                                      MAX ((int) NUM_VCF_FIELDS,    \
@@ -186,7 +186,7 @@ typedef struct DataTypeFields {
   {NUM_VCF_FIELDS,   VCF_POS,    VCF_POS,        VCF_INFO,   -1,           VCF_EOL,   VCF_TOPLEVEL,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL, "oCHROM", "oPOS", "oREF", "oSTRAND", "oALTRULE", "o$TATUS" } }, \
   {NUM_GNRIC_FIELDS, -1,         -1,             -1,         -1,           -1,        GNRIC_TOPLEVEL, { "DATA", TOPLEVEL } }, \
   {NUM_PHY_FIELDS,   -1,         -1,             -1,         -1,           PHY_EOL,   PHY_TOPLEVEL,   { "ID", "SEQ", "EOL", TOPLEVEL, "TOP2FA" } }, \
-  {NUM_CHAIN_FIELDS, -1,         CHAIN_QNAME,    -1,         -1,           CHAIN_EOL, CHAIN_TOPLEVEL, { "QNAME", "CHAIN", "SCORE", "TQSIZE", "TNAME", "TSTRAND", "TSTART", "TEND", "QSTRAND", "QSTART", "QEND", "ID", "SET", "SIZE", "DT_DQ", "EOL", TOPLEVEL } }, \
+  {NUM_CHAIN_FIELDS, -1,         CHAIN_NAMEDST,  -1,         -1,           CHAIN_EOL, CHAIN_TOPLEVEL, { "NAMESRC", "SRANDSRC", "STARTSRC", "ENDSRC", "NaMEDST", "SrANDDST", "StARTDST", "EnDDST", "CHAIN", "SCORE", "TQSIZE", "ID", "SET", "SIZE", "GAPS", "EOL", TOPLEVEL } }, /* unique first 2 letters */ \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)
