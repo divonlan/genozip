@@ -33,6 +33,7 @@ SPECIAL (CHAIN, 1, ENDDST,      chain_piz_special_ENDDST);
 SPECIAL (CHAIN, 2, SIZE,      chain_piz_special_SIZE);
 #define NUM_CHAIN_SPECIAL 3
 
-extern bool chain_is_loaded; // global
+extern char *chain_filename; // global
+#define chain_is_loaded ((bool)chain_filename)
 
 #endif

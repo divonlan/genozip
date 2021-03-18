@@ -144,7 +144,7 @@ extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 #define buf_add_more(vb, buf, new_data, new_data_len, name) do { \
     uint32_t new_len = (uint32_t)(new_data_len); /* copy in case caller uses ++ */ \
     if (new_len) { \
-        buf_alloc_more ((vb), (buf), (new_len), (buf)->len+(new_len)+1 /* room for \0 or seperator */, char, 1.5, (name)); \
+        buf_alloc_more ((vb), (buf), (new_len), (buf)->len+(new_len)+1 /* +1 - room for \0 or seperator */, char, 1.5, (name)); \
         memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
         (buf)->len += new_len; \
     } \

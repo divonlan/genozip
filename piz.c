@@ -590,7 +590,7 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
                     
                 txtfile_genozip_to_txt_header (sl_ent,  
                                                first_component_this_txtfile ? &original_file_digest : NULL); // NULL means skip txt header (2nd+ component if concatenating)
-                
+           
                 if (!first_component_this_txtfile) 
                     component_i += flag.interleave ? 2 : 1; 
 

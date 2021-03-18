@@ -249,6 +249,52 @@ static uint32_t txtfile_read_block (VBlock *vb, uint32_t max_bytes,
     return bytes_read;
 }
 
+// iterator on a buffer containing newline-terminated lines
+// false means continue iterating, true means stop
+char *txtfile_foreach_line (Buffer *txt_header,
+                            bool reverse, // iterate backwards
+                            TxtIteratorCallback callback, 
+                            void *cb_param1, void *cb_param2, unsigned cb_param3, // passed as-is to callback
+                            int64_t *line_len) // out
+{
+    if (line_len) *line_len = 0;
+
+    if (!txt_header->len) return NULL;
+
+    char *firstbuf = txt_header->data;
+    char *afterbuf = AFTERENT (char, *txt_header);
+
+    char *first = !reverse ? firstbuf : 0;
+    char *after = !reverse ? 0 : afterbuf;
+
+    while (1) {
+            
+        // get one line - searching forward or backwards
+        if (!reverse) {
+            for (after=first ; after < afterbuf && *after != '\n' ; after++);
+            after++; // skip newline
+        }
+        else {
+            for (first=after-2 /* skip final \n */; first >= firstbuf && *first != '\n'; first--);
+            first++; // after detected \n or at start of line
+        }
+
+        if (!reverse && after > afterbuf) return NULL; // we don't call callback if after>afterbuf - beyond end of line
+            
+        if (callback (first, after - first, cb_param1, cb_param2, cb_param3)) {
+            if (line_len) *line_len = after - first;
+            return first;
+        }
+
+        if (reverse && first == firstbuf) return NULL; // beginning of line - we called the cb
+
+        if (!reverse) first=after;
+        else          after=first;
+    }
+
+    return 0; // never reaches here
+}   
+
 // default callback from DataTypeProperties.is_header_done: 
 // returns header length if header read is complete + sets lines.len, 0 if complete but not existant, -1 not complete yet 
 int32_t def_is_header_done (bool is_eof)
@@ -539,8 +585,11 @@ void txtfile_write_to_disk (Buffer *buf)
 {
     if (!buf->len) return;
     
-    if (!flag.test) file_write (txt_file, buf->data, buf->len);
-
+    if (!flag.test) {
+        file_write (txt_file, buf->data, buf->len);
+        if (flag.to_stdout) fflush (txt_file->file);
+    }
+    
     txt_file->txt_data_so_far_single += buf->len;
     txt_file->disk_so_far            += buf->len;
 }

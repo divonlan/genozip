@@ -407,6 +407,7 @@ extern void file_remove (const char *filename, bool fail_quietly);
 extern void file_mkfifo (const char *filename);
 extern uint64_t file_get_size (const char *filename);
 extern char *file_compressible_extensions (bool plain_only);
+extern char *file_make_unix_filename (char *filename);
 
 #define FILENAME_STDIN  "(stdin)"
 #define FILENAME_STDOUT "(stdout)"

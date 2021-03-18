@@ -27,6 +27,7 @@ extern const char *liftover_status_names[];
 extern void liftover_copy_data_from_chain_file (void);
 extern void liftover_zip_initialize (DidIType tname_did_i, char special_liftback_snip_id);
 extern LiftOverStatus liftover_get_liftover_coords (VBlockP vb, BufferP liftover_chrom2qname, WordIndex *tname_node_index, PosType *tpos);
+extern const char *liftover_get_laft_contig (uint32_t contig_i);
 
 // Seg
 extern void liftover_append_rejects_file (VBlockP vb);

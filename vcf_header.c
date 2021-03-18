@@ -29,7 +29,10 @@ char *vcf_samples_is_included;         // a bytemap indicating for each sample i
 static char **vcf_sample_names;        // an array of char * to nul-terminated names of samples 
 static char *vcf_sample_names_data;    // vcf_sample_names point into here
 
-#define working_buf evb->codec_bufs[0] // so we don't override cmd_samples_buf that may be used for the next files
+#define LINEIS(s) (line_len > strlen(s) && !memcmp (line, (s), strlen(s))) // note: gcc optimizer resolves strlen("CONST") in compilation time
+
+#define SUBST_LABEL(old,new) do { buf_add_more (evb, new_txt_header, (new), strlen (new), NULL); \
+                                  buf_add_more (evb, new_txt_header, line + strlen (old), line_len - strlen (old), NULL); } while (0)
 
 void vcf_header_piz_init (void)
 {
@@ -43,87 +46,6 @@ void vcf_header_piz_init (void)
 static void vcf_header_subset_samples (Buffer *vcf_header);
 static bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bool soft_fail);
 static void vcf_header_trim_field_name_line (Buffer *vcf_header);
-
-// false means continue iterating, true means stop
-typedef bool (*VcfHeaderIteratorCallback)(const char *line, unsigned line_len, const void *cb_param1, unsigned cb_param2);
-static char *vcf_header_foreach_line (Buffer *txt_header,
-                                      bool reverse, // iterate backwards
-                                      VcfHeaderIteratorCallback callback, const void *cb_param1, unsigned cb_param2,
-                                      int64_t *line_len) // out
-{
-    if (line_len) *line_len = 0;
-
-    if (!txt_header->len) return NULL;
-
-    char *firstbuf = txt_header->data;
-    char *afterbuf = AFTERENT (char, *txt_header);
-
-    char *first = !reverse ? firstbuf : 0;
-    char *after = !reverse ? 0 : afterbuf;
-
-    while (1) {
-            
-        // get one line - searching forward or backwards
-        if (!reverse) {
-            for (after=first ; after < afterbuf && *after != '\n' ; after++);
-            after++; // skip newline
-        }
-        else {
-            for (first=after-2 /* skip final \n */; first >= firstbuf && *first != '\n'; first--);
-            first++; // after detected \n or at start of line
-        }
-
-        if (!reverse && after > afterbuf) return NULL; // we don't call callback if after>afterbuf - beyond end of line
-            
-        if (callback (first, after - first, cb_param1, cb_param2)) {
-            if (line_len) *line_len = after - first;
-            return first;
-        }
-
-        if (reverse && first == firstbuf) return NULL; // beginning of line - we called the cb
-
-        if (!reverse) first=after;
-        else          after=first;
-    }
-
-    return 0; // never reaches here
-}   
-
-// false means continue iterating, true means stop
-static bool vcf_header_is_key_cb (const char *line, unsigned line_len, const void *key, unsigned key_len)
-{
-    return line_len >= key_len && !memcmp (key, line, key_len);
-}
-
-static bool vcf_header_one_line_cb (const char *line, unsigned line_len, const void *key, unsigned key_len)
-{
-    return true;
-}
-
-// replaces a line that starts with key with new_line, or if none exists, appends new_line to the end of the buffer
-static void vcf_header_add_or_replace_line (Buffer *txt_header, const char *key, const char *new_line) 
-{
-    int64_t old_line_len;
-    int64_t new_line_len = strlen (new_line);
-    char *line = vcf_header_foreach_line (txt_header, true, vcf_header_is_key_cb, key, strlen (key), &old_line_len);
-
-    if (!line) line = AFTERENT (char, *txt_header);
-
-    uint64_t index = ENTNUM (*txt_header, line);
-
-    if (new_line_len > old_line_len)
-        buf_alloc_more (evb, txt_header, new_line_len - old_line_len, 0, char, 1.5, "txt_data");
-
-    line = ENT (char, *txt_header, index); // reset after realloc
-
-    // make room (or shrink it)
-    memmove (line + new_line_len, line + old_line_len, AFTERENT (char, *txt_header) - line - old_line_len);
-
-    // assign new data
-    memcpy (line, new_line, new_line_len);
-
-    txt_header->len += new_line_len - old_line_len; // possitive or negative
-}
 
 // returns the length of the first line, if it starts with ##fileformat, or 0
 static inline unsigned vcf_header_get_first_line_len (const Buffer *txt_header)
@@ -142,96 +64,156 @@ static inline bool is_field_name_line (const char *line, unsigned line_len)
 }
 
 // returns the length of the last line, if it starts with #CHROM, or 0
+static bool vcf_header_get_last_line_cb (const char *line, unsigned line_len, void *unused1, void *unused2, unsigned unused3)
+{ return true; }
 static unsigned vcf_header_get_last_line (Buffer *txt_header, char **line_p)
 {
     int64_t line_len;
-    char *line = vcf_header_foreach_line (txt_header, true, vcf_header_one_line_cb, 0, 0, &line_len);
+    char *line = txtfile_foreach_line (txt_header, true, vcf_header_get_last_line_cb, 0, 0, 0, &line_len);
     if (line_p) *line_p = line;
 
     return is_field_name_line (line, line_len) ? (unsigned)line_len : 0;
 }
 
-static void vcf_header_add_dual_coord_keys (Buffer *txt_header)
-{
-    #define LIFTOVER "##INFO=<ID=" INFO_LIFTOVER ",Number=.,Type=String,Description=\"Dual-coordinate VCF: Information for lifting over the variant to laft coordinates\",Source=\"genozip\",Version=\"%s\">\n"
-    #define LIFTBACK "##INFO=<ID=" INFO_LIFTBACK ",Number=.,Type=String,Description=\"Dual-coordinate VCF: Information for retrieving the variant in the primary coordinates\",Source=\"genozip\",Version=\"%s\">\n"
-    #define LIFTREJD "##INFO=<ID=" INFO_LIFTREJD ",Number=.,Type=String,Description=\"Dual-coordinate VCF: Reason variant was rejected for lift over\",Source=\"genozip\",Version=\"%s\">\n"
-
-    // add INFO lines only if they're not there
-    char line[strlen(LIFTOVER)+50];
-
-    sprintf (line, HEADER_KEY_DC"%s\n", flag.laft ? HEADER_KEY_DC_LAFT : HEADER_KEY_DC_PRIMARY);
-    vcf_header_add_or_replace_line (txt_header, HEADER_KEY_DC, line);
-
-    sprintf (line, LIFTOVER, GENOZIP_CODE_VERSION);
-    vcf_header_add_or_replace_line (txt_header, "##INFO=<ID=" INFO_LIFTOVER, line);
-    
-    sprintf (line, LIFTBACK, GENOZIP_CODE_VERSION);
-    vcf_header_add_or_replace_line (txt_header, "##INFO=<ID=" INFO_LIFTBACK, line);
-
-    sprintf (line, LIFTREJD, GENOZIP_CODE_VERSION);
-    vcf_header_add_or_replace_line (txt_header, "##INFO=<ID=" INFO_LIFTREJD, line);
-}
-
 static void vcf_header_add_genozip_command (Buffer *txt_header)
 {
     // the command line length is unbound, careful not to put it in a bufprintf
-    buf_add_string (evb, txt_header, "##genozip_Command=\"");
+    buf_add_string (evb, txt_header, HK_GENOZIP_CMD"\"");
     buf_add_string (evb, txt_header, flags_command_line()->data);
     bufprintf (evb, txt_header, "\" %s\n", str_time().s);
 }
 
-static bool vcf_header_extract_one_liftover_reject (const char *line, unsigned line_len, const void *first_reject_line, unsigned unused)
+static bool vcf_header_get_dual_coords (const char *line, unsigned line_len, void *unused1, void *unused2, unsigned unused3)
 {
-    // if not a reject line - return
-    unsigned label_len = strlen (HEADER_KEY_LIFTOVER_REJECT);
-    if (line_len <= label_len || memcmp (line, HEADER_KEY_LIFTOVER_REJECT, label_len))
-        // we reached the end the ##LIFTOVER_REJECTS area if we already observed a liftover line, otherwise he haven't reached it
-        // yet - continue iterating
-        return (bool)*(const char **)first_reject_line; 
+    if (LINEIS (HK_DC_PRIMARY)) {
+        txt_file->dual_coords = DC_PRIMARY;
+        return true; // found - no more iterating
+    }
 
-    buf_add_more (evb, &working_buf, line + label_len, line_len - label_len, NULL);
-
-    if (! *(const char **)first_reject_line) 
-        *(const char **)first_reject_line = line; 
+    else if (LINEIS (HK_DC_LAFT)) {
+        txt_file->dual_coords = DC_LAFT;
+        flag.data_modified = true; // we will be zipping this as a dual-coordinate VCF with default reconstruction as PRIMARY - this turns off digest
+        return true;
+    }
 
     return false; // continue iterating
 }
 
-static bool vcf_header_get_dual_coords (const char *line, unsigned line_len, const void *unused1, unsigned unused2)
+// PIZ with --laft - one line: remove fileformat, update *contig, *reference, dual_coordinates keys to Laft format
+static bool vcf_header_piz_liftover_header_one_line (const char *line, unsigned line_len, 
+                                                     void *new_txt_header_, void *unused1, unsigned unused2)
 {
-    // if not a DUAL_COORDINATES line - return and continue iterating
-    unsigned label_len = strlen (HEADER_KEY_DC);
-    unsigned prim_len  = strlen (HEADER_KEY_DC_PRIMARY);
-    unsigned laft_len  = strlen (HEADER_KEY_DC_LAFT);
+    Buffer *new_txt_header = (Buffer *)new_txt_header_;
 
-    if (line_len <= label_len || memcmp (line, HEADER_KEY_DC, label_len)) return false; // continue iterating
+    if      (LINEIS (HK_LO_CONTIG))   SUBST_LABEL (HK_LO_CONTIG, "##contig=");
+    else if (LINEIS ("##contig="))    SUBST_LABEL ("##contig=", HK_LB_CONTIG);
+    else if (LINEIS (HK_LO_REF))      SUBST_LABEL (HK_LO_REF, "##reference=");
+    else if (LINEIS ("##reference=")) SUBST_LABEL ("##reference=", HK_LB_REF);
+    else if (LINEIS (HK_DC_PRIMARY))  SUBST_LABEL (HK_DC_PRIMARY, HK_DC_LAFT);
+    else if (LINEIS ("##fileformat=")) {}  // remove ##fileformat as it will be reconstructed from the rejects component
+    else                              buf_add_more (evb, new_txt_header, line, line_len, NULL);
 
-    const char *value = &line[label_len];
-    unsigned value_len = line_len - label_len - 1; 
-    if (value[value_len-1] == '\r') value_len--;
+    return false; // continue iterating
+}
 
-    if (value_len == prim_len && !memcmp (value, HEADER_KEY_DC_PRIMARY, value_len))
-        txt_file->dual_coords = DC_PRIMARY;
+// PIZ with --laft: remove fileformat, update *contig, *reference, dual_coordinates keys to Laft format
+static void vcf_header_piz_liftover_header (Buffer *txt_header)
+{
+    #define new_txt_header evb->codec_bufs[0]
+
+    buf_alloc (evb, &new_txt_header, txt_header->len, 0, "evb->codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
+
+    txtfile_foreach_line (txt_header, false, vcf_header_piz_liftover_header_one_line, &new_txt_header, 0, 0, 0);
+
+    // replace txt_header with lifted back one
+    buf_free (txt_header);
+    buf_copy (evb, txt_header, &new_txt_header, 1, 0, 0, "txt_data");
+
+    buf_free (&new_txt_header);
+    #undef new_txt_header
+}
+
+// ZIP of Laft line: update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
+static bool vcf_header_zip_liftback_header_one_line (const char *line, unsigned line_len, 
+                                                     void *new_txt_header_, void *rejects_, unsigned unused)
+{
+    Buffer *new_txt_header = (Buffer *)new_txt_header_;
     
-    else if (value_len == laft_len && !memcmp (value, HEADER_KEY_DC_LAFT, value_len)) {
-        txt_file->dual_coords = DC_LAFT;
-        flag.data_modified = true; // we will be zipping this as a dual-coordinate VCF with default reconstruction as PRIMARY - this turns off digest
+    if      (LINEIS (HK_LB_REJECT))   buf_add_more (evb, (Buffer *)rejects_, line + strlen (HK_LB_REJECT), line_len - strlen (HK_LB_REJECT), NULL); // // add rejects to "rejects" buffer
+    else if (LINEIS (HK_LB_CONTIG))   SUBST_LABEL (HK_LB_CONTIG, "##contig=");
+    else if (LINEIS ("##contig="))    SUBST_LABEL ("##contig=", HK_LO_CONTIG);
+    else if (LINEIS (HK_LB_REF))      SUBST_LABEL (HK_LB_REF, "##reference=");
+    else if (LINEIS ("##reference=")) SUBST_LABEL ("##reference=", HK_LO_REF);
+    else if (LINEIS (HK_DC_LAFT))     SUBST_LABEL (HK_DC_LAFT, HK_DC_PRIMARY);
+    else                              buf_add_more (evb, new_txt_header, line, line_len, NULL);
+
+    return false; // continue iterating
+}
+
+// ZIP of Laft file: update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
+static void vcf_header_zip_liftback_header (Buffer *txt_header)
+{
+    #define new_txt_header evb->codec_bufs[0]
+    #define rejects        evb->codec_bufs[1]
+
+    // case: Laft file - scan the header and for LIFTBACK_REJECT lines, and move them to txt_file->unconsumed (after removing the label) 
+    // to be processsed as normal variants
+    buf_alloc (evb, &new_txt_header, txt_header->len, 0, "evb->codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
+    buf_alloc (evb, &rejects, 65536, 0, "evb->codec_bufs[1]"); // initial allocation
+
+    txtfile_foreach_line (txt_header, false, vcf_header_zip_liftback_header_one_line, &new_txt_header, &rejects, 0, 0);
+
+    // replace txt_header with lifted back one
+    buf_free (txt_header);
+    buf_copy (evb, txt_header, &new_txt_header, 1, 0, 0, "txt_data");
+
+    // squeeze in the liftover rejects from the header, with their label removed, before the existing unconsumed text
+    // (data that was read beyond the header) 
+    if (rejects.len) {
+        buf_alloc_more (evb, &txt_file->unconsumed_txt, rejects.len, 0, char, 0, "txt_file->unconsumed_txt");
+        ARRAY (char, unconsumed_txt, txt_file->unconsumed_txt);
+        
+        memmove (&unconsumed_txt[rejects.len], unconsumed_txt, unconsumed_txt_len);
+        memcpy (unconsumed_txt, rejects.data, rejects.len);
+        
+        txt_file->unconsumed_txt.len += rejects.len;
+        txt_file->laft_reject_bytes = rejects.len;
     }
-    
-    else
-        ABORT ("Expecting \""HEADER_KEY_DC"\" header line to be "HEADER_KEY_DC_PRIMARY" or "HEADER_KEY_DC_LAFT", but it is %.*s", 
-               value_len, value);
 
-    return true; // found - not more iterating
+    buf_free (&new_txt_header);
+    buf_free (&rejects);
+
+    #undef new_txt_header
+    #undef rejects
+}
+
+// ZIP with --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
+static void vcf_header_zip_convert_header_to_dual_coords (Buffer *txt_header)
+{
+    txt_header->len -= vcf_field_name_line.len; // remove field name line
+
+    bufprintf (evb, txt_header, "%s\n", HK_DC_PRIMARY);
+    bufprintf (evb, txt_header, HK_CHAIN"file://%s\n", chain_filename ? chain_filename : "<null>");
+    bufprintf (evb, txt_header, HK_LO_REF"file://%s\n", ref_filename ? ref_filename : "<null>");
+
+    bufprintf (evb, txt_header, KH_INFO_LO"\n", GENOZIP_CODE_VERSION);
+    bufprintf (evb, txt_header, KH_INFO_LB"\n", GENOZIP_CODE_VERSION);
+    bufprintf (evb, txt_header, KH_INFO_LR"\n", GENOZIP_CODE_VERSION);
+
+    // add all Laft contigs (note: we get them from liftover directly, as they zip_initialize that adds them to zf_ctx has not been called yet)
+    const char *laft_contig;
+    for (unsigned i=0; (laft_contig = liftover_get_laft_contig(i)); i++) 
+        bufprintf (evb, txt_header, HK_LO_CONTIG"<ID=%s>\n", laft_contig);
+
+    bufprintf (evb, txt_header, "%.*s", (int)vcf_field_name_line.len, vcf_field_name_line.data); // add back
 }
 
 static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
 {
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
 
-    // scan header for ##DUAL_COORDINATES
-    vcf_header_foreach_line (txt_header, false, vcf_header_get_dual_coords, 0, 0, 0);
+    // scan header for ##dual_coordinates - this sets txt_file->dual_coords
+    txtfile_foreach_line (txt_header, false, vcf_header_get_dual_coords, 0, 0, 0, 0);
 
     // if we're compressing a txt file with liftover, we prepare the rejects header: it consists of two lines:
     // 1. the first "##fileformat" line if one exists in our file 
@@ -247,34 +229,14 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
         liftover_append_rejects_file (evb);
     }
 
-    // scan the header for LIFTOVER_REJECT lines, and move them to txt_file->unconsumed (after removing the lable) to be processsed as 
-    // normal variants
-    buf_alloc (evb, &working_buf, 500000, 0, "evb->codec_bufs[0]"); // initial allocation
-    char *first_reject=0, *after_rejects=0;
-    after_rejects = vcf_header_foreach_line (txt_header, false, vcf_header_extract_one_liftover_reject, &first_reject, 0, 0);
+    // case: --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
+    if (chain_is_loaded && !flag.processing_rejects)
+        vcf_header_zip_convert_header_to_dual_coords (txt_header);
 
-    // if we moved some LIFTOVER_REJECT to working_buf, we shrink the txt_header to remove that area
-    if (first_reject) { 
-        uint64_t rejects_bytes_inc_label = after_rejects - first_reject;
-        uint64_t after_rejects_bytes = AFTERENT (char, *txt_header) - after_rejects;
+    // case: Laft file - update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
+    else if (txt_file->dual_coords == DC_LAFT)
+        vcf_header_zip_liftback_header (txt_header);
 
-        // remove rejects from header
-        memmove (first_reject, after_rejects, after_rejects_bytes);
-        txt_header->len -= rejects_bytes_inc_label;
-
-        // squeeze in the liftover rejects from the header, with their label removed, befoer the existing unconsumed text
-        // (data that was read beyond the header) 
-        buf_alloc_more (evb, &txt_file->unconsumed_txt, working_buf.len, 0, char, 0, "txt_file->unconsumed_txt");
-        ARRAY (char, unconsumed_txt, txt_file->unconsumed_txt);
-        
-        memmove (&unconsumed_txt[working_buf.len], unconsumed_txt, unconsumed_txt_len);
-        memcpy (unconsumed_txt, working_buf.data, working_buf.len);
-        
-        txt_file->unconsumed_txt.len += working_buf.len;
-        txt_file->laft_reject_bytes = working_buf.len;
-    }
-
-    buf_free (&working_buf);
     return true; // all good
 }
 
@@ -304,16 +266,15 @@ static bool vcf_inspect_txt_header_piz (Buffer *txt_header)
     
     // in case of --laft, we remove the first line of the regular file header (##fileformat), as they are 
     // duplicate in both files been output as part of the rejects file
-    if (!flag.header_one && flag.laft) {
+    if (flag.laft && !flag.header_one && !flag.genocat_no_reconstruct) {
         unsigned len = vcf_header_get_first_line_len (txt_header);
         memmove (txt_header->data, txt_header->data + len, txt_header->len - len);
         txt_header->len -= len;
     }
 
-    // add dual-coordinate keys to the header data
-    if (z_file->z_flags.dual_coords && exe_type == EXE_GENOCAT && !flag.header_one && !flag.genocat_no_reconstruct && 
-        !flag.processing_rejects)
-        vcf_header_add_dual_coord_keys (txt_header);
+    // if needed, liftover the header
+    if (flag.laft && !flag.header_one && !flag.processing_rejects) 
+        vcf_header_piz_liftover_header (txt_header);
 
     // add genozip command line
     if (!flag.header_one && exe_type == EXE_GENOCAT && !flag.genocat_no_reconstruct && !flag.processing_rejects
@@ -385,7 +346,7 @@ static bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bo
             // note: a VCF file without samples may or may not have a "FORMAT" in the header, i.e. tab_count==7 or 8 (8 or 9 fields).
             // however, even if it has a FORMAT in the header, it won't have a FORMAT column in the data
 
-            ASSINP (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
+            ASSINP (tab_count >= 7, "Error: invalid field header line - it contains only %d fields, expecting at least 8", tab_count+1);
 
             return true; 
         }
@@ -455,6 +416,8 @@ static void vcf_header_subset_samples (Buffer *vcf_field_name_line)
     // go through the vcf file's samples and add those that are consistent with the --samples requested
     vcf_num_displayed_samples = 0;
 
+    #define working_buf evb->codec_bufs[0]
+
     buf_copy (evb, &working_buf, &cmd_samples_buf, sizeof (char*), 0, 0, 0);
 
     for (unsigned i=0; i < num_samples; i++) {
@@ -488,6 +451,7 @@ static void vcf_header_subset_samples (Buffer *vcf_field_name_line)
     if (!vcf_num_displayed_samples) flag.drop_genotypes = true;
 
     buf_free (&working_buf);
+    #undef working_buf
 }
 
 // called from genozip.c for processing the --samples flag

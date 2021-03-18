@@ -1188,3 +1188,34 @@ void file_remove_codec_ext (char *filename, FileType ft)
         filename[fn_len-codec_ext_len] = 0; // shorten string
 }
 
+// change eg "c:\dir\file" to "/c/dir/file" and add full path (allocates memory - caller should free)
+char *file_make_unix_filename (char *filename)
+{
+    char path[PATH_MAX];
+    unsigned len = strlen (filename);
+    
+    if (
+#ifdef _WIN32
+        (len >= 2 && filename[1] == ':') || // full name - starting with eg C:
+#endif
+        (len >= 1 && filename[0] == '/') || // full name - starting with /
+        !getcwd (path, sizeof (path))) // path too long
+        path[0] = 0;  // don't store path
+
+    char *full_fn = malloc (strlen (z_name) + strlen (path) + 2);
+    sprintf (full_fn, "%s%s%s", path, *path ? "/" : "", z_name);
+
+#ifdef _WIN32 // convert to Unix-style filename
+    len = strlen (full_fn);
+
+    if (len >= 2 && full_fn[1] == ':') {
+        full_fn[1] = full_fn[0];
+        full_fn[0] = '/';
+    }
+
+    for (unsigned i=0; i < len; i++)
+        if (full_fn[i] == '\\') full_fn[i] = '/';
+#endif
+
+    return full_fn;
+}

@@ -46,24 +46,27 @@ extern unsigned vcf_vb_size (void);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 
-// Liftover - header keys
-#define HEADER_KEY_LIFTOVER_CONTIG "##liftover_contig="
-#define HEADER_KEY_LIFTBACK_CONTIG "##liftback_contig="
-#define HEADER_KEY_LIFTOVER_REF    "##liftover_reference="
-#define HEADER_KEY_LIFTBACK_REF    "##liftback_reference="
-#define HEADER_KEY_LIFTOVER_REJECT "##liftover_reject="
-#define HEADER_KEY_CHAIN           "##chain="
-#define HEADER_KEY_DC              "##dual_coordinates="
-#define HEADER_KEY_DC_PRIMARY      "PRIMARY"
-#define HEADER_KEY_DC_LAFT         "LAFT"
-
 // Liftover - header keys - INFO fields
-#define INFO_LIFTOVER "LIFTOVER"
+#define INFO_LIFTOVER  "LIFTOVER"
 #define INFO_LIFTOVER_LEN 8
-#define INFO_LIFTBACK "LIFTBACK"
+#define INFO_LIFTBACK  "LIFTBACK"
 #define INFO_LIFTBACK_LEN 8
-#define INFO_LIFTREJD "LIFTREJD"
+#define INFO_LIFTREJD  "LIFTREJD"
 #define INFO_LIFTREJD_LEN 8
+
+// Liftover - header keys
+#define HK_GENOZIP_CMD "##genozip_command="
+#define HK_LO_CONTIG   "##liftover_contig="     
+#define HK_LB_CONTIG   "##liftback_contig="
+#define HK_LO_REF      "##liftover_reference="
+#define HK_LB_REF      "##liftback_reference="
+#define HK_LB_REJECT   "##liftback_reject="
+#define HK_CHAIN       "##chain="
+#define HK_DC_PRIMARY  "##dual_coordinates=PRIMARY"
+#define HK_DC_LAFT     "##dual_coordinates=LAFT"
+#define KH_INFO_LO     "##INFO=<ID=" INFO_LIFTOVER ",Number=5,Type=String,Description=\"Dual-coordinate VCF: Information for lifting over the variant to laft coordinates\",Source=\"genozip\",Version=\"%s\">"
+#define KH_INFO_LB     "##INFO=<ID=" INFO_LIFTBACK ",Number=5,Type=String,Description=\"Dual-coordinate VCF: Information for retrieving the variant in the primary coordinates\",Source=\"genozip\",Version=\"%s\">"
+#define KH_INFO_LR     "##INFO=<ID=" INFO_LIFTREJD ",Number=1,Type=String,Description=\"Dual-coordinate VCF: Reason variant was rejected for lift over\",Source=\"genozip\",Version=\"%s\">"
 
 extern void vcf_seg_ref_alt (VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len);
 

@@ -109,7 +109,7 @@ void vcf_seg_finalize (VBlockP vb_)
 
     // when processing the liftover rejects file, we add a "##LIFTOVER_REJECT=" prefix to first item of each line, so that
     // it reconstructs as part of the VCF header 
-    static const char reject_file_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HEADER_KEY_LIFTOVER_REJECT CON_PREFIX_SEP_;
+    static const char reject_file_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HK_LB_REJECT CON_PREFIX_SEP_;
 
     container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 
                           vb->is_rejects_vb ? reject_file_prefix          : 0, 
@@ -670,7 +670,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         }
         else 
             WARN_ONCE0 ("FYI: Found an INFO/"INFO_LIFTOVER" subfield, but this is not a dual-coordinates VCF because it is missing \""
-                        HEADER_KEY_DC HEADER_KEY_DC_PRIMARY "\" in the VCF header");
+                        HK_DC_PRIMARY "\" in the VCF header");
     }
 
     else if (dict_id.num == dict_id_INFO_LIFTBACK) { 
@@ -690,7 +690,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         }
         else
             WARN_ONCE0 ("FYI: Found an INFO/"INFO_LIFTBACK" subfield, but this is not a dual-coordinates VCF because it is missing \""
-                        HEADER_KEY_DC HEADER_KEY_DC_LAFT "\" in the VCF header");
+                        HK_DC_LAFT "\" in the VCF header");
     }
 
     else if (dict_id.num == dict_id_INFO_LIFTREJD) {

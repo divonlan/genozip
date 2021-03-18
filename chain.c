@@ -38,7 +38,7 @@ static Buffer chain = EMPTY_BUFFER;   // immutable after loaded
 static Mutex chain_mutex = {};        // protect chain wnile loading
 static PosType next_dst_0pos=0, next_src_0pos=0; // used for loading chain
 
-bool chain_is_loaded = false; // global
+char *chain_filename = NULL; // global - chain filename
 
 //-----------------------
 // TXTFILE stuff
@@ -240,6 +240,7 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
 // PIZ functions
 //--------------
 
+// called after reconstructing the txt header and before compute threads
 void chain_piz_initialize (void)
 {
     mutex_initialize (chain_mutex);
@@ -424,11 +425,12 @@ void chain_load (void)
         exit_ok;
     }
 
+    chain_filename = file_make_unix_filename (z_name); // full-path unix-style filename, allocates memory
+
     file_close (&z_file, false, false);
     file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
     
     flag.reading_chain = NULL;
-    chain_is_loaded = true;
 }
 
 // get dst_contig, src_pos from src_contig, dst_pos (binary search on chain)

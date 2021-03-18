@@ -26,10 +26,10 @@
 // 2) At the beginning of ZIP of a file with --liftover: dst_contig copied to z_file->contexts of the file being compressed
 // 3) liftover_get_liftover_coords src_contig is consulted to get map the index of the primary chrom from the node_index
 //    of the file being compressed to the word_index of src_contig in the chain data
-static Buffer src_contig_dict    = EMPTY_BUFFER;
-static Buffer src_contig_words   = EMPTY_BUFFER;
-static Buffer dst_contig_dict    = EMPTY_BUFFER;
-static Buffer dst_contig_contigs = EMPTY_BUFFER;
+static Buffer src_contig_dict  = EMPTY_BUFFER;
+static Buffer src_contig_words = EMPTY_BUFFER;
+static Buffer dst_contig_dict  = EMPTY_BUFFER;
+static Buffer dst_contigs      = EMPTY_BUFFER;
 
 enum { OCHROM_OFFSET, OPOS_OFFSET, OREF_OFFSET, OSTRAND_OFFSET, OALTRULE_OFFSET, OSTATUS_OFFSET };
 
@@ -50,16 +50,26 @@ void liftover_copy_data_from_chain_file (void)
 
     // copy dictionary buffer
     buf_copy (evb, &dst_contig_dict, &z_file->contexts[CHAIN_NAMEDST].dict, 1, 0, 0, "dst_contig_dict");
+
     ARRAY (CtxWord, dst_contig_words, z_file->contexts[CHAIN_NAMEDST].word_list);
+    dst_contig_dict.param = dst_contig_words_len; // dict param contains number of words
 
     // copy word_list into a contigs buffer - for convenience of using ctx_build_zf_ctx_from_contigs later
-    buf_alloc_more (evb, &dst_contig_contigs, 0, dst_contig_words_len, RefContig, 0, "dst_contig_contigs");
-    dst_contig_contigs.len = dst_contig_words_len;
-    ARRAY (RefContig, contigs, dst_contig_contigs);
+    buf_alloc_more (evb, &dst_contigs, 0, dst_contig_words_len, RefContig, 0, "dst_contigs");
+    dst_contigs.len = dst_contig_words_len;
+    ARRAY (RefContig, contigs, dst_contigs);
 
     for (uint32_t i=0; i < dst_contig_words_len; i++)
         contigs[i] = (RefContig) { .char_index = dst_contig_words[i].char_index,
                                    .snip_len   = dst_contig_words[i].snip_len   };
+}
+
+// returns null-terminated string of contig, or NULL if contig_i is out of range
+const char *liftover_get_laft_contig (uint32_t contig_i)
+{
+    if (contig_i >= dst_contigs.len) return NULL;
+
+    return ENT (char, dst_contig_dict, ENT (RefContig, dst_contigs, contig_i)->char_index);
 }
 
 // ---------------
@@ -72,7 +82,7 @@ void liftover_zip_initialize (DidIType dst_contig_did_i, char special_liftback_s
 {
     // case: --chain : create SRCNAME context from liftover contigs and dict
     if (chain_is_loaded)
-        ctx_build_zf_ctx_from_contigs (dst_contig_did_i, &dst_contig_contigs, &dst_contig_dict);
+        ctx_build_zf_ctx_from_contigs (dst_contig_did_i, &dst_contigs, &dst_contig_dict);
 
     // prepare (constant) snips. note: we need these snips both for --chain and when zipping dual-coord files
 
@@ -231,7 +241,7 @@ void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId liftback
                             const char *alt, unsigned alt_len, // optional - primary ALT
                             char *value, int value_len)
 {
-    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTOVER" tag", txt_name);
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTOVER" subfield", txt_name);
 
     // parse record
     const char *ochrom, *oref; char ostrand, oaltrule; PosType opos; unsigned ochrom_len, opos_len, oref_len;
@@ -274,7 +284,7 @@ void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback
                             void (*seg_ref_alt_cb)(VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len), // call back to seg primary REF and ALT
                             char *value, int value_len)
 {
-    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTBACK" tag", txt_name);
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTBACK" subfield", txt_name);
 
     // parse record
     const char *chrom, *ref; char strand, altrule; PosType pos; unsigned pos_len, ref_len, chrom_len;
@@ -320,7 +330,7 @@ void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback
 
 void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len)
 {
-    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTREJD" tag", txt_name);
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTREJD" subfield", txt_name);
 
     // get status from string
     char save = value[value_len];
