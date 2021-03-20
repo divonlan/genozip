@@ -512,7 +512,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
 
-    // ZIP of a Laft dual-coordinate file: calculate how much of the VB is rejected liftover lines
+    // ZIP of a Laft dual-coordinates file: calculate how much of the VB is rejected liftover lines
     vb->laft_reject_bytes = MIN (vb->vb_data_size, txt_file->laft_reject_bytes);
     txt_file->laft_reject_bytes -= vb->laft_reject_bytes;
 

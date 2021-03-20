@@ -28,9 +28,9 @@ test_header() {
 }
 
 test_count_genocat_lines() { # $1 - genozip arguments $2 - genocat arguments $3 - expected number of output lines
-    local cmd="$genocat $output $2 $arg1"
+    local cmd="$genocat $output $2"
     test_header "$cmd"
-    $genozip $arg1 $1 -fo $output || exit 1
+    $genozip $1 -fo $output || exit 1
     local wc=`$cmd | wc -l`
     if (( $wc != $3 )); then
         echo "FAILED - expected $3 lines, but getting $wc"
@@ -67,13 +67,13 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         local single_output=1
     fi
 
-    test_header "genozip $arg1 ${zip_args[*]} ${files[*]}" # after COPY, NOPREFIX and CONCAT modifications occurred
+    test_header "$genozip ${zip_args[*]} ${files[*]}" # after COPY, NOPREFIX and CONCAT modifications occurred
     
     if (( ${#files[@]} == 1 || $single_output )); then # test with Adler32, unless caller specifies --md5
-        $genozip $arg1 ${zip_args[@]} ${files[@]} -o $output -f || exit 1
-        $genounzip $arg1 ${unzip_args[@]} $output -t || exit 1
+        $genozip ${zip_args[@]} ${files[@]} -o $output -f || exit 1
+        $genounzip ${unzip_args[@]} $output -t || exit 1
     else 
-        $genozip $arg1 ${zip_args[@]} ${unzip_args[@]} ${files[@]} -ft || exit 1
+        $genozip ${zip_args[@]} ${unzip_args[@]} ${files[@]} -ft || exit 1
     fi
     
     if [ ! -n "$single_output" ]; then
@@ -97,7 +97,7 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
     local input=${file#*.}
     if [[ $input == genome_Full.me23.txt ]]; then input=23andme; fi
 
-    cat $file | $genozip $arg1 ${args[@]:1} --test --force --output $output --input $input - || exit 1
+    cat $file | $genozip ${args[@]:1} --test --force --output $output --input $input - || exit 1
     cleanup
 }
 
@@ -122,7 +122,7 @@ test_windows_style() {  # $1=filename
     if [ ! -f $file ] ; then echo "$1: File $file not found"; exit 1; fi
 
     sed 's/$/\r/g' $OUTDIR/unix-nl.$1 > $OUTDIR/windows-nl.$1 || exit 1 # note: sed on mac doesn't recognize \r
-    $genozip $arg1 $OUTDIR/windows-nl.$1 -ft -o $output || exit 1
+    $genozip $OUTDIR/windows-nl.$1 -ft -o $output || exit 1
     cleanup
 }
 
@@ -131,8 +131,8 @@ test_stdout()
     test_header "$1 - redirecting stdout"
     local file=$TESTDIR/$1
     
-    $genozip $arg1 ${file} -fo $output || exit 1
-    $genounzip $arg1 $output --stdout | tr -d "\r" > $OUTDIR/unix-nl.$1 || exit 1
+    $genozip ${file} -fo $output || exit 1
+    $genounzip $output --stdout | tr -d "\r" > $OUTDIR/unix-nl.$1 || exit 1
 
     cmp_2_files $file $OUTDIR/unix-nl.$1
     cleanup
@@ -152,10 +152,10 @@ test_multi_bound() # $1=filename $2=REPLACE (optional)
         cp -f $file $file2
     fi
 
-    $genozip $arg1 $file1 $file2 -ft -o $output || exit 1 # test as bound
+    $genozip $file1 $file2 -ft -o $output || exit 1 # test as bound
     local output2=$OUTDIR/output2.genozip
     cp -f $output $output2
-    $genounzip $arg1 $output $output2 -u -t || exit 1 # test unbind 2x2
+    $genounzip $output $output2 -u -t || exit 1 # test unbind 2x2
     cleanup
 }
 
@@ -163,7 +163,7 @@ test_optimize()
 {
     test_header "$1 --optimize - NOT checking correctness, just that it doesn't crash"
     local file=$TESTDIR/$1
-    $genozip $arg1 $file -f --optimize -o $output || exit 1
+    $genozip $file -f --optimize -o $output || exit 1
     cleanup
 }
 
@@ -177,8 +177,8 @@ test_translate_bam_to_sam() # $1 bam file
     if [ ! -f $bam ] ; then echo "$bam: File not found"; exit 1; fi
     if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
 
-    $genozip $arg1 -f $bam -o $output  || exit 1
-    $genocat $arg1 $output --no-PG -fo $copy  || exit 1
+    $genozip -f $bam -o $output  || exit 1
+    $genocat $output --no-PG -fo $copy  || exit 1
     cmp_2_files $sam $copy
     cleanup
 }
@@ -194,8 +194,8 @@ test_translate_sam_to_bam() # $1 bam file
     if [ ! -f $bam ] ; then echo "$bam: File not found"; exit 1; fi
     if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
 
-    $genozip $arg1 -f $sam -o $output  || exit 1
-    $genounzip $arg1 $output --bam --no-PG -fo $new_bam || exit 1
+    $genozip -f $sam -o $output  || exit 1
+    $genounzip $output --bam --no-PG -fo $new_bam || exit 1
     
     # we compare the BAMs on a textual basis as the original BAM might be produced with a different version
     samtools view --no-PG -h $new_bam > $new_sam || exit 1
@@ -212,8 +212,8 @@ test_translate_sambam_to_fastq() # $1 sam or bam file
     local fastq=$OUTDIR/copy.fastq.gz
     if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
 
-    $genozip $arg1 -f $sambam -o $output  || exit 1
-    $genounzip $arg1 $output -fo $fastq   || exit 1
+    $genozip -f $sambam -o $output  || exit 1
+    $genounzip $output -fo $fastq   || exit 1
 
     cleanup
 }
@@ -227,16 +227,25 @@ test_translate_23andMe_to_vcf() # $1 23andMe file
     local vcf=$OUTDIR/copy.vcf.gz
     if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
 
-    $genozip $arg1 -f $me23 -o $output  || exit 1
-    $genounzip $arg1 $output -fo $vcf -e $hg19  || exit 1
+    $genozip -f $me23 -o $output  || exit 1
+    $genounzip $output -fo $vcf -e $hg19  || exit 1
 
     cleanup
+}
+
+view_file()
+{
+    if [[ $1 =~ \.gz$ ]]; then  
+        gunzip -c $1
+    else
+        cat $1
+    fi 
 }
 
 test_backward_compatability()
 {
     test_header "$1 - backward compatability test"
-    $genounzip $arg1 -t $1 || exit 1
+    $genounzip -t $1 || exit 1
 }
 
 batch_print_header()
@@ -323,6 +332,49 @@ batch_special_algs()
         test_standard "COPY" " " $file       # multiple files unbound
         test_multi_bound $file               # multiple files bound
         test_optimize $file                  # optimize - only compress to see that it doesn't error
+    done
+}
+
+
+batch_dual_coordinates()
+{
+    batch_print_header
+
+    local files=(test.human2.filtered.snp.vcf test.NA12878.sorted.vcf test.ExAC.vcf.gz)
+    local chain=data/GRCh37_to_GRCh38.chain.genozip
+    local file
+
+    for file in ${files[@]}; do
+        test_header "$file - dual-coordintes test"
+
+        local src=$OUTDIR/${file}
+        local primary=$OUTDIR/primary.vcf
+        local laft=$OUTDIR/laft.vcf
+        local primary2=$OUTDIR/primary2.vcf
+
+        # compare src to primary (ignoring header and INFO fields)
+        view_file test/$file | cut -f1-7,9 | grep -v \# > ${src}.noinfo
+        echo -n "make ${primary}.genozip from $file : " 
+        $genozip -C $chain test/$file -fo ${primary}.genozip || exit 1
+        echo -n "make ${primary} from ${primary}.genozip : " 
+        $genocat ${primary}.genozip --no-pg -fo ${primary}
+        cut -f1-7,9 $primary | grep -v \#  > ${primary}.noinfo || exit 1
+        echo "compare ${src}.noinfo to ${primary}.noinfo (ex. INFO and header) " 
+        cmp ${src}.noinfo ${primary}.noinfo || exit 1
+
+        # convert primary -> laft -> primary
+        echo -n "make ${laft} from ${primary}.genozip : " 
+        $genocat --laft --no-pg ${primary}.genozip -fo ${laft} || exit 1
+        echo -n "make ${laft}.genozip from ${laft} : " 
+        $genozip $laft -fo ${laft}.genozip || exit 1
+        echo -n "make ${primary2} from ${laft}.genozip : " 
+        $genocat ${laft}.genozip --no-pg -fo ${primary2} || exit 1
+        echo "compare $primary1 to $primary2" 
+        ##cmp $primary1 $primary2 || exit 1
+echo WILL WORK AFTER SORTING
+
+        cleanup
+        rm -f ${src}.noinfo ${primary}.genozip  ${primary}.noinfo ${laft} ${laft}.genozip ${primary2}
     done
 }
 
@@ -499,7 +551,7 @@ batch_make_reference()
     echo "Making a reference"
     local fa_file=data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
     local ref_file=$OUTDIR/output.ref.genozip
-    $genozip $arg1 --make-reference $fa_file --force -o $ref_file || exit 1
+    $genozip --make-reference $fa_file --force -o $ref_file || exit 1
 
     local ref="--reference $ref_file"
     local REF="--REFERENCE $ref_file"
@@ -526,12 +578,12 @@ batch_genols()
 {
     batch_print_header
 
-    $genozip $arg1 test/basic.sam test/minimal.sam -fo $output -p abcd || exit 1
+    $genozip test/basic.sam test/minimal.sam -fo $output -p abcd || exit 1
     $genols $output -p abcd || exit 1
     rm -f $output
 }
 
-make testfiles
+make --quiet testfiles
 
 output=${OUTDIR}/output.genozip
 
@@ -546,8 +598,6 @@ if (( $# < 1 )); then
     exit 0
 fi
 
-arg1=$2 # optional arg for genozip/genounzip
-
 # debug
 is_debug=`echo $1|grep debug`
 if [ -n "$is_debug" ]; then 
@@ -559,16 +609,16 @@ fi
 # platform settings
 # -----------------
 if [ -n "$is_windows" ]; then
-    genozip=./genozip${debug}.exe
-    genounzip=./genounzip${debug}.exe
-    genocat=./genocat${debug}.exe
-    genols=./genols${debug}.exe
+    genozip=./genozip${debug}.exe $2
+    genounzip=./genounzip${debug}.exe $2
+    genocat=./genocat${debug}.exe $2
+    genols=./genols${debug}.exe 
     path=`pwd| cut -c3-|tr / '\\\\'`\\
 else
-    genozip=./genozip${debug}
-    genounzip=./genounzip${debug}
-    genocat=./genocat${debug}
-    genols=./genols${debug}
+    genozip=./genozip${debug} $2
+    genounzip=./genounzip${debug} $2
+    genocat=./genocat${debug} $2
+    genols=./genols${debug} 
     path=$PWD/
 fi
 
@@ -599,19 +649,20 @@ if (( $1 <= 2  )) ; then  batch_basic                  ; fi
 if (( $1 <= 3  )) ; then  batch_precompressed          ; fi
 if (( $1 <= 4  )) ; then  batch_bgzf                   ; fi
 if (( $1 <= 5  )) ; then  batch_special_algs           ; fi
-if (( $1 <= 6  )) ; then  batch_sam_translations       ; fi
-if (( $1 <= 7  )) ; then  batch_23andMe_translations   ; fi
-if (( $1 <= 8  )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 9  )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 10 )) ; then  batch_real_world_subsets     ; fi
-if (( $1 <= 11 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 12 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 13 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 14 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 15 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 16 )) ; then  batch_reference              ; fi
-if (( $1 <= 17 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 18 )) ; then  batch_genols                 ; fi
+if (( $1 <= 6  )) ; then  batch_dual_coordinates       ; fi
+if (( $1 <= 7  )) ; then  batch_sam_translations       ; fi
+if (( $1 <= 8  )) ; then  batch_23andMe_translations   ; fi
+if (( $1 <= 9  )) ; then  batch_genocat_tests          ; fi
+if (( $1 <= 10 )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 11 )) ; then  batch_real_world_subsets     ; fi
+if (( $1 <= 12 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 13 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 14 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 15 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 16 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 17 )) ; then  batch_reference              ; fi
+if (( $1 <= 18 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 19 )) ; then  batch_genols                 ; fi
 
 printf "\nALL GOOD!\n"
 

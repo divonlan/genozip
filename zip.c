@@ -111,9 +111,15 @@ static void zip_dynamically_set_max_memory (void)
     VBlock *vb = vb_get_vb ("dynamically_set_memory", 1);
 
     bool done = false;
-    for (unsigned test_i=0; !done && test_i < sizeof (test_vb_sizes) / sizeof (test_vb_sizes[0]); test_i++) {
+    unsigned num_tests = sizeof (test_vb_sizes) / sizeof (test_vb_sizes[0]);
+    for (unsigned test_i=0; !done && test_i < num_tests; test_i++) {
 
         flag.vblock_memory = test_vb_sizes[test_i]; // read this amount of data
+
+        // If this is a Laft file (with LIFTREJD lines passed down from the header) - if possible, test lines beyond the 
+        // the rejected lines, as they have more contexts.
+        if (flag.vblock_memory < txt_file->laft_reject_bytes && test_i != num_tests-1) continue;
+
         txtfile_read_vblock (vb, true);
 
         // case: we found at least one full line - we can calculate the memory now
@@ -125,6 +131,8 @@ static void zip_dynamically_set_max_memory (void)
 
             // segment this VB
             ctx_clone (vb);
+
+            int32_t save_laft_reject_bytes = vb->laft_reject_bytes;
 
             SAVE_FLAGS;
             flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
@@ -141,6 +149,7 @@ static void zip_dynamically_set_max_memory (void)
 
             // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
             flag.vblock_memory = MIN (MAX (bytes, VBLOCK_MEMORY_MIN_DYN), VBLOCK_MEMORY_MAX_DYN);
+            if (txt_file->disk_size) flag.vblock_memory = MIN (flag.vblock_memory, txt_file->disk_size);
 
             if (flag.show_memory)
                 iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
@@ -160,12 +169,16 @@ static void zip_dynamically_set_max_memory (void)
                      "   --quiet to silence this warning",
                      global_max_threads, (uint32_t)(flag.vblock_memory >> 20));
 #endif
-            // return the data tp txt_file->unconsumed_txt - squeeze it in before the passed-up data
+            // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
             buf_alloc_more (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
             memcpy (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
             memcpy (txt_file->unconsumed_txt.data, txt_data_copy.data, txt_data_copy.len);
             txt_file->unconsumed_txt.len += txt_data_copy.len;
             buf_destroy (&txt_data_copy);
+
+            // in case of Laft file - undo
+            vb->liftover_rejects.len = 0;
+            txt_file->laft_reject_bytes += save_laft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
             done = true;
         }

@@ -1061,14 +1061,11 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
         .dict_id                 = vb->fragment_ctx->dict_id
     };
 
-    if (flag.show_dict) {
+    if (flag.show_dict || ctx_is_show_dict_id (vb->fragment_ctx->dict_id)) {
         iprintf ("%s (vb_i=%u, did=%u, num_snips=%u):\t", 
                  vb->fragment_ctx->name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
-        str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, true, false);
+        str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, flag.show_dict, false);
     }
-    
-    if (ctx_is_show_dict_id (vb->fragment_ctx->dict_id))
-        str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, false, false);
 
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
         str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, false, vb->data_type == DT_SAM);
@@ -1231,14 +1228,13 @@ void ctx_read_all_dictionaries (void)
             Context *ctx = &z_file->contexts[did_i];
             if (!ctx->dict.len) continue;
 
-            if (ctx_is_show_dict_id (ctx->dict_id))
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
-            
             if (flag.list_chroms && ctx->did_i == CHROM)
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, z_file->data_type == DT_SAM);
             
-            if (flag.show_dict) {
-                iprintf ("%s (did_i=%u, num_snips=%u):\t", ctx->name, did_i, (uint32_t)ctx->word_list.len);
+            if (flag.show_dict || ctx_is_show_dict_id (ctx->dict_id)) {
+                iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%u bytes):\t", 
+                         ctx->name, did_i, (uint32_t)ctx->word_list.len, (uint32_t)ctx->dict.len);
+
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
             }
         }

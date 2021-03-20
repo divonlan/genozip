@@ -73,7 +73,7 @@ void vcf_seg_initialize (VBlock *vb_)
     }
 
     // when compressing a Laft file, some lines are already known to be rejects. we just copy them to liftover_rejects
-    if (vb->laft_reject_bytes)
+    if (vb->laft_reject_bytes) 
         buf_copy (vb, &vb->liftover_rejects, &vb->txt_data, 1, 0, vb->laft_reject_bytes, "liftover_rejects");
 }             
 
@@ -84,7 +84,7 @@ void vcf_seg_finalize (VBlockP vb_)
     if (vb->ht_matrix_ctx) 
         vcf_seg_complete_missing_lines (vb);
 
-    // for a dual-coordinate VCF, we offer 2 ways to reconstruct it: normally, it is reconstructed in the
+    // for a dual-coordinates VCF, we offer 2 ways to reconstruct it: normally, it is reconstructed in the
     // primary coordinates. --laft invokes the translated mode, which reconstructs in laft coordintes.
     
     // top level snip
@@ -653,6 +653,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         return false;
     }
 
+    // segging the INFO/LIFTOVER field when segging a Primary dual-coordintes file
     else if (dict_id.num == dict_id_INFO_LIFTOVER) { 
         
         if (txt_file->dual_coords == DC_PRIMARY) {
@@ -662,8 +663,8 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
             char *alt        = ref + ref_len + 1; 
             unsigned alt_len = vb->contexts[VCF_REFALT].last_txt_len - ref_len - 1;
             
-            liftover_seg_LIFTOVER (vb_, dict_id, (DictId)dict_id_INFO_LIFTBACK, VCF_oCHROM, VCF_SPECIAL_OREF,
-                                   ref, ref_len, alt, alt_len, 
+            liftover_seg_LIFTOVER (vb_, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
+                                   VCF_oCHROM, VCF_SPECIAL_OREF, ref, ref_len, alt, alt_len, 
                                    (char *)*this_value, *this_value_len);
 
             return false; 
@@ -673,6 +674,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
                         HK_DC_PRIMARY "\" in the VCF header");
     }
 
+    // segging the INFO/LIFTBACK field when segging a Laft dual-coordintes file
     else if (dict_id.num == dict_id_INFO_LIFTBACK) { 
 
         if (txt_file->dual_coords == DC_LAFT) {
@@ -682,8 +684,8 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
             char *oalt        = oref + oref_len + 1; 
             unsigned oalt_len = vb->contexts[VCF_REFALT].last_txt_len - oref_len - 1;
             
-            liftover_seg_LIFTBACK (vb_, (DictId)dict_id_INFO_LIFTOVER, dict_id, VCF_oCHROM, VCF_POS, VCF_SPECIAL_OREF, 
-                                   oref, oref_len, oalt, oalt_len, 
+            liftover_seg_LIFTBACK (vb_, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
+                                   VCF_oCHROM, VCF_POS, VCF_SPECIAL_OREF, oref, oref_len, oalt, oalt_len, 
                                    vcf_seg_ref_alt, (char*)*this_value, *this_value_len);
 
             return false; 
@@ -867,7 +869,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         vb->ht_per_line = vb->ploidy * vcf_num_samples;
     }
 
-    if (sample_i == 0 && vb->line_i == 0) {
+    if (vb->ht_matrix_ctx->local.type != BUF_OVERLAY) { // first time
         // we overlay on the txt to save memory. since the HT data is by definition a subset of txt, we only overwrite txt
         // areas after we have already consumed them
         buf_set_overlayable (&vb->txt_data);
@@ -1233,7 +1235,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
                            : (txt_file->dual_coords == DC_PRIMARY) ? DC_PRIMARY // PRIMARY dual coordinates file - coordinates are primary
                            : vb->laft_reject_bytes                 ? DC_PRIMARY // LAFT dual coordinates file - this line is a rejected line originating from ##LIFTOVER_REJECT) in primary coordinates
                            :                                         DC_LAFT;   // LAFT dual coordinates file - this line is a laft-over line in laft coordinates
-    
+
     // if --chain and this VB is not the rejects data OR 
     // if this is a dual-coordinates file in primary coordintes (i.e. might have INFO/LIFTREFD) 
     // Note: when compressing a DC_LAFT file, we already copied the rejects in vcf_seg_initialize
@@ -1243,7 +1245,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         vcf_seg_copy_line_to_reject (vb, field_start_line, remaining_txt_len);
         
     GET_NEXT_ITEM ("CHROM");
-    if (coords == DC_PRIMARY)
+    if (coords == DC_PRIMARY) 
         seg_chrom_field (vb_, field_start, field_len);
     else
         seg_by_did_i (vb_, field_start, field_len, VCF_oCHROM, field_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
@@ -1287,21 +1289,21 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     
     // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to laft coordinates
     if (chain_is_loaded)
-        liftover_seg_add_chain_data (vb_, VCF_oCHROM, VCF_SPECIAL_OREF, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, (DictId)dict_id_INFO_LIFTREJD);
+        liftover_seg_add_INFO_LIFT_fields (vb_, VCF_oCHROM, VCF_SPECIAL_OREF, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, (DictId)dict_id_INFO_LIFTREJD);
 
     // INFO
     if (vcf_num_samples)
-        GET_NEXT_ITEM ("INFO"); 
+        GET_NEXT_ITEM ("INFO"); // to do: currently, we require FORMAT (and hence a \t after INFO) in the case the file has samples but this line doesn't. VCF spec doesn't require FORMAT in this case.
     else
         GET_MAYBE_LAST_ITEM ("INFO"); // may or may not have a FORMAT field
 
     seg_info_field (vb_, vcf_seg_special_info_subfields, field_start, field_len, 
                     flag.processing_rejects ? LO_UNSUPPORTED               : // in the rejects file all have failed - this is some error, we don't yet know the true one
-                    chain_is_loaded         ? vb->last_index (VCF_oSTATUS) : // in --chain  we got the oSTATUS in liftover_seg_add_chain_data
-                    vb->laft_reject_bytes   ? LO_UNSUPPORTED               : // reject lines in a Laft
-                    txt_file->dual_coords   ? LO_OK                        : // dual_coords=DC_LAFT    - non-rejects are all LO_OK. 
-                                                                             // dual_coords=DC_PRIMARY - we don't know yet, we will test for existance of INFO/LEFTREFD in seg_info_field_correct_for_dual_coordinates()
-                                              LO_NONE);                      // z_file is not a dual-coordinates file
+                    chain_is_loaded         ? vb->last_index (VCF_oSTATUS) : // in --chain  we got the oSTATUS in liftover_seg_add_INFO_LIFT_fields
+                    vb->laft_reject_bytes   ? LO_UNSUPPORTED               : // reject lines in Laft are all failed (happens only in txt_file->dual_coords==DC_LAFT)
+                    txt_file->dual_coords==DC_LAFT    ? LO_OK              : // non-reject lines Laft are all LO_OK. 
+                    txt_file->dual_coords==DC_PRIMARY ? LO_UNKNOWN         : // we don't know yet, we will test for existance of INFO/LEFTREFD in seg_info_field_correct_for_dual_coordinates()
+                                                        LO_NONE)           ; // z_file is not a dual-coordinates file
 
     bool has_samples = true;
     if (separator != '\n') { // has a FORMAT field

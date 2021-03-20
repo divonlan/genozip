@@ -3,6 +3,34 @@
 //   Copyright (C) 2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+// Dual-coordinates genozip/genocat file flow:
+//
+// genozip -C source.txt       --> dual-coord.genozip - component_i=0 contains all lines, each with LIFTOVER or LIFTREJD 
+//                                                                    LIFTREFD are also written to the rejects file
+//                                                      component_i=1 is the rejects file containing LIFTREFD lines (again)
+//
+// genocat dual-crd.genozip    --> primary.txt -        component_i=0 is reconstructed - lines have LIFTOVER or LIFTREJD 
+//                                                                    lines are IN ORDER
+//                                                      component_i=1 is skipped.
+//
+// genozip primary.txt         --> dual-coord.genozip - component_i=0 contains all lines, each with LIFTOVER or LIFTREJD 
+//                                                                    LIFTREFD are also written to the rejects file
+//                                                      component_i=1 is the rejects file containing LIFTREFD lines (again)
+//
+// genocat -v dual-crd.genozip --> laft.txt -           component_i=1 with LIFTREJD is reconstructed first and becomes part of the header
+//                                                      component_i=0 is reconstructed - dropping LIFTREJD lines and lifting over LIFTOVER->LIFTBACK 
+//                                                                    lines are OUT OF ORDER due to change in coordinates 
+//
+// genozip laft.txt            --> dual-coord.genozip - LIFTREJD header lines are sent to VB=0 via unconsumed_txt
+//                                                      component_i=0 contains all lines first all LIFTREJD lines followed by all LIFTOVER lines  
+//                                                                    LIFTREFD lines are also written to the rejects file
+//                                                      component_i=1 is the rejects file containing LIFTREFD lines (again)
+//
+// genocat dual-crd.genozip    --> primary.txt          component_i=0 is reconstructed - first LIFTREJD then LIFTOVER lines
+//                                                                    lines are OUT OF ORDER (LIFTREJD first)
+//                                                      component_i=1 is skipped.
+//
+
 #include <errno.h>
 #include <math.h>
 #include "liftover.h"
@@ -38,8 +66,9 @@ const char *liftover_status_names[] = LIFTOVER_STATUS_NAMES;
 #define WORD_INDEX_MISSING -2 // a value in liftover_chrom2chainsrc
 
 // constant snips initialized at the beginning of the first file zip
-static char liftover_snip[200], *liftback_snip;
-static unsigned liftover_snip_len, liftback_snip_len;
+static char liftover_snip[200];
+static unsigned liftover_snip_len;
+static char liftback_snip_id;
 
 // generate dst_contig dict and nodes at the end of chain_load; to be copied z_file->contexts of file being zipped
 void liftover_copy_data_from_chain_file (void)
@@ -99,8 +128,7 @@ void liftover_zip_initialize (DidIType dst_contig_did_i, char special_liftback_s
     liftover_snip_len = sizeof (liftover_snip);
     container_prepare_snip ((Container*)&liftover_con, 0, 0, liftover_snip, &liftover_snip_len);
 
-    liftback_snip = (char []){ SNIP_SPECIAL, special_liftback_snip_id };
-    liftback_snip_len = 2;
+    liftback_snip_id = special_liftback_snip_id;
 }
 
 // SEG: map coordinates primary->laft
@@ -147,12 +175,12 @@ LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover_chrom2
 }                                
 
 // --------------------------------------------------------------
-// Segging a NON-dual-coordinate file called when genozip --chain
+// Segging a NON-dual-coordinates file called when genozip --chain
 // --------------------------------------------------------------
 
-// Create LIFTOVER / LIFTREJD records when aligning a NON-dual-coordinate file (using --chain)
-LiftOverStatus liftover_seg_add_chain_data (VBlockP vb, DidIType ochrom_did_i, char orefalt_special_snip_id,
-                                            DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejd_dict_id)
+// Create either (LIFTOVER and LIFTBACK) or LIFTREJD records when aligning a NON-dual-coordinates file (using --chain)
+LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_did_i, char orefalt_special_snip_id,
+                                                  DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejd_dict_id)
 {
     WordIndex ochrom_node_index;
     PosType opos;
@@ -189,7 +217,7 @@ LiftOverStatus liftover_seg_add_chain_data (VBlockP vb, DidIType ochrom_did_i, c
         #define oaltrule_len 1
 
         seg_by_dict_id (vb, liftover_snip, liftover_snip_len, liftover_dict_id, 4); // account for 4 commas
-        seg_by_dict_id (vb, liftback_snip, liftback_snip_len, liftback_dict_id, 0); // don't account as this container is not reconstructed by default
+        seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, liftback_snip_id }), 2, liftback_dict_id, 0); // don't account as this container is not reconstructed by default
 
         // we modified the txt by adding these 5 fields to INFO/LIFTOVER. We account for them now, and we will account for the INFO name etc in seg_info_field
         vb->vb_data_size += opos_len + ochrom_len + oref_len + ostrand_len + oaltrule_len + 4 /* commas */;
@@ -205,14 +233,14 @@ LiftOverStatus liftover_seg_add_chain_data (VBlockP vb, DidIType ochrom_did_i, c
 }
 
 // -----------------------------------------------------------------------
-// Segging LIFTOVER / LIFTBACK / LIFTREJD records of dual-coordinate files
+// Segging LIFTOVER / LIFTBACK / LIFTREJD records of dual-coordinates files
 // Liftover record: CHROM,POS,REF,STRAND,ALTRULE
 // Liftback record: CHROM,POS,REF,STRAND,ALTRULE
 // Liftrejd snip:   REJECTION_REASON
 // -----------------------------------------------------------------------
 
 // parse INFO_LIFTOVER/BACK to its componets. note that it is destructive - it replaces the ','s with 0
-static void liftover_seg_parse_record (VBlockP vb, char *value, int value_len,
+static void liftover_seg_parse_record (VBlockP vb, char *value, int value_len, const char *field_name, 
                                        const char **chrom, unsigned *chrom_len,
                                        PosType *pos,       unsigned *pos_len,
                                        const char **ref,   unsigned *ref_len,
@@ -221,7 +249,7 @@ static void liftover_seg_parse_record (VBlockP vb, char *value, int value_len,
 {
     const char *strs[5];
     unsigned str_lens[5];
-    ASSSEG (str_split (value, value_len, 5, ',', strs, str_lens), value, "Invalid liftover record \"%.*s\"", value_len, value);
+    ASSSEG (str_split (value, value_len, 5, ',', strs, str_lens), value, "Invalid %s field: \"%.*s\"", field_name, value_len, value);
 
     *chrom     = strs[0]; 
     *chrom_len = str_lens[0];
@@ -241,11 +269,12 @@ void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId liftback
                             const char *alt, unsigned alt_len, // optional - primary ALT
                             char *value, int value_len)
 {
-    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTOVER" subfield", txt_name);
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains variants with the INFO/"INFO_LIFTOVER" subfield", txt_name);
 
     // parse record
     const char *ochrom, *oref; char ostrand, oaltrule; PosType opos; unsigned ochrom_len, opos_len, oref_len;
-    liftover_seg_parse_record (vb, value, value_len, &ochrom, &ochrom_len, &opos, &opos_len, &oref, &oref_len, &ostrand, &oaltrule); 
+    liftover_seg_parse_record (vb, value, value_len, "INFO/LIFTOVER",
+                               &ochrom, &ochrom_len, &opos, &opos_len, &oref, &oref_len, &ostrand, &oaltrule); 
 
     // oCHROM
     seg_by_did_i (vb, ochrom, ochrom_len, ochrom_did_i + OCHROM_OFFSET, ochrom_len);
@@ -271,7 +300,7 @@ void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId liftback
 
     // LIFTOVER and LIFTBACK container snips (INFO container filter will determine which is reconstructed)
     seg_by_dict_id (vb, liftover_snip, liftover_snip_len, liftover_dict_id, 4); // account for 4 commas
-    seg_by_dict_id (vb, liftback_snip, liftback_snip_len, liftback_dict_id, 0); // don't account as this container is not reconstructed by default
+    seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, liftback_snip_id }), 2, liftback_dict_id, 0); // don't account as this container is not reconstructed by default
 
     vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = LO_OK;
 }
@@ -284,11 +313,12 @@ void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback
                             void (*seg_ref_alt_cb)(VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len), // call back to seg primary REF and ALT
                             char *value, int value_len)
 {
-    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTBACK" subfield", txt_name);
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains variants with the INFO/"INFO_LIFTBACK" subfield", txt_name);
 
     // parse record
     const char *chrom, *ref; char strand, altrule; PosType pos; unsigned pos_len, ref_len, chrom_len;
-    liftover_seg_parse_record (vb, value, value_len, &chrom, &chrom_len, &pos, &pos_len, &ref, &ref_len, &strand, &altrule); 
+    liftover_seg_parse_record (vb, value, value_len, "INFO/LIFTBACK", 
+                               &chrom, &chrom_len, &pos, &pos_len, &ref, &ref_len, &strand, &altrule); 
 
     // CHROM
     seg_chrom_field (vb, chrom, chrom_len);
@@ -323,14 +353,14 @@ void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback
 
     // LIFTOVER and LIFTBACK container snips (INFO container filter will determine which is reconstructed)
     seg_by_dict_id (vb, liftover_snip, liftover_snip_len, liftover_dict_id, 4); // account for 4 commas
-    seg_by_dict_id (vb, liftback_snip, liftback_snip_len, liftback_dict_id, 0); // don't account as this container is not reconstructed by default
+    seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, liftback_snip_id }), 2, liftback_dict_id, 0); // don't account as this container is not reconstructed by default
 
     vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = LO_OK;
 }
 
 void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len)
 {
-    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinate VCF file - it contains variants with the INFO/"INFO_LIFTREJD" subfield", txt_name);
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains variants with the INFO/"INFO_LIFTREJD" subfield", txt_name);
 
     // get status from string
     char save = value[value_len];

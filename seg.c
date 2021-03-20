@@ -367,6 +367,16 @@ static int sort_by_subfield_name (const void *a, const void *b)
     return strncmp (ina->start, inb->start, MIN (ina->len, inb->len));
 }
 
+// if ostatus is not known yet (seg of a Primary line), check for LIFTREJD subfield
+static inline LiftOverStatus seg_info_field_get_ostatus_by_con (unsigned nitems, InfoItem *info_items)
+{
+    for (unsigned i=0; i < nitems; i++)
+        if (info_items[i].dict_id.num == dict_id_INFO_LIFTREJD) 
+            return LO_UNSUPPORTED;
+
+    return LO_OK; // no LIFTREJD - Primary line is not rejected
+}
+
 static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *con, InfoItem *info_items, LiftOverStatus ostatus)
 {
     // case: --chain and INFO is '.' - remove the '.' as we are adding INFO/LIFTOVER or LIFTREJD
@@ -374,6 +384,10 @@ static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *
         con_dec_nitems (*con);
         vb->vb_data_size--;
     }
+
+    // if ostatus is not known yet (seg of a Primary line), check for LIFTREJD subfield
+    if (ostatus == LO_UNKNOWN) 
+        ostatus = seg_info_field_get_ostatus_by_con (con_nitems(*con), info_items);
 
     // cases we add INFO_LIFTOVER: liftover is possible (LO_OK), but not if this is a Primary file that already contains LIFTOVER)
     if (ostatus == LO_OK && txt_file->dual_coords != DC_PRIMARY) {
@@ -397,18 +411,10 @@ static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *
     // cases we add INFO_LIFTBACK: lift is possible (LO_OK), but not if this is a Laft file that already contains LIFTBACK
     if (ostatus == LO_OK && txt_file->dual_coords != DC_LAFT) {
 
-        // for Primary, we don't yet know the status (vcf_seg_txt_line calls with LO_OK) - we check for LIFTREJD
-        unsigned nitems = con_nitems (*con);
-        for (unsigned i=0; i < nitems; i++)
-            if (info_items[i].dict_id.num == dict_id_INFO_LIFTREJD) {
-                ostatus = LO_UNSUPPORTED;
-                break;
-            }
-
         if (ostatus == LO_OK) {
             info_items[con_nitems(*con)] = (InfoItem){ .start   = INFO_LIFTBACK"=", 
-                                                    .len     = INFO_LIFTBACK_LEN + 1, // +1 for the '='
-                                                    .dict_id = (DictId)dict_id_INFO_LIFTBACK };  
+                                                       .len     = INFO_LIFTBACK_LEN + 1, // +1 for the '='
+                                                       .dict_id = (DictId)dict_id_INFO_LIFTBACK };  
             con_inc_nitems (*con);
             con->filter_items = true; // filter will select which of LIFTOVER and LIFTBACK is reconstructed
         }
@@ -433,9 +439,12 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
 {
     const int info_field   = DTF(info);
     const char *field_name = DTF(names)[info_field];
-    unsigned liftover_items = ostatus == LO_NONE ? 0
-                            : ostatus == LO_OK   ? 2  // INFO_LIFTOVER and INFO_LIFTBACK
-                            :                      1; // INFO_LIFTREJD
+
+    // max number of Container items consumed by Liftover stuff, reducing the max number of other subfields 
+    unsigned max_liftover_items = ostatus == LO_NONE    ? 0  // not a dual-coordinates frile
+                                : ostatus == LO_OK      ? 2  // INFO_LIFTOVER and INFO_LIFTBACK
+                                : ostatus == LO_UNKNOWN ? 2  // Either INFO_LIFTOVER and INFO_LIFTBACK Or INFO_LIFTREJD
+                                :                         1; // INFO_LIFTREJD
 
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true };
@@ -496,9 +505,9 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
                 this_name_len = 0;
                 con_inc_nitems (con);
 
-                ASSSEG (con_nitems(con) <= MAX_SUBFIELDS - liftover_items, info_str, 
+                ASSSEG (con_nitems(con) <= MAX_SUBFIELDS - max_liftover_items, info_str, 
                         "A line has too many subfields (tags) in the %s field - the maximum supported is %u",
-                        field_name, MAX_SUBFIELDS - liftover_items);
+                        field_name, MAX_SUBFIELDS - max_liftover_items);
             }
             else this_value_len++;
         }

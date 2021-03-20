@@ -16,9 +16,13 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
              
-            //"args": ["bug.vcf", "-f"],
-            //"args": ["d:\\\\My-DNA\\\\GFX0241869.bam.genozip", "--show-sex"],
-            "args": ["data/GFX0241869.R1.1M.fq.genozip", "--show-coverage"],
+            "args": ["test\\tmp\\primary.vcf.genozip"],
+            //"args": ["junk.laft1.vcf.genozip"],
+            //"args": ["-Cc:\\Users\\USER\\projects\\genozip\\test\\basic.chain.genozip", "test/basic.vcf", "-fojunk.vcf.genozip"],
+            //"args": ["junk.vcf.genozip", "-fojunk.primary.vcf"],
+            ///"args": ["-f","bug.laft.vcf", "-@1"],
+            //"args": ["junk.laft.vcf", "-tf"],
+            //"args": ["junkB.genozip"],
 
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

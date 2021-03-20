@@ -46,7 +46,7 @@ extern unsigned vcf_vb_size (void);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 
-// Liftover - header keys - INFO fields
+// Liftover - INFO fields
 #define INFO_LIFTOVER  "LIFTOVER"
 #define INFO_LIFTOVER_LEN 8
 #define INFO_LIFTBACK  "LIFTBACK"
@@ -62,11 +62,12 @@ extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 #define HK_LB_REF      "##liftback_reference="
 #define HK_LB_REJECT   "##liftback_reject="
 #define HK_CHAIN       "##chain="
-#define HK_DC_PRIMARY  "##dual_coordinates=PRIMARY"
-#define HK_DC_LAFT     "##dual_coordinates=LAFT"
-#define KH_INFO_LO     "##INFO=<ID=" INFO_LIFTOVER ",Number=5,Type=String,Description=\"Dual-coordinate VCF: Information for lifting over the variant to laft coordinates\",Source=\"genozip\",Version=\"%s\">"
-#define KH_INFO_LB     "##INFO=<ID=" INFO_LIFTBACK ",Number=5,Type=String,Description=\"Dual-coordinate VCF: Information for retrieving the variant in the primary coordinates\",Source=\"genozip\",Version=\"%s\">"
-#define KH_INFO_LR     "##INFO=<ID=" INFO_LIFTREJD ",Number=1,Type=String,Description=\"Dual-coordinate VCF: Reason variant was rejected for lift over\",Source=\"genozip\",Version=\"%s\">"
+#define HK_DC          "##dual_coordinates"
+#define HK_DC_PRIMARY  HK_DC"=PRIMARY"
+#define HK_DC_LAFT     HK_DC"=LAFT"
+#define KH_INFO_LO     "##INFO=<ID=" INFO_LIFTOVER ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for lifting over the variant to laft coordinates\",Source=\"genozip\",Version=\"%s\">"
+#define KH_INFO_LB     "##INFO=<ID=" INFO_LIFTBACK ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for retrieving the variant in the primary coordinates\",Source=\"genozip\",Version=\"%s\">"
+#define KH_INFO_LR     "##INFO=<ID=" INFO_LIFTREJD ",Number=1,Type=String,Description=\"dual-coordinates VCF: Reason variant was rejected for lift over\",Source=\"genozip\",Version=\"%s\">"
 
 extern void vcf_seg_ref_alt (VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len);
 
@@ -83,9 +84,9 @@ SPECIAL (VCF, 3, SVLEN,      vcf_piz_special_SVLEN);
 SPECIAL (VCF, 4, DS,         vcf_piz_special_DS);
 SPECIAL (VCF, 5, BaseCounts, vcf_piz_special_BaseCounts);
 SPECIAL (VCF, 6, SF,         vcf_piz_special_SF);
-SPECIAL (VCF, 7, OREF,       vcf_piz_special_OREF);     // added 11.0.9
-SPECIAL (VCF, 8, LIFTREJD,   vcf_piz_special_LIFTREJD); // added 11.0.9 - maybe be used by other data types too in the future
-SPECIAL (VCF, 9, LIFTBACK,   vcf_piz_special_LIFTBACK); // added 11.0.9 - maybe be used by other data types too in the future
+SPECIAL (VCF, 7, OREF,       vcf_piz_special_OREF);     // added v12
+SPECIAL (VCF, 8, LIFTREJD,   vcf_piz_special_LIFTREJD); // added v12 - maybe be used by other data types too in the future
+SPECIAL (VCF, 9, LIFTBACK,   vcf_piz_special_LIFTBACK); // added v12 - maybe be used by other data types too in the future
 
 #define NUM_VCF_SPECIAL 10
 

@@ -396,3 +396,8 @@ bug fixes, including major bug with mc:i optional field in SAM
 - Added support for compressing UCSC chain files
 - Better --show-coverage
 - Bug fixes
+
+12.0.0
+- Support dual-coordinates VCF files: genozip --chain to create a dual-coordinates file ; genocat --laft ("lifted") to see the
+       lifted-over coordinates
+- Fixed bug with subsetting samples in VCF (genocat --sample). The fix will work on files compressed with 11.0.9 onwards.

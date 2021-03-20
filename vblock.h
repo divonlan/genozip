@@ -118,7 +118,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     bool is_rejects_vb; \
     Buffer liftover;           /* ZIP: map from chrom_node_index (not word index!) to entry in chain_index */ \
                                /* PIZ VCF: in --laft, the data that will go into INFO/LIFTBACK */ \
-    Buffer liftover_rejects;   /* ZIP generating a dual-coordinate file: txt lines rejected for liftover */ \
+    Buffer liftover_rejects;   /* ZIP generating a dual-coordinates file: txt lines rejected for liftover */ \
     int32_t laft_reject_bytes; /* ZIP of a Laft file: number of bytes of reject data in this VB */ \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\

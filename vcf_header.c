@@ -50,17 +50,17 @@ static void vcf_header_trim_field_name_line (Buffer *vcf_header);
 // returns the length of the first line, if it starts with ##fileformat, or 0
 static inline unsigned vcf_header_get_first_line_len (const Buffer *txt_header)
 {
-    if (txt_header->len < 12 || memcmp (txt_header->data, "##fileformat", 12)) return 0;
+    ARRAY (char, line, *txt_header);
+    if (!LINEIS ("##fileformat")) return 0;
 
-    const char *newline = memchr (txt_header->data, '\n', txt_header->len);
-    
-    return newline ? newline - txt_header->data + 1 : 0;
+    const char *newline = memchr (line, '\n', line_len);
+    return newline ? newline - line + 1 : 0;
 }
 
 static inline bool is_field_name_line (const char *line, unsigned line_len)
 {
-    unsigned field_name_line_len = strlen (VCF_FIELD_NAMES);
-    return line_len >= field_name_line_len && !memcmp (line, VCF_FIELD_NAMES, field_name_line_len);
+    // compare to "#CHROM" - not to entire VCF_FIELD_NAMES as it may be a line maybe separated by spaces instead of tabs
+    return LINEIS ("#CHROM");
 }
 
 // returns the length of the last line, if it starts with #CHROM, or 0
@@ -92,7 +92,7 @@ static bool vcf_header_get_dual_coords (const char *line, unsigned line_len, voi
 
     else if (LINEIS (HK_DC_LAFT)) {
         txt_file->dual_coords = DC_LAFT;
-        flag.data_modified = true; // we will be zipping this as a dual-coordinate VCF with default reconstruction as PRIMARY - this turns off digest
+        flag.data_modified = true; // we will be zipping this as a dual-coordinates VCF with default reconstruction as PRIMARY - this turns off digest
         return true;
     }
 
@@ -215,6 +215,9 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     // scan header for ##dual_coordinates - this sets txt_file->dual_coords
     txtfile_foreach_line (txt_header, false, vcf_header_get_dual_coords, 0, 0, 0, 0);
 
+    ASSERTE (!chain_is_loaded || !txt_file->dual_coords, 
+             "--chain cannot be used with %s - it is already a dual-coordinates VCF file - it contains \""HK_DC"\" in its header", txt_name);
+
     // if we're compressing a txt file with liftover, we prepare the rejects header: it consists of two lines:
     // 1. the first "##fileformat" line if one exists in our file 
     // 2. the last "#CHROM" line - needing for zipping the rejects file, but will be removed in reconstruction
@@ -253,7 +256,7 @@ static bool vcf_inspect_txt_header_piz (Buffer *txt_header)
 
     // for the rejects part of the header - we just remove its #CHROM line as it will be taken from the primary component
     if (flag.processing_rejects) {
-        txt_header->len -= vcf_header_get_last_line (txt_header, 0); 
+        txt_header->len -= vcf_field_name_line.len;
         return true;
     }
 
@@ -262,7 +265,7 @@ static bool vcf_inspect_txt_header_piz (Buffer *txt_header)
     if (flag.header_one) 
         txt_header->len = 0; 
     else
-        txt_header->len -= vcf_header_get_last_line (txt_header, 0); 
+        txt_header->len -= vcf_field_name_line.len; 
     
     // in case of --laft, we remove the first line of the regular file header (##fileformat), as they are 
     // duplicate in both files been output as part of the rejects file

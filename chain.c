@@ -408,7 +408,9 @@ void chain_load (void)
 
     TEMP_VALUE (command, PIZ);
 
+    TEMP_FLAG (quiet, true); // don't show progress indicator for the chain file - it is very fast 
     piz_one_file (0, false, false);
+    RESTORE_FLAG (quiet);
 
     // copy src_contig and dst_contig dictionaries before z_file of the chain file is freed
     liftover_copy_data_from_chain_file();

@@ -56,7 +56,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
             return false; // filter out entirely without consuming (non-DC files have no oStatus data)
     }
 
-    // for dual-coordinate genozip files - in which rows capable of liftover have both 
+    // for dual-coordinates genozip files - in which rows capable of liftover have both 
     // INFO/LIFTOVER and INFO/LIFTBACK subfields - we select which one to filter out based on flag.laft
     else if (item >= 0 && con->items[item].dict_id.num == dict_id_INFO_LIFTOVER && flag.laft)
         return false;
