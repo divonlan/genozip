@@ -626,8 +626,11 @@ void txtfile_write_4_lines (VBlockP vb,
 
     for (unsigned nl=0; nl < 4; nl++) {
         int64_t last_in_line = start_line; 
-        while (txt[last_in_line] != '\n') last_in_line++;
+        while (last_in_line < txt_len && txt[last_in_line] != '\n') last_in_line++;
         
+        ASSERTE (last_in_line < txt_len, "txt_data ends without a full 4-line fastq record in vb=%u nl=%u txt_len=%u start_line=%u last_in_line=%u:\n%.*s", 
+                 vb->vblock_i, nl, (unsigned)txt_len, (unsigned)start_line, (unsigned)last_in_line, MIN (1000, (unsigned)(txt_len - start_line)), &txt[start_line]);
+
         int64_t line_len = last_in_line - start_line + 1;
 
         if (nl || !pair)

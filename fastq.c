@@ -168,14 +168,15 @@ void fastq_txtfile_write_one_vblock_interleave (VBlockP vb1_, VBlockP vb2_)
     VBlockFASTQ *vb1 = (VBlockFASTQ *)vb1_;
     VBlockFASTQ *vb2 = (VBlockFASTQ *)vb2_;
 
-    ASSERTE (vb1->lines.len == vb2->lines.len, "in vb1=%u vb2=%u expecting vb1->lines.len=%"PRIu64" == vb2->lines.len=%"PRIu64,
-             vb1->vblock_i, vb2->vblock_i, vb1->lines.len, vb2->lines.len);
+    // note vb->lines.param is the number of lines actually reconstructed (considering downsample, shard), set by container_reconstruct_do
+    ASSERTE (vb1->lines.param == vb2->lines.param, "in vb1=%u vb2=%u expecting vb1->lines.param=%"PRIu64" == vb2->lines.param=%"PRIu64,
+             vb1->vblock_i, vb2->vblock_i, vb1->lines.param, vb2->lines.param);
 
-    vb1->txt_data.param = vb2->txt_data.param = 0;
+    vb1->txt_data.param = vb2->txt_data.param = 0; // used in txtfile_write_4_lines()
     BitArray *show_1 = buf_get_bitarray (&vb1->genobwa_show_line);
     BitArray *show_2 = buf_get_bitarray (&vb2->genobwa_show_line);
-    
-    for (uint64_t i=0; i < vb1->lines.len; i++) {
+
+    for (uint64_t i=0; i < vb1->lines.param; i++) {
 
         // in case of --genobwa, we show both interleaved lines, if either one of them is passed the filter
         if (flag.genobwa && !bit_array_get (show_1, i) && !bit_array_get (show_2, i)) continue;
