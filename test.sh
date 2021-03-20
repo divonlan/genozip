@@ -386,6 +386,7 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--grep line5 --header-only" 1
     test_count_genocat_lines $file "--downsample 2" $(( 4 * `grep @ $file | wc -l` / 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave" $(( 4 * `grep @ $file | wc -l` * 2 )) 
+    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave --downsample=5,4" $(( 4 * `grep @ $file | wc -l` / 5 * 2 )) 
 }
 
 batch_backward_compatability()

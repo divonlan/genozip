@@ -124,11 +124,13 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
         // case this is the top-level snip
         if (con->is_toplevel) {
-            vb->line_i = vb->first_line + rep_i;
+            vb->line_i = vb->first_line + rep_i; // 1-based line from the begginging for the file, including the header
             vb->line_start = vb->txt_data.len;
 
             // show (or not) the line based on our downsampling rate
-            vb->dont_show_curr_line = flag.downsample && ((vb->line_i-1) % flag.downsample != flag.shard); 
+            vb->dont_show_curr_line = flag.downsample && ((vb->line_i-1) % flag.downsample != flag.shard);
+            if (!vb->dont_show_curr_line)
+                vb->lines.param++; // count number of top-level lines actually reconstructed (used in fastq_txtfile_write_one_vblock_interleave())
         }
     
         if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1))) continue; // repeat is filtered out

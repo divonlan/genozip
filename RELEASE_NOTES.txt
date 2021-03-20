@@ -396,3 +396,6 @@ bug fixes, including major bug with mc:i optional field in SAM
 - Added support for compressing UCSC chain files
 - Better --show-coverage
 - Bug fixes
+
+11.0.9
+- Fix bug with --downsample in combination with --interleaved
