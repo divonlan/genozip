@@ -22,7 +22,7 @@ copyright = '2019-2021, Divon Lan'
 author = 'Divon Lan'
 
 # The full version, including alpha/beta/rc tags
-release = '11.0.8'
+release = '11.0.9'
 
 
 # -- General configuration ---------------------------------------------------
@@ -53,3 +53,11 @@ html_theme = 'alabaster'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+# see: https://stackoverflow.com/questions/59215996/how-to-add-a-logo-to-my-readthedocs-logo-rendering-at-0px-wide
+html_logo = "_static/logo.png" # copied to _static by the system
+html_logo = "logo.png" # copied to _static by the system
+html_theme_options = {
+    'logo_only': True,
+    'display_version': False,
+}
