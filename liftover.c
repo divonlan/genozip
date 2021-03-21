@@ -21,7 +21,7 @@
 //                                                      component_i=0 is reconstructed - dropping LIFTREJD lines and lifting over LIFTOVER->LIFTBACK 
 //                                                                    lines are OUT OF ORDER due to change in coordinates 
 //
-// genozip laft.txt            --> dual-coord.genozip - LIFTREJD header lines are sent to VB=0 via unconsumed_txt
+// genozip laft.txt            --> dual-coord.genozip - LIFTREJD header lines are sent to vblock_i=1 via unconsumed_txt
 //                                                      component_i=0 contains all lines first all LIFTREJD lines followed by all LIFTOVER lines  
 //                                                                    LIFTREFD lines are also written to the rejects file
 //                                                      component_i=1 is the rejects file containing LIFTREFD lines (again)
