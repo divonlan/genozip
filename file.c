@@ -269,7 +269,7 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
     FILE *redirected_stdout_file = NULL;
     if (!flag.to_stdout) {
         redirected_stdout_file = fopen (file->name, file->mode); // exec_name will redirect its output to this file
-        ASSINP (redirected_stdout_file, "cannot open file %s: %s", file->name, strerror(errno));
+        ASSINP (redirected_stdout_file, "cannot open file \"%s\": %s", file->name, strerror(errno));
     }
     char reason[100];
     sprintf (reason, "To output a %s file", file_exts[file->type]);
@@ -757,7 +757,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
     if (!file->redirected) {
 
-        ASSINP (mode != READ || is_file_exists, "cannot open '%s' for reading: %s", filename, error);
+        ASSINP (mode != READ || is_file_exists, "cannot open \"%s\" for reading: %s", filename, error);
     
         if ((mode == WRITE || mode == WRITEREAD) && 
             is_file_exists && 
@@ -801,7 +801,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         default:       ABORT ("Error: invalid supertype: %u", supertype);
     }
 
-    ASSINP (success, "cannot open file %s: %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
+    ASSINP (success, "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
     return file;
 }
@@ -1070,7 +1070,7 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
     buf_alloc (vb, buf, size + add_string_terminator, 1, buf_name);
 
     FILE *file = fopen (filename, "rb");
-    ASSINP (file, "cannot open %s: %s", filename, strerror (errno));
+    ASSINP (file, "cannot open \"%s\": %s", filename, strerror (errno));
 
     size_t bytes_read = fread (buf->data, 1, size, file);
     ASSERTE (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));

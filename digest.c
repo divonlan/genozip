@@ -13,6 +13,7 @@
 #include "file.h"
 #include "codec.h"
 #include "txtfile.h"
+#include "strings.h"
 
 static Mutex vb_digest_mutex = {};   // ZIP: used for serializing MD5ing of VBs
 static uint32_t vb_digest_last=0; // last vb to be MD5ed 
@@ -32,7 +33,7 @@ Digest digest_finalize (DigestContext *ctx, const char *msg)
                              : md5_finalize (&ctx->md5_ctx);
 
     if (flag.show_digest) 
-        iprintf ("%s finalize %s: %s\n", DIGEST_NAME, msg, digest_display (digest).s);
+        iprintf ("%s finalize %s: %s\n", DIGEST_NAME, msg, digest_display_ex (digest, DD_SHORT).s);
 
     return digest;
 }
@@ -77,12 +78,14 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
 
     ctx->common.bytes_digested += buf->len;
 
-    if (flag.show_digest) 
-        iprintf ("vb=%05d %s update %s (len=%"PRIu64" so_far=%"PRIu64") 32chars=\"%.*s\": before=%s after=%s\n", 
+    if (flag.show_digest) {
+        char str[65];
+        iprintf ("vb=%05d %s update %s (len=%"PRIu64" so_far=%"PRIu64") 32chars=\"%s\": before=%s after=%s\n", 
                  buf->vb->vblock_i, DIGEST_NAME, msg, buf->len, ctx->common.bytes_digested, 
-                 MIN (32, (int)buf->len), buf->data, 
-                 digest_display (digest_snapshot (&before)).s, 
-                 digest_display (digest_snapshot (ctx)).s);
+                 str_to_single_line_printable (buf->data, MIN (32, (int)buf->len), str), 
+                 digest_display_ex (digest_snapshot (&before), DD_SHORT).s, 
+                 digest_display_ex (digest_snapshot (ctx), DD_SHORT).s);
+    }
 }
 
 // ZIP and PIZ: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
@@ -161,15 +164,18 @@ DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode)
         (mode == DD_MD5_IF_MD5 && (IS_ADLER || md5_is_zero (digest)))) 
         sprintf (dis.s, "N/A                             ");
 
-    if (mode == DD_NORMAL && IS_ADLER)
+    else if ((mode == DD_NORMAL || mode == DD_SHORT) && IS_ADLER)
         sprintf (dis.s, "%-10u", BGEN32 (digest.adler_bgen));
 
-    if ((mode == DD_NORMAL && !IS_ADLER && !md5_is_zero (digest)) ||
+    else if ((mode == DD_NORMAL && !IS_ADLER && !md5_is_zero (digest)) ||
         (mode == DD_MD5                 && !md5_is_zero (digest)) || 
         (mode == DD_MD5_IF_MD5 && !IS_ADLER && !md5_is_zero (digest)))
         sprintf (dis.s, "%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", 
                  b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);    
     
+    else if (mode == DD_SHORT && !IS_ADLER)
+        sprintf (dis.s, "%2.2x%2.2x%2.2x%2.2x", b[0], b[1], b[2], b[3]);    
+
     return dis;
 }
 DigestDisplay digest_display (const Digest digest) { return digest_display_ex (digest, DD_NORMAL); }

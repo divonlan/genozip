@@ -36,7 +36,7 @@ char *str_toupper (const char *in, char *out /* out allocated by caller - can be
 StrText char_to_printable (char c) 
 {
     switch ((uint8_t)c) {
-        case 32 ... 127 : return (StrText) { .s = {c, 0} }; // printable ASCII
+        case 32 ... 126 : return (StrText) { .s = {c, 0} };   // printable ASCII
         case '\t'       : 
         case '\n'       : 
         case '\r'       : return (StrText) { .s = {' ', 0} }; // whitespace
@@ -46,6 +46,27 @@ StrText char_to_printable (char c)
             return p;
         }
     }
+}
+
+// replaces \t, \n, \r, \b with "\t" etc, replaces unprintables with '?'. caller should allocate out. returns out.
+// out should be allocated by caller to (in_len*2 + 1), out is null-terminated
+char *str_to_single_line_printable (const char *in, unsigned in_len, char *out)
+{
+    char *start = out;
+
+    for (unsigned i=0; i < in_len; i++)
+        switch (in[i]) {
+            case '\t' : *out++ = '\\'; *out++ = 't'; break;
+            case '\n' : *out++ = '\\'; *out++ = 'n'; break;
+            case '\r' : *out++ = '\\'; *out++ = 'r'; break;
+            case '\b' : *out++ = '\\'; *out++ = 'b'; break;
+            case -128 ... 7: case 11 ... 12: case 14 ... 31: 
+                        *out++ = '?';                break;
+            default:    *out++ = in[i];
+        }
+    
+    *out = 0;
+    return start;
 }
 
 StrText str_size (uint64_t size)

@@ -773,7 +773,6 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
 {
     bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
 
-    is_first_txt = true;
     if (DTPZ(piz_header_init)) DTPZ(piz_header_init)();
 
     digest_initialize();
@@ -875,8 +874,9 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
 
         if (!evb->txt_data.len) goto done; // still no header... nothing more for us to do!
 
-        bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
-                        !flag.data_modified; // no point calculating digest if we know already the file will be different
+        bool test_digest = digest && // NOT 2nd+ component and concatenating
+                           !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
+                           !flag.data_modified; // no point calculating digest if we know already the file will be different
 
         if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
 

@@ -61,7 +61,7 @@ extern void digest_one_vb (VBlockP vb);
 typedef struct { char s[34]; } DigestDisplay;
 extern DigestDisplay digest_display (Digest digest);
 
-typedef enum { DD_NORMAL, DD_MD5, DD_MD5_IF_MD5 } DigestDisplayMode;
+typedef enum { DD_NORMAL, DD_MD5, DD_MD5_IF_MD5, DD_SHORT } DigestDisplayMode;
 extern DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode);
 extern const char *digest_name (void);
 

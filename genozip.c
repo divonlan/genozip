@@ -443,6 +443,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
                                   flag.quiet        ? "--quiet"        : SKIP_ARG,
                                   password          ? "--password"     : SKIP_ARG,
                                   password          ? password         : SKIP_ARG,
+                                  flag.show_digest  ? "--show-digest"  : SKIP_ARG,
                                   flag.show_memory  ? "--show-memory"  : SKIP_ARG,
                                   flag.show_time    ? "--show-time"    : SKIP_ARG,
                                   flag.threads_str  ? "--threads"      : SKIP_ARG,
@@ -526,7 +527,7 @@ static void main_genozip (const char *txt_filename,
     if (!flag.processing_rejects)
         stats_add_txt_name (txt_name); // add txt file name to stats data stored in z_file
 
-    TEMP_FLAG (quiet, flag.processing_rejects); // no warnings when (re) processing rejects
+    TEMP_FLAG (quiet, flag.processing_rejects ? true : flag.quiet); // no warnings when (re) processing rejects
 
     flags_update_zip_one_file();
 
@@ -754,24 +755,14 @@ int main (int argc, char **argv)
     // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
     if (command == ZIP) license_get(); 
 
-    if (flag.reading_chain) {
+    if (flag.reading_chain) 
         chain_load();
-/*        num_files++; // in liftover, we bind with the rejects file
-        flag.bind = BIND_ALL; */
-    }
 
     for (unsigned file_i=0, z_file_i=0; file_i < MAX (num_files, 1); file_i++) {
 
         // get file name
-        char *next_input_file;
-   /*     if (command == ZIP && chain_is_loaded && file_i == num_files-1) {
-            next_input_file = z_file->rejects_file_name; // in lift over, last file is the rejects file
-            flag.processing_rejects = true;
-        }
-        else {*/
-            next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
-            if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
-        //}
+        char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
+        if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
         ASSINP0 (next_input_file || command != PIZ, "filename(s) required (redirecting from stdin is not possible)");
 

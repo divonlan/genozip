@@ -89,7 +89,7 @@ static void *codec_gtshark_read_gtshark_output_file (void *arg)
     VBlockVCFP vb        = ((RWThreadArg *)arg)->vb;
 
     FILE *file = fopen (filename, "rb");
-    ASSERTE (file, "cannot open %s: %s (errno=%u)", filename, strerror (errno), errno);
+    ASSERTE (file, "cannot open \"%s\": %s (errno=%u)", filename, strerror (errno), errno);
 
     #define CHUNK 100000
 

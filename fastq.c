@@ -422,7 +422,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 
     // we segment it using / | : and " " as separators. 
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
-    seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, arg, unoptimized_len, 0);
+    seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, arg, 0, 0);
     SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line

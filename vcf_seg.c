@@ -1167,8 +1167,8 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
 
     // in some real-world files I encountered have too-short lines due to human errors. we pad them
     if (samples.repeats < vcf_num_samples) {
-        ASSERTW (false, "Warning: the number of samples in vb->line_i=%u is %u, different than the VCF column header line which has %u samples",
-                 vb->line_i, samples.repeats, vcf_num_samples);
+        WARN_ONCE ("FYI: the number of samples in vb->line_i=%u is %u, different than the VCF column header line which has %u samples",
+                   vb->line_i, samples.repeats, vcf_num_samples);
 
         if (dl->has_haplotype_data) {
             char *ht_data = ENT (char, vb->ht_matrix_ctx->local, vb->line_i * vb->ploidy * vcf_num_samples + vb->ploidy * samples.repeats);
@@ -1255,8 +1255,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         PosType pos = seg_pos_field (vb_, VCF_POS, VCF_POS, false, field_start, field_len, 0, field_len+1);
 
         // POS <= 0 not expected in a VCF file
-        ASSERTW (pos > 0, "Warning: invalid POS=%"PRId64" value in vb_i=%u vb_line_i=%u: line will be compressed, but not indexed", 
-                pos, vb->vblock_i, vb->line_i);
+        if (pos <= 0)
+            WARN_ONCE ("FYI: invalid POS=%"PRId64" value in vb_i=%u vb_line_i=%u: line will be compressed, but not indexed", 
+                       pos, vb->vblock_i, vb->line_i);
                 
         random_access_update_pos (vb_, VCF_POS);
     }
@@ -1337,7 +1338,8 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // seg INFO/SF, if there is one
     if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
 
-    ASSERTW (has_samples || !vcf_num_samples, "Warning: vb->line_i=%u has no samples", vb->line_i);
+    if (!has_samples && vcf_num_samples)
+        WARN_ONCE ("FYI: vb->line_i=%u has no samples", vb->line_i);
 
     SEG_EOL (VCF_EOL, false);
 
