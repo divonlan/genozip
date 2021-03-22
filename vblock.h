@@ -40,7 +40,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file; /* position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\
-    int32_t vb_data_size;      /* ZIP: actual size of txt read from file ; PIZ: expected size of decompressed txt. Might be different than original if --optimize is used. */\
+    int32_t vb_data_size;      /* ZIP: actual size of txt read from file, modified if --optimize/--chain ; PIZ: expected size of decompressed txt. */\
+    int32_t vb_data_size_0;    /* ZIP: original size of vb_data_size before modifying due to --optimize/--chain */ \
     uint32_t longest_line_len; /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
     uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
@@ -115,11 +116,12 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     WordIndex prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
     \
     /* liftover stuff */ \
-    bool is_rejects_vb; \
+    bool is_rejects_vb;        /* ZIP and PIZ. Cannot rely on flag.processing_rejects as it may change while VB is still processing  */ \
     Buffer liftover;           /* ZIP: map from chrom_node_index (not word index!) to entry in chain_index */ \
                                /* PIZ VCF: in --laft, the data that will go into INFO/LIFTBACK */ \
     Buffer liftover_rejects;   /* ZIP generating a dual-coordinates file: txt lines rejected for liftover */ \
     int32_t laft_reject_bytes; /* ZIP of a Laft file: number of bytes of reject data in this VB */ \
+    bool is_unsorted[2];       /* ZIP: line order of this VB[primary, laft] is unsorted */ \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
@@ -142,6 +144,14 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
 } VBlock;
+
+#define VBLOCK_COMMON_LINES_ZIP \
+    WordIndex chrom_index[2];   /* Seg: enter as node_index ; Merge: convert to word_index */ \
+    PosType pos[2];             /* arrays of [2] - { primary-coord, laft-coord } */ \
+
+typedef struct ZipDataLine {
+    VBLOCK_COMMON_LINES_ZIP
+} ZipDataLine;
 
 extern void vb_cleanup_memory(void);
 extern VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i);

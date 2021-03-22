@@ -1072,8 +1072,7 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
 
     if (flag.show_time) codec_show_time (vb, "DICT", vb->fragment_ctx->name, vb->fragment_codec);
 
-    vb->z_data.name = "z_data"; // comp_compress requires that it is set in advance
-    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, vb->fragment_start, NULL);
+    comp_compress (vb, &vb->z_data, (SectionHeader*)&header, vb->fragment_start, NULL);
 
     COPY_TIMER (ctx_compress_one_dict_fragment)    
 

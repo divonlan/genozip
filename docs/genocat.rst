@@ -91,6 +91,10 @@ One or more file names must be given.
 
           |
 
+.. option:: --unsorted.  If a file contains a "reconstruction plan" (see genozip --sort) the file will be displayed sorted by default. --unsorted overrides this behavior and shows the file in its unsorted form. This is useful if the file was highly unsorted causing sorting during genocat to consume a lot of memory.
+
+          |
+
 .. option:: --sequential.  (FASTA) Output in sequential format - each sequence in a single line.
    
           |
@@ -119,10 +123,8 @@ One or more file names must be given.
 
 .. include:: opt-piz.rst
 .. include:: opt-quiet.rst
-    
-|
 
-.. option:: --no-PG.  (VCF, SAM, BAM) When modifying the data in a file using genocat Genozip normally adds information about the modification in the file header. With this option it doesn't.
+.. option:: --no-PG.  (VCF SAM BAM) When modifying the data in a file using genocat Genozip normally adds information about the modification in the file header. With this option it doesn't.
     
 |
 

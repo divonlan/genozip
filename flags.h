@@ -39,9 +39,9 @@ typedef struct {
     int out_dt; // used to indicate the desired dt of the output txt - consumed by file_open, and thereafter equal to txt_file->data_type
     char *unbind;
 
-    // PIZ: data-modifying genocat options for showing only a subset of the file 
+    // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
-        regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, laft;
+        regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, laft, sort, unsorted;
     char *grep;
     uint32_t one_vb, downsample, shard ;
 
@@ -71,7 +71,7 @@ typedef struct {
     int list_chroms, show_sex, show_coverage, idxstats; 
     
     // stats / debug useful mostly for developers
-    int show_memory, show_dict, show_b250, show_aliases, show_digest,
+    int show_memory, show_dict, show_b250, show_aliases, show_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,

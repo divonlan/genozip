@@ -536,7 +536,9 @@ static void main_genozip (const char *txt_filename,
     zip_one_file (txt_file->basename, &is_last_txt_file, z_closes_after_me);
 
     if (flag.show_stats && z_closes_after_me && 
-        (!z_file->z_flags.dual_coords || flag.processing_rejects)) stats_display();
+        (!z_file->z_flags.dual_coords || flag.processing_rejects)) {
+        stats_display();
+    }
 
     bool remove_txt_file = z_file && flag.replace && txt_filename;
 
@@ -548,9 +550,13 @@ static void main_genozip (const char *txt_filename,
         // if this is a dual coords file, recursively call to add the rejects file, and close z_file there.
         if (z_file->z_flags.dual_coords && !flag.processing_rejects) {
             flag.processing_rejects = true;
+            flag.sort = false;
             z_closes_after_me = false;
             TEMP_FLAG (bind, BIND_REJECTS);            
+            stats_freeze_txt_len(); // don't count txt_len of rejects
+            
             main_genozip (z_file->rejects_file_name, 0, z_file->name, txt_file_i, true, exec_name);
+            
             RESTORE_FLAG (bind);
         }
         else {

@@ -1001,7 +1001,6 @@ static void ref_compress_one_range (VBlockP vb)
                                       .pos                 = r ? BGEN64 (r->first_pos) : 0,
                                       .gpos                = r ? BGEN64 (r->gpos)      : 0 };
 
-    vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
     vb->z_data.param = vb->vblock_i;
 
     // First, SEC_REF_IS_SET section (but not needed if the entire range is used)
@@ -1013,7 +1012,7 @@ static void ref_compress_one_range (VBlockP vb)
         header.h.codec                 = CODEC_BZ2;
         header.h.data_uncompressed_len = BGEN32 (r->is_set.nwords * sizeof (uint64_t));
         header.num_bases               = BGEN32 ((uint32_t)ref_size (r)); // full length, after flanking regions removed
-        comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, (char *)r->is_set.words, NULL);
+        comp_compress (vb, &vb->z_data, (SectionHeader*)&header, (char *)r->is_set.words, NULL);
 
         if (flag.show_reference && r) 
             iprintf ("vb_i=%u Compressing SEC_REF_IS_SET chrom=%u (%.*s) gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
@@ -1030,7 +1029,7 @@ static void ref_compress_one_range (VBlockP vb)
     header.h.compressed_offset     = BGEN32 (sizeof(header)); // reset compressed offset - if we're encrypting - REF_IS_SET was encrypted and compressed_offset padded, by REFERENCE is never encrypted
     header.h.data_uncompressed_len = r ? BGEN32 (r->ref.nwords * sizeof (uint64_t)) : 0;
     header.num_bases               = r ? BGEN32 (r->ref.nbits / 2) : 0; // less than ref_size(r) if compacted
-    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NULL);
+    comp_compress (vb, &vb->z_data, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NULL);
 
     if (flag.show_reference && r) 
         iprintf ("vb_i=%u Compressing SEC_REFERENCE chrom=%u (%.*s) %s gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 

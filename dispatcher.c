@@ -181,7 +181,8 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     COPY_TIMER_VB (evb, wallclock);
 
-    if (flag.show_time && !flag.show_time[0]) // show-time without the optional parameter 
+    if (flag.show_time && !flag.show_time[0] && // show-time without the optional parameter 
+        !(command == ZIP && z_file->z_flags.dual_coords && !flag.processing_rejects)) // when compressing dual coordinates, show time after the rejects component
         profiler_print_report (&evb->profile, 
                                dd->max_threads, dd->max_vb_id_so_far+1,
                                dd->filename, dd->next_vb_i + (command != ZIP)); // in ZIP, the last VB is empty
@@ -192,8 +193,8 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     buf_destroy (&dd->compute_threads_buf); // we need to destroy (not marely free) because we are about to free dd
 
     // note: we can only test evb when no compute thread is running as compute threads might modify evb buffers
-    // mid-way through test causing a buffer to have an inconsiset state and for buf_test_overflows to therefore report an error
-    buf_test_overflows(evb, "dispatcher_finish"); 
+    // mid-way through test causing a buffer to have an inconsistent state and for buf_test_overflows to therefore report an error
+    buf_test_overflows (evb, "dispatcher_finish"); 
 
     // free memory allocations between files, when compressing multiple non-bound files or 
     // decompressing multiple files. 

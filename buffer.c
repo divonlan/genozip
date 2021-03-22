@@ -169,20 +169,18 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
 {
     if (!vb) return false;
 
-    const Buffer *buf_list = &vb->buffer_list;
-
     int corruption = 0;
-    const Buffer *buf; // declare outside, so it is observable in the debugger in case of a crash
-    for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) {
 
-        // IMPORTANT NOTE regarding evb: testing evb might FAIL and should not be done in production! this is another thread thread
+    const Buffer *buf; // declare outside, so it is observable in the debugger in case of a crash
+    for (unsigned buf_i=0; buf_i < vb->buffer_list.len; buf_i++) {
+
+        // IMPORTANT NOTE regarding evb: testing evb might FAIL and should not be done in production! this if another thread 
         // can modify its buffers (under mutex protection) concurrently with this test, causing in consistent state between eg data and memory
         // we attempt to prevent many of the cases by not checking buffers that are BUFFER_BEING_MODIFIED at the onset, but they still may
         // become BUFFER_BEING_MODIFIED mid way through the test
 
-        buf = ((Buffer **)buf_list->data)[buf_i];
-
-        if (!buf) continue; // buf was 'buf_destroy'd
+        if (!(buf = *ENT (Buffer *, vb->buffer_list, buf_i)))
+             continue; // buf was 'buf_destroy'd
 
         static const char *nl[2] = {"", "\n\n"};
         if (buf->memory && buf->memory != BUFFER_BEING_MODIFIED) {

@@ -57,7 +57,7 @@ html_static_path = ['_static']
 # see: https://stackoverflow.com/questions/59215996/how-to-add-a-logo-to-my-readthedocs-logo-rendering-at-0px-wide
 html_logo = "_static/logo.png" # copied to _static by the system
 html_logo = "logo.png" # copied to _static by the system
-html_theme_options = {
-    'logo_only': True,
-    'display_version': False,
-}
+#html_theme_options = {
+#    'logo_only': True,
+#    'display_version': False,
+#}

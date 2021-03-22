@@ -14,6 +14,8 @@
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
+    VBLOCK_COMMON_LINES_ZIP
+    
     bool has_haplotype_data : 1; // FORMAT field contains GT
     bool has_genotype_data  : 1; // FORMAT field contains subfields other than GT
 

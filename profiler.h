@@ -25,6 +25,7 @@ typedef struct {
         ctx_read_all_dictionaries, ctx_dict_build_word_lists, ctx_clone, ctx_merge_in_vb_ctx_one_dict_id,
         md5,ctx_compress_one_dict_fragment, aligner_best_match, aligner_get_word_from_seq,
         lock_mutex_zf_ctx, aligner_get_match_len, generate_rev_complement_genome, ref_contigs_compress,
+        sorter_compress_qsort, sorter_compress_recon_plan,
         tmp1, tmp2, tmp3, tmp4, tmp5;
 
         const char *next_name, *next_subname;
@@ -57,7 +58,7 @@ typedef struct timespec TimeSpecType;
 }
 
 #define COPY_TIMER(res)         COPY_TIMER_FULL(vb, res)
-#define COPY_TIMER_VB(vb,res)   COPY_TIMER_FULL(vb, res)
+#define COPY_TIMER_VB(vb,res)   COPY_TIMER_FULL((vb), res)
 
 #define PAUSE_TIMER \
     TimeSpecType on_hold_timer; \

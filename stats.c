@@ -176,8 +176,8 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
     va_end (args);
 }
 
-static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_ratio, Codec codec,
-                                int64_t all_txt_size, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
+static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_ratio_0, Codec codec,
+                                int64_t all_txt_size, int64_t all_txt_size_0, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
     bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
     bufprintf (evb, &z_file->stats_buf, "NAME              GENOZIP      %%      TXT       %%   RATIO\n%s", "");
@@ -190,18 +190,18 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_r
                        str_size ((double)s->txt_size).s, s->pc_of_txt, // txt size and % of total txt which is in this line
                        (double)s->txt_size / (double)s->z_size); // ratio z vs txt
                        
-    if (txt_ratio > 1)
+    if (txt_ratio_0 != 1)
         bufprintf (evb, &z_file->stats_buf, 
                    "TOTAL vs %-6s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                    codec_name (codec),
-                   str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
-                   str_size (all_txt_size / txt_ratio).s, all_pc_of_txt, // total txt fize and ratio z vs txt
-                   all_comp_ratio / txt_ratio);
+                   str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
+                   str_size (all_txt_size_0 / txt_ratio_0).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+                   all_comp_ratio / txt_ratio_0);
     
     bufprintf (evb, &z_file->stats_buf, 
                "%-15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-               txt_ratio > 1 ? "TOTAL vs TXT" : "TOTAL",
-               str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 10-=0)
+               txt_ratio_0 != 1 ? "TOTAL vs TXT" : "TOTAL",
+               str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
                str_size (all_txt_size).s, all_pc_of_txt, // total txt fize and ratio z vs txt
                all_comp_ratio);
 }
@@ -273,7 +273,10 @@ void stats_compress (void)
         if (ctx && !ctx->b250.num_b250_words && !ctx->txt_len && !ctx->b250.len && !ctx->is_stats_parent && !s->z_size) 
             continue;
 
-        s->txt_size = ctx ? ctx->txt_len : (i==-SEC_TXT_HEADER ? txtfile_get_bound_headers_len() : 0);
+        s->txt_size = i==-SEC_TXT_HEADER        ? txtfile_get_bound_headers_len()
+                    : !ctx                      ? 0 
+                    : z_file->is_txt_len_frozen ? z_file->frozen_txt_len[i]
+                    :                             ctx->txt_len;
         
         all_comp_dict   += dict_compressed_size;
         all_uncomp_dict += ctx ? ctx->dict.len : 0;
@@ -337,14 +340,16 @@ void stats_compress (void)
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
 
-    // consolidate SAM arrays
+    ASSERTW (all_txt_size == z_file->txt_data_so_far_bind, "Expecting all_txt_size=%"PRId64" == z_file->txt_data_so_far_bind=%"PRId64,
+             all_txt_size, z_file->txt_data_so_far_bind);
 
     // short form stats from --show-stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
 
-    double txt_ratio = (double)z_file->txt_data_so_far_bind / (double)z_file->txt_disk_so_far_bind; // source compression, eg BGZF
+    // source compression, eg BGZF, against txt before any modifications
+    double txt_ratio_0 = (double)z_file->txt_data_so_far_bind_0 / (double)z_file->txt_disk_so_far_bind; 
 
-    stats_output_stats (sbl, num_stats, txt_ratio, txt_file->codec, all_txt_size, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
+    stats_output_stats (sbl, num_stats, txt_ratio_0, z_file->codec, all_txt_size, z_file->txt_data_so_far_bind_0, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
 
     stats_check_count (all_z_size, count_per_section);
 
@@ -398,4 +403,13 @@ void stats_add_txt_name (const char *fn)
 {
     bufprintf (evb, &z_file->bound_txt_names, "%s%s", z_file->bound_txt_names.len ? " ": "", fn);
     z_file->bound_txt_names.param++; // we store the number of files in param
+}
+
+// don't count txt_len of rejects. we store the txt_len of all contexts, and that's what we will use for stats_compress
+void stats_freeze_txt_len (void)
+{
+    for (uint32_t i=0; i < z_file->num_contexts; i++)
+        z_file->frozen_txt_len[i] = z_file->contexts[i].txt_len;
+
+    z_file->is_txt_len_frozen = true;
 }

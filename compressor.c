@@ -16,10 +16,10 @@
 
 // compresses data - either a contiguous block or one line at a time. If both are NULL that there is no data to compress.
 // returns data_compressed_len
-uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
+uint32_t comp_compress (VBlock *vb, Buffer *z_data,
                         SectionHeader *header, 
                         const char *uncompressed_data,  // option 1 - compress contiguous data
-                        LocalGetLineCB callback)  // option 2 - compress data one line at a time
+                        LocalGetLineCB callback)        // option 2 - compress data one line at a time
 { 
     ASSERTE0 (!uncompressed_data || !callback, "expecting either uncompressed_data or callback but not both");
 
@@ -54,9 +54,8 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     uint32_t est_compressed_len = codec_args[est_size_codec].est_size (header->codec, data_uncompressed_len); 
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
-    // note: its ok for other threads to allocate evb data because we have a special mutex in buffer protecting the 
-    // evb buffer list
-    buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, z_data->name);
+    buf_alloc (vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, 
+               z_data->name ? z_data->name : "z_data");
 
     // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec instead
     Codec comp_codec = (codec_args[header->codec].compress != USE_SUBCODEC) ? header->codec : codec_args[header->codec].sub_codec;
@@ -77,7 +76,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
         // if output buffer is too small, increase it, and try again
         if (!success) {
-            buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 50 /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */, 1,
+            buf_alloc (vb, z_data, z_data->len + compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 50 /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */, 1,
                        z_data->name ? z_data->name : "z_data");
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;

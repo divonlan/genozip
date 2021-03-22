@@ -11,5 +11,6 @@ extern void stats_display (void);  // PIZ and ZIP
 extern void stats_read_and_display (void);     // PIZ
 extern void stats_add_txt_name (const char *fn);
 extern void stats_set_consolidation (VBlockP vb, DidIType parent, unsigned num_deps, ...);
+extern void stats_freeze_txt_len (void);
 
 #endif

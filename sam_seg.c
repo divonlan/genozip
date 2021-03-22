@@ -661,7 +661,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         seg_by_ctx (vb, nm,     nm_len,     nm_ctx,     1 + nm_len);
         
         Context *pos_ctx = ctx_get_ctx (vb, con.items[1].dict_id);
-        seg_pos_field ((VBlockP)vb, pos_ctx->did_i, pos_ctx->did_i, false, pos, pos_len, 0, 1 + pos_len);
+        seg_pos_field ((VBlockP)vb, pos_ctx->did_i, pos_ctx->did_i, false, false, pos, pos_len, 0, 1 + pos_len);
     }
 
     container_seg_by_dict_id (vb, subfield_dict_id, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);
@@ -842,7 +842,7 @@ static inline void sam_seg_mc_field (VBlockSAM *vb, DictId dict_id,
     
     // delta vs PNEXT
     else
-        seg_pos_field ((VBlockP)vb, mc_did_i, SAM_PNEXT, true, snip, snip_len, 0, add_bytes);
+        seg_pos_field ((VBlockP)vb, mc_did_i, SAM_PNEXT, true, false, snip, snip_len, 0, add_bytes);
 }
 
 // optimization for Ion Torrent flow signal (ZM) - negative values become zero, positives are rounded to the nearest 10
@@ -1251,7 +1251,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     GET_NEXT_ITEM ("POS");
-    PosType this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, false, field_start, field_len, 0, field_len+1);
+    PosType this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, false, false, field_start, field_len, 0, field_len+1);
     sam_seg_verify_pos (vb_, this_pos);
     
     random_access_update_pos (vb_, SAM_POS);
@@ -1268,7 +1268,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     SEG_NEXT_ITEM (SAM_RNEXT);
     
     GET_NEXT_ITEM ("PNEXT");
-    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, field_start, field_len, 0, field_len+1);
+    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, false, field_start, field_len, 0, field_len+1);
 
     GET_NEXT_ITEM ("TLEN");
     sam_seg_tlen_field (vb, field_start, field_len, 0, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len);

@@ -158,19 +158,19 @@ WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str
 
 // scans a pos field - in case of non-digit or not in the range [0,MAX_POS], either returns -1
 // (if allow_nonsense) or errors
-PosType seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, 
-                           SegError *err) // out - if NULL, exception if error
+static PosType seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool zero_is_bad, 
+                                  SegError *err) // out - if NULL, exception if error
 {
     PosType value=0;
     bool is_int = str_get_int (snip, snip_len, &value); // value unchanged if not integer
 
-    if (is_int && value >= 0 && value <= MAX_POS) {
+    if (is_int && value >= !!zero_is_bad && value <= MAX_POS) {
         *err = ERR_SEG_NO_ERROR;
         return value; // all good
     }
 
-    ASSSEG (err, snip, "position field must be an integer number between 0 and %"PRId64", seeing: %.*s", 
-            MAX_POS, snip_len, snip);
+    ASSSEG (err, snip, "position field must be an integer number between %u and %"PRId64", seeing: %.*s", 
+            !!zero_is_bad, MAX_POS, snip_len, snip);
 
     *err = is_int ? ERR_SEG_OUT_OF_RANGE : ERR_SEG_NOT_INTEGER;
     return value; // in- or out-of- range integer, or 0 if value is not integer
@@ -181,6 +181,7 @@ PosType seg_pos_field (VBlock *vb,
                        DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
                        DidIType base_did_i,    // mandatory: base for delta
                        bool seg_bad_snips_too, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+                       bool zero_is_bad,       // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
                        const char *pos_str, unsigned pos_len, // option 1
                        PosType this_pos,       // option 2
                        unsigned add_bytes)
@@ -195,7 +196,7 @@ PosType seg_pos_field (VBlock *vb,
 
     SegError err = ERR_SEG_NO_ERROR;
     if (pos_str) {
-        this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, &err);
+        this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, zero_is_bad, &err);
         ASSERTE (seg_bad_snips_too || !err, "invalid value %.*s in %s vb=%u line_i=%u", 
                  pos_len, pos_str, vb->contexts[snip_did_i].name, vb->vblock_i, vb->line_i);
 

@@ -1,3 +1,5 @@
+Dual-coordinates VCF files
+==========================
 
 Working with dual coordinates consists of three processes:
 
@@ -33,8 +35,8 @@ Example: ``LIFTOVER=chr1,24143532,A,+``
 *OSTRAND*    "-" if the ALT alleles should be reverse-complemented during lift-over (after any changes in REF and ALT), and "+" if not
 *OALTRULE*   One of: Y or N: determines how to calculate OALT
              Y: if *OREF* equals to REF, then OALT=ALT
-                if *OREF* is equal to one of the alleles in the ALT, then OALT=ALT with that allele replaced by REF
-                if *OREF* is not equal to any REF or ALT allele, then OALT=ALT concatenated with REF
+             if *OREF* is equal to one of the alleles in the ALT, then OALT=ALT with that allele replaced by REF
+             if *OREF* is not equal to any REF or ALT allele, then OALT=ALT concatenated with REF
              N: OALT=ALT
 ============ ==================================================================================================
 
@@ -82,8 +84,8 @@ Example: ``LIFTBACK=chr1,24143532,A,+,Y``
 *STRAND*    "-" if Laft's ALT alleles should be reverse-complemented before any changes to REF and ALT, "+" if not
 *ALTRULE*   One of: Y or N: determines how to calculate ALT
             Y: if *REF* equals to OREF, then ALT=OALT
-               if *REF* is equal to one of the alleles in the OALT, then ALT=OALT with that allele replaced by OREF
-               if *REF* is not equal to any OREF or OALT allele, then ALT=OALT concatenated with OREF
+            if *REF* is equal to one of the alleles in the OALT, then ALT=OALT with that allele replaced by OREF
+            if *REF* is not equal to any OREF or OALT allele, then ALT=OALT concatenated with OREF
             N: ALT=OALT
 =========== ==================================================================================================
 

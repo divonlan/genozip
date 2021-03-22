@@ -30,6 +30,7 @@
 #include "compressor.h"
 #include "strings.h"
 #include "bgzf.h"
+#include "sorter.h"
 
 static Mutex wait_for_vb_1_mutex = {};
 
@@ -201,11 +202,11 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
 
     if (node_index >= 0) { // normal index
 
-        CtxNode *node = ctx_node_vb (ctx, node_index, NULL, NULL);
+        Base250 b250 = ctx_node_vb (ctx, node_index, NULL, NULL)->word_index;
 
-        WordIndex n           = node->word_index.n;
-        unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
-        uint8_t *numerals     = node->word_index.encoded.numerals;
+        WordIndex n           = b250.n;
+        unsigned num_numerals = base250_len (b250.encoded.numerals);
+        uint8_t *numerals     = b250.encoded.numerals;
         
         bool one_up = (n == *prev_word_index + 1) && (word_i > 0);
 
@@ -461,7 +462,6 @@ static void zip_generate_ctxs (VBlock *vb)
     COPY_TIMER (zip_generate_ctxs);
 }
 
-
 // generate & write b250 data for all primary fields of this data type
 static void zip_compress_ctxs (VBlock *vb)
 {
@@ -499,10 +499,15 @@ static void zip_update_txt_counters (VBlock *vb)
     // note: in case of an FASTQ with flag.optimize_DESC, we already updated this in fastq_txtfile_count_lines
     if (!(flag.optimize_DESC && vb->data_type == DT_FASTQ)) 
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
-        
-    z_file->num_lines              += (int64_t)vb->lines.len; // lines in all bound files in this z_file
-    z_file->txt_data_so_far_single += (int64_t)vb->vb_data_size;
-    z_file->txt_data_so_far_bind   += (int64_t)vb->vb_data_size;
+
+    // note: the liftover reject txt data is of course not counted as part of the file txt data for stats...
+    if (!flag.processing_rejects) {        
+        z_file->num_lines                += (int64_t)vb->lines.len; // lines in all bound files in this z_file
+        z_file->txt_data_so_far_single   += (int64_t)vb->vb_data_size;   // length of data as it would be reconstructed (as modified by --optimize or --chain or compressing a Laft file)
+        z_file->txt_data_so_far_bind     += (int64_t)vb->vb_data_size;
+        z_file->txt_data_so_far_single_0 += (int64_t)vb->vb_data_size_0; // length of data before any modifications
+        z_file->txt_data_so_far_bind_0   += (int64_t)vb->vb_data_size_0;
+    }
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
@@ -594,6 +599,10 @@ static void zip_compress_one_vb (VBlock *vb)
     if (!flag.make_reference && !flag.seg_only) 
         zip_generate_ctxs (vb);
 
+    // case: we sorting - add line data to txt_file's line_info
+    if (flag.sort) 
+        sorter_zip_merge_vb (vb);
+
     if (vb->vblock_i == 1) mutex_unlock (wait_for_vb_1_mutex); // locked in zip_one_file
 
     // merge in random access - IF it is used
@@ -680,7 +689,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         }
 
         vb->is_rejects_vb = flag.processing_rejects;
-
+        
         if (flag.show_threads) dispatcher_show_time ("Read input data done", -1, vb->vblock_i);
     }
 
@@ -711,6 +720,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
         zip_update_txt_counters (vb);
 
     z_file->num_vbs++;
+    txt_file->num_vbs++;
 }
 
 // this is the main dispatcher function. It first processes the txt header, then proceeds to read 
@@ -776,7 +786,12 @@ void zip_one_file (const char *txt_basename,
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:
-    z_file->txt_disk_so_far_bind  += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
+    if (!flag.processing_rejects)
+        z_file->txt_disk_so_far_bind += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
+
+    // reconstruction plan for sorting the data (per txt file)
+    if (flag.sort && !flag.seg_only)
+        sorter_compress_recon_plan();
 
     if (z_closes_after_me && !flag.seg_only)
         zip_write_global_area (single_component_digest);

@@ -9,8 +9,7 @@
 #include "genozip.h"
 #include "codec.h"
 
-extern uint32_t comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,
-                               SectionHeaderP header, 
+extern uint32_t comp_compress (VBlockP vb, BufferP z_data, SectionHeaderP header, 
                                const char *uncompressed_data, // option 1 - compress contiguous data
                                LocalGetLineCB callback); // option 2 - compress data one line at a time
 

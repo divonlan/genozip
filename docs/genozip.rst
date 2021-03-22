@@ -98,7 +98,17 @@ Examples:
 .. option:: --register  Register (or re-register) a non-commericial license to use genozip.
 
                      |
-                     
+
+**VCF-specific options**
+
+.. option:: --sort.  Causes genozip to generate a "reconstruction plan" that will allow genocat to show the file sorted. This is designed for mildly-unsorted files. If the file is highly unsorted this might result in genocat loading a big portion of the uncompressed file to memory (genocat --unsorted can be used to prevent sorting). This option is always set for dual-coordinates files unless overridden with --unsorted.
+
+                     |
+
+.. option:: --unsorted.  Don't generate a "reconstruction plan".
+
+                     |
+
 **FASTQ-specific options (ignored for other file types)**
 
 .. option:: -2, --pair  Compress pairs of paired-end FASTQ files resulting in compression ratios better than compressing the files individually. When using this option every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display it interleaved use genocat --interleaved. To unbind the genozip file back to its original FASTQ files use genounzip --unbind.

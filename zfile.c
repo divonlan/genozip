@@ -113,10 +113,15 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         break;
     }
     
+    case SEC_RECON_PLAN: {
+        SectionHeaderReconPlan *h = (SectionHeaderReconPlan *)header;
+        sprintf (str, SEC_TAB "num_txt_data_bufs=%u laft=%u\n", h->num_txt_data_bufs, h->h.flags.recon_plan.laft); 
+        break;
+    }
+    
     case SEC_BGZF: {
         SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
-        sprintf (str, SEC_TAB "level=%u has_eof=%u\n",
-                 h->h.flags.bgzf.level, h->h.flags.bgzf.has_eof_block); 
+        sprintf (str, SEC_TAB "level=%u has_eof=%u\n", h->h.flags.bgzf.level, h->h.flags.bgzf.has_eof_block); 
         break;
     }
     
@@ -307,7 +312,7 @@ uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
         .ltype                   = ctx->ltype
     };
 
-    return comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
+    return comp_compress (vb, &vb->z_data, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
 LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
@@ -358,7 +363,7 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
 
     LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
 
-    return comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
+    return comp_compress (vb, &vb->z_data, (SectionHeader*)&header, 
                           callback ? NULL : ctx->local.data, 
                           callback);
 }
@@ -383,8 +388,7 @@ void zfile_compress_section_data_ex (VBlock *vb, SectionType section_type,
 
     if (flag.show_time) codec_show_time (vb, st_name (section_type), NULL, codec);
 
-    vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
-    comp_compress (vb, &vb->z_data, false, &header, 
+    comp_compress (vb, &vb->z_data, &header, 
                    section_data ? section_data->data : NULL, 
                    callback);
 }
@@ -798,8 +802,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     z_file->section_list_buf.len *= sizeof (SectionListEntry); // change to counting bytes
 
     // compress section into z_data - to be eventually written to disk by the I/O thread
-    evb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
-    comp_compress (evb, z_data, true, &header.h, z_file->section_list_buf.data, NULL);
+    comp_compress (evb, z_data, &header.h, z_file->section_list_buf.data, NULL);
 
     // restore
     z_file->section_list_buf.len /= sizeof (SectionListEntry); 
@@ -821,12 +824,14 @@ void zfile_compress_genozip_header (Digest single_component_digest)
 }
 
 // ZIP
-void zfile_write_txt_header (Buffer *txt_header_text, Digest header_md5, bool is_first_txt)
+void zfile_write_txt_header (Buffer *txt_header, 
+                             uint64_t unmodified_txt_header_len, // length of header before modifications, eg due to --chain or compressing a Laft file
+                             Digest header_md5, bool is_first_txt)
 {
     SectionHeaderTxtHeader header = {
         .h.magic                 = BGEN32 (GENOZIP_MAGIC),
         .h.section_type          = SEC_TXT_HEADER,
-        .h.data_uncompressed_len = BGEN32 (txt_header_text->len),
+        .h.data_uncompressed_len = BGEN32 (txt_header->len),
         .h.compressed_offset     = BGEN32 (sizeof (SectionHeaderTxtHeader)),
         .h.codec                 = CODEC_BZ2,
         .h.flags.txt_header.liftover_rejects = flag.processing_rejects,
@@ -843,18 +848,25 @@ void zfile_write_txt_header (Buffer *txt_header_text, Digest header_md5, bool is
     
     static Buffer txt_header_buf = EMPTY_BUFFER;
 
-    buf_alloc (evb, &txt_header_buf, sizeof (SectionHeaderTxtHeader) + txt_header_text->len / 3, // generous guess of compressed size
+    buf_alloc (evb, &txt_header_buf, sizeof (SectionHeaderTxtHeader) + txt_header->len / 3, // generous guess of compressed size
                1, "txt_header_buf"); 
 
-    comp_compress (evb, &txt_header_buf, true, (SectionHeader*)&header, 
-                   txt_header_text->len ? txt_header_text->data : NULL, // actual header may be missing (eg in SAM it is permitted to not have a header)
+    comp_compress (evb, &txt_header_buf, (SectionHeader*)&header, 
+                   txt_header->len ? txt_header->data : NULL, // actual header may be missing (eg in SAM it is permitted to not have a header)
                    NULL);
 
     file_write (z_file, txt_header_buf.data, txt_header_buf.len);
 
-    z_file->disk_so_far            += txt_header_buf.len;   // length of GENOZIP data writen to disk
-    z_file->txt_data_so_far_single += txt_header_text->len; // length of the original txt header
-    z_file->txt_data_so_far_bind   += txt_header_text->len;
+    z_file->disk_so_far += txt_header_buf.len;   // length of GENOZIP data writen to disk
+
+    // note: the liftover reject txt data is of course not counted as part of the file txt data for stats...
+    if (!flag.processing_rejects) {        
+        z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly afer modifications)
+        z_file->txt_data_so_far_bind     += txt_header->len;
+        z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of the original txt header as read from the file
+        z_file->txt_data_so_far_bind_0   += unmodified_txt_header_len;
+        z_file->codec                     = txt_file->codec; // for stats (stats can't use txt_file.codec as it might be the rejects file)
+    }
 
     buf_free (&txt_header_buf); 
 
@@ -927,8 +939,7 @@ void zfile_compress_vb_header (VBlock *vb)
     };
 
     // copy section header into z_data - to be eventually written to disk by the I/O thread. this section doesn't have data.
-    vb->z_data.name  = "z_data"; // this is the first allocation of z_data - comp_compress requires that it is pre-named
-    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&vb_header, NULL, NULL);
+    comp_compress (vb, &vb->z_data, (SectionHeader*)&vb_header, NULL, NULL);
 }
 
 // ZIP only: called by the I/O thread in the sequential order of VBs: updating of the already compressed

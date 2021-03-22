@@ -286,6 +286,7 @@ typedef struct File {
     bool is_eof;                       // we've read the entire file
     DataType data_type;
     Codec codec;                       // ZIP - txt_file: generic codec used with this file (in PIZ we use flag.bgzf instead)
+                                       // ZIP - z_file: copy from txt_file.codec, but not for rejects file
 
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
@@ -297,6 +298,9 @@ typedef struct File {
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
     int64_t txt_data_so_far_bind;      // z_file & ZIP only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
+                                       // note: txt_data_so_far_single/bind accounts for txt modifications due to --optimize or --chain or compressing a Laft file
+    int64_t txt_data_so_far_single_0;  // z_file & ZIP only: same as txt_data_so_far_single/bind, but original sizes without 
+    int64_t txt_data_so_far_bind_0;    //      modifications due to --chain/--optimize/Laft                                   
     int64_t txt_disk_so_far_bind;      // z_file & ZIP only: compressed (with txt_file.codec - eg bgzf) txt data represented in the GENOZIP data written so far for all bound files
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
                                        // txt_file: number of lines in single txt file
@@ -359,9 +363,17 @@ typedef struct File {
     DualCoordinates dual_coords;       // ZIP: dual coordinate status of the TXT file. Set when reading TXT header, and immutable thereafter
     uint64_t laft_reject_bytes;        // ZIP of Laft dual coordinate file: number of bytes of that are rejected lines, not yet assigned to a VB
 
+    // TXT_FILE: Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is laft coords
+    Mutex recon_plan_mutex[2];         // ZIP: protect vb_info and line_info during merging of VB data
+    Buffer vb_info[2];                 // ZIP: array of VbInfo per VB, indexed by (vb_i-1)
+    Buffer line_info[2];               // ZIP: array of LineInfo per line or gapless range in txt_file
+    Buffer recon_plan;                 // ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file
+
     // Z_FILE: stats data
     Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)
     Buffer bound_txt_names;            // ZIP: a concatenation of all bound txt_names that contributed to this genozip file
+    bool is_txt_len_frozen;            // ZIP: true if frozen_txt_len is assigned
+    uint64_t frozen_txt_len[MAX_DICTS];// ZIP: copy of contexts[].txt_len, from stats_freeze_txt_len
 
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;

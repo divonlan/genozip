@@ -510,7 +510,8 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
 
-    vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
+    vb->vb_data_size   = vb->txt_data.len; // initial value. it may change if --optimize / --chain are used.
+    vb->vb_data_size_0 = vb->txt_data.len; // this copy doesn't change with --optimize / --chain.
 
     // ZIP of a Laft dual-coordinates file: calculate how much of the VB is rejected liftover lines
     vb->laft_reject_bytes = MIN (vb->vb_data_size, txt_file->laft_reject_bytes);
@@ -727,7 +728,9 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     *txt_line_i += (uint32_t)evb->lines.len;
 
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
+    //          also: header is modified if --chain or compressing a Laft file
     // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
+    uint64_t unmodified_txt_header_len = evb->txt_data.len;
     if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(&evb->txt_data))) { 
         // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
@@ -752,7 +755,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     if (z_file && !flag.seg_only)       
         // we always write the txt_header section, even if we don't actually have a header, because the section
         // header contains the data about the file
-        zfile_write_txt_header (&evb->txt_data, header_digest, is_first_txt); // we write all headers in bound mode too, to support --unbind
+        zfile_write_txt_header (&evb->txt_data, unmodified_txt_header_len, header_digest, is_first_txt); // we write all headers in bound mode too, to support --unbind
 
     // for stats: combined length of txt headers in this bound file, or only one file if not bound
     if (!flag.bind) total_bound_txt_headers_len=0;

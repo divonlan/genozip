@@ -33,7 +33,7 @@ static Buffer command_line = EMPTY_BUFFER;
 static pid_t pipe_in_pid = 0;
 static char pipe_in_process_name[100] = "";
 
-// command line options that get assigned to flags
+// command line options that get assigned to other flags (they are not flags themselves)
 static int option_noisy=0, option_best=0;
 
 static void flags_set_bgzf (const char *level_str)
@@ -74,6 +74,8 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _L2 {"licence",       optional_argument, 0, 'L'                    } // British spelling
         #define _q  {"quiet",         no_argument,       &flag.quiet,            1 }
         #define _Q  {"noisy",         no_argument,       &option_noisy,          1 }
+        #define _so {"sort",          no_argument,       &flag.sort,             1 }
+        #define _SO {"unsorted",      no_argument,       &flag.unsorted,         1 }
         #define _DL {"replace",       no_argument,       &flag.replace,          1 }
         #define _V  {"version",       no_argument,       &command, VERSION         }
         #define _z  {"bgzf",          required_argument, 0, 'z'                    }
@@ -172,6 +174,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sc {"show-codec",    no_argument,       &flag.show_codec,       1 }  
         #define _sb {"show-bgzf",     no_argument,       &flag.show_bgzf,        1 }
         #define _s5 {"show-digest",   no_argument,       &flag.show_digest,      1 }
+        #define _s6 {"show-recon-plan",no_argument,      &flag.show_recon_plan,  1 }
         #define _sM {"show-mutex",    optional_argument, 0, 4                      }
         #define _dS {"seg-only",      no_argument,       &flag.seg_only,         1 }  
         #define _xt {"xthreads",      no_argument,       &flag.xthreads,         1 }  
@@ -186,10 +189,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E, _ch, _lo,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _sH,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,                         _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                        _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,              _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,      _sx, _SX, _ix,          _00 };
-        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _du, _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,      _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw, _sx, _SX, _ix, _vl,     _00 };
-        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                              _u,     _p, _e,                                                                                                                    _st, _sm,                                                 _dm,                                                                                                                                                                 _sM,                                                             _b, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E, _ch, _lo,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _sH,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,                     _so, _SO, _s6,    _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                        _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,              _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,      _sx, _SX, _ix,                        _00 };
+        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _du, _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,      _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw, _sx, _SX, _ix, _vl,      _SO, _s6,    _00 };
+        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                              _u,     _p, _e,                                                                                                                    _st, _sm,                                                 _dm,                                                                                                                                                                 _sM,                                                                           _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -367,6 +370,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.show_coverage, flag.unbind,       "--show-coverage",    OT("unbind", "u"));
     CONFLICT (flag.show_coverage, flag.grep,         "--show-coverage",    OT("grep", "g"));
     CONFLICT (flag.test,        flag.make_reference, "--make-reference",   OT("test", "t"));
+    CONFLICT (flag.sort,        flag.unsorted,       "--sort",             "--unsorted");
     CONFLICT (flag.multifasta,  flag.make_reference, "--make-reference",   "multifasta");
     CONFLICT (flag.reference == REF_EXTERNAL, flag.make_reference, "--make-reference", OT("reference", "e"));
     CONFLICT (flag.reference == REF_EXT_STORE, flag.make_reference, "--make-reference", OT("REFERENCE", "E"));
@@ -543,6 +547,12 @@ void flags_update_zip_one_file (void)
     // cases where txt data is modified during Seg - digest is not stored, it cannot be tested with --test and other limitations 
     // note: this flag is also set when the file header indicates that it's a Laft file. See vcf_header_get_dual_coords().
     flag.data_modified = flag.optimize || chain_is_loaded || flag.processing_rejects;
+
+    ASSINP0 (!flag.sort || z_file->data_type == DT_VCF, "--sort is only supported for VCF files");
+
+    // genozip --chain implies --sort, unless overridden with --unsorted
+    if (chain_is_loaded && !flag.unsorted && !flag.processing_rejects) 
+        flag.sort = true;
 }
 
 // PIZ: called after opening z_file and reading the header before opening txt_file
@@ -568,6 +578,10 @@ void flags_update_piz_one_file (void)
 
     // --laft is only possible on dual-coordinates files
     ASSINP (!flag.laft || z_file->z_flags.dual_coords, "--laft is not possible for %s because it is not a dual-coordinates file", z_name);
+
+    // genocat of dual coords implies sorting unless overridden with --unsorted
+    if (exe_type == EXE_GENOCAT && z_file->z_flags.dual_coords && !flag.unsorted) 
+        flag.sort = true;
 
     // phylip implied sequential and header_one
     if (z_file->data_type == DT_FASTA && flag.out_dt == DT_PHYLIP) {

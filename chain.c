@@ -147,7 +147,7 @@ static void chain_seg_dst_end_field (VBlock *vb, const char *field_start, int fi
     }
 
     else
-        seg_pos_field (vb, CHAIN_ENDDST, CHAIN_STARTDST, false, field_start, field_len, 0, field_len + 1);
+        seg_pos_field (vb, CHAIN_ENDDST, CHAIN_STARTDST, false, false, field_start, field_len, 0, field_len + 1);
 }
 
 const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
@@ -165,17 +165,17 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     SEG_NEXT_ITEM_SP (CHAIN_STRNDSRC);
 
     GET_NEXT_ITEM_SP ("tSTART");
-    seg_pos_field (vb, CHAIN_STARTSRC, CHAIN_ENDSRC, false, field_start, field_len, 0, field_len + 1);
+    seg_pos_field (vb, CHAIN_STARTSRC, CHAIN_ENDSRC, false, false, field_start, field_len, 0, field_len + 1);
 
     GET_NEXT_ITEM_SP ("tEND");
-    seg_pos_field (vb, CHAIN_ENDSRC, CHAIN_STARTSRC, false, field_start, field_len, 0,field_len + 1);
+    seg_pos_field (vb, CHAIN_ENDSRC, CHAIN_STARTSRC, false, false, field_start, field_len, 0,field_len + 1);
 
     SEG_NEXT_ITEM_SP (CHAIN_NAMEDST);    
     SEG_NEXT_ITEM_SP (CHAIN_TQSIZE); 
     SEG_NEXT_ITEM_SP (CHAIN_STRNDDST);
 
     GET_NEXT_ITEM_SP ("qSTART");
-    seg_pos_field (vb, CHAIN_STARTDST, CHAIN_ENDDST, false, field_start, field_len, 0, field_len + 1);
+    seg_pos_field (vb, CHAIN_STARTDST, CHAIN_ENDDST, false, false, field_start, field_len, 0, field_len + 1);
 
     GET_NEXT_ITEM_SP ("qEND");
     chain_seg_dst_end_field (vb, field_start, field_len);
@@ -183,7 +183,7 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     // if ID is numeric, preferably store as delta, if not - normal snip
     GET_LAST_ITEM_SP ("ID");
     if (str_is_int (field_start, field_len))
-        seg_pos_field (vb, CHAIN_ID, CHAIN_ID, false, field_start, field_len, 0, field_len + 1); // just a numeric delta    
+        seg_pos_field (vb, CHAIN_ID, CHAIN_ID, false, false, field_start, field_len, 0, field_len + 1); // just a numeric delta    
     else
         seg_by_did_i (vb, field_start, field_len, CHAIN_ID, field_len + 1);
 

@@ -610,20 +610,25 @@ fi
 # platform settings
 # -----------------
 if [ -n "$is_windows" ]; then
-    genozip=./genozip${debug}.exe $2
-    genounzip=./genounzip${debug}.exe $2
-    genocat=./genocat${debug}.exe $2
-    genols=./genols${debug}.exe 
+    genozip_exe=./genozip${debug}.exe
+    genounzip_exe=./genounzip${debug}.exe
+    genocat_exe=./genocat${debug}.exe
+    genols_exe=./genols${debug}.exe 
     path=`pwd| cut -c3-|tr / '\\\\'`\\
 else
-    genozip=./genozip${debug} $2
-    genounzip=./genounzip${debug} $2
-    genocat=./genocat${debug} $2
-    genols=./genols${debug} 
+    genozip_exe=./genozip${debug}
+    genounzip_exe=./genounzip${debug}
+    genocat_exe=./genocat${debug}
+    genols_exe=./genols${debug} 
     path=$PWD/
 fi
 
-exes=($genozip $genounzip $genocat $genols)
+genozip="$genozip_exe $2"
+genounzip="$genounzip_exe $2"
+genocat="$genocat_exe $2"
+genols=$genols_exe 
+
+exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
 for exe in ${exes[@]}; do
     if [ ! -x $exe ]; then
         echo "Error: $exe does not exist"

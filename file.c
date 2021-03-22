@@ -44,6 +44,8 @@ static const struct { FileType in; Codec codec; FileType out; } txt_in_ft_by_dt[
 static const FileType txt_out_ft_by_dt[NUM_DATATYPES][20] = TXT_OUT_FT_BY_DT;
 static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 
+static void file_initialize_txt_file_data (File *file);
+
 // get data type by file type
 DataType file_get_data_type (FileType ft, bool is_input)
 {
@@ -511,6 +513,8 @@ static bool file_open_txt_read (File *file)
             ABORT ("%s: invalid filename extension for %s files: %s", global_cmd, dt_name (file->data_type), file->name);
     }
 
+    file_initialize_txt_file_data (file);
+
     return file->file != 0;
 }
 
@@ -596,6 +600,8 @@ static bool file_open_txt_write (File *file)
         default         : ABORT ("%s: invalid filename extension for %s files: %s. Please use --output to set another name", global_cmd, dt_name (file->data_type), file->name);
     }
 
+    file_initialize_txt_file_data (file);
+
     return file->file != 0;
 }
 
@@ -639,13 +645,25 @@ static void file_initialize_z_file_data (File *file)
     INIT (chroms_sorted_index);
     INIT (alt_chrom_map);
     INIT (section_list_buf);
-    INIT (unconsumed_txt);
-    INIT (bgzf_isizes);
-    INIT (coverage);
     INIT (stats_buf);
     INIT (STATS_buf);
     INIT (bound_txt_names);
 }
+
+static void file_initialize_txt_file_data (File *file)
+{
+    INIT (unconsumed_txt);
+    INIT (bgzf_isizes);
+    INIT (coverage);
+    INIT (line_info[0]);
+    INIT (line_info[1]);
+    INIT (vb_info[0]);
+    INIT (vb_info[1]);
+
+    mutex_initialize (file->recon_plan_mutex[0]);
+    mutex_initialize (file->recon_plan_mutex[1]);
+}
+
 #undef INIT
 
 // returns true if successful
@@ -885,6 +903,8 @@ void file_close (File **file_p,
     if (cleanup_memory) {
 
         mutex_destroy (file->dicts_mutex);
+        mutex_destroy (file->recon_plan_mutex[0]);
+        mutex_destroy (file->recon_plan_mutex[1]);
             
         // always destroy all buffers even if unused - for saftey
         for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
@@ -903,6 +923,11 @@ void file_close (File **file_p,
         buf_destroy (&file->stats_buf);
         buf_destroy (&file->STATS_buf);
         buf_destroy (&file->bound_txt_names);
+        buf_destroy (&file->line_info[0]);
+        buf_destroy (&file->line_info[1]);
+        buf_destroy (&file->vb_info[0]);
+        buf_destroy (&file->vb_info[1]);
+        buf_destroy (&file->recon_plan);
 
         FREE (file->name);
         FREE (file->basename);

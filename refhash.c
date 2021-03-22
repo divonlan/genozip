@@ -202,9 +202,7 @@ static void refhash_compress_one_vb (VBlockP vb)
                                     .layer_bits              = (uint8_t)layer_bits[vb->refhash_layer],
                                     .start_in_layer          = BGEN32 (vb->refhash_start_in_layer)     };
 
-    vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set    
-//comp_compress (vb, &vb->z_data, false, (SectionHeaderP)&header, ENT (char, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer), NULL);
-    comp_compress (vb, &vb->z_data, false, (SectionHeaderP)&header, (char*)hash_data, NULL);
+    comp_compress (vb, &vb->z_data, (SectionHeaderP)&header, (char*)hash_data, NULL);
 
     if (flag.show_ref_hash) 
         iprintf ("vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 

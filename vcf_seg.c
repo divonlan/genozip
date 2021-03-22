@@ -38,7 +38,8 @@ void vcf_seg_initialize (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    vb->contexts[VCF_CHROM]   .no_stons    = true; // needs b250 node_index for random access
+    vb->contexts[VCF_CHROM]   .no_stons    = true; // needs b250 node_index for random access and reconstrution plan
+    vb->contexts[VCF_oCHROM]  .no_stons    = true; // same
     vb->contexts[VCF_FORMAT]  .no_stons    = true;
     vb->contexts[VCF_INFO]    .no_stons    = true;
     vb->contexts[VCF_oSTATUS] .no_stons    = true;
@@ -560,6 +561,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
                                             const char **this_value, unsigned *this_value_len, char *optimized_snip)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
+    
     unsigned optimized_snip_len;
 
     // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
@@ -575,7 +577,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
     // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
     // POS and END share the same delta stream - the next POS will be a delta vs this END)
     else if (dict_id.num == dict_id_INFO_END) {
-        seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, *this_value, *this_value_len, 0, *this_value_len); // END is an alias of POS
+        seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, true, *this_value, *this_value_len, 0, *this_value_len); // END is an alias of POS
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -665,7 +667,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
             
             liftover_seg_LIFTOVER (vb_, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
                                    VCF_oCHROM, VCF_SPECIAL_OREF, ref, ref_len, alt, alt_len, 
-                                   (char *)*this_value, *this_value_len);
+                                   (char *)*this_value, *this_value_len, (ZipDataLineP)DATA_LINE (vb->line_i));
 
             return false; 
         }
@@ -686,7 +688,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
             
             liftover_seg_LIFTBACK (vb_, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
                                    VCF_oCHROM, VCF_POS, VCF_SPECIAL_OREF, oref, oref_len, oalt, oalt_len, 
-                                   vcf_seg_ref_alt, (char*)*this_value, *this_value_len);
+                                   vcf_seg_ref_alt, (char*)*this_value, *this_value_len, (ZipDataLineP)DATA_LINE (vb->line_i));
 
             return false; 
         }
@@ -696,7 +698,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
     }
 
     else if (dict_id.num == dict_id_INFO_LIFTREJD) {
-        liftover_seg_LIFTREJD (vb_, dict_id, VCF_oCHROM, *this_value, *this_value_len);
+        liftover_seg_LIFTREJD (vb_, dict_id, VCF_oCHROM, *this_value, *this_value_len, (ZipDataLineP)DATA_LINE (vb->line_i));
         return false; 
     }
 
@@ -1213,11 +1215,31 @@ static void vcf_seg_copy_line_to_reject (VBlockVCF *vb, const char *field_start_
     buf_add_more (vb, &vb->liftover_rejects, field_start_line, line_len, "liftover_rejects");
 }
 
+static inline void vcf_seg_assign_dl_sorted (VBlockVCF *vb, ZipDataLineVCF *dl, DidIType chrom_did_i)
+{
+    bool is_laft = !!chrom_did_i; // 0 for primary, 1 for last
+
+    if (!vb->is_unsorted[is_laft] && vb->line_i > 0) {
+        // cases where we have evidence this VB is NOT sorted:
+
+        // 1. pos is out of order
+        if( (dl->chrom_index[is_laft] == (dl-1)->chrom_index[is_laft] && dl->pos[is_laft] < (dl-1)->pos[is_laft])
+
+        // 2. rejected lift-over 
+        ||  (is_laft && dl->chrom_index[is_laft] == WORD_INDEX_NONE)
+
+        // 3. chrom different that prev line, but already appeared in this VB
+        ||  (dl->chrom_index[is_laft] != (dl-1)->chrom_index[is_laft] && 
+             node_count (vb, chrom_did_i, dl->chrom_index[is_laft]) > 1))
+           
+            vb->is_unsorted[is_laft] = true;
+    }
+}
+
 /* segment a VCF line into its fields:
-   fields CHROM->FORMAT are normal contexts
+   fields CHROM->FORMAT are "field" contexts
    all samples go into the SAMPLES context, which is a Container
-   Haplotype and phase data are stored in a separate buffers + a SNIP_SPECIAL in the GT context 
-*/
+   Haplotype and phase data are stored in a separate buffers + a SNIP_SPECIAL in the GT context  */
 const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
@@ -1246,13 +1268,14 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         
     GET_NEXT_ITEM ("CHROM");
     if (coords == DC_PRIMARY) 
-        seg_chrom_field (vb_, field_start, field_len);
+        dl->chrom_index[0] = seg_chrom_field (vb_, field_start, field_len);
     else
-        seg_by_did_i (vb_, field_start, field_len, VCF_oCHROM, field_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
+        dl->chrom_index[1] = seg_by_did_i (vb_, field_start, field_len, VCF_oCHROM, field_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
 
     GET_NEXT_ITEM ("POS");
+
     if (coords == DC_PRIMARY) {
-        PosType pos = seg_pos_field (vb_, VCF_POS, VCF_POS, false, field_start, field_len, 0, field_len+1);
+        PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, false, false, field_start, field_len, 0, field_len+1);
 
         // POS <= 0 not expected in a VCF file
         if (pos <= 0)
@@ -1261,8 +1284,8 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
                 
         random_access_update_pos (vb_, VCF_POS);
     }
-    else
-        seg_pos_field ((VBlockP)vb, VCF_oPOS, VCF_oPOS, false, field_start, field_len, 0, field_len);
+    else 
+        dl->pos[1] = seg_pos_field ((VBlockP)vb, VCF_oPOS, VCF_oPOS, false, true, field_start, field_len, 0, field_len);
 
     GET_NEXT_ITEM ("ID");
     seg_id_field (vb_, (DictId)dict_id_fields[VCF_ID], field_start, field_len, true);
@@ -1290,7 +1313,8 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     
     // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to laft coordinates
     if (chain_is_loaded)
-        liftover_seg_add_INFO_LIFT_fields (vb_, VCF_oCHROM, VCF_SPECIAL_OREF, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, (DictId)dict_id_INFO_LIFTREJD);
+        liftover_seg_add_INFO_LIFT_fields (vb_, VCF_oCHROM, VCF_SPECIAL_OREF, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
+                                           (DictId)dict_id_INFO_LIFTREJD, (ZipDataLineP)dl);
 
     // INFO
     if (vcf_num_samples)
@@ -1350,6 +1374,12 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // in case of a reject line in a LAFT file - update laft_reject_bytes to indicate its consumption
     if (txt_file->dual_coords == DC_LAFT && coords == DC_PRIMARY)
         vb->laft_reject_bytes -= next_field - field_start_line;
+
+    // test if still sorted
+    if (flag.sort) {
+        vcf_seg_assign_dl_sorted (vb, dl, VCF_CHROM);
+        if (z_file->z_flags.dual_coords) vcf_seg_assign_dl_sorted (vb, dl, VCF_oCHROM);
+    }
 
     return next_field;
 }

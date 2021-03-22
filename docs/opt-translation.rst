@@ -8,10 +8,6 @@
 
           |
 
-.. option:: --no-PG  (SAM and BAM only) When converting a file from SAM to BAM or vice versa Genozip normally adds a @PG line in the header. With this option it doesn't.
-
-          |
-
 .. option:: --fastq  (SAM and BAM only) Output as FASTQ. The alignments are outputted as FASTQ reads in the order they appear in the SAM/BAM file. Alignments with FLAG 16 (reverse complimented) have their SEQ reverse complimented and their QUAL reversed. Alignments with FLAG 4 (unmapped) or 256 (secondary) are dropped. Alignments with FLAG 64 (or 128) (the first (or last) segment in the template) have a '1' (or '2') added after the read name. Usually (if the original order of the SAM/BAM file has not been tampered with) this would result in a valid interleaved FASTQ file. Note: this option is implicit if --output specifies a filename ending with .fq[.gz] or .fastq[.gz]
 
           |

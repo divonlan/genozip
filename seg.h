@@ -32,8 +32,6 @@ extern WordIndex seg_by_ctx_do (VBlockP vb, const char *snip, unsigned snip_len,
 
 extern WordIndex seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
-extern PosType seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_len, SegError *err);
-
 extern void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer(vb,did_i,n,add_sizeof_n) seg_integer_do((VBlockP)(vb), (did_i), (n), (add_sizeof_n) ? sizeof(n) : 0)
 
@@ -45,6 +43,7 @@ extern PosType seg_pos_field (VBlockP vb,
                               DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
                               DidIType base_did_i,    // mandatory: base for delta
                               bool seg_bad_snips_too, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+                              bool zero_is_bad,
                               const char *pos_str, unsigned pos_len, 
                               PosType this_pos,
                               unsigned add_bytes);

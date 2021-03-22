@@ -29,6 +29,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_REF_ALT_CHROMS  = 13,
     SEC_STATS           = 14,
     SEC_BGZF            = 15, // optionally appears per component (txt header) and contains the uncompressed sizes of the source file bgzf block
+    SEC_RECON_PLAN      = 16,
 
     NUM_SEC_TYPES // fake section for counting
 } SectionType;
@@ -51,6 +52,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     {"SEC_REF_ALT_CHROMS",  sizeof (SectionHeader)              }, \
     {"SEC_STATS",           sizeof (SectionHeader)              }, \
     {"SEC_BGZF",            sizeof (SectionHeader)              }, \
+    {"SEC_RECON_PLAN",      sizeof (SectionHeaderReconPlan)     }, \
 }
 
 // Section headers - big endian
@@ -106,6 +108,10 @@ typedef union SectionFlags {
         #define ctxs_dot_is_0    ctx_specific // used in dict_id_FORMAT_GT_SHARK_GT between 10.0.3 and 10.0.8
         uint8_t ctx_specific     : 1; // flag specific a context (introduced 10.0.3)
     } ctx;
+
+    struct FlagsReconPlan {
+        uint8_t laft             : 1; // this section is for reconstructing the file in the Laft coordinates
+    } recon_plan;
     
 } SectionFlags;
 
@@ -266,6 +272,18 @@ typedef struct {
     uint8_t ffu;
     uint32_t start_in_layer;   // start index within layer
 } SectionHeaderRefHash;
+
+// SEC_RECON_PLAN, contains ar array of ReconPlanItem
+typedef struct SectionHeaderReconPlan {
+    SectionHeader h;
+    uint32_t num_txt_data_bufs;// max number of concurrent txt_data buffers needed to execute this plan    
+} SectionHeaderReconPlan;
+
+typedef struct {
+    uint32_t vb_i;
+    uint32_t start_line; // 0-based line within vb_i
+    uint32_t num_lines;
+} ReconPlanItem;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
 typedef struct SectionListEntry {

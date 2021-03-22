@@ -29,15 +29,14 @@ extern const char *liftover_status_names[];
  
 extern void liftover_copy_data_from_chain_file (void);
 extern void liftover_zip_initialize (DidIType tname_did_i, char special_liftback_snip_id);
-extern LiftOverStatus liftover_get_liftover_coords (VBlockP vb, BufferP liftover_chrom2qname, WordIndex *tname_node_index, PosType *tpos);
 extern const char *liftover_get_laft_contig (uint32_t contig_i);
 
 // Seg
 extern void liftover_append_rejects_file (VBlockP vb);
-extern LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_did, char oref_special, DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejd_dict_id);
-extern void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId liftback_dict_id, DidIType ochrom_did_i, char orefalt_special_snip_id, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len, char *value, int value_len);
-extern void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback_dict_id, DidIType ochrom_did_i, DidIType pos_did_i, char orefalt_special_snip_id, const char *oref, unsigned oref_len, const char *oalt, unsigned oalt_len, void (*seg_ref_alt_cb)(VBlockP, const char *, unsigned, const char *, unsigned), char *value, int value_len);
-extern void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len);
+extern LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_did_i, char orefalt_special_snip_id, DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejd_dict_id, ZipDataLineP dl);
+extern void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId liftback_dict_id, DidIType ochrom_did_i, char orefalt_special_snip_id, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len, char *value, int value_len, ZipDataLineP dl);
+extern void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback_dict_id, DidIType ochrom_did_i, DidIType pos_did_i, char orefalt_special_snip_id, const char *oref, unsigned oref_len, const char *oalt, unsigned oalt_len, void (*seg_ref_alt_cb)(VBlockP, const char *, unsigned, const char *, unsigned), char *value, int value_len, ZipDataLineP dl);
+extern void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len, ZipDataLineP dl);
 
 // PIZ: section list stuff
 extern void liftover_section_list_remove_rejects (void);        // called if no --laft

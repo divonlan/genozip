@@ -36,6 +36,8 @@
 // ------------------------------------------------------------------------------------------------------------------------
 typedef struct VBlock *VBlockP;
 typedef const struct VBlock *ConstVBlockP;
+typedef struct ZipDataLine *ZipDataLineP;
+typedef const struct ZipDataLine *ConstZipDataLineP;
 typedef struct File *FileP;
 typedef const struct File *ConstFileP;
 typedef struct Buffer *BufferP;

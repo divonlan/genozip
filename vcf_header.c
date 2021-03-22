@@ -83,20 +83,23 @@ static void vcf_header_add_genozip_command (Buffer *txt_header)
     bufprintf (evb, txt_header, "\" %s\n", str_time().s);
 }
 
+// ZIP
 static bool vcf_header_get_dual_coords (const char *line, unsigned line_len, void *unused1, void *unused2, unsigned unused3)
 {
-    if (LINEIS (HK_DC_PRIMARY)) {
+    if (LINEIS (HK_DC_PRIMARY)) 
         txt_file->dual_coords = DC_PRIMARY;
-        return true; // found - no more iterating
-    }
 
     else if (LINEIS (HK_DC_LAFT)) {
         txt_file->dual_coords = DC_LAFT;
         flag.data_modified = true; // we will be zipping this as a dual-coordinates VCF with default reconstruction as PRIMARY - this turns off digest
-        return true;
     }
 
-    return false; // continue iterating
+    else return false; // continue iterating
+
+    // genozip of a dual coordinates file implies --sort, unless overridden with --unsorted
+    if (!flag.unsorted) flag.sort = true;
+
+    return true; // found - no more iterating
 }
 
 // PIZ with --laft - one line: remove fileformat, update *contig, *reference, dual_coordinates keys to Laft format
@@ -205,7 +208,7 @@ static void vcf_header_zip_convert_header_to_dual_coords (Buffer *txt_header)
     for (unsigned i=0; (laft_contig = liftover_get_laft_contig(i)); i++) 
         bufprintf (evb, txt_header, HK_LO_CONTIG"<ID=%s>\n", laft_contig);
 
-    bufprintf (evb, txt_header, "%.*s", (int)vcf_field_name_line.len, vcf_field_name_line.data); // add back
+    buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_header"); // careful not to use bufprintf as it is unlimited
 }
 
 static bool vcf_inspect_txt_header_zip (Buffer *txt_header)

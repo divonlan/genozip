@@ -487,7 +487,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFTBACK)
 void vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (VBlock *vb)
 {
     // conditions for dropping a line in --laft
-    if ((!vb->is_rejects_vb && vb->last_index (VCF_oSTATUS) != LO_OK) || // drop primary lines that are rejected
+    if ((!vb->is_rejects_vb && vb->last_index (VCF_oSTATUS) != LO_OK) || // drop primary lines that are rejected (note: for sorted files, rejects are already excluded from the reconstruction plan in sorter_zip_merge_vb_do)
         ( vb->is_rejects_vb && (flag.no_header || flag.header_one)))     // drop rejects in --no-header or --header-one 
         vb->txt_data.len = vb->line_start;
 }

@@ -174,6 +174,10 @@ static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75  
 
+#define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
+#define node_count(vb,did_i,index) ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->count
+#define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index.n : WORD_INDEX_NONE)
+
 #define last_int(did_i)     contexts[did_i].last_value.i
 #define last_index(did_i)   contexts[did_i].last_value.i
 #define last_float(did_i)   contexts[did_i].last_value.f
@@ -191,7 +195,6 @@ extern double ctx_peek_next_float (VBlockP vb, ContextP ctx);
 extern WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
 extern void ctx_clone (VBlockP vb);
 extern CtxNode *ctx_node_vb_do (const Context *ctx, WordIndex node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
-#define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern CtxNode *ctx_node_zf_do (const Context *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void ctx_merge_in_vb_ctx (VBlockP vb);

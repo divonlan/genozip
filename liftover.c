@@ -132,8 +132,8 @@ void liftover_zip_initialize (DidIType dst_contig_did_i, char special_liftback_s
 }
 
 // SEG: map coordinates primary->laft
-LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover_chrom2chainsrc, 
-                                             WordIndex *dst_contig_index, PosType *dst_1pos) // out
+static LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover_chrom2chainsrc, 
+                                                    WordIndex *dst_contig_index, PosType *dst_1pos) // out
 {
     // extend liftover_chrom2chainsrc if needed
     if (vb->chrom_node_index >= liftover_chrom2chainsrc->len) { 
@@ -168,8 +168,11 @@ LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover_chrom2
     WordIndex src_contig_index = map[vb->chrom_node_index];
 
     *dst_1pos = 0; // initialize
-    if (src_contig_index == WORD_INDEX_NONE) 
+    if (src_contig_index == WORD_INDEX_NONE) {
+        *dst_contig_index = WORD_INDEX_NONE;
+        *dst_1pos = 0;
         return LO_NO_CHROM;
+    }
     else 
         return chain_get_liftover_coords (src_contig_index, vb->last_int(DTF(pos)), dst_contig_index, dst_1pos);
 }                                
@@ -180,25 +183,24 @@ LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover_chrom2
 
 // Create either (LIFTOVER and LIFTBACK) or LIFTREJD records when aligning a NON-dual-coordinates file (using --chain)
 LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_did_i, char orefalt_special_snip_id,
-                                                  DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejd_dict_id)
+                                                  DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejd_dict_id,
+                                                  ZipDataLine *dl)
 {
-    WordIndex ochrom_node_index;
-    PosType opos;
-    LiftOverStatus ostatus = liftover_get_liftover_coords (vb, &vb->liftover, &ochrom_node_index, &opos);
+    LiftOverStatus ostatus = liftover_get_liftover_coords (vb, &vb->liftover, &dl->chrom_index[1], &dl->pos[1]);
     
     seg_by_did_i (vb, liftover_status_names[ostatus], strlen (liftover_status_names[ostatus]), ochrom_did_i + OSTATUS_OFFSET, 0);
     vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = ostatus;
 
     // we add oPOS, oCHROM, oREF and oSTRAND only in case status is OK, they will be consumed by the liftover_snip container
     if (ostatus == LO_OK) {
-        unsigned opos_len = str_int_len (opos);
-        seg_pos_field (vb, VCF_oPOS, VCF_oPOS, false, 0, 0, opos, opos_len);
+        unsigned opos_len = str_int_len (dl->pos[1]);
+        seg_pos_field (vb, VCF_oPOS, VCF_oPOS, false, true, 0, 0, dl->pos[1], opos_len);
 
-        buf_alloc_more (vb, &vb->contexts[VCF_oCHROM].b250, 1, vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250");
-        NEXTENT (WordIndex, vb->contexts[VCF_oCHROM].b250) = ochrom_node_index;
+        buf_alloc_more (vb, &vb->contexts[ochrom_did_i].b250, 1, vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250");
+        NEXTENT (WordIndex, vb->contexts[ochrom_did_i].b250) = dl->chrom_index[1];
         
-        unsigned ochrom_len = ENT (CtxNode, vb->contexts[VCF_oCHROM].ol_nodes, ochrom_node_index)->snip_len;
-        vb->contexts[VCF_oCHROM].txt_len += ochrom_len;
+        unsigned ochrom_len = ENT (CtxNode, vb->contexts[ochrom_did_i].ol_nodes, dl->chrom_index[1])->snip_len;
+        vb->contexts[ochrom_did_i].txt_len += ochrom_len;
 
 // TODO - check with reference if REF changed
         bool oref_is_ref = true;
@@ -223,6 +225,9 @@ LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_di
         vb->vb_data_size += opos_len + ochrom_len + oref_len + ostrand_len + oaltrule_len + 4 /* commas */;
     }
     else {
+        dl->chrom_index[1] = WORD_INDEX_NONE;
+        dl->pos[1] = 0;
+
         unsigned ostatus_len = strlen (liftover_status_names[ostatus]);
         seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJD }), 2, liftrejd_dict_id, ostatus_len);
 
@@ -267,7 +272,8 @@ void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId liftback
                             DidIType ochrom_did_i, char orefalt_special_snip_id,
                             const char *ref, unsigned ref_len, // primary REF
                             const char *alt, unsigned alt_len, // optional - primary ALT
-                            char *value, int value_len)
+                            char *value, int value_len,
+                            ZipDataLine *dl)
 {
     ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains variants with the INFO/"INFO_LIFTOVER" subfield", txt_name);
 
@@ -277,10 +283,10 @@ void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId liftback
                                &ochrom, &ochrom_len, &opos, &opos_len, &oref, &oref_len, &ostrand, &oaltrule); 
 
     // oCHROM
-    seg_by_did_i (vb, ochrom, ochrom_len, ochrom_did_i + OCHROM_OFFSET, ochrom_len);
+    dl->chrom_index[1] = seg_by_did_i (vb, ochrom, ochrom_len, ochrom_did_i + OCHROM_OFFSET, ochrom_len);
 
     // oPOS
-    seg_pos_field (vb, ochrom_did_i+1, ochrom_did_i + OPOS_OFFSET, false, 0, 0, opos, opos_len);
+    dl->pos[1] = seg_pos_field (vb, ochrom_did_i+1, ochrom_did_i + OPOS_OFFSET, false, true, 0, 0, opos, opos_len);
 
     // oREF
     bool oref_is_ref =        (ref_len==oref_len && str_case_compare (ref, oref, oref_len, NULL)); // alleles are case insensitive per VCF spec
@@ -311,7 +317,8 @@ void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback
                             const char *oref, unsigned oref_len, 
                             const char *oalt, unsigned oalt_len, // optional
                             void (*seg_ref_alt_cb)(VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len), // call back to seg primary REF and ALT
-                            char *value, int value_len)
+                            char *value, int value_len,
+                            ZipDataLine *dl)
 {
     ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains variants with the INFO/"INFO_LIFTBACK" subfield", txt_name);
 
@@ -321,10 +328,10 @@ void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback
                                &chrom, &chrom_len, &pos, &pos_len, &ref, &ref_len, &strand, &altrule); 
 
     // CHROM
-    seg_chrom_field (vb, chrom, chrom_len);
+    dl->chrom_index[0] = seg_chrom_field (vb, chrom, chrom_len);
 
     // POS
-    seg_pos_field (vb, pos_did_i, pos_did_i, false, 0, 0, pos, pos_len+1);
+    dl->pos[0] = seg_pos_field (vb, pos_did_i, pos_did_i, false, true, 0, 0, pos, pos_len+1);
             
     random_access_update_pos (vb, pos_did_i);
 
@@ -358,9 +365,13 @@ void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback
     vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = LO_OK;
 }
 
-void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len)
+void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len,
+                            ZipDataLine *dl)
 {
     ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains variants with the INFO/"INFO_LIFTREJD" subfield", txt_name);
+
+    dl->chrom_index[1] = WORD_INDEX_NONE;
+    dl->pos[1] = 0;
 
     // get status from string
     char save = value[value_len];
