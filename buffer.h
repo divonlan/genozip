@@ -67,6 +67,7 @@ static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *
 extern void buf_initialize(void);
 
 #define buf_is_allocated(buf_p) ((buf_p)->data != NULL && (buf_p)->type != BUF_UNALLOCATED)
+#define ASSERTNOTINUSE(buf) ASSERTE (!buf_is_allocated (&(buf)) && !(buf).len, #buf" is in use: %s", buf_desc (&(buf)).s);
 
 extern uint64_t buf_alloc_do (VBlockP vb,
                               Buffer *buf, 
