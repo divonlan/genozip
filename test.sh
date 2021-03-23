@@ -463,7 +463,7 @@ batch_real_world_subsets()
         local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* basic.phy test.*chain* test.*gvf* test.*txt*|grep -v xz` )
     fi
     echo "subsets (~3 VBs) or real world files"
-    test_standard "-m" " " ${files[@]}
+    test_standard "-m $1" " " ${files[@]}
 }
 
 batch_multifasta()
@@ -660,15 +660,16 @@ if (( $1 <= 7  )) ; then  batch_sam_translations       ; fi
 if (( $1 <= 8  )) ; then  batch_23andMe_translations   ; fi
 if (( $1 <= 9  )) ; then  batch_genocat_tests          ; fi
 if (( $1 <= 10 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 11 )) ; then  batch_real_world_subsets     ; fi
-if (( $1 <= 12 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 13 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 14 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 15 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 16 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 17 )) ; then  batch_reference              ; fi
-if (( $1 <= 18 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 19 )) ; then  batch_genols                 ; fi
+if (( $1 <= 11 )) ; then  batch_real_world_subsets     ; fi # natural VB size
+if (( $1 <= 12 )) ; then  batch_real_world_subsets -B1 ; fi # many VBs
+if (( $1 <= 13 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 14 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 15 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 16 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 17 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 18 )) ; then  batch_reference              ; fi
+if (( $1 <= 19 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 20 )) ; then  batch_genols                 ; fi
 
 printf "\nALL GOOD!\n"
 

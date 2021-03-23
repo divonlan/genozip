@@ -161,7 +161,7 @@ static void zip_dynamically_set_max_memory (void)
             uint64_t concurrent_vbs = 1 + txt_file->disk_size ? MIN (1+ txt_file->disk_size / flag.vblock_memory, global_max_threads)
                                                               : global_max_threads;
 
-            ASSERTW (flag.vblock_memory * concurrent_vbs < 0x100000000,  // 4 GB
+            ASSERTW (flag.vblock_memory * concurrent_vbs < MEMORY_WARNING_THREASHOLD,
                      "\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
                      "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
                      "To reduce RAM consumption, you may use:\n"

@@ -208,7 +208,7 @@ static void vcf_header_zip_convert_header_to_dual_coords (Buffer *txt_header)
     for (unsigned i=0; (laft_contig = liftover_get_laft_contig(i)); i++) 
         bufprintf (evb, txt_header, HK_LO_CONTIG"<ID=%s>\n", laft_contig);
 
-    buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_header"); // careful not to use bufprintf as it is unlimited
+    buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_header"); // careful not to use bufprintf as it is unbound
 }
 
 static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
@@ -291,7 +291,7 @@ static bool vcf_inspect_txt_header_piz (Buffer *txt_header)
         vcf_header_trim_field_name_line (&vcf_field_name_line); // drop FORMAT and sample names
 
     // add the (perhaps modified) header
-    buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_data");
+    buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_data");
 
     return true; // all good
 }

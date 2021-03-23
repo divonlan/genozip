@@ -12,5 +12,8 @@
 extern void sorter_zip_merge_vb (VBlockP vb);
 extern void sorter_compress_recon_plan (void);
 
+// PIZ side
+extern void sorter_piz_get_reconstruction_plan (uint32_t component_i);
+
 #endif
 

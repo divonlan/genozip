@@ -220,14 +220,10 @@ void ref_contigs_sort_chroms (void)
 void ref_contigs_load_contigs (void)
 {
     const SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, true);
-
     if (!sl) return; // section doesn't exist
 
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_REF_CONTIGS, sl);
-
-    if (flag.show_headers && exe_type == EXE_GENOCAT) goto done;
-
-    zfile_uncompress_section (evb, evb->z_data.data, &loaded_contigs, "loaded_contigs", 0, SEC_REF_CONTIGS);
+    zfile_get_global_section (SectionHeader, SEC_REF_CONTIGS, sl, &loaded_contigs, "loaded_contigs");
+    if (flag.show_headers && exe_type == EXE_GENOCAT) return;
 
     loaded_contigs.len /= sizeof (RefContig);
     BGEN_ref_contigs (&loaded_contigs);
@@ -242,9 +238,6 @@ void ref_contigs_load_contigs (void)
         ref_contigs_show (&loaded_contigs, false);
         if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
     }
-
-done:
-    buf_free (&evb->z_data);
 }
 
 // called by ctx_build_zf_ctx_from_contigs when initializing ZIP for a new file using a pre-loaded external reference

@@ -407,7 +407,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
     
-    // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
+    // a loop for decompressing all components in unbind mode. in concatenate mode, it collapses to a single iteration.
     for (uint32_t component_i=0; component_i < z_file->num_components; component_i += flag.unbind ? 1 + flag.interleave : z_file->num_components) {
         piz_one_file (component_i, is_first_z_file, is_last_z_file);
         file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 

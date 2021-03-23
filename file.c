@@ -691,21 +691,24 @@ static bool file_open_z (File *file)
             // verify that this is a genozip file 
             // we read the Magic at the end of the file (as the magic at the beginning may be encrypted)
             uint32_t magic;
-            if (  !file->file ||
-                  !file_seek (file, -(int)sizeof (magic), SEEK_END, true) || 
-                  !fread (&magic, sizeof (magic), 1, file->file) ||
-                  BGEN32 (magic) != GENOZIP_MAGIC) {
+            int cause=0;
+            if (  (cause = 1 * !file->file) ||
+                  (cause = 2 * !file_seek (file, -(int)sizeof (magic), SEEK_END, true)) || 
+                  (cause = 3 * !fread (&magic, sizeof (magic), 1, file->file)) ||
+                  (cause = 4 * (BGEN32 (magic) != GENOZIP_MAGIC))) {
 
                 FCLOSE (file->file, file_printname (file));
 
                 if (flag.validate) flag.validate = 2; // invalid files have been found
 
+                static char *causes[] = { "file->file is NULL", "file_seek failed", "fread failed", "bad magic" };
+
                 if (flag.multiple_files) 
                     RETURNW (false, true, 
-                             flag.validate ? "%s is not a valid genozip file" : "Skipping %s - it is not a valid genozip file", 
-                             file_printname (file));
+                             flag.validate ? "%s is not a valid genozip file: %s" : "Skipping %s - it is not a valid genozip file: %s", 
+                             file_printname (file), causes[cause-1]);
                 else
-                    ABORTINP ("%s is not a valid genozip file", file_printname (file));
+                    ABORTINP ("%s is not a valid genozip file: %s", file_printname (file), causes[cause-1]);
             }
         }
 
@@ -865,10 +868,10 @@ void file_close (File **file_p,
     if (chain_is_loaded && file->supertype == TXT_FILE && flag.processing_rejects) 
         unlink (z_file->rejects_file_name); // ignore errors (this doesn't work on NTFS)
 
-    if (file->file) {
+    if (file->file && file->supertype == TXT_FILE) {
 
         // finalize a BGZF-compressed reconstructed txt file
-        if (file->mode == WRITE && file->supertype == TXT_FILE && file->codec == CODEC_BGZF)
+        if (file->mode == WRITE && file->codec == CODEC_BGZF)
             bgzf_write_finalize (file);         
 
         if (file->mode == READ && (file->codec == CODEC_GZ))
@@ -890,6 +893,9 @@ void file_close (File **file_p,
         else
             FCLOSE (file->file, file_printname (file));
     }
+
+    else if (file->file && file->supertype == Z_FILE) 
+        FCLOSE (file->file, file_printname (file));
 
     // in case the unlinking didn't work (eg NTFS) - remove the rejects file now that its closed
     if (chain_is_loaded && file->supertype == TXT_FILE && flag.processing_rejects) 

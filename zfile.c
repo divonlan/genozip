@@ -115,7 +115,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     
     case SEC_RECON_PLAN: {
         SectionHeaderReconPlan *h = (SectionHeaderReconPlan *)header;
-        sprintf (str, SEC_TAB "num_txt_data_bufs=%u laft=%u\n", h->num_txt_data_bufs, h->h.flags.recon_plan.laft); 
+        sprintf (str, SEC_TAB "num_txt_data_bufs=%u laft=%u\n", BGEN32 (h->num_txt_data_bufs), h->h.flags.recon_plan.laft); 
         break;
     }
     

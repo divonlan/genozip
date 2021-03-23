@@ -415,6 +415,7 @@ void liftover_section_list_move_rejects_to_front (void)
     memcpy (temp, rejects, num_rejects_sec * sizeof (SectionListEntry));
     memmove (primary + num_rejects_sec, primary, num_primary_secs * sizeof (SectionListEntry));
     memcpy (primary, temp, num_rejects_sec * sizeof (SectionListEntry));
+    FREE (temp);
 }
 
 // PIZ without --laft: remove rejects

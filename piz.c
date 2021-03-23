@@ -28,6 +28,7 @@
 #include "flags.h"
 #include "reconstruct.h"
 #include "coverage.h"
+#include "sorter.h"
 
 // called by I/O thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
@@ -588,9 +589,14 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
             // note: this never happens in the 2nd leaf when interleaving, because we skipped the header
             else if (another_header && (!flag.unbind || first_component_this_txtfile)) {
                     
+                // note: if unbinding, this will also open the txt file
                 txtfile_genozip_to_txt_header (sl_ent,  
                                                first_component_this_txtfile ? &original_file_digest : NULL); // NULL means skip txt header (2nd+ component if concatenating)
            
+                // create txt_file->recon_plan and resort VBs in section list if needed
+                if (first_component_this_txtfile && !flag.reading_chain && !flag.reading_reference) 
+                    sorter_piz_get_reconstruction_plan (component_i);
+
                 if (!first_component_this_txtfile) 
                     component_i += flag.interleave ? 2 : 1; 
 

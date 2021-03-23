@@ -389,9 +389,8 @@ void stats_read_and_display (void)
     if (!sl) return; // genozip file does not contain stats sections (SEC_STATS was introduced in v 7.0.5)
 
     // read and uncompress the requested stats section
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_STATS, sl + (flag.show_stats==2));
-    zfile_uncompress_section (evb, evb->z_data.data, flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf, "z_file->stats_buf", 0, SEC_STATS);
-    buf_free (&evb->z_data);
+    zfile_get_global_section (SectionHeader, SEC_STATS, sl + (flag.show_stats==2),
+                              flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf, "z_file->stats_buf");
     
     stats_display();
 

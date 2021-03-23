@@ -449,9 +449,7 @@ void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const 
     const SectionListEntry *ra_sl = sections_get_first_section_of_type (sec_type, true);
     if (!ra_sl) return; // section doesn't exist
 
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sec_type, ra_sl);
-
-    zfile_uncompress_section (evb, evb->z_data.data, ra_buf, buf_name, 0, sec_type);
+    zfile_get_global_section (SectionHeader, sec_type, ra_sl, ra_buf, buf_name);
 
     ra_buf->len /= sizeof (RAEntry);
     BGEN_random_access (ra_buf);
@@ -460,8 +458,6 @@ void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const 
         random_access_show_index (ra_buf, false, show_index_msg);
         if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-index, we only show the index, not the data
     }
-
-    buf_free (&evb->z_data);
 }
 
 void random_access_compress (Buffer *ra_buf, SectionType sec_type, const char *msg)

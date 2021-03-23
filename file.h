@@ -264,15 +264,17 @@ typedef enum { DC_NONE, DC_PRIMARY, DC_LAFT } DualCoordinates;
 // tests for compression types
 // ---------------------------
 
-#define file_is_read_via_ext_decompressor(file) \
-  (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_CRAM)
+#define file_is_read_via_ext_decompressor(file) (file->supertype == TXT_FILE && \
+  (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_CRAM))
 
-#define file_is_read_via_int_decompressor(file) \
-  (file->codec == CODEC_GZ || file->codec == CODEC_BGZF || file->codec == CODEC_BZ2)
+#define file_is_read_via_int_decompressor(file) (file->supertype == TXT_FILE && \
+  (file->codec == CODEC_GZ || file->codec == CODEC_BGZF || file->codec == CODEC_BZ2))
 
-#define file_is_written_via_ext_compressor(file) (file->codec == CODEC_BCF || file->codec == CODEC_GZ)
+#define file_is_written_via_ext_compressor(file) (file->supertype == TXT_FILE && \
+  (file->codec == CODEC_BCF || file->codec == CODEC_GZ))
 
-#define file_is_plain_or_ext_decompressor(file) (file->codec == CODEC_NONE || file_is_read_via_ext_decompressor(file))
+#define file_is_plain_or_ext_decompressor(file) (file->supertype == TXT_FILE && \
+  (file->codec == CODEC_NONE || file_is_read_via_ext_decompressor(file)))
 
 typedef struct File {
     void *file;

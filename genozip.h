@@ -31,6 +31,8 @@
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
+#define MEMORY_WARNING_THREASHOLD  0x100000000  // (4 GB) warning in some cases that we predict that user choices would cause us to consume more than this
+
 // ------------------------------------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
 // ------------------------------------------------------------------------------------------------------------------------

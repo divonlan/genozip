@@ -69,7 +69,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
 typedef enum __attribute__ ((__packed__)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX } StoreType; // values for SectionFlags.ctx.store
 
-// goes into SectionHeader.flags
+// goes into SectionHeader.flags and also SectionListEntry.flags
 typedef union SectionFlags {  
     uint8_t flags;
 
@@ -277,6 +277,7 @@ typedef struct {
 typedef struct SectionHeaderReconPlan {
     SectionHeader h;
     uint32_t num_txt_data_bufs;// max number of concurrent txt_data buffers needed to execute this plan    
+    uint32_t vblock_mb;        // size of vblock in MB
 } SectionHeaderReconPlan;
 
 typedef struct {
@@ -291,7 +292,8 @@ typedef struct SectionListEntry {
     DictId dict_id;            // used if this section is a DICT, LOCAL or a B250 section
     uint32_t vblock_i;
     SectionType section_type;  // 1 byte
-    uint8_t unused[3];         
+    SectionFlags flags;        // same flags as in section header, since v12 (before was "unused")
+    uint8_t unused[2];         
 } SectionListEntry;
 
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
@@ -336,6 +338,9 @@ extern bool sections_get_next_section_of_type2 (const SectionListEntry **sl_ent,
 extern uint32_t sections_count_sections (SectionType st);
 extern const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
 extern void sections_get_prev_component_vb_i (const SectionListEntry *sl, uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i);
+
+extern void sections_count_component_vbs (const SectionListEntry *sl, uint32_t *num_vbs, uint32_t *first_vb);
+extern const SectionListEntry *sections_pull_vb_up (uint32_t vb_i, const SectionListEntry *sl);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);

@@ -58,6 +58,12 @@ extern void zfile_uncompress_section (VBlockP vb, void *section_header,
                                       const char *uncompressed_data_buf_name,
                                       uint32_t expected_vb_i, SectionType expected_section_type);
 
+#define zfile_get_global_section(HeaderType, sec,sl,out_buf,out_buf_name) \
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", (sec), (sl)); \
+    zfile_uncompress_section (evb, evb->z_data.data, (out_buf), (out_buf_name), 0, (sec)); \
+    HeaderType header __attribute__((unused)) = *(HeaderType *)evb->z_data.data; /* make a copy of the header */ \
+    buf_free (&evb->z_data); 
+
 extern DataType zfile_get_file_dt (const char *filename);
 
 // --------

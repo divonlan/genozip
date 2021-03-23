@@ -312,12 +312,7 @@ void dict_id_read_aliases (void)
 
     buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
 
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_DICT_ID_ALIASES, NULL);    
-
-    SectionHeader *header = (SectionHeader *)evb->z_data.data;
-    zfile_uncompress_section (evb, header, &dict_id_aliases_buf, "dict_id_aliases_buf", 0, SEC_DICT_ID_ALIASES);
-
-    buf_free (&evb->z_data);
+    zfile_get_global_section (SectionHeader, SEC_DICT_ID_ALIASES, NULL, &dict_id_aliases_buf, "dict_id_aliases_buf");
 
     dict_id_aliases = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     dict_id_num_aliases = dict_id_aliases_buf.len / sizeof (DictIdAlias);

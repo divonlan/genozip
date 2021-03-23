@@ -150,6 +150,12 @@ extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
     } \
 } while(0)
 
+#define buf_add_buf(vb,dst_buf,src_buf,type,name) do { \
+    buf_alloc_more ((vb), (dst_buf), (src_buf)->len, 0, type, 1.5, (name)); \
+    memcpy (AFTERENT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
+    (dst_buf)->len += (src_buf)->len; \
+} while (0)
+
 extern void buf_add_string (VBlockP vb, Buffer *buf, const char *str);
 extern void buf_add_int (VBlockP vb, Buffer *buf, int64_t value);
 

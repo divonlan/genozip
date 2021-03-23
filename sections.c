@@ -38,7 +38,8 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
         .section_type = header->section_type,
         .vblock_i     = BGEN32 (header->vblock_i), // big endian in header - convert back to native
         .dict_id      = dict_id,
-        .offset       = vb->z_data.len  // this is a partial offset (within d) - we will correct it later
+        .offset       = vb->z_data.len,  // this is a partial offset (within d) - we will correct it later
+        .flags        = header->flags
     };
 }
 
@@ -132,7 +133,7 @@ uint32_t sections_count_sections (SectionType st)
     return count;
 }
 
-// called by PIZ I/O : vcf_zfile_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
+// called by PIZ I/O : vcf_zfile_read_one_vb. returns the first section of this vb_i
 const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
 {
     const SectionListEntry *sl=NULL;
@@ -172,55 +173,52 @@ void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bi
     ABORT ("Error in sections_get_refhash_details: can't find SEC_REF_HASH sections in %s", z_name);
 }
 
-void BGEN_sections_list()
+void BGEN_sections_list (void)
 {
     ARRAY (SectionListEntry, ent, z_file->section_list_buf);
 
-    for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
+    for (unsigned i=0; i < ent_len; i++) {
         ent[i].vblock_i = BGEN32 (ent[i].vblock_i);
         ent[i].offset   = BGEN64 (ent[i].offset);
     }
 }
 
-void sections_show_gheader (const SectionHeaderGenozipHeader *header)
+void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */)
 {
     if (flag.reading_reference || flag.reading_chain) return; // don't show gheaders of a reference or chain file
     
-    unsigned num_sections = BGEN32 (header->num_sections);
+    ARRAY (const SectionListEntry, ents, z_file->section_list_buf);
 
-    iprintf ("Contents of the genozip header (output of --show-gheader) of %s:\n", z_name);
-    fprintf (info_stream, "  genozip_version: %u\n",         header->genozip_version);
-    fprintf (info_stream, "  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
-    fprintf (info_stream, "  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
-    fprintf (info_stream, "  uncompressed_data_size: %s\n",  str_uint_commas (BGEN64 (header->uncompressed_data_size)).s);
-    fprintf (info_stream, "  num_items_bound: %"PRIu64"\n", BGEN64 (header->num_items_bound));
-    fprintf (info_stream, "  num_sections: %u\n",            num_sections);
-    fprintf (info_stream, "  num_components: %u\n",          BGEN32 (header->num_components));
-    fprintf (info_stream, "  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
-    fprintf (info_stream, "  created: %*s\n",                -FILE_METADATA_LEN, header->created);
-    fprintf (info_stream, "  license_hash: %s\n",            digest_display (header->license_hash).s);
-    fprintf (info_stream, "  reference filename: %*s\n",     -REF_FILENAME_LEN, header->ref_filename);
-    fprintf (info_stream, "  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
+    if (header) {
+        iprintf ("Contents of the genozip header (output of --show-gheader) of %s:\n", z_name);
+        fprintf (info_stream, "  genozip_version: %u\n",         header->genozip_version);
+        fprintf (info_stream, "  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
+        fprintf (info_stream, "  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
+        fprintf (info_stream, "  uncompressed_data_size: %s\n",  str_uint_commas (BGEN64 (header->uncompressed_data_size)).s);
+        fprintf (info_stream, "  num_items_bound: %"PRIu64"\n",  BGEN64 (header->num_items_bound));
+        fprintf (info_stream, "  num_sections: %u\n",            (unsigned)ents_len);
+        fprintf (info_stream, "  num_components: %u\n",          BGEN32 (header->num_components));
+        fprintf (info_stream, "  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
+        fprintf (info_stream, "  created: %*s\n",                -FILE_METADATA_LEN, header->created);
+        fprintf (info_stream, "  license_hash: %s\n",            digest_display (header->license_hash).s);
+        fprintf (info_stream, "  reference filename: %*s\n",     -REF_FILENAME_LEN, header->ref_filename);
+        fprintf (info_stream, "  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
+    }
 
     fprintf (info_stream, "  sections:\n");
 
-    ARRAY (const SectionListEntry, ents, z_file->section_list_buf);
-
-    for (unsigned i=0; i < num_sections; i++) {
+    for (unsigned i=0; i < ents_len; i++) {
      
         uint64_t this_offset = ents[i].offset;
-        uint64_t next_offset;
         
-        if (i < num_sections-1) 
-            next_offset = ents[i+1].offset;
+        uint64_t next_offset = (i < ents_len-1) ? ents[i+1].offset
+                             : header               ? this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader) // we're at the last section genozip header+footer
+                             :                        this_offset; // without the GenozipHeader, we can't know its length
 
-        else // we're at the last section genozip header+footer
-            next_offset = this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader);
-
-        fprintf (info_stream, "    %3u. %-24.24s %s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
+        fprintf (info_stream, "    %3u. %-24.24s %s vb_i=%u offset=%"PRIu64" size=%"PRId64" flags=%u\n", 
                  i, st_name(ents[i].section_type), 
                  dis_dict_id (ents[i].dict_id.num ? ents[i].dict_id : ents[i].dict_id).s, 
-                 ents[i].vblock_i, this_offset, next_offset - this_offset);
+                 ents[i].vblock_i, this_offset, next_offset - this_offset, ents[i].flags.flags);
     }
 
     fflush (info_stream);
@@ -276,6 +274,47 @@ const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool
     ASSERTE (soft_fail, "Cannot find section_type=%s in z_file", st_name (st));
 
     return NULL;
+}
+
+// count VBs of this component
+void sections_count_component_vbs (const SectionListEntry *sl, // must be set to SEC_TXT_HEADER of the requested component
+                                   uint32_t *first_vb, uint32_t *num_vbs) // out
+{
+    *first_vb = *num_vbs = 0;
+
+    while (sections_get_next_section_of_type2 (&sl, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) &&
+           sl->section_type == SEC_VB_HEADER) {
+        (*num_vbs)++;
+        if (! *first_vb) *first_vb = sl->vblock_i;
+    }
+}
+
+// move all sections of vb_i to be immediately after sl ; returns last section of vb_i after move
+// note: vb_i is expected to start strictly after sl
+const SectionListEntry *sections_pull_vb_up (uint32_t vb_i, const SectionListEntry *sl) 
+{
+    const SectionListEntry *new_vb_sl    = sl+1;
+    const SectionListEntry *vb_header_sl = sections_vb_first (vb_i, false);
+    const SectionListEntry *after_vb_sl  = vb_header_sl;
+    ASSERTE (sections_get_next_section_of_type2 (&after_vb_sl, SEC_VB_HEADER, SEC_RECON_PLAN, false, false), 
+             "Cannot find SEC_VB_HEADER or SEC_RECON_PLAN following sections of vb_i=%u", vb_i);
+
+    // case: VB is already in its desired place
+    if (sl+1 == vb_header_sl) return after_vb_sl-1; // return last section (B250/Local) of this VB
+
+    // save all entries of the VB in temp
+    uint32_t vb_sections_len  = (after_vb_sl - vb_header_sl);
+    uint32_t vb_sections_size = vb_sections_len * sizeof (SectionListEntry);
+    SectionListEntry temp[vb_sections_len]; // size is bound by MAX_DICTS x 2 x sizeof (SectionListEntry) = 2048x2x24=96K
+    memcpy (temp, vb_header_sl, vb_sections_size);
+
+    // push down all sections after sl and before vb_header_sl
+    memcpy ((SectionListEntry *)new_vb_sl + vb_sections_len, new_vb_sl, (vb_header_sl - new_vb_sl) * sizeof (SectionListEntry));
+
+    // copy our vb to its requested place at sl+1
+    memcpy ((SectionListEntry *)new_vb_sl, temp, vb_sections_size);
+             
+    return new_vb_sl + vb_sections_len - 1; // last section of the VB
 }
 
 const char *lt_name (LocalType lt)

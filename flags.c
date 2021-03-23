@@ -524,7 +524,7 @@ void flags_update (unsigned num_files, const char **filenames)
         (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
          flag.show_index || flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || flag.dump_section || flag.show_headers ||
          flag.show_reference || flag.show_ref_contigs || flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
-         flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs || flag.show_gheader);
+         flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_recon_plan);
 
     // where progress, metadata etc messages should go. data always goes to stdout and errors/warning always go to stderr.
     info_stream = (!flag.to_stdout || flag.genocat_no_reconstruct) ? stdout : stderr;
@@ -614,7 +614,7 @@ void flags_update_piz_one_file (void)
     flag.data_modified = !flag.reconstruct_as_src || // translating to another data
                          flag.header_one || flag.no_header || flag.header_only || flag.header_only_fast || flag.grep || 
                          flag.regions || flag.samples || flag.drop_genotypes || flag.gt_only || flag.sequential || 
-                         flag.one_vb || flag.downsample || flag.interleave || flag.laft || flag.genobwa ||
+                         flag.one_vb || flag.downsample || flag.interleave || flag.laft || flag.genobwa || flag.sort ||
                          (exe_type == EXE_GENOCAT && z_file->z_flags.dual_coords && !flag.no_pg);
 
     bool is_paired_fastq = fastq_piz_is_paired(); // also updates z_file->z_flags in case of backward compatability issues

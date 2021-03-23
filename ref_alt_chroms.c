@@ -76,9 +76,7 @@ void ref_alt_chroms_load (void)
     const SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_ALT_CHROMS, true);
     if (!sl) return; // we don't have alternate chroms
 
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_REF_ALT_CHROMS, sl);
-
-    zfile_uncompress_section (evb, evb->z_data.data, &evb->compressed, "compressed", 0, SEC_REF_ALT_CHROMS);
+    zfile_get_global_section (SectionHeader, SEC_REF_ALT_CHROMS, sl, &evb->compressed, "compressed");
 
     if (flag.show_ref_alts) 
         iprint0 ("\nAlternative chrom indices (output of --show-ref-alts): chroms that are in the txt file and are mapped to a different index in the reference\n");
@@ -116,7 +114,6 @@ void ref_alt_chroms_load (void)
 
     if (flag.show_ref_alts && exe_type == EXE_GENOCAT) exit(0); // in genocat this, not the data
 
-    buf_free (&evb->z_data);
     buf_free (&evb->compressed);
 }
 
