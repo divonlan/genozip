@@ -258,7 +258,7 @@ extern const char *file_exts[];
 typedef const char *FileMode;
 extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
-typedef enum { DC_NONE, DC_PRIMARY, DC_LAFT } DualCoordinates;
+typedef enum { DC_NONE, DC_PRIMARY, DC_LUFT } DualCoordinates;
 
 // ---------------------------
 // tests for compression types
@@ -300,9 +300,9 @@ typedef struct File {
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
     int64_t txt_data_so_far_bind;      // z_file & ZIP only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
-                                       // note: txt_data_so_far_single/bind accounts for txt modifications due to --optimize or --chain or compressing a Laft file
+                                       // note: txt_data_so_far_single/bind accounts for txt modifications due to --optimize or --chain or compressing a Luft file
     int64_t txt_data_so_far_single_0;  // z_file & ZIP only: same as txt_data_so_far_single/bind, but original sizes without 
-    int64_t txt_data_so_far_bind_0;    //      modifications due to --chain/--optimize/Laft                                   
+    int64_t txt_data_so_far_bind_0;    //      modifications due to --chain/--optimize/Luft                                   
     int64_t txt_disk_so_far_bind;      // z_file & ZIP only: compressed (with txt_file.codec - eg bgzf) txt data represented in the GENOZIP data written so far for all bound files
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
                                        // txt_file: number of lines in single txt file
@@ -363,9 +363,9 @@ typedef struct File {
 
     // TXT_FILE: Liftover stuff
     DualCoordinates dual_coords;       // ZIP: dual coordinate status of the TXT file. Set when reading TXT header, and immutable thereafter
-    uint64_t laft_reject_bytes;        // ZIP of Laft dual coordinate file: number of bytes of that are rejected lines, not yet assigned to a VB
+    uint64_t luft_reject_bytes;        // ZIP of Luft dual coordinate file: number of bytes of that are rejected lines, not yet assigned to a VB
 
-    // TXT_FILE: Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is laft coords
+    // TXT_FILE: Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
     Mutex recon_plan_mutex[2];         // ZIP: protect vb_info and line_info during merging of VB data
     Buffer vb_info[2];                 // ZIP: array of VbInfo per VB, indexed by (vb_i-1)
     Buffer line_info[2];               // ZIP: array of LineInfo per line or gapless range in txt_file

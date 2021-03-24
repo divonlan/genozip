@@ -57,11 +57,11 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
     }
 
     // for dual-coordinates genozip files - in which rows capable of liftover have both 
-    // INFO/LIFTOVER and INFO/LIFTBACK subfields - we select which one to filter out based on flag.laft
-    else if (item >= 0 && con->items[item].dict_id.num == dict_id_INFO_LIFTOVER && flag.laft)
+    // INFO/LIFTOVER and INFO/LIFTBACK subfields - we select which one to filter out based on flag.luft
+    else if (item >= 0 && con->items[item].dict_id.num == dict_id_INFO_LIFTOVER && flag.luft)
         return false;
         
-    else if (item >= 0 && con->items[item].dict_id.num == dict_id_INFO_LIFTBACK && !flag.laft)
+    else if (item >= 0 && con->items[item].dict_id.num == dict_id_INFO_LIFTBACK && !flag.luft)
         return false;
         
     return true;    
@@ -354,12 +354,12 @@ static void inline vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, 
 }
 
 // ---------------------------------------------------------------------------------
-// Translators and Special functions for Laft (secondary coordinates) reconstruction
-// Invoked by genocat --laft
+// Translators and Special functions for Luft (secondary coordinates) reconstruction
+// Invoked by genocat --luft
 // ---------------------------------------------------------------------------------
 
-// Translator called for CHROM (main field) if genocat --laft. if LO_OK, replaces CHROM with oCHROM, and saves CHROM in vb->liftover.
-TRANSLATOR_FUNC (vcf_piz_laft_CHROM)
+// Translator called for CHROM (main field) if genocat --luft. if LO_OK, replaces CHROM with oCHROM, and saves CHROM in vb->liftover.
+TRANSLATOR_FUNC (vcf_piz_luft_CHROM)
 {
     if (vb->is_rejects_vb) return 0;
 
@@ -379,9 +379,9 @@ TRANSLATOR_FUNC (vcf_piz_laft_CHROM)
     return 0;    
 }
 
-// Translator called for POS (main field) if genocat --laft. if LO_OK, replaces POS with oPOS, and saves POS in vb->liftover.
+// Translator called for POS (main field) if genocat --luft. if LO_OK, replaces POS with oPOS, and saves POS in vb->liftover.
 // (if not LO_OK, line will be dropped by vcf_piz_container_cb)
-TRANSLATOR_FUNC (vcf_piz_laft_POS)
+TRANSLATOR_FUNC (vcf_piz_luft_POS)
 {
     if (vb->is_rejects_vb || vb->last_index (VCF_oSTATUS) != LO_OK) return 0;
 
@@ -396,12 +396,12 @@ TRANSLATOR_FUNC (vcf_piz_laft_POS)
     return 0;    
 }
 
-// Translator called for REFALT (main field) if genocat --laft. if LO_OK, replaces REFALT with oREF + calculated oALT
+// Translator called for REFALT (main field) if genocat --luft. if LO_OK, replaces REFALT with oREF + calculated oALT
 // and saves REF in vb->liftover (actually liftback).
 // -f REF != oREF and oREF=ALT, swaps REF and ALT, inc. in nagative strand. vb->liftover updated.
 // This is the only form of REF change supported by genozip currently, other changes will 
 // be set by Seg as LO_UNSUPPORTED. 
-TRANSLATOR_FUNC (vcf_piz_laft_REFALT)
+TRANSLATOR_FUNC (vcf_piz_luft_REFALT)
 {
     if (vb->is_rejects_vb || vb->last_index (VCF_oSTATUS) != LO_OK) return 0;
 
@@ -438,10 +438,10 @@ TRANSLATOR_FUNC (vcf_piz_laft_REFALT)
 
 // used for:
 // 1. Primary VCF - reconstruct oREF in INFO/LIFTOVER (reconstruction invoked from LIFTOVER container)
-// 2. Laft VCF    - reconstruct oREF in primary REF field (reconstruction invoked by vcf_piz_laft_REFALT translator)
+// 2. Luft VCF    - reconstruct oREF in primary REF field (reconstruction invoked by vcf_piz_luft_REFALT translator)
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_OREF)
 {
-    // make a copy of refalt, as we will be overwriting it (since call from from vcf_piz_laft_REFALT)
+    // make a copy of refalt, as we will be overwriting it (since call from from vcf_piz_luft_REFALT)
     unsigned ref_alt_str_len = vb->last_txt_len (VCF_REFALT);
     char ref_alt_str[ref_alt_str_len];
     memcpy (ref_alt_str, last_txt (vb, VCF_REFALT), ref_alt_str_len);
@@ -482,47 +482,47 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFTBACK)
     return false; // new_value was not set
 }
 
-// Callback at the end of reconstructing a VCF line with --laft, i.e. with laft coordinates:
+// Callback at the end of reconstructing a VCF line with --luft, i.e. with luft coordinates:
 // we drop lines that failed liftovers. Seperately, these lines will be preserved in the VCF header.
 void vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (VBlock *vb)
 {
-    // conditions for dropping a line in --laft
+    // conditions for dropping a line in --luft
     if ((!vb->is_rejects_vb && vb->last_index (VCF_oSTATUS) != LO_OK) || // drop primary lines that are rejected (note: for sorted files, rejects are already excluded from the reconstruction plan in sorter_zip_merge_vb_do)
         ( vb->is_rejects_vb && (flag.no_header || flag.header_one)))     // drop rejects in --no-header or --header-one 
         vb->txt_data.len = vb->line_start;
 }
 
-TRANSLATOR_FUNC (vcf_piz_laft_AC)
+TRANSLATOR_FUNC (vcf_piz_luft_AC)
 {
     
     return 0;    
 }
 
-TRANSLATOR_FUNC (vcf_piz_laft_AF)
+TRANSLATOR_FUNC (vcf_piz_luft_AF)
 {
     
     return 0;    
 }
 
-TRANSLATOR_FUNC (vcf_piz_laft_AD)
+TRANSLATOR_FUNC (vcf_piz_luft_AD)
 {
     
     return 0;    
 }
 
-TRANSLATOR_FUNC (vcf_piz_laft_END)
+TRANSLATOR_FUNC (vcf_piz_luft_END)
 {
     
     return 0;    
 }
 
-TRANSLATOR_FUNC (vcf_piz_laft_GT)
+TRANSLATOR_FUNC (vcf_piz_luft_GT)
 {
     
     return 0;    
 }
 
-TRANSLATOR_FUNC (vcf_piz_laft_GL)
+TRANSLATOR_FUNC (vcf_piz_luft_GL)
 {
     return 0;    
 }
@@ -546,8 +546,8 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         if (have_INFO_SF) 
             vcf_piz_TOPLEVEL_cb_insert_INFO_SF (vcf_vb); // cleans up allocations - call even if line will be dropped due oSTATUS
 
-        // case: we are reconstructing with --laft and we reconstructed one VCF line
-        if (flag.laft) 
+        // case: we are reconstructing with --luft and we reconstructed one VCF line
+        if (flag.luft) 
             vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (vb);
     }
 

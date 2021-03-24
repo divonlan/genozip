@@ -123,7 +123,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _e  {"reference",     required_argument, 0, 'e'                    }
         #define _E  {"REFERENCE",     required_argument, 0, 'E'                    }
         #define _lo {"liftover",      required_argument, 0, 'v'                    }
-        #define _du {"laft",          no_argument,       &flag.laft,             1 }
+        #define _du {"luft",          no_argument,       &flag.luft,             1 }
         #define _ch {"chain",         required_argument, 0, 'C'                    }
         #define _b  {"bytes",         no_argument,       &flag.bytes,            1 }
         #define _me {"make-reference",no_argument,       &flag.make_reference,   1 }
@@ -246,7 +246,7 @@ verify_command:
             case 'e' : ref_set_reference (optarg, REF_EXTERNAL,  true); break;
             case 'E' : ref_set_reference (optarg, REF_EXT_STORE, true); break;
             case 'v' : if (exe_type == EXE_GENOZIP) ref_set_reference (optarg, REF_LIFTOVER, true); 
-                       else /* EXE_GENOCAT */       flag.laft = 1;
+                       else /* EXE_GENOCAT */       flag.luft = 1;
                        break;
             case 'C' : flag.reading_chain = optarg  ; break;  
             case 'm' : flag.md5           = 1       ; break;
@@ -545,7 +545,7 @@ void flags_update (unsigned num_files, const char **filenames)
 void flags_update_zip_one_file (void)
 {
     // cases where txt data is modified during Seg - digest is not stored, it cannot be tested with --test and other limitations 
-    // note: this flag is also set when the file header indicates that it's a Laft file. See vcf_header_get_dual_coords().
+    // note: this flag is also set when the file header indicates that it's a Luft file. See vcf_header_get_dual_coords().
     flag.data_modified = flag.optimize || chain_is_loaded || flag.processing_rejects;
 
     ASSINP0 (!flag.sort || z_file->data_type == DT_VCF, "--sort is only supported for VCF files");
@@ -576,8 +576,8 @@ void flags_update_piz_one_file (void)
             flag.out_dt = z_file->data_type;
     }
 
-    // --laft is only possible on dual-coordinates files
-    ASSINP (!flag.laft || z_file->z_flags.dual_coords, "--laft is not possible for %s because it is not a dual-coordinates file", z_name);
+    // --luft is only possible on dual-coordinates files
+    ASSINP (!flag.luft || z_file->z_flags.dual_coords, "--luft is not possible for %s because it is not a dual-coordinates file", z_name);
 
     // genocat of dual coords implies sorting unless overridden with --unsorted
     if (exe_type == EXE_GENOCAT && z_file->z_flags.dual_coords && !flag.unsorted) 
@@ -614,7 +614,7 @@ void flags_update_piz_one_file (void)
     flag.data_modified = !flag.reconstruct_as_src || // translating to another data
                          flag.header_one || flag.no_header || flag.header_only || flag.header_only_fast || flag.grep || 
                          flag.regions || flag.samples || flag.drop_genotypes || flag.gt_only || flag.sequential || 
-                         flag.one_vb || flag.downsample || flag.interleave || flag.laft || flag.genobwa || flag.sort ||
+                         flag.one_vb || flag.downsample || flag.interleave || flag.luft || flag.genobwa || flag.sort ||
                          (exe_type == EXE_GENOCAT && z_file->z_flags.dual_coords && !flag.no_pg);
 
     bool is_paired_fastq = fastq_piz_is_paired(); // also updates z_file->z_flags in case of backward compatability issues

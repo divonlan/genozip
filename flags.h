@@ -41,7 +41,7 @@ typedef struct {
 
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
-        regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, laft, sort, unsorted;
+        regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted;
     char *grep;
     uint32_t one_vb, downsample, shard ;
 

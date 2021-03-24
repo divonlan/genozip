@@ -64,8 +64,8 @@ extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 #define HK_CHAIN       "##chain="
 #define HK_DC          "##dual_coordinates"
 #define HK_DC_PRIMARY  HK_DC"=PRIMARY"
-#define HK_DC_LAFT     HK_DC"=LAFT"
-#define KH_INFO_LO     "##INFO=<ID=" INFO_LIFTOVER ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for lifting over the variant to laft coordinates\",Source=\"genozip\",Version=\"%s\">"
+#define HK_DC_LUFT     HK_DC"=LUFT"
+#define KH_INFO_LO     "##INFO=<ID=" INFO_LIFTOVER ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for lifting over the variant to luft coordinates\",Source=\"genozip\",Version=\"%s\">"
 #define KH_INFO_LB     "##INFO=<ID=" INFO_LIFTBACK ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for retrieving the variant in the primary coordinates\",Source=\"genozip\",Version=\"%s\">"
 #define KH_INFO_LR     "##INFO=<ID=" INFO_LIFTREJD ",Number=1,Type=String,Description=\"dual-coordinates VCF: Reason variant was rejected for lift over\",Source=\"genozip\",Version=\"%s\">"
 
@@ -90,21 +90,21 @@ SPECIAL (VCF, 9, LIFTBACK,   vcf_piz_special_LIFTBACK); // added v12 - maybe be 
 
 #define NUM_VCF_SPECIAL 10
 
-// Translators for Laft (=secondary coordinates)
-TRANSLATOR (VCF, VCF,   1,  CHROM,  vcf_piz_laft_CHROM)
-TRANSLATOR (VCF, VCF,   2,  POS,    vcf_piz_laft_POS)
-TRANSLATOR (VCF, VCF,   3,  REFALT, vcf_piz_laft_REFALT)
-TRANSLATOR (VCF, VCF,   4,  AC,     vcf_piz_laft_AC)
-TRANSLATOR (VCF, VCF,   5,  AF,     vcf_piz_laft_AF)
-TRANSLATOR (VCF, VCF,   6,  AD,     vcf_piz_laft_AD)
-TRANSLATOR (VCF, VCF,   7,  END,    vcf_piz_laft_END)
-TRANSLATOR (VCF, VCF,   8,  GT,     vcf_piz_laft_GT)
-TRANSLATOR (VCF, VCF,   9,  GL,     vcf_piz_laft_GL)
+// Translators for Luft (=secondary coordinates)
+TRANSLATOR (VCF, VCF,   1,  CHROM,  vcf_piz_luft_CHROM)
+TRANSLATOR (VCF, VCF,   2,  POS,    vcf_piz_luft_POS)
+TRANSLATOR (VCF, VCF,   3,  REFALT, vcf_piz_luft_REFALT)
+TRANSLATOR (VCF, VCF,   4,  AC,     vcf_piz_luft_AC)
+TRANSLATOR (VCF, VCF,   5,  AF,     vcf_piz_luft_AF)
+TRANSLATOR (VCF, VCF,   6,  AD,     vcf_piz_luft_AD)
+TRANSLATOR (VCF, VCF,   7,  END,    vcf_piz_luft_END)
+TRANSLATOR (VCF, VCF,   8,  GT,     vcf_piz_luft_GT)
+TRANSLATOR (VCF, VCF,   9,  GL,     vcf_piz_luft_GL)
 
 #define NUM_VCF_TRANS   10 // including "none"
-#define VCF_TRANSLATORS { NULL /* none */, vcf_piz_laft_CHROM, vcf_piz_laft_POS, vcf_piz_laft_REFALT, \
-                          vcf_piz_laft_AC, vcf_piz_laft_AF, \
-                          vcf_piz_laft_AD, vcf_piz_laft_END, vcf_piz_laft_GT, vcf_piz_laft_GL }
+#define VCF_TRANSLATORS { NULL /* none */, vcf_piz_luft_CHROM, vcf_piz_luft_POS, vcf_piz_luft_REFALT, \
+                          vcf_piz_luft_AC, vcf_piz_luft_AF, \
+                          vcf_piz_luft_AD, vcf_piz_luft_END, vcf_piz_luft_GT, vcf_piz_luft_GL }
 
 #define VCF_DICT_ID_ALIASES \
     /*         alias                           maps to this ctx          */  \

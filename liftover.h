@@ -18,7 +18,7 @@ typedef enum {
     LO_OK           = 0, 
     LO_NO_CHROM     = 1,  // chain file doesn't contain a qName which is the primary chrom as 
     LO_NO_MAPPING   = 2,  // chain file doesn't contain a mapping for the primary POS
-    LO_REF_SPLIT    = 3,  // A multi-base REF does not map to one contiguous sequence in the laft reference
+    LO_REF_SPLIT    = 3,  // A multi-base REF does not map to one contiguous sequence in the luft reference
     LO_END_MAPPING  = 4,  // INFO/END is on a different alignment than POS
     LO_UNSUPPORTED  = 5,  // REF changed in a way that genozip can't handle
     NUM_LO_STATUSES
@@ -29,7 +29,7 @@ extern const char *liftover_status_names[];
  
 extern void liftover_copy_data_from_chain_file (void);
 extern void liftover_zip_initialize (DidIType tname_did_i, char special_liftback_snip_id);
-extern const char *liftover_get_laft_contig (uint32_t contig_i);
+extern const char *liftover_get_luft_contig (uint32_t contig_i);
 
 // Seg
 extern void liftover_append_rejects_file (VBlockP vb);
@@ -39,8 +39,8 @@ extern void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId l
 extern void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len, ZipDataLineP dl);
 
 // PIZ: section list stuff
-extern void liftover_section_list_remove_rejects (void);        // called if no --laft
-extern void liftover_section_list_move_rejects_to_front (void); // called if --laft
+extern void liftover_section_list_remove_rejects (void);        // called if no --luft
+extern void liftover_section_list_move_rejects_to_front (void); // called if --luft
 
 
 #endif

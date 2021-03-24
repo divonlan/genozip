@@ -110,7 +110,7 @@ typedef union SectionFlags {
     } ctx;
 
     struct FlagsReconPlan {
-        uint8_t laft             : 1; // this section is for reconstructing the file in the Laft coordinates
+        uint8_t luft             : 1; // this section is for reconstructing the file in the Luft coordinates
     } recon_plan;
     
 } SectionFlags;

@@ -397,8 +397,8 @@ static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *
                                                    .len     = INFO_LIFTOVER_LEN + 1, // +1 for the '='
                                                    .dict_id = (DictId)dict_id_INFO_LIFTOVER };  
         
-        // case Laft: we're replacing LIFTBACK with LIFTOVER in the default reconstruction
-        if (txt_file->dual_coords == DC_LAFT)
+        // case Luft: we're replacing LIFTBACK with LIFTOVER in the default reconstruction
+        if (txt_file->dual_coords == DC_LUFT)
             vb->vb_data_size += (INFO_LIFTOVER_LEN - INFO_LIFTBACK_LEN);
 
         // case: --chain - we're adding this subfield to the default reconstruction
@@ -409,8 +409,8 @@ static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *
         con->filter_items = true; // filter will select which of LIFTOVER and LIFTBACK is reconstructed
     }
 
-    // cases we add INFO_LIFTBACK: lift is possible (LO_OK), but not if this is a Laft file that already contains LIFTBACK
-    if (ostatus == LO_OK && txt_file->dual_coords != DC_LAFT) {
+    // cases we add INFO_LIFTBACK: lift is possible (LO_OK), but not if this is a Luft file that already contains LIFTBACK
+    if (ostatus == LO_OK && txt_file->dual_coords != DC_LUFT) {
 
         if (ostatus == LO_OK) {
             info_items[con_nitems(*con)] = (InfoItem){ .start   = INFO_LIFTBACK"=", 
@@ -422,7 +422,7 @@ static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *
         // note: we don't increase vb_data_size for LIFTBACK because its not displayed in the default reconstruction of the file
     }
 
-    // case we add LIFTREJD: --chain with a liftover error (not Primary or Laft files - they already contain these)
+    // case we add LIFTREJD: --chain with a liftover error (not Primary or Luft files - they already contain these)
     if (ostatus >= 1 && chain_is_loaded) {
         info_items[con_nitems(*con)] = (InfoItem){ .start   = INFO_LIFTREJD"=", 
                                                    .len     = INFO_LIFTREJD_LEN + 1, 
@@ -514,7 +514,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
         }
     }
 
-    // handle dual coordinates arising from --chain, as well as compressing DC_PRIMARY and DC_LAFT files
+    // handle dual coordinates arising from --chain, as well as compressing DC_PRIMARY and DC_LUFT files
     seg_info_field_correct_for_dual_coordinates (vb, &con, info_items, ostatus);
 
     // finalize special handling

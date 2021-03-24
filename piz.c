@@ -253,15 +253,15 @@ static void piz_read_all_ctxs (VBlock *vb, ConstSectionListEntryP *next_sl)
 static void piz_handle_dual_coords (void)
 {
     if (!z_file->z_flags.dual_coords) {
-        if (flag.laft) {
-            WARN ("FYI: ignoring the --laft option, because %s was not compressed with --chain", z_name);
-            flag.laft = 0;
+        if (flag.luft) {
+            WARN ("FYI: ignoring the --luft option, because %s was not compressed with --chain", z_name);
+            flag.luft = 0;
         }
         return;
     }
 
     // when showing the primary coordinates - skip the rejects component
-    if (!flag.laft)
+    if (!flag.luft)
         liftover_section_list_remove_rejects();
 
     // when showing in liftover coordinates, we start with the rejects component (which is reconstructed with a prefix making
@@ -295,8 +295,8 @@ static DataType piz_read_global_area (Digest *original_file_digest) // out
     }
 
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
-    // (except in --laft where dictionaries are needed to reconstruct rejects in the header)
-    if (!flag.header_only || flag.laft) {
+    // (except in --luft where dictionaries are needed to reconstruct rejects in the header)
+    if (!flag.header_only || flag.luft) {
         
         ctx_read_all_dictionaries(); // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs()
 
@@ -578,7 +578,7 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
             } 
 
             // case: we are working on the liftover rejects component (this is the first component read) - some VBs are still
-            // processing and now we have read the header of the primary component. in --laft, we need to wait with this
+            // processing and now we have read the header of the primary component. in --luft, we need to wait with this
             // header until the VBs are completed, as their output (rejected lines with a header prefix) needs to come before.
             else if (another_header && flag.processing_rejects && dispatcher_has_active_threads (dispatcher)) {
                 sl_ent--; // rewind
@@ -604,7 +604,7 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
                 
                 dispatcher_resume (dispatcher);  // in case it was paused by previous component when unbinding
 
-                if (flag.header_only && !(component_i==0 && flag.laft /* liftover-rejects part of the header */)) goto finish;
+                if (flag.header_only && !(component_i==0 && flag.luft /* liftover-rejects part of the header */)) goto finish;
 
                 // if interleaving, set the start of leaf_2 to after its TXT_HEADER
                 if (do_interleave) { 

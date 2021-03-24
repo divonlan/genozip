@@ -248,7 +248,7 @@ bool random_access_is_vb_included (uint32_t vb_i,
     ASSERTE0 (region_ra_intersection_matrix, "region_ra_intersection_matrix is NULL");
 
     // allocate bytemap. note that it allocated in evb, and will be buf_moved to the vb after it is generated 
-    ASSERTE (!buf_is_allocated (region_ra_intersection_matrix), "expecting region_ra_intersection_matrix to be unallcoated vb_i=%u", vb_i);
+    ASSERTNOTINUSE (*region_ra_intersection_matrix);
 
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i);
     

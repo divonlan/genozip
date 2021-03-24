@@ -118,10 +118,10 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     /* liftover stuff */ \
     bool is_rejects_vb;        /* ZIP and PIZ. Cannot rely on flag.processing_rejects as it may change while VB is still processing  */ \
     Buffer liftover;           /* ZIP: map from chrom_node_index (not word index!) to entry in chain_index */ \
-                               /* PIZ VCF: in --laft, the data that will go into INFO/LIFTBACK */ \
+                               /* PIZ VCF: in --luft, the data that will go into INFO/LIFTBACK */ \
     Buffer liftover_rejects;   /* ZIP generating a dual-coordinates file: txt lines rejected for liftover */ \
-    int32_t laft_reject_bytes; /* ZIP of a Laft file: number of bytes of reject data in this VB */ \
-    bool is_unsorted[2];       /* ZIP: line order of this VB[primary, laft] is unsorted */ \
+    int32_t luft_reject_bytes; /* ZIP of a Luft file: number of bytes of reject data in this VB */ \
+    bool is_unsorted[2];       /* ZIP: line order of this VB[primary, luft] is unsorted */ \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
@@ -147,7 +147,7 @@ typedef struct VBlock {
 
 #define VBLOCK_COMMON_LINES_ZIP \
     WordIndex chrom_index[2];   /* Seg: enter as node_index ; Merge: convert to word_index */ \
-    PosType pos[2];             /* arrays of [2] - { primary-coord, laft-coord } */ \
+    PosType pos[2];             /* arrays of [2] - { primary-coord, luft-coord } */ \
 
 typedef struct ZipDataLine {
     VBLOCK_COMMON_LINES_ZIP

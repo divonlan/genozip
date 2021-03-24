@@ -115,7 +115,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     
     case SEC_RECON_PLAN: {
         SectionHeaderReconPlan *h = (SectionHeaderReconPlan *)header;
-        sprintf (str, SEC_TAB "num_txt_data_bufs=%u laft=%u\n", BGEN32 (h->num_txt_data_bufs), h->h.flags.recon_plan.laft); 
+        sprintf (str, SEC_TAB "num_txt_data_bufs=%u luft=%u\n", BGEN32 (h->num_txt_data_bufs), h->h.flags.recon_plan.luft); 
         break;
     }
     
@@ -825,7 +825,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
 
 // ZIP
 void zfile_write_txt_header (Buffer *txt_header, 
-                             uint64_t unmodified_txt_header_len, // length of header before modifications, eg due to --chain or compressing a Laft file
+                             uint64_t unmodified_txt_header_len, // length of header before modifications, eg due to --chain or compressing a Luft file
                              Digest header_md5, bool is_first_txt)
 {
     SectionHeaderTxtHeader header = {

@@ -579,7 +579,7 @@ done: {
     RESTORE_FLAGS;
     
     if (flag.pair) RESTORE_FLAG (vblock_memory); // FASTQ R2 must have the same vblock_memory as R1, so it should not re-calculate in zip_dynamically_set_max_memory - otherwise txtfile_read_vblock will fail
-    if (flag.bind) RESTORE_FLAG (data_modified); // When binding, if any of the compressed files is a Laft, we don't store digests
+    if (flag.bind) RESTORE_FLAG (data_modified); // When binding, if any of the compressed files is a Luft, we don't store digests
 }}
 
 static void main_list_dir(const char *dirname)

@@ -31,7 +31,7 @@ void vb_release_vb (VBlock *vb)
     ASSERTE (!vb->gzip_compressor, "vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
 
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
-    vb->vb_data_size = vb->vb_data_size_0 = vb->laft_reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
+    vb->vb_data_size = vb->vb_data_size_0 = vb->luft_reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->is_unsorted[0] = vb->is_unsorted[1] = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;

@@ -31,7 +31,7 @@ typedef struct {
     Mutex wait_for_data;          // initialized locked, unlocked when data is moved to txt_data and is_loaded is set
 } PizVbInfo;
 
-// an entry per line of Primary and per line of Laft
+// an entry per line of Primary and per line of Luft
 typedef struct {
     uint32_t vblock_i;
     uint32_t start_line, num_lines;
@@ -39,12 +39,12 @@ typedef struct {
     PosType start_pos, end_pos;
 } LineInfo;
 
-static void sorter_show_recon_plan (bool is_laft, uint32_t num_txt_data_bufs, uint32_t vblock_mb)
+static void sorter_show_recon_plan (bool is_luft, uint32_t num_txt_data_bufs, uint32_t vblock_mb)
 {
     ARRAY (ReconPlanItem, plan, txt_file->recon_plan);
 
     iprintf ("\nReconstruction plan of %s view: entries=%u num_txt_data_bufs=%u x %u MB\n", 
-             is_laft ? "LAFT" : "PRIMARY", (unsigned)plan_len, num_txt_data_bufs, vblock_mb);
+             is_luft ? "LUFT" : "PRIMARY", (unsigned)plan_len, num_txt_data_bufs, vblock_mb);
 
     for (uint32_t i=0; i < plan_len; i++)
         iprintf ("vb=%u\tstart_line=%u\tnum_lines=%d\n", plan[i].vb_i, plan[i].start_line, plan[i].num_lines);
@@ -58,32 +58,32 @@ static void sorter_zip_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
 {
     ASSERT_DT_FUNC (vb, sizeof_zip_dataline);
     const unsigned dl_size = DT_FUNC (vb, sizeof_zip_dataline)();
-    bool is_laft = !!chrom_did_i; // 0=PRIMARY 1=LAFT
+    bool is_luft = !!chrom_did_i; // 0=PRIMARY 1=LUFT
 
-    mutex_lock (txt_file->recon_plan_mutex[is_laft]);
+    mutex_lock (txt_file->recon_plan_mutex[is_luft]);
 
-    buf_alloc_more (evb, &txt_file->line_info[is_laft], vb->lines.len, 0, LineInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
+    buf_alloc_more (evb, &txt_file->line_info[is_luft], vb->lines.len, 0, LineInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
 
     WordIndex last_chrom_word_index = WORD_INDEX_NONE;
     PosType last_pos = -1;
-    uint32_t start_i = txt_file->line_info[is_laft].len;
+    uint32_t start_i = txt_file->line_info[is_luft].len;
 
     for (uint32_t line_i=0 ; line_i < vb->lines.len ; line_i++) {
         ZipDataLine *dl = (ZipDataLine *)(&vb->lines.data[dl_size * line_i]);
-        PosType pos = dl->pos[is_laft];
-        WordIndex chrom_word_index = node_word_index (vb, chrom_did_i, dl->chrom_index[is_laft]);
+        PosType pos = dl->pos[is_luft];
+        WordIndex chrom_word_index = node_word_index (vb, chrom_did_i, dl->chrom_index[is_luft]);
 
         // special case (eg GVCF) - this line is exactly one position after previous line - just add to previous record
-        if (is_laft && chrom_word_index == WORD_INDEX_NONE) {
-            // In Laft, exclude rejected lines (we exclude here if sorted, and in vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header if not sorted)
+        if (is_luft && chrom_word_index == WORD_INDEX_NONE) {
+            // In Luft, exclude rejected lines (we exclude here if sorted, and in vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header if not sorted)
         }
         else if (last_pos >= 1 && chrom_word_index == last_chrom_word_index && pos == last_pos+1) {
-            LineInfo *last = LASTENT (LineInfo, txt_file->line_info[is_laft]);
+            LineInfo *last = LASTENT (LineInfo, txt_file->line_info[is_luft]);
             last->end_pos  = pos;
             last->num_lines++; 
         }
         else
-            NEXTENT (LineInfo, txt_file->line_info[is_laft]) = (LineInfo){
+            NEXTENT (LineInfo, txt_file->line_info[is_luft]) = (LineInfo){
                 .vblock_i   = vb->vblock_i,
                 .start_line = line_i,
                 .num_lines  = 1,
@@ -97,36 +97,36 @@ static void sorter_zip_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
     }
 
     // store information about this VB, that will help us figure out if the entire file is sorted or not
-    buf_alloc_more_zero (evb, &txt_file->vb_info[is_laft], 0, MIN (1000, vb->vblock_i), ZipVbInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
+    buf_alloc_more_zero (evb, &txt_file->vb_info[is_luft], 0, MIN (1000, vb->vblock_i), ZipVbInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
     
-    *ENT (ZipVbInfo, txt_file->vb_info[is_laft], vb->vblock_i-1) = (ZipVbInfo){ // -1 as vblock_i is 1-based
-        .is_unsorted        = vb->is_unsorted[is_laft],
+    *ENT (ZipVbInfo, txt_file->vb_info[is_luft], vb->vblock_i-1) = (ZipVbInfo){ // -1 as vblock_i is 1-based
+        .is_unsorted        = vb->is_unsorted[is_luft],
         .last_line_chrom_wi = last_chrom_word_index,
         .last_line_pos      = last_pos,
         .start_i            = start_i,
-        .len                = txt_file->line_info[is_laft].len - start_i,
+        .len                = txt_file->line_info[is_luft].len - start_i,
         .num_lines          = (uint32_t)vb->lines.len
     };
 
-    txt_file->vb_info[is_laft].len = MAX (txt_file->vb_info[is_laft].len, vb->vblock_i); // note: vblock_i is 1-based
+    txt_file->vb_info[is_luft].len = MAX (txt_file->vb_info[is_luft].len, vb->vblock_i); // note: vblock_i is 1-based
 
-    mutex_unlock (txt_file->recon_plan_mutex[is_laft]);
+    mutex_unlock (txt_file->recon_plan_mutex[is_luft]);
 }
 
 // ZIP compute thread: merge data from one VB (possibly VBs are out of order) into txt_file->vb_info/line_info
 void sorter_zip_merge_vb (VBlock *vb)
 {
     sorter_zip_merge_vb_do (vb, CHROM);
-    if (z_file->z_flags.dual_coords) // Laft coordinates exist
+    if (z_file->z_flags.dual_coords) // Luft coordinates exist
         sorter_zip_merge_vb_do (vb, DTF(ochrom));
 }
 
-static bool sorter_zip_is_file_sorted (bool is_laft)
+static bool sorter_zip_is_file_sorted (bool is_luft)
 {
     ZipVbInfo *last_v = NULL;
 
     for (uint32_t vb_i=0; vb_i < txt_file->num_vbs; vb_i++) {
-        ZipVbInfo *v = ENT (ZipVbInfo, txt_file->vb_info[is_laft], vb_i);
+        ZipVbInfo *v = ENT (ZipVbInfo, txt_file->vb_info[is_luft], vb_i);
         
         // cases file line order is NOT sorted 
         if (v->is_unsorted ||  // this vb is not sorted internally
@@ -140,22 +140,22 @@ static bool sorter_zip_is_file_sorted (bool is_laft)
     return true; // no evidence of unsortedness found, meaning it is sorted
 }
 
-static void sorter_zip_create_index (Buffer *index_buf, bool is_laft)
+static void sorter_zip_create_index (Buffer *index_buf, bool is_luft)
 {
-    buf_alloc_more (evb, index_buf, 0, txt_file->line_info[is_laft].len, uint32_t, 1, "compressed");
+    buf_alloc_more (evb, index_buf, 0, txt_file->line_info[is_luft].len, uint32_t, 1, "compressed");
     
-    ZipVbInfo *v = FIRSTENT (ZipVbInfo, txt_file->vb_info[is_laft]);
+    ZipVbInfo *v = FIRSTENT (ZipVbInfo, txt_file->vb_info[is_luft]);
 
     for (uint32_t vb_i=0; vb_i < txt_file->num_vbs; vb_i++, v++) 
         for (uint32_t line_i=v->start_i; line_i < v->start_i + v->len; line_i++)
             NEXTENT (uint32_t, *index_buf) = line_i;
 }
 
-static bool is_laft_sorter;
+static bool is_luft_sorter;
 static int sorter_line_cmp (const void *a_, const void *b_)
 {
-    LineInfo *a = ENT (LineInfo, txt_file->line_info[is_laft_sorter], *(uint32_t *)a_);
-    LineInfo *b = ENT (LineInfo, txt_file->line_info[is_laft_sorter], *(uint32_t *)b_);
+    LineInfo *a = ENT (LineInfo, txt_file->line_info[is_luft_sorter], *(uint32_t *)a_);
+    LineInfo *b = ENT (LineInfo, txt_file->line_info[is_luft_sorter], *(uint32_t *)b_);
 
     // case: different chrome: order by chrom
     if (a->chrom_wi != b->chrom_wi) return a->chrom_wi - b->chrom_wi;
@@ -265,28 +265,28 @@ static uint32_t sorter_zip_plan_reconstruction (const Buffer *line_info, const B
     return max_num_txt_data_bufs;
 }
 
-static void sorter_compress_recon_plan_do (bool is_laft)
+static void sorter_compress_recon_plan_do (bool is_luft)
 {
     #define index_buf evb->compressed // an array of uint32_t - indices into txt_file->line_info
 
     // case: no need for a thread plan, as file is sorted
-    if (sorter_zip_is_file_sorted (is_laft)) return; 
+    if (sorter_zip_is_file_sorted (is_luft)) return; 
 
     // build index sorted by VB - indices into txt_file->line_info 
-    sorter_zip_create_index (&index_buf, is_laft);
+    sorter_zip_create_index (&index_buf, is_luft);
 
     // sort lines
-    is_laft_sorter = is_laft; // ugly
+    is_luft_sorter = is_luft; // ugly
 
     START_TIMER
     qsort (index_buf.data, index_buf.len, sizeof (uint32_t), sorter_line_cmp);
     COPY_TIMER_VB (evb, sorter_compress_qsort);
 
     // find final entry in index_buf of each VB - needed to calculate how many concurrent threads will be needed for piz
-    sorter_zip_get_final_index_i (&txt_file->line_info[is_laft], &txt_file->vb_info[is_laft], &index_buf);
+    sorter_zip_get_final_index_i (&txt_file->line_info[is_luft], &txt_file->vb_info[is_luft], &index_buf);
 
     // create txt_file->reconstruction_plan
-    uint32_t num_txt_data_bufs = sorter_zip_plan_reconstruction (&txt_file->line_info[is_laft], &txt_file->vb_info[is_laft], &index_buf);
+    uint32_t num_txt_data_bufs = sorter_zip_plan_reconstruction (&txt_file->line_info[is_luft], &txt_file->vb_info[is_luft], &index_buf);
     buf_free (&index_buf)
 
     // get best codec for the reconstruction plan data
@@ -294,7 +294,7 @@ static void sorter_compress_recon_plan_do (bool is_laft)
     if (codec == CODEC_UNKNOWN) codec = CODEC_NONE; // too small for compression
 
     if (flag.show_recon_plan)
-        sorter_show_recon_plan (is_laft, num_txt_data_bufs, (uint32_t)(flag.vblock_memory >> 20));
+        sorter_show_recon_plan (is_luft, num_txt_data_bufs, (uint32_t)(flag.vblock_memory >> 20));
 
     // prepare section header and compress
     SectionHeaderReconPlan header = (SectionHeaderReconPlan){
@@ -303,7 +303,7 @@ static void sorter_compress_recon_plan_do (bool is_laft)
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderReconPlan)),
         .h.data_uncompressed_len = BGEN32 (txt_file->recon_plan.len * sizeof (ReconPlanItem)),
         .h.codec                 = codec,
-        .h.flags.recon_plan.laft = is_laft,
+        .h.flags.recon_plan.luft = is_luft,
         .num_txt_data_bufs       = BGEN32 (num_txt_data_bufs),
         .vblock_mb               = BGEN32 ((uint32_t)(flag.vblock_memory >> 20))
     };
@@ -313,15 +313,15 @@ static void sorter_compress_recon_plan_do (bool is_laft)
 
     comp_compress (evb, &evb->z_data, (SectionHeader*)&header, txt_file->recon_plan.data, NULL);
     buf_free (&txt_file->recon_plan);
-    buf_free (&txt_file->vb_info[is_laft]);
-    buf_free (&txt_file->line_info[is_laft]);
+    buf_free (&txt_file->vb_info[is_luft]);
+    buf_free (&txt_file->line_info[is_luft]);
 }
 
 void sorter_compress_recon_plan (void)
 {
     START_TIMER;
 
-    // reconstruction plans for primary and laft (might not exist)
+    // reconstruction plans for primary and luft (might not exist)
     if (txt_file->vb_info[0].len) sorter_compress_recon_plan_do (false);
     if (txt_file->vb_info[1].len) sorter_compress_recon_plan_do (true );
 
@@ -397,7 +397,7 @@ static void sorter_piz_sort_section_list_by_recon_plan (const SectionListEntry *
     FREE (vb_is_pulled_up);
 }
 
-// if --sort: read one (if unbind) or all (if concat) reconstruction plans (for primary OR laft) from z_file
+// if --sort: read one (if unbind) or all (if concat) reconstruction plans (for primary OR luft) from z_file
 // if a component has no plan (because not --sort or not in z_file) - create a trival reconstruction plan
 // re-sort all VBs within each component in sections according to VB appearance order in reconstruction plan
 void sorter_piz_get_reconstruction_plan (uint32_t component_i /* 0 if not unbinding */)
@@ -424,7 +424,7 @@ void sorter_piz_get_reconstruction_plan (uint32_t component_i /* 0 if not unbind
         }
 
         else if (flag.sort && !eof && sl->section_type == SEC_RECON_PLAN && comp_i >= first_comp_i &&
-                 sl->flags.recon_plan.laft == flag.laft) {
+                 sl->flags.recon_plan.luft == flag.luft) {
 
             zfile_get_global_section (SectionHeaderReconPlan, SEC_RECON_PLAN, sl, &evb->compressed, "compressed");
             num_txt_data_bufs = MAX (num_txt_data_bufs, BGEN32 (header.num_txt_data_bufs));
@@ -448,7 +448,7 @@ void sorter_piz_get_reconstruction_plan (uint32_t component_i /* 0 if not unbind
     num_txt_data_bufs = MIN (num_vbs, MAX (3, num_txt_data_bufs) + global_max_threads);
 
     if (flag.show_recon_plan) {
-        sorter_show_recon_plan (flag.laft, num_txt_data_bufs, vblock_mb);    
+        sorter_show_recon_plan (flag.luft, num_txt_data_bufs, vblock_mb);    
         if (exe_type == EXE_GENOCAT) exit_ok;
     }
 

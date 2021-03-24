@@ -117,9 +117,9 @@ static void zip_dynamically_set_max_memory (void)
 
         flag.vblock_memory = test_vb_sizes[test_i]; // read this amount of data
 
-        // If this is a Laft file (with LIFTREJD lines passed down from the header) - if possible, test lines beyond the 
+        // If this is a Luft file (with LIFTREJD lines passed down from the header) - if possible, test lines beyond the 
         // the rejected lines, as they have more contexts.
-        if (flag.vblock_memory < txt_file->laft_reject_bytes && test_i != num_tests-1) continue;
+        if (flag.vblock_memory < txt_file->luft_reject_bytes && test_i != num_tests-1) continue;
 
         txtfile_read_vblock (vb, true);
 
@@ -133,7 +133,7 @@ static void zip_dynamically_set_max_memory (void)
             // segment this VB
             ctx_clone (vb);
 
-            int32_t save_laft_reject_bytes = vb->laft_reject_bytes;
+            int32_t save_luft_reject_bytes = vb->luft_reject_bytes;
 
             SAVE_FLAGS;
             flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
@@ -177,9 +177,9 @@ static void zip_dynamically_set_max_memory (void)
             txt_file->unconsumed_txt.len += txt_data_copy.len;
             buf_destroy (&txt_data_copy);
 
-            // in case of Laft file - undo
+            // in case of Luft file - undo
             vb->liftover_rejects.len = 0;
-            txt_file->laft_reject_bytes += save_laft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
+            txt_file->luft_reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
             done = true;
         }
@@ -503,7 +503,7 @@ static void zip_update_txt_counters (VBlock *vb)
     // note: the liftover reject txt data is of course not counted as part of the file txt data for stats...
     if (!flag.processing_rejects) {        
         z_file->num_lines                += (int64_t)vb->lines.len; // lines in all bound files in this z_file
-        z_file->txt_data_so_far_single   += (int64_t)vb->vb_data_size;   // length of data as it would be reconstructed (as modified by --optimize or --chain or compressing a Laft file)
+        z_file->txt_data_so_far_single   += (int64_t)vb->vb_data_size;   // length of data as it would be reconstructed (as modified by --optimize or --chain or compressing a Luft file)
         z_file->txt_data_so_far_bind     += (int64_t)vb->vb_data_size;
         z_file->txt_data_so_far_single_0 += (int64_t)vb->vb_data_size_0; // length of data before any modifications
         z_file->txt_data_so_far_bind_0   += (int64_t)vb->vb_data_size_0;

@@ -238,7 +238,7 @@ typedef struct DtTranslation {
     /* 23andMe to VCF       */ { DT_ME23,   false, DT_VCF,    ME23_TOP2VCF,   4,   txtheader_me232vcf,  true,     false, NULL }, \
     /* FASTA to Phylip      */ { DT_FASTA,  false, DT_PHYLIP, FASTA_TOPLEVEL, 1.1, txtheader_fa2phy,    true,     false, NULL }, \
     /* Phylip to FASTA      */ { DT_PHYLIP, false, DT_FASTA,  PHY_TOP2FASTA,  1.1, txtheader_phy2fa,    true,     false, NULL }, \
-    /* VCF: genocat --laft  */ { DT_VCF,    false, DT_VCF,    VCF_TOPLEVEL,   1,   NULL,                true,     false, &flag.laft }, /* Length of --laft is identical, because we only allow REF/ALT exchange, not addition of alleles */ \
+    /* VCF: genocat --luft  */ { DT_VCF,    false, DT_VCF,    VCF_TOPLEVEL,   1,   NULL,                true,     false, &flag.luft }, /* Length of --luft is identical, because we only allow REF/ALT exchange, not addition of alleles */ \
 }
 // note: "factor" 
 

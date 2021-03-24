@@ -3,9 +3,9 @@ Dual-coordinates VCF files
 
 Working with dual coordinates consists of three processes:
 
-1. *Alignment* of a VCF file to a laft reference. This results in a *dual-coordinates VCF*, which is the original VCF with one additional INFO subfield per variant, which can be either LIFTOVER or LIFTREJD. The INFO/LIFTOVER subfield contains information a Liftover tool may use to liftover the VCF to the laft coordinate system, while the INFO/LIFTREJD subfield indicates that reason as to why this variant cannot be lifted over. The method of aligning a VCF to the laft reference is determined by the Aligner tool and is out of scope of this specification.
+1. *Alignment* of a VCF file to a luft reference. This results in a *dual-coordinates VCF*, which is the original VCF with one additional INFO subfield per variant, which can be either LIFTOVER or LIFTREJD. The INFO/LIFTOVER subfield contains information a Liftover tool may use to liftover the VCF to the luft coordinate system, while the INFO/LIFTREJD subfield indicates that reason as to why this variant cannot be lifted over. The method of aligning a VCF to the luft reference is determined by the Aligner tool and is out of scope of this specification.
 
-2. *Liftover* of a dual-coordinates VCF file. This results in a *Laft VCF* as follows:
+2. *Liftover* of a dual-coordinates VCF file. This results in a *Luft VCF* as follows:
    
     2.1 For variants that have a INFO/LIFTOVER subfield in the dual-coordinates VCF: These variants are lifted-over and some fields, INFO subfields and CHROM subfields are modified. The INFO/LIFTOVER subfield is replaced with an INFO/LIFTBACK subfield, described below, containing all the information a liftover software needs to liftback this variant to the primary coordinates. The selection of which fields or subfields to modify in the liftover process, and the algorithm to do so, are determined by the Liftover tool used and is out of scope of this specification.
 
@@ -13,7 +13,7 @@ Working with dual coordinates consists of three processes:
     2.2 Variants with a INFO/LIFTREJT subfield in the dual-coordinates VCF: The entire variant line is moved, as is, to the VCF header, and prefixed with "##LIFTOVER_REJECT=". 
  
  
-3. *Liftback* of a Laft VCF file. This results in a *dual-coordinates VCF*. 
+3. *Liftback* of a Luft VCF file. This results in a *dual-coordinates VCF*. 
 
     3.1 All variants are lifted-backed to the primary coordinate system using the information in INFO/LIFTBACK. The INFO/LIFTBACK subfield is replaced by an INFO/LIFTOVER subfield which is expected to be identical to the INFO/LIFTOVER subfield of the original dual-coordinates VCF prior to liftover. 
     
@@ -29,9 +29,9 @@ LIFTOVER=*CHROM*,*POS*,*REF*,*STRAND*
 Example: ``LIFTOVER=chr1,24143532,A,+``
 
 ============ ==================================================================================================
-*OCHROM*     The value of the CHROM field in the *Laft VCF*
-*OPOS*       The value of the POS field in the *Laft VCF*
-*OREF*       The value of the REF field in the *Laft VCF*
+*OCHROM*     The value of the CHROM field in the *Luft VCF*
+*OPOS*       The value of the POS field in the *Luft VCF*
+*OREF*       The value of the REF field in the *Luft VCF*
 *OSTRAND*    "-" if the ALT alleles should be reverse-complemented during lift-over (after any changes in REF and ALT), and "+" if not
 *OALTRULE*   One of: Y or N: determines how to calculate OALT
              Y: if *OREF* equals to REF, then OALT=ALT
@@ -41,15 +41,15 @@ Example: ``LIFTOVER=chr1,24143532,A,+``
 ============ ==================================================================================================
 
 The corresponding header line is: 
-``##INFO=<ID=LIFTOVER,Number=4,Type=String,Description="dual-coordinates VCF: Information for lifting over the variant to laft coordinates">``
+``##INFO=<ID=LIFTOVER,Number=4,Type=String,Description="dual-coordinates VCF: Information for lifting over the variant to luft coordinates">``
 
 1. VCF header ##DUAL_COORDINATES key 
 
-This key must exist for a dual coordinates file, and must contain one of the values: PRIMARY or LAFT, indicating the coordinates of the file.
+This key must exist for a dual coordinates file, and must contain one of the values: PRIMARY or LUFT, indicating the coordinates of the file.
 
 2. VCF header ##LIFTOVER_REJECT header key
    
-Exists in LAFT files only, one per variant rejected by lift over. The value is the variant line as-is.
+Exists in LUFT files only, one per variant rejected by lift over. The value is the variant line as-is.
 
 3. INFO/LIFTREJD subfield: 
    
@@ -81,7 +81,7 @@ Example: ``LIFTBACK=chr1,24143532,A,+,Y``
 *CHROM*     The value of the CHROM field in the *Primary VCF*
 *POS*       The value of the POS field in the *Primary VCF*
 *REF*       The value of the REF field in the *Primary VCF*
-*STRAND*    "-" if Laft's ALT alleles should be reverse-complemented before any changes to REF and ALT, "+" if not
+*STRAND*    "-" if Luft's ALT alleles should be reverse-complemented before any changes to REF and ALT, "+" if not
 *ALTRULE*   One of: Y or N: determines how to calculate ALT
             Y: if *REF* equals to OREF, then ALT=OALT
             if *REF* is equal to one of the alleles in the OALT, then ALT=OALT with that allele replaced by OREF

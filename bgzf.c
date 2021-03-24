@@ -448,7 +448,7 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
     return (uint32_t)out_size;
 } 
 
-// Called in the Compute Thread for VBs and in I/O thread for the Txt Header - fallback from 
+// PIZ: Called in the Compute Thread for VBs and in I/O thread for the Txt Header - fallback from 
 // bgzf_compress_vb in case no bgzf blocks are available and we need to make our own
 static void bgzf_compress_vb_no_blocks (VBlock *vb)
 {

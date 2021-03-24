@@ -513,9 +513,9 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     vb->vb_data_size   = vb->txt_data.len; // initial value. it may change if --optimize / --chain are used.
     vb->vb_data_size_0 = vb->txt_data.len; // this copy doesn't change with --optimize / --chain.
 
-    // ZIP of a Laft dual-coordinates file: calculate how much of the VB is rejected liftover lines
-    vb->laft_reject_bytes = MIN (vb->vb_data_size, txt_file->laft_reject_bytes);
-    txt_file->laft_reject_bytes -= vb->laft_reject_bytes;
+    // ZIP of a Luft dual-coordinates file: calculate how much of the VB is rejected liftover lines
+    vb->luft_reject_bytes = MIN (vb->vb_data_size, txt_file->luft_reject_bytes);
+    txt_file->luft_reject_bytes -= vb->luft_reject_bytes;
 
     if (!testing_memory) {
 
@@ -728,7 +728,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     *txt_line_i += (uint32_t)evb->lines.len;
 
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
-    //          also: header is modified if --chain or compressing a Laft file
+    //          also: header is modified if --chain or compressing a Luft file
     // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
     uint64_t unmodified_txt_header_len = evb->txt_data.len;
     if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(&evb->txt_data))) { 
@@ -787,7 +787,7 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
     // handle the GENOZIP header of the txt header section
     SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)evb->z_data.data;
 
-    flag.processing_rejects = flag.laft && header->h.flags.txt_header.liftover_rejects;
+    flag.processing_rejects = flag.luft && header->h.flags.txt_header.liftover_rejects;
 
     ASSERTE (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderTxtHeader)), 
              "invalid txt header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderTxtHeader));
@@ -859,12 +859,12 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
         zfile_uncompress_section (evb, header, &evb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
 
     if (evb->txt_data.len && 
-        (is_first_txt || flag.unbind || flag.laft) &&  // this is the first component, or we are unbinding (all components get a header)
+        (is_first_txt || flag.unbind || flag.luft) &&  // this is the first component, or we are unbinding (all components get a header)
         !flag.reading_reference && !flag.reading_chain) 
         DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
 
     // write txt header if it is needed:
-    if ((is_first_txt || flag.unbind || flag.laft) &&  // this is the first component, or we are unbinding (all components get a header)
+    if ((is_first_txt || flag.unbind || flag.luft) &&  // this is the first component, or we are unbinding (all components get a header)
         (!flag.no_header || z_file->z_flags.txt_is_bin) && // user didn't specify --no-header (or ignore the request if this is a binary file, eg BAM)
         !flag.reading_reference &&        // nothing is written when reading a reference
         !flag.reading_chain &&            // nothing is written when reading a chain file

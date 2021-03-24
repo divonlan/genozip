@@ -521,7 +521,7 @@ static void ref_read_one_range (VBlockP vb)
 // or this could be a .ref.genozip file (called from load_external->piz_one_file)
 void ref_load_stored_reference (void)
 {
-    ASSERTE0 (!buf_is_allocated (&ranges), "expecting ranges to be unallocated (this can happen when specifying --reference for a file that doesn't need it)");
+    ASSERTNOTINUSE (ranges);
 
     if (!(flag.show_headers && exe_type == EXE_GENOCAT)) {
 

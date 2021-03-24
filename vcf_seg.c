@@ -73,9 +73,9 @@ void vcf_seg_initialize (VBlock *vb_)
         ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[VCF_oREF], oref_special, 3, NULL);
     }
 
-    // when compressing a Laft file, some lines are already known to be rejects. we just copy them to liftover_rejects
-    if (vb->laft_reject_bytes) 
-        buf_copy (vb, &vb->liftover_rejects, &vb->txt_data, 1, 0, vb->laft_reject_bytes, "liftover_rejects");
+    // when compressing a Luft file, some lines are already known to be rejects. we just copy them to liftover_rejects
+    if (vb->luft_reject_bytes) 
+        buf_copy (vb, &vb->liftover_rejects, &vb->txt_data, 1, 0, vb->luft_reject_bytes, "liftover_rejects");
 }             
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -86,7 +86,7 @@ void vcf_seg_finalize (VBlockP vb_)
         vcf_seg_complete_missing_lines (vb);
 
     // for a dual-coordinates VCF, we offer 2 ways to reconstruct it: normally, it is reconstructed in the
-    // primary coordinates. --laft invokes the translated mode, which reconstructs in laft coordintes.
+    // primary coordinates. --luft invokes the translated mode, which reconstructs in luft coordintes.
     
     // top level snip
     SmallContainer top_level = { 
@@ -436,8 +436,8 @@ static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
 // Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
 static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value_len) // returns true if caller still needs to seg 
 {
-    // don't attempt this optimization if file is a LAFT coordinates, as we might not yet know the values of primary REF and ALT
-    if (txt_file->dual_coords == DC_LAFT) return true; // caller should seg
+    // don't attempt this optimization if file is a LUFT coordinates, as we might not yet know the values of primary REF and ALT
+    if (txt_file->dual_coords == DC_LUFT) return true; // caller should seg
 
     Context *ctx_basecounts= ctx_get_ctx (vb, dict_id_INFO_BaseCounts);
     Context *ctx_refalt = &vb->contexts[VCF_REFALT];
@@ -676,10 +676,10 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
                         HK_DC_PRIMARY "\" in the VCF header");
     }
 
-    // segging the INFO/LIFTBACK field when segging a Laft dual-coordintes file
+    // segging the INFO/LIFTBACK field when segging a Luft dual-coordintes file
     else if (dict_id.num == dict_id_INFO_LIFTBACK) { 
 
-        if (txt_file->dual_coords == DC_LAFT) {
+        if (txt_file->dual_coords == DC_LUFT) {
             // values as they appear in the REF and ALT columns of the VCF
             char *oref        = last_txt (vb, VCF_REFALT);
             unsigned oref_len = vb->contexts[VCF_oREF].last_txt_len;
@@ -694,7 +694,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
         }
         else
             WARN_ONCE0 ("FYI: Found an INFO/"INFO_LIFTBACK" subfield, but this is not a dual-coordinates VCF because it is missing \""
-                        HK_DC_LAFT "\" in the VCF header");
+                        HK_DC_LUFT "\" in the VCF header");
     }
 
     else if (dict_id.num == dict_id_INFO_LIFTREJD) {
@@ -1217,22 +1217,22 @@ static void vcf_seg_copy_line_to_reject (VBlockVCF *vb, const char *field_start_
 
 static inline void vcf_seg_assign_dl_sorted (VBlockVCF *vb, ZipDataLineVCF *dl, DidIType chrom_did_i)
 {
-    bool is_laft = !!chrom_did_i; // 0 for primary, 1 for last
+    bool is_luft = !!chrom_did_i; // 0 for primary, 1 for last
 
-    if (!vb->is_unsorted[is_laft] && vb->line_i > 0) {
+    if (!vb->is_unsorted[is_luft] && vb->line_i > 0) {
         // cases where we have evidence this VB is NOT sorted:
 
         // 1. pos is out of order
-        if( (dl->chrom_index[is_laft] == (dl-1)->chrom_index[is_laft] && dl->pos[is_laft] < (dl-1)->pos[is_laft])
+        if( (dl->chrom_index[is_luft] == (dl-1)->chrom_index[is_luft] && dl->pos[is_luft] < (dl-1)->pos[is_luft])
 
         // 2. rejected lift-over 
-        ||  (is_laft && dl->chrom_index[is_laft] == WORD_INDEX_NONE)
+        ||  (is_luft && dl->chrom_index[is_luft] == WORD_INDEX_NONE)
 
         // 3. chrom different that prev line, but already appeared in this VB
-        ||  (dl->chrom_index[is_laft] != (dl-1)->chrom_index[is_laft] && 
-             node_count (vb, chrom_did_i, dl->chrom_index[is_laft]) > 1))
+        ||  (dl->chrom_index[is_luft] != (dl-1)->chrom_index[is_luft] && 
+             node_count (vb, chrom_did_i, dl->chrom_index[is_luft]) > 1))
            
-            vb->is_unsorted[is_laft] = true;
+            vb->is_unsorted[is_luft] = true;
     }
 }
 
@@ -1255,12 +1255,12 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     DualCoordinates coords = (txt_file->dual_coords == DC_NONE)    ? DC_PRIMARY // not a dual coordinates file
                            : (txt_file->dual_coords == DC_PRIMARY) ? DC_PRIMARY // PRIMARY dual coordinates file - coordinates are primary
-                           : vb->laft_reject_bytes                 ? DC_PRIMARY // LAFT dual coordinates file - this line is a rejected line originating from ##LIFTOVER_REJECT) in primary coordinates
-                           :                                         DC_LAFT;   // LAFT dual coordinates file - this line is a laft-over line in laft coordinates
+                           : vb->luft_reject_bytes                 ? DC_PRIMARY // LUFT dual coordinates file - this line is a rejected line originating from ##LIFTOVER_REJECT) in primary coordinates
+                           :                                         DC_LUFT;   // LUFT dual coordinates file - this line is a luft-over line in luft coordinates
 
     // if --chain and this VB is not the rejects data OR 
     // if this is a dual-coordinates file in primary coordintes (i.e. might have INFO/LIFTREFD) 
-    // Note: when compressing a DC_LAFT file, we already copied the rejects in vcf_seg_initialize
+    // Note: when compressing a DC_LUFT file, we already copied the rejects in vcf_seg_initialize
     // copy line to liftover_rejects now, because we are going to destroy it. We remove it later if its not a reject.
     uint64_t save_liftover_rejects_len = vb->liftover_rejects.len;
     if ((chain_is_loaded && !vb->is_rejects_vb) || txt_file->dual_coords == DC_PRIMARY)
@@ -1298,20 +1298,20 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     const char *alt_start = seg_get_next_item (vb, ref_start, &len, GN_FORBIDEN, GN_SEP, GN_FORBIDEN, &ref_len, &separator, NULL, "REF"); 
     next_field            = seg_get_next_item (vb, alt_start, &len, GN_FORBIDEN, GN_SEP, GN_FORBIDEN, &alt_len, &separator, NULL, "ALT");
 
-    // save REF and ALT (in primary or laft coordinates) to be used for INFO fields
+    // save REF and ALT (in primary or luft coordinates) to be used for INFO fields
     vb->contexts[VCF_REFALT].last_txt = ENTNUM (vb->txt_data, ref_start); // used by vcf_seg_INFO_BaseCounts, INFO/LIFTBACK
     vb->last_txt_len(VCF_REFALT) = ref_len + alt_len + 1;
     vb->last_txt_len(VCF_oREF)   = ref_len; // we use this to store ref_len regardless if it is REF or oREF - for liftover_seg_LIFTOVER/BACK
  
     // coords=PRIMARY: REFALT is segged here and oREF is segged in liftover_seg_LIFTOVER()
-    // coords=LAFT: REFALT and oREF are segged in liftover_seg_LIFTBACK()
+    // coords=LUFT: REFALT and oREF are segged in liftover_seg_LIFTBACK()
     if (coords == DC_PRIMARY) 
         vcf_seg_ref_alt (vb_, ref_start, ref_len, alt_start, alt_len);
 
     SEG_NEXT_ITEM (VCF_QUAL);
     SEG_NEXT_ITEM (VCF_FILTER);
     
-    // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to laft coordinates
+    // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to luft coordinates
     if (chain_is_loaded)
         liftover_seg_add_INFO_LIFT_fields (vb_, VCF_oCHROM, VCF_SPECIAL_OREF, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
                                            (DictId)dict_id_INFO_LIFTREJD, (ZipDataLineP)dl);
@@ -1325,8 +1325,8 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     seg_info_field (vb_, vcf_seg_special_info_subfields, field_start, field_len, 
                     flag.processing_rejects ? LO_UNSUPPORTED               : // in the rejects file all have failed - this is some error, we don't yet know the true one
                     chain_is_loaded         ? vb->last_index (VCF_oSTATUS) : // in --chain  we got the oSTATUS in liftover_seg_add_INFO_LIFT_fields
-                    vb->laft_reject_bytes   ? LO_UNSUPPORTED               : // reject lines in Laft are all failed (happens only in txt_file->dual_coords==DC_LAFT)
-                    txt_file->dual_coords==DC_LAFT    ? LO_OK              : // non-reject lines Laft are all LO_OK. 
+                    vb->luft_reject_bytes   ? LO_UNSUPPORTED               : // reject lines in Luft are all failed (happens only in txt_file->dual_coords==DC_LUFT)
+                    txt_file->dual_coords==DC_LUFT    ? LO_OK              : // non-reject lines Luft are all LO_OK. 
                     txt_file->dual_coords==DC_PRIMARY ? LO_UNKNOWN         : // we don't know yet, we will test for existance of INFO/LEFTREFD in seg_info_field_correct_for_dual_coordinates()
                                                         LO_NONE)           ; // z_file is not a dual-coordinates file
 
@@ -1371,9 +1371,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     if (vb->last_index(VCF_oSTATUS) == LO_OK) 
         vb->liftover_rejects.len = save_liftover_rejects_len;
 
-    // in case of a reject line in a LAFT file - update laft_reject_bytes to indicate its consumption
-    if (txt_file->dual_coords == DC_LAFT && coords == DC_PRIMARY)
-        vb->laft_reject_bytes -= next_field - field_start_line;
+    // in case of a reject line in a LUFT file - update luft_reject_bytes to indicate its consumption
+    if (txt_file->dual_coords == DC_LUFT && coords == DC_PRIMARY)
+        vb->luft_reject_bytes -= next_field - field_start_line;
 
     // test if still sorted
     if (flag.sort) {

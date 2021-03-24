@@ -8,7 +8,7 @@
 //
 // Note on terminology: I find Chain file terminology very confusing an error-prone. I use a different terminology:
 // Chain: Target Genozip: Src, Primary
-// Chain: Query  Genozip: Dst, Laft (i.e. lifted-over, "laft" being an alternative past tense of "lift")
+// Chain: Query  Genozip: Dst, Luft (i.e. lifted-over, "luft" being an alternative past tense of "lift")
 
 #include "genozip.h"
 #include "seg.h"
@@ -284,7 +284,7 @@ static void chain_display_alignments (void)
         const char *dst_chrom = ctx_get_words_snip (&z_file->contexts[CHAIN_NAMEDST], aln[i].dst_chrom);
         const char *src_chrom = ctx_get_words_snip (&z_file->contexts[CHAIN_NAMESRC], aln[i].src_chrom);
 
-        fprintf (info_stream, "Primary: %s %"PRId64"-%"PRId64" Laft: %s %"PRId64"-%"PRId64"\n",
+        fprintf (info_stream, "Primary: %s %"PRId64"-%"PRId64" Luft: %s %"PRId64"-%"PRId64"\n",
                  src_chrom, aln[i].src_first_1pos, aln[i].src_last_1pos,
                  dst_chrom, aln[i].dst_first_1pos, aln[i].dst_last_1pos);
     }

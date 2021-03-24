@@ -17,11 +17,11 @@
 //                                                                    LIFTREFD are also written to the rejects file
 //                                                      component_i=1 is the rejects file containing LIFTREFD lines (again)
 //
-// genocat -v dual-crd.genozip --> laft.txt -           component_i=1 with LIFTREJD is reconstructed first and becomes part of the header
+// genocat -v dual-crd.genozip --> luft.txt -           component_i=1 with LIFTREJD is reconstructed first and becomes part of the header
 //                                                      component_i=0 is reconstructed - dropping LIFTREJD lines and lifting over LIFTOVER->LIFTBACK 
 //                                                                    lines are OUT OF ORDER due to change in coordinates 
 //
-// genozip laft.txt            --> dual-coord.genozip - LIFTREJD header lines are sent to vblock_i=1 via unconsumed_txt
+// genozip luft.txt            --> dual-coord.genozip - LIFTREJD header lines are sent to vblock_i=1 via unconsumed_txt
 //                                                      component_i=0 contains all lines first all LIFTREJD lines followed by all LIFTOVER lines  
 //                                                                    LIFTREFD lines are also written to the rejects file
 //                                                      component_i=1 is the rejects file containing LIFTREFD lines (again)
@@ -94,7 +94,7 @@ void liftover_copy_data_from_chain_file (void)
 }
 
 // returns null-terminated string of contig, or NULL if contig_i is out of range
-const char *liftover_get_laft_contig (uint32_t contig_i)
+const char *liftover_get_luft_contig (uint32_t contig_i)
 {
     if (contig_i >= dst_contigs.len) return NULL;
 
@@ -131,7 +131,7 @@ void liftover_zip_initialize (DidIType dst_contig_did_i, char special_liftback_s
     liftback_snip_id = special_liftback_snip_id;
 }
 
-// SEG: map coordinates primary->laft
+// SEG: map coordinates primary->luft
 static LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover_chrom2chainsrc, 
                                                     WordIndex *dst_contig_index, PosType *dst_1pos) // out
 {
@@ -395,7 +395,7 @@ void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, c
 }
 
 
-// PIZ with --laft: switch the order of the primary and reject txt files in the section list, to convince
+// PIZ with --luft: switch the order of the primary and reject txt files in the section list, to convince
 // piz_one_file to piz them in reverse order
 void liftover_section_list_move_rejects_to_front (void)
 {
@@ -418,7 +418,7 @@ void liftover_section_list_move_rejects_to_front (void)
     FREE (temp);
 }
 
-// PIZ without --laft: remove rejects
+// PIZ without --luft: remove rejects
 void liftover_section_list_remove_rejects (void)
 {
     SectionListEntry *primary = (SectionListEntry *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
