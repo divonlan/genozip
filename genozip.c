@@ -337,7 +337,7 @@ static void main_ask_about_unbind (void)
     fprintf (stderr, "\n");
 }
 
-static void main_genounzip (const char *z_filename, const char *txt_filename, bool is_last_z_file)
+static void main_genounzip (const char *z_filename, const char *txt_filename, int z_file_i, bool is_last_z_file)
 {
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;
@@ -389,11 +389,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         }
     }
 
-    // when using genocat to concatenate multiple files - don't show the header for the 2nd+ file
-    if (exe_type == EXE_GENOCAT && !is_first_z_file)
-        flag.no_header = true;
-
-    flags_update_piz_one_file ();
+    flags_update_piz_one_file (z_file_i);
     
     // set txt_filename from genozip file name (inc. extensions if translating or --bgzf)
     if (!txt_filename && !flag.to_stdout && !flag.unbind) 
@@ -759,7 +755,7 @@ int main (int argc, char **argv)
                                       flag.out_filename, file_i, !next_input_file || is_last_txt_file, argv[0]); 
                         break;
 
-            case PIZ  : main_genounzip (next_input_file, flag.out_filename, is_last_z_file); break;           
+            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); break;           
 
             case LIST : main_genols (next_input_file, false, NULL, false); break;
 
