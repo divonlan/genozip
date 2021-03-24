@@ -346,6 +346,7 @@ WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genoc
                          windows/LICENSE.for-installer.txt windows/readme.txt
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
+# Note: this doesn't work in genozip-prod/ because genozip-installer.ifp contains absolute paths to genozip/
 docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LICENSE.non-commercial.txt 
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
