@@ -50,7 +50,8 @@
         "system_error": "c",
         "thread": "c",
         "dict_id.h": "c",
-        "url.h": "c"
+        "url.h": "c",
+        "arch.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",

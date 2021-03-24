@@ -374,8 +374,8 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     if (z_file->data_type == DT_SAM && z_file->z_flags.txt_is_bin && flag.out_dt==-1 && exe_type == EXE_GENOCAT)
         flag.out_dt = DT_SAM;
 
-    // if this is a bound file, and we don't have --unbind or --force, we ask the user
-    if (z_file->num_components >= 2 && !flag.unbind && !flag.force && !flag.out_filename)
+    // if this is genounzip of a bound file, and we don't have --unbind or --force, we ask the user
+    if (exe_type == EXE_GENOUNZIP && z_file->num_components >= 2 && !flag.unbind && !flag.force && !flag.out_filename)
         main_ask_about_unbind();
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
@@ -388,6 +388,10 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
             RESTORE_VALUE (z_file);
         }
     }
+
+    // when using genocat to concatenate multiple files - don't show the header for the 2nd+ file
+    if (exe_type == EXE_GENOCAT && !is_first_z_file)
+        flag.no_header = true;
 
     flags_update_piz_one_file ();
     
@@ -755,7 +759,7 @@ int main (int argc, char **argv)
                                       flag.out_filename, file_i, !next_input_file || is_last_txt_file, argv[0]); 
                         break;
 
-            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i==0); break;           
+            case PIZ  : main_genounzip (next_input_file, flag.out_filename, is_last_z_file); break;           
 
             case LIST : main_genols (next_input_file, false, NULL, false); break;
 

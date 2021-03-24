@@ -399,3 +399,9 @@ bug fixes, including major bug with mc:i optional field in SAM
 
 11.0.9
 - Fix bug with --downsample in combination with --interleaved
+
+11.0.10
+- Fix bug with concatenating multiple files with genocat
+- genocat <file1> <file2>.... now will show the header of only the first file. To show headers of all files use 
+  genounzip --stdout instead.
+  
