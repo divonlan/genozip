@@ -559,7 +559,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
     return false; // no new value
 }
 
-bool fasta_piz_read_one_vb (VBlock *vb, ConstSectionListEntryP sl)
+bool fasta_piz_read_one_vb (VBlock *vb, ConstSecLiEntP sl)
 { 
     // if we're grepping we we uncompress and reconstruct the DESC from the main thread, and terminate here if this VB is to be skipped
     if ((flag.grep || flag.regions) && !piz_test_grep (vb)) return false; 

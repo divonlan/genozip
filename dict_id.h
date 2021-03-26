@@ -40,7 +40,7 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_FORMAT_GQ, dict_id_FORMAT_DS,
                 dict_id_INFO_AC,  dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD, // some VCF INFO subfields
                 dict_id_INFO_DP4, dict_id_INFO_SF, dict_id_INFO_END, dict_id_INFO_SVLEN, dict_id_WindowsEOL,
-                dict_id_INFO_LIFTOVER, dict_id_INFO_LIFTBACK, dict_id_INFO_LIFTREJD, 
+                dict_id_INFO_LIFTOVER, dict_id_INFO_LIFTBACK, dict_id_INFO_LIFTREJT, 
                 dict_id_INFO_BaseCounts,
                 
                 // tags from VEP (Varient Effect Predictor) and similar tools

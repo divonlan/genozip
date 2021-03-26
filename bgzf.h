@@ -50,7 +50,7 @@ extern struct FlagsBgzf bgzf_get_compression_level (const char *filename, const 
 // PIZ side
 //---------
 
-extern bool bgzf_load_isizes (ConstSectionListEntryP sl_ent);
+extern bool bgzf_load_isizes (ConstSecLiEntP sl_ent);
 extern void bgzf_calculate_blocks_one_vb (VBlockP vb, uint32_t vb_txt_data_len);
 extern void bgzf_compress_vb (VBlockP vb);
 extern void bgzf_write_to_disk (ConstBufferP txt_data, ConstBufferP bgzf_blocks, BufferP compressed);

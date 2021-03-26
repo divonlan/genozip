@@ -1094,14 +1094,14 @@ void ctx_compress_dictionaries (void)
 // -------------------------------------
 // PIZ: Read and decompress dictionaries
 // -------------------------------------
-static const SectionListEntry *dict_sl = NULL; 
+static const SecLiEnt *dict_sl = NULL; 
 static Context *dict_ctx;
 
 static void ctx_dict_read_one_vb (VBlockP vb)
 {
     buf_alloc_old (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
 
-    if (!sections_get_next_section_of_type (&dict_sl, SEC_DICT, false, false))
+    if (!sections_next_sec1 (&dict_sl, SEC_DICT, false, false))
         return; // we're done - no more SEC_DICT sections
 
     // create context if if section is skipped, for containters to work (skipping a section should be mirror in 
@@ -1125,7 +1125,7 @@ static void ctx_dict_read_one_vb (VBlockP vb)
     // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are FRAGMENT_SIZE or a bit less, allowing pre-allocation
     if (header && new_ctx && z_file->genozip_version >= 9) {
         unsigned num_fragments=0; 
-        for (const SectionListEntry *sl=dict_sl; sl->dict_id.num == dict_ctx->dict_id.num; sl++) num_fragments++;
+        for (const SecLiEnt *sl=dict_sl; sl->dict_id.num == dict_ctx->dict_id.num; sl++) num_fragments++;
 
         // get size: for multi-fragment dictionaries, first fragment will be at or slightly less than FRAGMENT_SIZE, which is a power of 2.
         // this allows us to calculate the FRAGMENT_SIZE with which this file was compressed and hence an upper bound on the size

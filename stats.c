@@ -27,20 +27,20 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_
 
     for (uint64_t i=0; i < z_file->section_list_buf.len; i++) {
 
-        SectionListEntry *section = ENT (SectionListEntry, z_file->section_list_buf, i);
+        SecLiEnt *section = ENT (SecLiEnt, z_file->section_list_buf, i);
         int64_t after_sec = (i == z_file->section_list_buf.len - 1) ? z_file->disk_so_far : (section+1)->offset;
         int64_t sec_size = after_sec - section->offset;
 
         count_per_section[i]++; // we're optimistically assuming section will be count_per_section - we will revert if not
 
-        if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
+        if (section->dict_id.num == dict_id.num && section->st == SEC_DICT)
             *dict_compressed_size += sec_size;
 
-        else if (section->dict_id.num == dict_id.num && section->section_type == SEC_B250)
+        else if (section->dict_id.num == dict_id.num && section->st == SEC_B250)
             *b250_compressed_size += sec_size;
 
-        else if ((section->dict_id.num == dict_id.num && section->section_type == SEC_LOCAL) ||
-                 (section->section_type == non_ctx_sec))
+        else if ((section->dict_id.num == dict_id.num && section->st == SEC_LOCAL) ||
+                 (section->st == non_ctx_sec))
             *local_compressed_size += sec_size;
              
         else count_per_section[i]--; // acually... not count_per_section!
@@ -51,14 +51,14 @@ static void stats_check_count (uint64_t all_z_size, const int *count_per_section
 {
     if (all_z_size == z_file->disk_so_far) return; // all good
 
-    ARRAY (SectionListEntry, sections, z_file->section_list_buf);
+    ARRAY (SecLiEnt, sections, z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) 
         if (!count_per_section[i]) 
-            WARN ("stats_check_count: Section not counted: %s section_i=%u\n", st_name (sections[i].section_type), i);
+            WARN ("stats_check_count: Section not counted: %s section_i=%u\n", st_name (sections[i].st), i);
         else if (count_per_section[i] > 1) 
             WARN ("stats_check_count: Section overcounted: %s section_i=%u dict=%s counted %u times\n", 
-                   st_name (sections[i].section_type), i, dis_dict_id (sections[i].dict_id).s, count_per_section[i]);
+                   st_name (sections[i].st), i, dis_dict_id (sections[i].dict_id).s, count_per_section[i]);
 
     WARN ("Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
           str_uint_commas (all_z_size).s, str_uint_commas (z_file->disk_so_far).s, (int32_t)(z_file->disk_so_far - all_z_size));
@@ -374,7 +374,7 @@ void stats_display (void)
 
     buf_print (buf , false);
 
-    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_STATS, false);
+    const SecLiEnt *sl = sections_get_first_section_of_type (SEC_STATS, false);
 
     if (z_file->disk_size < (1<<20))  // no need to print this note if total size > 1MB, as the ~2K of overhead is rounded off anyway
         // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 2 sections in the file - since stats text is generated before these sections are compressed
@@ -385,7 +385,7 @@ void stats_display (void)
 
 void stats_read_and_display (void)
 {
-    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_STATS, true);
+    const SecLiEnt *sl = sections_get_first_section_of_type (SEC_STATS, true);
     if (!sl) return; // genozip file does not contain stats sections (SEC_STATS was introduced in v 7.0.5)
 
     // read and uncompress the requested stats section

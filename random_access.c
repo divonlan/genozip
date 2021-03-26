@@ -445,7 +445,7 @@ uint32_t random_access_verify_all_contigs_same_length (void)
 
 void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const char *buf_name, const char *show_index_msg)
 {
-    const SectionListEntry *ra_sl = sections_get_first_section_of_type (sec_type, true);
+    const SecLiEnt *ra_sl = sections_get_first_section_of_type (sec_type, true);
     if (!ra_sl) return; // section doesn't exist
 
     zfile_get_global_section (SectionHeader, sec_type, ra_sl, ra_buf, buf_name);

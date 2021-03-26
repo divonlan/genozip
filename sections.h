@@ -69,7 +69,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
 typedef enum __attribute__ ((__packed__)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX } StoreType; // values for SectionFlags.ctx.store
 
-// goes into SectionHeader.flags and also SectionListEntry.flags
+// goes into SectionHeader.flags and also SecLiEnt.flags
 typedef union SectionFlags {  
     uint8_t flags;
 
@@ -293,14 +293,14 @@ typedef struct {
 } ReconPlanItem;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
-typedef struct SectionListEntry {
-    uint64_t offset;           // offset of this section in the file
-    DictId dict_id;            // used if this section is a DICT, LOCAL or a B250 section
+typedef struct SecLiEnt {
+    uint64_t offset;            // offset of this section in the file
+    DictId dict_id;             // used if this section is a DICT, LOCAL or a B250 section
     uint32_t vblock_i;
-    SectionType section_type;  // 1 byte
-    SectionFlags flags;        // same flags as in section header, since v12 (before was "unused")
+    SectionType st;             // 1 byte
+    SectionFlags flags;         // same flags as in section header, since v12 (before was "unused")
     uint8_t unused[2];         
-} SectionListEntry;
+} SecLiEnt;
 
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
@@ -343,17 +343,17 @@ extern void sections_list_concat (VBlockP vb);
 // PIZ stuff
 // ---------
 
-extern const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail);
-extern bool sections_get_next_section_of_type2 (const SectionListEntry **sl_ent, SectionType st1, SectionType st2, bool must_be_next_section, bool seek);
-#define sections_get_next_section_of_type(sl_ent,st,must_be_next_section,seek) sections_get_next_section_of_type2(sl_ent,st,SEC_NONE,must_be_next_section,seek)
+extern const SecLiEnt *sections_get_first_section_of_type (SectionType st, bool soft_fail);
+extern bool sections_next_sec2 (const SecLiEnt **sl_ent, SectionType st1, SectionType st2, bool must_be_next_section, bool seek);
+#define sections_next_sec1(sl_ent,st,must_be_next_section,seek) sections_next_sec2(sl_ent,st,SEC_NONE,must_be_next_section,seek)
 
-extern const SectionListEntry *sections_get_last_section_of_type2 (const SectionListEntry *sl, SectionType st1, SectionType st2);
+extern const SecLiEnt *sections_last_sec2 (const SecLiEnt *sl, SectionType st1, SectionType st2);
 
 extern uint32_t sections_count_sections (SectionType st);
-extern const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
+extern const SecLiEnt *sections_vb_first (uint32_t vb_i, bool soft_fail);
 
-extern void sections_count_component_vbs (const SectionListEntry *sl, uint32_t *num_vbs, uint32_t *first_vb);
-extern const SectionListEntry *sections_pull_vb_up (uint32_t vb_i, const SectionListEntry *sl);
+extern void sections_count_component_vbs (const SecLiEnt *sl, uint32_t *num_vbs, uint32_t *first_vb);
+extern const SecLiEnt *sections_pull_vb_up (uint32_t vb_i, const SecLiEnt *sl);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);

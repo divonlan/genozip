@@ -423,11 +423,11 @@ int32_t zfile_read_section_do (File *file,
                                uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the main thread (vb=0)
                                Buffer *data, const char *buf_name, // buffer to append 
                                SectionType expected_sec_type,
-                               const SectionListEntry *sl,
+                               const SecLiEnt *sl,
                                uint32_t header_size)   // NULL for no seeking
 {
-    ASSERTE (!sl || expected_sec_type == sl->section_type, "expected_sec_type=%s but encountered sl->section_type=%s. vb_i=%u",
-             st_name (expected_sec_type), st_name(sl->section_type), vb->vblock_i);
+    ASSERTE (!sl || expected_sec_type == sl->st, "expected_sec_type=%s but encountered sl->st=%s. vb_i=%u",
+             st_name (expected_sec_type), st_name(sl->st), vb->vblock_i);
 
     if (sl && file == z_file && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
     uint32_t unencrypted_header_size = header_size;
@@ -611,8 +611,8 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
     // read genozip header
     uint64_t footer_offset = BGEN64 (footer.genozip_header_offset);
     
-    SectionListEntry dummy_sl = { .section_type = SEC_GENOZIP_HEADER,
-                                  .offset       = footer_offset };
+    SecLiEnt dummy_sl = { .st     = SEC_GENOZIP_HEADER,
+                                  .offset = footer_offset };
 
     // header might be smaller for older versions - we limit our reading of it to the entire section size so we don't
     // fail due to end-of-file. This is just so we can observe the section number, and give a proper error message
@@ -688,7 +688,7 @@ bool zfile_read_genozip_header (Digest *digest, uint64_t *txt_data_size, uint64_
     if (created) memcpy (created, header->created, FILE_METADATA_LEN);
 
     zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", 0, SEC_GENOZIP_HEADER);
-    z_file->section_list_buf.len /= sizeof (SectionListEntry); // fix len
+    z_file->section_list_buf.len /= sizeof (SecLiEnt); // fix len
     BGEN_sections_list();
 
     if (flag.show_gheader) {
@@ -741,7 +741,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
 
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
-    header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
+    header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SecLiEnt));
     header.h.codec                 = CODEC_BZ2;
     header.h.flags.genozip_header  = (struct FlagsGenozipHeader) {
         .txt_is_bin   = DTPT (is_binary),
@@ -799,13 +799,13 @@ void zfile_compress_genozip_header (Digest single_component_digest)
 
     // prepare section list for disk - Big Endian and length in bytes
     BGEN_sections_list();
-    z_file->section_list_buf.len *= sizeof (SectionListEntry); // change to counting bytes
+    z_file->section_list_buf.len *= sizeof (SecLiEnt); // change to counting bytes
 
     // compress section into z_data - to be eventually written to disk by the main thread
     comp_compress (evb, z_data, &header.h, z_file->section_list_buf.data, NULL);
 
     // restore
-    z_file->section_list_buf.len /= sizeof (SectionListEntry); 
+    z_file->section_list_buf.len /= sizeof (SecLiEnt); 
     BGEN_sections_list();
 
     if (flag.show_gheader) sections_show_gheader (&header); 

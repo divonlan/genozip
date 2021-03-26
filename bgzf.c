@@ -292,12 +292,12 @@ struct FlagsBgzf bgzf_get_compression_level (const char *filename, const uint8_t
 // PIZ SIDE
 //---------
 
-bool bgzf_load_isizes (const SectionListEntry *sl_ent) 
+bool bgzf_load_isizes (const SecLiEnt *sl_ent) 
 {
     // skip passed all VBs of this component, and read SEC_BGZF - the last section of the component - if it exists
     // but stop if we encounter the next component's SEC_TXT_HEADER before seeing the BGZF
-    if (!sections_get_next_section_of_type2 (&sl_ent, SEC_BGZF, SEC_TXT_HEADER, false, false) // updates sl_ent, but its a local var, doesn't affect our caller
-        || sl_ent->section_type == SEC_TXT_HEADER)
+    if (!sections_next_sec2 (&sl_ent, SEC_BGZF, SEC_TXT_HEADER, false, false) // updates sl_ent, but its a local var, doesn't affect our caller
+        || sl_ent->st == SEC_TXT_HEADER)
         return false; // this component doesn't contain a BGZF section
 
     int32_t offset = zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_BGZF, sl_ent);

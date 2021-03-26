@@ -117,7 +117,7 @@ static void zip_dynamically_set_max_memory (void)
 
         flag.vblock_memory = test_vb_sizes[test_i]; // read this amount of data
 
-        // If this is a Luft file (with LIFTREJD lines passed down from the header) - if possible, test lines beyond the 
+        // If this is a Luft file (with LIFTREJT lines passed down from the header) - if possible, test lines beyond the 
         // the rejected lines, as they have more contexts.
         if (flag.vblock_memory < txt_file->luft_reject_bytes && test_i != num_tests-1) continue;
 

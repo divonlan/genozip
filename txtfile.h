@@ -24,7 +24,7 @@ extern const char *txtfile_dump_filename (VBlockP vb, const char *base_name, con
 extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
 
 extern bool txtfile_header_to_genozip (uint32_t *vcf_line_i);
-extern void txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Digest *digest);
+extern void txtfile_genozip_to_txt_header (ConstSecLiEntP sl, Digest *digest);
 
 uint32_t txtfile_get_bound_headers_len(void); // for stats
 

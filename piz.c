@@ -232,19 +232,19 @@ done:
     COPY_TIMER (compute);
 }
 
-static void piz_read_all_ctxs (VBlock *vb, ConstSectionListEntryP *next_sl)
+static void piz_read_all_ctxs (VBlock *vb, ConstSecLiEntP *next_sl)
 {
     // ctxs that have dictionaries are already initialized, but others (eg local data only) are not
     ctx_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts);
 
-    while ((*next_sl)->section_type == SEC_B250 || (*next_sl)->section_type == SEC_LOCAL) {
+    while ((*next_sl)->st == SEC_B250 || (*next_sl)->st == SEC_LOCAL) {
         uint32_t section_start = vb->z_data.len;
         *ENT (uint32_t, vb->z_section_headers, vb->z_section_headers.len) = section_start; 
 
         // create a context even if section is skipped, for containters to work (skipping a section should be mirrored in a container filter)
         ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, (*next_sl)->dict_id);
 
-        int32_t ret = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", (*next_sl)->section_type, *next_sl); // returns 0 if section is skipped
+        int32_t ret = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", (*next_sl)->st, *next_sl); // returns 0 if section is skipped
 
         if (ret) vb->z_section_headers.len++;
         (*next_sl)++;                             
@@ -384,7 +384,7 @@ static bool piz_read_one_vb (VBlock *vb)
 {
     START_TIMER; 
 
-    ConstSectionListEntryP sl = sections_vb_first (vb->vblock_i, false); 
+    ConstSecLiEntP sl = sections_vb_first (vb->vblock_i, false); 
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
     
@@ -473,7 +473,7 @@ static Digest piz_one_file_verify_digest (Digest original_file_digest)
 }
 
 // returns false if VB was dispatched, and true if vb was skipped
-static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSectionListEntryP sl_ent, uint32_t component_i)
+static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent, uint32_t component_i)
 {
     static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
     if (!random_access_is_vb_included (sl_ent->vblock_i, &region_ra_intersection_matrix)) return true; // skip this VB if not included
@@ -502,7 +502,7 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSectionListEntryP s
 void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_z_file, bool is_last_z_file)
 {
     static Dispatcher dispatcher = NULL; // static dispatcher - with flag.unbind, we use the same dispatcher when pizzing components
-    static ConstSectionListEntryP sl_ent = NULL, sl_ent_leaf_2=NULL; // preserve for unbinding multiple files
+    static ConstSecLiEntP sl_ent = NULL, sl_ent_leaf_2=NULL; // preserve for unbinding multiple files
 
     // read genozip header
     Digest original_file_digest = DIGEST_NONE;
@@ -532,7 +532,7 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
     }
     
     else if (flag.unbind) {
-        if (!sections_get_next_section_of_type (&sl_ent, SEC_TXT_HEADER, false, true)) return; // unbinding - no more components
+        if (!sections_next_sec1 (&sl_ent, SEC_TXT_HEADER, false, true)) return; // unbinding - no more components
         sl_ent--; // rewind;
     
         dispatcher_set_input_exhausted (dispatcher, false); // accept more input 
@@ -553,13 +553,13 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
         // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a vblock and compute it
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
 
-            ConstSectionListEntryP *sl_p = &sl_ent;
+            ConstSecLiEntP *sl_p = &sl_ent;
 
             // note when interleaving: either leaf 1 or 2 may encounter a VB_HEADER, but only leaf_1 will encounter a TXT_HEADER bc we skipped it for leaf 2
-            bool another_header = sections_get_next_section_of_type2 (sl_p, SEC_TXT_HEADER, SEC_VB_HEADER, false, true);
+            bool another_header = sections_next_sec2 (sl_p, SEC_TXT_HEADER, SEC_VB_HEADER, false, true);
 
             // case: SEC_VB_HEADER
-            if (another_header && sl_ent->section_type == SEC_VB_HEADER) {
+            if (another_header && sl_ent->st == SEC_VB_HEADER) {
                 
                 if (flag.one_vb && flag.one_vb != (*sl_p)->vblock_i) // we want only one VB, but not this one
                     { (*sl_p)++; continue; }

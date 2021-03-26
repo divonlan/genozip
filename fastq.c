@@ -295,7 +295,7 @@ void fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i)
 
     vb->pair_vb_i = pair_vb_i;
 
-    const SectionListEntry *sl = sections_vb_first (vb->pair_vb_i, true);
+    const SecLiEnt *sl = sections_vb_first (vb->pair_vb_i, true);
     ASSERTE (sl, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
 
     // get num_lines from vb header
@@ -308,13 +308,13 @@ void fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i)
     sl++;
     buf_alloc_old (vb, &vb->z_section_headers, MAX ((MAX_DICTS * 2 + 50),  vb->z_section_headers.len + MAX_SUBFIELDS + 10) * sizeof(uint32_t), 0, "z_section_headers"); // room for section headers  
 
-    while (sl->section_type == SEC_B250 || sl->section_type == SEC_LOCAL) {
+    while (sl->st == SEC_B250 || sl->st == SEC_LOCAL) {
         
         if (dict_id_is_fastq_desc_sf (sl->dict_id) || sl->dict_id.num == dict_id_fields[FASTQ_DESC] ||
             sl->dict_id.num == dict_id_fields[FASTQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_STRAND]) { 
             
             NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
-            int32_t ret = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "data", sl->section_type, sl); // returns 0 if section is skipped
+            int32_t ret = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "data", sl->st, sl); // returns 0 if section is skipped
             ASSERTE (ret != EOF, "vb_i=%u failed to read from pair_vb=%u dict_id=%s", vb->vblock_i, vb->pair_vb_i, dis_dict_id (sl->dict_id).s);
         }
         
@@ -326,7 +326,7 @@ void fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i)
 }
 
 // main thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
-bool fastq_piz_read_one_vb (VBlockP vb_, ConstSectionListEntryP sl)
+bool fastq_piz_read_one_vb (VBlockP vb_, ConstSecLiEntP sl)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint32_t pair_vb_i=0;
@@ -519,14 +519,14 @@ bool fastq_piz_is_paired (void)
     if (z_file->genozip_version >= 10) return false;
 
     // dts_paired is not set, and this is v8 for v9. We proceed to inspect GPOS.local of the 2nd component to see if it is paired
-    ConstSectionListEntryP sl = NULL;
-    sections_get_next_section_of_type (&sl, SEC_TXT_HEADER, false, false); // first component txt header
-    sections_get_next_section_of_type (&sl, SEC_TXT_HEADER, false, false); // second component txt header
-    sections_get_next_section_of_type (&sl, SEC_VB_HEADER,  false, false); // first VB of second component txt header
+    ConstSecLiEntP sl = NULL;
+    sections_next_sec1 (&sl, SEC_TXT_HEADER, false, false); // first component txt header
+    sections_next_sec1 (&sl, SEC_TXT_HEADER, false, false); // second component txt header
+    sections_next_sec1 (&sl, SEC_VB_HEADER,  false, false); // first VB of second component txt header
 
     // scan all B250 and Local looking for evidence of pairing
-    while (sections_get_next_section_of_type2 (&sl, SEC_B250, SEC_LOCAL, true, false)) {            
-        bool is_paired = zfile_read_section_header (evb, sl->offset, sl->vblock_i, sl->section_type)->flags.ctx.paired;
+    while (sections_next_sec2 (&sl, SEC_B250, SEC_LOCAL, true, false)) {            
+        bool is_paired = zfile_read_section_header (evb, sl->offset, sl->vblock_i, sl->st)->flags.ctx.paired;
         buf_free (&evb->compressed); // zfile_read_section_header used this for the header
 
         if (is_paired) return (z_file->z_flags.dts_paired = true); // assign and return

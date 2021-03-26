@@ -5,29 +5,29 @@
 
 // Dual-coordinates genozip/genocat file flow:
 //
-// genozip -C source.txt       --> dual-coord.genozip - component_i=0 contains all lines, each with LIFTOVER or LIFTREJD 
+// genozip -C source.txt       --> dual-coord.genozip - component_i=0 contains all lines, each with LIFTOVER or LIFTREJT 
 //                                                                    LIFTREFD are also written to the rejects file
 //                                                      component_i=1 is the rejects file containing LIFTREFD lines (again)
 //
-// genocat dual-crd.genozip    --> primary.txt -        component_i=0 is reconstructed - lines have LIFTOVER or LIFTREJD 
+// genocat dual-crd.genozip    --> primary.txt -        component_i=0 is reconstructed - lines have LIFTOVER or LIFTREJT 
 //                                                                    lines are IN ORDER
 //                                                      component_i=1 is skipped.
 //
-// genozip primary.txt         --> dual-coord.genozip - component_i=0 contains all lines, each with LIFTOVER or LIFTREJD 
+// genozip primary.txt         --> dual-coord.genozip - component_i=0 contains all lines, each with LIFTOVER or LIFTREJT 
 //                                                                    LIFTREFD are also written to the rejects file
 //                                                      component_i=1 is the rejects file containing LIFTREFD lines (again)
 //
-// genocat -v dual-crd.genozip --> luft.txt -           component_i=1 with LIFTREJD is reconstructed first and becomes part of the header
-//                                                      component_i=0 is reconstructed - dropping LIFTREJD lines and lifting over LIFTOVER->LIFTBACK 
+// genocat -v dual-crd.genozip --> luft.txt -           component_i=1 with LIFTREJT is reconstructed first and becomes part of the header
+//                                                      component_i=0 is reconstructed - dropping LIFTREJT lines and lifting over LIFTOVER->LIFTBACK 
 //                                                                    lines are OUT OF ORDER due to change in coordinates 
 //
-// genozip luft.txt            --> dual-coord.genozip - LIFTREJD header lines are sent to vblock_i=1 via unconsumed_txt
-//                                                      component_i=0 contains all lines first all LIFTREJD lines followed by all LIFTOVER lines  
+// genozip luft.txt            --> dual-coord.genozip - LIFTREJT header lines are sent to vblock_i=1 via unconsumed_txt
+//                                                      component_i=0 contains all lines first all LIFTREJT lines followed by all LIFTOVER lines  
 //                                                                    LIFTREFD lines are also written to the rejects file
 //                                                      component_i=1 is the rejects file containing LIFTREFD lines (again)
 //
-// genocat dual-crd.genozip    --> primary.txt          component_i=0 is reconstructed - first LIFTREJD then LIFTOVER lines
-//                                                                    lines are OUT OF ORDER (LIFTREJD first)
+// genocat dual-crd.genozip    --> primary.txt          component_i=0 is reconstructed - first LIFTREJT then LIFTOVER lines
+//                                                                    lines are OUT OF ORDER (LIFTREJT first)
 //                                                      component_i=1 is skipped.
 //
 
@@ -181,9 +181,9 @@ static LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover
 // Segging a NON-dual-coordinates file called when genozip --chain
 // --------------------------------------------------------------
 
-// Create either (LIFTOVER and LIFTBACK) or LIFTREJD records when aligning a NON-dual-coordinates file (using --chain)
+// Create either (LIFTOVER and LIFTBACK) or LIFTREJT records when aligning a NON-dual-coordinates file (using --chain)
 LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_did_i, char orefalt_special_snip_id,
-                                                  DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejd_dict_id,
+                                                  DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejt_dict_id,
                                                   ZipDataLine *dl)
 {
     LiftOverStatus ostatus = liftover_get_liftover_coords (vb, &vb->liftover, &dl->chrom_index[1], &dl->pos[1]);
@@ -229,19 +229,19 @@ LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_di
         dl->pos[1] = 0;
 
         unsigned ostatus_len = strlen (liftover_status_names[ostatus]);
-        seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJD }), 2, liftrejd_dict_id, ostatus_len);
+        seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJT }), 2, liftrejt_dict_id, ostatus_len);
 
-        vb->vb_data_size += ostatus_len; // we modified the txt by adding this string to INFO/LIFTREJD - update
+        vb->vb_data_size += ostatus_len; // we modified the txt by adding this string to INFO/LIFTREJT - update
     }
 
     return ostatus;
 }
 
 // -----------------------------------------------------------------------
-// Segging LIFTOVER / LIFTBACK / LIFTREJD records of dual-coordinates files
+// Segging LIFTOVER / LIFTBACK / LIFTREJT records of dual-coordinates files
 // Liftover record: CHROM,POS,REF,STRAND,ALTRULE
 // Liftback record: CHROM,POS,REF,STRAND,ALTRULE
-// Liftrejd snip:   REJECTION_REASON
+// Liftrejt snip:   REJECTION_REASON
 // -----------------------------------------------------------------------
 
 // parse INFO_LIFTOVER/BACK to its componets. note that it is destructive - it replaces the ','s with 0
@@ -365,10 +365,10 @@ void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback
     vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = LO_OK;
 }
 
-void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len,
+void liftover_seg_LIFTREJT (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len,
                             ZipDataLine *dl)
 {
-    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains variants with the INFO/"INFO_LIFTREJD" subfield", txt_name);
+    ASSINP (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains variants with the INFO/"INFO_LIFTREJT" subfield", txt_name);
 
     dl->chrom_index[1] = WORD_INDEX_NONE;
     dl->pos[1] = 0;
@@ -382,7 +382,7 @@ void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, c
 
             unsigned status_len = strlen (value);
             seg_by_did_i (vb, value, status_len, ochrom_did_i + OSTATUS_OFFSET, status_len);
-            seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJD }), 2, (DictId)dict_id_INFO_LIFTREJD, 0); // 0 bc no comma and name is accounted for by INFO
+            seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJT }), 2, (DictId)dict_id_INFO_LIFTREJT, 0); // 0 bc no comma and name is accounted for by INFO
 
             ((char *)value)[value_len] = save; // recover
 

@@ -368,25 +368,25 @@ static int sort_by_subfield_name (const void *a, const void *b)
     return strncmp (ina->start, inb->start, MIN (ina->len, inb->len));
 }
 
-// if ostatus is not known yet (seg of a Primary line), check for LIFTREJD subfield
+// if ostatus is not known yet (seg of a Primary line), check for LIFTREJT subfield
 static inline LiftOverStatus seg_info_field_get_ostatus_by_con (unsigned nitems, InfoItem *info_items)
 {
     for (unsigned i=0; i < nitems; i++)
-        if (info_items[i].dict_id.num == dict_id_INFO_LIFTREJD) 
+        if (info_items[i].dict_id.num == dict_id_INFO_LIFTREJT) 
             return LO_UNSUPPORTED;
 
-    return LO_OK; // no LIFTREJD - Primary line is not rejected
+    return LO_OK; // no LIFTREJT - Primary line is not rejected
 }
 
 static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *con, InfoItem *info_items, LiftOverStatus ostatus)
 {
-    // case: --chain and INFO is '.' - remove the '.' as we are adding INFO/LIFTOVER or LIFTREJD
+    // case: --chain and INFO is '.' - remove the '.' as we are adding INFO/LIFTOVER or LIFTREJT
     if (ostatus >= 0 && (con_nitems(*con) == 1 && info_items->len == 1 && *info_items->start == '.')) {
         con_dec_nitems (*con);
         vb->vb_data_size--;
     }
 
-    // if ostatus is not known yet (seg of a Primary line), check for LIFTREJD subfield
+    // if ostatus is not known yet (seg of a Primary line), check for LIFTREJT subfield
     if (ostatus == LO_UNKNOWN) 
         ostatus = seg_info_field_get_ostatus_by_con (con_nitems(*con), info_items);
 
@@ -422,13 +422,13 @@ static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *
         // note: we don't increase vb_data_size for LIFTBACK because its not displayed in the default reconstruction of the file
     }
 
-    // case we add LIFTREJD: --chain with a liftover error (not Primary or Luft files - they already contain these)
+    // case we add LIFTREJT: --chain with a liftover error (not Primary or Luft files - they already contain these)
     if (ostatus >= 1 && chain_is_loaded) {
-        info_items[con_nitems(*con)] = (InfoItem){ .start   = INFO_LIFTREJD"=", 
-                                                   .len     = INFO_LIFTREJD_LEN + 1, 
-                                                   .dict_id = (DictId)dict_id_INFO_LIFTREJD };
+        info_items[con_nitems(*con)] = (InfoItem){ .start   = INFO_LIFTREJT"=", 
+                                                   .len     = INFO_LIFTREJT_LEN + 1, 
+                                                   .dict_id = (DictId)dict_id_INFO_LIFTREJT };
         
-        vb->vb_data_size += INFO_LIFTREJD_LEN + 1 + (con_nitems(*con) > 0); // +1 for '=', +1 for ';' if we already have item(s)
+        vb->vb_data_size += INFO_LIFTREJT_LEN + 1 + (con_nitems(*con) > 0); // +1 for '=', +1 for ';' if we already have item(s)
 
         con_inc_nitems (*con);
     }
@@ -444,8 +444,8 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
     // max number of Container items consumed by Liftover stuff, reducing the max number of other subfields 
     unsigned max_liftover_items = ostatus == LO_NONE    ? 0  // not a dual-coordinates frile
                                 : ostatus == LO_OK      ? 2  // INFO_LIFTOVER and INFO_LIFTBACK
-                                : ostatus == LO_UNKNOWN ? 2  // Either INFO_LIFTOVER and INFO_LIFTBACK Or INFO_LIFTREJD
-                                :                         1; // INFO_LIFTREJD
+                                : ostatus == LO_UNKNOWN ? 2  // Either INFO_LIFTOVER and INFO_LIFTBACK Or INFO_LIFTREJT
+                                :                         1; // INFO_LIFTREJT
 
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true };

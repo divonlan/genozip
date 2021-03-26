@@ -3,7 +3,7 @@ Dual-coordinates VCF files
 
 Working with dual coordinates consists of three processes:
 
-1. *Alignment* of a VCF file to a luft reference. This results in a *dual-coordinates VCF*, which is the original VCF with one additional INFO subfield per variant, which can be either LIFTOVER or LIFTREJD. The INFO/LIFTOVER subfield contains information a Liftover tool may use to liftover the VCF to the luft coordinate system, while the INFO/LIFTREJD subfield indicates that reason as to why this variant cannot be lifted over. The method of aligning a VCF to the luft reference is determined by the Aligner tool and is out of scope of this specification.
+1. *Alignment* of a VCF file to a luft reference. This results in a *dual-coordinates VCF*, which is the original VCF with one additional INFO subfield per variant, which can be either LIFTOVER or LIFTREJT. The INFO/LIFTOVER subfield contains information a Liftover tool may use to liftover the VCF to the luft coordinate system, while the INFO/LIFTREJT subfield indicates that reason as to why this variant cannot be lifted over. The method of aligning a VCF to the luft reference is determined by the Aligner tool and is out of scope of this specification.
 
 2. *Liftover* of a dual-coordinates VCF file. This results in a *Luft VCF* as follows:
    
@@ -51,17 +51,17 @@ This key must exist for a dual coordinates file, and must contain one of the val
    
 Exists in LUFT files only, one per variant rejected by lift over. The value is the variant line as-is.
 
-3. INFO/LIFTREJD subfield: 
+3. INFO/LIFTREJT subfield: 
    
-LIFTREJD=*REASON*
+LIFTREJT=*REASON*
 
-Example: ``LIFTREJD=NO_CHROM``. 
+Example: ``LIFTREJT=NO_CHROM``. 
 
 It represents the reasons for liftover rejection. The following reasons are defined, and a Liftover tool may add additional ones:
 
 =========== ==================================================================================================
 *String*    *Rejection reason*
-OK          Liftover successful (reserved, but usually doesn't appear in INFO/LIFTREJD)
+OK          Liftover successful (reserved, but usually doesn't appear in INFO/LIFTREJT)
 NO_CHROM    CHROM is not available in lift-over reference
 NO_MAPPING  POS does not map to the lift-over reference
 REF_SPLIT   The first and last base in a multi-base REF map to different alignments in the lift-over reference
@@ -69,7 +69,7 @@ UNSUPPORTED The variant is mappable in principal, but this case is not supported
 =========== ==================================================================================================
 
 The corresponding header line is: 
-``##INFO=<ID=LIFTREJD,Number=1,Type=String,Description="dual-coordinates VCF: Reason variant was rejected for lift over">``
+``##INFO=<ID=LIFTREJT,Number=1,Type=String,Description="dual-coordinates VCF: Reason variant was rejected for lift over">``
 
 4. INFO/LIFTBACK subfield:
 

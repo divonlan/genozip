@@ -581,7 +581,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     // genocat of dual coords implies sorting unless overridden with --unsorted
     if (exe_type == EXE_GENOCAT && z_file->z_flags.dual_coords && !flag.unsorted) 
         flag.sort = true;
-        
+
     // when using genocat to concatenate multiple files - don't show the header for the 2nd+ file
     if (exe_type == EXE_GENOCAT && z_file_i >= 1) {
         flag.no_header = true;
@@ -639,7 +639,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
             "%s: --downsample is not supported for %s files", z_name, dt_name (flag.out_dt));
 
     flag.may_drop_lines = exe_type == EXE_GENOCAT && 
-                          (flag.grep || flag.regions || flag.downsample || flag.luft || flag.genobwa || 
+                          (flag.grep || flag.regions || flag.downsample || flag.genobwa || flag.luft ||
                            flag.header_only_fast || (flag.no_header && flag.out_dt == DT_FASTA) ||
                            (z_file->data_type == DT_ME23 && flag.out_dt == DT_VCF) || // translating ME23->VCF
                            (z_file->data_type == DT_SAM && flag.out_dt == DT_FASTQ)); // translating SAM->FASTQ

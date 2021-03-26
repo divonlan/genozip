@@ -68,7 +68,7 @@ typedef struct DataTypeProperties {
     void (*piz_header_init)(void);// called at the beginning of piz of each file
     void (*piz_initialize)(void); // called after reconstructing the txt header and before compute threads
     void (*piz_finalize)(void);   // called by main thread after each z_file reconstruction is done
-    bool (*piz_read_one_vb)(VBlockP, ConstSectionListEntryP);
+    bool (*piz_read_one_vb)(VBlockP, ConstSecLiEntP);
     bool (*is_skip_secetion)(VBlockP, SectionType, DictId);
     void (*reconstruct_seq)(VBlockP, ContextP, const char *, unsigned);
     CONTAINER_FILTER_FUNC ((*container_filter)); // called for containers as defined in the container

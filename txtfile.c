@@ -777,7 +777,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 }
 
 // PIZ: reads the txt header from the genozip file and outputs it to the reconstructed txt file
-void txtfile_genozip_to_txt_header (const SectionListEntry *sl, 
+void txtfile_genozip_to_txt_header (const SecLiEnt *sl, 
                                     Digest *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
 {
     bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);

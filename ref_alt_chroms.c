@@ -73,7 +73,7 @@ just_compress:
 
 void ref_alt_chroms_load (void)
 {
-    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_ALT_CHROMS, true);
+    const SecLiEnt *sl = sections_get_first_section_of_type (SEC_REF_ALT_CHROMS, true);
     if (!sl) return; // we don't have alternate chroms
 
     zfile_get_global_section (SectionHeader, SEC_REF_ALT_CHROMS, sl, &evb->compressed, "compressed");

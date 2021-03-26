@@ -54,7 +54,7 @@ uint32_t layer_bitmask[64];  // 1s in the layer_bits[] LSbs
 static Buffer refhash_buf = {}; // One buffer that includes all layers
 uint32_t **refhashs = NULL;  // array of pointers to into refhash_buf.data - beginning of each layer 
 
-static const SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
+static const SecLiEnt *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
 // used for parallelizing read / write of the refhash
 static uint32_t next_task_layer = 0;
@@ -308,10 +308,10 @@ static void refhash_read_one_vb (VBlockP vb)
 {
     buf_alloc_old (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
 
-    if (!sections_get_next_section_of_type (&sl_ent, SEC_REF_HASH, true, false))
+    if (!sections_next_sec1 (&sl_ent, SEC_REF_HASH, true, false))
         return; // no more refhash sections
 
-    int32_t section_offset = zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, "z_data", sl_ent->section_type, sl_ent);
+    int32_t section_offset = zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, "z_data", sl_ent->st, sl_ent);
 
     if (((SectionHeaderRefHash *)vb->z_data.data)->layer_i >= num_layers)
         return; // don't read the high layers if beyond the requested num_layers

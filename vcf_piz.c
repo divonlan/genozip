@@ -463,7 +463,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_OREF)
     return true; // new_value was set
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFTREJD)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFTREJT)
 {
     ctx_get_snip_by_word_index (&vb->contexts[VCF_oSTATUS], vb->last_index(VCF_oSTATUS), &snip, &snip_len);
     RECONSTRUCT (snip, snip_len);

@@ -219,7 +219,7 @@ void ref_contigs_sort_chroms (void)
 // read and uncompress a contigs section (when pizzing the reference file or pizzing a data file with a stored reference)
 void ref_contigs_load_contigs (void)
 {
-    const SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, true);
+    const SecLiEnt *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, true);
     if (!sl) return; // section doesn't exist
 
     zfile_get_global_section (SectionHeader, SEC_REF_CONTIGS, sl, &loaded_contigs, "loaded_contigs");

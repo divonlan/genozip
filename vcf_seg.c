@@ -140,7 +140,7 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == dict_id_INFO_DP              ||
         dict_id.num == dict_id_INFO_LIFTOVER        ||
         dict_id.num == dict_id_INFO_LIFTBACK        ||
-        dict_id.num == dict_id_INFO_LIFTREJD        ||
+        dict_id.num == dict_id_INFO_LIFTREJT        ||
 
         // AC_* AN_* AF_* are small
         ((dict_id.id[0] == ('A' | 0xc0)) && (dict_id.id[1] == 'C' || dict_id.id[1] == 'F' || dict_id.id[1] == 'N') && dict_id.id[2] == '_');
@@ -697,8 +697,8 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
                         HK_DC_LUFT "\" in the VCF header");
     }
 
-    else if (dict_id.num == dict_id_INFO_LIFTREJD) {
-        liftover_seg_LIFTREJD (vb_, dict_id, VCF_oCHROM, *this_value, *this_value_len, (ZipDataLineP)DATA_LINE (vb->line_i));
+    else if (dict_id.num == dict_id_INFO_LIFTREJT) {
+        liftover_seg_LIFTREJT (vb_, dict_id, VCF_oCHROM, *this_value, *this_value_len, (ZipDataLineP)DATA_LINE (vb->line_i));
         return false; 
     }
 
@@ -1314,7 +1314,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to luft coordinates
     if (chain_is_loaded)
         liftover_seg_add_INFO_LIFT_fields (vb_, VCF_oCHROM, VCF_SPECIAL_OREF, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
-                                           (DictId)dict_id_INFO_LIFTREJD, (ZipDataLineP)dl);
+                                           (DictId)dict_id_INFO_LIFTREJT, (ZipDataLineP)dl);
 
     // INFO
     if (vcf_num_samples)

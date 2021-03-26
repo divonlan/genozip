@@ -409,6 +409,7 @@ void chain_load (void)
     TEMP_VALUE (command, PIZ);
 
     TEMP_FLAG (quiet, true); // don't show progress indicator for the chain file - it is very fast 
+    flag.may_drop_lines = true; // if fact, we drop all the lines
     piz_one_file (0, false, false);
     RESTORE_FLAG (quiet);
 

@@ -51,7 +51,7 @@ typedef struct {
 
 typedef struct {
     unsigned comp_i;
-    const SectionListEntry *txt_header_sl;
+    const SecLiEnt *txt_header_sl;
     uint32_t first_vb_i;
     uint32_t num_vbs;
 } PizCompInfo;
@@ -376,22 +376,22 @@ void sorter_move_liftover_rejects_to_front (void)
 {
     ASSERTE0 (flag.luft, "Expecting flag.luft=true");
 
-    SectionListEntry *primary = (SectionListEntry *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
+    SecLiEnt *primary = (SecLiEnt *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
 
-    SectionListEntry *rejects = primary;
-    sections_get_next_section_of_type ((const SectionListEntry **)&rejects, SEC_TXT_HEADER, false, true);
+    SecLiEnt *rejects = primary;
+    sections_next_sec1 ((const SecLiEnt **)&rejects, SEC_TXT_HEADER, false, true);
 
-    SectionListEntry *after = rejects;
-    sections_get_next_section_of_type ((const SectionListEntry **)&after, SEC_DICT, false, true); // first non-VB section type
+    SecLiEnt *after = rejects;
+    sections_next_sec1 ((const SecLiEnt **)&after, SEC_DICT, false, true); // first non-VB section type
 
     unsigned num_primary_secs = rejects - primary;
     unsigned num_rejects_sec  = after - rejects;
 
     // now swap them...
-    SectionListEntry *temp = MALLOC (num_rejects_sec * sizeof (SectionListEntry));
-    memcpy (temp, rejects, num_rejects_sec * sizeof (SectionListEntry));
-    memmove (primary + num_rejects_sec, primary, num_primary_secs * sizeof (SectionListEntry));
-    memcpy (primary, temp, num_rejects_sec * sizeof (SectionListEntry));
+    SecLiEnt *temp = MALLOC (num_rejects_sec * sizeof (SecLiEnt));
+    memcpy (temp, rejects, num_rejects_sec * sizeof (SecLiEnt));
+    memmove (primary + num_rejects_sec, primary, num_primary_secs * sizeof (SecLiEnt));
+    memcpy (primary, temp, num_rejects_sec * sizeof (SecLiEnt));
     FREE (temp);
 }
 
@@ -400,19 +400,19 @@ void sorter_remove_liftover_rejects (void)
 {
     ASSERTE0 (!flag.luft, "Expecting flag.luft=false");
 
-    SectionListEntry *primary = (SectionListEntry *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
+    SecLiEnt *primary = (SecLiEnt *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
 
-    SectionListEntry *rejects = primary;
-    sections_get_next_section_of_type ((const SectionListEntry **)&rejects, SEC_TXT_HEADER, false, true);
+    SecLiEnt *rejects = primary;
+    sections_next_sec1 ((const SecLiEnt **)&rejects, SEC_TXT_HEADER, false, true);
 
-    SectionListEntry *after = rejects;
-    sections_get_next_section_of_type ((const SectionListEntry **)&after, SEC_DICT, false, true); // first non-VB section type
+    SecLiEnt *after = rejects;
+    sections_next_sec1 ((const SecLiEnt **)&after, SEC_DICT, false, true); // first non-VB section type
 
     unsigned num_rejects_sec  = after - rejects;
-    unsigned num_after_sec    = AFTERENT (SectionListEntry, z_file->section_list_buf) - after;
+    unsigned num_after_sec    = AFTERENT (SecLiEnt, z_file->section_list_buf) - after;
 
     // now remove rejects
-    memmove (rejects, after, num_after_sec * sizeof (SectionListEntry));
+    memmove (rejects, after, num_after_sec * sizeof (SecLiEnt));
     z_file->section_list_buf.len -= num_rejects_sec;
     z_file->num_components--;
 }
@@ -435,13 +435,13 @@ static uint32_t sorter_piz_initialize_components (void)
     z_file->comp_info.len = z_file->num_components;
 
     uint32_t num_vbs = 0;
-    const SectionListEntry *sl = NULL;
+    const SecLiEnt *sl = NULL;
 
     for (unsigned i=0; i < z_file->num_components; i++) {
 
         PizCompInfo *comp = ENT (PizCompInfo, z_file->comp_info, i);
 
-        ASSERTE (sections_get_next_section_of_type (&sl, SEC_TXT_HEADER, 0, 0),
+        ASSERTE (sections_next_sec1 (&sl, SEC_TXT_HEADER, 0, 0),
                  "Expecting %s to have %u components, but found only %u", z_name, z_file->num_components, i);
 
         *comp = (PizCompInfo){ .comp_i = i, .txt_header_sl = sl, .first_vb_i = 0xffffffff };
@@ -461,14 +461,14 @@ static void sorter_piz_init_vb_info (void)
     z_file->vb_info[0].len = sorter_piz_initialize_components();
     buf_alloc_zero (evb, &z_file->vb_info[0], 0, z_file->vb_info[0].len, PizVbInfo, 1, "z_file->vb_info");
 
-    const SectionListEntry *sl = NULL;
+    const SecLiEnt *sl = NULL;
     uint32_t v_i=0;
     for (unsigned comp_i=0; comp_i < z_file->comp_info.len; comp_i++) {
 
         uint32_t comp_num_vbs = ENT (PizCompInfo, z_file->comp_info, comp_i)->num_vbs;
         for (uint32_t v_comp_i=0; v_comp_i < comp_num_vbs; v_comp_i++, v_i++) {
 
-            ASSERTE0 (sections_get_next_section_of_type (&sl, SEC_VB_HEADER, 0, 0), "Unexpected end of section list");
+            ASSERTE0 (sections_next_sec1 (&sl, SEC_VB_HEADER, 0, 0), "Unexpected end of section list");
             
             PizVbInfo *v = ENT (PizVbInfo, z_file->vb_info[0], v_i);
             v->vblock_i = sl->vblock_i;
@@ -502,21 +502,21 @@ static void sorter_piz_add_trival_plan (const PizCompInfo *comp)
 // also interleaves VBs of the two components and eliminates the second TXT_HEADER entry
 static void sorter_piz_add_interleave_plan (const PizCompInfo *comp)
 {
-    const SectionListEntry *sl1 = comp->txt_header_sl;
-    const SectionListEntry *sl2 = (comp+1)->txt_header_sl;
+    const SecLiEnt *sl1 = comp->txt_header_sl;
+    const SecLiEnt *sl2 = (comp+1)->txt_header_sl;
 
-    ((SectionListEntry *)sl2)->section_type = SEC_NONE; // effectively merge the components by neutralizing the 2nd TXT_HEADER
+    ((SecLiEnt *)sl2)->st = SEC_NONE; // effectively merge the components by neutralizing the 2nd TXT_HEADER
 
     unsigned num_vbs_per_component=0;
 
-    while (sections_get_next_section_of_type2 (&sl1, SEC_VB_HEADER, SEC_NONE, false, false) && // 2nd component TXT_HEADER is not SEC_NONE
-           sl1->section_type == SEC_VB_HEADER) {
+    while (sections_next_sec2 (&sl1, SEC_VB_HEADER, SEC_NONE, false, false) && // 2nd component TXT_HEADER is not SEC_NONE
+           sl1->st == SEC_VB_HEADER) {
 
-        ASSERTE0 (sections_get_next_section_of_type2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) &&
-                  sl2->section_type == SEC_VB_HEADER, "Failed to find matching VB in second component, when --interleave");
+        ASSERTE0 (sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) &&
+                  sl2->st == SEC_VB_HEADER, "Failed to find matching VB in second component, when --interleave");
 
-        const SectionListEntry *last_1 = sections_get_last_section_of_type2 (sl1, SEC_B250, SEC_LOCAL);
-        const SectionListEntry *last_2 = sections_get_last_section_of_type2 (sl2, SEC_B250, SEC_LOCAL);
+        const SecLiEnt *last_1 = sections_last_sec2 (sl1, SEC_B250, SEC_LOCAL);
+        const SecLiEnt *last_2 = sections_last_sec2 (sl2, SEC_B250, SEC_LOCAL);
         
         buf_alloc (evb, &txt_file->recon_plan, 2, 1000, ReconPlanItem, 1.5, "recon_plan");
         NEXTENT (ReconPlanItem, txt_file->recon_plan) = (ReconPlanItem){ 
@@ -533,25 +533,33 @@ static void sorter_piz_add_interleave_plan (const PizCompInfo *comp)
     ASSERTE0 (num_vbs_per_component, "Component has no VBs");
     
     // we've iterated to the end of component1 VBs, make sure component2 doesn't have any additional VB
-    ASSERTE (!sections_get_next_section_of_type2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) ||
-             sl2->section_type == SEC_TXT_HEADER, // either no more VB/TXT headers, or the next header is TXT
+    ASSERTE (!sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) ||
+             sl2->st == SEC_TXT_HEADER, // either no more VB/TXT headers, or the next header is TXT
              "First component has %u num_vbs_per_component VBs, but second component has more, when --interleave", num_vbs_per_component);
 }
 
-// returns true if this component has a SEC_RECON_PLAN section
-static bool sorter_piz_is_comp_have_recon_plan (const PizCompInfo *comp)
+// returns SL if this component has a SEC_RECON_PLAN section which matchs flag.luft
+static const SecLiEnt *sorter_piz_get_recon_plan_sl (const PizCompInfo *comp)
 {
-    const SectionListEntry *sl = comp->txt_header_sl;
+    const SecLiEnt *sl = comp->txt_header_sl + 1;
 
-    return sections_get_next_section_of_type2 (&sl, SEC_RECON_PLAN, SEC_TXT_HEADER, 0, 0) &&
-           sl->section_type == SEC_RECON_PLAN;
+    if (sections_next_sec2 (&sl, SEC_RECON_PLAN, SEC_TXT_HEADER, 0, 0) && sl->st == SEC_RECON_PLAN) {
+
+        if (sl->flags.recon_plan.luft == flag.luft) 
+            return sl;  // first recon plan matches flag.luft
+                
+        if ((sl+1)->st == SEC_RECON_PLAN && (sl+1)->flags.recon_plan.luft == flag.luft) 
+            return sl+1;  // 2nd recon plan matches flag.luft
+    }
+    
+    return NULL; // no RECON_PLAN matching flag.luft was found in this component
 }
 
 // for each VB in the component pointed by sl, sort VBs according to first appearance in recon plan
-static void sorter_piz_add_plan_from_recon_section (const PizCompInfo *comp, 
+static void sorter_piz_add_plan_from_recon_section (const PizCompInfo *comp, const SecLiEnt *recon_plan_sl,
                                                     uint32_t *num_txt_data_bufs, uint32_t *vblock_mb) // out
 {
-    zfile_get_global_section (SectionHeaderReconPlan, SEC_RECON_PLAN, comp->txt_header_sl, 
+    zfile_get_global_section (SectionHeaderReconPlan, SEC_RECON_PLAN, recon_plan_sl, 
                               &evb->compressed, "compressed");
 
     // assign outs
@@ -570,7 +578,7 @@ static void sorter_piz_add_plan_from_recon_section (const PizCompInfo *comp,
 
     ARRAY (const ReconPlanItem, plan, evb->compressed);
     
-    const SectionListEntry *sl = comp->txt_header_sl;
+    const SecLiEnt *sl = comp->txt_header_sl;
     for (uint64_t i=0; i < plan_len; i++)
         if (!vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i]) {
             // move all sections of vb_i to be immediately after sl ; returns last section of vb_i after move
@@ -602,13 +610,14 @@ static void sorter_piz_create_plan (uint32_t component_i /* 0 if not unbinding *
     for (unsigned comp_i = first_comp_i; comp_i <= last_comp_i; comp_i += 1 + flag.interleave) {
 
         PizCompInfo *comp = ENT (PizCompInfo, z_file->comp_info, comp_i);
+        const SecLiEnt *recon_plan_sl;
 
         // case: interleave the VBs of two components - we ignore RECON_PLAN sections 
         if (flag.interleave) 
             sorter_piz_add_interleave_plan (comp);
 
-        else if (flag.sort && sorter_piz_is_comp_have_recon_plan (comp))
-            sorter_piz_add_plan_from_recon_section (comp, &num_txt_data_bufs, &vblock_mb);
+        else if (flag.sort && (recon_plan_sl = sorter_piz_get_recon_plan_sl (comp)))
+            sorter_piz_add_plan_from_recon_section (comp, recon_plan_sl, &num_txt_data_bufs, &vblock_mb);
 
         else 
             sorter_piz_add_trival_plan (comp);
@@ -756,7 +765,7 @@ static void *sorter_piz_writer (void *unused)
                 break;
 
             default: 
-                sorter_piz_write_line_range (v, plan->start_line, plan->num_lines);
+                sorter_piz_write_line_range (v, plan[i].start_line, plan[i].num_lines);
                 break;
         }
     }

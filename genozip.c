@@ -244,9 +244,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     // if --unbind, OR if the user did genols on one file (not a directory), show bound components, if there are any
     if (flag.unbind || (!flag.multiple_files && !recursive && z_file->num_components >= 2)) {
         buf_add_string (evb, &str_buf, "Components:\n");
-        const SectionListEntry *sl_ent = NULL;
+        const SecLiEnt *sl_ent = NULL;
         uint64_t num_lines_count=0;
-        while (sections_get_next_section_of_type (&sl_ent, SEC_TXT_HEADER, false, false)) {
+        while (sections_next_sec1 (&sl_ent, SEC_TXT_HEADER, false, false)) {
             zfile_read_section_header (evb, sl_ent->offset, sl_ent->vblock_i, SEC_TXT_HEADER);
 
             SectionHeaderTxtHeader *header = FIRSTENT (SectionHeaderTxtHeader, evb->compressed);
@@ -270,30 +270,6 @@ finish:
         buf_print (&str_buf, false);
         buf_free (&str_buf);
     }
-}
-
-// if this is a bound file, and we don't have --unbind or --force, we ask the user
-static void main_ask_about_unbind (void)
-{
-    if (  flag.to_stdout           || // we don't ask if we're outputing to stdout as we can't unbind
-          !isatty(0) || !isatty(2) || // if we stdin or stderr is redirected - we cannot ask the user an interactive question
-          flag.test                || // we don't ask if we're just testing          
-          flag.genocat_no_reconstruct)     // we don't ask we're not reconstructing bc user only wants metadata
-        return; 
-
-    fprintf (stderr, "\n%s: %s contains %u bound files. You may either:\n"
-                     "y) uncompress and unbind - retrieve the individual files (or use --unbind=<prefix> to add a prefix) ; or-\n"
-                     "n) uncompress to one large file\n"
-                     "Note: in the future, you may silence this question with --force\n\n", 
-                     global_cmd, z_name, z_file->num_components);
-        
-    // read all chars available on stdin, so that if we're processing multiple files - and we ask this question
-    // for a subsequent file later - we don't get left overs of this response
-    char read_buf[1000];
-    str_query_user ("Do you wish to unbind this file? ([y] or n) ", read_buf, sizeof(read_buf), str_verify_y_n, "Y");
-
-    if (read_buf[0] == 'Y') flag.unbind = ""; // unbind with no prefix
-    fprintf (stderr, "\n");
 }
 
 static void main_genounzip (const char *z_filename, const char *txt_filename, int z_file_i, bool is_last_z_file)
