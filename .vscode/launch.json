@@ -16,7 +16,7 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
              
-            "args": ["bug.genozip", "--interleave", "--downsample=2"],
+            "args": ["test\\tmp\\output.genozip"],
             //"args": ["test\\test.human2-R1.100K.fq.gz", "test\\test.human2-R2.100K.fq.gz", "-2fobug.genozip", "-B1", "-edata\\GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip"],
             //"args": ["test\\test.360_merged_2.50.vcf.gz", "-ft"],
 
