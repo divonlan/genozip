@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_bam.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -147,7 +147,7 @@ static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, i
 static inline void bam_rewrite_cigar (VBlockSAM *vb, uint16_t n_cigar_op, const uint32_t *cigar)
 {
     if (!n_cigar_op) {
-        buf_alloc (vb, &vb->textual_cigar, 2, 2, "textual_cigar");
+        buf_alloc_old (vb, &vb->textual_cigar, 2, 2, "textual_cigar");
         NEXTENT (char, vb->textual_cigar) = '*';
         goto finish;
     }
@@ -166,7 +166,7 @@ static inline void bam_rewrite_cigar (VBlockSAM *vb, uint16_t n_cigar_op, const 
         else                        len += 9;
     }
 
-    buf_alloc (vb, &vb->textual_cigar, len + 1 /* for \0 */, 2, "textual_cigar");
+    buf_alloc_old (vb, &vb->textual_cigar, len + 1 /* for \0 */, 2, "textual_cigar");
 
     for (uint16_t i=0; i < n_cigar_op; i++) {
         uint32_t subcigar = LTEN32 (cigar[i]);
@@ -209,7 +209,7 @@ static void bam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_s
 // re-writes BAM format SEQ into textual SEQ in vb->textual_seq
 static inline void bam_rewrite_seq (VBlockSAM *vb, uint32_t l_seq, const char *next_field)
 {
-    buf_alloc (vb, &vb->textual_seq, l_seq+1 /* +1 for last half-byte */, 1.5, "textual_seq");
+    buf_alloc_old (vb, &vb->textual_seq, l_seq+1 /* +1 for last half-byte */, 1.5, "textual_seq");
 
     if (!l_seq) {
         NEXTENT (char, vb->textual_seq) = '*';
@@ -287,7 +287,7 @@ const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field,
 
     uint32_t max_len = (*type == 'B') ? (12 * GET_UINT32 (next_field) + 10) : // worst case scenario for item: "-1000000000,"
                        30;
-    buf_alloc (vb, &vb->textual_opt, max_len, 2, "textual_opt"); // a rather inefficient max in case of arrays, to do: tighten the calculation
+    buf_alloc_old (vb, &vb->textual_opt, max_len, 2, "textual_opt"); // a rather inefficient max in case of arrays, to do: tighten the calculation
 
     if (*type != 'B')
         next_field = bam_rewrite_one_optional_number (vb, next_field, *type);

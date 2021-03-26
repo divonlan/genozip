@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sections.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -32,7 +32,7 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 
     ASSERTE0 (!has_dict_id || dict_id.num, "dict_id=0");
     
-    buf_alloc_more (vb, &vb->section_list_buf, 1, 50, SectionListEntry, 2, "section_list_buf");
+    buf_alloc (vb, &vb->section_list_buf, 1, 50, SectionListEntry, 2, "section_list_buf");
     
     NEXTENT (SectionListEntry, vb->section_list_buf) = (SectionListEntry) {
         .section_type = header->section_type,
@@ -43,13 +43,13 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
     };
 }
 
-// Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file section list - just before 
+// Called by ZIP main thread. concatenates a vb or dictionary section list to the z_file section list - just before 
 // writing those sections to the disk. we use the current disk position to update the offset
 void sections_list_concat (VBlock *vb)
 {
     if (!vb->section_list_buf.len) return;
 
-    buf_alloc_more (evb, &z_file->section_list_buf, vb->section_list_buf.len, 0, SectionListEntry, 2, "z_file->section_list_buf");
+    buf_alloc (evb, &z_file->section_list_buf, vb->section_list_buf.len, 0, SectionListEntry, 2, "z_file->section_list_buf");
 
     SectionListEntry *dst = AFTERENT (SectionListEntry, z_file->section_list_buf);
     SectionListEntry *src = FIRSTENT (SectionListEntry, vb->section_list_buf);
@@ -100,26 +100,21 @@ bool sections_get_next_section_of_type2 (const SectionListEntry **sl_ent, // opt
     return found;
 }
 
-// find the first and last vb_i of a the immediately previous bound file, start from an sl in this file
-void sections_get_prev_component_vb_i (const SectionListEntry *sl, // any sl of the current file
-                                  uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i) //out
+// section iterator. returns true last section starting from the section after sl_ent, that is of one of st1 or st2
+// (i.e. the following section is not st1 or st2)
+const SectionListEntry *sections_get_last_section_of_type2 (const SectionListEntry *sl, SectionType st1, SectionType st2)
 {
-#   define SAFTEY ASSERTE0 ((char*)sl > z_file->section_list_buf.data, "cannot find previous file VBs")
+    while (sl < AFTERENT (const SectionListEntry, z_file->section_list_buf) - 1) {
 
-    // search back to current file's txt header
-    do { SAFTEY; sl--; } while (sl->section_type != SEC_TXT_HEADER);
+        sl = sl ? (sl + 1) : FIRSTENT (const SectionListEntry, z_file->section_list_buf); 
 
-    // search back to previous file's last VB header
-    do { SAFTEY; sl--; } while (sl->section_type != SEC_VB_HEADER);
-    *prev_file_last_vb_i = sl->vblock_i;
-
-    // search back to the previous file's txt header
-    do { SAFTEY; sl--; } while (sl->section_type != SEC_TXT_HEADER);
-
-    sl++;
-    *prev_file_first_vb_i = sl->vblock_i;
-
-#   undef SAFETY
+        if (!((st1 != SEC_NONE && sl->section_type == st1) ||
+              (st2 != SEC_NONE && sl->section_type == st2))) {
+            break;
+        }
+    } 
+    
+    return sl - 1; // sl is either on the first section that is NOT st1 or st2, or we are after the section list
 }
 
 // count how many sections we have of a certain type
@@ -133,7 +128,7 @@ uint32_t sections_count_sections (SectionType st)
     return count;
 }
 
-// called by PIZ I/O : vcf_zfile_read_one_vb. returns the first section of this vb_i
+// called by PIZ main thread : vcf_zfile_read_one_vb. returns the first section of this vb_i
 const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
 {
     const SectionListEntry *sl=NULL;
@@ -150,7 +145,7 @@ const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
     return sl;
 }
 
-// I/O thread: called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
+// main thread: called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
 void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits) // optional outs
 {
     ASSERTE0 (flag.reading_reference || flag.show_ref_hash, "can only be called while reading reference");
@@ -263,7 +258,7 @@ uint32_t st_header_size (SectionType sec_type)
     return (sec_type == SEC_NONE) ? 0 : abouts[sec_type].header_size;
 }
 
-// called by PIZ I/O
+// called by PIZ main thread
 const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail)
 {
     ARRAY (const SectionListEntry, sl, z_file->section_list_buf);
@@ -295,15 +290,13 @@ const SectionListEntry *sections_pull_vb_up (uint32_t vb_i, const SectionListEnt
 {
     const SectionListEntry *new_vb_sl    = sl+1;
     const SectionListEntry *vb_header_sl = sections_vb_first (vb_i, false);
-    const SectionListEntry *after_vb_sl  = vb_header_sl;
-    ASSERTE (sections_get_next_section_of_type2 (&after_vb_sl, SEC_VB_HEADER, SEC_RECON_PLAN, false, false), 
-             "Cannot find SEC_VB_HEADER or SEC_RECON_PLAN following sections of vb_i=%u", vb_i);
+    const SectionListEntry *last_vb_sl   = sections_get_last_section_of_type2 (vb_header_sl, SEC_B250, SEC_LOCAL);
 
     // case: VB is already in its desired place
-    if (sl+1 == vb_header_sl) return after_vb_sl-1; // return last section (B250/Local) of this VB
+    if (sl+1 == vb_header_sl) return last_vb_sl; // return last section (B250/Local) of this VB
 
     // save all entries of the VB in temp
-    uint32_t vb_sections_len  = (after_vb_sl - vb_header_sl);
+    uint32_t vb_sections_len  = (last_vb_sl - vb_header_sl) + 1;
     uint32_t vb_sections_size = vb_sections_len * sizeof (SectionListEntry);
     SectionListEntry temp[vb_sections_len]; // size is bound by MAX_DICTS x 2 x sizeof (SectionListEntry) = 2048x2x24=96K
     memcpy (temp, vb_header_sl, vb_sections_size);

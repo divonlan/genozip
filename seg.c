@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   seg.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -27,7 +27,7 @@ WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Contex
 {
     ASSERTE0 (ctx, "ctx is NULL");
 
-    buf_alloc_more (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
+    buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
     
     WordIndex node_index = ctx_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
@@ -234,7 +234,7 @@ PosType seg_pos_field (VBlock *vb,
     if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value.i) {
 
         // store the value in store it in local - uint32
-        buf_alloc (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, "contexts->local");
+        buf_alloc_old (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, "contexts->local");
         NEXTENT (uint32_t, snip_ctx->local) = BGEN32 (this_pos);
         snip_ctx->txt_len += add_bytes;
 
@@ -341,7 +341,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx,
         }
 
         // add to local
-        buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
+        buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
         NEXTENT (uint32_t, ctx->local) = ctx->last_value.i;
         
         // add to b250
@@ -639,7 +639,7 @@ void seg_compound_field (VBlock *vb,
             sf_ctx->st_did_i = field_ctx->did_i;
 
             // allocate memory if needed
-            buf_alloc_more (vb, &sf_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
+            buf_alloc (vb, &sf_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
 
             // if snip is an integer, we store a delta
             char delta_snip[30];
@@ -753,7 +753,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
                                         ((id[1]+1) % 256) | 128, // different IDs for top array, subarray and items
                                         id[2], id[3], id[4], id[5], id[6], id[7] } };
         
-        buf_alloc (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "contexts->con_cache");
+        buf_alloc_old (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "contexts->con_cache");
 
         con = FIRSTENT (MiniContainer, container_ctx->con_cache);
         *con = (MiniContainer){ .nitems_lo = 1, 
@@ -841,7 +841,7 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx,
                             const char *snip, unsigned snip_len, 
                             unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
-    buf_alloc_more (vb, &ctx->local, snip_len + 1, vb->lines.len * (snip_len+1), char, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, snip_len + 1, vb->lines.len * (snip_len+1), char, CTX_GROWTH, "contexts->local");
     if (snip_len) buf_add (&ctx->local, snip, snip_len); 
     
     static const char sep[1] = { SNIP_SEP };
@@ -853,14 +853,14 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx,
 void seg_add_to_local_fixed (VBlock *vb, Context *ctx, const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
 {
     if (data_len) {
-        buf_alloc_more (vb, &ctx->local, data_len, vb->lines.len * data_len, char, CTX_GROWTH, "contexts->local");
+        buf_alloc (vb, &ctx->local, data_len, vb->lines.len * data_len, char, CTX_GROWTH, "contexts->local");
         buf_add (&ctx->local, data, data_len); 
     }
 }
 
 void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned add_bytes)
 {
-    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint8_t, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint8_t, CTX_GROWTH, "contexts->local");
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int8_t, value);
     NEXTENT (uint8_t, ctx->local) = value;
@@ -870,7 +870,7 @@ void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned a
 
 void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned add_bytes)
 {
-    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint16_t, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint16_t, CTX_GROWTH, "contexts->local");
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int16_t, value);
     NEXTENT (uint16_t, ctx->local) = BGEN16 (value);
@@ -880,7 +880,7 @@ void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned
 
 void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes)
 {
-    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int32_t, value);
     NEXTENT (uint32_t, ctx->local) = BGEN32 (value);
@@ -890,7 +890,7 @@ void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned
 
 void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned add_bytes)
 {
-    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len, uint64_t, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint64_t, CTX_GROWTH, "contexts->local");
 
     if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int64_t, value);
     NEXTENT (uint64_t, ctx->local) = BGEN64 (value);
@@ -945,7 +945,7 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
     uint32_t num_old_lines = vb->lines.len;
     
     // note: sadly, we cannot use the normal Buffer macros here because each data_type has its own line type
-    buf_alloc (vb, &vb->lines, (vb->lines.len + 1) * sizeof_line, 2, "lines");
+    buf_alloc_old (vb, &vb->lines, (vb->lines.len + 1) * sizeof_line, 2, "lines");
     
     memset (&vb->lines.data[num_old_lines * sizeof_line], 0, vb->lines.size - num_old_lines * sizeof_line);
     
@@ -954,7 +954,7 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
     // allocate more to the b250 buffer of the fields, which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
         if (buf_is_allocated (&vb->contexts[f].b250))
-            buf_alloc_more_zero (vb, &vb->contexts[f].b250, vb->lines.len - num_old_lines, 0, uint32_t, 1, "contexts->b250");
+            buf_alloc_zero (vb, &vb->contexts[f].b250, vb->lines.len - num_old_lines, 0, uint32_t, 1, "contexts->b250");
 }
 
 static void seg_verify_file_size (VBlock *vb)
@@ -990,7 +990,7 @@ void seg_all_data_lines (VBlock *vb)
  
     // allocate the b250 for the fields which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
-        buf_alloc (vb, &vb->contexts[f].b250, vb->lines.len * sizeof (uint32_t), 1, "contexts->b250");
+        buf_alloc_old (vb, &vb->contexts[f].b250, vb->lines.len * sizeof (uint32_t), 1, "contexts->b250");
     
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
 
@@ -1000,7 +1000,7 @@ void seg_all_data_lines (VBlock *vb)
 
     // allocate lines
     uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
-    buf_alloc (vb, &vb->lines, vb->lines.len * sizeof_line, 1, "lines");
+    buf_alloc_old (vb, &vb->lines, vb->lines.len * sizeof_line, 1, "lines");
     buf_zero (&vb->lines);
 
     const char *field_start = vb->txt_data.data;

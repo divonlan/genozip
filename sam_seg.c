@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seg.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "sam_private.h"
@@ -106,7 +106,7 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
 
     if (!line_data) return; // only length was requested
 
-    buf_alloc (vb, &vb->bd_bi_line, dl->seq_len * 2, 2, "bd_bi_line");
+    buf_alloc_old (vb, &vb->bd_bi_line, dl->seq_len * 2, 2, "bd_bi_line");
 
     // calculate character-wise delta
     for (unsigned i=0; i < dl->seq_len; i++) {
@@ -397,15 +397,15 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
     if (!recursion_level) {
         // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite nbits that overlays it
-        //buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
+        //buf_alloc_old (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
         //        buf_is_allocated (&bitmap_ctx->local) ? NULL : "contexts->local", 0); 
         
         ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspeciously high and might indicate a bug", seq_len);
         
-        buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
+        buf_alloc_old (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
                    "contexts->local"); 
         
-        buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "contexts->local"); 
+        buf_alloc_old (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "contexts->local"); 
 
         buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
     }

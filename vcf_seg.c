@@ -21,7 +21,7 @@
 
 static void vcf_seg_complete_missing_lines (VBlockVCF *vb);
 
-// called by I/O thread after reading the header
+// called by main thread after reading the header
 void vcf_zip_initialize (void)
 {
     liftover_zip_initialize (VCF_oCHROM, VCF_SPECIAL_LIFTBACK);
@@ -54,7 +54,7 @@ void vcf_seg_initialize (VBlock *vb_)
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_nodes.len;
-    buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf");
+    buf_alloc_old (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf");
     buf_zero (&vb->format_mapper_buf);
 
     // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
@@ -299,7 +299,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         ASSERTE (node_index == vb->format_mapper_buf.len, 
                  "node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
-        buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf");
+        buf_alloc_old (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf");
     }    
 
     ContainerP con = ENT (Container, vb->format_mapper_buf, node_index);
@@ -347,7 +347,7 @@ static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, const char *value, int value_le
         case USE_SF_YES: 
             // we store the SF value in a buffer, since seg_FORMAT_GT overlays the haplotype buffer onto txt_data and may override the SF field
             // we will need the SF data if the field fails verification in vcf_seg_INFO_SF_one_sample
-            buf_alloc (vb, &vb->sf_txt, value_len + 1, 2, "sf_txt"); // +1 for nul-terminator
+            buf_alloc_old (vb, &vb->sf_txt, value_len + 1, 2, "sf_txt"); // +1 for nul-terminator
             memcpy (FIRSTENT (char, vb->sf_txt), value, value_len);
             vb->sf_txt.len = value_len;
             *AFTERENT (char, vb->sf_txt) = 0; // nul-terminate
@@ -355,7 +355,7 @@ static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, const char *value, int value_le
             adjustment = 0;      
             
             // snip being contructed 
-            buf_alloc (vb, &vb->sf_snip, value_len + 20, 2, "sf_snip"); // initial value - we will increase if needed
+            buf_alloc_old (vb, &vb->sf_snip, value_len + 20, 2, "sf_snip"); // initial value - we will increase if needed
             NEXTENT (char, vb->sf_snip) = SNIP_SPECIAL;
             NEXTENT (char, vb->sf_snip) = VCF_SPECIAL_SF;
 
@@ -372,7 +372,7 @@ static inline void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
     // case: no more SF values left to compare - we ignore this sample
     while (vb->sf_txt.next < vb->sf_txt.len) {
 
-        buf_alloc_more (vb, &vb->sf_snip, 10, 0, char, 2, "sf_snip");
+        buf_alloc (vb, &vb->sf_snip, 10, 0, char, 2, "sf_snip");
 
         char *sf_one_value = ENT (char, vb->sf_txt, vb->sf_txt.next); 
         char *after;
@@ -761,7 +761,7 @@ static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, 
     ctx->ltype = LT_UINT32_TR;
     ctx->flags.store = STORE_INT;
 
-    buf_alloc_more (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, "contexts->local");
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, "contexts->local");
 
     if (cell_len == 1 && cell[0] == '.') {
         NEXTENT (uint32_t, ctx->local) = 0xffffffff;
@@ -955,7 +955,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     // shortcut if we have the same ploidy and phase as previous GT (saves re-genetrating base64 in container_seg_by_ctx)
     if (gt.repeats == vb->gt_prev_ploidy && gt.repsep[0] == vb->gt_prev_phase) {
 
-        buf_alloc_more (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
+        buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
 
         WordIndex node_index = *LASTENT (uint32_t, ctx->b250);
         NEXTENT (uint32_t, ctx->b250) = node_index;

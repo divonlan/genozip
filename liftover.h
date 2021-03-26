@@ -38,9 +38,4 @@ extern void liftover_seg_LIFTOVER (VBlockP vb, DictId liftover_dict_id, DictId l
 extern void liftover_seg_LIFTBACK (VBlockP vb, DictId liftover_dict_id, DictId liftback_dict_id, DidIType ochrom_did_i, DidIType pos_did_i, char orefalt_special_snip_id, const char *oref, unsigned oref_len, const char *oalt, unsigned oalt_len, void (*seg_ref_alt_cb)(VBlockP, const char *, unsigned, const char *, unsigned), char *value, int value_len, ZipDataLineP dl);
 extern void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, const char *value, int value_len, ZipDataLineP dl);
 
-// PIZ: section list stuff
-extern void liftover_section_list_remove_rejects (void);        // called if no --luft
-extern void liftover_section_list_move_rejects_to_front (void); // called if --luft
-
-
 #endif

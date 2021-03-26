@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fast.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "fastq.h"
@@ -22,6 +22,7 @@
 #include "stats.h"
 #include "reconstruct.h"
 #include "coverage.h"
+#include "sorter.h"
 
 #define dict_id_is_fastq_desc_sf dict_id_is_type_1
 #define dict_id_fastq_desc_sf dict_id_type_1
@@ -127,7 +128,8 @@ out_of_data:
 // comparing to the number of lines in the first file of the pair
 // returns true if we have at least as much as needed, and sets unconsumed_len to the amount of excess characters read
 // returns false is we don't yet have pair_1_num_lines lines - we need to read more
-bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len)
+bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len, 
+                                      uint32_t *my_lines, uint32_t *her_lines) // out - only set in case of failure
 {
 
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
@@ -137,8 +139,11 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len)
 
     uint32_t line_i; for (line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
         while (*next != '\n' && next < after) next++; 
-        if (next >= after) 
+        if (next >= after) {
+            *my_lines  = line_i;
+            *her_lines = vb->pair_num_lines * 4;
             return false;
+        }
         next++; // skip newline
     }
 
@@ -160,30 +165,6 @@ static void fastq_txtfile_count_lines (VBlockP vb)
 
     vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
     txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
-}
-
-// PIZ: if --interleave write the VBs - interleaving their lines
-void fastq_txtfile_write_one_vblock_interleave (VBlockP vb1_, VBlockP vb2_)
-{
-    VBlockFASTQ *vb1 = (VBlockFASTQ *)vb1_;
-    VBlockFASTQ *vb2 = (VBlockFASTQ *)vb2_;
-
-    // note vb->lines.param is the number of lines actually reconstructed (considering downsample, shard), set by container_reconstruct_do
-    ASSERTE (vb1->lines.param == vb2->lines.param, "in vb1=%u vb2=%u expecting vb1->lines.param=%"PRIu64" == vb2->lines.param=%"PRIu64,
-             vb1->vblock_i, vb2->vblock_i, vb1->lines.param, vb2->lines.param);
-
-    vb1->txt_data.param = vb2->txt_data.param = 0; // used in txtfile_write_4_lines()
-    BitArray *show_1 = buf_get_bitarray (&vb1->genobwa_show_line);
-    BitArray *show_2 = buf_get_bitarray (&vb2->genobwa_show_line);
-
-    for (uint64_t i=0; i < vb1->lines.param; i++) {
-
-        // in case of --genobwa, we show both interleaved lines, if either one of them is passed the filter
-        if (flag.genobwa && !bit_array_get (show_1, i) && !bit_array_get (show_2, i)) continue;
-
-        txtfile_write_4_lines (vb1_, 1);
-        txtfile_write_4_lines (vb2_, 2);
-    }
 }
 
 //---------------
@@ -212,7 +193,7 @@ static void fastq_get_optimized_desc_read_name (VBlockFASTQ *vb)
         if (vb->optimized_desc[i] == '.') vb->optimized_desc[i] = '-';
 }
 
-// called by I/O thread at the beginning of zipping this file
+// called by main thread at the beginning of zipping this file
 void fastq_zip_initialize (void)
 {
     // reset lcodec for STRAND and GPOS, as these may change between PAIR_1 and PAIR_2 files
@@ -304,19 +285,18 @@ bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
            dict_id.num == dict_id_fields[FASTQ_E2L];
 }
 
-// ZIP/PIZ I/O thread: called ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
+// ZIP/PIZ main thread: called ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
 // returns true if successful, false if there isn't a vb with vb_i in the previous file
-bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_t last_vb_i_of_pair_1)
+void fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint64_t save_offset = file_tell (z_file);
     uint64_t save_disk_so_far = z_file->disk_so_far;
 
-    vb->pair_vb_i = first_vb_i_of_pair_1 + (vb->vblock_i - last_vb_i_of_pair_1 - 1);
-    if (vb->pair_vb_i > last_vb_i_of_pair_1) return false; // we're done
+    vb->pair_vb_i = pair_vb_i;
 
     const SectionListEntry *sl = sections_vb_first (vb->pair_vb_i, true);
-    if (!sl) return false;
+    ASSERTE (sl, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
 
     // get num_lines from vb header
     SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER);
@@ -326,12 +306,12 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
 
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
     sl++;
-    buf_alloc (vb, &vb->z_section_headers, MAX ((MAX_DICTS * 2 + 50),  vb->z_section_headers.len + MAX_SUBFIELDS + 10) * sizeof(uint32_t), 0, "z_section_headers"); // room for section headers  
+    buf_alloc_old (vb, &vb->z_section_headers, MAX ((MAX_DICTS * 2 + 50),  vb->z_section_headers.len + MAX_SUBFIELDS + 10) * sizeof(uint32_t), 0, "z_section_headers"); // room for section headers  
 
     while (sl->section_type == SEC_B250 || sl->section_type == SEC_LOCAL) {
         
-        if (((dict_id_is_type_1 (sl->dict_id) || sl->dict_id.num == dict_id_fields[FASTQ_DESC]) && sl->section_type == SEC_B250) ||
-            ((sl->dict_id.num == dict_id_fields[FASTQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_STRAND]) && sl->section_type == SEC_LOCAL)) { // these are local sections
+        if (dict_id_is_fastq_desc_sf (sl->dict_id) || sl->dict_id.num == dict_id_fields[FASTQ_DESC] ||
+            sl->dict_id.num == dict_id_fields[FASTQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_STRAND]) { 
             
             NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
             int32_t ret = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "data", sl->section_type, sl); // returns 0 if section is skipped
@@ -343,40 +323,29 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
 
     file_seek (z_file, save_offset, SEEK_SET, false); // restore
     z_file->disk_so_far = save_disk_so_far;
-    
-    return true;
 }
 
-// I/O thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
+// main thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
 bool fastq_piz_read_one_vb (VBlockP vb_, ConstSectionListEntryP sl)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
-    bool i_am_pair_2 = z_file->z_flags.dts_paired && (vb->component_i % 2);
-
-    uint32_t prev_file_first_vb_i, prev_file_last_vb_i;
-    if (i_am_pair_2) 
-        sections_get_prev_component_vb_i (sl, &prev_file_first_vb_i, &prev_file_last_vb_i);
+    uint32_t pair_vb_i=0;
+    bool i_am_pair_2 = sorter_piz_get_pair (vb->vblock_i, &pair_vb_i) == 2;
 
     if (flag.grep) {
         // in case of this is a paired fastq file, get just the pair_1 data that is needed to resolve the grep
         if (i_am_pair_2) {
             vb->grep_stages = GS_TEST; // tell piz_is_skip_section to skip decompressing sections not needed for determining the grep
-            fastq_read_pair_1_data (vb_, prev_file_first_vb_i, prev_file_last_vb_i);
+            fastq_read_pair_1_data (vb_, pair_vb_i);
         }
 
-        // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
+        // if we're grepping we we uncompress and reconstruct the DESC from the main thread, and terminate here if this VB is to be skipped
         if (!piz_test_grep (vb_)) return false; // also updates vb->grep_stages
     }
 
     // in case of this is a paired fastq file, get all the pair_1 data not already fetched for the grep above
     if (i_am_pair_2) 
-        fastq_read_pair_1_data (vb_, prev_file_first_vb_i, prev_file_last_vb_i);
-
-    // if --genobwa and interleaving, initialize genobwa_show_line
-    if (flag.genobwa && flag.interleave) {
-        buf_alloc_bitarr (vb_, &vb->genobwa_show_line, vb->lines.len, "genobwa_show_line");
-        memset (vb->genobwa_show_line.data, 0xff, vb->genobwa_show_line.size); // initialize to "show"
-    } 
+        fastq_read_pair_1_data (vb_, pair_vb_i);
 
     return true;
 }
@@ -436,7 +405,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 
     else {
         Context *nonref_ctx = &vb->contexts[FASTQ_NONREF];
-        buf_alloc ((VBlockP)vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), CTX_GROWTH, "contexts->local"); 
+        buf_alloc_old ((VBlockP)vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), CTX_GROWTH, "contexts->local"); 
         buf_add (&nonref_ctx->local, seq_start, dl->seq_len);
     }
 
@@ -515,7 +484,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
          dict_id.num == dict_id_fields[FASTQ_QUAL]     || dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] ))
         return true;
         
-    // when grepping by I/O thread - skipping all sections but DESC
+    // when grepping by main thread - skipping all sections but DESC
     if (flag.grep && (vb->grep_stages == GS_TEST) && 
         dict_id.num != dict_id_fields[FASTQ_DESC] && !dict_id_is_fastq_desc_sf (dict_id))
         return true;
@@ -578,19 +547,15 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
             // case: --grep (note: appears before --header-one filter below, so both can be used together)
             if (flag.grep && item == 2 /* first EOL */) {
                 *AFTERENT (char, vb->txt_data) = 0; // for strstr
-                if (!strstr (ENT (char, vb->txt_data, vb->line_start), flag.grep))
-                    vb->dont_show_curr_line = true; // container_reconstruct_do will rollback the line
+                
+                vb->dont_show_curr_line = vb->dont_show_curr_line ||
+                                          !strstr (ENT (char, vb->txt_data, vb->line_start), flag.grep);
             }
 
             // case: --genobwa: check if line is included after SEQ 
-            if (  flag.genobwa && item == 4 && // 2nd EOL
-                  !fastq_genobwa_is_seq_included (ENT (char, vb->txt_data, vb->txt_data.len - vb->seq_len), vb->seq_len)) {
-                if (flag.interleave) {
-                    BitArray *genobwa_show_line_bm = buf_get_bitarray (&((VBlockFASTQ*)vb)->genobwa_show_line);
-                    bit_array_clear (genobwa_show_line_bm, rep);
-                } else
-                    vb->dont_show_curr_line = true; // container_reconstruct_do will rollback the line
-            }
+            if (flag.genobwa && item == 4) // 2nd EOL
+                vb->dont_show_curr_line = vb->dont_show_curr_line ||
+                                          !fastq_genobwa_is_seq_included (ENT (char, vb->txt_data, vb->txt_data.len - vb->seq_len), vb->seq_len);            
 
             // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
             if (flag.header_only_fast && item >= 2) return false; // skip this item

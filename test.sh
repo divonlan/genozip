@@ -370,8 +370,7 @@ batch_dual_coordinates()
         echo -n "make ${primary2} from ${laft}.genozip : " 
         $genocat ${laft}.genozip --no-pg -fo ${primary2} || exit 1
         echo "compare $primary1 to $primary2" 
-        ##cmp $primary1 $primary2 || exit 1
-echo WILL WORK AFTER SORTING
+        cmp $primary1 $primary2 || exit 1
 
         cleanup
         rm -f ${src}.noinfo ${primary}.genozip  ${primary}.noinfo ${laft} ${laft}.genozip ${primary2}

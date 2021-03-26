@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "codec.h"
@@ -27,7 +27,7 @@ void *codec_alloc (VBlock *vb, int size, double grow_at_least_factor)
     // so subsequent VBs will allocate roughly the same amount of memory for each buffer
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (!buf_is_allocated (&vb->codec_bufs[i])) {
-            buf_alloc (vb, &vb->codec_bufs[i], size, grow_at_least_factor, names[i]);
+            buf_alloc_old (vb, &vb->codec_bufs[i], size, grow_at_least_factor, names[i]);
             //printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;
         }

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   comp_agct.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -95,7 +95,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
     ASSERTE0 (!vb->compressed.len && !vb->compressed.param, "expecting vb->compressed to be free, but its not");
 
     // we will pack into vb->compressed
-    buf_alloc (vb, &vb->compressed, roundup_bits2bytes64 (*uncompressed_len * 2), 1, "compress");
+    buf_alloc_old (vb, &vb->compressed, roundup_bits2bytes64 (*uncompressed_len * 2), 1, "compress");
     BitArray *packed = buf_get_bitarray (&vb->compressed);
 
     // option 1 - pack contiguous data
@@ -117,7 +117,7 @@ COPY_TIMER (tmp1);
     else if (callback) {
 START_TIMER;        
 
-        buf_alloc (vb, &nonref_x_ctx->local, *uncompressed_len, CTX_GROWTH, "contexts->local");
+        buf_alloc_old (vb, &nonref_x_ctx->local, *uncompressed_len, CTX_GROWTH, "contexts->local");
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
             char *data_1=0;
@@ -198,7 +198,7 @@ void codec_acgt_uncompress (VBlock *vb, Codec codec, uint8_t param,
     ASSERTE0 (!vb->compressed.len && !vb->compressed.param, "expected vb->compressed to be free, but its not");
 
     uint64_t bitmap_num_bytes = roundup_bits2bytes64 (num_bases * 2); // 4 nucleotides per byte, rounded up to whole 64b words
-    buf_alloc (vb, &vb->compressed, bitmap_num_bytes, 1, "compressed");    
+    buf_alloc_old (vb, &vb->compressed, bitmap_num_bytes, 1, "compressed");    
 
     // uncompress bitmap using CODEC_ACGT.sub_codec (passed to us as sub_codec) into vb->compressed
     codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, &vb->compressed, bitmap_num_bytes, CODEC_NONE);

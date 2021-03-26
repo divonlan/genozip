@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   stats.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <stdarg.h>
@@ -249,7 +249,7 @@ void stats_compress (void)
     StatsByLine sbl[MAX_DICTS + NUM_SEC_TYPES] = { }, *s = sbl;
 
     static Buffer count_per_section_buf = EMPTY_BUFFER;
-    buf_alloc (evb, &count_per_section_buf, z_file->section_list_buf.len * sizeof (int), 1, "count_per_section");
+    buf_alloc_old (evb, &count_per_section_buf, z_file->section_list_buf.len * sizeof (int), 1, "count_per_section");
     buf_zero (&count_per_section_buf);
     ARRAY (int, count_per_section, count_per_section_buf);
 

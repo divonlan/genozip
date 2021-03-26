@@ -1,16 +1,10 @@
 // ------------------------------------------------------------------
 //   file.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef FILE_INCLUDED
 #define FILE_INCLUDED
-
-#ifndef _MSC_VER // Microsoft compiler
-#include <pthread.h>
-#else
-#include "compatibility/visual_c_pthread.h"
-#endif
 
 #include "genozip.h"
 #include "context.h"
@@ -365,11 +359,14 @@ typedef struct File {
     DualCoordinates dual_coords;       // ZIP: dual coordinate status of the TXT file. Set when reading TXT header, and immutable thereafter
     uint64_t luft_reject_bytes;        // ZIP of Luft dual coordinate file: number of bytes of that are rejected lines, not yet assigned to a VB
 
-    // TXT_FILE: Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
-    Mutex recon_plan_mutex[2];         // ZIP: protect vb_info and line_info during merging of VB data
-    Buffer vb_info[2];                 // ZIP: array of VbInfo per VB, indexed by (vb_i-1)
-    Buffer line_info[2];               // ZIP: array of LineInfo per line or gapless range in txt_file
-    Buffer recon_plan;                 // ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file
+    // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
+    Mutex recon_plan_mutex[2];         // TXT_FILE ZIP: protect vb_info and line_info during merging of VB data
+    Buffer vb_info[2];                 // TXT_FILE ZIP: array of ZipVbInfo per VB, indexed by (vb_i-1), 0:PRIMARY, 1:LUFT
+                                       // Z_FILE   PIZ: array of PizVbInfo per VB, indexed by (vb_i-1), only vb_info[0] is used
+    Buffer line_info[2];               // TXT_FILE ZIP: array of LineInfo per line or gapless range in txt_file
+    Buffer recon_plan;                 // TXT_FILE ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file
+    Buffer comp_info;                  // Z_FILE   PIZ: array of PizCompInfo - component information
+    uint32_t lines_so_far;             // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downlsampling, and is to be written to txt_file, or downsampled-out
 
     // Z_FILE: stats data
     Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)

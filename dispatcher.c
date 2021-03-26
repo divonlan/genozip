@@ -1,15 +1,8 @@
 // ------------------------------------------------------------------
 //   dispatcher.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-
-#ifndef _MSC_VER // Microsoft compiler
-#include <pthread.h>
-#else
-#include "compatibility/visual_c_pthread.h"
-#include "compatibility/visual_c_gettime.h"
-#endif
 #if defined __APPLE__ 
 #include "compatibility/mac_gettime.h"
 #endif
@@ -20,9 +13,10 @@
 #include "file.h"
 #include "profiler.h"
 #include "progress.h"
+#include "threads.h"
 
 typedef struct {
-    pthread_t thread_id;
+    int thread_id;
     VBlock *vb;
     void (*func)(VBlock *);
 } Thread;
@@ -53,7 +47,7 @@ typedef struct {
 // variables that persist across multiple dispatchers run sequentially
 static TimeSpecType profiler_timer; // wallclock
 
-void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i)
+void dispatcher_show_time (const char *task, const char *stage, int32_t thread_index, uint32_t vb_i)
 {
     static bool initialized = false;
     static const char *prev_stage;
@@ -67,7 +61,8 @@ void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_
     int diff_micro = 0;
     if (initialized) {
         diff_micro = 1000000 *(timer.tv_sec - prev_timer.tv_sec) + (int)((int64_t)timer.tv_nsec - (int64_t)prev_timer.tv_nsec) / 1000;
-        iprintf ("TH=%-2d VB=%-3u Stage='%s' Microsec_in_this_stage=%u z=%s\n", prev_thread_index, prev_vb_i, prev_stage, diff_micro, z_name);
+        iprintf ("%s: TH=%-2d VB=%-3u Stage='%s' Microsec_in_this_stage=%u z=%s\n",
+                 task, prev_thread_index, prev_vb_i, prev_stage, diff_micro, z_name);
     }
 
     initialized = true;
@@ -133,7 +128,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool throughout the execution
     vb_create_pool (MAX (2,global_max_threads+1 /* one for evb */));
 
-    buf_alloc_more (evb, &dd->compute_threads_buf, 0, MAX (1, max_threads), Thread, 1, "compute_threads_buf");
+    buf_alloc (evb, &dd->compute_threads_buf, 0, MAX (1, max_threads), Thread, 1, "compute_threads_buf");
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
@@ -227,8 +222,6 @@ VBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
 
     dd->next_vb_i = vb_i ? vb_i : dd->next_vb_i+1;
 
-    if (flag.show_threads) dispatcher_show_time ("Generate vb", -1, dd->next_vb_i);
-
     dd->next_vb = vb_get_vb (dd->task_name, dd->next_vb_i);
     dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->next_vb->id);
 
@@ -243,13 +236,10 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP))
     th->vb = dd->next_vb;
     th->func = func;
 
-    if (flag.show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->vblock_i);
-
     ASSERTE0 (dd->next_vb->vblock_i, "vb_i=0");
 
     if (dd->max_threads > 1) {
-        unsigned err = pthread_create (&th->thread_id, NULL, dispatcher_thread_entry, th);
-        ASSERTE (!err, "failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->vblock_i, err);
+        th->thread_id = threads_create (dispatcher_thread_entry, th, dd->task_name, dd->next_vb->vblock_i);
 
         dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % dd->max_threads;
     }
@@ -283,13 +273,9 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
 
     Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
 
-    if (flag.show_threads) dispatcher_show_time ("Wait for thread", dd->next_thread_to_be_joined, th->vb->vblock_i);
-
     if (dd->max_threads > 1) 
         // wait for thread to complete (possibly it completed already)
-        pthread_join (th->thread_id, NULL);
-
-    if (flag.show_threads) dispatcher_show_time ("Join (end compute)", dd->next_thread_to_be_joined, th->vb->vblock_i);
+         threads_join (th->thread_id);
 
     VBlockP processed_vb = th->vb; // possibly NULL if no running compute threads
 

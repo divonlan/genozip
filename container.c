@@ -1,7 +1,7 @@
 
 // ------------------------------------------------------------------
 //   container.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -146,10 +146,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             vb->line_i = vb->first_line + rep_i; // 1-based line from the begginging for the file, including the header
             vb->line_start = vb->txt_data.len;
 
-            // show (or not) the line based on our downsampling rate
-            vb->dont_show_curr_line = flag.downsample && ((vb->line_i-1) % flag.downsample != flag.shard);
-            if (!vb->dont_show_curr_line)
-                vb->lines.param++; // count number of top-level lines actually reconstructed (used in fastq_txtfile_write_one_vblock_interleave())
+            vb->dont_show_curr_line = false; // initialize for this line
         }
     
         if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1, NULL))) continue; // repeat is filtered out
@@ -235,9 +232,15 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         if (con->callback) 
             DT_FUNC(vb, container_cb)(vb, ctx->dict_id, rep_i, rep_reconstruction_start, AFTERENT (char, vb->txt_data) - rep_reconstruction_start);
 
-        // in top level: after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
-        if (con->is_toplevel && vb->dont_show_curr_line) 
-            vb->txt_data.len = vb->line_start; 
+        // in top level: after consuming the line's data, if it is not to be outputted - drop it
+        if (con->is_toplevel && vb->dont_show_curr_line) {
+            ASSERTE0 (flag.may_drop_lines, "Lines cannot be dropped because flag.may_drop_lines=false");
+            vb->txt_data.len = vb->line_start;
+            
+            static const char *drop_lines[] = { "", "\b\n", "\b\n\b\n", "\b\n\b\n\b\n", "\b\n\b\n\b\n\b\n" };
+            unsigned ht = DTPT (line_height);
+            RECONSTRUCT (drop_lines[ht], ht*2); // tell sorter_piz_writer to drop line
+        }
     }
 
     // remove final seperator, if we need to
@@ -315,15 +318,15 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
 
             // first encounter with Container for this context - allocate the cache
             if (!cache_exists) {
-                buf_alloc_more (vb, &ctx->con_index, 0, ctx->word_list.len, uint32_t, 1, "context->con_index");
-                buf_alloc_more (vb, &ctx->con_len,   0, ctx->word_list.len, uint16_t, 1, "context->con_len");
+                buf_alloc (vb, &ctx->con_index, 0, ctx->word_list.len, uint32_t, 1, "context->con_index");
+                buf_alloc (vb, &ctx->con_len,   0, ctx->word_list.len, uint16_t, 1, "context->con_len");
                 buf_zero (&ctx->con_len); // zero entire buffer, not just part added
             }
 
             // place Container followed by prefix in the cache
             *ENT (uint32_t, ctx->con_index, word_index) = (uint32_t)ctx->con_cache.len;
 
-            buf_alloc (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 2, "context->con_cache");
+            buf_alloc_old (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 2, "context->con_cache");
             
             char *cached_con = AFTERENT (char, ctx->con_cache);
             buf_add (&ctx->con_cache, con_p, st_size);

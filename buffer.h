@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   buffer.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef BUFFER_INCLUDED
@@ -77,18 +77,18 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                               const char *name);
 
 // efficient wrapper
-#define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name) do { \
+#define buf_alloc_old(vb, buf, requested_size, grow_at_least_factor, name) do { \
     uint64_t new_req_size = (requested_size); /* make copy to allow ++ */ \
     ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name)) \
                                                     : (buf)->size); \
 } while(0)
 
-#define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor,name) \
-    buf_alloc ((VBlockP)(vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
+#define buf_alloc(vb, buf, more, at_least, type, grow_at_least_factor,name) \
+    buf_alloc_old ((VBlockP)(vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
 
-#define buf_alloc_more_zero(vb, buf, more, at_least, element_type, grow_at_least_factor,name) do { \
+#define buf_alloc_zero(vb, buf, more, at_least, element_type, grow_at_least_factor,name) do { \
     uint64_t size_before = ((buf)->type == BUF_UNALLOCATED) ? 0 : (buf)->size; \
-    buf_alloc_more((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
+    buf_alloc((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
     if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 } while(0)
 
@@ -130,6 +130,8 @@ extern void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src, uint64_
   buf_copy_do ((VBlockP)(dst_vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(dst_name))
 
 extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
+extern void buf_grab_do (Buffer *dst_buf, const char *dst_name, Buffer *src_buf, const char *func, uint32_t code_line);
+#define buf_grab(dst_buf, dst_name, src_buf) buf_grab_do ((dst_buf), (dst_name), (src_buf), __FUNCTION__, __LINE__)
 
 #define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
 
@@ -145,14 +147,14 @@ extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 #define buf_add_more(vb, buf, new_data, new_data_len, name) do { \
     uint32_t new_len = (uint32_t)(new_data_len); /* copy in case caller uses ++ */ \
     if (new_len) { \
-        buf_alloc_more ((vb), (buf), (new_len), (buf)->len+(new_len)+1 /* +1 - room for \0 or seperator */, char, 1.5, (name)); \
+        buf_alloc ((vb), (buf), (new_len), (buf)->len+(new_len)+1 /* +1 - room for \0 or seperator */, char, 1.5, (name)); \
         memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
         (buf)->len += new_len; \
     } \
 } while(0)
 
 #define buf_add_buf(vb,dst_buf,src_buf,type,name) do { \
-    buf_alloc_more ((vb), (dst_buf), (src_buf)->len, 0, type, 1.5, (name)); \
+    buf_alloc ((vb), (dst_buf), (src_buf)->len, 0, type, 1.5, (name)); \
     memcpy (AFTERENT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
     (dst_buf)->len += (src_buf)->len; \
 } while (0)
@@ -185,7 +187,7 @@ typedef struct {
 } MemStats;
 
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
-extern void buf_display_memory_usage_handler (int sig);
+extern void buf_display_memory_usage_handler (void);
 
 #define buf_set(buf_p,value) do { if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); } while(0)
 #define buf_zero(buf_p) buf_set(buf_p, 0)

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   hash.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <math.h>
@@ -86,7 +86,7 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
 
     // note: we can't be too generous with the initial allocation because this memory is usually physically allocated
     // to ALL VB structures before any of them merges. Better start smaller for vb_i=1 and let it extend if needed
-    buf_alloc (segging_vb, &vb_ctx->local_hash, (vb_ctx->local_hash_prime * 1.2) * sizeof (LocalHashEnt) /* room for expansion */, 1, 
+    buf_alloc_old (segging_vb, &vb_ctx->local_hash, (vb_ctx->local_hash_prime * 1.2) * sizeof (LocalHashEnt) /* room for expansion */, 1, 
                "contexts->local_hash");
     vb_ctx->local_hash.len = vb_ctx->local_hash_prime;
     memset (vb_ctx->local_hash.data, 0xff, vb_ctx->local_hash_prime * sizeof (LocalHashEnt)); // initialize core table
@@ -230,7 +230,7 @@ void hash_alloc_global (ContextP zf_ctx, uint32_t estimated_entries)
 {
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
 
-    buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
+    buf_alloc_old (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
                "z_file->contexts->global_hash");
     buf_set (&zf_ctx->global_hash, 0xff); // we set all entries to {NO_NEXT, NODE_INDEX_NONE, NODE_INDEX_NONE} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
     buf_set_overlayable (&zf_ctx->global_hash);
@@ -320,7 +320,7 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
         return NODE_INDEX_NONE;
     }
 
-    buf_alloc_more (evb, &zf_ctx->global_hash, 1, 0, GlobalHashEnt, 2, "z_file->contexts->global_hash");
+    buf_alloc (evb, &zf_ctx->global_hash, 1, 0, GlobalHashEnt, 2, "z_file->contexts->global_hash");
 
     g_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, hashent_i); // might have changed after realloc
 
@@ -439,7 +439,7 @@ WordIndex hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
     }
 
     // case: not found in hash table, and we are required to provide a new hash entry on the linked list
-    buf_alloc (segging_vb, &vb_ctx->local_hash, sizeof (LocalHashEnt) * (1 + vb_ctx->local_hash.len), // realloc if needed
+    buf_alloc_old (segging_vb, &vb_ctx->local_hash, sizeof (LocalHashEnt) * (1 + vb_ctx->local_hash.len), // realloc if needed
                 1.5, "contexts->local_hash");
 
     l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent_i);  // might have changed after realloc

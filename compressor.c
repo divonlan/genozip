@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   compressor.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -54,7 +54,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
     uint32_t est_compressed_len = codec_args[est_size_codec].est_size (header->codec, data_uncompressed_len); 
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
-    buf_alloc (vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, 
+    buf_alloc_old (vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, 
                z_data->name ? z_data->name : "z_data");
 
     // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec instead
@@ -76,7 +76,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
 
         // if output buffer is too small, increase it, and try again
         if (!success) {
-            buf_alloc (vb, z_data, z_data->len + compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 50 /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */, 1,
+            buf_alloc_old (vb, z_data, z_data->len + compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 50 /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */, 1,
                        z_data->name ? z_data->name : "z_data");
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
@@ -150,7 +150,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
 
     z_data->len += total_z_len;
 
-    // if we're compressing a global buffer in the I/O thread, we can write it immeidately
+    // if we're compressing a global buffer in the main thread, we can write it immeidately
     if (vb == evb && header->section_type != SEC_NONE) 
         zfile_output_processed_vb (vb);
 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zip.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <math.h>
@@ -171,7 +171,7 @@ static void zip_dynamically_set_max_memory (void)
                      global_max_threads, (uint32_t)(flag.vblock_memory >> 20));
 #endif
             // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
-            buf_alloc_more (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
+            buf_alloc (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
             memcpy (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
             memcpy (txt_file->unconsumed_txt.data, txt_data_copy.data, txt_data_copy.len);
             txt_file->unconsumed_txt.len += txt_data_copy.len;
@@ -344,7 +344,7 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
     if      (largest < 0xfe)   ctx->ltype = LT_UINT8_TR;  // -1 is reserved for "missing"
     else if (largest < 0xfffe) ctx->ltype = LT_UINT16_TR;
     
-    buf_alloc (vb, &vb->compressed, ctx->local.len * lt_desc[ctx->ltype].width, 1, "compressed");
+    buf_alloc_old (vb, &vb->compressed, ctx->local.len * lt_desc[ctx->ltype].width, 1, "compressed");
 
     uint32_t cols = ctx->local.param;
     // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
@@ -517,7 +517,7 @@ static void zip_write_global_area (Digest single_component_digest)
     if (DTPZ(has_random_access)) 
         random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
-    ctx_compress_dictionaries(); // note: liftover_section_list_move_rejects_to_front() depends on SEC_DICT being the first non-VB sections
+    ctx_compress_dictionaries(); // note: sorter_move_liftover_rejects_to_front() depends on SEC_DICT being the first non-VB sections
     
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL) 
@@ -563,7 +563,7 @@ static void zip_compress_one_vb (VBlock *vb)
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
-    buf_alloc (vb, &vb->z_data, vb->vb_data_size / 3, 1.2, "z_data");
+    buf_alloc_old (vb, &vb->z_data, vb->vb_data_size / 3, 1.2, "z_data");
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
     if (flag.pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
@@ -584,10 +584,8 @@ static void zip_compress_one_vb (VBlock *vb)
     zfile_compress_vb_header (vb); // vblock header
 
     // vb_i=1 merges first, as it has the sorted dictionaries, other vbs can go in arbitrary order. 
-    if (vb->vblock_i != 1) {
-        mutex_lock (wait_for_vb_1_mutex);
-        mutex_unlock (wait_for_vb_1_mutex);
-    }
+    if (vb->vblock_i != 1) 
+        mutex_wait (wait_for_vb_1_mutex);
 
     // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section().
     // writing indices based on the merged dictionaries. dictionaries are compressed. 
@@ -663,13 +661,16 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         // normally we clone in the compute thread, because it might wait on mutex, but in this
         // case we need to clone (i.e. create all contexts before we can read the pair file data)
         ctx_clone (vb); 
+    
+        uint32_t pair_vb_i = prev_file_first_vb_i + (vb->vblock_i - prev_file_last_vb_i - 1);
+        
+        read_txt = (pair_vb_i <= prev_file_last_vb_i); // false if there is no vb with vb_i in the previous file
 
-        // returns false if their is no vb with vb_i in the previous file
-        read_txt = fastq_read_pair_1_data (vb, prev_file_first_vb_i, prev_file_last_vb_i); // read here, decompressed in fastq_seg_initialize
+        fastq_read_pair_1_data (vb, pair_vb_i); // read here, decompressed in fastq_seg_initialize
     }
 
     if (read_txt) {
-        if (flag.show_threads) dispatcher_show_time ("Read input data", -1, vb->vblock_i);            
+        if (flag.show_threads) dispatcher_show_time ("main thread", "Read input data", -1, vb->vblock_i);            
 
         // if vblock_memory is not already set by user options or previous files, set the size of the VBs for optimal compression
         if (!flag.vblock_memory)
@@ -690,7 +691,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
 
         vb->is_rejects_vb = flag.processing_rejects;
         
-        if (flag.show_threads) dispatcher_show_time ("Read input data done", -1, vb->vblock_i);
+        if (flag.show_threads) dispatcher_show_time ("main thread", "Read input data done", -1, vb->vblock_i);
     }
 
     if (vb->txt_data.len)   // we found some data 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <errno.h>
@@ -55,7 +55,7 @@ static inline CharIndex ctx_insert_to_dict (VBlock *vb_of_dict, Context *ctx, Di
     Buffer *dict = (type == DICT_ZF_SINGLETON) ? &ctx->ol_dict : &ctx->dict;
 
     static const char *buf_name[3] = { "contexts->dict", "zf_ctx->dict", "zf_ctx->ol_dict" };
-    buf_alloc_more (vb_of_dict, dict, snip_len + 1, INITIAL_NUM_NODES * MIN (10, snip_len), char,CTX_GROWTH, buf_name[type]);
+    buf_alloc (vb_of_dict, dict, snip_len + 1, INITIAL_NUM_NODES * MIN (10, snip_len), char,CTX_GROWTH, buf_name[type]);
     
     if (type == DICT_ZF) buf_set_overlayable (dict); // during merge
     
@@ -283,7 +283,7 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
     ASSERTE (nodes->len <= MAX_WORDS_IN_CTX, 
              "too many words in ctx %s, max allowed number of words is is %u", zf_ctx->name, MAX_WORDS_IN_CTX);
 
-    buf_alloc_more (evb, nodes, 0, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, 
+    buf_alloc (evb, nodes, 0, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, 
                     is_singleton_in_global ? "zf_ctx->ol_nodes" : "zf_ctx->nodes");
 
     // set either singleton node or regular node with this snip
@@ -347,7 +347,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
     // this snip isn't in the hash table - its a new snip
     ASSERTE (vb_ctx->nodes.len < MAX_NODE_INDEX, "too many words in dictionary %s (MAX_NODE_INDEX=%u)", vb_ctx->name, MAX_NODE_INDEX);
 
-    buf_alloc_more (segging_vb, &vb_ctx->nodes, 1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, "contexts->nodes");
+    buf_alloc (segging_vb, &vb_ctx->nodes, 1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, "contexts->nodes");
 
     vb_ctx->nodes.len++; // new hash entry or extend linked list
 
@@ -435,7 +435,7 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
     if (is_zf_ctx && command == ZIP) mutex_initialize (ctx->mutex);
 }
 
-// ZIP I/O thread: 
+// ZIP main thread: 
 // 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference FASTA CONTIG
 //    dictionary as the chrom dictionary of the new file
 // 2. in SAM, DENOVO: after creating loaded_contigs from SQ records, we copy them to the RNAME dictionary
@@ -461,7 +461,7 @@ void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf
     buf_set_overlayable (&zf_ctx->dict);
 
     // build nodes from word_list
-    buf_alloc (evb, &zf_ctx->nodes, sizeof (CtxNode) * contigs_buf->len, 1, "z_file->contexts->nodes");
+    buf_alloc_old (evb, &zf_ctx->nodes, sizeof (CtxNode) * contigs_buf->len, 1, "z_file->contexts->nodes");
     buf_set_overlayable (&zf_ctx->nodes);
     zf_ctx->nodes.len = contigs_buf->len;
 
@@ -748,7 +748,7 @@ void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
     }
 }
 
-// PIZ only: this is called by the I/O thread after it integrated all the dictionary fragment read from disk for one VB.
+// PIZ only: this is called by the main thread after it integrated all the dictionary fragment read from disk for one VB.
 // Here we hand over the integrated dictionaries to the VB - in preparation for the Compute Thread to use them.
 // We overlay the z_file's dictionaries and word lists to the vb. these data remain unchanged - neither
 // the vb nor the dispatcher thread will ever change snips placed in these. the dispatcher thread may append
@@ -852,7 +852,7 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
         // prepare sorter array containing indices into ctx->nodes. We are going to sort it rather than sort nodes directly
         // as the b250 data contains node indices into ctx->nodes.
         static Buffer sorter = EMPTY_BUFFER;
-        buf_alloc (vb, &sorter, ctx->nodes.len * sizeof (int32_t), CTX_GROWTH, "sorter");
+        buf_alloc_old (vb, &sorter, ctx->nodes.len * sizeof (int32_t), CTX_GROWTH, "sorter");
         for (WordIndex i=0; i < ctx->nodes.len; i++)
             NEXTENT (WordIndex, sorter) = i;
 
@@ -864,7 +864,7 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
         static Buffer old_dict = EMPTY_BUFFER;
         buf_move (vb, &old_dict, vb, &ctx->dict);
 
-        buf_alloc (vb, &ctx->dict, old_dict.len, CTX_GROWTH, "contexts->dict");
+        buf_alloc_old (vb, &ctx->dict, old_dict.len, CTX_GROWTH, "contexts->dict");
         ctx->dict.len = old_dict.len;
 
         char *next = ctx->dict.data;
@@ -897,7 +897,7 @@ void ctx_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
     }
 }
 
-// ZIP only: run by I/O thread during zfile_output_processed_vb()
+// ZIP only: run by main thread during zfile_output_processed_vb()
 void ctx_update_stats (VBlock *vb)
 {
     // zf_ctx doesn't store b250, but we just use b250.len as a counter for displaying in genozip_show_sections
@@ -907,7 +907,7 @@ void ctx_update_stats (VBlock *vb)
         Context *zf_ctx = ctx_get_zf_ctx (vb_ctx->dict_id);
         if (!zf_ctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
 
-        zf_ctx->b250.num_b250_words += vb_ctx->b250.num_b250_words; // thread safety: no issues, this only updated only by the I/O thread
+        zf_ctx->b250.num_b250_words += vb_ctx->b250.num_b250_words; // thread safety: no issues, this only updated only by the main thread
     }
 }
 
@@ -1079,7 +1079,7 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
 }
 
-// called by I/O thread in zip_write_global_area
+// called by main thread in zip_write_global_area
 void ctx_compress_dictionaries (void)
 {
     frag_ctx = &z_file->contexts[0];
@@ -1099,7 +1099,7 @@ static Context *dict_ctx;
 
 static void ctx_dict_read_one_vb (VBlockP vb)
 {
-    buf_alloc (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
+    buf_alloc_old (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
 
     if (!sections_get_next_section_of_type (&dict_sl, SEC_DICT, false, false))
         return; // we're done - no more SEC_DICT sections
@@ -1131,13 +1131,13 @@ static void ctx_dict_read_one_vb (VBlockP vb)
         // this allows us to calculate the FRAGMENT_SIZE with which this file was compressed and hence an upper bound on the size
         uint32_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : roundup2pow (vb->fragment_len) * num_fragments;
         
-        buf_alloc (evb, &dict_ctx->dict, size_upper_bound, 0, "contexts->dict");
+        buf_alloc_old (evb, &dict_ctx->dict, size_upper_bound, 0, "contexts->dict");
         buf_set_overlayable (&dict_ctx->dict);
     }
 
     // when pizzing a v8 file, we run in single-thread since we need to do the following dictionary enlargement with which fragment
     if (z_file->genozip_version == 8) {
-        buf_alloc_more (evb, &dict_ctx->dict, vb->fragment_len, 0, char, 0, "contexts->dict");
+        buf_alloc (evb, &dict_ctx->dict, vb->fragment_len, 0, char, 0, "contexts->dict");
         buf_set_overlayable (&dict_ctx->dict);
     }
 
@@ -1165,7 +1165,7 @@ static void ctx_dict_uncompress_one_vb (VBlockP vb)
     // non-overlappying regions in the same buffer in parallel
     Buffer copy = vb->fragment_ctx->dict;
     copy.data   = vb->fragment_start;
-    zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc
+    zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc_old
 
 done:
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
@@ -1179,7 +1179,7 @@ static void ctx_dict_build_word_lists (void)
 
         if (!ctx->word_list.len || ctx->word_list.data) continue; // skip if 1. no words, or 2. already built
 
-        buf_alloc (evb, &ctx->word_list, ctx->word_list.len * sizeof (CtxWord), 0, "contexts->word_list");
+        buf_alloc_old (evb, &ctx->word_list, ctx->word_list.len * sizeof (CtxWord), 0, "contexts->word_list");
         buf_set_overlayable (&ctx->word_list);
 
         const char *word_start = ctx->dict.data;
@@ -1211,7 +1211,7 @@ void ctx_read_all_dictionaries (void)
     dispatcher_fan_out_task (NULL, PROGRESS_NONE, "Reading dictionaries...", 
                              flag.test, 
                              true, true, 
-                             z_file->genozip_version == 8, // For v8 files, we read all fragments in the I/O thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
+                             z_file->genozip_version == 8, // For v8 files, we read all fragments in the main thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
                              0, 20000,
                              ctx_dict_read_one_vb, 
                              ctx_dict_uncompress_one_vb, 

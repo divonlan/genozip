@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   genozip.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef GENOZIP_INCLUDED
@@ -9,14 +9,8 @@
 #define _FILE_OFFSET_BITS 64
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef _MSC_VER // Microsoft compiler
 #include <inttypes.h>
 #include <unistd.h> 
-#else
-#include "compatibility/visual_c_stdint.h"
-#include "compatibility/visual_c_unistd.h"
-#include "compatibility/visual_c_misc_funcs.h"
-#endif
 #include <string.h> // must be after inttypes
 
 // -----------------

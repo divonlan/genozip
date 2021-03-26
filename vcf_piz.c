@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_piz.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <math.h>
@@ -247,11 +247,11 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SF)
         snip_i        = 0;
 
         // temporary place for SF
-        buf_alloc (vb, &vcf_vb->sf_txt, 5 * vcf_header_get_num_samples(), 1, "sf_txt" ); // initial estimate, we may further grow it later
+        buf_alloc_old (vb, &vcf_vb->sf_txt, 5 * vcf_header_get_num_samples(), 1, "sf_txt" ); // initial estimate, we may further grow it later
         vcf_vb->sf_txt.len = 0;
 
         // copy snip to sf_snip (note: the SNIP_SPECIAL+code are already removed)
-        buf_alloc (vb, &vcf_vb->sf_snip, snip_len, 2, "sf_snip");
+        buf_alloc_old (vb, &vcf_vb->sf_snip, snip_len, 2, "sf_snip");
         vcf_vb->sf_snip.len = snip_len; 
         memcpy (vcf_vb->sf_snip.data, snip, snip_len); 
     }
@@ -287,7 +287,7 @@ static void inline vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, 
 
     while (snip_i < sf_snip_len) {
 
-        buf_alloc_more (vcf_vb, &vcf_vb->sf_txt, 12, 0, char, 2, "sf_txt"); // sufficient for int32 + ','
+        buf_alloc (vcf_vb, &vcf_vb->sf_txt, 12, 0, char, 2, "sf_txt"); // sufficient for int32 + ','
 
         int32_t adjusted_sample_i = (int32_t)(sample_i + adjustment); // last_delta is the number of values in SF that are not in samples
 
@@ -369,7 +369,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_CHROM)
     // save the primary-coord chrom in liftback (this is part of INFO/LIFTBACK used in vcf_piz_special_LIFTBACK)
     Buffer *liftback = &((VBlockVCF *)vb)->liftover;
     liftback->len = 0;
-    buf_alloc (vb, liftback, reconstructed_len + 100, 0, "liftover"); // enough for POS (9 chars), and usually also REFALT
+    buf_alloc_old (vb, liftback, reconstructed_len + 100, 0, "liftover"); // enough for POS (9 chars), and usually also REFALT
     bufprintf (vb, liftback, "%.*s,", reconstructed_len, reconstructed);
 
     // delete the primary-coord chrom
@@ -489,7 +489,7 @@ void vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (VBlock *vb)
     // conditions for dropping a line in --luft
     if ((!vb->is_rejects_vb && vb->last_index (VCF_oSTATUS) != LO_OK) || // drop primary lines that are rejected (note: for sorted files, rejects are already excluded from the reconstruction plan in sorter_zip_merge_vb_do)
         ( vb->is_rejects_vb && (flag.no_header || flag.header_one)))     // drop rejects in --no-header or --header-one 
-        vb->txt_data.len = vb->line_start;
+        vb->dont_show_curr_line = true;
 }
 
 TRANSLATOR_FUNC (vcf_piz_luft_AC)

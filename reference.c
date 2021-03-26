@@ -1,9 +1,8 @@
 // ------------------------------------------------------------------
 //   reference.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include <pthread.h>
 #include <errno.h>
 #include "reference.h"
 #include "buffer.h"
@@ -30,6 +29,7 @@
 #include "codec.h"
 #include "compressor.h"
 #include "fastq.h"
+#include "threads.h"
 
 // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_DENOVO_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
 Buffer ranges = EMPTY_BUFFER; 
@@ -63,7 +63,7 @@ static const SectionListEntry *sl_ent = NULL; // NULL -> first call to this sect
 
 static char *ref_fasta_name = NULL;
 
-static pthread_t ref_cache_creation_thread_id;
+static int ref_cache_creation_thread_id;
 static bool ref_creating_cache = false;
 static bool external_ref_is_loaded = false;
 
@@ -489,7 +489,7 @@ static void ref_read_one_range (VBlockP vb)
 
     if (range_is_included) { 
 
-        buf_alloc (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers"); // room for 2 section headers  
+        buf_alloc_old (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers"); // room for 2 section headers  
 
         ASSERTE0 (vb->z_section_headers.len < 2, "unexpected 3rd recursive entry");
 
@@ -530,7 +530,7 @@ void ref_load_stored_reference (void)
         sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
         spin_initialize (region_to_set_list_spin);
-        buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list");
+        buf_alloc_old (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list");
     }
     
     // decompress reference using Dispatcher
@@ -610,8 +610,7 @@ void ref_create_cache_in_background (void)
     // start creating the genome cache now in a background thread, but only if we loaded the entire reference
     if (!flag.regions) { 
         ref_get_cache_fn(); // generate name before closing z_file
-        unsigned err = pthread_create (&ref_cache_creation_thread_id, NULL, ref_create_cache, NULL);
-        ASSERTE (!err, "pthread_create failed: err=%u", err);
+        ref_cache_creation_thread_id = threads_create (ref_create_cache, NULL, "create_ref_cache", THREADS_NO_VB);
         ref_creating_cache = true;
     }
 }
@@ -620,7 +619,7 @@ void ref_create_cache_join (void)
 {
     if (!ref_creating_cache) return;
 
-    pthread_join (ref_cache_creation_thread_id, NULL);
+    threads_join (ref_cache_creation_thread_id);
     ref_creating_cache = false;
 }
 
@@ -825,7 +824,7 @@ Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, cons
 // Compressing ranges into SEC_REFERENCE sections
 // ----------------------------------------------
 
-// ZIP I/O thread
+// ZIP main thread
 static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, SectionListEntry **sl)
 {
     // get section list entry from ref_file_section_list - which will be used by zfile_read_section to seek to the correct offset
@@ -876,7 +875,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
     buf_free (&ref_seq_section);
 }
 
-// ZIP copying parts of external reference to fine - called by I/O thread from zip_write_global_area->ref_compress_ref
+// ZIP copying parts of external reference to fine - called by main thread from zip_write_global_area->ref_compress_ref
 static void ref_copy_compressed_sections_from_reference_file (void)
 {
     ASSERTE (primary_command == ZIP && flag.reference == REF_EXT_STORE, 
@@ -1150,7 +1149,7 @@ void ref_compress_ref (void)
     if (ranges_type == RT_LOADED || ranges_type == RT_CACHED)
         ref_copy_compressed_sections_from_reference_file ();
 
-    buf_alloc (evb, &ref_stored_ra, sizeof (RAEntry) * ranges.len, 1, "ref_stored_ra");
+    buf_alloc_old (evb, &ref_stored_ra, sizeof (RAEntry) * ranges.len, 1, "ref_stored_ra");
     ref_stored_ra.len = 0; // re-initialize, in case we read the external reference into here
     
     spin_initialize (ref_stored_ra_spin);
@@ -1348,7 +1347,7 @@ static void ref_initialize_loaded_ranges (RangesType type)
     // 3. in case loading from a reference file, the number of contigs will match the number of chroms, so no issues.
     ranges.len = IS_REF_INTERNAL (z_file) ? z_file->contexts[CHROM].word_list.len : ref_contigs_num_contigs();
 
-    buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges");     
+    buf_alloc_old (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges");     
     buf_zero (&ranges);
     ranges_type = type;
 
@@ -1406,14 +1405,14 @@ static void overlay_ranges_on_loaded_genome (void)
 // case 1: in case of ZIP with external reference, called by ref_load_stored_reference during piz_read_global_area of the reference file
 // case 2: in case of PIZ: also called from ref_load_stored_reference with RT_LOADED
 // case 3: in case of ZIP of SAM using internal reference - called from sam_zip_initialize
-// note: ranges allocation must be called by the I/O thread as it adds a buffer to evb buf_list
+// note: ranges allocation must be called by the main thread as it adds a buffer to evb buf_list
 void ref_initialize_ranges (RangesType type)
 {
     if (type == RT_LOADED || type == RT_CACHED) {
         ref_initialize_loaded_ranges (type);
 
         if (type == RT_LOADED) 
-            buf_alloc (evb, &genome_cache, genome_nbases / 4 * 2, 1, "genome_cache"); // contains both forward and rev. compliment
+            buf_alloc_old (evb, &genome_cache, genome_nbases / 4 * 2, 1, "genome_cache"); // contains both forward and rev. compliment
         
         else  // RT_CACHED 
             ASSERTE0 (buf_mmap (evb, &genome_cache, ref_get_cache_fn(), "genome_cache"),  // we map the entire file (forward and revese complement genomes) onto genome_cache
@@ -1432,7 +1431,7 @@ void ref_initialize_ranges (RangesType type)
 
         ranges.len   = REF_NUM_DENOVO_RANGES;
         ranges_type = RT_DENOVO;
-        buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges"); 
+        buf_alloc_old (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges"); 
         buf_zero (&ranges);
         ref_lock_initialize_denovo_genome();
     }

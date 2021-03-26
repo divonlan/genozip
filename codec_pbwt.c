@@ -87,7 +87,7 @@ static void show_runs (const PbwtState *state)
 
 static PbwtState codec_pbwt_initialize_state (VBlockP vb, Buffer *runs, Buffer *fgrc)
 {
-    buf_alloc_more (vb, &vb->codec_bufs[0], 0, vb->ht_per_line * 2, PermEnt, 1, "codec_bufs");
+    buf_alloc (vb, &vb->codec_bufs[0], 0, vb->ht_per_line * 2, PermEnt, 1, "codec_bufs");
     buf_zero (&vb->codec_bufs[0]); // re-zero every time
     ARRAY (PermEnt, state_data, vb->codec_bufs[0]);
 
@@ -252,8 +252,8 @@ bool codec_pbwt_compress (VBlock *vb,
 
     PbwtState state = codec_pbwt_initialize_state (vb, &vb->runs_ctx->local, &vb->fgrc_ctx->local); 
  
-    buf_alloc (vb, &vb->runs_ctx->local, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 5 ), CTX_GROWTH, "contexts->local"); // initial allocation
-    buf_alloc (vb, &vb->fgrc_ctx->local, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 30), CTX_GROWTH, "contexts->local");
+    buf_alloc_old (vb, &vb->runs_ctx->local, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 5 ), CTX_GROWTH, "contexts->local"); // initial allocation
+    buf_alloc_old (vb, &vb->fgrc_ctx->local, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 30), CTX_GROWTH, "contexts->local");
         
     ARRAY (Allele, ht_data, vb->ht_matrix_ctx->local);
     
@@ -264,8 +264,8 @@ bool codec_pbwt_compress (VBlock *vb,
         codec_pbwt_calculate_permutation (&state, &ht_data[line_i * vb->ht_per_line], vb->ht_per_line, line_i==0);
 
         // grow local if needed (unlikely) to the worst case scenario - all ht foreground, no two consecutive are similar -> 2xlen runs, half of them fg runs
-        buf_alloc_more (vb, &vb->runs_ctx->local, 2 * vb->ht_per_line, 0, uint32_t, CTX_GROWTH, "contexts->local"); 
-        buf_alloc_more (vb, &vb->fgrc_ctx->local,     vb->ht_per_line, 0, uint32_t, CTX_GROWTH, "contexts->local"); 
+        buf_alloc (vb, &vb->runs_ctx->local, 2 * vb->ht_per_line, 0, uint32_t, CTX_GROWTH, "contexts->local"); 
+        buf_alloc (vb, &vb->fgrc_ctx->local,     vb->ht_per_line, 0, uint32_t, CTX_GROWTH, "contexts->local"); 
 
         show_line; show_perm(&state); 
         bool backward_permuted_ht_line = line_i % 2; // even rows are forward, odd are backward - better run length encoding 
@@ -277,7 +277,7 @@ bool codec_pbwt_compress (VBlock *vb,
     
     // add ht_matrix_ctx.len to the end of fgrc_ctx.local (this should really be in the section header, but we don't
     // want to change SectionHeaderCtx (now in genozip v11)
-    buf_alloc_more (vb, &vb->fgrc_ctx->local, 2, 0, uint32_t, 1, "contexts->local");
+    buf_alloc (vb, &vb->fgrc_ctx->local, 2, 0, uint32_t, 1, "contexts->local");
     NEXTENT (uint32_t, vb->fgrc_ctx->local) = vb->ht_matrix_ctx->local.len & 0xffffffffULL; // 32 LSb
     NEXTENT (uint32_t, vb->fgrc_ctx->local) = vb->ht_matrix_ctx->local.len >> 32;           // 32 MSb
 
@@ -318,7 +318,7 @@ static void codec_pbwt_decode_init_ht_matrix (VBlock *vb, const uint32_t *rc_dat
     ASSERTE (vb->lines.len && uncompressed_len, 
              "Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", (uint32_t)vb->lines.len, uncompressed_len);
 
-    buf_alloc (vb, &vb->ht_matrix_ctx->local, uncompressed_len, 1, "contexts->local");
+    buf_alloc_old (vb, &vb->ht_matrix_ctx->local, uncompressed_len, 1, "contexts->local");
 
     vb->ht_matrix_ctx->local.len = uncompressed_len;
     vb->ht_matrix_ctx->lcodec    = CODEC_PBWT;

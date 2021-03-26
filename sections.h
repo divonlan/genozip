@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sections.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef SECTIONS_INCLUDED
@@ -280,10 +280,16 @@ typedef struct SectionHeaderReconPlan {
     uint32_t vblock_mb;        // size of vblock in MB
 } SectionHeaderReconPlan;
 
+// special values of ReconPlanItem.num_lines
+#define PLAN_END_OF_VB  0xffffffff
+#define PLAN_FULL_VB    0xfffffffe
+#define PLAN_INTERLEAVE 0xfffffffd
 typedef struct {
     uint32_t vb_i;
     uint32_t start_line; // 0-based line within vb_i
+    #define vb2_i start_line // vb2_i is used in place of start_line wieh PLAN_INTERLEAVE
     uint32_t num_lines;
+    #define plan_type num_lines // one of PLAN*
 } ReconPlanItem;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
@@ -326,18 +332,25 @@ typedef struct { WordIndex txt_chrom, ref_chrom; } AltChrom;
 
 #pragma pack()
 
-// zip stuff
+// ---------
+// ZIP stuff
+// ---------
+
 extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
 extern void sections_list_concat (VBlockP vb);
 
-// piz stuff
+// ---------
+// PIZ stuff
+// ---------
+
 extern const SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail);
 extern bool sections_get_next_section_of_type2 (const SectionListEntry **sl_ent, SectionType st1, SectionType st2, bool must_be_next_section, bool seek);
 #define sections_get_next_section_of_type(sl_ent,st,must_be_next_section,seek) sections_get_next_section_of_type2(sl_ent,st,SEC_NONE,must_be_next_section,seek)
 
+extern const SectionListEntry *sections_get_last_section_of_type2 (const SectionListEntry *sl, SectionType st1, SectionType st2);
+
 extern uint32_t sections_count_sections (SectionType st);
 extern const SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
-extern void sections_get_prev_component_vb_i (const SectionListEntry *sl, uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i);
 
 extern void sections_count_component_vbs (const SectionListEntry *sl, uint32_t *num_vbs, uint32_t *first_vb);
 extern const SectionListEntry *sections_pull_vb_up (uint32_t vb_i, const SectionListEntry *sl);
@@ -347,7 +360,7 @@ extern const char *st_name (SectionType sec_type);
 extern SectionType sections_st_by_name (char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
-extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);
+extern void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */);
 
 extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
 

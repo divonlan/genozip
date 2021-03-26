@@ -1,9 +1,8 @@
 // ------------------------------------------------------------------
 //   random_access.h
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include <pthread.h>
 #include "buffer.h"
 #include "random_access.h"
 #include "vblock.h"
@@ -33,7 +32,7 @@ void random_access_alloc_ra_buf (VBlock *vb, int32_t chrom_node_index)
     uint64_t old_len = vb->ra_buf.len;
     uint64_t new_len = chrom_node_index + 2; // +2 because we store for chrom_node_index [-1, chrom_node_index]
     if (new_len > old_len) {
-        buf_alloc (vb, &vb->ra_buf, sizeof (RAEntry) * MAX (new_len, 500), 2, "ra_buf");
+        buf_alloc_old (vb, &vb->ra_buf, sizeof (RAEntry) * MAX (new_len, 500), 2, "ra_buf");
         memset (ENT (RAEntry, vb->ra_buf, old_len), 0, (new_len - old_len) * sizeof (RAEntry));
         vb->ra_buf.len = new_len;
     }
@@ -123,7 +122,7 @@ void random_access_merge_in_vb (VBlock *vb)
 {
     mutex_lock (ra_mutex);
 
-    buf_alloc (evb, &z_file->ra_buf, (z_file->ra_buf.len + vb->ra_buf.len) * sizeof(RAEntry), 2, "z_file->ra_buf"); 
+    buf_alloc_old (evb, &z_file->ra_buf, (z_file->ra_buf.len + vb->ra_buf.len) * sizeof(RAEntry), 2, "z_file->ra_buf"); 
 
     ARRAY (RAEntry, src_ra, vb->ra_buf);
 
@@ -168,7 +167,7 @@ int random_access_sort_by_vb_i (const void *a_, const void *b_)
         return a - b; // for same vb_i, keep order as it currently is in array (order will be from lower to higher address)
 }
 
-// ZIP (I/O thread) sort RA, update overflowing chroms, create and merge in evb ra
+// ZIP (main thread) sort RA, update overflowing chroms, create and merge in evb ra
 void random_access_finalize_entries (Buffer *ra_buf)
 {
     // build an index into ra_buf that we will sort. we need that, because for same-vb entries we need to 
@@ -184,7 +183,7 @@ void random_access_finalize_entries (Buffer *ra_buf)
 
     // use sorter to consturct a sorted RA
     static Buffer sorted_ra_buf = EMPTY_BUFFER; // must be static because its added to buf_list
-    buf_alloc (evb, &sorted_ra_buf, sizeof (RAEntry) * ra_buf->len, 1, ra_buf->name);
+    buf_alloc_old (evb, &sorted_ra_buf, sizeof (RAEntry) * ra_buf->len, 1, ra_buf->name);
     sorted_ra_buf.len = ra_buf->len;
 
     for (uint32_t i=0; i < ra_buf->len; i++) 
@@ -236,7 +235,7 @@ static const RAEntry *random_access_get_first_ra_of_vb_do (uint32_t vb_i, const 
 }
 #define random_access_get_first_ra_of_vb(vb_i) random_access_get_first_ra_of_vb_do (vb_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf))
 
-// PIZ I/O thread: check if for the given VB,
+// PIZ main thread: check if for the given VB,
 // the ranges in random access (from the file) overlap with the ranges in regions (from the command line --regions)
 bool random_access_is_vb_included (uint32_t vb_i,
                                    Buffer *region_ra_intersection_matrix) // out - a bytemap - rows are ra's of this VB, columns are regions, a cell is 1 if there's an intersection
@@ -256,7 +255,7 @@ bool random_access_is_vb_included (uint32_t vb_i,
     if (!ra) return false; // don't include this VB
 
     unsigned num_regions = regions_max_num_chregs();
-    buf_alloc (evb, region_ra_intersection_matrix, z_file->ra_buf.len * num_regions, 1, "region_ra_intersection_matrix");
+    buf_alloc_old (evb, region_ra_intersection_matrix, z_file->ra_buf.len * num_regions, 1, "region_ra_intersection_matrix");
     buf_zero (region_ra_intersection_matrix);
 
     bool vb_is_included = false;
@@ -271,7 +270,7 @@ bool random_access_is_vb_included (uint32_t vb_i,
     return vb_is_included; 
 }
 
-// PIZ I/O threads: get last vb_i that is included in the regions requested with --regions, or -1 if no vb includes regions.
+// PIZ main threads: get last vb_i that is included in the regions requested with --regions, or -1 if no vb includes regions.
 // used for reading dictionaries from a genozip file - there's no need to read dictionaries beyond this vb_i
 int32_t random_access_get_last_included_vb_i (void)
 {
@@ -287,7 +286,7 @@ int32_t random_access_get_last_included_vb_i (void)
     return last_vb_i;
 }
 
-// PIZ I/O thread: gets min/max pos value for a particular chrom, across the entire file, by looking at the RA entries
+// PIZ main thread: gets min/max pos value for a particular chrom, across the entire file, by looking at the RA entries
 void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min_pos, PosType *max_pos)
 {
     typedef struct { PosType min_pos, max_pos, gpos; } MinMax;
@@ -296,7 +295,7 @@ void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min_pos, P
     if (!buf_is_allocated (&z_file->ra_min_max_by_chrom)) {
         uint64_t num_chroms = z_file->contexts[CHROM].word_list.len;
 
-        buf_alloc (evb, &z_file->ra_min_max_by_chrom, num_chroms * sizeof (MinMax), 1, "z_file->ra_min_max_by_chrom");
+        buf_alloc_old (evb, &z_file->ra_min_max_by_chrom, num_chroms * sizeof (MinMax), 1, "z_file->ra_min_max_by_chrom");
         buf_zero (&z_file->ra_min_max_by_chrom); // safety
         z_file->ra_min_max_by_chrom.len = num_chroms;
 
@@ -364,7 +363,7 @@ uint32_t random_access_num_chroms_start_in_this_vb (uint32_t vb_i)
     return count;
 }
 
-// Called by PIZ I/O thread (piz_read_global_area) and ZIP I/O thread (zip_write_global_area)
+// Called by PIZ main thread (piz_read_global_area) and ZIP main thread (zip_write_global_area)
 void BGEN_random_access (Buffer *ra_buf)
 {
     ARRAY (RAEntry, ra, *ra_buf);
@@ -418,12 +417,12 @@ void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosTy
     *max_pos     = ra->max_pos;
 }
 
-// FASTA PIZ I/O thread: check if all contigs have the same max pos, and return it
+// FASTA PIZ main thread: check if all contigs have the same max pos, and return it
 uint32_t random_access_verify_all_contigs_same_length (void)
 {
     static Buffer max_lens_buf = EMPTY_BUFFER;
     const Context *ctx = &z_file->contexts[CHROM];
-    buf_alloc (evb, &max_lens_buf, ctx->word_list.len * sizeof (PosType), 1, "max_lens");
+    buf_alloc_old (evb, &max_lens_buf, ctx->word_list.len * sizeof (PosType), 1, "max_lens");
     buf_zero (&max_lens_buf);
 
     ARRAY (const RAEntry, ra, z_file->ra_buf);

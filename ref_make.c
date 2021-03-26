@@ -64,7 +64,7 @@ void ref_make_ref_init (void)
     ref_remove_cache();
     refhash_remove_cache();
 
-    buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges"); // must be allocated by I/O thread as its evb
+    buf_alloc_old (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges"); // must be allocated by main thread as its evb
     ranges_type = RT_MAKE_REF;
     
     buf_zero (&ranges);

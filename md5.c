@@ -2,7 +2,7 @@
 // which has been modified extensively
 // 
 // The original source, as specified there, is "This is free and unencumbered software released into the public domain - June 2013 waterjuice.org". 
-// All modifications are (c) 2020 Divon Lan and are subject to license.
+// All modifications are (c) 2020-2021 Divon Lan and are subject to license.
 
 #include <memory.h>
 #include "genozip.h"

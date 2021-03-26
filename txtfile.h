@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   txtfile.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef TXTFILE_INCLUDED
@@ -15,9 +15,10 @@ typedef bool (*TxtFileTestFunc)(const char *, int);
 extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, double success_threashold, TxtFileTestFunc test_func);
 
 extern int64_t txtfile_estimate_txt_data_size (VBlockP vb);
-extern void txtfile_write_one_vblock (VBlockP vb);
+extern void txtfile_write_one_vblock (ConstBufferP txt_data, ConstBufferP bgzf_blocks, BufferP compressed, 
+                                      uint32_t vb_i, uint32_t vb_data_size, uint32_t num_lines, uint32_t first_line);
 
-extern void txtfile_write_4_lines (VBlockP vb, unsigned pair);
+extern void txtfile_write_4_lines (ConstBufferP txt_data, const char *line_start[5], unsigned pair);
 
 extern const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext);
 extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
@@ -28,7 +29,8 @@ extern void txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Digest *di
 uint32_t txtfile_get_bound_headers_len(void); // for stats
 
 extern void txtfile_read_vblock (VBlockP vb, bool force_uncompress);
-extern void txtfile_write_to_disk (BufferP buf);
+extern void txtfile_write_to_disk (ConstBufferP buf, const char *data, unsigned len);
+extern void txtfile_flush_if_stdout (void);
 
 typedef bool (*TxtIteratorCallback)(const char *line, unsigned line_len, void *cb_param1, void *cb_param2, unsigned cb_param3);
 extern char *txtfile_foreach_line (BufferP txt_header, bool reverse, TxtIteratorCallback callback, void *cb_param1, void *cb_param2, unsigned cb_param3, int64_t *line_len);

@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #   uninstall.sh
-#   Copyright (C) 2020 Divon Lan <divon@genozip.com> where applies
+#   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com> where applies
 #   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 # loosely based on https://github.com/KosalaHerath/macos-installer-builder which is licensed under Apache 2.0 license

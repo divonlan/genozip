@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fasta.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "fasta.h"
@@ -270,7 +270,7 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
 
     // cached node index
     if (!is_first_line_in_contig && line_len == vb->std_line_len) {
-        buf_alloc_more (vb, &lm_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
+        buf_alloc (vb, &lm_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
         NEXTENT (WordIndex, lm_ctx->b250) = vb->std_line_node_index;
     }
 
@@ -384,7 +384,7 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (dict_id.num == dict_id_fields[FASTA_NONREF] || dict_id.num == dict_id_fields[FASTA_NONREF_X] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
         return true;
 
-    // when grepping by I/O thread - skipping all sections but DESC
+    // when grepping by main thread - skipping all sections but DESC
     if ((flag.grep || flag.regions) && (vb->grep_stages == GS_TEST) && 
         dict_id.num != dict_id_fields[FASTA_DESC] && !dict_id_is_fasta_desc_sf (dict_id))
         return true;
@@ -473,7 +473,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_COMMENT)
     return false; // no new value
 }
 
-// this is called by piz_test_grep - it is called sequentially for all VBs by the I/O thread
+// this is called by piz_test_grep - it is called sequentially for all VBs by the main thread
 // returns true if the last contig of the previous VB was grepped-in
 bool fasta_piz_initialize_contig_grepped_out (VBlock *vb_, bool does_vb_have_any_desc, bool last_desc_in_this_vb_matches_grep)
 {
@@ -561,7 +561,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
 
 bool fasta_piz_read_one_vb (VBlock *vb, ConstSectionListEntryP sl)
 { 
-    // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
+    // if we're grepping we we uncompress and reconstruct the DESC from the main thread, and terminate here if this VB is to be skipped
     if ((flag.grep || flag.regions) && !piz_test_grep (vb)) return false; 
 
     return true;

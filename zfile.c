@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zfile.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <errno.h>
@@ -239,7 +239,7 @@ void zfile_uncompress_section (VBlock *vb,
     // sanity checks
     ASSERTE (section_header->section_type == expected_section_type, "expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
     
-    ASSERTE (vblock_i == expected_vb_i || !expected_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
+    ASSERTE (vblock_i == expected_vb_i || !expected_vb_i, // dictionaries are uncompressed by the main thread with pseduo_vb (vb_i=0) 
              "bad vblock_i: vblock_i in file=%u but expecting it to be %u (section_type=%s)", 
              vblock_i, expected_vb_i, st_name (expected_section_type));
 
@@ -250,7 +250,7 @@ void zfile_uncompress_section (VBlock *vb,
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
         if (uncompressed_data_buf_name) {
-            buf_alloc (vb, uncompressed_data, data_uncompressed_len + sizeof (uint64_t), 1.1, uncompressed_data_buf_name); // add a 64b word for safety in case this buffer will be converted to a bitarray later
+            buf_alloc_old (vb, uncompressed_data, data_uncompressed_len + sizeof (uint64_t), 1.1, uncompressed_data_buf_name); // add a 64b word for safety in case this buffer will be converted to a bitarray later
             uncompressed_data->len = data_uncompressed_len;
         }
 
@@ -417,10 +417,10 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
 }
 
 
-// read section header - called from the I/O thread. returns offset of header within data
+// read section header - called from the main thread. returns offset of header within data
 int32_t zfile_read_section_do (File *file,
                                VBlock *vb, 
-                               uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
+                               uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the main thread (vb=0)
                                Buffer *data, const char *buf_name, // buffer to append 
                                SectionType expected_sec_type,
                                const SectionListEntry *sl,
@@ -439,7 +439,7 @@ int32_t zfile_read_section_do (File *file,
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
     
     uint32_t header_offset = data->len;
-    buf_alloc (vb, data, header_offset + header_size, 2, buf_name);
+    buf_alloc_old (vb, data, header_offset + header_size, 2, buf_name);
     data->param = 1;
     
     // move the cursor to the section. file_seek is smart not to cause any overhead if no moving is needed
@@ -501,7 +501,7 @@ int32_t zfile_read_section_do (File *file,
              z_name, header_size, compressed_offset, st_name(header->section_type));
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
-    buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "zfile_read_section");
+    buf_alloc_old (vb, data, header_offset + compressed_offset + data_len, 2, "zfile_read_section");
     data->param = 2;
     header = (SectionHeader *)&data->data[header_offset]; // update after realloc
 
@@ -514,7 +514,7 @@ int32_t zfile_read_section_do (File *file,
 
 // Read one section header - returns the header in vb->compressed - caller needs to free vb->compressed
 SectionHeader *zfile_read_section_header (VBlockP vb, uint64_t offset, 
-                                          uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
+                                          uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the main thread (vb=0)
                                           SectionType expected_sec_type)
 {
     uint32_t header_size = st_header_size (expected_sec_type);
@@ -529,7 +529,7 @@ SectionHeader *zfile_read_section_header (VBlockP vb, uint64_t offset,
     ASSERTE (!vb->compressed.len, "vb_i=%u expected_sec_type=%s: expecting vb->compressed to be free, but it's not: %s",
              vb->vblock_i, st_name (expected_sec_type), buf_desc (&vb->compressed).s);
     
-    buf_alloc (vb, &vb->compressed, header_size, 4, "compressed"); 
+    buf_alloc_old (vb, &vb->compressed, header_size, 4, "compressed"); 
 
     SectionHeader *header = zfile_read_from_disk (z_file, evb, &vb->compressed, header_size, expected_sec_type); 
 
@@ -801,7 +801,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     BGEN_sections_list();
     z_file->section_list_buf.len *= sizeof (SectionListEntry); // change to counting bytes
 
-    // compress section into z_data - to be eventually written to disk by the I/O thread
+    // compress section into z_data - to be eventually written to disk by the main thread
     comp_compress (evb, z_data, &header.h, z_file->section_list_buf.data, NULL);
 
     // restore
@@ -816,7 +816,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     footer.magic                 = BGEN32 (GENOZIP_MAGIC);
     footer.genozip_header_offset = BGEN64 (genozip_header_offset);
 
-    buf_alloc (evb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data");
+    buf_alloc_old (evb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data");
     memcpy (&z_data->data[z_data->len], &footer, sizeof(SectionFooterGenozipHeader));
     z_data->len += sizeof(SectionFooterGenozipHeader);
 
@@ -848,7 +848,7 @@ void zfile_write_txt_header (Buffer *txt_header,
     
     static Buffer txt_header_buf = EMPTY_BUFFER;
 
-    buf_alloc (evb, &txt_header_buf, sizeof (SectionHeaderTxtHeader) + txt_header->len / 3, // generous guess of compressed size
+    buf_alloc_old (evb, &txt_header_buf, sizeof (SectionHeaderTxtHeader) + txt_header->len / 3, // generous guess of compressed size
                1, "txt_header_buf"); 
 
     comp_compress (evb, &txt_header_buf, (SectionHeader*)&header, 
@@ -938,11 +938,11 @@ void zfile_compress_vb_header (VBlock *vb)
         .digest_so_far       = flag.data_modified ? DIGEST_NONE : vb->digest_so_far
     };
 
-    // copy section header into z_data - to be eventually written to disk by the I/O thread. this section doesn't have data.
+    // copy section header into z_data - to be eventually written to disk by the main thread. this section doesn't have data.
     comp_compress (vb, &vb->z_data, (SectionHeader*)&vb_header, NULL, NULL);
 }
 
-// ZIP only: called by the I/O thread in the sequential order of VBs: updating of the already compressed
+// ZIP only: called by the main thread in the sequential order of VBs: updating of the already compressed
 // variant data section (compressed by the compute thread in zfile_compress_vb_header) just before writing it to disk
 // note: this updates the z_data in memory (not on disk)
 void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
@@ -982,7 +982,7 @@ void zfile_output_processed_vb (VBlock *vb)
     if (flag.show_headers && buf_is_allocated (&vb->show_headers_buf))
         buf_print (&vb->show_headers_buf, false);
 
-    if (flag.show_threads) dispatcher_show_time ("Write genozip data done", -1, vb->vblock_i);
+    if (flag.show_threads) dispatcher_show_time ("main thread", "Write genozip data done", -1, vb->vblock_i);
 }
 
 DataType zfile_get_file_dt (const char *filename)

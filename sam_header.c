@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_header.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // ----------------------
@@ -168,7 +168,7 @@ bool sam_header_inspect (BufferP txt_header)
         if (!flag.reference || flag.reference == REF_INTERNAL) 
             ref_initialize_ranges (RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
-        // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
+        // evb buffers must be alloced by main threads, since other threads cannot modify evb's buf_list
         random_access_alloc_ra_buf (evb, 0);
     }
 
@@ -182,8 +182,8 @@ bool sam_header_inspect (BufferP txt_header)
     // In SAM, a contig-less header just means we don't know the contigs and they are defined in RNAME 
     has_header_contigs = IS_BAM || (ranges_data.num_contigs > 0);
     
-    buf_alloc (evb, &header_contigs, ranges_data.num_contigs * sizeof (RefContig), 1, "header_contigs"); 
-    buf_alloc (evb, &header_contigs_dict, ranges_data.dict_len, 1, "header_contigs_dict"); 
+    buf_alloc_old (evb, &header_contigs, ranges_data.num_contigs * sizeof (RefContig), 1, "header_contigs"); 
+    buf_alloc_old (evb, &header_contigs_dict, ranges_data.dict_len, 1, "header_contigs_dict"); 
     
     // if its the 2nd+ file while binding in ZIP - we just check that the contigs are the same
     // (or a subset) of header_contigs 
@@ -258,7 +258,7 @@ static inline void txtheader_sam_add_PG (Buffer *txtheader_buf)
     buf_add_string (evb, txtheader_buf, "\n");
 }
 
-// PIZ I/O thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
+// PIZ main thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
 TXTHEADER_TRANSLATOR (txtheader_bam2sam)
 {
     if (flag.no_header) {
@@ -284,7 +284,7 @@ static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_n
 {
     Buffer *txtheader_buf = (Buffer *)callback_param;
 
-    buf_alloc_more (evb, txtheader_buf, chrom_name_len+9, 0, char, 1, 0);
+    buf_alloc (evb, txtheader_buf, chrom_name_len+9, 0, char, 1, 0);
 
     // l_name
     chrom_name_len++; // inc. nul terminator
@@ -310,7 +310,7 @@ static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_n
 TXTHEADER_TRANSLATOR (txtheader_sam2bam)
 {
     // grow buffer to accommodate the BAM header fixed size and text (inc. nul terminator)
-    buf_alloc (evb, txtheader_buf, 12 + txtheader_buf->len + 1, 1, "txt_data");
+    buf_alloc_old (evb, txtheader_buf, 12 + txtheader_buf->len + 1, 1, "txt_data");
 
     // nul-terminate text - required by sam_foreach_SQ_line - but without enlengthening buffer
     *AFTERENT (char, *txtheader_buf) = 0;
@@ -332,7 +332,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     if (!from_SQ) n_ref = ref_num_loaded_contigs();
 
     // grow buffer to accommodate estimated reference size (we will more in txtheader_sam2bam_ref_info if not enough)
-    buf_alloc_more (evb, txtheader_buf, n_ref * 100 + (50 + flags_command_line()->len) , 0, char, 1, 0);
+    buf_alloc (evb, txtheader_buf, n_ref * 100 + (50 + flags_command_line()->len) , 0, char, 1, 0);
 
     // add PG
     txtheader_sam_add_PG (txtheader_buf);

@@ -1,7 +1,8 @@
 // ------------------------------------------------------------------
 //   arch.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
@@ -25,8 +26,6 @@
 #include "arch.h"
 #include "sections.h"
 #include "flags.h"
-
-static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread) - despite common wisdom, it is NOT always 0 (on Windows it is 1)
 
 #ifdef _WIN32
 // add the genozip path to the user's Path environment variable, if its not already there. 
@@ -99,8 +98,6 @@ void arch_initialize (const char *argv0)
     ASSERTE0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
     ASSERTE0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
 
-    io_thread_id = pthread_self();
-
 #ifdef _WIN32
     arch_add_to_windows_path (argv0);
 #endif
@@ -119,18 +116,6 @@ const char *arch_get_endianity (void)
 #else
 #error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
 #endif    
-}
-
-bool arch_am_i_io_thread (void)
-{
-    return pthread_self() == io_thread_id;
-}
-
-void cancel_io_thread (void)
-{
-    pthread_cancel (io_thread_id);     // cancel the main thread
-    usleep (200000);                   // wait 200ms for the main thread to die. pthread_join here hangs on Windows (not tested on others)
-    //pthread_join (io_thread_id, NULL); // wait for the thread cancelation to complete
 }
 
 unsigned arch_get_num_cores (void)

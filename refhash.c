@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   refhash.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -18,6 +18,7 @@
 #include "compressor.h"
 #include "bit_array.h"
 #include "profiler.h"
+#include "threads.h"
 
 // ref_hash logic:
 // we use the 28 bits (14 nucleotides) following a "G" hook, as the hash value, to index into a hash table with multiple
@@ -64,7 +65,7 @@ const char complement[256] =  { ['A']='T', ['C']='G', ['G']='C', ['T']='A',  // 
                                 [0 ...'@']=4, ['B']=4, ['D'...'F']=4, ['U'...255]=0 };
 
 // cache stuff
-static pthread_t refhash_cache_creation_thread_id;
+static int refhash_cache_creation_thread_id;
 static bool refhash_creating_cache = false;
 
 // ------------------------------------------------------
@@ -211,7 +212,7 @@ static void refhash_compress_one_vb (VBlockP vb)
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
 }
 
-// ZIP-FASTA-make-reference: called by I/O thread in zip_write_global_area
+// ZIP-FASTA-make-reference: called by main thread in zip_write_global_area
 void refhash_compress_refhash (void)
 {
     next_task_layer = 0;
@@ -258,8 +259,7 @@ static void refhash_create_cache_in_background (void)
     // start creating the genome cache now in a background thread, but only if we loaded the entire reference
     if (!flag.regions) { 
         refhash_get_cache_fn(); // generate name before we close z_file
-        unsigned err = pthread_create (&refhash_cache_creation_thread_id, NULL, refhash_create_cache, NULL);
-        ASSERTE (!err, "pthread_create failed: err=%u", err);
+        refhash_cache_creation_thread_id = threads_create (refhash_create_cache, NULL, "create_refhash_cache", THREADS_NO_VB);
         refhash_creating_cache = true;
     }
 }
@@ -268,7 +268,7 @@ void refhash_create_cache_join (void)
 {
     if (!refhash_creating_cache) return;
 
-    pthread_join (refhash_cache_creation_thread_id, NULL);
+    threads_join (refhash_cache_creation_thread_id);
     refhash_creating_cache = false;
 }
 
@@ -306,7 +306,7 @@ static void refhash_uncompress_one_vb (VBlockP vb)
 
 static void refhash_read_one_vb (VBlockP vb)
 {
-    buf_alloc (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
+    buf_alloc_old (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
 
     if (!sections_get_next_section_of_type (&sl_ent, SEC_REF_HASH, true, false))
         return; // no more refhash sections
@@ -363,7 +363,7 @@ static void refhash_initialize_refhashs_array (void)
     }
 }
 
-// called by the I/O thread - piz_read_global_area when reading the reference file, ahead of compressing a fasta or fastq file. 
+// called by the main thread - piz_read_global_area when reading the reference file, ahead of compressing a fasta or fastq file. 
 // returns true if mapped cache
 void refhash_initialize (bool *dispatcher_invoked)
 {
@@ -404,7 +404,7 @@ void refhash_initialize (bool *dispatcher_invoked)
         bool mapped_cache = buf_mmap (evb, &refhash_buf, refhash_get_cache_fn(), "refhash_buf");
         if (!mapped_cache) { 
             // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
-            buf_alloc (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
+            buf_alloc_old (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
             refhash_initialize_refhashs_array();
 
             sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
@@ -426,7 +426,7 @@ void refhash_initialize (bool *dispatcher_invoked)
         // NOTE: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min
         // due to a different LZMA internal mode when compressing the hash. However, the resulting file is MUCH smaller,
         // and loading of refhash during zip is MUCH faster
-        buf_alloc (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
+        buf_alloc_old (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
         buf_set (&refhash_buf, 0xff); 
     }
 

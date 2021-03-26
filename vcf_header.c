@@ -124,7 +124,7 @@ static void vcf_header_piz_liftover_header (Buffer *txt_header)
 {
     #define new_txt_header evb->codec_bufs[0]
 
-    buf_alloc (evb, &new_txt_header, txt_header->len, 0, "evb->codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
+    buf_alloc_old (evb, &new_txt_header, txt_header->len, 0, "evb->codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
 
     txtfile_foreach_line (txt_header, false, vcf_header_piz_liftover_header_one_line, &new_txt_header, 0, 0, 0);
 
@@ -161,8 +161,8 @@ static void vcf_header_zip_liftback_header (Buffer *txt_header)
 
     // case: Luft file - scan the header and for LIFTBACK_REJECT lines, and move them to txt_file->unconsumed (after removing the label) 
     // to be processsed as normal variants
-    buf_alloc (evb, &new_txt_header, txt_header->len, 0, "evb->codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
-    buf_alloc (evb, &rejects, 65536, 0, "evb->codec_bufs[1]"); // initial allocation
+    buf_alloc_old (evb, &new_txt_header, txt_header->len, 0, "evb->codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
+    buf_alloc_old (evb, &rejects, 65536, 0, "evb->codec_bufs[1]"); // initial allocation
 
     txtfile_foreach_line (txt_header, false, vcf_header_zip_liftback_header_one_line, &new_txt_header, &rejects, 0, 0);
 
@@ -173,7 +173,7 @@ static void vcf_header_zip_liftback_header (Buffer *txt_header)
     // squeeze in the liftover rejects from the header, with their label removed, before the existing unconsumed text
     // (data that was read beyond the header) 
     if (rejects.len) {
-        buf_alloc_more (evb, &txt_file->unconsumed_txt, rejects.len, 0, char, 0, "txt_file->unconsumed_txt");
+        buf_alloc (evb, &txt_file->unconsumed_txt, rejects.len, 0, char, 0, "txt_file->unconsumed_txt");
         ARRAY (char, unconsumed_txt, txt_file->unconsumed_txt);
         
         memmove (&unconsumed_txt[rejects.len], unconsumed_txt, unconsumed_txt_len);
@@ -489,7 +489,7 @@ void vcf_samples_add  (const char *samples_str)
             }
         if (is_duplicate) continue; // skip duplicates "genocat -s sample1,sample2,sample1"
 
-        buf_alloc (evb, &cmd_samples_buf, MAX (cmd_samples_buf.len + 1, 100) * sizeof (char*), 2, "cmd_samples_buf");
+        buf_alloc_old (evb, &cmd_samples_buf, MAX (cmd_samples_buf.len + 1, 100) * sizeof (char*), 2, "cmd_samples_buf");
 
         NEXTENT (char *, cmd_samples_buf) = one_sample;
     }

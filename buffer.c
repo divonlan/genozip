@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   buffer.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // memory management - when running the same code by the same thread for another variant block - we reuse
@@ -335,14 +335,14 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
 
 #ifndef _WIN32
 // signal handler of SIGUSR1 
-void buf_display_memory_usage_handler (int sig) 
+void buf_display_memory_usage_handler (void) 
 {
     buf_display_memory_usage (false, 0, 0);
 }
 #endif
 
-// thread safety: only the thread owning the VB of the buffer (I/O thread of evb) can add a buffer
-// to the buf list OR it may be added by the I/O thread IF the compute thread of this VB is not 
+// thread safety: only the thread owning the VB of the buffer (main thread of evb) can add a buffer
+// to the buf list OR it may be added by the main thread IF the compute thread of this VB is not 
 // running yet
 void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 {
@@ -354,7 +354,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     Buffer *bl = &vb->buffer_list;
 
-    buf_alloc_more (vb, bl, 1, INITIAL_MAX_MEM_NUM_BUFFERS, Buffer *, 2, "buffer_list");
+    buf_alloc (vb, bl, 1, INITIAL_MAX_MEM_NUM_BUFFERS, Buffer *, 2, "buffer_list");
 
     ((Buffer **)bl->data)[bl->len++] = buf;
 
@@ -414,11 +414,11 @@ uint64_t buf_alloc_do (VBlock *vb,
     if (!requested_size) return 0; // nothing to do
 
 #define REQUEST_TOO_BIG_THREADSHOLD (4ULL*1024*1024*1024) // 4 GB
-    ASSERTW (requested_size < REQUEST_TOO_BIG_THREADSHOLD, "Warning: buf_alloc called from %s:%u requested %s. This is suspeciously high and might indicate a bug. buf=%s",
+    ASSERTW (requested_size < REQUEST_TOO_BIG_THREADSHOLD, "Warning: buf_alloc_old called from %s:%u requested %s. This is suspeciously high and might indicate a bug. buf=%s",
              func, code_line, str_size (requested_size).s, buf_desc (buf).s);
 
     // sanity checks
-    ASSERTE (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
+    ASSERTE (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc_old a buffer of type %s. details: %s", 
              func, code_line, buf_display_type (buf), buf_desc (buf).s);
 
     ASSERTE0 (vb, "null vb");
@@ -501,7 +501,7 @@ uint64_t buf_alloc_do (VBlock *vb,
     }
 
 finish:
-    if (vb != evb) COPY_TIMER (buf_alloc); // this is not thread-safe for evb as evb buffers might be allocated by any thread
+    if (vb != evb) COPY_TIMER (buf_alloc_old); // this is not thread-safe for evb as evb buffers might be allocated by any thread
     return buf->size;
 }
 
@@ -643,7 +643,7 @@ error:
     return false;
 }
 
-// free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
+// free buffer - without freeing memory. A future buf_alloc_old of this buffer will reuse the memory if possible.
 void buf_free_do (Buffer *buf, const char *func, uint32_t code_line) 
 {
     uint16_t *overlay_count; // number of buffers (overlay and regular) sharing buf->memory
@@ -725,8 +725,8 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 } 
 
 // remove from buffer_list of this vb
-// thread safety: only the thread owning the VB of the buffer (I/O thread of evb) can remove a buffer
-// from the buf list, OR the I/O thread may remove for all VBs, IF no compute thread is running
+// thread safety: only the thread owning the VB of the buffer (main thread of evb) can remove a buffer
+// from the buf list, OR the main thread may remove for all VBs, IF no compute thread is running
 void buf_remove_from_buffer_list (Buffer *buf)
 {
     if (!buf->vb) return; // this buffer is not on the buf_list - nothing to do
@@ -775,6 +775,28 @@ void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
     memset (buf, 0, sizeof (Buffer)); // reset to factory defaults
 }
 
+// similar to buf_move, but for evb only
+// IMPORTANT: only works when called from main thread, when BOTH src and dst VB are in full control of main thread, so that there
+// no chance another thread is concurrently modifying the buf_list of the src or dst VBs 
+void buf_grab_do (Buffer *dst_buf, const char *dst_name, Buffer *src_buf, const char *func, uint32_t code_line)
+{
+    ASSERTE (src_buf, "called from %s:%u: buf is NULL", func, code_line);
+    if (src_buf->type == BUF_UNALLOCATED) return; // nothing to grab
+
+    ASSERTE (src_buf->type == BUF_REGULAR && !src_buf->overlayable, "called from %s:%u: this function can only be called for a non-overlayable REGULAR buf", func, code_line);
+    ASSERTE (dst_buf->type == BUF_UNALLOCATED, "called from %s:%u: expecting dst_buf to be UNALLOCATED", func, code_line);
+
+    buf_remove_from_buffer_list (src_buf); 
+
+    dst_buf->type = BUF_REGULAR;
+    dst_buf->len = src_buf->len;
+    buf_init (dst_buf, src_buf->memory, src_buf->size, 0, func, code_line, dst_name);
+
+    buf_add_to_buffer_list(evb, dst_buf);
+
+    memset (src_buf, 0, sizeof (Buffer)); // reset to factory defaults
+}
+
 void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src, 
                   uint64_t bytes_per_entry, // how many bytes are counted by a unit of .len
                   uint64_t src_start_entry, uint64_t max_entries,  // if 0 copies the entire buffer 
@@ -789,7 +811,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
     uint64_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
-    buf_alloc (dst_vb, dst, num_entries * bytes_per_entry, 1, dst_name ? dst_name : src->name); // use realloc rather than malloc to allocate exact size
+    buf_alloc_old (dst_vb, dst, num_entries * bytes_per_entry, 1, dst_name ? dst_name : src->name); // use realloc rather than malloc to allocate exact size
 
     memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);
 
@@ -806,7 +828,7 @@ void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
 
     ASSERTE (src_vb==dst_vb || dst->vb==dst_vb, "to move a buffer between VBs, the dst buffer needs to be added"
                                                 " to the dst_vb buffer_list in advance. If dst_vb=evb the dst buffer must be added to"
-                                                " the buffer_list by the I/O thread only. src: %s dst: %s src_vb->vb_i=%d dst_vb->vb_i=%d",
+                                                " the buffer_list by the main thread only. src: %s dst: %s src_vb->vb_i=%d dst_vb->vb_i=%d",
             buf_desc (src).s, buf_desc (dst).s, (src_vb ? src_vb->vblock_i : -999), (dst_vb ? dst_vb->vblock_i : -999));
 
     if (!dst->vb) buf_add_to_buffer_list (dst_vb, dst); // this can only happen if src_vb==dst_vb 
@@ -1001,7 +1023,7 @@ void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
-    buf_alloc (buf->vb, &buf->vb->compressed, buf->len, 1, "compressed");
+    buf_alloc_old (buf->vb, &buf->vb->compressed, buf->len, 1, "compressed");
     ARRAY (uint8_t, target, buf->vb->compressed);
     ARRAY (uint8_t, transposed, *buf);
 
@@ -1024,7 +1046,7 @@ void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
-    buf_alloc (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint16_t), 1, "compressed");
+    buf_alloc_old (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint16_t), 1, "compressed");
     ARRAY (uint16_t, target, buf->vb->compressed);
     ARRAY (uint16_t, transposed, *buf);
 
@@ -1047,7 +1069,7 @@ void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
-    buf_alloc (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint32_t), 1, "compressed");
+    buf_alloc_old (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint32_t), 1, "compressed");
     ARRAY (uint32_t, target, buf->vb->compressed);
     ARRAY (uint32_t, transposed, *buf);
 
@@ -1070,7 +1092,7 @@ void BGEN_transpose_u64_buf (Buffer *buf, LocalType *lt)
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
-    buf_alloc (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint64_t), 1, "compressed");
+    buf_alloc_old (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint64_t), 1, "compressed");
     ARRAY (uint64_t, target, buf->vb->compressed);
     ARRAY (uint64_t, transposed, *buf);
 

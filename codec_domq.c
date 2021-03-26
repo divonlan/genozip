@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_domq.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // compression algorithm for QUAL value that has a dominant value ("dom") (roughly over 50%) - as typically does binned Illumina
@@ -120,10 +120,10 @@ bool codec_domq_compress (VBlock *vb,
 
     // this is usually enough, but might not be in some edge cases
     // note: qual_buf->len is the total length of all qual lines
-    buf_alloc (vb, qual_buf, qual_buf->len / 5, 1, "contexts->local"); 
+    buf_alloc_old (vb, qual_buf, qual_buf->len / 5, 1, "contexts->local"); 
     qual_buf->param = dom; // dom goes into param, and eventually into SectionHeaderCtx.local_param
 
-    buf_alloc (vb, qdomruns_buf, qual_buf->len / 10, 1, "contexts->local");
+    buf_alloc_old (vb, qdomruns_buf, qual_buf->len / 10, 1, "contexts->local");
 
     qual_buf->len = 0; 
     uint32_t runlen = 0;
@@ -134,8 +134,8 @@ bool codec_domq_compress (VBlock *vb,
         callback (vb, line_i, &qual, &qual_len, CALLBACK_NO_SIZE_LIMIT);
 
         // grow if needed
-        buf_alloc_more (vb, qual_buf, 2 * qual_len, 0, char, 1.5, 0); // theoretical worst case is 2 characters (added NO_DOMS) per each original character
-        buf_alloc_more (vb, qdomruns_buf, qual_len, 0, uint8_t, 1.5, 0);
+        buf_alloc (vb, qual_buf, 2 * qual_len, 0, char, 1.5, 0); // theoretical worst case is 2 characters (added NO_DOMS) per each original character
+        buf_alloc (vb, qdomruns_buf, qual_len, 0, uint8_t, 1.5, 0);
 
         if (!qual) continue;
 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   strings.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef STRINGS_INCLUDED
@@ -25,7 +25,7 @@ extern StrText char_to_printable (char c);
 extern char *str_to_single_line_printable (const char *in, unsigned in_len, char *out);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (const char *in, char *out);
-extern bool str_case_compare (const char *str1, const char *str2, unsigned len, bool *identical);
+extern _Bool str_case_compare (const char *str1, const char *str2, unsigned len, _Bool *identical);
 
 extern StrText str_size (uint64_t size);
 extern StrText str_bases (uint64_t num_bases);
@@ -52,7 +52,7 @@ extern StrText str_time (void);
 extern double str_get_positive_float (const char *float_str, unsigned float_str_len);
 extern unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str /* out */);
 
-extern bool str_split (const 
+extern _Bool str_split (const 
 char *str, unsigned str_len, unsigned num_items, char sep, const char **items, unsigned *item_lens);
 
 extern const char *type_name (unsigned item, 

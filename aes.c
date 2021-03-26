@@ -2,7 +2,7 @@
 // which has been heavily modified
 // 
 // The original source, as specified there, is "free and unencumbered software released into the 
-// public domain". All modifications are (c) 2020 Divon Lan and are subject to license.
+// public domain". All modifications are (c) 2020-2021 Divon Lan and are subject to license.
 
 #include "genozip.h" 
 #include "vblock.h"

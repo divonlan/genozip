@@ -1,12 +1,11 @@
 // ------------------------------------------------------------------
 //   context.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef CONTEXT_INCLUDED
 #define CONTEXT_INCLUDED
 
-#include <pthread.h>
 #include "genozip.h"
 #include "buffer.h"
 #include "base250.h"

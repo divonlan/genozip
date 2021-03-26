@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   dispatcher.h
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef DISPATCHER_INCLUDED
@@ -32,7 +32,7 @@ extern void dispatcher_abandon_next_vb (Dispatcher dispatcher);
 extern void dispatcher_set_input_exhausted (Dispatcher dispatcher, bool exhausted);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_done (Dispatcher dispatcher);
-extern void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i);
+extern void dispatcher_show_time (const char *task_name, const char *stage, int32_t thread_index, uint32_t vb_i);
 extern Dispatcher dispatcher_fan_out_task_do (const char *task_name, const char *filename, ProgressType prog, const char *prog_msg, bool test_mode, bool is_last_file, bool cleanup_after_me, bool force_single_thread, uint32_t previous_vb_i, uint32_t idle_sleep_microsec, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
 #define dispatcher_fan_out_task(filename, prog, prog_msg, test_mode, is_last_file, cleanup_after_me, force_single_thread, previous_vb_i, idle_sleep_microsec, prepare, compute, output) \
     dispatcher_fan_out_task_do (__FUNCTION__, (filename), (prog), (prog_msg), (test_mode), (is_last_file), (cleanup_after_me), (force_single_thread), (previous_vb_i), (idle_sleep_microsec), (prepare), (compute), (output))

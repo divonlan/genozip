@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   flags.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef FLAGS_INCLUDED
@@ -98,6 +98,7 @@ typedef struct {
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
+         may_drop_lines,     // PIZ: reconstruction is allowed to drop lines
          explicit_ref;       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
 
     char *reading_chain;     // system is currently reading a chain file by this name

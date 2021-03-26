@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   reconstruct.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef RECONSTRUCT_INCLUDED
@@ -22,7 +22,7 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, 
 
 #define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (char*)(s), (len))
 #define RECONSTRUCT1(c) NEXTENT (char, vb->txt_data) = c
-#define RECONSTRUCT_SEP(s,len,sep) { RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); }
+#define RECONSTRUCT_SEP(s,len,sep) do { RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); } while(0)
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
 
 #define RECONSTRUCT_INT(n) unsigned n_len = str_int ((n), AFTERENT (char, vb->txt_data)); /* not in a block because some need access to n_len */ \

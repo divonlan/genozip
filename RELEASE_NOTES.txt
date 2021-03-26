@@ -401,6 +401,7 @@ bug fixes, including major bug with mc:i optional field in SAM
 - Fix bug with --downsample in combination with --interleaved
 
 12.0.0
-- Support dual-coordinates VCF files: genozip --chain to create a dual-coordinates file ; genocat --laft ("lifted") to see the
+- Support dual-coordinates VCF files: genozip --chain to create a dual-coordinates file ; genocat --luft ("lifted") to see the
        lifted-over coordinates
+- Support genocat --sort for mildly-unsorted VCF files, implied for dual-coordinates VCF files. Disabled by --unsorted.
 - Fixed bug with subsetting samples in VCF (genocat --sample). The fix will work on files compressed with 11.0.9 onwards.

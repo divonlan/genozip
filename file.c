@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <errno.h>
@@ -610,8 +610,8 @@ static bool file_open_txt_write (File *file)
 // without our pre-allocation, some of these buffers will be first allocated by a compute threads 
 // when the first vb containing a certain did_i is merged in (for the contexts buffers) or
 // ra is merged (for ra_buf). while these operations 
-// are done while holding a mutex, so that compute threads don't run over each over, buf_alloc 
-// may change buf_lists in evb buffers, while the I/O thread might be doing so concurrently
+// are done while holding a mutex, so that compute threads don't run over each over, buf_alloc_old 
+// may change buf_lists in evb buffers, while the main thread might be doing so concurrently
 // resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
 // of the execution.
 // with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
@@ -934,6 +934,7 @@ void file_close (File **file_p,
         buf_destroy (&file->vb_info[0]);
         buf_destroy (&file->vb_info[1]);
         buf_destroy (&file->recon_plan);
+        buf_destroy (&file->comp_info);
 
         FREE (file->name);
         FREE (file->basename);
@@ -1098,7 +1099,7 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
 {
     uint64_t size = file_get_size (filename);
 
-    buf_alloc (vb, buf, size + add_string_terminator, 1, buf_name);
+    buf_alloc_old (vb, buf, size + add_string_terminator, 1, buf_name);
 
     FILE *file = fopen (filename, "rb");
     ASSINP (file, "cannot open \"%s\": %s", filename, strerror (errno));

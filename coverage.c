@@ -11,15 +11,15 @@
 void coverage_initialize (VBlock *vb)
 {
     vb->coverage.len = vb->contexts[CHROM].word_list.len + NUM_COVER_TYPES;
-    buf_alloc_more (vb, &vb->coverage, 0, vb->coverage.len, uint64_t, 1, "coverage");
+    buf_alloc (vb, &vb->coverage, 0, vb->coverage.len, uint64_t, 1, "coverage");
     buf_zero (&vb->coverage); // zero every VB even if already allocated from prev VB
 
     vb->read_count.len = vb->contexts[CHROM].word_list.len + NUM_COVER_TYPES;
-    buf_alloc_more (vb, &vb->read_count, 0, vb->read_count.len, uint64_t, 1, "read_count");
+    buf_alloc (vb, &vb->read_count, 0, vb->read_count.len, uint64_t, 1, "read_count");
     buf_zero (&vb->read_count); // zero every VB even if already allocated from prev VB
     
     vb->unmapped_read_count.len = vb->contexts[CHROM].word_list.len;
-    buf_alloc_more (vb, &vb->unmapped_read_count, 0, vb->unmapped_read_count.len, uint64_t, 1, "unmapped_read_count");
+    buf_alloc (vb, &vb->unmapped_read_count, 0, vb->unmapped_read_count.len, uint64_t, 1, "unmapped_read_count");
     buf_zero (&vb->unmapped_read_count); // zero every VB even if already allocated from prev VB
 }
 

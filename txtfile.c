@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   txtfile.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
  
 #include "profiler.h"
@@ -137,9 +137,11 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
     if (uncompress)
         vb->gzip_compressor = libdeflate_alloc_decompressor(vb);
         
-    while (vb->compressed.uncomp_len < max_uncomp - BGZF_MAX_BLOCK_SIZE) {
+    int64_t start_uncomp_len = vb->compressed.uncomp_len;
 
-        buf_alloc_more (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, max_uncomp/4, char, 1.5, "compressed");
+    while (vb->compressed.uncomp_len - start_uncomp_len < max_uncomp - BGZF_MAX_BLOCK_SIZE) {
+
+        buf_alloc (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, max_uncomp/4, char, 1.5, "compressed");
 
         // case: we have data passed to us from file_open_txt_read - handle it first
         if (!vb->txt_data.len && evb->compressed.len) {
@@ -153,7 +155,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
             }
 
             // add block to list
-            buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_uncomp / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
+            buf_alloc (vb, &vb->bgzf_blocks, 1, 1.2 * max_uncomp / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
             NEXTENT (BgzfBlockZip, vb->bgzf_blocks) = (BgzfBlockZip)
                 { .txt_index        = 0,
                   .compressed_index = 0,
@@ -179,7 +181,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
 
             // add block to list - including the EOF block (block_comp_len=BGZF_EOF_LEN block_uncomp_len=0)
             if (block_comp_len) {
-                buf_alloc_more (vb, &vb->bgzf_blocks, 1, 1.2 * max_uncomp / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
+                buf_alloc (vb, &vb->bgzf_blocks, 1, 1.2 * max_uncomp / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
                 NEXTENT (BgzfBlockZip, vb->bgzf_blocks) = (BgzfBlockZip)
                     { .txt_index        = vb->txt_data.len, // after passed-down data and all previous blocks
                       .compressed_index = vb->compressed.len,
@@ -323,7 +325,7 @@ int32_t def_is_header_done (bool is_eof)
     return -1; // not end of header yet
 }
 
-// ZIP I/O thread: returns the hash of the header
+// ZIP main thread: returns the hash of the header
 static Digest txtfile_read_header (bool is_first_txt)
 {
     START_TIMER;
@@ -346,7 +348,7 @@ static Digest txtfile_read_header (bool is_first_txt)
                        dt_name(txt_file->data_type), txt_name, evb->txt_data.len);
         }
 
-        buf_alloc_more (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
+        buf_alloc (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
         bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true);
     }
 
@@ -427,7 +429,7 @@ done:
     return (uint32_t)passed_up_len;
 }
 
-// ZIP I/O threads
+// ZIP main threads
 void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 {
     START_TIMER;
@@ -438,7 +440,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file))
         pos_before = file_tell (txt_file);
 
-    buf_alloc (vb, &vb->txt_data, flag.vblock_memory, 1, "txt_data");    
+    buf_alloc_old (vb, &vb->txt_data, flag.vblock_memory, 1, "txt_data");    
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
     if (buf_is_allocated (&txt_file->unconsumed_txt)) {
@@ -456,22 +458,28 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     for (int32_t block_i=0; ; block_i++) {
 
-        uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, MIN (max_memory_per_vb - vb->txt_data.len, 1<<30 /* read() can't handle moer */), always_uncompress) 
+        uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, MIN (max_memory_per_vb - vb->txt_data.len, 1<<30 /* read() can't handle more */), always_uncompress) 
                                                             : 0;
 
-        if (!len || vb->txt_data.len >= max_memory_per_vb) {  // EOF or we have filled up the allocted memory
+        // when reading BGZF, we might be filled up even without completely filling max_memory_per_vb 
+        // if there is room left for only a partial BGZF block (we can't read partial blocks)
+        uint32_t filled_up = max_memory_per_vb - (txt_file->codec == CODEC_BGZF) * BGZF_MAX_BLOCK_SIZE;
+
+        if (!len || vb->txt_data.len >= filled_up) {  // EOF or we have filled up the allocted memory
 
             // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
+            uint32_t my_lines, her_lines;
             if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
-                !fastq_txtfile_have_enough_lines (vb, &passed_up_len)) { // we don't yet have all the data we need
+                !fastq_txtfile_have_enough_lines (vb, &passed_up_len, &my_lines, &her_lines)) { // we don't yet have all the data we need
 
-                ASSINP (len, "File %s has less FASTQ reads than its R1 counterpart", txt_name);
+                ASSINP (len, "File %s has less FASTQ reads than its R1 counterpart (vb=%u has %u lines while counterpart has %u lines)", 
+                        txt_name, vb->vblock_i, my_lines, her_lines);
 
                 ASSERTE (vb->txt_data.len, "txt_data.len=0 when reading pair-2 vb=%u", vb->vblock_i);
 
                 // if we need more lines - increase memory and keep on reading
                 max_memory_per_vb *= 1.1; 
-                buf_alloc (vb, &vb->txt_data, max_memory_per_vb, 1, "txt_data");    
+                buf_alloc_old (vb, &vb->txt_data, max_memory_per_vb, 1, "txt_data");    
             }
             else
                 break;
@@ -555,7 +563,7 @@ bool txtfile_test_data (char first_char,            // first character in every 
     #define TEST_BLOCK_SIZE (256 * 1024)
 
     while (1) {      // read data from the file until either 1. EOF is reached 2. we pass the header + num_lines_to_test lines
-        buf_alloc_more (evb, &evb->txt_data, TEST_BLOCK_SIZE + 1 /* for \0 */, 0, char, 1.2, "txt_data");    
+        buf_alloc (evb, &evb->txt_data, TEST_BLOCK_SIZE + 1 /* for \0 */, 0, char, 1.2, "txt_data");    
 
         uint64_t start_read = evb->txt_data.len;
         txtfile_read_block (evb, TEST_BLOCK_SIZE, true);
@@ -582,85 +590,83 @@ done:
 }
 
 // PIZ
-void txtfile_write_to_disk (Buffer *buf)
+void txtfile_write_to_disk (const Buffer *buf, // option 1
+                            const char *data, unsigned len) // option 2
 {
-    if (!buf->len) return;
-    
-    if (!flag.test) {
-        file_write (txt_file, buf->data, buf->len);
-        if (flag.to_stdout) fflush (txt_file->file);
+    if (buf) {
+        data = buf->data;
+        len  = buf->len;
     }
+
+    if (!len) return;
     
-    txt_file->txt_data_so_far_single += buf->len;
-    txt_file->disk_so_far            += buf->len;
+    if (!flag.test) 
+        file_write (txt_file, data, len);
+    
+    txt_file->txt_data_so_far_single += len;
+    txt_file->disk_so_far            += len;
 }
 
-void txtfile_write_one_vblock (VBlockP vb)
+void txtfile_flush_if_stdout (void)
+{
+    if (!flag.test && flag.to_stdout) 
+         fflush (txt_file->file);
+}
+
+void txtfile_write_one_vblock (ConstBufferP txt_data, ConstBufferP bgzf_blocks, BufferP compressed,
+                               uint32_t vb_i, uint32_t vb_data_size, uint32_t num_lines, uint32_t first_line)
 {
     START_TIMER;
 
     if (txt_file->codec == CODEC_BGZF)
-        bgzf_write_to_disk (vb); 
+        bgzf_write_to_disk (txt_data, bgzf_blocks, compressed); 
     else
-        txtfile_write_to_disk (&vb->txt_data);
+        txtfile_write_to_disk (txt_data, 0, 0);
 
-    ASSERTW (vb->txt_data.len == vb->vb_data_size || // files are the same size, expected
-             exe_type == EXE_GENOCAT ||              // many genocat flags modify the output file, so don't compare
-             !dt_get_translation().is_src_dt,        // we are translating between data types - the source and target txt files have different sizes
+    ASSERTW (txt_data->len == vb_data_size || // files are the same size, expected
+             exe_type == EXE_GENOCAT       || // many genocat flags modify the output file, so don't compare
+             !dt_get_translation().is_src_dt, // we are translating between data types - the source and target txt files have different sizes
              "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-             vb->vblock_i, (uint32_t)vb->lines.len, vb->first_line,
-             str_uint_commas (vb->vb_data_size).s, dt_name (txt_file->data_type), 
-             str_uint_commas (vb->txt_data.len).s, 
-             (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
+             vb_i, num_lines, first_line, str_uint_commas (vb_data_size).s, dt_name (txt_file->data_type), 
+             str_uint_commas (txt_data->len).s, 
+             (int32_t)txt_data->len - (int32_t)vb_data_size);
 
-    COPY_TIMER (write);
+    COPY_TIMER_VB (evb, write);
 }
 
 // PIZ - called from fastq_txtfile_write_one_vblock_interleave
-void txtfile_write_4_lines (VBlockP vb, 
-                            unsigned pair) // 1 or 2 to add /1 or /2 to the end of the qname
+void txtfile_write_4_lines (ConstBufferP txt_data, 
+                            const char *line_start[5], // 5 pointers into txt_data (5th is the after the 4th line)
+                            unsigned pair)       // 1 or 2 to add /1 or /2 to the end of the qname
 {
     static const char *suffixes[3] = { "", "/1", "/2" }; // suffixes for pair 1 and pair 2 reads
 
-    ARRAY (char, txt, vb->txt_data);
-    #define start_line (vb->txt_data.param) // we use param as "start_line"
-
     for (unsigned nl=0; nl < 4; nl++) {
-        int64_t last_in_line = start_line; 
-        while (last_in_line < txt_len && txt[last_in_line] != '\n') last_in_line++;
-        
-        ASSERTE (last_in_line < txt_len, "txt_data ends without a full 4-line fastq record in vb=%u nl=%u txt_len=%u start_line=%u last_in_line=%u:\n%.*s", 
-                 vb->vblock_i, nl, (unsigned)txt_len, (unsigned)start_line, (unsigned)last_in_line, MIN (1000, (unsigned)(txt_len - start_line)), &txt[start_line]);
 
-        int64_t line_len = last_in_line - start_line + 1;
+        unsigned line_len = line_start[nl+1] - line_start[nl];
 
         if (nl || !pair)
-            file_write (txt_file, &txt[start_line], line_len);
+            file_write (txt_file, line_start[nl], line_len);
 
         else {
-            int64_t after_qname = last_in_line;
-            for (int64_t i=start_line; i <= last_in_line; i++)
-                if (txt[i] == ' ' || txt[i] == '\t') {
-                    after_qname = i;
-                    break;
-                }
+            // insert a /1 or /2 just before the first space, tab or newline
+            const char *sep;
+            for (sep = line_start[0]; *sep != ' ' && *sep != '\t' && *sep != '\n'; sep++);
+            unsigned qname_len = (unsigned)(sep - line_start[0]); // excluding the separator
 
-            int qname_len = after_qname - start_line;
-            file_write (txt_file, &txt[start_line], qname_len);
+            // write up to the separator
+            file_write (txt_file, line_start[0], qname_len);
 
             // write suffix if requested, and suffix is not already present
-            if (pair && (qname_len < 3 || txt[after_qname-2] != '/' || txt[after_qname-1] != '0' + pair))
+            if (pair && (qname_len < 3 || sep[-2] != '/' || sep[-1] != '0' + pair))
                 file_write (txt_file, suffixes[pair], 2);
 
-            file_write (txt_file, &txt[after_qname], line_len - qname_len);
+            file_write (txt_file, sep, line_len - qname_len);
         }
         
         txt_file->txt_data_so_far_single += line_len;
         txt_file->disk_so_far            += line_len;
-        start_line                       += line_len;
     }
-
-    #undef start_line
 }
 
 // ZIP only - estimate the size of the txt data in this file. affects the hash table size and the progress indicator.
@@ -887,10 +893,10 @@ void txtfile_genozip_to_txt_header (const SectionListEntry *sl,
         if (txt_file->codec == CODEC_BGZF) { 
             bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
             bgzf_compress_vb (evb); // compress data (but not if we are re-creating SEC_BGZF blocks and header is too small to fit into the first block)
-            bgzf_write_to_disk (evb); // write blocks to disk and/or move unconsumed data to the next vb
+            bgzf_write_to_disk (&evb->txt_data, &evb->bgzf_blocks, &evb->compressed); // write blocks to disk and/or move unconsumed data to the next vb
         } 
         else
-            txtfile_write_to_disk (&evb->txt_data);
+            txtfile_write_to_disk (&evb->txt_data, 0, 0);
 
         if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
             Digest reconstructed_header_digest = digest_do (evb->txt_data.data, evb->txt_data.len);

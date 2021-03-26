@@ -1,14 +1,12 @@
 // ------------------------------------------------------------------
 //   mutex.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef MUTEX_INCLUDED
 #define MUTEX_INCLUDED
 
-#ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
-#endif
 #ifdef __APPLE__
 #include <availability.h>
 #ifdef __MAC_10_12
@@ -26,17 +24,20 @@ typedef struct Mutex {
     const char *name, *initialized, *lock_func;
 } Mutex;
 
-void mutex_initialize_do (MutexP mutex, const char *name, const char *func);
+extern void mutex_initialize_do (MutexP mutex, const char *name, const char *func);
 #define mutex_initialize(mutex) mutex_initialize_do (&(mutex), #mutex, __FUNCTION__)
 
-void mutex_destroy_do (MutexP mutex, const char *func);
+extern void mutex_destroy_do (MutexP mutex, const char *func);
 #define mutex_destroy(mutex) mutex_destroy_do (&(mutex), __FUNCTION__)
 
-void mutex_lock_do (MutexP mutex, const char *func);
+extern void mutex_lock_do (MutexP mutex, const char *func);
 #define mutex_lock(mutex) mutex_lock_do (&(mutex), __FUNCTION__)
 
-void mutex_unlock_do (MutexP mutex, const char *func, uint32_t line);
+extern void mutex_unlock_do (MutexP mutex, const char *func, uint32_t line);
 #define mutex_unlock(mutex) mutex_unlock_do (&(mutex), __FUNCTION__, __LINE__)
+
+extern void mutex_wait_do (Mutex *mutex, const char *func, uint32_t line);
+#define mutex_wait(mutex) mutex_wait_do (&(mutex), __FUNCTION__, __LINE__)
 
 #define mutex_is_show(name) (flag.show_mutex && (flag.show_mutex==(char*)1 || !strncmp ((name), flag.show_mutex, 8))) // only 8 chars so we can catch all genome_muteces[%u]
 

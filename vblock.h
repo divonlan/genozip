@@ -27,7 +27,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     DataType data_type;        /* type of this VB */\
     \
     /* memory management  */\
-    Buffer buffer_list;        /* a buffer containing an array of pointers to all buffers allocated for this VB (either by the I/O thread or its compute thread) */\
+    Buffer buffer_list;        /* a buffer containing an array of pointers to all buffers allocated for this VB (either by the main thread or its compute thread) */\
     \
     bool ready_to_dispatch;    /* line data is read, and dispatcher can dispatch this VB to a compute thread */\
     bool is_processed;         /* thread completed processing this VB - it is ready for outputting */\
@@ -53,7 +53,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
-    uint32_t range_num_set_bits;  /* ZIP: I/O thread telling compute thread to how many bits are set in range.is_set */ \
+    uint32_t range_num_set_bits;  /* ZIP: main thread telling compute thread to how many bits are set in range.is_set */ \
     \
     /* data for dictionary compressing */ \
     char *fragment_start;        \
@@ -145,6 +145,7 @@ typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
 } VBlock;
 
+// VBLOCK_COMMON_LINES_ZIP needs to be at the begging of *ZipDataLine of data types that support dual-coordinates.
 #define VBLOCK_COMMON_LINES_ZIP \
     WordIndex chrom_index[2];   /* Seg: enter as node_index ; Merge: convert to word_index */ \
     PosType pos[2];             /* arrays of [2] - { primary-coord, luft-coord } */ \

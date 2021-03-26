@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   bgzf.h
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
  
 #include "genozip.h"
@@ -53,5 +53,5 @@ extern struct FlagsBgzf bgzf_get_compression_level (const char *filename, const 
 extern bool bgzf_load_isizes (ConstSectionListEntryP sl_ent);
 extern void bgzf_calculate_blocks_one_vb (VBlockP vb, uint32_t vb_txt_data_len);
 extern void bgzf_compress_vb (VBlockP vb);
-extern void bgzf_write_to_disk (VBlockP vb);
+extern void bgzf_write_to_disk (ConstBufferP txt_data, ConstBufferP bgzf_blocks, BufferP compressed);
 extern void bgzf_write_finalize (FileP file);

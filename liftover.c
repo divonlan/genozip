@@ -84,7 +84,7 @@ void liftover_copy_data_from_chain_file (void)
     dst_contig_dict.param = dst_contig_words_len; // dict param contains number of words
 
     // copy word_list into a contigs buffer - for convenience of using ctx_build_zf_ctx_from_contigs later
-    buf_alloc_more (evb, &dst_contigs, 0, dst_contig_words_len, RefContig, 0, "dst_contigs");
+    buf_alloc (evb, &dst_contigs, 0, dst_contig_words_len, RefContig, 0, "dst_contigs");
     dst_contigs.len = dst_contig_words_len;
     ARRAY (RefContig, contigs, dst_contigs);
 
@@ -105,7 +105,7 @@ const char *liftover_get_luft_contig (uint32_t contig_i)
 // ZIP & SEG stuff
 // ---------------
 
-// ZIP: called by the I/O thread from *_zip_initialize 
+// ZIP: called by the main thread from *_zip_initialize 
 // 
 void liftover_zip_initialize (DidIType dst_contig_did_i, char special_liftback_snip_id)
 {
@@ -137,7 +137,7 @@ static LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover
 {
     // extend liftover_chrom2chainsrc if needed
     if (vb->chrom_node_index >= liftover_chrom2chainsrc->len) { 
-        buf_alloc_more (vb, liftover_chrom2chainsrc, 0, MAX (vb->chrom_node_index+1, 100), WordIndex, 0, "liftover_chrom2chainsrc");
+        buf_alloc (vb, liftover_chrom2chainsrc, 0, MAX (vb->chrom_node_index+1, 100), WordIndex, 0, "liftover_chrom2chainsrc");
 
         // initialize new entries allocated to WORD_INDEX_MISSING
         uint32_t size = liftover_chrom2chainsrc->size / sizeof (WordIndex);
@@ -196,7 +196,7 @@ LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_di
         unsigned opos_len = str_int_len (dl->pos[1]);
         seg_pos_field (vb, VCF_oPOS, VCF_oPOS, false, true, 0, 0, dl->pos[1], opos_len);
 
-        buf_alloc_more (vb, &vb->contexts[ochrom_did_i].b250, 1, vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250");
+        buf_alloc (vb, &vb->contexts[ochrom_did_i].b250, 1, vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250");
         NEXTENT (WordIndex, vb->contexts[ochrom_did_i].b250) = dl->chrom_index[1];
         
         unsigned ochrom_len = ENT (CtxNode, vb->contexts[ochrom_did_i].ol_nodes, dl->chrom_index[1])->snip_len;
@@ -394,48 +394,6 @@ void liftover_seg_LIFTREJD (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, c
     ASSSEG (false, value, "Invalid oSTATUS name: %.*s", value_len, value);
 }
 
-
-// PIZ with --luft: switch the order of the primary and reject txt files in the section list, to convince
-// piz_one_file to piz them in reverse order
-void liftover_section_list_move_rejects_to_front (void)
-{
-    SectionListEntry *primary = (SectionListEntry *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
-
-    SectionListEntry *rejects = primary;
-    sections_get_next_section_of_type ((const SectionListEntry **)&rejects, SEC_TXT_HEADER, false, true);
-
-    SectionListEntry *after = rejects;
-    sections_get_next_section_of_type ((const SectionListEntry **)&after, SEC_DICT, false, true); // first non-VB section type
-
-    unsigned num_primary_secs = rejects - primary;
-    unsigned num_rejects_sec  = after - rejects;
-
-    // now swap them...
-    SectionListEntry *temp = MALLOC (num_rejects_sec * sizeof (SectionListEntry));
-    memcpy (temp, rejects, num_rejects_sec * sizeof (SectionListEntry));
-    memmove (primary + num_rejects_sec, primary, num_primary_secs * sizeof (SectionListEntry));
-    memcpy (primary, temp, num_rejects_sec * sizeof (SectionListEntry));
-    FREE (temp);
-}
-
-// PIZ without --luft: remove rejects
-void liftover_section_list_remove_rejects (void)
-{
-    SectionListEntry *primary = (SectionListEntry *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
-
-    SectionListEntry *rejects = primary;
-    sections_get_next_section_of_type ((const SectionListEntry **)&rejects, SEC_TXT_HEADER, false, true);
-
-    SectionListEntry *after = rejects;
-    sections_get_next_section_of_type ((const SectionListEntry **)&after, SEC_DICT, false, true); // first non-VB section type
-
-    unsigned num_rejects_sec  = after - rejects;
-    unsigned num_after_sec    = AFTERENT (SectionListEntry, z_file->section_list_buf) - after;
-
-    // now remove rejects
-    memmove (rejects, after, num_after_sec * sizeof (SectionListEntry));
-    z_file->section_list_buf.len -= num_rejects_sec;
-}
 
 // ----------------------------------------------------------------
 // Rejects file stuff - file contains data in the native txt format

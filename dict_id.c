@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   dict_id.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -277,7 +277,7 @@ static void dict_id_show_aliases (void)
     if (exe_type == EXE_GENOCAT) exit_ok;
 }
 
-// called by ZIP I/O thread for writing to global section
+// called by ZIP main thread for writing to global section
 Buffer *dict_id_create_aliases_buf (void)
 {
     static struct { DataType dt; uint64_t *dict_id_alias; uint64_t *dict_id_dst; } aliases_def[] = DICT_ID_ALIASES;
@@ -290,7 +290,7 @@ Buffer *dict_id_create_aliases_buf (void)
 
     // build global alias reference, which will be immutable until the end of this z_file
     dict_id_aliases_buf.len = dict_id_num_aliases * sizeof (DictIdAlias);
-    buf_alloc (evb, &dict_id_aliases_buf, dict_id_aliases_buf.len, 1, "dict_id_aliases_buf");
+    buf_alloc_old (evb, &dict_id_aliases_buf, dict_id_aliases_buf.len, 1, "dict_id_aliases_buf");
 
     DictIdAlias *next = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)
@@ -305,7 +305,7 @@ Buffer *dict_id_create_aliases_buf (void)
     return &dict_id_aliases_buf;
 }
 
-// PIZ I/O thread: read all dict_id aliaeses, if there are any
+// PIZ main thread: read all dict_id aliaeses, if there are any
 void dict_id_read_aliases (void) 
 { 
     if (!sections_get_next_section_of_type (NULL, SEC_DICT_ID_ALIASES, false, true)) return; // no aliases section

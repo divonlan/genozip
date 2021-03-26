@@ -1,16 +1,12 @@
 // ------------------------------------------------------------------
 //   genozip.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
 #include <sys/types.h>
-#ifndef _WIN32
-#include <execinfo.h>
-#include <signal.h>
-#endif
 #include <getopt.h>
 
 #include "genozip.h"
@@ -38,6 +34,7 @@
 #include "context.h"
 #include "random_access.h"
 #include "codec.h"
+#include "threads.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -49,26 +46,11 @@ CommandType command = NO_COMMAND, primary_command = NO_COMMAND;
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 
-static void print_call_stack (void) 
-{
-#if ! defined _WIN32 && defined DEBUG
-#   define STACK_DEPTH 15
-    void *array[STACK_DEPTH];
-    size_t size = backtrace(array, STACK_DEPTH);
-    
-    fprintf (stderr, "Call stack:\n");
-    backtrace_symbols_fd (array, size, STDERR_FILENO);
-#endif
-}
-
-static bool im_in_main_exit = false, exit_completed = false;
 void main_exit (bool show_stack, bool is_error) 
 {
     fflush (stderr);
 
-    im_in_main_exit = true;
-
-    if (show_stack) print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
+    if (show_stack) threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
 
     buf_test_overflows_all_vbs("exit_on_error");
 
@@ -80,47 +62,22 @@ void main_exit (bool show_stack, bool is_error)
         char save_name[strlen (z_file->name)+1];
         strcpy (save_name, z_file->name);
 
-        // if we're not the main thread - cancel the main thread before closing z_file, so that the main 
-        // thread doesn't attempt to access it (eg. z_file->data_type) and get a segmentation fault.
-        if (!arch_am_i_io_thread()) 
-            cancel_io_thread(); 
+        // cancel all other threads before closing z_file, so other threads don't attempt to access it 
+        // (eg. z_file->data_type) and get a segmentation fault.
+        threads_cancel_other_threads();
 
         file_close (&z_file, false, false); // also frees file->name
 
         // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
-        // because it can't access a z_file filed after z_file is freed, and main_sigsegv_handler aborts
+        // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
         file_remove (save_name, true);
     }
-
-    exit_completed = true;
 
     if (is_error)
         abort();
     else
         exit (0);
 } 
-
-#ifndef _WIN32
-static void main_sigsegv_handler (int sig) 
-{
-    // note: during exit_on_error, we close z_file which might cause compute threads access z_file fields to 
-    // throw a segmentation fault. we don't show it in this case, as we have already displayed the error itself
-    if (!im_in_main_exit) 
-        fprintf (stderr, "\nError: %s\n", strsignal (sig));
-
-    // busy-wait for exit_on_error to complete before exiting cleanly
-    else {
-        //fprintf (stderr, "Segmentation fault might appear now - it is not an error - you can safely ignore it\n");
-        while (!exit_completed) 
-            usleep (10000); // 10 millisec
-        exit (1);
-    }
-
-    print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
-
-    abort();
-}
-#endif
 
 static void main_print_help (bool explicit)
 {
@@ -407,7 +364,8 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
     
-    // a loop for decompressing all components in unbind mode. in concatenate mode, it collapses to a single iteration.
+    // a loop for decompressing all components in unbind mode.
+    // in concatenate mode, it collapses to a single iteration. in --interleave, it iterates on every other component.
     for (uint32_t component_i=0; component_i < z_file->num_components; component_i += flag.unbind ? 1 + flag.interleave : z_file->num_components) {
         piz_one_file (component_i, is_first_z_file, is_last_z_file);
         file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
@@ -672,21 +630,14 @@ void TEST() {
 
 int main (int argc, char **argv)
 {
-    arch_initialize (argv[0]);
     buf_initialize(); 
+    arch_initialize (argv[0]);
+    threads_initialize();
     vb_initialize_evb();
     random_access_initialize();
     codec_initialize();
 
     //TEST();exit(0);
-
-#ifdef _WIN32
-    // lowercase argv[0] to allow case-insensitive comparison in Windows
-    str_tolower (argv[0], argv[0]);
-#else
-    signal (SIGSEGV, main_sigsegv_handler);   // segmentation fault handler
-    signal (SIGUSR1, buf_display_memory_usage_handler); // display memory usage
-#endif
 
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
     else if (strstr (argv[0], "genocat"))   exe_type = EXE_GENOCAT;

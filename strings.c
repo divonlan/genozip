@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   strings.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <time.h>
@@ -291,7 +291,7 @@ bool str_case_compare (const char *str1, const char *str2, unsigned len,
 // returns true is successful
 bool str_split (const char *str, unsigned str_len, unsigned num_items, char sep,
                 const char **items,  // out - array of char*
-                unsigned *item_lens) // out - corresponding lengths
+                unsigned *item_lens) // optional out - corresponding lengths
 
 {
     items[0] = str;
@@ -303,10 +303,12 @@ bool str_split (const char *str, unsigned str_len, unsigned num_items, char sep,
             items[item_i++] = &str[i+1];
         }
 
-    for (unsigned i=0; i < num_items-1; i++)    
-        item_lens[i] = items[i+1] - items[i] - 1;
-        
-    item_lens[num_items-1] = &str[str_len] - items[num_items-1];
+    if (item_lens) {
+        for (unsigned i=0; i < num_items-1; i++)    
+            item_lens[i] = items[i+1] - items[i] - 1;
+            
+        item_lens[num_items-1] = &str[str_len] - items[num_items-1];
+    }
 
     return item_i == num_items; // false if too few separators
 }

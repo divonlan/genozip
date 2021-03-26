@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_none.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -43,7 +43,7 @@ bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
 
         // copy data to vb->compressed
         ASSERTE0 (!vb->compressed.len, "expecting vb->compressed to be free, but its not");
-        buf_alloc (vb, &vb->compressed, *uncompressed_len, 1.2, "compressed");
+        buf_alloc_old (vb, &vb->compressed, *uncompressed_len, 1.2, "compressed");
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
             char *start1=0;

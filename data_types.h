@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   header.h
-//   Copyrigh8t (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyrigh8t (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef DATA_TYPES_INCLUDED
@@ -41,7 +41,7 @@ typedef struct DataTypeProperties {
     bool is_binary; 
     DataType bin_type;                 // the binary equivalent of this textual file - exists for every data type that might have genozip_header.txt_is_bin=true
     enum {NO_RA, RA} has_random_access;
-    unsigned line_height;              // how many actual txt file lines are in one seg line (seg lines are counted in lines.len)
+    unsigned line_height;              // how many actual txt file lines are in one seg line (seg lines are counted in lines.len). drop_lines in container_reconstruct_do needs to match the maximum.
     unsigned (*sizeof_vb)(void);
     unsigned (*sizeof_zip_dataline)(void);
 
@@ -49,14 +49,14 @@ typedef struct DataTypeProperties {
     enum {HDR_NONE, HDR_OK, HDR_MUST} txt_header_required;
     char txt_header_1st_char;          // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
     int32_t (*is_header_done) (bool is_eof);  // header length if header read is complete, -1 if not complete yet + sets lines.len
-    int32_t (*unconsumed) (VBlockP, uint32_t first_i, int32_t *i);  // called by I/O thread called by txtfile_get_unconsumed_to_pass_up to get the length of unconsumed txt to pass to next vb. returns -1 if first_i is too high and it needs more data.
-    bool (*inspect_txt_header) (BufferP txt_header); // called by I/O thread to verify the txt header. returns false if this txt file should be skipped
+    int32_t (*unconsumed) (VBlockP, uint32_t first_i, int32_t *i);  // called by main thread called by txtfile_get_unconsumed_to_pass_up to get the length of unconsumed txt to pass to next vb. returns -1 if first_i is too high and it needs more data.
+    bool (*inspect_txt_header) (BufferP txt_header); // called by main thread to verify the txt header. returns false if this txt file should be skipped
 
     // ZIP callbacks
-    void (*zip_initialize)(void);       // called by I/O thread when after the txt header is read
-    void (*zip_finalize)(void);         // called by I/O thread after each txt file compressing is done
-    void (*zip_read_one_vb)(VBlockP);   // called by I/O thread after reading txt of one vb into vb->txt_data
-    void (*zip_after_compute)(VBlockP); // called by I/O thread after completing compute thread of VB
+    void (*zip_initialize)(void);       // called by main thread when after the txt header is read
+    void (*zip_finalize)(void);         // called by main thread after each txt file compressing is done
+    void (*zip_read_one_vb)(VBlockP);   // called by main thread after reading txt of one vb into vb->txt_data
+    void (*zip_after_compute)(VBlockP); // called by main thread after completing compute thread of VB
     bool (*zip_dts_flag)(void);         // called to set FlagsGenozipHeader.dt_specific
     void (*seg_initialize)(VBlockP);    // called by Compute thread at the beginning of Seg
     const char *(*seg_txt_line)(VBlockP, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13);  // Called by Compute thread to Seg one line
@@ -67,7 +67,7 @@ typedef struct DataTypeProperties {
     // PIZ callbacks
     void (*piz_header_init)(void);// called at the beginning of piz of each file
     void (*piz_initialize)(void); // called after reconstructing the txt header and before compute threads
-    void (*piz_finalize)(void);   // called by I/O thread after each z_file reconstruction is done
+    void (*piz_finalize)(void);   // called by main thread after each z_file reconstruction is done
     bool (*piz_read_one_vb)(VBlockP, ConstSectionListEntryP);
     bool (*is_skip_secetion)(VBlockP, SectionType, DictId);
     void (*reconstruct_seq)(VBlockP, ContextP, const char *, unsigned);

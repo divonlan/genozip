@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   mutex.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -58,4 +58,10 @@ void mutex_unlock_do (Mutex *mutex, const char *func, uint32_t line)
 
     if (mutex_is_show (mutex->name))
         iprintf ("UNLOCKED: Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
+}
+
+void mutex_wait_do (Mutex *mutex, const char *func, uint32_t line)   
+{
+    mutex_lock_do (mutex, func);
+    mutex_unlock_do (mutex, func, line);
 }

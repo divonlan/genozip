@@ -310,7 +310,7 @@ static inline void chain_piz_filter_ingest_alignmet (VBlock *vb)
 {
     mutex_lock (chain_mutex);
 
-    buf_alloc_more (vb, &chain, 1, 0, ChainAlignment, 2, "chain"); 
+    buf_alloc (vb, &chain, 1, 0, ChainAlignment, 2, "chain"); 
 
     int64_t size = vb->last_int(CHAIN_SIZE);
 
@@ -393,7 +393,7 @@ void chain_load (void)
     ASSERTE0 (flag.reading_chain, "reading_chain is NULL");
     SAVE_FLAGS;
 
-    buf_alloc_more (evb, &chain, 0, 1000, ChainAlignment, 1, "chain"); // must be allocated by I/O thread
+    buf_alloc (evb, &chain, 0, 1000, ChainAlignment, 1, "chain"); // must be allocated by main thread
     
     z_file = file_open (flag.reading_chain, READ, Z_FILE, DT_CHAIN);    
     z_file->basename = file_basename (flag.reading_chain, false, "(chain-file)", NULL, 0);

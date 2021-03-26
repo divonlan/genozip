@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   encrypt.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -91,7 +91,7 @@ static void crypt_generate_aes_key (VBlock *vb,
         pepper_len = strlen (pepper);
     }
 
-    buf_alloc (vb, &vb->spiced_pw, pw_len + sizeof (uint32_t) + sizeof (uint8_t) + sizeof (uint8_t) + salt_len + pepper_len, 1, "spiced_pw");
+    buf_alloc_old (vb, &vb->spiced_pw, pw_len + sizeof (uint32_t) + sizeof (uint8_t) + sizeof (uint8_t) + salt_len + pepper_len, 1, "spiced_pw");
     buf_add (&vb->spiced_pw, password, pw_len);
 
     uint8_t sec_type_byte  = (uint8_t)sec_type; // convert to a byte, as enum and bool might be represented differently by different compilers

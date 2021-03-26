@@ -52,7 +52,8 @@
         "dict_id.h": "c",
         "url.h": "c",
         "limits": "cpp",
-        "new": "cpp"
+        "new": "cpp",
+        "threads.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",

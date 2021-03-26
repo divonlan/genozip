@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   profiler.h
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef PROFILER_INCLUDED
@@ -8,9 +8,7 @@
 
 #include "genozip.h"
 #include <time.h>
-#if defined _MSC_VER // Microsoft compiler
-#include "compatibility/visual_c_gettime.h"
-#elif defined __APPLE__ 
+#ifdef __APPLE__ 
 #include "compatibility/mac_gettime.h"
 #endif
 
@@ -20,7 +18,7 @@ typedef struct {
         sam_seg_seq_field, compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread,
         piz_get_line_subfields, zip_generate_ctxs, zip_compress_ctxs, ctx_merge_in_vb_ctx,
         zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt,
-        reconstruct_vb, buf_alloc, txtfile_read_header, txtfile_read_vblock,
+        reconstruct_vb, buf_alloc_old, txtfile_read_header, txtfile_read_vblock,
         seg_all_data_lines, compressor_hapmat, codec_hapmat_count_alt_alleles, seg_initialize,
         ctx_read_all_dictionaries, ctx_dict_build_word_lists, ctx_clone, ctx_merge_in_vb_ctx_one_dict_id,
         md5,ctx_compress_one_dict_fragment, aligner_best_match, aligner_get_word_from_seq,
@@ -31,11 +29,7 @@ typedef struct {
         const char *next_name, *next_subname;
 } ProfilerRec;
 
-#ifdef _MSC_VER
-typedef struct my_timespec TimeSpecType;
-#else
 typedef struct timespec TimeSpecType;
-#endif
 
 #define START_TIMER     TimeSpecType profiler_timer; \
                         if (flag.show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 

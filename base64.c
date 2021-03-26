@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   base64.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions data the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 //
 // inspired by: https://github.com/launchdarkly/c-client-sdk/blob/master/base64.c

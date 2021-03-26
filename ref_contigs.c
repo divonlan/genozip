@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   ref_contigs.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -89,7 +89,7 @@ void ref_contigs_compress (void)
 
     // the number of contigs is at most the number of chroms - but could be less if some chroms have no sequence
     // in SAM with header and -E, we don't copy the contigs to CHROM, so we take the length from loaded_contigs.
-    buf_alloc (evb, &created_contigs, sizeof (RefContig) * MAX (z_file->contexts[CHROM].nodes.len, loaded_contigs.len), 1, "created_contigs");
+    buf_alloc_old (evb, &created_contigs, sizeof (RefContig) * MAX (z_file->contexts[CHROM].nodes.len, loaded_contigs.len), 1, "created_contigs");
 
     RefContig *last = NULL;
 
@@ -182,7 +182,7 @@ static void ref_contigs_create_sorted_index (void)
     if (buf_is_allocated (&loaded_contigs_sorted_index)) return; // already done
 
     // contig_words_sorted_index - an array of uint32 of indexes into contig_words - sorted by alphabetical order of the snip in contig_dict
-    buf_alloc (evb, &loaded_contigs_sorted_index, sizeof(uint32_t) * loaded_contigs.len, 1, "loaded_contigs_sorted_index");
+    buf_alloc_old (evb, &loaded_contigs_sorted_index, sizeof(uint32_t) * loaded_contigs.len, 1, "loaded_contigs_sorted_index");
     for (uint32_t i=0; i < loaded_contigs.len; i++)
         NEXTENT (uint32_t, loaded_contigs_sorted_index) = i;
 
@@ -203,13 +203,13 @@ static int ref_contigs_sort_chroms_alphabetically (const void *a, const void *b)
                    ENT (char, ctx->dict, word_b->char_index));
 }
 
-// called by I/O thread from piz_read_global_area of user file (not reference file)
+// called by main thread from piz_read_global_area of user file (not reference file)
 void ref_contigs_sort_chroms (void)
 {
     uint32_t num_chroms = z_file->contexts[CHROM].word_list.len;
 
     // z_file->chroms_sorted_index - an array of uint32 of indexes into z_file->contexts[CHROM].word_list - sorted by alphabetical order of the snip in z_file->contexts[CHROM].dict
-    buf_alloc (evb, &z_file->chroms_sorted_index, sizeof(uint32_t) * num_chroms, 1, "z_file->chroms_sorted_index");
+    buf_alloc_old (evb, &z_file->chroms_sorted_index, sizeof(uint32_t) * num_chroms, 1, "z_file->chroms_sorted_index");
     for (uint32_t i=0; i < num_chroms; i++)
         NEXTENT (uint32_t, z_file->chroms_sorted_index) = i;
 
@@ -324,7 +324,7 @@ void ref_contigs_generate_data_if_denovo (void)
     // word_list generation as done in PIZ, we guarantee that we will get the same chrom_index
     // in case of multiple bound files, we re-do this in every file in case of additional chroms (not super effecient, but good enough because the context is small)
     loaded_contigs.len = chrom_ctx->nodes.len;
-    buf_alloc (evb, &loaded_contigs, loaded_contigs.len * sizeof (RefContig), 1, "loaded_contigs");
+    buf_alloc_old (evb, &loaded_contigs, loaded_contigs.len * sizeof (RefContig), 1, "loaded_contigs");
 
     // similar logic to ctx_dict_build_word_lists
     char *start = loaded_contigs_dict.data;
@@ -357,7 +357,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsig
     // case: found (original or alternate name), but in a different index than header - create a alt_chrom entry to map indeces
     // note: in case of an alt name, but in the correct index - no need to create an alt chrom entry as no index mapping is needed
     if (ref_chrom != WORD_INDEX_NONE && ref_chrom != header_chrom) {
-        buf_alloc_more (evb, &z_file->alt_chrom_map, 1, 100, AltChrom, 2, "z_file->alt_chrom_map");
+        buf_alloc (evb, &z_file->alt_chrom_map, 1, 100, AltChrom, 2, "z_file->alt_chrom_map");
         NEXTENT (AltChrom, z_file->alt_chrom_map) = (AltChrom){ .txt_chrom = BGEN32 (header_chrom), 
                                                                 .ref_chrom = BGEN32 (ref_chrom) };
 

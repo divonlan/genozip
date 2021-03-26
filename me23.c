@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   me23.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -24,7 +24,7 @@
 
 bool me23_header_inspect (BufferP txt_header)
 {
-    buf_alloc_more (evb, txt_header, 1, 0, char, 0, 0); // make room for \0
+    buf_alloc (evb, txt_header, 1, 0, char, 0, 0); // make room for \0
     *AFTERENT (char, *txt_header) = 0; // nul-terminate for strstr
 
     ASSINP (strstr (txt_header->data, "23andMe"), "file %s is missing a 23andMe header and thus not identified as a 23andMe file", 
@@ -143,7 +143,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     Context *ctx = &z_file->contexts[ME23_CHROM];
     uint32_t num_chroms = (uint32_t)ctx->word_list.len;
     
-    buf_alloc (evb, txtheader_buf, 1.3*evb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3p1)+strlen (VCF_HEAD_3p2)+80 +
+    buf_alloc_old (evb, txtheader_buf, 1.3*evb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3p1)+strlen (VCF_HEAD_3p2)+80 +
                num_chroms * (strlen (VCF_HEAD_2) + 100), 1, "txt_data");
     
     bufprintf (evb, txtheader_buf, VCF_HEAD_1, ref_filename);

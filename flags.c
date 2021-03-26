@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   flags.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <getopt.h>
@@ -190,7 +190,7 @@ void flags_init_from_command_line (int argc, char **argv)
 
         typedef const struct option Option;
         static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E, _ch, _lo,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _sH,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,                     _so, _SO, _s6,    _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                        _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,              _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,      _sx, _SX, _ix,                        _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                        _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,              _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,      _sx, _SX, _ix,                _s6,    _00 };
         static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _du, _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,      _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw, _sx, _SX, _ix, _vl,      _SO, _s6,    _00 };
         static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                              _u,     _p, _e,                                                                                                                    _st, _sm,                                                 _dm,                                                                                                                                                                 _sM,                                                                           _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
@@ -379,6 +379,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     if (command == PIZ) {
         CONFLICT (flag.test, flag.out_filename,      OT("output", "o"),    OT("test", "t"));
         CONFLICT (flag.test, flag.replace,           OT("replace", "^"),   OT("test", "t"));
+        CONFLICT (flag.sort, flag.bgzf,              "--sort",             OT("bgzf", "z"));
     }
 
     // some genozip flags are allowed only in combination with --decompress 
@@ -393,8 +394,6 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     ASSINP (flag.reference != REF_EXTERNAL  || !flag.show_ref_seq, "option %s is incompatible with --show-ref-seq: use genocat --show-ref-seq on the reference file itself instead", OT("reference", "e"));
     ASSINP (!flag.to_stdout || command != ZIP, "option %s only works for decompressing files, not compressing", OT("stdout", "c"));
     ASSINP (flag.reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "option %s supported only for viewing the reference file itself", OT("REFERENCE", "E"));
-    ASSINP0 (global_max_threads >= 2 || !flag.genobwa, "--genobwa requires at least 2 threads");
-    ASSINP0 (global_max_threads >= 2 || !flag.interleave, "--interleave requires at least 2 threads");
     ASSINP0 (!flag.gtshark, "the --gtshark option is no longer supported, because the native VCF haplotype compression of Genozip is now superior to GTShark");
     
     if (num_files)
@@ -596,8 +595,12 @@ void flags_update_piz_one_file (void)
         flag.header_only_fast  = true;
     }
 
-    // if interleaving bgzf is always 0
-    if (flag.interleave)
+    // interleave is off for this, if we're just reading the reference / chain file
+    if (flag.reading_reference || flag.reading_chain)
+        flag.interleave = false;
+
+    // if interleaving or sorting bgzf is always 0
+    if (flag.interleave || flag.sort)
         flag.bgzf = 0;
 
     // Note on BAM/SAM: BAM is stored as binary SAM, so trans_containers=true for BAM->BAM , but false for BAM->SAM
@@ -618,7 +621,7 @@ void flags_update_piz_one_file (void)
                          (exe_type == EXE_GENOCAT && z_file->z_flags.dual_coords && !flag.no_pg);
 
     bool is_paired_fastq = fastq_piz_is_paired(); // also updates z_file->z_flags in case of backward compatability issues
-    
+
     // interleaving is only possible for on FASTQ data compressed with --pair
     ASSINP (!flag.interleave || is_paired_fastq, 
             "--interleave is not supported for %s because it only works on FASTQ data that was compressed with --pair", z_name);
@@ -626,6 +629,15 @@ void flags_update_piz_one_file (void)
     // downsample not possible for FASTA or Chain
     ASSINP (!flag.downsample || (flag.out_dt != DT_FASTA && flag.out_dt != DT_CHAIN && flag.out_dt != DT_GENERIC), 
             "%s: --downsample is not supported for %s files", z_name, dt_name (flag.out_dt));
+
+    flag.may_drop_lines = exe_type == EXE_GENOCAT && 
+                          (flag.grep || flag.regions || flag.downsample || flag.luft || flag.genobwa || 
+                           flag.header_only_fast || (flag.no_header && flag.out_dt == DT_FASTA) ||
+                           (z_file->data_type == DT_ME23 && flag.out_dt == DT_VCF) || // translating ME23->VCF
+                           (z_file->data_type == DT_SAM && flag.out_dt == DT_FASTQ)); // translating SAM->FASTQ
+
+    ASSINP (!flag.may_drop_lines || dt_props[flag.out_dt].line_height, "Options that cause dropping lines are not possible for a %s output file",
+            dt_name (flag.out_dt));
 
     // --show-sex is only possible on SAM/BAM and FASTQ
     ASSINP (!flag.show_sex || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout

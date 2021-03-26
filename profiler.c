@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   profiler.c
-//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
@@ -33,7 +33,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(sam_seg_seq_field);
     ADD(ctx_compress_one_dict_fragment);
     ADD(zfile_uncompress_section);
-    ADD(buf_alloc);
+    ADD(buf_alloc_old);
     ADD(txtfile_read_vblock);
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
@@ -100,7 +100,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
 
     if (command != ZIP) { // this is a uncompress operation
 
-        fprintf (info_stream, "GENOUNZIP I/O thread (piz_one_file):\n");
+        fprintf (info_stream, "GENOUNZIP main thread (piz_one_file):\n");
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
         PRINT (ctx_read_all_dictionaries, 1)
@@ -123,7 +123,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (codec_hapmat_piz_get_one_line, 2);
     }
     else { // compress
-        fprintf (info_stream, "GENOZIP I/O thread (zip_one_file):\n");
+        fprintf (info_stream, "GENOZIP main thread (zip_one_file):\n");
         PRINT (txtfile_read_header, 1);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
@@ -159,7 +159,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (codec_hapmat_count_alt_alleles, 2);
     }    
 
-    PRINT (buf_alloc, 0);
+    PRINT (buf_alloc_old, 0);
     PRINT (generate_rev_complement_genome, 0);
     
     fprintf (info_stream, "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
