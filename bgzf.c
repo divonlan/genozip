@@ -460,6 +460,9 @@ static void bgzf_compress_vb_no_blocks (VBlock *vb)
 {
     #define BGZF_CREATED_BLOCK_SIZE 65280 // same size as observed in htslib-created files
 
+    ASSERTNOTINUSE (vb->compressed);
+    ASSERTNOTINUSE (vb->bgzf_blocks);
+
     // estimated size, we will increase later if needed
     buf_alloc_old (vb, &vb->compressed, vb->txt_data.len/2, 1, "compressed"); // alloc based on estimated size
     buf_alloc_old (vb, &vb->bgzf_blocks, (1 + vb->txt_data.len / BGZF_CREATED_BLOCK_SIZE) * sizeof (BgzfBlockPiz), 1, "bgzf_blocks");
@@ -584,6 +587,13 @@ void bgzf_write_to_disk (ConstBufferP txt_data, ConstBufferP bgzf_blocks, Buffer
 
     if (last_data_len)                            
         buf_add_more (evb, &txt_file->unconsumed_txt, ENT (char, *txt_data, last_data_index), last_data_len, "txt_file->unconsumed_txt");
+/*    
+    if (last_data_len) {                             
+        buf_alloc_more (evb, &txt_file->unconsumed_txt, last_data_len, 0, char, 0, "txt_file->unconsumed_txt");
+        buf_add (&txt_file->unconsumed_txt, ENT (char, vb->txt_data, last_data_index), last_data_len);
+    }
+
+    buf_free (&vb->bgzf_blocks);*/
 }
 
 void bgzf_write_finalize (File *file)

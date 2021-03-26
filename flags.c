@@ -555,7 +555,7 @@ void flags_update_zip_one_file (void)
 }
 
 // PIZ: called after opening z_file and reading the header before opening txt_file
-void flags_update_piz_one_file (void)
+void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 {
     if (flag.out_dt == DT_NONE) {
 
@@ -581,6 +581,14 @@ void flags_update_piz_one_file (void)
     // genocat of dual coords implies sorting unless overridden with --unsorted
     if (exe_type == EXE_GENOCAT && z_file->z_flags.dual_coords && !flag.unsorted) 
         flag.sort = true;
+        
+    // when using genocat to concatenate multiple files - don't show the header for the 2nd+ file
+    if (exe_type == EXE_GENOCAT && z_file_i >= 1) {
+        flag.no_header = true;
+
+        ASSINP (!dt_props[flag.out_dt].is_binary, "Cannot concatenate multiple %s files, because %s is a binary format",
+                dt_name (flag.out_dt), dt_name (flag.out_dt));
+    }
 
     // phylip implied sequential and header_one
     if (z_file->data_type == DT_FASTA && flag.out_dt == DT_PHYLIP) {

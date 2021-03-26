@@ -356,9 +356,10 @@ docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LIC
 	@echo '  (3) Click Save, then click Build'
 	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
 	@echo '  (5) Exit the UI (close the window)'
+	@cp $(WINDOWS_INSTALLER_OBJS) ../genozip/windows # so this works for genozip-prod too - because InstallForge uses absolute paths
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
 	@echo 'Committing Windows installer and pushing to repo'
-	@mv windows/genozip-installer.exe docs
+	@mv ../genozip/windows/genozip-installer.exe docs  # so this works for genozip-prod too - because InstallForge uses absolute paths
 	@(git stage genozip-installer.ifp $@ ; exit 0) > /dev/null
 	@(git commit -m windows_files_for_version_$(version) genozip-installer.ifp $@ ; exit 0) > /dev/null
 	@git push > /dev/null

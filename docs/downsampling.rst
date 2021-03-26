@@ -13,6 +13,8 @@ Data Types: VCF, SAM, BAM, FASTQ, GVF, 23andMe
 
 Shows one line (or *read* in the case of FASTQ) in every *rate* lines. The optional *shard* parameter (0-based) determines which of the *rate* lines is shown. The default value of *shard* is 0.
 
+Downsampling is applied as the final filter after all other filters (``--interleave``, ``--grep``, ``--regions``, ``--no-header``, ``--luft`` etc) are applied.
+
 *Example*:
 
 Getting the middle read of every 3 consecutive FASTQ reads (i.e. read 1 of every {0,1,2}):

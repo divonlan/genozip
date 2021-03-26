@@ -14,7 +14,7 @@ One or more file names must be given
      |
      | ``genounzip file.vcf.genozip --output file.vcf.gz``
      |
-     | ``genounzip bound.vcf.genozip --unbind``
+     | ``genounzip bound.vcf.genozip --unbind=new_directory/``
 
 **Options**
 
@@ -24,7 +24,7 @@ One or more file names must be given
 
 .. include:: opt-piz.rst
 
-.. option:: -u, --unbind[=prefix]  Split a bound file back to its original components. If the --unbind=prefix form is used a prefix is added to each file component. A prefix may include a directory.
+.. option:: --unbind=prefix  Specify a prefix that is added to each file component name. A prefix may include a directory.
 
           |
 

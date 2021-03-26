@@ -707,8 +707,8 @@ static void *sorter_piz_writer (void *unused)
 
     for (uint64_t i=0; i < plan_len; i++) {
 
-        ASSERTE (plan[i].vb_i >= 0 && plan[i].vb_i < z_file->vb_info[0].len, 
-                 "plan[%u].vb_i=%u expected to be in range [0,%u] ", (unsigned)i, plan[i].vb_i, (unsigned)(z_file->vb_info[0].len-1));
+        ASSERTE (plan[i].vb_i >= 1 && plan[i].vb_i <= z_file->vb_info[0].len, 
+                 "plan[%u].vb_i=%u expected to be in range [1,%u] ", (unsigned)i, plan[i].vb_i, (unsigned)z_file->vb_info[0].len);
 
         PizVbInfo *v  =                   ENT (PizVbInfo, z_file->vb_info[0], plan[i].vb_i  - 1),
                   *v2 = flag.interleave ? ENT (PizVbInfo, z_file->vb_info[0], plan[i].vb2_i - 1) : NULL;

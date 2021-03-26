@@ -296,7 +296,7 @@ static void main_ask_about_unbind (void)
     fprintf (stderr, "\n");
 }
 
-static void main_genounzip (const char *z_filename, const char *txt_filename, bool is_last_z_file)
+static void main_genounzip (const char *z_filename, const char *txt_filename, int z_file_i, bool is_last_z_file)
 {
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;
@@ -331,9 +331,9 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
     if (z_file->data_type == DT_SAM && z_file->z_flags.txt_is_bin && flag.out_dt==-1 && exe_type == EXE_GENOCAT)
         flag.out_dt = DT_SAM;
 
-    // if this is a bound file, and we don't have --unbind or --force, we ask the user
-    if (z_file->num_components >= (2 + z_file->z_flags.dual_coords) && !flag.unbind && !flag.force && !flag.out_filename)
-        main_ask_about_unbind();
+    // if this is genounzip of a bound file, and we don't have --unbind or --force, we ask the user
+    if (exe_type == EXE_GENOUNZIP && z_file->num_components >= (2 + z_file->z_flags.dual_coords) && !flag.unbind && !flag.force && !flag.out_filename)
+        flag.unbind = ""; // we always unbind in genounzip - if user didn't specify prefix, then no prefix
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
     if (flag.reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
@@ -346,7 +346,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, bo
         }
     }
 
-    flags_update_piz_one_file ();
+    flags_update_piz_one_file (z_file_i);
     
     // set txt_filename from genozip file name (inc. extensions if translating or --bgzf)
     if (!txt_filename && !flag.to_stdout && !flag.unbind) 
@@ -736,7 +736,7 @@ int main (int argc, char **argv)
                                       flag.out_filename, file_i, !next_input_file || is_last_txt_file, argv[0]); 
                         break;
 
-            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i==0); break;           
+            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); break;           
 
             case LIST : main_genols (next_input_file, false, NULL, false); break;
 

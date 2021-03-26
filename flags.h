@@ -137,7 +137,7 @@ extern bool option_is_short[];
 extern void flags_init_from_command_line (int argc, char **argv);
 extern void flags_update (unsigned num_files, const char **filenames);
 extern void flags_update_zip_one_file (void);
-extern void flags_update_piz_one_file (void);
+extern void flags_update_piz_one_file (int z_file_i);
 
 extern void flags_store_command_line (int argc, char **argv);
 const BufferP flags_command_line (void);

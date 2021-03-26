@@ -400,8 +400,14 @@ bug fixes, including major bug with mc:i optional field in SAM
 11.0.9
 - Fix bug with --downsample in combination with --interleaved
 
+11.0.11
+- Fix bug with concatenating multiple files with genocat
+- genocat <file1> <file2>.... now will show the header of only the first file. To show headers of all files use 
+  genounzip --stdout instead.
+
 12.0.0
 - Support dual-coordinates VCF files: genozip --chain to create a dual-coordinates file ; genocat --luft ("lifted") to see the
        lifted-over coordinates
 - Support genocat --sort for mildly-unsorted VCF files, implied for dual-coordinates VCF files. Disabled by --unsorted.
 - Fixed bug with subsetting samples in VCF (genocat --sample). The fix will work on files compressed with 11.0.9 onwards.
+- Now, genounzip always unbinds files, and genocat always concatenates
