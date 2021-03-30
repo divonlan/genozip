@@ -132,7 +132,7 @@ test_stdout()
     local file=$TESTDIR/$1
     
     $genozip ${file} -fo $output || exit 1
-    $genounzip $output --stdout | tr -d "\r" > $OUTDIR/unix-nl.$1 || exit 1
+    ($genocat $output || exit 1) | tr -d "\r" > $OUTDIR/unix-nl.$1 
 
     cmp_2_files $file $OUTDIR/unix-nl.$1
     cleanup
@@ -155,7 +155,7 @@ test_multi_bound() # $1=filename $2=REPLACE (optional)
     $genozip $file1 $file2 -ft -o $output || exit 1 # test as bound
     local output2=$OUTDIR/output2.genozip
     cp -f $output $output2
-    $genounzip $output $output2 -u -t || exit 1 # test unbind 2x2
+    $genounzip $output $output2 -t || exit 1 # test unbind 2x2
     cleanup
 }
 
@@ -349,31 +349,27 @@ batch_dual_coordinates()
 
         local src=$OUTDIR/${file}
         local primary=$OUTDIR/primary.vcf
-        local laft=$OUTDIR/laft.vcf
+        local luft=$OUTDIR/luft.vcf
         local primary2=$OUTDIR/primary2.vcf
 
         # compare src to primary (ignoring header and INFO fields)
-        view_file test/$file | cut -f1-7,9 | grep -v \# > ${src}.noinfo
         echo -n "make ${primary}.genozip from $file : " 
         $genozip -C $chain test/$file -fo ${primary}.genozip || exit 1
         echo -n "make ${primary} from ${primary}.genozip : " 
         $genocat ${primary}.genozip --no-pg -fo ${primary}
-        cut -f1-7,9 $primary | grep -v \#  > ${primary}.noinfo || exit 1
-        echo "compare ${src}.noinfo to ${primary}.noinfo (ex. INFO and header) " 
-        cmp ${src}.noinfo ${primary}.noinfo || exit 1
 
-        # convert primary -> laft -> primary
-        echo -n "make ${laft} from ${primary}.genozip : " 
-        $genocat --laft --no-pg ${primary}.genozip -fo ${laft} || exit 1
-        echo -n "make ${laft}.genozip from ${laft} : " 
-        $genozip $laft -fo ${laft}.genozip || exit 1
-        echo -n "make ${primary2} from ${laft}.genozip : " 
-        $genocat ${laft}.genozip --no-pg -fo ${primary2} || exit 1
-        echo "compare $primary1 to $primary2" 
-        cmp $primary1 $primary2 || exit 1
+        # convert primary -> luft -> primary
+        echo -n "make ${luft} from ${primary}.genozip : " 
+        $genocat --luft --no-pg ${primary}.genozip -fo ${luft} || exit 1
+        echo -n "make ${luft}.genozip from ${luft} : " 
+        $genozip $luft -fo ${luft}.genozip || exit 1
+        echo -n "make ${primary2} from ${luft}.genozip : " 
+        $genocat ${luft}.genozip --no-pg -fo ${primary2} || exit 1
+        echo "compare $primary to $primary2" 
+        cmp $primary $primary2 || exit 1
 
         cleanup
-        rm -f ${src}.noinfo ${primary}.genozip  ${primary}.noinfo ${laft} ${laft}.genozip ${primary2}
+        rm -f ${src}.noinfo ${primary}.genozip  ${primary}.noinfo ${luft} ${luft}.genozip ${primary2}
     done
 }
 
@@ -519,7 +515,7 @@ batch_reference()
     test_standard "COPY -E$GRCh38 --pair" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz
 
     echo "4 paired FASTQ with --REFERENCE (BZ2, decompress unbound)"
-    test_standard "COPY CONCAT -E$GRCh38 -2" "-u" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    test_standard "COPY CONCAT -E$GRCh38 -2" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
@@ -535,7 +531,7 @@ batch_reference()
     test_standard "-E$GRCh38 --password 123" "-p123" test.human-unsorted.sam
     
     echo "multiple bound VCF with --reference, --md5 using hg19, and unbind"
-    test_standard "COPY CONCAT -me$hg19" "-u" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    test_standard "COPY CONCAT -me$hg19" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
     echo "multiple VCF with --REFERENCE using hg19" 
     test_standard "-mE$hg19" " " test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf test.human2.filtered.snp.vcf

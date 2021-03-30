@@ -69,7 +69,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _d  {"decompress",    no_argument,       &command, PIZ             }
         #define _f  {"force",         no_argument,       &flag.force,            1 }
         #define _h  {"help",          optional_argument, 0, 'h'                    }
-        #define _l  {"list",          no_argument,       &command, LIST            }
+        #define _l  {"list",          no_argument,       &flag.list,             1 }
         #define _L1 {"license",       optional_argument, 0, 'L'                    } // US spelling
         #define _L2 {"licence",       optional_argument, 0, 'L'                    } // British spelling
         #define _q  {"quiet",         no_argument,       &flag.quiet,            1 }
@@ -113,7 +113,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _gt {"gtshark",       no_argument,       &flag.gtshark,          1 } 
         #define _pe {"pair",          no_argument,       &flag.pair,   PAIR_READ_1 } 
         #define _th {"threads",       required_argument, 0, '@'                    }
-        #define _u  {"unbind",        optional_argument, 0, 'u'                    }
+        #define _u  {"prefix",        required_argument, 0, 'u'                    }
         #define _o  {"output",        required_argument, 0, 'o'                    }
         #define _p  {"password",      required_argument, 0, 'p'                    }
         #define _B  {"vblock",        required_argument, 0, 'B'                    }
@@ -146,6 +146,8 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _SS {"SHOW-STATS",    no_argument,       &flag.show_stats,       2 } 
         #define _lc {"list-chroms",   no_argument,       &flag.list_chroms,      1 } // identical to --show-dict=CHROM 
         #define _lC {"list-contigs",  no_argument,       &flag.list_chroms,      1 } 
+        #define _lh {"show-chroms",   no_argument,       &flag.list_chroms,      1 } // identical to --show-dict=CHROM 
+        #define _lH {"show-contigs",  no_argument,       &flag.list_chroms,      1 } 
         #define _s2 {"show-b250",     optional_argument, 0, 2,                     }
         #define _sd {"show-dict",     optional_argument, 0, 3                      }
         #define _s7 {"dump-b250",     required_argument, 0, 5                      }
@@ -163,6 +165,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sv {"show-vblocks",  no_argument,       &flag.show_vblocks,     1 }  
         #define _sH {"show-chain",    no_argument,       &flag.show_chain,       1 }  
         #define _ov {"one-vb",        required_argument, 0, 8                      }  
+        #define _oc {"component",     required_argument, 0, 14                     }  
         #define _sR {"show-reference",no_argument,       &flag.show_reference,   1 }  
         #define _sC {"show-ref-contigs", no_argument,    &flag.show_ref_contigs, 1 }  
         #define _rA {"show-ref-alts", no_argument,       &flag.show_ref_alts,    1 }  
@@ -182,24 +185,26 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
         #define _dh {"show-hash",     no_argument,       &flag.show_hash,        1 }  
         #define _sx {"show-sex",      no_argument,       &flag.show_sex,         1 }  
+        #define _sy {"sex",           no_argument,       &flag.show_sex,         1 }  
         #define _SX {"show-coverage", optional_argument, 0, 13                     }  
+        #define _SY {"coverage",      optional_argument, 0, 13                     }  
         #define _ix {"idxstats",      no_argument,       &flag.idxstats,         1 }
         #define _vl {"validate",      no_argument,       &flag.validate,         1 }  
         #define _bw {"genobwa",       required_argument, 0, 11                     }  
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,    _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e, _E, _ch, _lo,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _sH,     _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,                     _so, _SO, _s6,    _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                        _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,              _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,      _sx, _SX, _ix,                _s6,    _00 };
-        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _du, _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,      _ov,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw, _sx, _SX, _ix, _vl,      _SO, _s6,    _00 };
-        static Option genols_lo[]     = {                 _f, _h,        _L1, _L2, _q,              _V,                                                                                              _u,     _p, _e,                                                                                                                    _st, _sm,                                                 _dm,                                                                                                                                                                 _sM,                                                                           _b, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch, _lo,                                          _ss, _SS, _sd, _sT, _sb, _lc, _lC, _lh, _lH, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _sH,          _B, _xt, _dm, _dp,      _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,              _rg, _sR,      _sC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _gt, _cn,           _bw,                               _so, _SO, _s6,    _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                        _ss, _SS, _sd, _sT, _sb, _lc, _lC, _lh, _lH, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,                   _xt, _dm, _dp,                                                                                                      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG,      _sx, _sy, _SX, _SY, _ix,                _s6,    _00 };
+        static Option genocat_lo[]    = {         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _du, _il, _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _sb, _lc, _lC, _lh, _lH, _s2, _s7, _S7, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,      _ov, _oc,    _xt, _dm, _dp, _ds,                                                                                   _fs, _g,      _sR,      _sC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI,      _cn, _pg, _PG, _bw, _sx, _sy, _SX, _SY, _ix, _vl,      _SO, _s6,    _00 };
+        static Option genols_lo[]     = {                 _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                                    _st, _sm,                                                                _dm,                                                                                                                                                                 _sM,                                                                                     _b, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[NUM_EXE_TYPES] = { // same order as ExeType
-            "i:I:cdfhlLqQt^Vzm@:o:p:B:9wWFe:E:C:v:2z:u", // genozip (note: includes some genounzip options to be used in combination with -d)
-            "cz:fhLqQt^V@:uo:p:me:wWx",                  // genounzip
-            "hLVp:qfub",                                 // genols
+            "i:I:cdfhLqQt^Vzm@:o:p:B:9wWFe:E:C:v:2z:",   // genozip (note: includes some genounzip options to be used in combination with -d)
+            "cz:fhLqQt^V@:u:o:p:me:wWx",                 // genounzip
+            "hLVp:qfbl",                                 // genols
             "z:hLV@:p:qQ1r:s:H1Go:fg:e:E:wWxv"           // genocat
         };
 
@@ -219,7 +224,7 @@ void flags_init_from_command_line (int argc, char **argv)
                 flag.lic_width = optarg ? atoi (optarg) : 0;
                 goto verify_command;
 
-            case PIZ : case LIST :  
+            case PIZ :  
             case VERSION :
 verify_command:
                 ASSINP (command<0 || command==c, "can't have both -%c and -%c", command, c); 
@@ -228,6 +233,7 @@ verify_command:
 
             case 'i' : file_set_input_type (optarg) ; break;
             case 'I' : file_set_input_size (optarg) ; break;
+            case 'l' : flag.list          = 1       ; break;
             case 'c' : flag.to_stdout     = 1       ; break;
             case 'F' : flag.fast          = 1       ; break;
             case 'f' : flag.force         = 1       ; break;
@@ -250,7 +256,7 @@ verify_command:
                        break;
             case 'C' : flag.reading_chain = optarg  ; break;  
             case 'm' : flag.md5           = 1       ; break;
-            case 'u' : flag.unbind    = optarg ? optarg : "" ; break; // unbind with or without a prefix
+            case 'u' : flag.unbind        = optarg  ; break;
             case '\1': flag.show_time = optarg ? optarg : "" ; break; // show_time with or without a specific member of ProfilerRec
             case 'G' : flag.drop_genotypes= 1       ; break;
             case 'H' : flag.no_header     = 1       ; break;
@@ -275,6 +281,7 @@ verify_command:
             case 5   : flag.dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 6   : flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 8   : flag.one_vb = atoi (optarg);  break;
+            case 14  : flag.one_component = atoi (optarg);  break;
             case 9   : flags_set_downsample (optarg); break;
             case 10  : flag.show_headers = 1 + sections_st_by_name (optarg); break; // +1 so SEC_NONE maps to 0
             case 'p' : crypt_set_password (optarg) ; break;
@@ -319,8 +326,8 @@ static void flags_warn_if_duplicates (int num_files, const char **filenames)
 
     for (unsigned i=1; i < num_files; i++) 
         ASSERTW (strncmp(&basenames[(i-1) * BASENAME_LEN], &basenames[i * BASENAME_LEN], BASENAME_LEN), 
-                 "Warning: two files with the same name '%s' - if you later unbind with 'genounzip --unbind %s', these files will overwrite each other", 
-                 &basenames[i * BASENAME_LEN], flag.out_filename);
+                 "Warning: two files with the same name '%s' - if you later use genounzip, these files will overwrite each other", 
+                 &basenames[i * BASENAME_LEN]);
 }
 
 static void flags_test_conflicts (unsigned num_files /* optional */)
@@ -339,8 +346,11 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.to_stdout,   flag.replace,        OT("stdout", "c"),    OT("replace", "^"));
     CONFLICT (flag.to_stdout,   flag.index_txt,      OT("stdout", "c"),    OT("index", "x"));
     CONFLICT (flag.one_vb,      flag.interleave,     "--interleave",       "--one-vb");
+    CONFLICT (flag.one_component, flag.interleave,   "--interleave",       "--component");
+    CONFLICT (flag.one_component, flag.luft,         OT("luft", "v"),      "--component");
     CONFLICT (flag.xthreads,    flag.interleave,     "--interleave",       "--xthreads");
     CONFLICT (flag.header_only, flag.interleave,     "--interleave",       "--header-only");
+    CONFLICT (flag.regions,     flag.interleave,     "--interleave",       "--regions");
     CONFLICT (flag.header_only, flag.no_header,      OT("no-header", "H"), "header-only");
     CONFLICT (flag.no_header,   flag.header_one,     OT("no-header", "H"), OT("header-one", "1"));
     CONFLICT (flag.quiet,       option_noisy,        OT("quiet", "q"),     OT("noisy", "Q"));
@@ -361,13 +371,11 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.genobwa,     flag.make_reference, "--genobwa",          "--make-reference");
     CONFLICT (flag.show_sex,    flag.regions==1,     "--show-sex",         OT("regions", "r"));
     CONFLICT (flag.show_sex,    flag.out_filename,   "--show-sex",         OT("output", "o"));
-    CONFLICT (flag.show_sex,    flag.unbind,         "--show-sex",         OT("unbind", "u"));
     CONFLICT (flag.show_sex,    flag.grep,           "--show-sex",         OT("grep", "g"));
     CONFLICT (flag.show_sex,    flag.idxstats,       "--show-sex",         "--idxstats");
     CONFLICT (flag.show_coverage, flag.idxstats,     "--show-coverage",    "--idxstats");
     CONFLICT (flag.show_coverage, flag.regions==1,   "--show-coverage",    OT("regions", "r"));
     CONFLICT (flag.show_coverage, flag.out_filename, "--show-coverage",    OT("output", "o"));
-    CONFLICT (flag.show_coverage, flag.unbind,       "--show-coverage",    OT("unbind", "u"));
     CONFLICT (flag.show_coverage, flag.grep,         "--show-coverage",    OT("grep", "g"));
     CONFLICT (flag.test,        flag.make_reference, "--make-reference",   OT("test", "t"));
     CONFLICT (flag.sort,        flag.unsorted,       "--sort",             "--unsorted");
@@ -506,7 +514,7 @@ void flags_update (unsigned num_files, const char **filenames)
         flag.optimize = true;
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
-    // will overwrite each other if extracted with --unbind
+    // will overwrite each other if extracted genounzip
     if (command == ZIP && flag.out_filename && !flag.quiet) flags_warn_if_duplicates (num_files, filenames);
 
     flag.multiple_files = (num_files > 1);
@@ -589,7 +597,16 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         ASSINP (!dt_props[flag.out_dt].is_binary, "Cannot concatenate multiple %s files, because %s is a binary format",
                 dt_name (flag.out_dt), dt_name (flag.out_dt));
     }
+        // if this is genounzip of a bound file, set flag.unbind
+    if (exe_type == EXE_GENOUNZIP && z_file->num_components >= (2 + z_file->z_flags.dual_coords) && !flag.unbind)
+        flag.unbind = ""; // we always unbind in genounzip - if user didn't specify prefix, then no prefix
 
+    ASSINP0 (exe_type != EXE_GENOUNZIP || !flag.to_stdout, "Cannot use --stdout with genounzip, use genocat instead");
+
+    ASSINP (!flag.out_filename || z_file->num_components <= (1 + z_file->z_flags.dual_coords), 
+            "Cannot use --output because %s is a bound file containing multiple components. Use --prefix to set a prefix for output filenames, use genocat to output as a single concatenated file, or use genols to see the components' metadata",
+            z_name);
+             
     // phylip implied sequential and header_one
     if (z_file->data_type == DT_FASTA && flag.out_dt == DT_PHYLIP) {
         flag.sequential = 1;
@@ -602,10 +619,11 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         flag.header_only = false;
         flag.header_only_fast  = true;
     }
-
-    // interleave is off for this, if we're just reading the reference / chain file
-    if (flag.reading_reference || flag.reading_chain)
-        flag.interleave = false;
+    
+    if (!z_file->z_flags.dual_coords && flag.luft) {
+        WARN ("%s: ignoring the --luft option, because file was not compressed with --chain", z_name);
+        flag.luft = 0;
+    }
 
     // if interleaving or sorting bgzf is always 0
     if (flag.interleave || flag.sort)
@@ -625,8 +643,9 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     flag.data_modified = !flag.reconstruct_as_src || // translating to another data
                          flag.header_one || flag.no_header || flag.header_only || flag.header_only_fast || flag.grep || 
                          flag.regions || flag.samples || flag.drop_genotypes || flag.gt_only || flag.sequential || 
-                         flag.one_vb || flag.downsample || flag.interleave || flag.luft || flag.genobwa || flag.sort ||
-                         (exe_type == EXE_GENOCAT && z_file->z_flags.dual_coords && !flag.no_pg);
+                         flag.one_vb || flag.one_component || flag.downsample || flag.interleave || flag.luft || flag.genobwa || flag.sort ||
+                         (exe_type == EXE_GENOCAT && z_file->z_flags.dual_coords && !flag.no_pg) ||
+                         (exe_type == EXE_GENOCAT && z_file->num_components > (1 + z_file->z_flags.dual_coords)); // txtheaders are dropped if concatenating
 
     bool is_paired_fastq = fastq_piz_is_paired(); // also updates z_file->z_flags in case of backward compatability issues
 

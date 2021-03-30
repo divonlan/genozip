@@ -60,8 +60,8 @@ void codec_free_all (VBlock *vb)
 void codec_verify_free_all (VBlock *vb, const char *op, Codec codec)
 {
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
-        ASSERTE (!buf_is_allocated (&vb->codec_bufs[i]), "About to call %s for %s, but codec_bufs[%u] is allocated, expecting it to be free: %s",
-                 op, codec_name (codec), i, buf_desc (&vb->codec_bufs[i]).s);
+        ASSERT (!buf_is_allocated (&vb->codec_bufs[i]), "About to call %s for %s, but codec_bufs[%u] is allocated, expecting it to be free: %s",
+                op, codec_name (codec), i, buf_desc (&vb->codec_bufs[i]).s);
 }
 
 static bool codec_compress_error (VBlock *vb, SectionHeader *header, const char *uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,
@@ -182,7 +182,7 @@ Codec codec_assign_best_codec (VBlockP vb,
         case SEC_DICT  : data = &ctx->dict  ; break;
         case SEC_B250  : data = &ctx->b250  ; break; 
         case SEC_LOCAL : data = &ctx->local ; break;
-        default: ASSERTE (data, "expecting non-NULL data for section=%s", st_name (st));
+        default: ASSERT (data, "expecting non-NULL data for section=%s", st_name (st));
     }
 
     uint64_t save_data_len = data->len;

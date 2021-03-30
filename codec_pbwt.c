@@ -64,7 +64,7 @@ static void show_runs (const PbwtState *state)
     for (unsigned i=0, fg=0; i < state->runs->len; i++, fg=!fg) {
 
         if (fg && !rc.count) {
-            ASSERTE0 (next_allele < AFTERENT (PbwtFgRunCount, *state->fgrc), "premature end of alleles buffer");
+            ASSERT0 (next_allele < AFTERENT (PbwtFgRunCount, *state->fgrc), "premature end of alleles buffer");
             rc = *next_allele++;
         }
     
@@ -187,7 +187,7 @@ static bool inline codec_pbwt_udpate_fgrc (PbwtState *state, Allele allele_of_co
         if (  state->fgrc->len && // we already have foreground runs
                 state->run_allele == (rc = LASTENT (PbwtFgRunCount, *state->fgrc))->fg_allele) { 
             rc->count++; // one more consecutive foreground run of this allele
-            ASSERTE (rc->count, "Number of consecutive forward runs with allele=%c exceeded the maximum of %u",
+            ASSERT (rc->count, "Number of consecutive forward runs with allele=%c exceeded the maximum of %u",
                     state->run_allele, 0xffffff); // error is count round-robined back to 0
         }
         // case: the previous fg run (if any) was of a different allele - start RunCount entry
@@ -315,8 +315,8 @@ static void codec_pbwt_decode_init_ht_matrix (VBlock *vb, const uint32_t *rc_dat
 
     uint64_t uncompressed_len = (uint64_t)rc_data[*rc_data_len] | ((uint64_t)rc_data[*rc_data_len + 1] << 32);
     
-    ASSERTE (vb->lines.len && uncompressed_len, 
-             "Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", (uint32_t)vb->lines.len, uncompressed_len);
+    ASSERT (vb->lines.len && uncompressed_len, 
+            "Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", (uint32_t)vb->lines.len, uncompressed_len);
 
     buf_alloc_old (vb, &vb->ht_matrix_ctx->local, uncompressed_len, 1, "contexts->local");
 
@@ -377,7 +377,7 @@ static inline void pbwt_decode_one_line (VBlockP vb, PbwtState *state, uint32_t 
     show_perm(state); show_line; 
 
     state->runs->next += runs - start_runs;
-    ASSERTE (state->runs->next <= state->runs->len, "state.runs->next=%u is out of range", (uint32_t)state->runs->next);
+    ASSERT (state->runs->next <= state->runs->len, "state.runs->next=%u is out of range", (uint32_t)state->runs->next);
 }
 
 // this function is called for the PBWT_FGRC section - after the PBWT_RUNS was already decompressed
@@ -398,7 +398,7 @@ void codec_pbwt_uncompress (VBlock *vb, Codec codec, uint8_t unused /* param */,
     codec_pbwt_decode_init_ht_matrix (vb, rc_data, &rc_data_len);
 
     Context *runs_ctx = ctx_get_existing_ctx (vb, dict_id_PBWT_RUNS);
-    ASSERTE0 (runs_ctx, "Cannot find context for PBWT_RUNS");
+    ASSERT0 (runs_ctx, "Cannot find context for PBWT_RUNS");
 
     PbwtState state = codec_pbwt_initialize_state (vb, &runs_ctx->local, &vb->compressed); // background allele is provided to us in param ; this is a subcodec, so vb->compressed.data == compressed
 

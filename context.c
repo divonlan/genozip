@@ -74,10 +74,10 @@ CtxNode *ctx_node_vb_do (const Context *vb_ctx, WordIndex node_index,
                          const char **snip_in_dict, uint32_t *snip_len,  // optional outs
                          const char *func, uint32_t code_line)
 {
-    ASSERTE (vb_ctx->dict_id.num, "this vb_ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
+    ASSERT (vb_ctx->dict_id.num, "this vb_ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
     
-    ASSERTE (node_index < vb_ctx->nodes.len + vb_ctx->ol_nodes.len, "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u. Caller: %s:%u",  
-             vb_ctx->name, node_index, (uint32_t)vb_ctx->nodes.len, (uint32_t)vb_ctx->ol_nodes.len, func, code_line);
+    ASSERT (node_index < vb_ctx->nodes.len + vb_ctx->ol_nodes.len, "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u. Caller: %s:%u",  
+            vb_ctx->name, node_index, (uint32_t)vb_ctx->nodes.len, (uint32_t)vb_ctx->ol_nodes.len, func, code_line);
 
     bool is_ol = node_index < vb_ctx->ol_nodes.len; // is this entry from a previous vb (overlay buffer)
 
@@ -86,10 +86,10 @@ CtxNode *ctx_node_vb_do (const Context *vb_ctx, WordIndex node_index,
 
     if (snip_in_dict) {
         const Buffer *dict = is_ol ? &vb_ctx->ol_dict : &vb_ctx->dict;
-        ASSERTE0 (buf_is_allocated (dict), "dict not allocated");
+        ASSERT0 (buf_is_allocated (dict), "dict not allocated");
 
-        ASSERTE (node->char_index + (uint64_t)node->snip_len < dict->len, "snip of %s out of range: node->char_index=%"PRIu64" + node->snip_len=%u >= %s->len=%"PRIu64,
-                 vb_ctx->name, node->char_index, node->snip_len, is_ol ? "ol_dict" : "dict", dict->len);
+        ASSERT (node->char_index + (uint64_t)node->snip_len < dict->len, "snip of %s out of range: node->char_index=%"PRIu64" + node->snip_len=%u >= %s->len=%"PRIu64,
+                vb_ctx->name, node->char_index, node->snip_len, is_ol ? "ol_dict" : "dict", dict->len);
 
         *snip_in_dict = ENT (char, *dict, node->char_index);
     }
@@ -104,11 +104,11 @@ CtxNode *ctx_node_zf_do (const Context *zf_ctx, int32_t node_index,
                          const char **snip_in_dict, uint32_t *snip_len,  // optional outs
                          const char *func, uint32_t code_line)
 {
-    ASSERTE (zf_ctx->dict_id.num, "this zf_ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
+    ASSERT (zf_ctx->dict_id.num, "this zf_ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
     
-    ASSERTE (node_index > -2 - (int32_t)zf_ctx->ol_nodes.len && node_index < (int32_t)zf_ctx->nodes.len, 
-             "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u. Caller: %s:%u",  
-             zf_ctx->name, node_index, (uint32_t)zf_ctx->nodes.len, (uint32_t)zf_ctx->ol_nodes.len, func, code_line);
+    ASSERT (node_index > -2 - (int32_t)zf_ctx->ol_nodes.len && node_index < (int32_t)zf_ctx->nodes.len, 
+            "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u. Caller: %s:%u",  
+            zf_ctx->name, node_index, (uint32_t)zf_ctx->nodes.len, (uint32_t)zf_ctx->ol_nodes.len, func, code_line);
 
     bool is_singleton = node_index < 0; // is this entry from a previous vb (overlay buffer)
 
@@ -117,7 +117,7 @@ CtxNode *ctx_node_zf_do (const Context *zf_ctx, int32_t node_index,
 
     if (snip_in_dict) {
         const Buffer *dict = is_singleton ? &zf_ctx->ol_dict : &zf_ctx->dict;
-        ASSERTE0 (buf_is_allocated (dict), "dict not allocated");
+        ASSERT0 (buf_is_allocated (dict), "dict not allocated");
 
         *snip_in_dict = &dict->data[node->char_index];
     }
@@ -132,7 +132,7 @@ CtxNode *ctx_node_zf_do (const Context *zf_ctx, int32_t node_index,
 WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len)
 {
     CtxWord *words = (CtxWord *)ctx->word_list.data;
-    ASSERTE (words, "word_list is empty for context %s", ctx->name);
+    ASSERT (words, "word_list is empty for context %s", ctx->name);
 
     for (unsigned i=0; i < ctx->word_list.len; i++)
         if (words[i].snip_len == snip_len && !memcmp (&ctx->dict.data[words[i].char_index], snip, snip_len))
@@ -147,7 +147,7 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same,
                              const char **snip, uint32_t *snip_len) // optional out 
 {
     WordIndex word_index;
-    ASSERTE (ctx || override_iterator, "ctx is NULL. vb_i=%u", vb->vblock_i);
+    ASSERT (ctx || override_iterator, "ctx is NULL. vb_i=%u", vb->vblock_i);
 
     // if the entire b250 in a VB consisted of word_index=0, we don't output the b250 to the file, and just 
     // consider it to always emit 0
@@ -166,8 +166,8 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same,
         iterator->next_b250 = FIRSTENT (uint8_t, ctx->b250); // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
 
     // an imperfect test for overflow, but this should never happen anyway 
-    ASSERTE (override_iterator || iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), 
-             "while reconstrucing line %u vb_i=%u: iterator for %s reached end of data", vb->line_i, vb->vblock_i, ctx->name);
+    ASSERT (override_iterator || iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), 
+            "while reconstrucing line %u vb_i=%u: iterator for %s reached end of data", vb->line_i, vb->vblock_i, ctx->name);
             
     word_index = base250_decode (&iterator->next_b250, !all_the_same, ctx->name);  // if this line has no non-GT subfields, it will not have a ctx 
 
@@ -191,9 +191,9 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same,
         if (word_index == WORD_INDEX_ONE_UP) 
             word_index = iterator->prev_word_index + 1;
 
-        ASSERTE (word_index < ctx->word_list.len, 
-                 "while parsing line %u: word_index=%u is out of bounds - %s dictionary has only %u entries",
-                 vb->line_i, word_index, ctx->name, (uint32_t)ctx->word_list.len);
+        ASSERT (word_index < ctx->word_list.len, 
+                "while parsing line %u: word_index=%u is out of bounds - %s dictionary has only %u entries",
+                vb->line_i, word_index, ctx->name, (uint32_t)ctx->word_list.len);
 
         CtxWord *dict_word = ENT (CtxWord, ctx->word_list, word_index);
 
@@ -280,8 +280,8 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
     // NEW SNIP globally - this snip was just added to the hash table - either as a regular or singleton node
     bool is_singleton_in_global = (node_index < 0);
     Buffer *nodes = is_singleton_in_global ? &zf_ctx->ol_nodes : &zf_ctx->nodes;
-    ASSERTE (nodes->len <= MAX_WORDS_IN_CTX, 
-             "too many words in ctx %s, max allowed number of words is is %u", zf_ctx->name, MAX_WORDS_IN_CTX);
+    ASSERT (nodes->len <= MAX_WORDS_IN_CTX, 
+            "too many words in ctx %s, max allowed number of words is is %u", zf_ctx->name, MAX_WORDS_IN_CTX);
 
     buf_alloc (evb, nodes, 0, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, 
                     is_singleton_in_global ? "zf_ctx->ol_nodes" : "zf_ctx->nodes");
@@ -315,8 +315,8 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
                                  const char *snip, uint32_t snip_len,
                                  bool *is_new /* out */)
 {
-    ASSERTE0 (vb_ctx, "vb_ctx is NULL");
-    ASSERTE0 (vb_ctx->dict_id.num, "vb_ctx has no dict_id");
+    ASSERTNOTNULL (vb_ctx);
+    ASSERT0 (vb_ctx->dict_id.num, "vb_ctx has no dict_id");
 
     if (!snip_len) {
         if (is_new) *is_new = false;
@@ -327,13 +327,13 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
     
 #ifdef DEBUG // time consuming and only needed during development
     unsigned actual_len = strnlen (snip, snip_len);
-    ASSERTE (actual_len == snip_len, "vb=%u ctx=%s: snip_len=%u but unexpectedly has an 0 at index %u: \"%.*s\"", 
-             segging_vb->vblock_i, vb_ctx->name, snip_len, actual_len, snip_len, snip);
+    ASSERT (actual_len == snip_len, "vb=%u ctx=%s: snip_len=%u but unexpectedly has an 0 at index %u: \"%.*s\"", 
+            segging_vb->vblock_i, vb_ctx->name, snip_len, actual_len, snip_len, snip);
 #endif
 
-    ASSERTE (node_index_if_new <= MAX_NODE_INDEX, 
-             "ctx of %s is full (max allowed words=%u): ol_nodes.len=%u nodes.len=%u",
-             vb_ctx->name, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_nodes.len, (uint32_t)vb_ctx->nodes.len);
+    ASSERT (node_index_if_new <= MAX_NODE_INDEX, 
+            "ctx of %s is full (max allowed words=%u): ol_nodes.len=%u nodes.len=%u",
+            vb_ctx->name, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_nodes.len, (uint32_t)vb_ctx->nodes.len);
 
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     CtxNode *node;
@@ -345,7 +345,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
     }
     
     // this snip isn't in the hash table - its a new snip
-    ASSERTE (vb_ctx->nodes.len < MAX_NODE_INDEX, "too many words in dictionary %s (MAX_NODE_INDEX=%u)", vb_ctx->name, MAX_NODE_INDEX);
+    ASSERT (vb_ctx->nodes.len < MAX_NODE_INDEX, "too many words in dictionary %s (MAX_NODE_INDEX=%u)", vb_ctx->name, MAX_NODE_INDEX);
 
     buf_alloc (segging_vb, &vb_ctx->nodes, 1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, "contexts->nodes");
 
@@ -445,7 +445,7 @@ void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf
     // note: in REF_INTERNAL it is possible that there are no contigs - unaligned SAM
     if (flag.reference == REF_INTERNAL && (!contigs_buf || !contigs_buf->len)) return;
 
-    ASSERTE0 (buf_is_allocated (contigs_buf) && buf_is_allocated (contigs_dict_buf),
+    ASSERT0 (buf_is_allocated (contigs_buf) && buf_is_allocated (contigs_dict_buf),
              "expecting contigs and contigs_dict to be allocated");
 
     // this is usually not yet initialized
@@ -457,7 +457,7 @@ void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf
     // copy dict
     ARRAY (RefContig, contigs, *contigs_buf);
 
-    buf_copy (evb, &zf_ctx->dict, contigs_dict_buf, 0,0,0, "z_file->contexts->dict");
+    buf_copy (evb, &zf_ctx->dict, contigs_dict_buf, char,0,0, "z_file->contexts->dict");
     buf_set_overlayable (&zf_ctx->dict);
 
     // build nodes from word_list
@@ -505,8 +505,8 @@ static Context *ctx_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
     Context *zf_ctx = ctx_get_zf_ctx (vb_ctx->dict_id);
     if (zf_ctx) goto finish;
 
-    ASSERTE (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
-             "z_file has more dict_id types than MAX_DICTS=%u", MAX_DICTS);
+    ASSERT (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
+            "z_file has more dict_id types than MAX_DICTS=%u", MAX_DICTS);
 
     zf_ctx = &z_file->contexts[z_file->num_contexts];
 
@@ -531,7 +531,7 @@ finish:
 void ctx_commit_codec_to_zf_ctx (VBlock *vb, Context *vb_ctx, bool is_lcodec)
 {
     Context *zf_ctx  = ctx_get_zf_ctx (vb_ctx->dict_id);
-    ASSERTE (zf_ctx, "zf_ctx is missing for %s in vb=%u", vb_ctx->name, vb->vblock_i); // zf_ctx is expected to exist as this is called after merge
+    ASSERT (zf_ctx, "zf_ctx is missing for %s in vb=%u", vb_ctx->name, vb->vblock_i); // zf_ctx is expected to exist as this is called after merge
 
     { START_TIMER; 
       mutex_lock (zf_ctx->mutex);
@@ -603,8 +603,8 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
             ctx_evaluate_snip_merge (merging_vb, zf_ctx, vb_ctx, &vb_ctx->dict.data[vb_node->char_index], 
                                      vb_node->snip_len, vb_node->count, &zf_node, &is_new);
 
-        ASSERTE (zf_node_index >= 0 && zf_node_index < zf_ctx->nodes.len, 
-                 "zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vb_ctx->nodes.len);
+        ASSERT (zf_node_index >= 0 && zf_node_index < zf_ctx->nodes.len, 
+                "zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vb_ctx->nodes.len);
 
         // set word_index to be indexing the global dict - to be used by vcf_zip_generate_genotype_one_section() and zip_generate_b250_section()
         if (is_new)
@@ -699,9 +699,9 @@ Context *ctx_get_ctx_if_not_found_by_inline (
     Context *ctx = &contexts[did_i]; 
 
     //iprintf ("New context: dict_id=%s in did_i=%u \n", dis_dict_id (dict_id).s, did_i);
-    ASSERTE (*num_contexts+1 < MAX_DICTS, 
-             "cannot create a context for %s because number of dictionaries would exceed MAX_DICTS=%u", 
-             dis_dict_id (dict_id).s, MAX_DICTS);
+    ASSERT (*num_contexts+1 < MAX_DICTS, 
+            "cannot create a context for %s because number of dictionaries would exceed MAX_DICTS=%u", 
+            dis_dict_id (dict_id).s, MAX_DICTS);
 
     ctx_initialize_ctx (ctx, did_i, dict_id, dict_id_to_did_i_map);
 
@@ -726,8 +726,8 @@ void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
 
     for (int f=0; f < dt_fields[dt].num_fields; f++) {
         const char *fname  = dt_fields[dt].names[f];
-        ASSERTE (strlen (fname) <= DICT_ID_LEN, "A primary field's name is limited to %u characters, \"%s\" exceeds it", 
-                 DICT_ID_LEN, fname); // to avoid dict_id_make name compression which might change between genozip releases
+        ASSERT (strlen (fname) <= DICT_ID_LEN, "A primary field's name is limited to %u characters, \"%s\" exceeds it", 
+                DICT_ID_LEN, fname); // to avoid dict_id_make name compression which might change between genozip releases
 
         DictId dict_id = dict_id_make (fname, strlen(fname), DTYPE_FIELD);
         Context *dst_ctx  = NULL;
@@ -891,9 +891,9 @@ void ctx_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 
             Context *ctx = &vb->contexts[f];
 
-            ASSERTE (dict_id_fields[f] == ctx->dict_id.num,
-                     "called from %s:%u: dict_id mismatch with section type: f=%s ctx->dict_id=%s vb_i=%u",
-                     func, code_line, (char*)DTF(names)[f], ctx->name, vb->vblock_i);
+            ASSERT (dict_id_fields[f] == ctx->dict_id.num,
+                    "called from %s:%u: dict_id mismatch with section type: f=%s ctx->dict_id=%s vb_i=%u",
+                    func, code_line, (char*)DTF(names)[f], ctx->name, vb->vblock_i);
     }
 }
 
@@ -1006,8 +1006,8 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
             }
             frag_next_node = FIRSTENT (const CtxNode, frag_ctx->nodes);
 
-            ASSERTE (frag_next_node->char_index + frag_next_node->snip_len <= frag_ctx->dict.len, 
-                     "Corrupt nodes in ctx=%.8s did_i=%u", frag_ctx->name, (int)(frag_ctx - z_file->contexts));
+            ASSERT (frag_next_node->char_index + frag_next_node->snip_len <= frag_ctx->dict.len, 
+                    "Corrupt nodes in ctx=%.8s did_i=%u", frag_ctx->name, (int)(frag_ctx - z_file->contexts));
         }
 
         vb->fragment_ctx   = frag_ctx;
@@ -1020,8 +1020,8 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
             // we allow snips to be so large that it will cause the fragment to be FRAGMENT_SIZE/2 or less, which will cause
             // mis-calculation of size_upper_bound in ctx_dict_read_one_vb (if this ever becomes a problem, we can set FRAGMENT_SIZE
             // dynamically based on the largest snip in the dictionary)
-            ASSERTE (frag_next_node->snip_len < FRAGMENT_SIZE/2,
-                     "found a word in dict=%s that is larger than %u, the maximum supported by genozip", frag_ctx->name, FRAGMENT_SIZE/2);
+            ASSERT (frag_next_node->snip_len < FRAGMENT_SIZE/2,
+                    "found a word in dict=%s that is larger than %u, the maximum supported by genozip", frag_ctx->name, FRAGMENT_SIZE/2);
 
             vb->fragment_len += frag_next_node->snip_len + 1;
             vb->fragment_num_words++;
@@ -1118,8 +1118,8 @@ static void ctx_dict_read_one_vb (VBlockP vb)
 
     vb->fragment_len = header ? BGEN32 (header->h.data_uncompressed_len) : 0;
 
-    ASSERTE (!header || header->dict_id.num == dict_sl->dict_id.num, "Expecting dictionary fragment with DictId=%s but found one with DictId=%s",
-             dis_dict_id (dict_sl->dict_id).s, dis_dict_id (header->dict_id).s);
+    ASSERT (!header || header->dict_id.num == dict_sl->dict_id.num, "Expecting dictionary fragment with DictId=%s but found one with DictId=%s",
+            dis_dict_id (dict_sl->dict_id).s, dis_dict_id (header->dict_id).s);
 
     // new context
     // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are FRAGMENT_SIZE or a bit less, allowing pre-allocation

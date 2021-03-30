@@ -307,7 +307,7 @@ static inline word_t _get_word(const BitArray* bitarr, bit_index_t start)
 #define BIT_ARRAY_GET_WORD(width) \
   static inline uint64_t bit_array_get_word ## width (const BitArray* bitarr, bit_index_t start) \
   { \
-    ASSERTE (start + width <= bitarr->nbits, "expecting start(%"PRIu64") + " #width " <= bitarr->nbits(%"PRIu64")", start, bitarr->nbits); \
+    ASSERT (start + width <= bitarr->nbits, "expecting start(%"PRIu64") + " #width " <= bitarr->nbits(%"PRIu64")", start, bitarr->nbits); \
     return (uint ## width ## _t)_get_word(bitarr, start); \
   } 
 BIT_ARRAY_GET_WORD(64)

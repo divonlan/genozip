@@ -56,8 +56,8 @@ extern const BufDescType buf_desc (const Buffer *buf);
 static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *func, uint32_t code_line) 
 { 
     uint64_t index = (buf->len++) * size;
-    ASSERTE (index + size <= buf->size, "called from %s:%u: NEXTENT went beyond end of buffer: size=%u index=%"PRIu64": %s", 
-             func, code_line, (unsigned)size, index, buf_desc (buf).s);
+    ASSERT (index + size <= buf->size, "called from %s:%u: NEXTENT went beyond end of buffer: size=%u index=%"PRIu64": %s", 
+            func, code_line, (unsigned)size, index, buf_desc (buf).s);
     return index;
 }
 #define NEXTENT(type, buf)    (*(type *)(&(buf).data[NEXTENT_get_index (&(buf), sizeof(type), __FUNCTION__, __LINE__)]))
@@ -67,7 +67,9 @@ static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *
 extern void buf_initialize(void);
 
 #define buf_is_allocated(buf_p) ((buf_p)->data != NULL && (buf_p)->type != BUF_UNALLOCATED)
-#define ASSERTNOTINUSE(buf) ASSERTE (!buf_is_allocated (&(buf)) && !(buf).len, #buf" is in use: %s", buf_desc (&(buf)).s);
+#define ASSERTNOTINUSE(buf) ASSERT (!buf_is_allocated (&(buf)) && !(buf).len, "expecting "#buf" to be free, but it's not: %s", buf_desc (&(buf)).s)
+#define ASSERTISALLOCED(buf) ASSERT0 (buf_is_allocated (&(buf)), #buf" is not allocated")
+#define ASSERTNOTEMPTY(buf) ASSERT (buf_is_allocated (&(buf)) && (buf).len, "expecting "#buf" to be contain some data, but it doesn't: %s", buf_desc (&(buf)).s)
 
 extern uint64_t buf_alloc_do (VBlockP vb,
                               Buffer *buf, 
@@ -126,18 +128,18 @@ extern void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src, uint64_
                          uint64_t src_start_entry, uint64_t max_entries, // if 0 copies the entire buffer
                          const char *func, uint32_t code_line,
                          const char *name);
-#define buf_copy(dst_vb,dst,src,bytes_per_entry,src_start_entry,max_entries,dst_name) \
-  buf_copy_do ((VBlockP)(dst_vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(dst_name))
+#define buf_copy(dst_vb,dst,src,type,src_start_entry,max_entries,dst_name) \
+  buf_copy_do ((VBlockP)(dst_vb),(dst),(src),sizeof(type),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(dst_name))
 
 extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
-extern void buf_grab_do (Buffer *dst_buf, const char *dst_name, Buffer *src_buf, const char *func, uint32_t code_line);
-#define buf_grab(dst_buf, dst_name, src_buf) buf_grab_do ((dst_buf), (dst_name), (src_buf), __FUNCTION__, __LINE__)
+extern void buf_grab_do (VBlockP dst_vb, Buffer *dst_buf, const char *dst_name, Buffer *src_buf, const char *func, uint32_t code_line);
+#define buf_grab(dst_vb, dst_buf, dst_name, src_buf) buf_grab_do ((dst_vb), (dst_buf), (dst_name), (src_buf), __FUNCTION__, __LINE__)
 
 #define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
 
 #define buf_add(buf, new_data, new_data_len) do { \
     uint32_t new_len = (uint32_t)(new_data_len); /* copy in case caller uses ++ */ \
-    ASSERTE (buf_has_space(buf, new_len), \
+    ASSERT (buf_has_space(buf, new_len), \
             "Error in buf_add: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
             buf_desc (buf).s, (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
     memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \

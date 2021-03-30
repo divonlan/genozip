@@ -118,12 +118,12 @@ DictId dict_id_make (const char *str, unsigned str_len, DictIdType dict_id_type)
 
 void dict_id_initialize (DataType data_type) 
 {   
-    ASSERTE0 (data_type != DT_NONE, "data_type is DT_NONE");
+    ASSERT0 (data_type != DT_NONE, "data_type is DT_NONE");
 
     for (int f=0; f < dt_fields[data_type].num_fields; f++) {
         const char *field_name = dt_fields[data_type].names[f];
 
-        ASSERTE (field_name, "Data type %s is missing a field name in DATA_TYPE_FIELDS for field %u", dt_name (data_type), f);
+        ASSERT (field_name, "Data type %s is missing a field name in DATA_TYPE_FIELDS for field %u", dt_name (data_type), f);
         dict_id_fields[f] = dict_id_make (field_name, strlen (field_name), DTYPE_FIELD).num; 
     }
 
@@ -318,7 +318,7 @@ void dict_id_read_aliases (void)
     dict_id_num_aliases = dict_id_aliases_buf.len / sizeof (DictIdAlias);
 
     for (unsigned i=0; i < dict_id_num_aliases; i++) 
-        ASSERTE0 (dict_id_aliases[i].dst.id[0] && dict_id_aliases[i].alias.id[0], "corrupted aliases buffer");
+        ASSERT0 (dict_id_aliases[i].dst.id[0] && dict_id_aliases[i].alias.id[0], "corrupted aliases buffer");
     
     if (flag.show_aliases) dict_id_show_aliases();
 }

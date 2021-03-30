@@ -25,15 +25,15 @@
 WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                          bool *is_new) // optional out
 {
-    ASSERTE0 (ctx, "ctx is NULL");
+    ASSERTNOTNULL (ctx);
 
     buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
     
     WordIndex node_index = ctx_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
-    ASSERTE (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
-             "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u",  
-             ctx->name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_nodes.len);
+    ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
+            "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u",  
+            ctx->name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_nodes.len);
     
     NEXTENT (uint32_t, ctx->b250) = node_index;
     ctx->txt_len += add_bytes;
@@ -71,7 +71,7 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len,
                 // check for Windows-style '\r\n' end of line 
                 if (i && c == '\n' && str[i-1] == '\r') {
                     (*len)--;
-                    ASSERTE0 (has_13, "has_13=NULL but expecting it because newline=GN_SEP");
+                    ASSERT0 (has_13, "has_13=NULL but expecting it because newline=GN_SEP");
                     *has_13 = true;
                 }
 
@@ -131,7 +131,7 @@ void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_p
 {
     // make sure we have enough memory
     unsigned required_len = 1 + base64_size (DICT_ID_LEN) + 11 /* max length of a int32 -1000000000 */ + 1 /* \0 */ ;
-    ASSERTE (*snip_len >= required_len, "*snip_len=%u, but it needs to be at least %u", *snip_len, required_len);
+    ASSERT (*snip_len >= required_len, "*snip_len=%u, but it needs to be at least %u", *snip_len, required_len);
 
     snip[0] = snip_code;
     *snip_len = 1 + base64_encode (other_dict_id.id, DICT_ID_LEN, &snip[1]);
@@ -142,7 +142,7 @@ void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_p
 
 WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
 {
-    ASSERTE0 (chrom_str_len, "chrom_str_len=0");
+    ASSERT0 (chrom_str_len, "chrom_str_len=0");
 
     bool is_new;
     WordIndex chrom_node_index = seg_by_did_i_ex (vb, chrom_str, chrom_str_len, CHROM, chrom_str_len+1, &is_new);
@@ -197,8 +197,8 @@ PosType seg_pos_field (VBlock *vb,
     SegError err = ERR_SEG_NO_ERROR;
     if (pos_str) {
         this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, zero_is_bad, &err);
-        ASSERTE (seg_bad_snips_too || !err, "invalid value %.*s in %s vb=%u line_i=%u", 
-                 pos_len, pos_str, vb->contexts[snip_did_i].name, vb->vblock_i, vb->line_i);
+        ASSERT (seg_bad_snips_too || !err, "invalid value %.*s in %s vb=%u line_i=%u", 
+                pos_len, pos_str, vb->contexts[snip_did_i].name, vb->vblock_i, vb->line_i);
 
         // we accept out-of-range integer values for non-self-delta
         if (snip_did_i != base_did_i && err == ERR_SEG_OUT_OF_RANGE) err = ERR_SEG_NO_ERROR;
@@ -369,13 +369,19 @@ static int sort_by_subfield_name (const void *a, const void *b)
 }
 
 // if ostatus is not known yet (seg of a Primary line), check for LIFTREJT subfield
-static inline LiftOverStatus seg_info_field_get_ostatus_by_con (unsigned nitems, InfoItem *info_items)
+static inline LiftOverStatus seg_info_field_get_ostatus_by_con (VBlock *vb, unsigned nitems, InfoItem *info_items)
 {
     for (unsigned i=0; i < nitems; i++)
         if (info_items[i].dict_id.num == dict_id_INFO_LIFTREJT) 
             return LO_UNSUPPORTED;
 
-    return LO_OK; // no LIFTREJT - Primary line is not rejected
+        else if (info_items[i].dict_id.num == dict_id_INFO_LIFTOVER) 
+            return LO_OK;
+
+    ASSSEG0 (false, ENT (char, vb->txt_data, vb->line_start), 
+             "File is a PRIMARY dual-coordinates file, expecting every line to have an INFO/"INFO_LIFTOVER" or INFO/"INFO_LIFTREJT" subfield, but this line does not");
+    
+    return 0; // never reaches here
 }
 
 static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *con, InfoItem *info_items, LiftOverStatus ostatus)
@@ -388,7 +394,7 @@ static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *
 
     // if ostatus is not known yet (seg of a Primary line), check for LIFTREJT subfield
     if (ostatus == LO_UNKNOWN) 
-        ostatus = seg_info_field_get_ostatus_by_con (con_nitems(*con), info_items);
+        ostatus = seg_info_field_get_ostatus_by_con (vb, con_nitems(*con), info_items);
 
     // cases we add INFO_LIFTOVER: liftover is possible (LO_OK), but not if this is a Primary file that already contains LIFTOVER)
     if (ostatus == LO_OK && txt_file->dual_coords != DC_PRIMARY) {
@@ -634,7 +640,7 @@ void seg_compound_field (VBlock *vb,
         
             // process the subfield that just ended
             Context *sf_ctx = ctx_get_ctx (vb, con.items[con_nitems(con)].dict_id);
-            ASSERTE (sf_ctx, "sf_ctx for %s is NULL", dis_dict_id (con.items[con_nitems(con)].dict_id).s);
+            ASSERT (sf_ctx, "sf_ctx for %s is NULL", dis_dict_id (con.items[con_nitems(con)].dict_id).s);
 
             sf_ctx->st_did_i = field_ctx->did_i;
 
@@ -930,7 +936,7 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 
     len /= NUM_LINES_IN_TEST; // average length of a line
 
-    ASSERTE (vb->txt_data.len, "vb=%u: txt_data is empty", vb->vblock_i); 
+    ASSERT (vb->txt_data.len, "vb=%u: txt_data is empty", vb->vblock_i); 
 
     ASSSEG (newlines==DTP (line_height) || len < vb->txt_data.len, vb->txt_data.data, 
             "a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
@@ -1016,6 +1022,7 @@ void seg_all_data_lines (VBlock *vb)
 
         //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
         bool has_13 = false;
+        vb->line_start = field_start - vb->txt_data.data;
         const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
 
         vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));

@@ -30,7 +30,7 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
     else if (header->section_type == SEC_LOCAL) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
     else has_dict_id = false;
 
-    ASSERTE0 (!has_dict_id || dict_id.num, "dict_id=0");
+    ASSERT0 (!has_dict_id || dict_id.num, "dict_id=0");
     
     buf_alloc (vb, &vb->section_list_buf, 1, 50, SecLiEnt, 2, "section_list_buf");
     
@@ -100,21 +100,21 @@ bool sections_next_sec2 (const SecLiEnt **sl_ent, // optional in/out. if NULL - 
     return found;
 }
 
-// section iterator. returns true last section starting from the section after sl_ent, that is of one of st1 or st2
-// (i.e. the following section is not st1 or st2)
-const SecLiEnt *sections_last_sec2 (const SecLiEnt *sl, SectionType st1, SectionType st2)
+// section iterator. skips to the last consecutive section from after sl, that is type st1, st2 or st3.
+const SecLiEnt *sections_last_sec3 (const SecLiEnt *sl, SectionType st1, SectionType st2, SectionType st3)
 {
     while (sl < AFTERENT (const SecLiEnt, z_file->section_list_buf) - 1) {
 
         sl = sl ? (sl + 1) : FIRSTENT (const SecLiEnt, z_file->section_list_buf); 
 
         if (!((st1 != SEC_NONE && sl->st == st1) ||
-              (st2 != SEC_NONE && sl->st == st2))) {
+              (st2 != SEC_NONE && sl->st == st2) ||
+              (st3 != SEC_NONE && sl->st == st2))) {
             break;
         }
     } 
     
-    return sl - 1; // sl is either on the first section that is NOT st1 or st2, or we are after the section list
+    return sl - 1; // sl is either on the first section that is NOT st1 or st2, or we are after the section list - so we decrement it
 }
 
 // count how many sections we have of a certain type
@@ -148,7 +148,7 @@ const SecLiEnt *sections_vb_first (uint32_t vb_i, bool soft_fail)
 // main thread: called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
 void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits) // optional outs
 {
-    ASSERTE0 (flag.reading_reference || flag.show_ref_hash, "can only be called while reading reference");
+    ASSERT0 (flag.reading_reference || flag.show_ref_hash, "can only be called while reading reference");
 
     for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the refhash sections are near the end
         const SecLiEnt *sl = ENT (const SecLiEnt, z_file->section_list_buf, i);
@@ -180,7 +180,7 @@ void BGEN_sections_list (void)
 
 void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */)
 {
-    if (flag.reading_reference || flag.reading_chain) return; // don't show gheaders of a reference or chain file
+    if (flag_loading_auxiliary) return; // don't show gheaders of an auxiliary file
     
     ARRAY (const SecLiEnt, ents, z_file->section_list_buf);
 
@@ -221,7 +221,7 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
 
 const char *st_name (SectionType sec_type)
 {
-    ASSERTE (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
+    ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
     return (sec_type == SEC_NONE) ? "SEC_NONE" : type_name (sec_type, &abouts[sec_type].name , sizeof(abouts)/sizeof(abouts[0]));
 }
@@ -253,7 +253,7 @@ SectionType sections_st_by_name (char *name)
 
 uint32_t st_header_size (SectionType sec_type)
 {
-    ASSERTE (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
+    ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
     return (sec_type == SEC_NONE) ? 0 : abouts[sec_type].header_size;
 }
@@ -266,7 +266,7 @@ const SecLiEnt *sections_get_first_section_of_type (SectionType st, bool soft_fa
     for (unsigned i=0; i < z_file->section_list_buf.len; i++)
         if (sl[i].st == st) return &sl[i];
 
-    ASSERTE (soft_fail, "Cannot find section_type=%s in z_file", st_name (st));
+    ASSERT (soft_fail, "Cannot find section_type=%s in z_file", st_name (st));
 
     return NULL;
 }
@@ -290,7 +290,7 @@ const SecLiEnt *sections_pull_vb_up (uint32_t vb_i, const SecLiEnt *sl)
 {
     const SecLiEnt *new_vb_sl    = sl+1;
     const SecLiEnt *vb_header_sl = sections_vb_first (vb_i, false);
-    const SecLiEnt *last_vb_sl   = sections_last_sec2 (vb_header_sl, SEC_B250, SEC_LOCAL);
+    const SecLiEnt *last_vb_sl   = sections_vb_last (vb_header_sl);
 
     // case: VB is already in its desired place
     if (sl+1 == vb_header_sl) return last_vb_sl; // return last section (B250/Local) of this VB

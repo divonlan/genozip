@@ -123,7 +123,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     if (filename)
         dd->filename = filename;
 
-    ASSERTE (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
+    ASSERT (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
     
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool throughout the execution
     vb_create_pool (MAX (2,global_max_threads+1 /* one for evb */));
@@ -146,6 +146,7 @@ void dispatcher_pause (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     dd->paused = true;
+    dd->input_exhausted = false;
     dd->next_vb_i--;
 }
 
@@ -153,8 +154,6 @@ void dispatcher_pause (Dispatcher dispatcher)
 void dispatcher_resume (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-
-    if (!dd->paused) return; // nothing to do
 
     dd->input_exhausted = false;
     dd->paused          = false;
@@ -209,7 +208,7 @@ static void *dispatcher_thread_entry (void *thread_)
 {
     Thread *th = (Thread *)thread_;
 
-    ASSERTE0 (th->vb->vblock_i, "vb_i=0");
+    ASSERT0 (th->vb->vblock_i, "vb_i=0");
 
     th->func (th->vb);
     
@@ -236,7 +235,7 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP))
     th->vb = dd->next_vb;
     th->func = func;
 
-    ASSERTE0 (dd->next_vb->vblock_i, "vb_i=0");
+    ASSERT0 (dd->next_vb->vblock_i, "vb_i=0");
 
     if (dd->max_threads > 1) {
         th->thread_id = threads_create (dispatcher_thread_entry, th, dd->task_name, dd->next_vb->vblock_i);
@@ -265,7 +264,8 @@ bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final)
     return my_is_final || (th->vb && th->vb->is_processed);
 }
 
-VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
+// returns the next processed VB, or NULL if non-blocking the VBlock is not ready yet, or no running compute threads
+VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool blocking)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -275,7 +275,8 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
 
     if (dd->max_threads > 1) 
         // wait for thread to complete (possibly it completed already)
-         threads_join (th->thread_id);
+        if (!threads_join (th->thread_id, blocking))
+            return NULL;
 
     VBlockP processed_vb = th->vb; // possibly NULL if no running compute threads
 
@@ -395,7 +396,7 @@ Dispatcher dispatcher_fan_out_task_do (const char *task_name,
         else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
                  (has_vb_ready_to_compute && !has_free_thread)) {   // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete
            
-            VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); // this will block until one is available
+            VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL, true); // this will block until one is available
             if (!processed_vb) continue; // no running compute threads 
 
             if (output) output (processed_vb);

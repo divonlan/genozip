@@ -3,8 +3,6 @@
 //   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
  
-#include "profiler.h"
-
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for for conda mac - otherwise zlib.h throws compilation errors
 #endif
@@ -15,7 +13,6 @@
 #include "txtfile.h"
 #include "vblock.h"
 #include "vcf.h"
-#include "zfile.h"
 #include "file.h"
 #include "strings.h"
 #include "endianness.h"
@@ -25,11 +22,9 @@
 #include "bgzf.h"
 #include "mutex.h"
 #include "digest.h"
+#include "profiler.h"
 #include "zlib/zlib.h"
 #include "libdeflate/libdeflate.h"
-
-static bool is_first_txt = true; 
-static uint32_t total_bound_txt_headers_len = 0;
 
 static uint32_t vb1_txt_data_comp_len = 0; // ZIP: approximate size of the source BZ2/gz/bgzf-compressed vb->txt_data
 
@@ -50,8 +45,6 @@ const char *txtfile_dump_vb (VBlockP vb, const char *base_name)
     return dump_filename;
 }
 
-uint32_t txtfile_get_bound_headers_len(void) { return total_bound_txt_headers_len; }
-
 static inline uint32_t txtfile_read_block_plain (VBlock *vb, uint32_t max_bytes)
 {
     char *data = AFTERENT (char, vb->txt_data);
@@ -66,7 +59,7 @@ static inline uint32_t txtfile_read_block_plain (VBlock *vb, uint32_t max_bytes)
     // case: normal read
     else {
         bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
-        ASSERTE (bytes_read >= 0, "read failed from %s: %s", txt_name, strerror(errno));
+        ASSERT (bytes_read >= 0, "read failed from %s: %s", txt_name, strerror(errno));
 
         // bytes_read=0 and we're using an external decompressor - it is either EOF or
         // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
@@ -150,7 +143,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
 
             // if we're reading a VB (not the txt header) - copy the compressed data from evb to vb
             if (evb != vb) {
-                buf_copy (vb, &vb->compressed, &evb->compressed, 0,0,0,0);
+                buf_copy (vb, &vb->compressed, &evb->compressed, char,0,0,0);
                 buf_free (&evb->compressed);
             }
 
@@ -326,7 +319,7 @@ int32_t def_is_header_done (bool is_eof)
 }
 
 // ZIP main thread: returns the hash of the header
-static Digest txtfile_read_header (bool is_first_txt)
+Digest txtfile_read_header (bool is_first_txt)
 {
     START_TIMER;
 
@@ -353,7 +346,7 @@ static Digest txtfile_read_header (bool is_first_txt)
     }
 
     // the excess data is for the next vb to read 
-    buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, header_len, 0, "txt_file->unconsumed_txt");
+    buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, char, header_len, 0, "txt_file->unconsumed_txt");
 
     // account for the passed up vb=1 data - using the compression ratio of this block
     vb1_txt_data_comp_len = ((double)(evb->txt_data.len - header_len) / (double)evb->txt_data.len) * (double)txt_file->disk_so_far;
@@ -378,7 +371,7 @@ static Digest txtfile_read_header (bool is_first_txt)
 // default "unconsumed" function file formats where we need to read whole \n-ending lines. returns the unconsumed data length
 int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    ASSERTE (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
     for (; *i >= (int32_t)first_i; (*i)--) 
         if (vb->txt_data.data[*i] == '\n') 
@@ -417,12 +410,12 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memo
     // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
     if (testing_memory && passed_up_len < 0) return (uint32_t)-1;
 
-    ASSERTE (passed_up_len >= 0, "Reason: failed to find a full line (i.e. newline-terminated) in vb=%u data_type=%s codec=%s.\n"
-             "Known possible causes:\n"
-             "- The file is missing a newline on the last line.\n%sVB dumped: %s", 
-             vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec),
-             txt_file->data_type == DT_FASTA ? "- A FASTA file in which each sequence is in a single line (without newlines), and the length of the longest line (sequence) in the file exceeds the vblock size. Solution: use --vblock to increase vblock size to a value (in MB) larger than the length of longest line.\n" : "",
-             txtfile_dump_vb (vb, txt_name));
+    ASSERT (passed_up_len >= 0, "Reason: failed to find a full line (i.e. newline-terminated) in vb=%u data_type=%s codec=%s.\n"
+            "Known possible causes:\n"
+            "- The file is missing a newline on the last line.\n%sVB dumped: %s", 
+            vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec),
+            txt_file->data_type == DT_FASTA ? "- A FASTA file in which each sequence is in a single line (without newlines), and the length of the longest line (sequence) in the file exceeds the vblock size. Solution: use --vblock to increase vblock size to a value (in MB) larger than the length of longest line.\n" : "",
+            txtfile_dump_vb (vb, txt_name));
 
 done:
     libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
@@ -440,11 +433,11 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file))
         pos_before = file_tell (txt_file);
 
-    buf_alloc_old (vb, &vb->txt_data, flag.vblock_memory, 1, "txt_data");    
+    buf_alloc (vb, &vb->txt_data, 0, flag.vblock_memory, char, 1, "txt_data");    
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
     if (buf_is_allocated (&txt_file->unconsumed_txt)) {
-        buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, 0 ,0 ,0, "txt_data");
+        buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, char ,0 ,0, "txt_data");
         buf_free (&txt_file->unconsumed_txt);
     }
 
@@ -475,11 +468,11 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
                 ASSINP (len, "File %s has less FASTQ reads than its R1 counterpart (vb=%u has %u lines while counterpart has %u lines)", 
                         txt_name, vb->vblock_i, my_lines, her_lines);
 
-                ASSERTE (vb->txt_data.len, "txt_data.len=0 when reading pair-2 vb=%u", vb->vblock_i);
+                ASSERT (vb->txt_data.len, "txt_data.len=0 when reading pair-2 vb=%u", vb->vblock_i);
 
                 // if we need more lines - increase memory and keep on reading
                 max_memory_per_vb *= 1.1; 
-                buf_alloc_old (vb, &vb->txt_data, max_memory_per_vb, 1, "txt_data");    
+                buf_alloc (vb, &vb->txt_data, 0, max_memory_per_vb, char, 1, "txt_data");    
             }
             else
                 break;
@@ -496,7 +489,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
         // case: return if we're testing memory, and there is not even one line of text  
         if (testing_memory && passed_up_len == (uint32_t)-1) {
-            buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, 0, 0, 0, "txt_file->unconsumed_txt"); 
+            buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, char, 0, 0, "txt_file->unconsumed_txt"); 
             buf_free (&vb->txt_data);
             return;
         }
@@ -504,7 +497,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     // if we have some unconsumed data, pass it up to the next vb
     if (passed_up_len) {
-        buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, 1, // evb, because dst buffer belongs to File
+        buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, char, // evb, because dst buffer belongs to File
                   vb->txt_data.len - passed_up_len, passed_up_len, "txt_file->unconsumed_txt");
 
         // now, if our data is bgzf-compressed, txt_data.len becomes shorter than indicated by vb->bgzf_blocks. that's ok - all that data
@@ -623,13 +616,15 @@ void txtfile_write_one_vblock (ConstBufferP txt_data, ConstBufferP bgzf_blocks, 
     else
         txtfile_write_to_disk (txt_data, 0, 0);
 
-    ASSERTW (txt_data->len == vb_data_size || // files are the same size, expected
-             exe_type == EXE_GENOCAT       || // many genocat flags modify the output file, so don't compare
-             !dt_get_translation().is_src_dt, // we are translating between data types - the source and target txt files have different sizes
-             "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-             vb_i, num_lines, first_line, str_uint_commas (vb_data_size).s, dt_name (txt_file->data_type), 
-             str_uint_commas (txt_data->len).s, 
-             (int32_t)txt_data->len - (int32_t)vb_data_size);
+    if (vb_i) { // a VB, not a txt header
+        ASSERTW (txt_data->len == vb_data_size || // files are the same size, expected
+                exe_type == EXE_GENOCAT       || // many genocat flags modify the output file, so don't compare
+                !dt_get_translation().is_src_dt, // we are translating between data types - the source and target txt files have different sizes
+                "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
+                vb_i, num_lines, first_line, str_uint_commas (vb_data_size).s, dt_name (txt_file->data_type), 
+                str_uint_commas (txt_data->len).s, 
+                (int32_t)txt_data->len - (int32_t)vb_data_size);
+    }
 
     COPY_TIMER_VB (evb, write);
 }
@@ -718,208 +713,6 @@ int64_t txtfile_estimate_txt_data_size (VBlock *vb)
     }
 
      return disk_size * ratio;
-}
-
-// ZIP: reads txt header and writes its compressed form to the GENOZIP file
-bool txtfile_header_to_genozip (uint32_t *txt_line_i)
-{    
-    Digest header_digest = DIGEST_NONE;
-    digest_initialize(); 
-
-    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
-
-    if (DTPT(txt_header_required) == HDR_MUST || DTPT (txt_header_required) == HDR_OK)
-        header_digest = txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
-    
-    *txt_line_i += (uint32_t)evb->lines.len;
-
-    // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
-    //          also: header is modified if --chain or compressing a Luft file
-    // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
-    uint64_t unmodified_txt_header_len = evb->txt_data.len;
-    if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(&evb->txt_data))) { 
-        // this is the second+ file in a bind list, but its samples are incompatible
-        buf_free (&evb->txt_data);
-        return false;
-    }
-
-    // in the 2nd+ binding file, we require the dual-components status to be consistent with earlier files
-    if (z_file) { 
-        if (z_file->num_components) {
-            ASSERTE (!(txt_file->dual_coords && !z_file->z_flags.dual_coords), 
-                    "All binding files must be either dual-coordinates or not. However %s is a dual-coordinates file while previous file(s) are not", txt_name);
-
-            ASSERTE (!(!txt_file->dual_coords && z_file->z_flags.dual_coords), 
-                    "All binding files must be either dual-coordinates or not. However %s is not a dual-coordinates file while previous file(s) are", txt_name);
-        }
-        else  // first component 
-              // note: in case of --chain, z_flags.dual_coords is set in file_open_z
-              // note: z_flags.dual_coords is bool and txt_file->dual_coords is an enum
-            z_file->z_flags.dual_coords = z_file->z_flags.dual_coords || !!txt_file->dual_coords; 
-    }
-
-    if (z_file && !flag.seg_only)       
-        // we always write the txt_header section, even if we don't actually have a header, because the section
-        // header contains the data about the file
-        zfile_write_txt_header (&evb->txt_data, unmodified_txt_header_len, header_digest, is_first_txt); // we write all headers in bound mode too, to support --unbind
-
-    // for stats: combined length of txt headers in this bound file, or only one file if not bound
-    if (!flag.bind) total_bound_txt_headers_len=0;
-    total_bound_txt_headers_len += evb->txt_data.len; 
-
-    z_file->num_txt_components_so_far++; // when compressing
-
-    buf_free (&evb->txt_data);
-    
-    is_first_txt = false;
-
-    return true; // everything's good
-}
-
-// PIZ: reads the txt header from the genozip file and outputs it to the reconstructed txt file
-void txtfile_genozip_to_txt_header (const SecLiEnt *sl, 
-                                    Digest *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
-{
-    bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
-
-    if (DTPZ(piz_header_init)) DTPZ(piz_header_init)();
-
-    digest_initialize();
-
-    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
-
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "header_section", SEC_TXT_HEADER, sl);
-
-    // handle the GENOZIP header of the txt header section
-    SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)evb->z_data.data;
-
-    flag.processing_rejects = flag.luft && header->h.flags.txt_header.liftover_rejects;
-
-    ASSERTE (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderTxtHeader)), 
-             "invalid txt header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderTxtHeader));
-
-    // 1. in unbind mode - we open the output txt file of the component
-    // 2. when reading a reference file - we create txt_file here (but don't actually open the physical file)
-    if (flag.unbind || flag.reading_reference || flag.reading_chain) {
-        ASSERTE0 (!txt_file, "not expecting txt_file to be open already in unbind mode or when reading a reference or chain file");
-        
-        const char *filename = txtfile_piz_get_filename (header->txt_filename, flag.unbind, false);
-        txt_file = file_open (filename, WRITE, TXT_FILE, z_file->data_type);
-        FREE (filename); // file_open copies the names
-    }
-
-    txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
-    txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
-    
-    if (txt_file->codec == CODEC_BGZF)
-        memcpy (txt_file->bgzf_signature, header->codec_info, 3);
-    
-    if (is_first_txt || flag.unbind) 
-        z_file->num_lines = BGEN64 (header->num_lines);
-
-    if (flag.unbind) *digest = header->digest_single; // override md5 from genozip header
-
-    // case: we need to reconstruct (or not) the BGZF following the instructions from the z_file
-    if (flag.bgzf == FLAG_BGZF_BY_ZFILE) {
-
-        // load the source file isize if we have it and we are attempting to reconstruct an unmodifed file identical to the source
-        bool loaded = false;
-        if (!flag.data_modified &&   
-            (z_file->num_components == 1 || flag.unbind))  // not concatenating multiple files
-            loaded = bgzf_load_isizes (sl); // also sets txt_file->bgzf_flags
-
-        // case: user wants to see this section header, despite not needing BGZF data
-        else if (exe_type == EXE_GENOCAT && (flag.show_headers == SEC_BGZF+1 || flag.show_headers == -1)) {
-            bgzf_load_isizes (sl); 
-            buf_free (&txt_file->bgzf_isizes);
-        }
-
-        // case: we need to reconstruct back to BGZF, but we don't have a SEC_BGZF to guide us - we'll creating our own BGZF blocks
-        if (!loaded && z_file->z_flags.bgzf)
-            txt_file->bgzf_flags = (struct FlagsBgzf){ // case: we're creating our own BGZF blocks
-                .has_eof_block = true, // add an EOF block at the end
-                .library       = BGZF_LIBDEFLATE, // default - libdeflate level 6
-                .level         = BGZF_COMP_LEVEL_DEFAULT 
-            };
-
-        header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_load_isizes
-    }
-
-    // case: the user wants us to reconstruct (or not) the BGZF blocks in a particular way, this overrides the z_file instructions 
-    else 
-        txt_file->bgzf_flags = (struct FlagsBgzf){ // case: we're creating our own BGZF blocks
-            .has_eof_block = true, // add an EOF block at the end
-            .library       = BGZF_LIBDEFLATE, 
-            .level         = flag.bgzf 
-        };
-
-    // sanity        
-    ASSERTE (txt_file->bgzf_flags.level >= 0 && txt_file->bgzf_flags.level <= 12, "txt_file->bgzf_flags.level=%u out of range [0,12]", 
-             txt_file->bgzf_flags.level);
-
-    ASSERTE (txt_file->bgzf_flags.library >= 0 && txt_file->bgzf_flags.library < NUM_BGZF_LIBRARIES, "txt_file->bgzf_flags.library=%u out of range [0,%u]", 
-             txt_file->bgzf_flags.level, NUM_BGZF_LIBRARIES-1);
-
-    // now get the text of the txt header itself
-    if (!show_headers_only)
-        zfile_uncompress_section (evb, header, &evb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
-
-    if (evb->txt_data.len && 
-        (is_first_txt || flag.unbind || flag.luft) &&  // this is the first component, or we are unbinding (all components get a header)
-        !flag.reading_reference && !flag.reading_chain) 
-        DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
-
-    // write txt header if it is needed:
-    if ((is_first_txt || flag.unbind || flag.luft) &&  // this is the first component, or we are unbinding (all components get a header)
-        (!flag.no_header || z_file->z_flags.txt_is_bin) && // user didn't specify --no-header (or ignore the request if this is a binary file, eg BAM)
-        !flag.reading_reference &&        // nothing is written when reading a reference
-        !flag.reading_chain &&            // nothing is written when reading a chain file
-        !flag.genocat_no_reconstruct) {   // nothing is written when we not reconstructing
-
-        // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
-        // note: in a header-less SAM, after translating to BAM, we will have a header
-        DtTranslation trans = dt_get_translation();
-        if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
-
-        if (!evb->txt_data.len) goto done; // still no header... nothing more for us to do!
-
-        bool test_digest = digest && // NOT 2nd+ component and concatenating
-                           !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
-                           !flag.data_modified; // no point calculating digest if we know already the file will be different
-
-        if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
-
-        // compress the txt header with BGZF if needed
-        if (txt_file->codec == CODEC_BGZF) { 
-            bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
-            bgzf_compress_vb (evb); // compress data (but not if we are re-creating SEC_BGZF blocks and header is too small to fit into the first block)
-            bgzf_write_to_disk (&evb->txt_data, &evb->bgzf_blocks, &evb->compressed); // write blocks to disk and/or move unconsumed data to the next vb
-        } 
-        else
-            txtfile_write_to_disk (&evb->txt_data, 0, 0);
-
-        if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
-            Digest reconstructed_header_digest = digest_do (evb->txt_data.data, evb->txt_data.len);
-            
-            ASSERTW (digest_is_equal (header->digest_header, DIGEST_NONE) || 
-                     digest_is_equal (reconstructed_header_digest, header->digest_header) ||
-                     flag.data_modified,
-                    "%s of reconstructed %s header (%s) differs from original file (%s)\n"
-                    "Bad reconstructed header has been dumped to: %s\n", digest_name(),
-                    dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
-                    txtfile_dump_vb (evb, z_name));
-        }
-
-    }
-
-done:
-    buf_free (&evb->z_data);
-    buf_free (&evb->txt_data);
-
-    z_file->num_txt_components_so_far++;
-    
-    if (!flag.reading_chain && !flag.reading_reference)
-        is_first_txt = false;
 }
 
 DataType txtfile_get_file_dt (const char *filename)

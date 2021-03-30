@@ -49,7 +49,7 @@ int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 {
     ARRAY (char, data, vb->txt_data)
 
-    ASSERTE (*i >= 0 && *i < data_len, "*i=%d is out of range [0,%"PRIu64"]", *i, data_len);
+    ASSERT (*i >= 0 && *i < data_len, "*i=%d is out of range [0,%"PRIu64"]", *i, data_len);
 
     for (; *i >= (int32_t)first_i; (*i)--) {
         // in CHAIN - an "end of line" is two newlines (\n\n or \n\r\n)
@@ -248,7 +248,7 @@ void chain_piz_initialize (void)
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
 {
-    ASSERTE0 (vb->txt_data.len, "vb->txt_data.len is 0");
+    ASSERT0 (vb->txt_data.len, "vb->txt_data.len is 0");
     vb->txt_data.len--;
 
     Context *gaps_ctx = &vb->contexts[CHAIN_GAPS];
@@ -390,7 +390,7 @@ static int chain_sorter (const void *a_, const void *b_)
 // zip: load chain file as a result of genozip --chain
 void chain_load (void)
 {
-    ASSERTE0 (flag.reading_chain, "reading_chain is NULL");
+    ASSERTNOTNULL (flag.reading_chain);
     SAVE_FLAGS;
 
     buf_alloc (evb, &chain, 0, 1000, ChainAlignment, 1, "chain"); // must be allocated by main thread
@@ -401,7 +401,7 @@ void chain_load (void)
     // save and reset flags that are intended to operate on the compressed file rather than the reference file
     flag.test = flag.md5 = flag.show_memory = flag.show_stats= flag.no_header =
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict = 
-    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = 0;
+    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.interleave = 0;
     flag.grep = flag.show_time = flag.unbind = 0;
     flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE;
     flag.show_one_dict = NULL;
@@ -410,7 +410,8 @@ void chain_load (void)
 
     TEMP_FLAG (quiet, true); // don't show progress indicator for the chain file - it is very fast 
     flag.may_drop_lines = true; // if fact, we drop all the lines
-    piz_one_file (0, false, false);
+    Dispatcher dispachter = piz_z_file_initialize (false);
+    piz_one_txt_file (dispachter, 0, true, false);
     RESTORE_FLAG (quiet);
 
     // copy src_contig and dst_contig dictionaries before z_file of the chain file is freed
@@ -431,7 +432,7 @@ void chain_load (void)
     chain_filename = file_make_unix_filename (z_name); // full-path unix-style filename, allocates memory
 
     file_close (&z_file, false, false);
-    file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
+    file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtheader_piz_read_and_reconstruct.
     
     flag.reading_chain = NULL;
 }

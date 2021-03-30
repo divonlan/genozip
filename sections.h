@@ -281,15 +281,18 @@ typedef struct SectionHeaderReconPlan {
 } SectionHeaderReconPlan;
 
 // special values of ReconPlanItem.num_lines
-#define PLAN_END_OF_VB  0xffffffff
-#define PLAN_FULL_VB    0xfffffffe
-#define PLAN_INTERLEAVE 0xfffffffd
+#define PLAN_END_OF_VB      0xffffffff
+#define PLAN_FULL_VB        0xfffffffe
+#define PLAN_INTERLEAVE     0xfffffffd
+#define PLAN_FULL_TXTHEADER 0xfffffffc
+
 typedef struct {
-    uint32_t vb_i;
-    uint32_t start_line; // 0-based line within vb_i
-    #define vb2_i start_line // vb2_i is used in place of start_line wieh PLAN_INTERLEAVE
+    uint32_t vb_i;               // 0 if PLAN_FULL_TXTHEADER
+    uint32_t start_line;         // 0-based line within vb_i
+    #define vb2_i start_line     // vb2_i is used in place of start_line with PLAN_INTERLEAVE
+    #define rp_comp_i start_line // rp_comp_i is used in place of start_line with PLAN_INTERLEAVE
     uint32_t num_lines;
-    #define plan_type num_lines // one of PLAN*
+    #define plan_type num_lines  // one of PLAN*
 } ReconPlanItem;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
@@ -347,10 +350,12 @@ extern const SecLiEnt *sections_get_first_section_of_type (SectionType st, bool 
 extern bool sections_next_sec2 (const SecLiEnt **sl_ent, SectionType st1, SectionType st2, bool must_be_next_section, bool seek);
 #define sections_next_sec1(sl_ent,st,must_be_next_section,seek) sections_next_sec2(sl_ent,st,SEC_NONE,must_be_next_section,seek)
 
-extern const SecLiEnt *sections_last_sec2 (const SecLiEnt *sl, SectionType st1, SectionType st2);
+extern const SecLiEnt *sections_last_sec3 (const SecLiEnt *sl, SectionType st1, SectionType st2, SectionType st3);
+#define sections_component_last(any_sl_in_component) sections_last_sec3 (any_sl_in_component, SEC_B250, SEC_LOCAL, SEC_VB_HEADER)
 
 extern uint32_t sections_count_sections (SectionType st);
 extern const SecLiEnt *sections_vb_first (uint32_t vb_i, bool soft_fail);
+#define sections_vb_last(any_sl_in_vb) sections_last_sec3 (any_sl_in_vb, SEC_B250, SEC_LOCAL, SEC_NONE)
 
 extern void sections_count_component_vbs (const SecLiEnt *sl, uint32_t *num_vbs, uint32_t *first_vb);
 extern const SecLiEnt *sections_pull_vb_up (uint32_t vb_i, const SecLiEnt *sl);

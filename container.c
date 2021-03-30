@@ -22,20 +22,20 @@
 void container_prepare_snip (ContainerP con, const char *prefixes, unsigned prefixes_len, 
                              char *snip, unsigned *snip_len) // in / out
 {
-    ASSERTE (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is beyond maximum of %u",
-             prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
+    ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is beyond maximum of %u",
+            prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
 
     // make sure we have enough memory
     unsigned con_size = con_sizeof (*con);
     unsigned snip_len_needed = 1 + base64_size(con_size) + prefixes_len;
-    ASSERTE (*snip_len >= snip_len_needed, "snip_len=%u too short, need at least %u", *snip_len, snip_len_needed);
+    ASSERT (*snip_len >= snip_len_needed, "snip_len=%u too short, need at least %u", *snip_len, snip_len_needed);
 
     con->repeats = BGEN24 (con->repeats); 
     snip[0] = SNIP_CONTAINER;
     
     unsigned b64_len = base64_encode ((uint8_t*)con, con_size, &snip[1]);
-    ASSERTE (b64_len <= base64_size(con_size), "b64_len=%u larger than base64_size(%u)=%u",
-             b64_len, con_size, base64_size(con_size));
+    ASSERT (b64_len <= base64_size(con_size), "b64_len=%u larger than base64_size(%u)=%u",
+            b64_len, con_size, base64_size(con_size));
     
     con->repeats = BGEN24 (con->repeats); // restore
 
@@ -68,8 +68,11 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, ContainerP con,
                  vb->vblock_i, vb->line_i, ctx->did_i, ctx->name, con->repeats, con->repsep[0], con->repsep[1]);
         for (unsigned i=0; i < con_nitems (*con); i++) {
             ContainerItem *item = &con->items[i];
-            if (item->dict_id.num) 
-                fprintf (info_stream, "%u:%s ", ctx_get_existing_ctx (vb, item->dict_id)->did_i, dis_dict_id (item->dict_id).s); 
+            if (item->dict_id.num) {
+                Context *item_ctx = ctx_get_existing_ctx (vb, item->dict_id);
+                ASSERT (item_ctx, "dict_id=%s has no context", dis_dict_id (item->dict_id).s);
+                fprintf (info_stream, "%u:%s ", ctx->did_i, dis_dict_id (item->dict_id).s); 
+            }
         }
         iprint0 ("\n");
     }
@@ -85,7 +88,7 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, ContainerP con,
 static inline void container_reconstruct_prefix (VBlockP vb, ConstContainerP con, const char **prefixes, uint32_t *prefixes_len,
                                                  bool skip, DictId con_dict_id, DictId item_dict_id)
 {
-    ASSERTE (*prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is too big", *prefixes_len);
+    ASSERT (*prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is too big", *prefixes_len);
 
     if (! (*prefixes_len)) return; // nothing to do
     
@@ -124,8 +127,8 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, con, &prefixes, &prefixes_len, false, ctx->dict_id, DICT_ID_NONE); 
 
-    ASSERTE (DTP (container_filter) || (!con->filter_repeats && !con->filter_items), 
-             "data_type=%s doesn't support container_filter, despite being specified in the Container", dt_name (vb->data_type));
+    ASSERT (DTP (container_filter) || (!con->filter_repeats && !con->filter_items), 
+            "data_type=%s doesn't support container_filter, despite being specified in the Container", dt_name (vb->data_type));
 
     uint32_t num_items = con_nitems(*con);
     Context *item_ctxs[num_items];
@@ -234,7 +237,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
         if (con->is_toplevel && vb->dont_show_curr_line) {
-            ASSERTE0 (flag.may_drop_lines, "Lines cannot be dropped because flag.may_drop_lines=false");
+            ASSERT0 (flag.may_drop_lines, "Lines cannot be dropped because flag.may_drop_lines=false");
             vb->txt_data.len = vb->line_start;
             
             static const char *drop_lines[] = { "", "\b\n", "\b\n\b\n", "\b\n\b\n\b\n", "\b\n\b\n\b\n\b\n" };
@@ -282,15 +285,15 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
         base64_decode (snip, &b64_len, (uint8_t*)&con);
         con.repeats = BGEN24 (con.repeats);
 
-        ASSERTE (con_nitems (con) <= MAX_SUBFIELDS, "A container of %s has %u items which is beyond MAX_SUBFIELDS=%u. Please upgrade to latest version of genozip to access this file.",
-                 ctx->name, con_nitems (con), MAX_SUBFIELDS);
+        ASSERT (con_nitems (con) <= MAX_SUBFIELDS, "A container of %s has %u items which is beyond MAX_SUBFIELDS=%u. Please upgrade to latest version of genozip to access this file.",
+                ctx->name, con_nitems (con), MAX_SUBFIELDS);
 
         // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
         for (uint32_t item_i=0; item_i < con_nitems (con); item_i++)
             if (con.items[item_i].dict_id.num) { // not a prefix-only item
                 DidIType did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
-                ASSERTE (did_i != DID_I_NONE, "analyzing a %s container: unable to find did_i for item %s",
-                         ctx->name, dis_dict_id (con.items[item_i].dict_id).s);
+                ASSERT (did_i != DID_I_NONE, "analyzing a %s container: unable to find did_i for item %s",
+                        ctx->name, dis_dict_id (con.items[item_i].dict_id).s);
 
                 con.items[item_i].did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
             }
@@ -303,18 +306,18 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
         prefixes     = (b64_len < snip_len) ? &snip[b64_len+1]       : NULL;
         prefixes_len = (b64_len < snip_len) ? snip_len - (b64_len+1) : 0;
 
-        ASSERTE (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "ctx=%s: prefixes_len=%u longer than CONTAINER_MAX_PREFIXES_LEN=%u", 
-                 ctx->name, prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
+        ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "ctx=%s: prefixes_len=%u longer than CONTAINER_MAX_PREFIXES_LEN=%u", 
+                ctx->name, prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
 
-        ASSERTE (!prefixes_len || prefixes[prefixes_len-1] == CON_PREFIX_SEP, 
-                 "ctx=%s: prefixes array does end with a CON_PREFIX_SEP: %.*s", ctx->name, prefixes_len, prefixes);
+        ASSERT (!prefixes_len || prefixes[prefixes_len-1] == CON_PREFIX_SEP, 
+                "ctx=%s: prefixes array does end with a CON_PREFIX_SEP: %.*s", ctx->name, prefixes_len, prefixes);
 
         // condition testing needed only for backward compatability with 8.0.x: prior to version 8.1 containers didn't have NO_STONS 
         // so singletons were in ctx.local without a word_index)
         if (word_index != WORD_INDEX_NONE) {
 
-            ASSERTE (st_size + prefixes_len <= 65535, "ctx=%s: st_size=%u + prefixes_len=%u too large", 
-                     ctx->name, st_size, prefixes_len);
+            ASSERT (st_size + prefixes_len <= 65535, "ctx=%s: st_size=%u + prefixes_len=%u too large", 
+                    ctx->name, st_size, prefixes_len);
 
             // first encounter with Container for this context - allocate the cache
             if (!cache_exists) {
@@ -339,9 +342,9 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
             ContainerItem *item0 = &con.items[0];
             if (flag.trans_containers && !item0->dict_id.num && item0->translator) {
                 int32_t prefixes_len_change = DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len);  
-                ASSERTE (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
-                         "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", 
-                         ctx->name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
+                ASSERT (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
+                        "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", 
+                        ctx->name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
                 
                 prefixes_len       += prefixes_len_change;
                 ctx->con_cache.len += prefixes_len_change;

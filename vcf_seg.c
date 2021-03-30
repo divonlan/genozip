@@ -75,7 +75,7 @@ void vcf_seg_initialize (VBlock *vb_)
 
     // when compressing a Luft file, some lines are already known to be rejects. we just copy them to liftover_rejects
     if (vb->luft_reject_bytes) 
-        buf_copy (vb, &vb->liftover_rejects, &vb->txt_data, 1, 0, vb->luft_reject_bytes, "liftover_rejects");
+        buf_copy (vb, &vb->liftover_rejects, &vb->txt_data, char, 0, vb->luft_reject_bytes, "liftover_rejects");
 }             
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -296,8 +296,8 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
     dl->format_node_i = node_index;
 
     if (is_new) {
-        ASSERTE (node_index == vb->format_mapper_buf.len, 
-                 "node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
+        ASSERT (node_index == vb->format_mapper_buf.len, 
+                "node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
         buf_alloc_old (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf");
     }    
@@ -767,8 +767,8 @@ static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, 
         NEXTENT (uint32_t, ctx->local) = 0xffffffff;
     }
     else {
-        ASSERTE (str_get_int (cell, cell_len, &ctx->last_value.i) && ctx->last_value.i >= 0 && ctx->last_value.i <= 0xfffffffe, 
-                 "expecting an integer in the range [0, 0xfffffffe] or a '.', but found: %.*s", cell_len, cell);
+        ASSERT (str_get_int (cell, cell_len, &ctx->last_value.i) && ctx->last_value.i >= 0 && ctx->last_value.i <= 0xfffffffe, 
+                "expecting an integer in the range [0, 0xfffffffe] or a '.', but found: %.*s", cell_len, cell);
 
         NEXTENT (uint32_t, ctx->local) = (uint32_t)ctx->last_value.i;
     }
@@ -816,8 +816,8 @@ static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const ch
 static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigned sample_i, uint32_t max_new_size)
 {
     // protect against highly unlikely case that we don't have enough consumed txt data to store increased-ploidy ht data 
-    ASSERTE (new_ploidy * vb->line_i * vcf_num_samples <= max_new_size, 
-             "haplotype data overflow due to increased ploidy on line %u", vb->line_i);
+    ASSERT (new_ploidy * vb->line_i * vcf_num_samples <= max_new_size, 
+            "haplotype data overflow due to increased ploidy on line %u", vb->line_i);
 
     uint32_t num_samples = vb->line_i * vcf_num_samples + sample_i; // all samples in previous lines + previous samples in current line
     char *ht_data = FIRSTENT (char, vb->ht_matrix_ctx->local);
@@ -1209,7 +1209,7 @@ static void vcf_seg_complete_missing_lines (VBlockVCF *vb)
 static void vcf_seg_copy_line_to_reject (VBlockVCF *vb, const char *field_start_line, uint32_t remaining_txt_len)
 {
     const char *last = memchr (field_start_line, '\n', remaining_txt_len);
-    ASSERTE (last, "Line has no newline: %.*s", remaining_txt_len, field_start_line);
+    ASSERT (last, "Line has no newline: %.*s", remaining_txt_len, field_start_line);
 
     uint32_t line_len = last - field_start_line + 1;
     buf_add_more (vb, &vb->liftover_rejects, field_start_line, line_len, "liftover_rejects");
@@ -1228,9 +1228,8 @@ static inline void vcf_seg_assign_dl_sorted (VBlockVCF *vb, ZipDataLineVCF *dl, 
         // 2. rejected lift-over 
         ||  (is_luft && dl->chrom_index[is_luft] == WORD_INDEX_NONE)
 
-        // 3. chrom different that prev line, but already appeared in this VB
-        ||  (dl->chrom_index[is_luft] != (dl-1)->chrom_index[is_luft] && 
-             node_count (vb, chrom_did_i, dl->chrom_index[is_luft]) > 1))
+        // 3. chrom os out of order (if chroms are in header, then this is by the header, otherwise by first appearance in file)
+        ||  (dl->chrom_index[is_luft] < (dl-1)->chrom_index[is_luft]))
            
             vb->is_unsorted[is_luft] = true;
     }

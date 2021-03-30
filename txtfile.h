@@ -23,11 +23,7 @@ extern void txtfile_write_4_lines (ConstBufferP txt_data, const char *line_start
 extern const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext);
 extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
 
-extern bool txtfile_header_to_genozip (uint32_t *vcf_line_i);
-extern void txtfile_genozip_to_txt_header (ConstSecLiEntP sl, Digest *digest);
-
-uint32_t txtfile_get_bound_headers_len(void); // for stats
-
+extern Digest txtfile_read_header (bool is_first_txt);
 extern void txtfile_read_vblock (VBlockP vb, bool force_uncompress);
 extern void txtfile_write_to_disk (ConstBufferP buf, const char *data, unsigned len);
 extern void txtfile_flush_if_stdout (void);

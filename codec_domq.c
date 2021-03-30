@@ -106,14 +106,14 @@ bool codec_domq_compress (VBlock *vb,
 {
     START_TIMER;
 
-    ASSERTE0 (!uncompressed && callback, "only callback option is supported");
+    ASSERT0 (!uncompressed && callback, "only callback option is supported");
 
     SectionHeaderCtx *local_header = (SectionHeaderCtx *)header;
     Context *qual_ctx = ctx_get_existing_ctx (vb, local_header->dict_id);
     Context *qdomruns_ctx = qual_ctx + 1;
 
     const char dom = qual_ctx->local.param;
-    ASSERTE0 (dom, "dom is not set");
+    ASSERT0 (dom, "dom is not set");
 
     Buffer *qual_buf     = &qual_ctx->local;
     Buffer *qdomruns_buf = &qdomruns_ctx->local;
@@ -207,7 +207,7 @@ bool codec_domq_compress (VBlock *vb,
 static inline uint32_t shorten_run (uint8_t *run, uint32_t old_num_bytes, uint32_t old_runlen, uint32_t dec)
 {
     int32_t new_runlen = old_runlen - dec;
-    ASSERTE (new_runlen >= 0, "new_runlen=%d is out of range", new_runlen);
+    ASSERT (new_runlen >= 0, "new_runlen=%d is out of range", new_runlen);
 
     uint32_t new_num_bytes = MAX (1, ((uint32_t)new_runlen + 253) / 254); // roundup (if runlen=0, we still need 1 byte)
 
@@ -224,8 +224,8 @@ static inline uint32_t shorten_run (uint8_t *run, uint32_t old_num_bytes, uint32
 // reconstructed a run of the dominant character
 static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, Context *domqruns_ctx, char dom, uint32_t max_len)
 {
-    ASSERTE (domqruns_ctx->next_local < domqruns_ctx->local.len, "unexpectedly reached the end of vb->domqruns_ctx in vb_i=%u (first_line=%u len=%u)", 
-             vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len);
+    ASSERT (domqruns_ctx->next_local < domqruns_ctx->local.len, "unexpectedly reached the end of vb->domqruns_ctx in vb_i=%u (first_line=%u len=%u)", 
+            vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len);
 
     // read the entire runlength (even bytes that are in excess of max_len)
     uint32_t runlen=0, num_bytes;
@@ -290,6 +290,6 @@ void codec_domq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
         qual_len++;
     }
 
-    ASSERTE (qual_len == vb->seq_len, "expecting qual_len(%u) == vb->seq_len(%u) in vb_i=%u (last_line=%u, num_lines=%u) line_i=%u", 
-             qual_len, vb->seq_len, vb->vblock_i, vb->first_line + (uint32_t)vb->lines.len-1, (uint32_t)vb->lines.len, vb->line_i);   
+    ASSERT (qual_len == vb->seq_len, "expecting qual_len(%u) == vb->seq_len(%u) in vb_i=%u (last_line=%u, num_lines=%u) line_i=%u", 
+            qual_len, vb->seq_len, vb->vblock_i, vb->first_line + (uint32_t)vb->lines.len-1, (uint32_t)vb->lines.len, vb->line_i);   
 }

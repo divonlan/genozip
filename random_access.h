@@ -23,7 +23,7 @@ extern void random_access_merge_in_vb (VBlockP vb);
 extern void random_access_finalize_entries (BufferP ra_buf);
 extern void BGEN_random_access (Buffer *ra_buf);
 extern void random_access_show_index (ConstBufferP ra_buf, bool from_zip, const char *msg);
-extern bool random_access_is_vb_included (uint32_t vb_i, BufferP region_ra_intersection_matrix);
+extern bool random_access_is_vb_included (uint32_t vb_i, BufferP region_X_ra_matrix);
 extern int32_t random_access_get_last_included_vb_i (void);
 extern void random_access_get_first_chrom_of_vb (VBlockP vb, PosType *first_pos, PosType *last_pos);
 extern bool random_access_does_last_chrom_continue_in_next_vb (uint32_t vb_i);

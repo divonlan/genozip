@@ -14,7 +14,7 @@ One or more file names must be given
      |
      | ``genounzip file.vcf.genozip --output file.vcf.gz``
      |
-     | ``genounzip bound.vcf.genozip --unbind=new_directory/``
+     | ``genounzip bound.vcf.genozip --prefix=new_directory/``
 
 **Options**
 
@@ -24,7 +24,7 @@ One or more file names must be given
 
 .. include:: opt-piz.rst
 
-.. option:: --unbind=prefix  Specify a prefix that is added to each file component name. A prefix may include a directory.
+.. option:: -u --prefix <prefix> Specify a prefix that is added to each file component name. A prefix may include a directory.
 
           |
 
@@ -33,6 +33,10 @@ One or more file names must be given
           |
 
 .. option:: -t, --test  Decompress in memory (i.e. without writing the decompressed file to disk) and use the digest (MD5 or Adler32) to verify that the resulting decompressed file is identical to the original file.
+
+          |
+
+.. option:: -c, --stdout  (obsolete) use genocat instead          
 
           |
 

@@ -19,11 +19,9 @@ extern bool sam_zip_dts_flag (void);
 
 // HEADER stuff
 extern bool sam_header_inspect (BufferP txt_header);
-extern void sam_header_get_contigs (ConstBufferP *contigs_dict, ConstBufferP *contigs);
 
 // SEG Stuff
 extern void sam_seg_initialize (VBlockP vb);
-extern void sam_header_finalize (void);
 extern void sam_seg_finalize (VBlockP vb);
 extern bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern const char *sam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);

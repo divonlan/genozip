@@ -35,6 +35,7 @@
 #include "random_access.h"
 #include "codec.h"
 #include "threads.h"
+#include "dispatcher.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -58,7 +59,7 @@ void main_exit (bool show_stack, bool is_error)
     file_kill_external_compressors(); 
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
-    if (primary_command == ZIP && z_file && z_file->name && !flag.reading_reference && !flag.reading_chain) {
+    if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) {
         char save_name[strlen (z_file->name)+1];
         strcpy (save_name, z_file->name);
 
@@ -210,10 +211,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
 
-    Digest md5_hash_bound; 
     uint64_t txt_data_size, num_lines;
     char created[FILE_METADATA_LEN];
-    if (!zfile_read_genozip_header (&md5_hash_bound, &txt_data_size, &num_lines, created))
+    if (!zfile_read_genozip_header (&txt_data_size, &num_lines, created))
         goto finish;
 
     double ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
@@ -231,7 +231,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     else 
         bufprintf (evb, &str_buf, item_format, dt_name (dt), str_uint_commas (num_lines).s,
                    str_size (z_file->disk_size).s, str_size (txt_data_size).s, ratio < 100, ratio, 
-                   digest_display_ex (md5_hash_bound, DD_MD5_IF_MD5).s,
+                   digest_display_ex (z_file->digest, DD_MD5_IF_MD5).s,
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
                    z_filename, created);
@@ -241,8 +241,8 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     files_listed++;
 
-    // if --unbind, OR if the user did genols on one file (not a directory), show bound components, if there are any
-    if (flag.unbind || (!flag.multiple_files && !recursive && z_file->num_components >= 2)) {
+    // if --list, OR if the user did genols on one file (not a directory), show bound components, if there are any
+    if (flag.list || (!flag.multiple_files && !recursive && z_file->num_components >= 2)) {
         buf_add_string (evb, &str_buf, "Components:\n");
         const SecLiEnt *sl_ent = NULL;
         uint64_t num_lines_count=0;
@@ -280,7 +280,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     static bool is_first_z_file = true;
     
     // get input FILE
-    ASSERTE0 (z_filename, "z_filename is NULL");
+    ASSERTNOTNULL (z_filename);
 
     // we cannot work with a remote genozip file because the decompression process requires random access
     ASSINP (!url_is_url (z_filename), 
@@ -301,15 +301,11 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
     // 3) identify skip cases (DT_NONE returned) - empty file, unzip of a reference
     // 4) reset flag.unbind if file contains only one component
-    if (!z_file->file || !zfile_read_genozip_header (0,0,0,0)) goto done; 
+    if (!z_file->file || !zfile_read_genozip_header (0,0,0)) goto done; 
 
     // if we're genocatting a BAM file, output it as a SAM unless user requested otherwise
     if (z_file->data_type == DT_SAM && z_file->z_flags.txt_is_bin && flag.out_dt==-1 && exe_type == EXE_GENOCAT)
         flag.out_dt = DT_SAM;
-
-    // if this is genounzip of a bound file, and we don't have --unbind or --force, we ask the user
-    if (exe_type == EXE_GENOUNZIP && z_file->num_components >= (2 + z_file->z_flags.dual_coords) && !flag.unbind && !flag.force && !flag.out_filename)
-        flag.unbind = ""; // we always unbind in genounzip - if user didn't specify prefix, then no prefix
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
     if (flag.reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
@@ -330,20 +326,21 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
 
     // open output txt file (except if unbinding or outputting to stdout)
     if (txt_filename || flag.to_stdout) {
-        ASSERTE0 (!txt_file, "txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
+        ASSERT0 (!txt_file, "txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
         txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag.out_dt);
     }
     else if (flag.unbind) {
-        // do nothing - the component files will be opened by txtfile_genozip_to_txt_header()
+        // do nothing - the component files will be opened by txtheader_piz_read_and_reconstruct()
     }
     else {
         ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
-    
-    // a loop for decompressing all components in unbind mode.
-    // in concatenate mode, it collapses to a single iteration. in --interleave, it iterates on every other component.
-    for (uint32_t component_i=0; component_i < z_file->num_components; component_i += flag.unbind ? 1 + flag.interleave : z_file->num_components) {
-        piz_one_file (component_i, is_first_z_file, is_last_z_file);
+
+    Dispatcher dispatcher = piz_z_file_initialize (is_last_z_file);  
+
+    // a loop for decompressing all txt_files (1 if concatenating, possibly more if unbinding)
+    for (int txt_file_i=0; txt_file_i < z_file->txt_file_info.len; txt_file_i++) {
+        piz_one_txt_file (dispatcher, txt_file_i, (txt_file_i==z_file->txt_file_info.len-1), is_first_z_file);
         file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
     }
 
@@ -447,7 +444,7 @@ static void main_genozip (const char *txt_filename,
 
     if (!txt_file->file) goto done; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
 
-    ASSERTE0 (flag.bind || !z_file, "expecting z_file to be NULL in non-bound mode");
+    ASSERT0 (flag.bind || !z_file, "expecting z_file to be NULL in non-bound mode");
 
     // get output FILE
     if (!z_file) { // skip if we're the second file onwards in bind mode, or pair_2 in unbound list of pairs - nothing to do
@@ -522,10 +519,10 @@ static void main_list_dir(const char *dirname)
     struct dirent *ent;
 
     dir = opendir (dirname);
-    ASSERTE (dir, "failed to open directory: %s", strerror (errno));
+    ASSERT (dir, "failed to open directory: %s", strerror (errno));
 
     int ret = chdir (dirname);
-    ASSERTE (!ret, "failed to chdir(%s)", dirname);
+    ASSERT (!ret, "failed to chdir(%s)", dirname);
 
     flag.multiple_files = true;
 
@@ -536,7 +533,7 @@ static void main_list_dir(const char *dirname)
     closedir(dir);    
 
     ret = chdir ("..");
-    ASSERTE0 (!ret, "failed to chdir(..)");
+    ASSERT0 (!ret, "failed to chdir(..)");
 }
 
 static inline DataType main_get_file_dt (const char *filename)

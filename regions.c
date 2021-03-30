@@ -90,7 +90,7 @@ static bool regions_is_valid_chrom (const char *str)
 // called from main when parsing the command line to add the argument of --regions
 void regions_add (const char *region_str)
 {
-    ASSERTE0 (region_str, "region_str is NULL");
+    ASSERTNOTNULL (region_str);
 
     bool is_negated = region_str[0] == '^';
 
@@ -278,7 +278,7 @@ bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType min_pos, P
 {
     if (!flag.regions) return true; // nothing to do
 
-    ASSERTE (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
+    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
 
     Buffer *chregs_buf = &chregs[chrom_word_index];
 
@@ -326,7 +326,7 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
 // a specific ra (i.e. chromosome)
 bool regions_is_site_included (WordIndex chrom_word_index, PosType pos)
 {
-    ASSERTE (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
+    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
 
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];
@@ -340,7 +340,7 @@ bool regions_is_site_included (WordIndex chrom_word_index, PosType pos)
 // PIZ: check if a range (chrom,start_pos,end_pos) overlaps with an included region. used when loading reference ranges.
 bool regions_is_range_included (WordIndex chrom_word_index, PosType start_pos, PosType end_pos, bool completely_included)
 {
-    ASSERTE (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
+    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
 
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];

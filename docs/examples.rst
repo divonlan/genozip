@@ -38,7 +38,7 @@ Examples
 
     | ``genozip --reference myfasta.ref.genozip --pair mysample-R1.fastq.gz mysample-R2.fastq.gz``
     |
-    | ``genounzip --reference myfasta.ref.genozip --unbind mysample-R1+2.fastq.genozip``
+    | ``genounzip --reference myfasta.ref.genozip mysample-R1+2.fastq.genozip``
 
     | *Note*: with ``--pair`` genozip uses similarities between the files to enhance compression.
 
@@ -81,7 +81,7 @@ Examples
     | ``genozip *.fq.gz -o all-samples.fq.genozip``  
     | Binds all .fq.gz files in the current directory.
     |
-    | ``genounzip my-project.fq.genozip --unbind``
+    | ``genounzip my-project.fq.genozip``
 
 **Compressing even better, with some minor modifications of the data**
 

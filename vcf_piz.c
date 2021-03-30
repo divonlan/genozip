@@ -88,8 +88,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
     // initialize haplotype stuff
     if (has_GT && !vb_vcf->ht_matrix_ctx) {
 
-        ASSERTE ((vb_vcf->ht_matrix_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT)), 
-                 "vb_i=%u: cannot find GT_HT data", vb->vblock_i);
+        ASSERT ((vb_vcf->ht_matrix_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT)), 
+                "vb_i=%u: cannot find GT_HT data", vb->vblock_i);
 
         // will exist in case of use of CODEC_HAPMAT but not CODEC_GTSHARK        
         vb_vcf->hapmat_index_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
@@ -106,7 +106,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_REFALT)
 {
     if (!reconstruct) goto done;
 
-    ASSERTE (snip_len==2, "expecting snip_len=2 but seeing %u", snip_len);
+    ASSERT (snip_len==2, "expecting snip_len=2 but seeing %u", snip_len);
 
     // snip is 3 characters - REF, \t, ALT
     char ref_alt[3] = { 0, '\t', 0 };
@@ -116,10 +116,10 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_REFALT)
         PosType pos = vb->last_int (VCF_POS);
 
         const Range *range = ref_piz_get_range (vb, pos, 1);
-        ASSERTE (range, "failed to find range for chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
+        ASSERT (range, "failed to find range for chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
         
         uint32_t idx = pos - range->first_pos;
-        ASSERTE (ref_is_nucleotide_set (range, idx), "reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos);
+        ASSERT (ref_is_nucleotide_set (range, idx), "reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos);
         ref_value = ref_get_nucleotide (range, idx);
     }
 
@@ -197,7 +197,7 @@ done:
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_BaseCounts)
 {
     Context *ctx_refalt = &vb->contexts[VCF_REFALT];
-    ASSERTE (ctx_refalt->last_txt_len == 3, "Expecting ctx_refalt->last_txt_len=%u to be 3", ctx_refalt->last_txt_len);
+    ASSERT (ctx_refalt->last_txt_len == 3, "Expecting ctx_refalt->last_txt_len=%u to be 3", ctx_refalt->last_txt_len);
     const char *refalt = last_txt (vb, VCF_REFALT);
 
     uint32_t counts[4], sorted_counts[4] = {}; // counts of A, C, G, T
@@ -213,7 +213,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_BaseCounts)
 
     if (!reconstruct) goto done; // just return the new value
 
-    ASSERTE (str - snip == snip_len + 1, "expecting (str-snip)=%d == (snip_len+1)=%u", (int)(str - snip), snip_len+1);
+    ASSERT (str - snip == snip_len + 1, "expecting (str-snip)=%d == (snip_len+1)=%u", (int)(str - snip), snip_len+1);
 
     unsigned ref_i = acgt_encode[(int)refalt[0]];
     unsigned alt_i = acgt_encode[(int)refalt[2]];
@@ -411,8 +411,8 @@ TRANSLATOR_FUNC (vcf_piz_luft_REFALT)
 
     // split REFALT
     const char *ref_alt[2]; unsigned ref_alt_lens[2];
-    ASSERTE (str_split (reconstructed, reconstructed_len, 2, '\t', ref_alt, ref_alt_lens), 
-             "expecting one tab in the REFALT snip: \"%.*s\"", reconstructed_len, reconstructed);
+    ASSERT (str_split (reconstructed, reconstructed_len, 2, '\t', ref_alt, ref_alt_lens), 
+            "expecting one tab in the REFALT snip: \"%.*s\"", reconstructed_len, reconstructed);
 
     liftback->len -= ref_alt_lens[1] + 1; // remove \tALT from INFO/LIFTBACK data (but data is still in the buffer...)
 
@@ -420,10 +420,10 @@ TRANSLATOR_FUNC (vcf_piz_luft_REFALT)
     uint64_t txt_data_len_with_refalt = vb->txt_data.len;    
     vb->txt_data.len -= reconstructed_len;
 
-    reconstruct_from_ctx (vb, VCF_oREF, '\t', true); // reconstructs special snip using vcf_piz_special_OREF
+    reconstruct_from_ctx (vb, VCF_oREF, '\t', true); // reconstructs special snip using vcf_piz_special_oREF
 
     // case: REF unchanged - oALT is ALT - just restore the length
-    if (vb->last_int (VCF_oREF) == 0) // oREF value stored in vcf_piz_special_OREF()
+    if (vb->last_int (VCF_oREF) == 0) // oREF value stored in vcf_piz_special_oREF()
         vb->txt_data.len = txt_data_len_with_refalt;
 
 // TODO - the old ALT to be rev complemented in strand=-
@@ -439,16 +439,16 @@ TRANSLATOR_FUNC (vcf_piz_luft_REFALT)
 // used for:
 // 1. Primary VCF - reconstruct oREF in INFO/LIFTOVER (reconstruction invoked from LIFTOVER container)
 // 2. Luft VCF    - reconstruct oREF in primary REF field (reconstruction invoked by vcf_piz_luft_REFALT translator)
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_OREF)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_oREF)
 {
     // make a copy of refalt, as we will be overwriting it (since call from from vcf_piz_luft_REFALT)
     unsigned ref_alt_str_len = vb->last_txt_len (VCF_REFALT);
+
     char ref_alt_str[ref_alt_str_len];
     memcpy (ref_alt_str, last_txt (vb, VCF_REFALT), ref_alt_str_len);
-
     const char *ref_alt[2]; unsigned ref_alt_len[2];
-    ASSERTE (str_split (ref_alt_str, ref_alt_str_len, 2, '\t', ref_alt, ref_alt_len),
-             "expecting one tab in the REFALT snip: \"%.*s\"", ref_alt_str_len, ref_alt_str);
+    ASSERT (str_split (ref_alt_str, ref_alt_str_len, 2, '\t', ref_alt, ref_alt_len),
+            "expecting one tab in the REFALT snip: \"%.*s\"", ref_alt_str_len, ref_alt_str);
 
     if (snip_len==1 && *snip=='0')      // ALT
         RECONSTRUCT (ref_alt[1], ref_alt_len[1]);

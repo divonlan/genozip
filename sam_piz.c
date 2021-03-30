@@ -40,7 +40,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
 #define ROUNDUP_TO_NEAREST_4(x) ((uint32_t)(x) + 3) & ~((uint32_t)0x3)
 
     VBlockSAMP vb = (VBlockSAMP)vb_;
-    ASSERTE0 (bitmap_ctx && bitmap_ctx->did_i == SAM_SQBITMAP, "context is not SAM_SQBITMAP");
+    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == SAM_SQBITMAP, "context is not SAM_SQBITMAP");
 
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 
@@ -84,7 +84,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
             subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
             cigar_op = cigar_lookup_sam[(uint8_t)*(next_cigar++)];
-            ASSERTE (cigar_op, "Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
+            ASSERT (cigar_op, "Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
             cigar_op &= 0x0f; // remove validity bit
         }
 
@@ -118,8 +118,8 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
         subcigar_len--;
     }
 
-    ASSERTE (seq_consumed == vb->seq_len,      "expecting seq_consumed(%u) == vb->seq_len(%u)", seq_consumed, vb->seq_len);
-    ASSERTE (ref_consumed == vb->ref_consumed, "expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
+    ASSERT (seq_consumed == vb->seq_len,      "expecting seq_consumed(%u) == vb->seq_len(%u)", seq_consumed, vb->seq_len);
+    ASSERT (ref_consumed == vb->ref_consumed, "expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
 
     bitmap_ctx->last_value.i = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
     
@@ -222,7 +222,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_BIN)
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
 {
-    ASSERTE0 (snip_len, "snip_len=0");
+    ASSERT0 (snip_len, "snip_len=0");
 
     int32_t tlen_by_calc = atoi (snip);
     int32_t tlen_val = tlen_by_calc + vb->contexts[SAM_PNEXT].last_delta + vb->seq_len;
@@ -265,7 +265,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
 
     // note: bd and bi use their own next_local to retrieve data from bdbi_ctx. the actual index
     // in bdbi_ctx.local is calculated given the interlacing
-    ASSERTE (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, dis_dict_id (ctx->dict_id).s);
+    ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, dis_dict_id (ctx->dict_id).s);
 
     char *dst        = AFTERENT (char, vb->txt_data);
     const char *src  = ENT (char, bdbi_ctx->local, ctx->next_local * 2);
@@ -292,7 +292,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 {
     // get Little Endian n
     int64_t n;
-    ASSERTE (str_get_int (snip, snip_len, &n), "failed to read integer in %s", ctx->name);
+    ASSERT (str_get_int (snip, snip_len, &n), "failed to read integer in %s", ctx->name);
 
     uint32_t lten_n = (uint32_t)n;         // n is now little endian, uint32 
     
@@ -347,8 +347,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_XA_POS)
 
     const char *xa_rname = ENT (char, vb->txt_data, xa_rname_ctx->last_txt);
 
-    ASSERTE (xa_rname_ctx->last_txt_len >= 1 && xa_rname_ctx->last_txt_len <= 5, "unexpected length of XA_RNAME=%.*s len=%u",
-             xa_rname_ctx->last_txt_len, xa_rname, xa_rname_ctx->last_txt_len);
+    ASSERT (xa_rname_ctx->last_txt_len >= 1 && xa_rname_ctx->last_txt_len <= 5, "unexpected length of XA_RNAME=%.*s len=%u",
+            xa_rname_ctx->last_txt_len, xa_rname, xa_rname_ctx->last_txt_len);
 
     char id[DICT_ID_LEN] = "X2A";
     memcpy (&id[3], xa_rname, xa_rname_ctx->last_txt_len);
@@ -602,7 +602,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
         uint32_t i;
     } value;
     
-    ASSERTE0 (sizeof (value)==4, "expecting value to be 32 bits"); // should never happen
+    ASSERT0 (sizeof (value)==4, "expecting value to be 32 bits"); // should never happen
 
     value.f = (float)ctx->last_value.f;
     RECONSTRUCT_BIN32 (value.i);

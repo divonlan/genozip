@@ -44,7 +44,7 @@ void random_access_alloc_ra_buf (VBlock *vb, int32_t chrom_node_index)
 void random_access_update_chrom (VBlock *vb, WordIndex chrom_node_index, const char *chrom_name, unsigned chrom_name_len)
 {
     // note: when FASTA calls this for a sequence that started in the previous vb, and hence chrom is unknown, chrom_node_index==-1.
-    ASSERTE (chrom_node_index >= -1, "chrom_node_index=%d in vb_i=%u", chrom_node_index, vb->vblock_i);
+    ASSERT (chrom_node_index >= -1, "chrom_node_index=%d in vb_i=%u", chrom_node_index, vb->vblock_i);
 
     // if this is an "unavailable" chrom ("*") we don't store it and signal not to store POS either
     if (chrom_name_len == 1 && chrom_name[0] == '*') {
@@ -127,7 +127,7 @@ void random_access_merge_in_vb (VBlock *vb)
     ARRAY (RAEntry, src_ra, vb->ra_buf);
 
     Context *chrom_ctx = &vb->contexts[CHROM];
-    ASSERTE0 (chrom_ctx, "cannot find chrom_ctx");
+    ASSERT0 (chrom_ctx, "cannot find chrom_ctx");
 
     for (unsigned i=0; i < vb->ra_buf.len; i++) {
         
@@ -203,8 +203,8 @@ void random_access_finalize_entries (Buffer *ra_buf)
         // case: chrom is unknown - if the sequence started in the previous VB (this happens in FASTA) - we update now
         if (ra->chrom_index == WORD_INDEX_NONE) {
             // we expect this ra to be the first in its VB, and the previous ra to be of the previous VB
-            ASSERTE (i && (ra->vblock_i == (ra-1)->vblock_i+1), "corrupt ra[%u]: chrom_index=WORD_INDEX_NONE but vb_i=%u and (ra-1)->vb_i=%u (expecting it to be %u)",
-                     i, ra->vblock_i, (ra-1)->vblock_i, ra->vblock_i-1);
+            ASSERT (i && (ra->vblock_i == (ra-1)->vblock_i+1), "corrupt ra[%u]: chrom_index=WORD_INDEX_NONE but vb_i=%u and (ra-1)->vb_i=%u (expecting it to be %u)",
+                    i, ra->vblock_i, (ra-1)->vblock_i, ra->vblock_i-1);
 
             ra->chrom_index = (ra-1)->chrom_index;
             ra->min_pos    += (ra-1)->max_pos;
@@ -238,16 +238,16 @@ static const RAEntry *random_access_get_first_ra_of_vb_do (uint32_t vb_i, const 
 // PIZ main thread: check if for the given VB,
 // the ranges in random access (from the file) overlap with the ranges in regions (from the command line --regions)
 bool random_access_is_vb_included (uint32_t vb_i,
-                                   Buffer *region_ra_intersection_matrix) // out - a bytemap - rows are ra's of this VB, columns are regions, a cell is 1 if there's an intersection
+                                   Buffer *region_X_ra_matrix) // out - a bytemap - rows are ra's of this VB, columns are regions, a cell is 1 if there's an intersection
 {
     if (!flag.regions ||      // no --regions were specified
         !z_file->ra_buf.len)  // this file has no RA data (eg unaligned SAM/BAM)
         return true; // all VBs are included
 
-    ASSERTE0 (region_ra_intersection_matrix, "region_ra_intersection_matrix is NULL");
+    ASSERT0 (region_X_ra_matrix, "region_X_ra_matrix is NULL");
 
-    // allocate bytemap. note that it allocated in evb, and will be buf_moved to the vb after it is generated 
-    ASSERTNOTINUSE (*region_ra_intersection_matrix);
+    // allocate bytemap.
+    ASSERTNOTINUSE (*region_X_ra_matrix);
 
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i);
     
@@ -255,17 +255,17 @@ bool random_access_is_vb_included (uint32_t vb_i,
     if (!ra) return false; // don't include this VB
 
     unsigned num_regions = regions_max_num_chregs();
-    buf_alloc_old (evb, region_ra_intersection_matrix, z_file->ra_buf.len * num_regions, 1, "region_ra_intersection_matrix");
-    buf_zero (region_ra_intersection_matrix);
+    buf_alloc_old (evb, region_X_ra_matrix, z_file->ra_buf.len * num_regions, 1, "region_X_ra_matrix");
+    buf_zero (region_X_ra_matrix);
 
     bool vb_is_included = false;
     for (unsigned ra_i=0; ra->vblock_i == vb_i; ra_i++, ra++) {
         if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos,
-                                         &region_ra_intersection_matrix->data[ra_i * num_regions]))  // the matrix row for this ra
+                                         &region_X_ra_matrix->data[ra_i * num_regions]))  // the matrix row for this ra
             vb_is_included = true; 
     }   
 
-    if (!vb_is_included) buf_free (region_ra_intersection_matrix);
+    if (!vb_is_included) buf_destroy (region_X_ra_matrix);
 
     return vb_is_included; 
 }
@@ -325,10 +325,10 @@ void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min_pos, P
 void random_access_get_first_chrom_of_vb (VBlockP vb, PosType *first_pos, PosType *last_pos)
 {
     Context *ctx = &z_file->contexts[CHROM];
-    ASSERTE (ctx->word_list.len, "word_list of %s is empty", ctx->name);
+    ASSERT (ctx->word_list.len, "word_list of %s is empty", ctx->name);
 
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb->vblock_i);
-    ASSERTE (ra, "vb_i=%u not found in random access index", vb->vblock_i);
+    ASSERT (ra, "vb_i=%u not found in random access index", vb->vblock_i);
 
     CtxWord *chrom_word  = ENT (CtxWord, ctx->word_list, ra->chrom_index);            
     vb->chrom_name       = ENT (const char, ctx->dict, chrom_word->char_index);
@@ -351,7 +351,7 @@ bool random_access_does_last_chrom_continue_in_next_vb (uint32_t vb_i)
 uint32_t random_access_num_chroms_start_in_this_vb (uint32_t vb_i)
 {
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i);
-    ASSERTE (ra, "no ra for vb_i%u", vb_i);
+    ASSERT (ra, "no ra for vb_i%u", vb_i);
 
     // count the first RA if its its the first RA in the file OR it is the first RA with this chrom 
     // (NOT a continuation of the chrom of the last RA of the previous VB)

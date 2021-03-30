@@ -13,6 +13,7 @@
 #include "file.h"
 #include "dispatcher.h"
 #include "txtfile.h"
+#include "txtheader.h"
 #include "strings.h"
 
 // Globals
@@ -83,7 +84,46 @@ static void vcf_header_add_genozip_command (Buffer *txt_header)
     bufprintf (evb, txt_header, "\" %s\n", str_time().s);
 }
 
-// ZIP
+// add contig to buffer if line is a valid contig, and fail silently if not
+static void vcf_header_parse_contig_line (const char *line, unsigned line_len, bool liftover)
+{
+    DECLARE_SNIP;
+
+    // parse eg "##contig=<ID=NKLS02001838.1,length=29167>" and "##liftover_contig=<ID=22>"
+    if (!(snip = strstr (line, "contig=<ID="))) return;
+    snip += 11;
+
+    const char *bracket = memchr (snip, '>', line + line_len - snip);
+    if (!bracket) return;
+
+    const char *comma = memchr (snip, ',', bracket - snip);
+
+    snip_len = (comma ? comma : bracket) - snip;
+
+    // if its the 2nd+ file while binding in ZIP - we just check that the contigs are the same
+    // (or a subset) of previous file's contigs (to do: merge headers, bug 327) 
+    if (command == ZIP && flag.bind && z_file->num_txt_components_so_far /* 2nd+ file */) 
+        txtheader_verify_contig (snip, snip_len, 0, (void *)liftover);
+
+    else {
+        txtheader_alloc_contigs (1, snip_len+1, liftover);
+        txtheader_add_contig (snip, snip_len, 0, (void *)liftover);
+    }
+}
+
+static bool vcf_header_extract_contigs (const char *line, unsigned line_len, void *unused1, void *unused2, unsigned unused3)
+{
+    if ((LINEIS ("##contig=") && txt_file->dual_coords == DC_LUFT) || 
+         LINEIS (HK_LO_CONTIG))
+        vcf_header_parse_contig_line (line, line_len, true);
+
+    else if (LINEIS ("##contig=") || LINEIS (HK_LB_CONTIG)) 
+        vcf_header_parse_contig_line (line, line_len, false);
+
+    return false; // continue iterating
+}
+
+
 static bool vcf_header_get_dual_coords (const char *line, unsigned line_len, void *unused1, void *unused2, unsigned unused3)
 {
     if (LINEIS (HK_DC_PRIMARY)) 
@@ -130,7 +170,7 @@ static void vcf_header_piz_liftover_header (Buffer *txt_header)
 
     // replace txt_header with lifted back one
     buf_free (txt_header);
-    buf_copy (evb, txt_header, &new_txt_header, 1, 0, 0, "txt_data");
+    buf_copy (evb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
 
     buf_free (&new_txt_header);
     #undef new_txt_header
@@ -168,7 +208,7 @@ static void vcf_header_zip_liftback_header (Buffer *txt_header)
 
     // replace txt_header with lifted back one
     buf_free (txt_header);
-    buf_copy (evb, txt_header, &new_txt_header, 1, 0, 0, "txt_data");
+    buf_copy (evb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
 
     // squeeze in the liftover rejects from the header, with their label removed, before the existing unconsumed text
     // (data that was read beyond the header) 
@@ -217,9 +257,13 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
 
     // scan header for ##dual_coordinates - this sets txt_file->dual_coords
     txtfile_foreach_line (txt_header, false, vcf_header_get_dual_coords, 0, 0, 0, 0);
+    
+    // scan header for contigs - used to pre-populate z_file contexts in txtheader_zip_prepopulate_contig_ctxs
+    txtheader_verify_contig_init();
+    txtfile_foreach_line (txt_header, false, vcf_header_extract_contigs, 0, 0, 0, 0);
 
-    ASSERTE (!chain_is_loaded || !txt_file->dual_coords, 
-             "--chain cannot be used with %s - it is already a dual-coordinates VCF file - it contains \""HK_DC"\" in its header", txt_name);
+    ASSERT (!chain_is_loaded || !txt_file->dual_coords, 
+            "--chain cannot be used with %s - it is already a dual-coordinates VCF file - it contains \""HK_DC"\" in its header", txt_name);
 
     // if we're compressing a txt file with liftover, we prepare the rejects header: it consists of two lines:
     // 1. the first "##fileformat" line if one exists in our file 
@@ -324,7 +368,7 @@ static bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bo
         
             // if first vcf file - copy the header to the global
             if (!buf_is_allocated (&vcf_field_name_line)) {
-                buf_copy (evb, &vcf_field_name_line, vcf_header, 1, i, vcf_header->len - i, "vcf_field_name_line");
+                buf_copy (evb, &vcf_field_name_line, vcf_header, char, i, vcf_header->len - i, "vcf_field_name_line");
                 vcf_field_name_line_filename = filename;
             }
 
@@ -424,7 +468,7 @@ static void vcf_header_subset_samples (Buffer *vcf_field_name_line)
 
     #define working_buf evb->codec_bufs[0]
 
-    buf_copy (evb, &working_buf, &cmd_samples_buf, sizeof (char*), 0, 0, 0);
+    buf_copy (evb, &working_buf, &cmd_samples_buf, char*, 0, 0, 0);
 
     for (unsigned i=0; i < num_samples; i++) {
         vcf_sample_names[i] = strtok_r (next_token, "\t", &next_token);
@@ -463,7 +507,7 @@ static void vcf_header_subset_samples (Buffer *vcf_field_name_line)
 // called from genozip.c for processing the --samples flag
 void vcf_samples_add  (const char *samples_str)
 {
-    ASSERTE0 (samples_str, "samples_str is NULL");
+    ASSERTNOTNULL (samples_str);
 
     bool is_negated = samples_str[0] == '^';
 

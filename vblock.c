@@ -28,7 +28,7 @@ void vb_release_vb (VBlock *vb)
     if (!vb) return; // nothing to release
 
     // verify that gzip_compressor was released after use
-    ASSERTE (!vb->gzip_compressor, "vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
+    ASSERT (!vb->gzip_compressor, "vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
 
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
     vb->vb_data_size = vb->vb_data_size_0 = vb->luft_reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
@@ -64,7 +64,7 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->show_headers_buf);
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
-    buf_free(&vb->region_ra_intersection_matrix);
+    buf_free(&vb->region_X_ra_matrix);
     buf_free(&vb->bgzf_blocks);
     buf_free(&vb->coverage);
     buf_free(&vb->read_count);
@@ -110,7 +110,7 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->show_headers_buf);
     buf_destroy (&vb->show_b250_buf);
     buf_destroy (&vb->section_list_buf);
-    buf_destroy (&vb->region_ra_intersection_matrix);
+    buf_destroy (&vb->region_X_ra_matrix);
     buf_destroy (&vb->coverage);
     buf_destroy (&vb->read_count);
     buf_destroy (&vb->unmapped_read_count);
@@ -133,8 +133,8 @@ void vb_destroy_vb (VBlockP *vb_p)
 
 void vb_create_pool (unsigned num_vbs)
 {
-    ASSERTE (!pool || num_vbs <= pool->num_vbs, 
-             "vb pool already exists, but with the wrong number of vbs - expected %u but it has %u", num_vbs, pool->num_vbs);
+    ASSERT (!pool || num_vbs <= pool->num_vbs, 
+            "vb pool already exists, but with the wrong number of vbs - expected %u but it has %u", num_vbs, pool->num_vbs);
 
     if (!pool)  {
         // allocation includes array of pointers (initialized to NULL)
@@ -150,7 +150,7 @@ VBlockPool *vb_get_pool (void)
 
 void vb_initialize_evb(void)
 {
-    ASSERTE0 (!evb, "Error: evb already initialized");
+    ASSERT0 (!evb, "Error: evb already initialized");
 
     evb = CALLOC (sizeof (VBlock));
     evb->data_type = DT_NONE;
@@ -182,7 +182,7 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
         if (!pool->vb[vb_i]->in_use) break;
     }
 
-    ASSERTE (vb_i < pool->num_vbs, "task=%s: VB pool is full - it already has %u VBs", task_name, pool->num_vbs);
+    ASSERT (vb_i < pool->num_vbs, "task=%s: VB pool is full - it already has %u VBs", task_name, pool->num_vbs);
 
     // initialize VB fields that need to be a value other than 0
     VBlock *vb = pool->vb[vb_i];

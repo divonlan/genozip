@@ -12,7 +12,7 @@
 #include "sections.h"
 #include "file.h"
 #include "vblock.h"
-#include "txtfile.h"
+#include "txtheader.h"
 #include "reference.h"
 #include "zfile.h"
 #include "version.h"
@@ -241,7 +241,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 void stats_compress (void)
 {    
     stats_output_file_metadata(&z_file->stats_buf);
-    buf_copy (evb, &z_file->STATS_buf, &z_file->stats_buf, 0,0,0, "z_file->STATS_buf");
+    buf_copy (evb, &z_file->STATS_buf, &z_file->stats_buf, char,0,0, "z_file->STATS_buf");
 
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_size=0;
 
@@ -273,7 +273,7 @@ void stats_compress (void)
         if (ctx && !ctx->b250.num_b250_words && !ctx->txt_len && !ctx->b250.len && !ctx->is_stats_parent && !s->z_size) 
             continue;
 
-        s->txt_size = i==-SEC_TXT_HEADER        ? txtfile_get_bound_headers_len()
+        s->txt_size = i==-SEC_TXT_HEADER        ? txtheader_get_bound_headers_len()
                     : !ctx                      ? 0 
                     : z_file->is_txt_len_frozen ? z_file->frozen_txt_len[i]
                     :                             ctx->txt_len;

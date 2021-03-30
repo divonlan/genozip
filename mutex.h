@@ -63,7 +63,7 @@ extern void mutex_wait_do (Mutex *mutex, const char *func, uint32_t line);
 
 #else // not mac
 #define spin_initialize(name) do { if (! name##_initialized) { \
-                                   int ret; ASSERTE (!(ret = pthread_spin_init (&name, PTHREAD_PROCESS_PRIVATE)), "failed for %s: %s", #name, strerror (ret)); \
+                                   int ret; ASSERT (!(ret = pthread_spin_init (&name, PTHREAD_PROCESS_PRIVATE)), "failed for %s: %s", #name, strerror (ret)); \
                                    name##_initialized = true;  \
                                  } } while (0)
 #define spin_destroy(name) if (name##_initialized) { pthread_spin_destroy (&name); name##_initialized = false; }
@@ -81,10 +81,10 @@ extern void mutex_wait_do (Mutex *mutex, const char *func, uint32_t line);
 
 #else
 #define spin_lock(m)   do { int ret = pthread_spin_lock (&m); \
-                            ASSERTE (!ret, "pthread_spin_lock failed: %s", strerror (ret)); } while(0)
+                            ASSERT (!ret, "pthread_spin_lock failed: %s", strerror (ret)); } while(0)
 
 #define spin_unlock(m) do { int ret = pthread_spin_unlock (&m); \
-                            ASSERTE (!ret, "pthread_spin_lock failed: %s", strerror (ret)); } while(0)
+                            ASSERT (!ret, "pthread_spin_lock failed: %s", strerror (ret)); } while(0)
 #endif
 
 #endif

@@ -70,8 +70,8 @@ static void arch_add_to_windows_path (const char *argv0)
 void arch_initialize (const char *argv0)
 {
     // verify CPU architecture and compiler is supported
-    ASSERTE0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
-              "Unsupported C type lengths, check compiler options");
+    ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
+             "Unsupported C type lengths, check compiler options");
     
     // verify endianity is as expected
     arch_get_endianity();
@@ -84,9 +84,9 @@ void arch_initialize (const char *argv0)
 #endif
 
     // verify that type sizes are as required (types that appear in section headers written to the genozip format)
-    ASSERTE0 (sizeof (SectionType) == 1, "expecting sizeof (SectionType)==1");
-    ASSERTE0 (sizeof (Codec)       == 1, "expecting sizeof (Codec)==1");
-    ASSERTE0 (sizeof (LocalType)   == 1, "expecting sizeof (LocalType)==1");
+    ASSERT0 (sizeof (SectionType) == 1, "expecting sizeof (SectionType)==1");
+    ASSERT0 (sizeof (Codec)       == 1, "expecting sizeof (Codec)==1");
+    ASSERT0 (sizeof (LocalType)   == 1, "expecting sizeof (LocalType)==1");
 
     // verify that order of bit fields in a structure is as expected (this is compiler-implementation dependent, and we go by gcc)
     // it might be endianity-dependent, and we haven't implemented big-endian yet, see: http://mjfrazer.org/mjfrazer/bitfields/
@@ -95,8 +95,8 @@ void arch_initialize (const char *argv0)
         struct __attribute__ ((__packed__)) { uint8_t a : 1; uint8_t b : 1; } bit_1;
         struct __attribute__ ((__packed__)) { uint8_t a : 3; } bit_3;
     } bittest = { .bit_1 = { .a = 1 } }; // we expect this to set the LSb of .byte and of .bit_3.a
-    ASSERTE0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
-    ASSERTE0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
+    ASSERT0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
+    ASSERT0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
 
 #ifdef _WIN32
     arch_add_to_windows_path (argv0);
@@ -108,10 +108,10 @@ const char *arch_get_endianity (void)
     // verify endianity is as expected
     uint16_t test_endianity = 0x0102;
 #if defined __LITTLE_ENDIAN__
-    ASSERTE0 (*(uint8_t*)&test_endianity==0x02, "expected CPU to be Little Endian but it is not");
+    ASSERT0 (*(uint8_t*)&test_endianity==0x02, "expected CPU to be Little Endian but it is not");
     return "little";
 #elif defined __BIG_ENDIAN__
-    ASSERTE0 (*(uint8_t*)&test_endianity==0x01, "expected CPU to be Big Endian but it is not");
+    ASSERT0 (*(uint8_t*)&test_endianity==0x01, "expected CPU to be Big Endian but it is not");
     return "big";
 #else
 #error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
@@ -163,7 +163,7 @@ const char *arch_get_os (void)
 #else
 
     struct utsname uts;
-    ASSERTE (!uname (&uts), "uname failed: %s", strerror (errno));
+    ASSERT (!uname (&uts), "uname failed: %s", strerror (errno));
 
     sprintf (os, "%s %s", uts.sysname, uts.release);
 

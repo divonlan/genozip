@@ -148,7 +148,7 @@ void md5_initialize (Md5Context *ctx)
 {
     // sanity
     for (unsigned i=0; i < sizeof(Md5Context); i++)
-        ASSERTE0 (!((char *)ctx)[i], "md5_initialize expects ctx to be zeros, but its not");
+        ASSERT0 (!((char *)ctx)[i], "md5_initialize expects ctx to be zeros, but its not");
 
     ctx->a = 0x67452301;
     ctx->b = 0xefcdab89;

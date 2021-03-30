@@ -68,8 +68,8 @@ static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_
         instream->line_i++;
     }
 
-    ASSERTE (instream->avail_in_1 <= instream->avail_in, "Expecting avail_in_1=%u <= avail_in=%u",
-             instream->avail_in_1, instream->avail_in);
+    ASSERT (instream->avail_in_1 <= instream->avail_in, "Expecting avail_in_1=%u <= avail_in=%u",
+            instream->avail_in_1, instream->avail_in);
             
     uint32_t bytes_served_1 = MIN (instream->avail_in_1, *size);
     if (bytes_served_1) {
@@ -116,15 +116,15 @@ bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
     props.writeEndMark = true; // add an "end of compression" mark - better error detection during decompress
 
     CLzmaEncHandle lzma_handle = LzmaEnc_Create (&alloc_stuff);
-    ASSERTE0 (lzma_handle, "LzmaEnc_Create failed");
+    ASSERT0 (lzma_handle, "LzmaEnc_Create failed");
 
     SRes res = LzmaEnc_SetProps (lzma_handle, &props);
-    ASSERTE (res == SZ_OK, "LzmaEnc_SetProps failed: %s", lzma_errstr (res));
+    ASSERT (res == SZ_OK, "LzmaEnc_SetProps failed: %s", lzma_errstr (res));
     
     // write encoding properties as first 5 bytes of compressed stream
     SizeT props_size = LZMA_PROPS_SIZE; // per documentation in LzmaLib.h
     res = LzmaEnc_WriteProperties (lzma_handle, (uint8_t*)compressed, &props_size);
-    ASSERTE (res == SZ_OK && props_size==LZMA_PROPS_SIZE, "LzmaEnc_WriteProperties failed: %s", lzma_errstr (res));
+    ASSERT (res == SZ_OK && props_size==LZMA_PROPS_SIZE, "LzmaEnc_WriteProperties failed: %s", lzma_errstr (res));
 
     bool success = true;
 
@@ -164,7 +164,7 @@ bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
     if (soft_fail && ((callback && res == SZ_ERROR_WRITE) || (!callback && res == SZ_ERROR_OUTPUT_EOF)))  // data_compressed_len is too small
         success = false;
     else
-        ASSERTE (res == SZ_OK, "LzmaEnc_MemEncode failed: %s", lzma_errstr (res));
+        ASSERT (res == SZ_OK, "LzmaEnc_MemEncode failed: %s", lzma_errstr (res));
 
     LzmaEnc_Destroy (lzma_handle, &alloc_stuff, &alloc_stuff);
 
@@ -190,7 +190,7 @@ void codec_lzma_uncompress (VBlock *vb, Codec codec, uint8_t param,
                            (uint8_t *)compressed, LZMA_PROPS_SIZE, 
                            LZMA_FINISH_END, &status, &alloc_stuff);
 
-    ASSERTE (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
+    ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
             "LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status)); 
 
     COPY_TIMER (compressor_lzma);

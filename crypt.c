@@ -83,7 +83,7 @@ static void crypt_generate_aes_key (VBlock *vb,
     const char *pepper = "vaughan";   
     static uint32_t pw_len=0, salt_len=0, pepper_len=0;
 
-    ASSERTE0 (password, "password is NULL");
+    ASSERTNOTNULL (password);
 
     if (!pw_len) { // first call
         pw_len     = strlen (password);

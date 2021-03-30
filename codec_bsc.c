@@ -35,14 +35,14 @@ bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
 {
     START_TIMER;
 
-    ASSERTE (*compressed_len >= *uncompressed_len + LIBBSC_HEADER_SIZE, "compressed_len too small: compress_len=%u < uncompressed_len=%u + LIBBSC_HEADER_SIZE=%u",
-             *compressed_len, *uncompressed_len, LIBBSC_HEADER_SIZE);
+    ASSERT (*compressed_len >= *uncompressed_len + LIBBSC_HEADER_SIZE, "compressed_len too small: compress_len=%u < uncompressed_len=%u + LIBBSC_HEADER_SIZE=%u",
+            *compressed_len, *uncompressed_len, LIBBSC_HEADER_SIZE);
 
     // libbsc doesn't allow piecemiel compression, so we need to copy all the data in case of callback
     if (callback) {
 
         // copy data to vb->compressed
-        ASSERTE0 (!vb->compressed.len, "expecting vb->compressed to be free, but its not");
+        ASSERTNOTINUSE (vb->compressed);
         buf_alloc_old (vb, &vb->compressed, *uncompressed_len, 1.2, "compressed");
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
@@ -68,7 +68,7 @@ bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
     if (ret == LIBBSC_NOT_COMPRESSIBLE)
         ret = bsc_store (vb, (const uint8_t *)uncompressed, (uint8_t *)compressed, *uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
-    ASSERTE (ret >= LIBBSC_NO_ERROR, "bsc_compress or bsc_store returned %s", codec_bsc_errstr (ret));
+    ASSERT (ret >= LIBBSC_NO_ERROR, "bsc_compress or bsc_store returned %s", codec_bsc_errstr (ret));
 
     if (callback) buf_free (&vb->compressed);
 
@@ -87,7 +87,7 @@ void codec_bsc_uncompress (VBlock *vb, Codec codec, uint8_t param,
     START_TIMER;
     int ret = bsc_decompress (vb, (const uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
-    ASSERTE (ret >= LIBBSC_NO_ERROR, "%s", codec_bsc_errstr (ret));    
+    ASSERT (ret >= LIBBSC_NO_ERROR, "%s", codec_bsc_errstr (ret));    
 
     COPY_TIMER (compressor_bsc);
 }

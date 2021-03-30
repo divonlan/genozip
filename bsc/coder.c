@@ -150,14 +150,14 @@ static int bsc_coder_compress_serial(void *vb, const unsigned char * input, unsi
 
 int bsc_coder_compress (void *vb, const unsigned char * input, unsigned char * output, int n, int coder, int features)
 {
-    ASSERTE0 (coder == LIBBSC_CODER_QLFC_STATIC || coder == LIBBSC_CODER_QLFC_ADAPTIVE, "bad parameter");
+    ASSERT0 (coder == LIBBSC_CODER_QLFC_STATIC || coder == LIBBSC_CODER_QLFC_ADAPTIVE, "bad parameter");
     return bsc_coder_compress_serial(vb,input, output, n, coder);
 }
 
 
 static int bsc_coder_decode_block (void *vb, const unsigned char * input, unsigned char * output, int coder)
 {
-    ASSERTE0 (coder == LIBBSC_CODER_QLFC_STATIC || coder == LIBBSC_CODER_QLFC_ADAPTIVE, "bad parameter");
+    ASSERT0 (coder == LIBBSC_CODER_QLFC_STATIC || coder == LIBBSC_CODER_QLFC_ADAPTIVE, "bad parameter");
 
     if (coder == LIBBSC_CODER_QLFC_STATIC)   
         return bsc_qlfc_static_decode_block  (vb, input, output);
@@ -167,7 +167,7 @@ static int bsc_coder_decode_block (void *vb, const unsigned char * input, unsign
 
 int bsc_coder_decompress (void *vb, const unsigned char * input, unsigned char * output, int coder, int features)
 {
-    ASSERTE0 (coder == LIBBSC_CODER_QLFC_STATIC || coder == LIBBSC_CODER_QLFC_ADAPTIVE, "bad parameter");
+    ASSERT0 (coder == LIBBSC_CODER_QLFC_STATIC || coder == LIBBSC_CODER_QLFC_ADAPTIVE, "bad parameter");
 
     int nBlocks = input[0];
     if (nBlocks == 1)

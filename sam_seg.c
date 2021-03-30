@@ -18,6 +18,7 @@
 #include "aligner.h"
 #include "container.h"
 #include "stats.h"
+#include "txtheader.h"
 
 static const StoreType optional_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
@@ -310,11 +311,13 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 void sam_seg_verify_pos (VBlock *vb, PosType this_pos)
 {
-    if (flag.reference == REF_INTERNAL && !buf_is_allocated (&header_contigs)) return;
+    const Buffer *header_contigs = txtheader_get_contigs();
+
+    if (flag.reference == REF_INTERNAL && (!header_contigs /* SQ-less SAM */ || !header_contigs->len /* SQ-less BAM */)) return;
     if (!this_pos) return; // unaligned
     
-    PosType max_pos = (has_header_contigs) ? ENT (RefContig, header_contigs, vb->chrom_node_index)->max_pos
-                                           : ENT (RefContig, loaded_contigs, vb->chrom_node_index)->max_pos;
+    PosType max_pos = (header_contigs) ? ENT (RefContig, *header_contigs, vb->chrom_node_index)->max_pos
+                                       : ENT (RefContig, loaded_contigs,  vb->chrom_node_index)->max_pos;
     ASSINP (this_pos <= max_pos, "Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%u chrom_node_index=%d", 
             this_pos, vb->chrom_name_len, vb->chrom_name, max_pos, vb->vblock_i, vb->line_i, vb->chrom_node_index);
 }
@@ -382,8 +385,8 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     Context *bitmap_ctx = &vb->contexts[bitmap_did];
     Context *nonref_ctx = bitmap_ctx + 1;
 
-    ASSERTE (recursion_level < 4, "excess recursion recursion_level=%u seq_len=%u level_0_cigar=%s", // this would mean a read of about 4M bases... in 2020, this looks unlikely
-             recursion_level, seq_len, level_0_cigar);
+    ASSERT (recursion_level < 4, "excess recursion recursion_level=%u seq_len=%u level_0_cigar=%s", // this would mean a read of about 4M bases... in 2020, this looks unlikely
+            recursion_level, seq_len, level_0_cigar);
 
     bitmap_ctx->txt_len += add_bytes; // byte counts for --show-sections
 
@@ -455,7 +458,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     
     while (i < seq_len || next_ref < pos_index + ref_len_this_level) {
 
-        ASSERTE0 (i <= seq_len && next_ref <= pos_index + ref_len_this_level, "i or next_ref are out of range");
+        ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_len_this_level, "i or next_ref are out of range");
 
         subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
@@ -463,9 +466,9 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
         if (cigar_op == 'M' || cigar_op == '=' || cigar_op == 'X') { // alignment match or sequence match or mismatch
 
-            ASSERTE (subcigar_len > 0 && subcigar_len <= (seq_len - i), 
-                     "CIGAR %s implies seq_len longer than actual seq_len=%u (recursion_level=%u level0: cigar=%s seq_len=%u)", 
-                     cigar, seq_len, recursion_level, level_0_cigar, level_0_seq_len);
+            ASSERT (subcigar_len > 0 && subcigar_len <= (seq_len - i), 
+                    "CIGAR %s implies seq_len longer than actual seq_len=%u (recursion_level=%u level0: cigar=%s seq_len=%u)", 
+                    cigar, seq_len, recursion_level, level_0_cigar, level_0_seq_len);
 
             uint32_t bit_i = bitmap_ctx->next_local; // copy to automatic variable for performance
             uint32_t start_i = i;
@@ -554,8 +557,8 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
     // in REF_INTERNAL, the sequence can flow over to the next range as each range is 1M bases. this cannot happen
     // in REF_EXTERNAL as each range is the entire contig
-    ASSERTE (flag.reference == REF_INTERNAL || i == seq_len, "expecting i(%u) == seq_len(%u) pos=%"PRId64" range=[%.*s %"PRId64"-%"PRId64"] (cigar=%s recursion_level=%u level0: cigar=%s seq_len=%u)", 
-             i, seq_len, pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, cigar, recursion_level, level_0_cigar, level_0_seq_len);
+    ASSERT (flag.reference == REF_INTERNAL || i == seq_len, "expecting i(%u) == seq_len(%u) pos=%"PRId64" range=[%.*s %"PRId64"-%"PRId64"] (cigar=%s recursion_level=%u level0: cigar=%s seq_len=%u)", 
+            i, seq_len, pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, cigar, recursion_level, level_0_cigar, level_0_seq_len);
 
     // case: we have reached the end of the current reference range, but we still have sequence left - 
     // call recursively with remaining sequence and next reference range 

@@ -7,6 +7,7 @@
 #include "vblock.h"
 #include "file.h"
 #include "strings.h"
+#include "txtfile.h"
 
 void coverage_initialize (VBlock *vb)
 {
@@ -48,6 +49,7 @@ static WordIndex coverage_get_chrom_index (char chrom_char)
 static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index_chrY)
 {
     uint64_t coverage_AS=0, len_AS=0;
+    const Buffer *header_contigs = txtheader_get_contigs();
 
     for (uint64_t i=0; i < txt_file->coverage.len; i++) {
 
@@ -59,8 +61,8 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
         unsigned cn_len;
         ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
         
-        PosType len = has_header_contigs ? ENT (RefContig, header_contigs, i)->max_pos
-                    :                      ENT (RefContig, loaded_contigs, i)->max_pos;
+        PosType len = header_contigs ? ENT (RefContig, *header_contigs, i)->max_pos
+                    :                  ENT (RefContig, loaded_contigs,  i)->max_pos;
 
         if (cn_len > 5 || len <= (1>>20)) continue; // not primary autosome (note: in SAM/BAM compression with REF_INTERNAL the minimum length of a contig 1MB)
 
@@ -68,15 +70,17 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
         len_AS      += len;
     }
 
-    ASSERTE0 (len_AS, "Cannot calculate autosome data, because autosome contigs are not loaded");
+    ASSERT0 (len_AS, "Cannot calculate autosome data, because autosome contigs are not loaded");
 
     return (double)coverage_AS / (double)len_AS;
 }
 
-// output of genocat --show-sex, called from piz_one_file
+// output of genocat --show-sex, called from piz_one_txt_file
 void coverage_sex_classifier (bool is_first_z_file)
 {    
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len) {
+    const Buffer *header_contigs = txtheader_get_contigs();
+
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs) {
         flag.quiet = false;
         WARN ("%s: %s: --show-sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
@@ -90,17 +94,16 @@ void coverage_sex_classifier (bool is_first_z_file)
     WordIndex index_chrY = coverage_get_chrom_index ('Y');
 
     double len_chr1 = index_chr1 == WORD_INDEX_NONE ? 1
-                    : has_header_contigs            ? ENT (RefContig, header_contigs, index_chr1)->max_pos
-                    :                                 ENT (RefContig, loaded_contigs, index_chr1)->max_pos;
+                    : header_contigs                ? ENT (RefContig, *header_contigs, index_chr1)->max_pos
+                    :                                 ENT (RefContig, loaded_contigs,  index_chr1)->max_pos;
 
     double len_chrX = index_chrX == WORD_INDEX_NONE ? 1
-                    : has_header_contigs            ? ENT (RefContig, header_contigs, index_chrX)->max_pos
-                    :                                 ENT (RefContig, loaded_contigs, index_chrX)->max_pos;
+                    : header_contigs                ? ENT (RefContig, *header_contigs, index_chrX)->max_pos
+                    :                                 ENT (RefContig, loaded_contigs,  index_chrX)->max_pos;
 
     double len_chrY = index_chrY == WORD_INDEX_NONE ? 1
-                    : has_header_contigs            ? ENT (RefContig, header_contigs, index_chrY)->max_pos
-                    :                                 ENT (RefContig, loaded_contigs, index_chrY)->max_pos;
-
+                    : header_contigs                ? ENT (RefContig, *header_contigs, index_chrY)->max_pos
+                    :                                 ENT (RefContig, loaded_contigs,  index_chrY)->max_pos;
 
     //printf ("chrY: index=%u cov=%"PRIu64" len=%f\n", index_chrY, *ENT (uint64_t, txt_file->coverage, index_chrY), len_chrY);
     
@@ -154,8 +157,9 @@ void coverage_sex_classifier (bool is_first_z_file)
                                   };
 
     if (is_first_z_file) 
-        printf (isatty(1) ? "%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" : "%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
-                "Sex", flag.longest_filename, "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
+        printf (isatty(1) ? "\n--show-sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
+                          : "\n--show-sex for: %s\n%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
+                z_name, "Sex", flag.longest_filename, "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
                 is_sam ? "1/X" : "AS/X", "X/Y");
                 
     printf (isatty(1) ? "%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n" : "%s\t%*s\t%f\t%f\t%f\t%f\t%f\n",  
@@ -166,10 +170,12 @@ void coverage_sex_classifier (bool is_first_z_file)
     fflush (stdout); // in case output is redirected
 }
 
-// output of genocat --show-coverage, called from piz_one_file
+// output of genocat --show-coverage, called from piz_one_txt_file
 void coverage_show_coverage (void)
 {
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len) {
+    const Buffer *header_contigs = txtheader_get_contigs();
+
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs) {
         flag.quiet = false;
         WARN ("%s: %s: --show-coverage for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
@@ -177,8 +183,9 @@ void coverage_show_coverage (void)
 
     unsigned chr_width = flag.show_coverage==1 ? 26 : 13;
 
-    printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" : "%*s\t%s\t%s\t%s\t%s\t%s\n", 
-                       chr_width, "Contig", "LN", "Reads", "Bases", "Bases", "Depth");
+    printf (isatty(1) ? "\n--show-coverage for: %s\n%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" 
+                      : "\n--show-coverage for: %s\n%*s\t%s\t%s\t%s\t%s\t%s\n", 
+                       z_name, chr_width, "Contig", "LN", "Reads", "Bases", "Bases", "Depth");
 
     txt_file->coverage.len -= NUM_COVER_TYPES; // real contigs only
     ARRAY (uint64_t, coverage, txt_file->coverage);
@@ -199,8 +206,8 @@ void coverage_show_coverage (void)
         const char *chrom_name = ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
 
         PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0
-                    : has_header_contigs                ? ENT (RefContig, header_contigs, i)->max_pos
-                    :                                     ENT (RefContig, loaded_contigs, i)->max_pos;
+                    : header_contigs                    ? ENT (RefContig, *header_contigs, i)->max_pos
+                    :                                     ENT (RefContig, loaded_contigs,  i)->max_pos;
 
         if (flag.show_coverage==1 || cn_len <= 5) 
             printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %-6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
@@ -230,7 +237,9 @@ void coverage_show_coverage (void)
 // output of genocat --idxstats - designed to identical to samtools idxstats
 void coverage_show_idxstats (void)
 {
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs.len) {
+    const Buffer *header_contigs = txtheader_get_contigs();
+
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && header_contigs) {
         flag.quiet = false;
         WARN ("%s: %s: --idxstats for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
@@ -245,8 +254,8 @@ void coverage_show_idxstats (void)
         const char *chrom_name = ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
 
         PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0
-                    : has_header_contigs                ? ENT (RefContig, header_contigs, i)->max_pos
-                    :                                     ENT (RefContig, loaded_contigs, i)->max_pos;
+                    : header_contigs                ? ENT (RefContig, *header_contigs, i)->max_pos
+                    :                                 ENT (RefContig, loaded_contigs,  i)->max_pos;
 
         printf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", cn_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
     }

@@ -37,13 +37,12 @@ typedef struct {
     int bgzf;   // can be set by --bgzf, or by various other conditions. values 0-12 indicate the level of libdeflate, FLAG_BGZF_BY_ZFILE means use SEC_BGZF or default level if it is absent
     
     int out_dt; // used to indicate the desired dt of the output txt - consumed by file_open, and thereafter equal to txt_file->data_type
-    char *unbind;
 
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted;
     char *grep;
-    uint32_t one_vb, downsample, shard ;
+    uint32_t one_vb, one_component, downsample, shard ;
 
     // genols options
     int bytes;
@@ -55,7 +54,8 @@ typedef struct {
         do_register,
         lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
         test,        // implies md5
-        index_txt;   // create an index
+        index_txt,   // create an index
+        list;        // a genols option
     char *threads_str, *out_filename;
 
     ReferenceType reference;
@@ -92,8 +92,8 @@ typedef struct {
          trans_containers,   // PIZ: decompression invokes container translators
          processing_rejects, // ZIP & PIZ: currently zipping liftover rejects file / component
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
-         genocat_no_reconstruct,  // User requested to genocat with only metadata to be shown, not file contents
-         genocat_no_reconstruct_output,  // User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
+         genocat_no_reconstruct,  // PIZ: User requested to genocat with only metadata to be shown, not file contents
+         genocat_no_reconstruct_output, // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
@@ -101,7 +101,10 @@ typedef struct {
          may_drop_lines,     // PIZ: reconstruction is allowed to drop lines
          explicit_ref;       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
 
+#define flag_loading_auxiliary (flag.reading_reference || flag.reading_chain) // PIZ: currently reading auxiliary file (reference, chain etc)
+
     char *reading_chain;     // system is currently reading a chain file by this name
+    char *unbind;
 
     enum { BIND_NONE, BIND_ALL, BIND_PAIRS, BIND_REJECTS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
     uint64_t stdin_size;

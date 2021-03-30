@@ -14,6 +14,7 @@
 #include "vblock.h"
 #include "mutex.h"
 #include "seg.h"
+#include "txtheader.h"
 
 // ZIP of a file with REF_EXTERNAL/REF_EXT_STORE: When a chrom index in the txt file matches an a different chrom index in the reference file, 
 // we create a mapping here pass it to Piz as a SEC_REF_ALT_CHROMS section. It contains at most as many entries 
@@ -28,7 +29,7 @@ void ref_alt_chroms_compress (void)
 {
     // case: when compressing SAM or BAM with a header (including BAM header with no SQs - unaligned BAM), 
     // alt chroms were already prepared in ref_contigs_ref_chrom_from_header_chrom
-    if (has_header_contigs) goto just_compress;
+    if (txtheader_get_contigs()) goto just_compress;
 
     Context *ctx = &z_file->contexts[CHROM];
     uint32_t num_chroms = ctx->nodes.len;
@@ -100,8 +101,8 @@ void ref_alt_chroms_load (void)
         WordIndex txt_chrom_index = BGEN32 (ent->txt_chrom);
         WordIndex ref_chrom_index = BGEN32 (ent->ref_chrom);
 
-        ASSERTE (txt_chrom_index >= 0 && txt_chrom_index < ctx->word_list.len, "txt_chrom_index=%d out of range [0,%d]", txt_chrom_index, (int32_t)ctx->word_list.len);
-        ASSERTE (ref_chrom_index >= 0 && ref_chrom_index < ref_contigs_num_contigs(), "ref_chrom_index=%d out of range [0,%u]", ref_chrom_index, ref_contigs_num_contigs());
+        ASSERT (txt_chrom_index >= 0 && txt_chrom_index < ctx->word_list.len, "txt_chrom_index=%d out of range [0,%d]", txt_chrom_index, (int32_t)ctx->word_list.len);
+        ASSERT (ref_chrom_index >= 0 && ref_chrom_index < ref_contigs_num_contigs(), "ref_chrom_index=%d out of range [0,%u]", ref_chrom_index, ref_contigs_num_contigs());
 
         map[txt_chrom_index] = ref_chrom_index;
 

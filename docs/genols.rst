@@ -9,7 +9,7 @@ One or more files or directory names may be given. If omitted, ``genols`` runs o
 
 **Options**
 
-.. option:: -u, --unbind  Show the components of bound files. This option is implied when running genols on a single file.
+.. option:: -l, --list  Show the components of bound files. This option is implied when running genols on a single file.
 
         |
 

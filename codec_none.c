@@ -15,7 +15,7 @@ bool codec_none_compress (VBlock *vb, SectionHeader *header,
                          bool soft_fail)
 {
     if (*compressed_len < *uncompressed_len && soft_fail) return false;
-    ASSERTE0 (*compressed_len >= *uncompressed_len, "compressed_len too small");
+    ASSERT0 (*compressed_len >= *uncompressed_len, "compressed_len too small");
 
     if (callback) {
         char *next = compressed;

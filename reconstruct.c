@@ -26,9 +26,9 @@ static int64_t reconstruct_from_delta (VBlock *vb,
                                        const char *delta_snip, unsigned delta_snip_len,
                                        bool reconstruct) 
 {
-    ASSERTE (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    ASSERTE (base_ctx->flags.store == STORE_INT, "attempting calculate delta from a base of \"%s\", but this context doesn't have STORE_INT",
-             base_ctx->name);
+    ASSERT (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
+    ASSERT (base_ctx->flags.store == STORE_INT, "attempting calculate delta from a base of \"%s\", but this context doesn't have STORE_INT",
+            base_ctx->name);
 
     if (delta_snip_len == 1 && delta_snip[0] == '-')
         my_ctx->last_delta = -2 * base_ctx->last_value.i; // negated previous value
@@ -46,9 +46,9 @@ static int64_t reconstruct_from_delta (VBlock *vb,
 }
 
 #define ASSERT_IN_BOUNDS \
-    ASSERTE (ctx->next_local < ctx->local.len, \
-             "reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s)", \
-             vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec))
+    ASSERT (ctx->next_local < ctx->local.len, \
+            "reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s)", \
+            vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec))
 
 static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reconstruct)
 {
@@ -104,7 +104,7 @@ int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char seperator /* 
 // if snip_len==0, then the length is taken from seq_len.
 static void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
 {
-    ASSERTE0 (ctx, "ctx is NULL");
+    ASSERTNOTNULL (ctx);
 
     bool reconstruct = !piz_is_skip_section (vb, SEC_LOCAL, ctx->dict_id);
     uint32_t len;
@@ -119,8 +119,8 @@ static void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const cha
     }
     else {
         len = vb->seq_len;
-        ASSERTE (ctx->next_local + len <= ctx->local.len, "reading txt_line=%u vb_i=%u: unexpected end of %s data", 
-                 vb->line_i, vb->vblock_i, ctx->name);
+        ASSERT (ctx->next_local + len <= ctx->local.len, "reading txt_line=%u vb_i=%u: unexpected end of %s data", 
+                vb->line_i, vb->vblock_i, ctx->name);
 
         if (reconstruct) RECONSTRUCT (&ctx->local.data[ctx->next_local], len);
     }
@@ -132,7 +132,7 @@ static void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const cha
 static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
 {
     unsigned b64_len = base64_sizeof (DictId);
-    ASSERTE (b64_len + 1 <= *snip_len, "snip_len=%u but expecting it to be >= %u", *snip_len, b64_len + 1);
+    ASSERT (b64_len + 1 <= *snip_len, "snip_len=%u but expecting it to be >= %u", *snip_len, b64_len + 1);
 
     DictId dict_id;
     base64_decode ((*snip)+1, &b64_len, dict_id.id);
@@ -198,8 +198,8 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     }
     case SNIP_PAIR_LOOKUP: {
-        ASSERTE (snip_ctx->pair_b250_iter.next_b250, "no pair_1 data for ctx=%s, while reconstructing pair_2 vb=%u", 
-                 snip_ctx->name, vb->vblock_i);
+        ASSERT (snip_ctx->pair_b250_iter.next_b250, "no pair_1 data for ctx=%s, while reconstructing pair_2 vb=%u", 
+                snip_ctx->name, vb->vblock_i);
 
         ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags.all_the_same, &snip_ctx->pair_b250_iter, &snip, &snip_len);
         reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len, reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
@@ -232,10 +232,10 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
 
     case SNIP_SPECIAL:
-        ASSERTE (snip_len >= 2, "SNIP_SPECIAL expects snip_len >= 2. ctx=%s", snip_ctx->name);
+        ASSERT (snip_len >= 2, "SNIP_SPECIAL expects snip_len >= 2. ctx=%s", snip_ctx->name);
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
 
-        ASSERTE (special < DTP (num_special), "file requires special handler %u which doesn't exist in this version of genozip - please upgrade to the latest version", special);
+        ASSERT (special < DTP (num_special), "file requires special handler %u which doesn't exist in this version of genozip - please upgrade to the latest version", special);
         ASSERT_DT_FUNC (vb, special);
 
         have_new_value = DT_FUNC(vb, special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
@@ -292,11 +292,11 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
                                  char sep, // if non-zero, outputs after the reconstruction
                                  bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data
 {
-    ASSERTE (did_i < vb->num_contexts, "did_i=%u out of range: vb->num_contexts=%u", did_i, vb->num_contexts);
+    ASSERT (did_i < vb->num_contexts, "did_i=%u out of range: vb->num_contexts=%u", did_i, vb->num_contexts);
 
     Context *ctx = &vb->contexts[did_i];
 
-    ASSERTE0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "ctx not initialized (dict_id=0)");
+    ASSERT0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "ctx not initialized (dict_id=0)");
 
     // update ctx, if its an alias (only for primary field aliases as they have contexts, other alias don't have ctx)
     if (!ctx->dict_id.num) 
@@ -372,9 +372,9 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         if (reconstruct) { RECONSTRUCT1('\n'); }
     }
 
-    else ASSERTE (flag.show_sex || flag.show_coverage || flag.idxstats || flag.drop_genotypes, // in --show-sex/coverage/idxstats, we filtered out most contexts in sam_piz_is_skip_section, so this is expected
-                  "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
-                  ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
+    else ASSERT (flag.show_sex || flag.show_coverage || flag.idxstats || flag.drop_genotypes, // in --show-sex/coverage/idxstats, we filtered out most contexts in sam_piz_is_skip_section, so this is expected
+                 "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
+                 ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 

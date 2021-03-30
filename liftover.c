@@ -74,11 +74,11 @@ static char liftback_snip_id;
 void liftover_copy_data_from_chain_file (void)
 {
     // save src_contig  
-    buf_copy (evb, &src_contig_dict,  &z_file->contexts[CHAIN_NAMESRC].dict, 1, 0, 0, "src_contig_dict");
-    buf_copy (evb, &src_contig_words, &z_file->contexts[CHAIN_NAMESRC].word_list, sizeof (CtxWord), 0, 0, "src_contig_words");
+    buf_copy (evb, &src_contig_dict,  &z_file->contexts[CHAIN_NAMESRC].dict, char, 0, 0, "src_contig_dict");
+    buf_copy (evb, &src_contig_words, &z_file->contexts[CHAIN_NAMESRC].word_list, CtxWord, 0, 0, "src_contig_words");
 
     // copy dictionary buffer
-    buf_copy (evb, &dst_contig_dict, &z_file->contexts[CHAIN_NAMEDST].dict, 1, 0, 0, "dst_contig_dict");
+    buf_copy (evb, &dst_contig_dict, &z_file->contexts[CHAIN_NAMEDST].dict, char, 0, 0, "dst_contig_dict");
 
     ARRAY (CtxWord, dst_contig_words, z_file->contexts[CHAIN_NAMEDST].word_list);
     dst_contig_dict.param = dst_contig_words_len; // dict param contains number of words
@@ -402,7 +402,7 @@ void liftover_seg_LIFTREJT (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, c
 // ZIP: called when inspecting the txtheader to add header data, and after each VB to add rejected line
 void liftover_append_rejects_file (VBlockP vb)
 {
-    ASSERTE0 (z_file, "zfile is NULL");
+    ASSERTNOTNULL (z_file);
 
     // create rejects file if not already open
     if (!z_file->rejects_file) {
@@ -410,10 +410,10 @@ void liftover_append_rejects_file (VBlockP vb)
         sprintf (z_file->rejects_file_name, "%s.rejects%s", z_file->name, file_plain_ext_by_dt (z_file->data_type));
         
         z_file->rejects_file = fopen (z_file->rejects_file_name, "wb+");
-        ASSERTE (z_file->rejects_file, "fopen() failed to open %s: %s", z_file->rejects_file_name, strerror (errno));
+        ASSERT (z_file->rejects_file, "fopen() failed to open %s: %s", z_file->rejects_file_name, strerror (errno));
     }
 
-    ASSERTE0 (z_file->rejects_file, "liftover rejects file is not open");
+    ASSERT0 (z_file->rejects_file, "liftover rejects file is not open");
 
     fwrite (vb->liftover_rejects.data, 1, vb->liftover_rejects.len, z_file->rejects_file);
     z_file->rejects_disk_size += vb->liftover_rejects.len;

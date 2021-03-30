@@ -189,7 +189,7 @@ void progress_finalize_component_time_ratio_better (const char *me, double ratio
 
 void progress_concatenated_md5 (const char *me, Digest md5)
 {
-    ASSERTE0 (!component_name, "expecting component_name=NULL");
+    ASSERT0 (!component_name, "expecting component_name=NULL");
 
     FINALIZE ("Bound %s", me);
 }

@@ -26,6 +26,9 @@ One or more file names must be given.
 
           |
 
+.. option:: --component component-number.  View a specific component of a genozip file. <component-number> is the number of the component as it appears in the genols list - the first component being number 1.
+
+          |
 .. option:: --interleaved  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file ; then a read from the second file ; then the next read from the first file and so on.
 
           |
@@ -101,15 +104,15 @@ One or more file names must be given.
 
 **Analysis options**
 
-.. option:: --list-chroms.  (VCF SAM BAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file.
+.. option:: --list-chroms.  (VCF SAM BAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file. case. Altnernative option names: show-chroms, show-contigs, list-contigs.
     
           |
 
-.. option:: --show-sex.  (SAM BAM) Determine whether a SAM/BAM is a Male or a Female. See "Sex assignment" use case.
+.. option:: --show-sex.  (SAM BAM) Determine whether a SAM/BAM is a Male or a Female. See "Sex assignment" use case. Altnernative option name: --sex.
     
           |
 
-.. option:: --show-coverage[=all].  (SAM BAM) Shows the coverage and depth of each contig. Without =all it shows only contigs that are chromosomes and groups the other contigs under "Other contigs". See "Coverage and Depth" use case.
+.. option:: --show-coverage[=all].  (SAM BAM) Shows the coverage and depth of each contig. Without =all it shows only contigs that are chromosomes and groups the other contigs under "Other contigs". See "Coverage and Depth" use case. Altnernative option name: --converage.
     
           |
 

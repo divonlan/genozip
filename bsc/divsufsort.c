@@ -1789,7 +1789,7 @@ int divbwt (void *vb, const unsigned char *T, unsigned char *U, int *A, int n, u
     int m, pidx, i;
 
     /* Check arguments. */
-    ASSERTE0 (T && U && n>=0, "bad parameter");
+    ASSERT0 (T && U && n>=0, "bad parameter");
 
     if(n <= 1) { if(n == 1) { U[0] = T[0]; } return n; }
 

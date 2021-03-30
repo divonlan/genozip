@@ -41,12 +41,12 @@ static void gtshark_check_pipe_for_errors (char *data, FILE *fp, uint32_t vb_i, 
     unsigned bytes = fread (data, 1, PIPE_MAX_BYTES-1, fp); // -1 to leave room for \0
     data[bytes] = '\0';
 
-    ASSERTE (!strstr (data, "error")   && 
-             !strstr (data, "E::")     && 
-             !strstr (data, "Invalid") &&
-             !strstr (data, "throw"),
-             "gtshark failed for vb_i=%u. Here is its %s:\n%s\n", 
-             vb_i, is_stderr ? "STDERR" : "STDOUT", data);
+    ASSERT (!strstr (data, "error")   && 
+            !strstr (data, "E::")     && 
+            !strstr (data, "Invalid") &&
+            !strstr (data, "throw"),
+            "gtshark failed for vb_i=%u. Here is its %s:\n%s\n", 
+            vb_i, is_stderr ? "STDERR" : "STDOUT", data);
 }
 
 static bool codec_gtshark_run (uint32_t vb_i, const char *command, 
@@ -65,17 +65,17 @@ static bool codec_gtshark_run (uint32_t vb_i, const char *command,
 
 #ifndef _WIN32
 
-    ASSERTE (!WEXITSTATUS (exit_status), 
-             "gtshark exited with status=%u for vb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
-             WEXITSTATUS (exit_status), vb_i, stdout_data, stderr_data);
+    ASSERT (!WEXITSTATUS (exit_status), 
+            "gtshark exited with status=%u for vb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
+            WEXITSTATUS (exit_status), vb_i, stdout_data, stderr_data);
 
-    ASSERTE (!WIFSIGNALED (exit_status),
-             "gtshark process was killed by a signal, it was running for vb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
-             vb_i, stdout_data, stderr_data);
+    ASSERT (!WIFSIGNALED (exit_status),
+            "gtshark process was killed by a signal, it was running for vb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
+            vb_i, stdout_data, stderr_data);
 #endif
 
-    ASSERTE (!exit_status, "gtshark failed to exit normally for vb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
-             vb_i, stdout_data, stderr_data);
+    ASSERT (!exit_status, "gtshark failed to exit normally for vb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
+            vb_i, stdout_data, stderr_data);
 
     return true; // successfully executed gtshark
 }
@@ -89,7 +89,7 @@ static void *codec_gtshark_read_gtshark_output_file (void *arg)
     VBlockVCFP vb        = ((RWThreadArg *)arg)->vb;
 
     FILE *file = fopen (filename, "rb");
-    ASSERTE (file, "cannot open \"%s\": %s (errno=%u)", filename, strerror (errno), errno);
+    ASSERT (file, "cannot open \"%s\": %s (errno=%u)", filename, strerror (errno), errno);
 
     #define CHUNK 100000
 
@@ -100,7 +100,7 @@ static void *codec_gtshark_read_gtshark_output_file (void *arg)
         buf->len += bytes_read;
     } while (bytes_read == CHUNK); // its EOF if its smaller
 
-    ASSERTE (!fclose (file), "fclose failed: %s", strerror (errno));
+    ASSERT (!fclose (file), "fclose failed: %s", strerror (errno));
 
     file_remove (filename, false);
 
@@ -137,7 +137,7 @@ static void *codec_gtshark_zip_create_vcf_file (void *arg)
     const uint32_t num_hts = vb->ht_per_line;
 
     FILE *file = fopen (gtshark_vcf_name, "wb");
-    ASSERTE (file, "failed to create temporary file %s", gtshark_vcf_name);
+    ASSERT (file, "failed to create temporary file %s", gtshark_vcf_name);
 
     // write gtshark vcf header
     fprintf (file, "##fileformat=VCFv4.2\n" 
@@ -237,9 +237,9 @@ bool codec_gtshark_compress (VBlock *vb_,
     file_remove (gtshark_vcf_name, false);
 
     // wait for threads to complete (writer first, then readers)
-    threads_join (vcf_thread);
-    threads_join (db_thread);
-    threads_join (gt_thread);
+    threads_join (vcf_thread, true);
+    threads_join (db_thread, true);
+    threads_join (gt_thread, true);
 
     // set parameters for output sections
     vb->gtshark_db_ctx->ltype  = LT_UINT8;
@@ -282,9 +282,9 @@ static void *codec_gtshark_write_gtshark_input_file (void *arg)
     FILE *file = fopen (filename, "wb");
 
     size_t bytes_written = fwrite (buf->data, 1, buf->len, file);
-    ASSERTE (bytes_written == buf->len, 
-             "while uncompressing vb_i=%u: failed to write file %s - only %u out of %u bytes written: %s",
-             vb->vblock_i, filename, (unsigned)bytes_written, (uint32_t)buf->len, strerror (errno));
+    ASSERT (bytes_written == buf->len, 
+            "while uncompressing vb_i=%u: failed to write file %s - only %u out of %u bytes written: %s",
+            vb->vblock_i, filename, (unsigned)bytes_written, (uint32_t)buf->len, strerror (errno));
 
     FCLOSE (file, filename);
     return NULL;
@@ -321,13 +321,13 @@ static void codec_gtshark_reconstruct_ht_matrix (VBlockVCF *vb)
 {
     // get vb->ht_per_line
     const char *substr = strstr (vb->compressed.data, GTSHARK_NUM_HT_PER_LINE);
-    ASSERTE (substr, "cannot locate \"" GTSHARK_NUM_HT_PER_LINE "\" within gtshark-produced vcf data for vb_i=%u", vb->vblock_i);
+    ASSERT (substr, "cannot locate \"" GTSHARK_NUM_HT_PER_LINE "\" within gtshark-produced vcf data for vb_i=%u", vb->vblock_i);
     uint32_t num_hts = vb->ht_per_line = atoi (substr + strlen (GTSHARK_NUM_HT_PER_LINE));
     vb->ploidy = num_hts / vcf_header_get_num_samples();
 
     uint32_t num_lines = vb->lines.len;
 
-    ASSERTE (num_lines && num_hts, "Expecting num_lines=%u and num_hts=%u to be >0", num_lines, num_hts);
+    ASSERT (num_lines && num_hts, "Expecting num_lines=%u and num_hts=%u to be >0", num_lines, num_hts);
     
     buf_alloc_old (vb, &vb->ht_matrix_ctx->local, num_lines * num_hts, 1, "contexts->local");
     vb->ht_matrix_ctx->local.len = num_lines * num_hts;
@@ -336,15 +336,15 @@ static void codec_gtshark_reconstruct_ht_matrix (VBlockVCF *vb)
     
     // look for the start of our data - a newline followed by the chrom
     substr = strstr (vb->compressed.data, "\n" GTSHARK_CHROM_ID);
-    ASSERTE (substr, "cannot locate start of data within gtshark-produced vcf data for vb_i=%u", vb->vblock_i);
+    ASSERT (substr, "cannot locate start of data within gtshark-produced vcf data for vb_i=%u", vb->vblock_i);
 
     // build the transposed matrix from the vcf data - this will include alleles 0, 1 or 2 with higher
     // alleles showing as 0
     const char *next = substr + 1; // point to the CHROM = '1'
     
     for (uint32_t vb_line_i=0; vb_line_i < num_lines; vb_line_i++) {
-        ASSERTE (*next == GTSHARK_CHROM_ID[0], "expecting vb_line_i=%u to start with '" GTSHARK_CHROM_ID "' but seeing '%c' (ASCII %u)", 
-                 vb_line_i, *next, *next);
+        ASSERT (*next == GTSHARK_CHROM_ID[0], "expecting vb_line_i=%u to start with '" GTSHARK_CHROM_ID "' but seeing '%c' (ASCII %u)", 
+                vb_line_i, *next, *next);
 
         next += vardata_len; // skipping the line fields 1-9, arriving at the first haplotype
     
@@ -357,7 +357,7 @@ static void codec_gtshark_reconstruct_ht_matrix (VBlockVCF *vb)
     // case: we have exceptions - update the ht_matrix with the "exceptional" alleles
     if (vb->gtshark_ex_ctx) { // has exceptions
 
-        ASSERTE (vb->gtshark_ex_ctx->local.len == num_lines * num_hts, 
+        ASSERT (vb->gtshark_ex_ctx->local.len == num_lines * num_hts, 
                  "Expecting vb->gtshark_ex_ctx->local.len=%u == num_lines=%u * num_hts=%u",
                  (unsigned)vb->gtshark_ex_ctx->local.len, num_lines, num_hts);
                  
@@ -392,8 +392,8 @@ void codec_gtshark_uncompress (VBlock *vb_, Codec codec, uint8_t param,
     vb->gtshark_gt_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
     vb->gtshark_ex_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_EX); // note: gtshark_ex_ctx will be set only if there was a gtshark_ex section
 
-    ASSERTE0 (vb->gtshark_db_ctx, "gtshark_db_ctx is NULL, perhaps the section is missing in the file?");
-    ASSERTE0 (vb->gtshark_gt_ctx, "gtshark_gt_ctx is NULL, perhaps the section is missing in the file?");
+    ASSERT0 (vb->gtshark_db_ctx, "gtshark_db_ctx is NULL, perhaps the section is missing in the file?");
+    ASSERT0 (vb->gtshark_gt_ctx, "gtshark_gt_ctx is NULL, perhaps the section is missing in the file?");
 
     // create threads for writing gtshark files for its decompressor to consume 
     RWThreadArg db_write_thread_arg = { vb, gtshark_db_name, &vb->gtshark_db_ctx->local };
@@ -409,9 +409,9 @@ void codec_gtshark_uncompress (VBlock *vb_, Codec codec, uint8_t param,
     codec_gtshark_run (vb->vblock_i, "decompress-db", gtshark_base_name, gtshark_vcf_name);
 
     // wait for threads to complete (writers first, then reader)
-    threads_join (db_thread);
-    threads_join (gt_thread);
-    threads_join (vcf_thread);
+    threads_join (db_thread, true);
+    threads_join (gt_thread, true);
+    threads_join (vcf_thread, true);
     
     file_remove (gtshark_db_name, false);
     file_remove (gtshark_gt_name, false);

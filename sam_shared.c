@@ -56,7 +56,7 @@ void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len,
     if (seq_and_ref)  *seq_and_ref  = 0;
     if (soft_clip)    *soft_clip    = 0;
 
-    ASSERTE (cigar[0] != '*' || cigar_len == 1, "Invalid CIGAR: %.*s", cigar_len, cigar); // a CIGAR start with '*' must have 1 character
+    ASSERT (cigar[0] != '*' || cigar_len == 1, "Invalid CIGAR: %.*s", cigar_len, cigar); // a CIGAR start with '*' must have 1 character
 
     // ZIP case: if the CIGAR is "*", later sam_seg_cigar_field uses the length from SEQ and store it as eg "151*". 
     // In PIZ it will be eg "151*" or "1*" if both SEQ and QUAL are "*", so this condition is always false

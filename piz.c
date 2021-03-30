@@ -42,7 +42,7 @@ bool piz_test_grep (VBlock *vb)
     vb->vb_data_size     = BGEN32 (header->vb_data_size);
     vb->longest_line_len = BGEN32 (header->longest_line_len);
 
-    // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
+    // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every sam component
     if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
     
@@ -202,7 +202,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
 {
     START_TIMER;
 
-    ASSERTE0 (!flag.reference || (genome && genome->nbits) ||
+    ASSERT0 (!flag.reference || (genome && genome->nbits) ||
               (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage || flag.idxstats)), // reference data not loaded in genocat --show-sex/coverage
               "reference is not loaded correctly");
 
@@ -251,32 +251,10 @@ static void piz_read_all_ctxs (VBlock *vb, ConstSecLiEntP *next_sl)
     }
 }
 
-static void piz_handle_dual_coords (void)
-{
-    if (!z_file->z_flags.dual_coords) {
-        if (flag.luft) {
-            WARN ("FYI: ignoring the --luft option, because %s was not compressed with --chain", z_name);
-            flag.luft = 0;
-        }
-        return;
-    }
-
-    // when showing the primary coordinates - skip the rejects component
-    if (!flag.luft)
-        sorter_remove_liftover_rejects();
-
-    // when showing in liftover coordinates, we start with the rejects component (which is reconstructed with a prefix making
-    // it into part of the header), followed by the primary component.
-    else  
-        sorter_move_liftover_rejects_to_front(); // reject first, this primary
-}
-
 // Called by PIZ main thread: read all the sections at the end of the file, before starting to process VBs
-static DataType piz_read_global_area (Digest *original_file_digest) // out
+DataType piz_read_global_area (void)
 {
-    bool success = zfile_read_genozip_header (original_file_digest, 0, 0, 0);
-    
-    piz_handle_dual_coords();
+    bool success = zfile_read_genozip_header (0, 0, 0);
 
     if (flag.show_stats) stats_read_and_display();
 
@@ -400,7 +378,7 @@ static bool piz_read_one_vb (VBlock *vb)
     vb->vb_header_flags  = header->h.flags.vb_header;
     vb->is_rejects_vb    = flag.processing_rejects; // note: flag.processing_rejects is valid in the main thread only - it may change before the compute thread completes
 
-    // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
+    // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every txt component
     if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
 
@@ -408,7 +386,7 @@ static bool piz_read_one_vb (VBlock *vb)
         iprintf ("vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
-    ASSERTE (vb_header_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
+    ASSERT (vb_header_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
     buf_alloc_old (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(uint32_t), 0, "z_section_headers"); // room for section headers  
@@ -434,21 +412,24 @@ static bool piz_read_one_vb (VBlock *vb)
     return ok_to_compute;
 }
 
-static Digest piz_one_file_verify_digest (Digest original_file_digest)
+static Digest piz_one_verify_digest (void)
 {
-    if (v8_digest_is_zero (original_file_digest) || digest_is_zero (original_file_digest) || 
-        flag.genocat_no_reconstruct || flag.data_modified || flag.reading_chain) 
+    Digest original_digest = flag.unbind ? txt_file->digest /* digest_single */ : z_file->digest /* digest_bound */;
+
+    if (v8_digest_is_zero (original_digest) || digest_is_zero (original_digest) || 
+        flag.genocat_no_reconstruct || flag.data_modified || flag_loading_auxiliary) 
         return DIGEST_NONE; // we can't calculate the digest for some reason
 
-    Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound, "file:digest_ctx_bound"); // z_file might be a bound file - this is the MD5 of the entire bound file
+    // Note: in piz, we compare txt_file->digest_ctx_bound to original bound or single, depending on flag.unbind
+    Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound, "file:digest_ctx_bound"); 
     char s[200]; 
 
-/*    if (digest_is_zero (original_file_digest)) { 
+/*    if (digest_is_zero (original_digest)) { 
         sprintf (s, "%s = %s", digest_name(), digest_display (decompressed_file_digest).s);
         progress_finalize_component (s); 
     }
 
-    else*/ if (digest_is_equal (decompressed_file_digest, original_file_digest)) {
+    else*/ if (digest_is_equal (decompressed_file_digest, original_digest)) {
 
         if (flag.test) { 
             sprintf (s, "%s = %s verified as identical to the original %s", 
@@ -460,148 +441,111 @@ static Digest piz_one_file_verify_digest (Digest original_file_digest)
     else if (flag.test) {
         progress_finalize_component ("FAILED!!!");
         ABORT ("Error: %s of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",
-               digest_name(), digest_display (original_file_digest).s, digest_display (decompressed_file_digest).s);
+               digest_name(), digest_display (original_digest).s, digest_display (decompressed_file_digest).s);
     }
 
     // if compressed incorrectly - warn, but still give user access to the decompressed file
-    else ASSERTW (digest_is_zero (original_file_digest), // its ok if we decompressed only a partial file
+    else ASSERTW (digest_is_zero (original_digest), // its ok if we decompressed only a partial file
                   "File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s", 
                   digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
-                  dt_name (txt_file->data_type), digest_display (original_file_digest).s);
+                  dt_name (txt_file->data_type), digest_display (original_digest).s);
 
     return decompressed_file_digest;
 }
 
 // returns false if VB was dispatched, and true if vb was skipped
-static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent, uint32_t component_i)
+static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
 {
-    static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
-    if (!random_access_is_vb_included (sl_ent->vblock_i, &region_ra_intersection_matrix)) return true; // skip this VB if not included
-
+    if (!sorter_is_vb_in_plan (sl_ent->vblock_i)) return true; // skip this VB - we don't need it
+    
     VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
-    next_vb->component_i = component_i;
-
-    if (region_ra_intersection_matrix.data) {
-        buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix");
-        buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
-    }
+    next_vb->component_i = z_file->num_txt_components_so_far;
     
     // read one VB's genozip data
     bool grepped_out = !piz_read_one_vb (next_vb);
 
-    if (grepped_out ||                                    // this VB was filtered out by grep
-        (flag.show_headers && exe_type == EXE_GENOCAT))   // we're not reconstructing VBs at all - only showing headers
-        dispatcher_abandon_next_vb (dispatcher); 
-    else
-        dispatcher_compute (dispatcher, piz_uncompress_one_vb);
+    if (grepped_out) {
+        sorter_filter_out_vb (next_vb->vblock_i);
+        dispatcher_abandon_next_vb (dispatcher);
+        return true; // VB skipped
+    }
+
+    buf_grab (next_vb, &next_vb->region_X_ra_matrix, "region_X_ra_matrix", 
+              sorter_piz_get_region_X_ra_matrix (next_vb->vblock_i));
+
+    dispatcher_compute (dispatcher, piz_uncompress_one_vb);
 
     return false;
 }
 
-// called once per txt_file created: i.e. if concatenating - a single call, if unbinding there will be multiple calls to this function
-void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_z_file, bool is_last_z_file)
+Dispatcher piz_z_file_initialize (bool is_last_z_file)
 {
-    static Dispatcher dispatcher = NULL; // static dispatcher - with flag.unbind, we use the same dispatcher when pizzing components
-    static ConstSecLiEntP sl_ent = NULL, sl_ent_leaf_2=NULL; // preserve for unbinding multiple files
+    digest_initialize();
 
     // read genozip header
-    Digest original_file_digest = DIGEST_NONE;
+    DataType data_type = piz_read_global_area();
+    if (data_type == DT_NONE || flag.reading_reference) 
+        return NULL; // no components in this file (as is always the case with reference files) 
 
-    // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --unbind, 
-    static DataType data_type = DT_NONE; 
-    bool no_more_headers = false;
+    sorter_piz_create_plan();
 
-    if (component_i == 0) {
+    ASSINP (!flag.test || !digest_is_zero (z_file->digest), 
+            "Error testing %s: --test cannot be used with this file, as it was not compressed (in genozip v8) with --md5 or --test", z_name);
 
-        data_type = piz_read_global_area (&original_file_digest);
-        if (data_type == DT_NONE || flag.reading_reference) {
-            no_more_headers = true; // reference file has no VBs
-            goto finish; 
-        }
+    if (flag.test || flag.md5) 
+        ASSINP0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
 
-        sl_ent = sl_ent_leaf_2 = NULL; // reset
+    Dispatcher dispatcher = dispatcher_init ("piz", flag.xthreads ? 1 : global_max_threads, 
+                                             0, flag.test, is_last_z_file, true, z_file->basename, PROGRESS_PERCENT, 0);
+    return dispatcher;
+}
 
-        ASSINP (!flag.test || !digest_is_zero (original_file_digest), 
-                "Error testing %s: --test cannot be used with this file, as it was not compressed (in genozip v8) with --md5 or --test", z_name);
-
-        if (flag.test || flag.md5) 
-            ASSINP0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
-
-        dispatcher = dispatcher_init ("piz", flag.xthreads ? 1 : global_max_threads, 
-                                      0, flag.test, is_last_z_file, true, z_file->basename, PROGRESS_PERCENT, 0);
-    }
-    
-    else if (flag.unbind) {
-        if (!sections_next_sec1 (&sl_ent, SEC_TXT_HEADER, false, true)) return; // unbinding - no more components
-        sl_ent--; // rewind;
-    
-        dispatcher_set_input_exhausted (dispatcher, false); // accept more input 
-    }
-  
+// called once per txt_file created: i.e. if concatenating - a single call, if unbinding there will be multiple calls to this function
+void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_file, bool is_first_z_file)
+{
     if (DTPZ(piz_initialize)) DTPZ(piz_initialize)();
       
-    // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
-    // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
-    // 2. Wait for the first thread (by sequential order) to complete and write data
-
     bool header_only_file = true; // initialize - true until we encounter a VB header
-    bool first_component_this_txtfile = true;
-    bool is_leaf_2 = false; // used when interleaving - true if we are reading a VB from the 2nd leaf
+    uint32_t first_comp_this_txt, num_comps_this_txt;
+    const SecLiEnt *sl;
+
+    sorter_piz_get_txt_file_info (txt_file_i, &first_comp_this_txt, &num_comps_this_txt, &sl);
 
     while (!dispatcher_is_done (dispatcher)) {
 
-        // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a vblock and compute it
+        bool achieved_something = false;
+        
+        // In input is not exhausted, and a compute thread is available - read a vblock and dispatch it
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
+            achieved_something = true;
 
-            ConstSecLiEntP *sl_p = &sl_ent;
+            bool found_header = sections_next_sec2 (&sl, SEC_TXT_HEADER, SEC_VB_HEADER, false, true);
 
-            // note when interleaving: either leaf 1 or 2 may encounter a VB_HEADER, but only leaf_1 will encounter a TXT_HEADER bc we skipped it for leaf 2
-            bool another_header = sections_next_sec2 (sl_p, SEC_TXT_HEADER, SEC_VB_HEADER, false, true);
+            // case SEC_TXT_HEADER
+            if (found_header && sl->st == SEC_TXT_HEADER && z_file->num_txt_components_so_far < first_comp_this_txt + num_comps_this_txt) { 
 
-            // case: SEC_VB_HEADER
-            if (another_header && sl_ent->st == SEC_VB_HEADER) {
-                
-                if (flag.one_vb && flag.one_vb != (*sl_p)->vblock_i) // we want only one VB, but not this one
-                    { (*sl_p)++; continue; }
+                // case: skip entire component 
+                if (sorter_is_component_skipped (z_file->num_txt_components_so_far)) 
+                    sl = sections_component_last (sl);
 
-                header_only_file &= piz_dispatch_one_vb (dispatcher, (*sl_p), component_i + is_leaf_2);  // function returns true if VB was skipped
-            } 
+                else {
+                    // note: if unbinding, this will also open the txt file
+                    txtheader_piz_read_and_reconstruct (z_file->num_txt_components_so_far, sl); 
 
-            // case: we are working on the liftover rejects component (this is the first component read) - some VBs are still
-            // processing and now we have read the header of the primary component. in --luft, we need to wait with this
-            // header until the VBs are completed, as their output (rejected lines with a header prefix) needs to come before.
-            else if (another_header && flag.processing_rejects && dispatcher_has_active_threads (dispatcher)) {
-                sl_ent--; // rewind
-                goto get_processed_vb;
+                    // stand ready to start outputing txt from completed VBs (called here, since in --unbind txt file is opened in txtheader_piz_read_and_reconstruct)
+                    sorter_piz_start_writing (txt_file_i);
+
+                    if (flag.unbind) dispatcher_resume (dispatcher);  // handle --unbind progress printing and unpausing after previous txt_file pause
+                }
+                z_file->num_txt_components_so_far++;
             }
 
-            // case SEC_TXT_HEADER when concatenating or first TXT_HEADER when unbinding: proceed with this component 
-            // note: this never happens in the 2nd leaf when interleaving, because we cancel the txt header in sorter_piz_add_interleave_plan_two_components
-            else if (another_header && (!flag.unbind || first_component_this_txtfile)) {
-                    
-                // note: if unbinding, this will also open the txt file
-                txtfile_genozip_to_txt_header (sl_ent,  
-                                               first_component_this_txtfile ? &original_file_digest : NULL); // NULL means skip txt header (2nd+ component if concatenating)
-           
-                // case: first component - create reconstruction plan, and stand ready to start outputing txt from completed VBs
-                if (first_component_this_txtfile && !flag.reading_chain && !flag.reading_reference) 
-                    sorter_piz_start_writing (component_i);
+            // case SEC_VB_HEADER
+            else if (found_header && sl->st == SEC_VB_HEADER)
+                header_only_file &= piz_dispatch_one_vb (dispatcher, sl);  // function returns true if VB was skipped
 
-                if (!first_component_this_txtfile) 
-                    component_i += flag.interleave ? 2 : 1; 
-
-                first_component_this_txtfile = false;
-                
-                dispatcher_resume (dispatcher);  // in case it was paused by previous component when unbinding
-
-                if (flag.header_only && !(component_i==0 && flag.luft /* liftover-rejects part of the header */)) goto finish;
-            }
-
-            // case: we're done (concatenating: no more VBs in the entire file ; unbinding: no more VBs in our component)
-            else { 
-                no_more_headers = !another_header;
-
-                sl_ent--; // re-read in next call to this function if unbinding
+            // case: we're done with this txt_file (either no header bc EOF, or TXT_HEADER belongs to the next txt_file when unbinding)
+            else {
                 dispatcher_set_input_exhausted (dispatcher, true);
 
                 if (header_only_file)
@@ -609,14 +553,11 @@ void piz_one_file (uint32_t component_i /* 0 if not unbinding */, bool is_first_
             }
         }
 
-        // PRIORITY 2: Wait for the first thread (by sequential order) to handover the data to the writer thread
-        else {
-            VBlock *processed_vb;
-get_processed_vb:            
-            processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
-
+        // if the next thread (by sequential order) is ready, hand over the data to the writer thread
+        VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
+        if (processed_vb) {
             // read of a normal file - output uncompressed block (unless we're reading a reference - we don't need to output it)
-            if (!flag.reading_reference && !flag.reading_chain) {
+            if (!flag_loading_auxiliary) {
                 sorter_piz_handover_data (processed_vb);
                 coverage_add_one_vb (processed_vb);
             }
@@ -624,31 +565,31 @@ get_processed_vb:
             z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
 
             dispatcher_recycle_vbs (dispatcher);
+            achieved_something = true;
         }
+
+        if (!achieved_something) usleep (100000); // nothing for us to do right now - wait 100ms
     }
 
     // verifies reconstructed file against MD5 (if compressed with --md5 or --test) or Adler2 and/or codec_args (if bgzf)
-    Digest decompressed_file_digest = piz_one_file_verify_digest (original_file_digest);
+    Digest decompressed_file_digest = piz_one_verify_digest();
 
     if (!flag.test) progress_finalize_component_time ("Done", decompressed_file_digest);
 
-finish:
     // finish writing the txt_file
     sorter_piz_finish_writing();
 
     // --show-sex and --show-coverage - output results
-    if (txt_file && !flag.reading_reference && !flag.reading_chain) {
+    if (txt_file && !flag_loading_auxiliary) {
         if (flag.show_coverage) coverage_show_coverage();
         if (flag.show_sex) coverage_sex_classifier (is_first_z_file);
         if (flag.idxstats) coverage_show_idxstats();
     }
 
-    // case: we're unbinding and still have more components - we continue with the same dispatcher in the next component.
-    if (!no_more_headers) 
-        dispatcher_pause (dispatcher);
-
-    // case: we're done with reconstructing this z_file - either concatenated, or this was the last component unbound
-    else dispatcher_finish (&dispatcher, NULL);    
-
+    if (is_last_txt_file) 
+        dispatcher_finish (&dispatcher, NULL);
+    else
+        dispatcher_pause (dispatcher); // we're unbinding and still have more txt_files
+     
     DT_FUNC (z_file, piz_finalize)();
 }

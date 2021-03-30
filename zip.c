@@ -31,6 +31,7 @@
 #include "strings.h"
 #include "bgzf.h"
 #include "sorter.h"
+#include "txtheader.h"
 
 static Mutex wait_for_vb_1_mutex = {};
 
@@ -128,7 +129,7 @@ static void zip_dynamically_set_max_memory (void)
 
             // make a copy of txt_data as seg may modify it
             static Buffer txt_data_copy = {};
-            buf_copy (evb, &txt_data_copy, &vb->txt_data, 0, 0, 0, "txt_data_copy");
+            buf_copy (evb, &txt_data_copy, &vb->txt_data, char, 0, 0, "txt_data_copy");
 
             // segment this VB
             ctx_clone (vb);
@@ -348,7 +349,7 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
 
     uint32_t cols = ctx->local.param;
     // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
-    ASSERTE (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->name);
+    ASSERT (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->name);
 
     if (!cols) cols = vcf_header_get_num_samples(); // 0 if not vcf/bcf (not restricted to 255)
     
@@ -380,7 +381,7 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
         }
 
     vb->compressed.len = ctx->local.len;
-    buf_copy (vb, &ctx->local, &vb->compressed, lt_desc[ctx->ltype].width, 0, 0, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
+    buf_copy_do (vb, &ctx->local, &vb->compressed, lt_desc[ctx->ltype].width, 0, 0, __FUNCTION__,__LINE__, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
 
 done:
     buf_free (&vb->compressed);
@@ -433,7 +434,7 @@ static void zip_generate_ctxs (VBlock *vb)
             buf_free (&ctx->b250);
 
         if (ctx->b250.len) {
-            ASSERTE (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", did_i);
+            ASSERT (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", did_i);
 
             bool drop_section = zip_generate_b250_section (vb, ctx);
             if (drop_section) 
@@ -444,7 +445,7 @@ static void zip_generate_ctxs (VBlock *vb)
 
         // local first - so zip_resize_local can eliminate b250 if needed
         if (ctx->local.len || ctx->local_always) { 
-            ASSERTE (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->local containing data", did_i);
+            ASSERT (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->local containing data", did_i);
 
             if (ctx->ltype == LT_BITMAP) 
                 LTEN_bit_array (buf_get_bitarray (&ctx->local));
@@ -622,28 +623,6 @@ static void zip_compress_one_vb (VBlock *vb)
     COPY_TIMER (compute);
 }
 
-// copy contigs from reference or SAM/BAM header to CHROM (and RNEXT too, for SAM/BAM)
-void zip_prepopulate_contig_data (void)
-{
-    if (flag.reference != REF_NONE) {
-        ConstBufferP contigs=NULL, contigs_dict=NULL;    
-
-        // in BAM SQ is mandatory, in SAM it is optional - if we have SQ records, we use them for RNAME/RNEXT
-        // (even if we're also using a reference)
-        if (z_file->data_type == DT_SAM || z_file->data_type == DT_BAM)
-            sam_header_get_contigs (&contigs_dict, &contigs);
-
-        // In SQ-less SAM, and in other data types, if we're using a reference - get our CHROM data from it
-        if (!contigs && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) 
-            ref_contigs_get (&contigs_dict, &contigs);
-
-        ctx_build_zf_ctx_from_contigs (CHROM, contigs, contigs_dict); 
-
-        if (z_file->data_type == DT_SAM || z_file->data_type == DT_BAM)
-            ctx_build_zf_ctx_from_contigs (SAM_RNEXT, contigs, contigs_dict);
-    }
-}
-
 // data sent through dispatcher fan out functions - to do: make this an opaque struct
 static uint32_t prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
 static uint32_t txt_line_i; // the next line to be read (first line = 1) (resets in every file)
@@ -751,7 +730,7 @@ void zip_one_file (const char *txt_basename,
     
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
-    bool success = txtfile_header_to_genozip (&txt_line_i);
+    bool success = txtheader_zip_read_and_compress (&txt_line_i);
     if (!success) goto finish; // 2nd+ VCF file cannot bind, because of different sample names
 
     if (z_file->z_flags.dual_coords && !flag.processing_rejects) {
@@ -761,8 +740,9 @@ void zip_one_file (const char *txt_basename,
 
     DT_FUNC (txt_file, zip_initialize)();
 
-    // copy contigs from reference or SAM/BAM header to CHROM (and RNEXT too, for SAM/BAM)
-    zip_prepopulate_contig_data();
+    // copy contigs from reference or txtheader to CHROM (and RNEXT too, for SAM/BAM)
+    if (DTPZ (has_header_contigs))
+        txtheader_zip_prepopulate_contig_ctxs();
 
     max_lines_per_vb=0;
 

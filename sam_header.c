@@ -18,6 +18,7 @@
 #include "reference.h"
 #include "zfile.h"
 #include "version.h"
+#include "txtheader.h"
 
 #define HDRLEN evb->txt_data.len
 #define HDRSKIP(n) if (HDRLEN < next + n) goto incomplete_header; next += n
@@ -87,64 +88,6 @@ incomplete_header:
     ABORT ("Error in bam_foreach_SQ_line: incomplete BAM header (next=%u)", next);
 }   
 
-void sam_header_get_contigs (ConstBufferP *contigs_dict, ConstBufferP *contigs)
-{
-    if (!header_contigs.len) return; // SQ-less SAM
-
-    *contigs      = &header_contigs;
-    *contigs_dict = &header_contigs_dict;
-}
-
-void sam_header_finalize (void)
-{
-    if (!flag.bind) { // in ZIP with bind we keep the header contigs
-        buf_free (&header_contigs);
-        buf_free (&header_contigs_dict);
-    }
-}
-
-static void sam_header_add_contig (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
-{
-    WordIndex ref_chrom=WORD_INDEX_NONE;
-
-    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
-        ref_chrom = ref_contigs_ref_chrom_from_header_chrom (chrom_name, chrom_name_len, last_pos, header_contigs.len);
-
-    // add to header_contigs
-    NEXTENT (RefContig, header_contigs) = (RefContig){ 
-        .max_pos     = last_pos, 
-        .char_index  = header_contigs_dict.len, 
-        .snip_len    = chrom_name_len,
-        .chrom_index = ref_chrom
-    };
-
-    if (flag.show_txt_contigs) 
-        iprintf ("index=%u \"%.*s\" LN=%"PRId64" ref_chrom_index=%u snip_len=%u\n", 
-                 (unsigned)header_contigs.len-1, chrom_name_len, chrom_name, last_pos, ref_chrom, chrom_name_len);
-
-    // add to header_contigs_dict
-    buf_add (&header_contigs_dict, chrom_name, chrom_name_len);
-    NEXTENT (char, header_contigs_dict) = 0; // nul-termiante
-}
-
-#define next_contig param // we use header_contigs.param as "next_contig"
-static void sam_header_verify_contig (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
-{
-    ASSINP (header_contigs.next_contig < header_contigs.len, 
-            "Error: SAM header: contigs mismatch between files: first file has %u contigs, but %s has more",
-             (unsigned)header_contigs.len, txt_name);
-
-    RefContig *rc = ENT (RefContig, header_contigs, header_contigs.next_contig++);
-    const char *rc_chrom_name = ENT (char, header_contigs_dict, rc->char_index);
-    
-    ASSINP (chrom_name_len == rc->snip_len && !memcmp (chrom_name, rc_chrom_name, chrom_name_len),
-            "Error: SAM header contig=%u: contig name mismatch between files: in first file: \"%s\", in %s: \"%.*s\"",
-            (unsigned)header_contigs.next_contig, rc_chrom_name, txt_name, chrom_name_len, chrom_name);
-            
-    ASSINP (last_pos == rc->max_pos, "Error: SAM header in \"%s\": contig length mismatch between files: in first file: LN:%"PRId64", in %s: LN:%"PRId64,
-            rc_chrom_name, rc->max_pos, txt_name, last_pos);
-}
-
 typedef struct { uint32_t num_contigs, dict_len; } NumRangesCbParam;
 
 static void sam_header_get_num_ranges_cb (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *cb_param)
@@ -180,25 +123,24 @@ bool sam_header_inspect (BufferP txt_header)
 
     // note: In BAM, a contig-less header is considered an unaligned BAM in which all RNAME=*
     // In SAM, a contig-less header just means we don't know the contigs and they are defined in RNAME 
-    has_header_contigs = IS_BAM || (ranges_data.num_contigs > 0);
-    
-    buf_alloc_old (evb, &header_contigs, ranges_data.num_contigs * sizeof (RefContig), 1, "header_contigs"); 
-    buf_alloc_old (evb, &header_contigs_dict, ranges_data.dict_len, 1, "header_contigs_dict"); 
+    bool has_header_contigs = IS_BAM || (ranges_data.num_contigs > 0);
+    if (has_header_contigs)
+        txtheader_alloc_contigs (ranges_data.num_contigs, ranges_data.dict_len, false);
     
     // if its the 2nd+ file while binding in ZIP - we just check that the contigs are the same
-    // (or a subset) of header_contigs 
+    // (or a subset) of previous file's contigs (to do: merge headers, bug 327) 
     if (command == ZIP && flag.bind && z_file->num_txt_components_so_far /* 2nd+ file */) {
-        header_contigs.next_contig = 0;
-        foreach_SQ_line (sam_header_verify_contig, NULL);
+        txtheader_verify_contig_init();
+        foreach_SQ_line (txtheader_verify_contig, (void*)false);
     }
     // ZIP: first bound file, or non-binding ; PIZ - 1st header when concatenating or all headers when unbinding 
     else
-        foreach_SQ_line (sam_header_add_contig, NULL);
+        foreach_SQ_line (txtheader_add_contig, (void*)false);
 
     if (flag.show_txt_contigs && exe_type == EXE_GENOCAT) exit_ok;
 
     // If we have a header with SQ lines in SAM, and always in BAM, all RNAME values must be defined in the header
-    flag.const_chroms = (command == ZIP) && (IS_BAM || header_contigs.len); 
+    flag.const_chroms = (command == ZIP) && has_header_contigs; 
 
     return true;
 }
@@ -266,7 +208,7 @@ TXTHEADER_TRANSLATOR (txtheader_bam2sam)
         return;
     }
 
-    ASSERTE0 (buf_is_allocated (txtheader_buf), "txtheader_buf not allocated");
+    ASSERT0 (buf_is_allocated (txtheader_buf), "txtheader_buf not allocated");
 
     uint32_t l_text = GET_UINT32 (ENT (char, *txtheader_buf, 4));
     memcpy (txtheader_buf->data, ENT (char, *txtheader_buf, 8), l_text);

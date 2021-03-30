@@ -18,6 +18,12 @@
 #include "threads.h"
 #include "sorter.h"
 #include "sections.h"
+#include "random_access.h"
+#include "crypt.h"
+
+// ---------------
+// Data structures
+// ---------------
 
 // an entry per VB
 typedef struct {
@@ -33,6 +39,7 @@ typedef struct {
 typedef struct {
     // sychronization between the main thread and the Writer thread
     uint32_t vblock_i;
+    uint32_t comp_i;              // component_i of this VB
     bool is_loaded;               // has data moving to txt_data completed
     Mutex wait_for_data;          // initialized locked, unlocked when data is moved to txt_data and is_loaded is set
     uint32_t pair_vb_i;           // vb_i of pair vb, or 0 if there isn't any. if pair_vb_i > vblock_i then we are pair_1
@@ -42,19 +49,39 @@ typedef struct {
     Buffer bgzf_blocks;           // details of BGZF blocks to be written to disk
     Buffer compressed;            // data already BGZF-compressed in compute thread, except perhaps the flanking regions to be compressed in bgzf_write_to_disk
     Buffer line_start;            // array of num_lines x (char *) - pointer to with txt_data - start of each line
+    Buffer region_X_ra_matrix;    // --regions info to be copied to the VB
 
     uint32_t num_lines;           // number of textual lines (not data-type lines) in txt_data. 1 if data type is not textual.
     uint32_t vb_data_size;        // data size of VB in default reconstruction
     uint32_t first_line;          // 1-based line number of first line of this VB in the resulting txt file
-    bool is_header;               // should this data be dropped if flag.no_header
+    bool in_plan;                 // this VB is used in the reconstruction plan
+    bool filtered_out;            // entire VB filtered out and should not be read or reconstructed (despite maybe being in the plan)
 } PizVbInfo;
 
 typedef struct {
-    unsigned comp_i;
+    // sychronization between the main thread and the Writer thread
+    uint32_t comp_i;
+    bool is_loaded;               // has data moving to txt_data completed
+    Mutex wait_for_data;          // initialized locked, unlocked when data is moved to txt_data and is_loaded is set
+
+    // txtheader data handed over
+    Buffer txt_data;              // data to be written to disk
+    Buffer bgzf_blocks;           // details of BGZF blocks to be written to disk
+    Buffer compressed;            // data already BGZF-compressed in compute thread, except perhaps the flanking regions to be compressed in bgzf_write_to_disk
+
     const SecLiEnt *txt_header_sl;
     uint32_t first_vb_i;
     uint32_t num_vbs;
+    bool in_plan;                 // the txt header should be reconstructed. this paramater doesn't affect the VBs of this component.
+    bool is_skipped;              // the this component in its entirety should be ignored. if false, txt header should be read and inspected.
+    bool liftover_rejects;        // this component is the "liftover rejects" component
 } PizCompInfo;
+
+typedef struct {
+    uint32_t txt_file_i;
+    uint32_t first_comp_i, num_comps;
+    uint32_t first_plan_i, plan_len;
+} PizTxtFileInfo;
 
 // an entry per line of Primary and per line of Luft
 typedef struct {
@@ -65,6 +92,7 @@ typedef struct {
 } LineInfo;
 
 static int writer_thread=0;
+static bool writer_thread_running=false;
 
 static void sorter_show_recon_plan (bool is_luft, uint32_t num_txt_data_bufs, uint32_t vblock_mb)
 {
@@ -83,6 +111,24 @@ static void sorter_show_recon_plan (bool is_luft, uint32_t num_txt_data_bufs, ui
                  plan[i].plan_type == PLAN_FULL_VB    ? "FULL_VB"    :
                  plan[i].plan_type == PLAN_INTERLEAVE ? "INTERLEAVE" :
                                                         str_int_s (plan[i].num_lines).s); 
+}
+
+static void destroy_one_vb_info (PizVbInfo *v)
+{
+    buf_destroy (&v->txt_data);
+    buf_destroy (&v->bgzf_blocks);
+    buf_destroy (&v->compressed);
+    buf_destroy (&v->line_start);
+    buf_destroy (&v->region_X_ra_matrix);
+    mutex_destroy (v->wait_for_data);
+}
+
+static void destroy_one_comp_info (PizCompInfo *comp)
+{
+    buf_destroy (&comp->txt_data);
+    buf_destroy (&comp->bgzf_blocks);
+    buf_destroy (&comp->compressed);
+    mutex_destroy (comp->wait_for_data);
 }
 
 // --------
@@ -197,8 +243,14 @@ static int sorter_line_cmp (const void *a_, const void *b_)
 
     // case: same chrom, different pos - order by pos (note: at this point pos ranges are gapless)
     if (a->end_pos < b->start_pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
-    
     if (b->end_pos < a->start_pos) return +1; // b is smaller
+
+    // case: either has multiple pos values
+    // eg {chrom=2,pos=207237509-207237510,nlines=2} vs {chrom=2,pos=207237510-207237510,nlines=1} no order by ^ but yes by:
+    if (a->start_pos != a->end_pos || b->start_pos != b->end_pos) {
+        if (a->end_pos == b->start_pos) return -1; // a is smaller (the last item of a overlaps with the first item of b)
+        if (b->end_pos == a->start_pos) return +1; // b is smaller
+    }
 
     // same chrome and pos ranges overlap (not expected in normal VCFs) - sort by vb_i
     return a->vblock_i - b->vblock_i;
@@ -237,7 +289,7 @@ static void sorter_zip_get_final_index_i (Buffer *line_info, Buffer *vb_info, Bu
     }
 }
 
-// reconstruction plan format: txt_file->recon_plan is an array of ReconPlanItem
+// ZIP: reconstruction plan format: txt_file->recon_plan is an array of ReconPlanItem
 // returns - max number of concurrent txt_data buffers in memory needed for execution of the plan
 static uint32_t sorter_zip_plan_reconstruction (const Buffer *line_info, const Buffer *vb_info, const Buffer *index_buf)
 {
@@ -254,10 +306,12 @@ static uint32_t sorter_zip_plan_reconstruction (const Buffer *line_info, const B
 
         // verify sort
         #ifdef DEBUG
-        ASSERTE0 (!prev_li || 
-                  li->chrom_wi > prev_li->chrom_wi || 
-                  (li->chrom_wi == prev_li->chrom_wi && li->start_pos >= prev_li->start_pos),
-                  "line_info not sorted correctly");
+        ASSERT (!prev_li || 
+                li->chrom_wi > prev_li->chrom_wi || 
+                (li->chrom_wi == prev_li->chrom_wi && li->start_pos >= prev_li->start_pos),
+                "line_info sorting: [%u]={chrom=%d,pos=%"PRId64"-%"PRId64",nlines=%u} [%u]={chrom=%d,pos=%"PRId64"-%"PRId64",nlines=%u}",
+                index_i-1, prev_li->chrom_wi, prev_li->start_pos, prev_li->end_pos, prev_li->num_lines, 
+                index_i, li->chrom_wi, li->start_pos, li->end_pos, li->num_lines);
         #endif
     
         // same vb and consecutive lines - collapse to a single line
@@ -303,6 +357,7 @@ static uint32_t sorter_zip_plan_reconstruction (const Buffer *line_info, const B
     return max_num_txt_data_bufs;
 }
 
+// ZIP
 static void sorter_compress_recon_plan_do (bool is_luft)
 {
     #define index_buf evb->compressed // an array of uint32_t - indices into txt_file->line_info
@@ -323,7 +378,7 @@ static void sorter_compress_recon_plan_do (bool is_luft)
     // find final entry in index_buf of each VB - needed to calculate how many concurrent threads will be needed for piz
     sorter_zip_get_final_index_i (&txt_file->line_info[is_luft], &txt_file->vb_info[is_luft], &index_buf);
 
-    // create txt_file->reconstruction_plan
+    // create txt_file->recon_plan
     uint32_t num_txt_data_bufs = sorter_zip_plan_reconstruction (&txt_file->line_info[is_luft], &txt_file->vb_info[is_luft], &index_buf);
     buf_free (&index_buf)
 
@@ -355,6 +410,7 @@ static void sorter_compress_recon_plan_do (bool is_luft)
     buf_free (&txt_file->line_info[is_luft]);
 }
 
+// ZIP
 void sorter_compress_recon_plan (void)
 {
     START_TIMER;
@@ -370,11 +426,13 @@ void sorter_compress_recon_plan (void)
 // PIZ reconstruction plan stuff
 // -----------------------------
 
-// PIZ with --luft: switch the order of the primary and reject txt files in the section list, to convince
-// piz_one_file to piz them in reverse order
+// PIZ with --luft: 
+// concatenating - all rejects components move to the front
+// unbinding - each reject component switches place with its primary component
+// note: currently we support only a single primary+rejects dual component. bug 333.
 void sorter_move_liftover_rejects_to_front (void)
 {
-    ASSERTE0 (flag.luft, "Expecting flag.luft=true");
+    ASSERT0 (flag.luft, "Expecting flag.luft=true");
 
     SecLiEnt *primary = (SecLiEnt *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
 
@@ -395,29 +453,6 @@ void sorter_move_liftover_rejects_to_front (void)
     FREE (temp);
 }
 
-// PIZ without --luft: remove rejects
-void sorter_remove_liftover_rejects (void)
-{
-    ASSERTE0 (!flag.luft, "Expecting flag.luft=false");
-
-    SecLiEnt *primary = (SecLiEnt *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
-
-    SecLiEnt *rejects = primary;
-    sections_next_sec1 ((const SecLiEnt **)&rejects, SEC_TXT_HEADER, false, true);
-
-    SecLiEnt *after = rejects;
-    sections_next_sec1 ((const SecLiEnt **)&after, SEC_DICT, false, true); // first non-VB section type
-
-    unsigned num_rejects_sec  = after - rejects;
-    unsigned num_after_sec    = AFTERENT (SecLiEnt, z_file->section_list_buf) - after;
-
-    // now remove rejects
-    memmove (rejects, after, num_after_sec * sizeof (SecLiEnt));
-    z_file->section_list_buf.len -= num_rejects_sec;
-    z_file->num_components--;
-}
-
-
 // returns my own number in the pair (1 or 2) and pair_vb_i. return 0 if file is not paired.
 unsigned sorter_piz_get_pair (uint32_t vb_i, uint32_t *pair_vb_i)
 {
@@ -429,9 +464,32 @@ unsigned sorter_piz_get_pair (uint32_t vb_i, uint32_t *pair_vb_i)
     return *pair_vb_i > vb_i ? 1 : 2;
 }
 
-static uint32_t sorter_piz_initialize_components (void)
+static void sort_piz_init_txt_file_info (void)
 {
-    buf_alloc (evb, &z_file->comp_info, 0, z_file->num_components, PizCompInfo, 0, "z_file->comp_info");
+    buf_alloc (evb, &z_file->txt_file_info, 0, flag.unbind ? z_file->comp_info.len : 1, PizTxtFileInfo, 1, "txt_file_info"); // maximal size
+
+    if (flag.unbind) {
+        uint32_t txt_file_i = 0;
+        for (uint32_t comp_i=0; comp_i < z_file->comp_info.len; comp_i++) {
+            
+            bool two_components = flag.interleave || ENT (PizCompInfo, z_file->comp_info, comp_i)->liftover_rejects;
+
+            NEXTENT (PizTxtFileInfo, z_file->txt_file_info) = (PizTxtFileInfo){
+                .txt_file_i   = txt_file_i++,
+                .first_comp_i = comp_i,
+                .num_comps    = 1 + two_components
+            };
+
+            if (two_components) comp_i++;
+        }
+    }
+    else // concatenating all components to a single txt file
+        NEXTENT (PizTxtFileInfo, z_file->txt_file_info) = (PizTxtFileInfo){ .num_comps = z_file->comp_info.len };
+}
+
+static uint32_t sorter_piz_init_comp_info (void)
+{
+    buf_alloc_zero (evb, &z_file->comp_info, 0, z_file->num_components, PizCompInfo, 0, "z_file->comp_info");
     z_file->comp_info.len = z_file->num_components;
 
     uint32_t num_vbs = 0;
@@ -441,10 +499,46 @@ static uint32_t sorter_piz_initialize_components (void)
 
         PizCompInfo *comp = ENT (PizCompInfo, z_file->comp_info, i);
 
-        ASSERTE (sections_next_sec1 (&sl, SEC_TXT_HEADER, 0, 0),
-                 "Expecting %s to have %u components, but found only %u", z_name, z_file->num_components, i);
+        ASSERT (sections_next_sec1 (&sl, SEC_TXT_HEADER, 0, 0),
+                "Expecting %s to have %u components, but found only %u", z_name, z_file->num_components, i);
 
-        *comp = (PizCompInfo){ .comp_i = i, .txt_header_sl = sl, .first_vb_i = 0xffffffff };
+        *comp = (PizCompInfo){ 
+            .comp_i           = i, 
+            .txt_header_sl    = sl, 
+            .first_vb_i       = 0xffffffff,
+            .liftover_rejects = sl->flags.txt_header.liftover_rejects,
+        };
+
+        // conditions entire component (header and all VBs) should be skipped (i.e. not even read and inspected)
+        comp->is_skipped =
+           (!flag.luft && comp->liftover_rejects && !flag.one_component)
+        ||
+           (flag.one_component && flag.one_component-1 != i); // --component specifies a single component, and this is not it 
+
+        // conditions we reconstruct the txt header
+        comp->in_plan =
+           !flag_loading_auxiliary
+        &&
+           !flag.genocat_no_reconstruct_output  // no suppression of entire reconstruction output
+        &&
+           !comp->is_skipped
+        &&
+           !flag.no_header
+        &&
+           (  !flag.interleave              // when interleaving, show every header of the first component of every two
+           || i % 2 == 0) 
+        &&                                  // whether to show this section considering concatenating or unbinding
+           (  flag.unbind                   // unbinding: we show all components
+           || (flag.luft && comp->liftover_rejects) // concatenating: if --luft, show all rejects components
+           || flag.one_component-1 == i     // single component: this is it (note: if dual coord, this will pointing a rejects components since we switched their order)
+           || (!flag.one_component && i==0) // concatenating: show first header (0 if no rejects)
+           || (!flag.one_component && (comp-1)->liftover_rejects)); // concatenating: show first header (first after rejects)
+
+        if (comp->in_plan) {
+            // lock this mutex until txtheader data is handed over. writer thread will wait on this mutex
+            mutex_initialize (comp->wait_for_data);
+            mutex_lock (comp->wait_for_data); 
+        }
 
         sections_count_component_vbs (sl, &comp->first_vb_i, &comp->num_vbs);
         num_vbs += comp->num_vbs;
@@ -458,43 +552,135 @@ static void sorter_piz_init_vb_info (void)
 {
     if (z_file->comp_info.len) return; // already initialized
 
-    z_file->vb_info[0].len = sorter_piz_initialize_components();
+    z_file->vb_info[0].len = sorter_piz_init_comp_info();
+
+    sort_piz_init_txt_file_info();
+
     buf_alloc_zero (evb, &z_file->vb_info[0], 0, z_file->vb_info[0].len, PizVbInfo, 1, "z_file->vb_info");
 
     const SecLiEnt *sl = NULL;
     uint32_t v_i=0;
     for (unsigned comp_i=0; comp_i < z_file->comp_info.len; comp_i++) {
 
-        uint32_t comp_num_vbs = ENT (PizCompInfo, z_file->comp_info, comp_i)->num_vbs;
-        for (uint32_t v_comp_i=0; v_comp_i < comp_num_vbs; v_comp_i++, v_i++) {
+        PizCompInfo *comp = ENT (PizCompInfo, z_file->comp_info, comp_i);
 
-            ASSERTE0 (sections_next_sec1 (&sl, SEC_VB_HEADER, 0, 0), "Unexpected end of section list");
+        for (uint32_t v_comp_i=0; v_comp_i < comp->num_vbs; v_comp_i++, v_i++) {
+
+            ASSERT0 (sections_next_sec1 (&sl, SEC_VB_HEADER, 0, 0), "Unexpected end of section list");
             
             PizVbInfo *v = ENT (PizVbInfo, z_file->vb_info[0], v_i);
-            v->vblock_i = sl->vblock_i;
+            v->vblock_i  = sl->vblock_i;
+            v->comp_i    = comp_i;
 
             // set pairs (used even if not interleaving)
             if (z_file->z_flags.dts_paired) 
-                v->pair_vb_i = v->vblock_i + comp_num_vbs * (comp_i % 2 ? -1 : 1);  
+                v->pair_vb_i = v->vblock_i + comp->num_vbs * (comp_i % 2 ? -1 : 1);  
 
-            // we will unlock this when VB is reconstructed and data handed over for writer thread to consume.
-            // writer thread will wait on this mutex
-            mutex_initialize (v->wait_for_data);
-            mutex_lock (v->wait_for_data); // to be unlocked when VB compute thread is joined
+            // conditions this VB should not be reconstructed (note: it might still be read - that is governed by piz_is_skip_section, not sorter)
+            v->filtered_out = 
+                flag_loading_auxiliary                        // we're ingesting, but not reconstructing, an auxiliary file
+            ||  flag.genocat_no_reconstruct_output            // entire reconstruction output is suppressed
+            ||  comp->is_skipped                              // entire component is skipped
+            ||  (flag.one_vb && flag.one_vb != v->vblock_i)   // --one-vb: user only wants to see a single VB, and this is not it
+            ||  (flag.no_header && comp->liftover_rejects)    // --no-header: this a rejects header VB
+            ||  (flag.header_only && !comp->liftover_rejects) // --header-only (except rejects VB)
+            ||  !random_access_is_vb_included (v_i+1, &v->region_X_ra_matrix); // --regions: this VB is excluded
+
+            if (!v->filtered_out) {
+                // lock this mutex until VB data is handed over. writer thread will wait on this mutex
+                mutex_initialize (v->wait_for_data);
+                mutex_lock (v->wait_for_data);
+            }
         }
     }
+}
+
+bool sorter_is_liftover_rejects (uint32_t component_i)
+{
+    bool is_liftover_rejects = z_file->comp_info.len && // will fail if loading an auxiliary file
+                               ENT (PizCompInfo, z_file->comp_info, component_i)->liftover_rejects;
+    return is_liftover_rejects;
+}
+
+bool sorter_is_txtheader_in_plan (uint32_t component_i)
+{
+    bool is_txtheader_in_plan = z_file->comp_info.len && // will fail if loading an auxiliary file
+                                ENT (PizCompInfo, z_file->comp_info, component_i)->in_plan;
+    return is_txtheader_in_plan;                             
+}
+
+bool sorter_is_component_skipped (uint32_t component_i)
+{
+    bool is_component_skipped = z_file->comp_info.len && // will fail if loading an auxiliary file
+                                ENT (PizCompInfo, z_file->comp_info, component_i)->is_skipped;
+    return is_component_skipped;                             
+}
+
+bool sorter_is_vb_in_plan (uint32_t vb_i)
+{
+    PizVbInfo *v = ENT (PizVbInfo, z_file->vb_info[0], vb_i - 1);
+    
+    bool is_vb_in_plan = z_file->vb_info[0].len && v->in_plan && !v->filtered_out;
+    return is_vb_in_plan;
+}
+
+void sorter_filter_out_vb (uint32_t vb_i)
+{
+    PizVbInfo *v = ENT (PizVbInfo, z_file->vb_info[0], vb_i - 1);
+
+    v->filtered_out = true;
+    destroy_one_vb_info (v);
+}
+
+Buffer *sorter_piz_get_region_X_ra_matrix (uint32_t vb_i)
+{
+    Buffer *region_X_ra_matrix = &ENT (PizVbInfo, z_file->vb_info[0], vb_i - 1)->region_X_ra_matrix;
+    return region_X_ra_matrix;
+}
+
+void sorter_piz_get_txt_file_info (uint32_t txt_file_i, 
+                                   uint32_t *first_comp_i, uint32_t *num_comps, ConstSecLiEntP *start_sl) // out
+{
+    const PizTxtFileInfo *tf = ENT (PizTxtFileInfo, z_file->txt_file_info, txt_file_i);
+    const PizCompInfo *first_comp = ENT (PizCompInfo, z_file->comp_info, tf->first_comp_i);
+
+    *first_comp_i = tf->first_comp_i;
+    *num_comps    = tf->num_comps;
+    *start_sl     = first_comp->txt_header_sl->offset ? first_comp->txt_header_sl - 1
+                                                      : NULL; /* before start of array */
+}
+
+// PIZ main thread: add txtheader entry for the component
+static void sorter_piz_add_txtheader_plan (PizCompInfo *comp)
+{
+    if (!comp->in_plan) return; 
+
+    buf_alloc (evb, &z_file->recon_plan, 1, 1000, ReconPlanItem, 1.5, "recon_plan");
+
+    NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
+        .vb_i       = 0, // component, not VB
+        .rp_comp_i  = comp->comp_i,
+        .plan_type  = PLAN_FULL_TXTHEADER
+    };
 }
 
 // PIZ main thread: add "all vb" entry for each VB of the component
 static void sorter_piz_add_trival_plan (const PizCompInfo *comp)
 {
-    buf_alloc (evb, &txt_file->recon_plan, comp->num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");
+    buf_alloc (evb, &z_file->recon_plan, comp->num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");
 
     for (uint32_t i=0; i < comp->num_vbs; i++) {
-        NEXTENT (ReconPlanItem, txt_file->recon_plan) = (ReconPlanItem){ 
-            .vb_i       = comp->first_vb_i + i,
+        uint32_t vb_i = comp->first_vb_i + i;
+        PizVbInfo *v = ENT (PizVbInfo, z_file->vb_info[0], vb_i - 1);
+
+        if (v->filtered_out) continue;
+
+        NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
+            .vb_i       = vb_i,
             .plan_type  = PLAN_FULL_VB // all lines
         };
+
+        v->in_plan = true;
     }
 }
 
@@ -505,37 +691,83 @@ static void sorter_piz_add_interleave_plan (const PizCompInfo *comp)
     const SecLiEnt *sl1 = comp->txt_header_sl;
     const SecLiEnt *sl2 = (comp+1)->txt_header_sl;
 
-    ((SecLiEnt *)sl2)->st = SEC_NONE; // effectively merge the components by neutralizing the 2nd TXT_HEADER
-
     unsigned num_vbs_per_component=0;
 
-    while (sections_next_sec2 (&sl1, SEC_VB_HEADER, SEC_NONE, false, false) && // 2nd component TXT_HEADER is not SEC_NONE
+    while (sections_next_sec2 (&sl1, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) && 
            sl1->st == SEC_VB_HEADER) {
 
-        ASSERTE0 (sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) &&
+        ASSERT0 (sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) &&
                   sl2->st == SEC_VB_HEADER, "Failed to find matching VB in second component, when --interleave");
 
-        const SecLiEnt *last_1 = sections_last_sec2 (sl1, SEC_B250, SEC_LOCAL);
-        const SecLiEnt *last_2 = sections_last_sec2 (sl2, SEC_B250, SEC_LOCAL);
-        
-        buf_alloc (evb, &txt_file->recon_plan, 2, 1000, ReconPlanItem, 1.5, "recon_plan");
-        NEXTENT (ReconPlanItem, txt_file->recon_plan) = (ReconPlanItem){ 
-            .vb_i      = sl1->vblock_i,
-            .vb2_i     = sl2->vblock_i,
-            .plan_type = PLAN_INTERLEAVE // all lines
-        };
+        PizVbInfo *v1 = ENT (PizVbInfo, z_file->vb_info[0], sl1->vblock_i - 1);
+        PizVbInfo *v2 = ENT (PizVbInfo, z_file->vb_info[0], sl2->vblock_i - 1);
+
+        if (!v1->filtered_out && !v2->filtered_out) {            
+            buf_alloc (evb, &z_file->recon_plan, 2, 1000, ReconPlanItem, 1.5, "recon_plan");
+            NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
+                .vb_i      = sl1->vblock_i,
+                .vb2_i     = sl2->vblock_i,
+                .plan_type = PLAN_INTERLEAVE // all lines
+            };
+
+            v1->in_plan = v2->in_plan = true;
+        }
+        else // if one of them is filtered out, both are
+            v1->filtered_out = v2->filtered_out = true;
+
+        // get last section index, before pull up
+        const SecLiEnt *last_1 = sections_vb_last (sl1);
+        const SecLiEnt *last_2 = sections_vb_last (sl2);
 
         sl1 = sections_pull_vb_up (sl2->vblock_i, last_1); // move the 2nd component VB to be after the corresponding 1st component VB
         sl2 = last_2; 
         num_vbs_per_component++;
     }
 
-    ASSERTE0 (num_vbs_per_component, "Component has no VBs");
+    ASSERT0 (num_vbs_per_component, "Component has no VBs");
     
     // we've iterated to the end of component1 VBs, make sure component2 doesn't have any additional VB
-    ASSERTE (!sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) ||
-             sl2->st == SEC_TXT_HEADER, // either no more VB/TXT headers, or the next header is TXT
-             "First component has %u num_vbs_per_component VBs, but second component has more, when --interleave", num_vbs_per_component);
+    ASSERT (!sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) ||
+            sl2->st == SEC_TXT_HEADER, // either no more VB/TXT headers, or the next header is TXT
+            "First component has %u num_vbs_per_component VBs, but second component has more, when --interleave", num_vbs_per_component);
+}
+
+// for each VB in the component pointed by sl, sort VBs according to first appearance in recon plan
+static void sorter_piz_add_plan_from_recon_section (const PizCompInfo *comp, const SecLiEnt *recon_plan_sl,
+                                                    uint32_t *num_txt_data_bufs, uint32_t *vblock_mb) // out
+{
+    zfile_get_global_section (SectionHeaderReconPlan, SEC_RECON_PLAN, recon_plan_sl, 
+                              &evb->compressed, "compressed");
+
+    // assign outs
+    *num_txt_data_bufs = MAX (*num_txt_data_bufs, BGEN32 (header.num_txt_data_bufs));
+    *vblock_mb = BGEN32 (header.vblock_mb);
+
+    evb->compressed.len /= sizeof (uint32_t); // len to units of uint32_t
+    BGEN_u32_buf (&evb->compressed, 0);
+    evb->compressed.len /= 3; // len to units of ReconPlanItem
+
+    // concatenate reconstruction plan
+    buf_add_buf (evb, &z_file->recon_plan, &evb->compressed, ReconPlanItem, "recon_plan");
+            
+    // track if VB has been pulled up already
+    uint8_t *vb_is_pulled_up = CALLOC (comp->num_vbs); // dynamic allocation as number of VBs in a component is unbound
+
+    ARRAY (const ReconPlanItem, plan, evb->compressed);
+    
+    const SecLiEnt *sl = comp->txt_header_sl;
+    for (uint64_t i=0; i < plan_len; i++)
+        if (!vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i]) { // first encounter with this VB in the plan
+            // move all sections of vb_i to be immediately after sl ; returns last section of vb_i after move
+            sl = sections_pull_vb_up (plan[i].vb_i, sl); 
+            vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i] = true;
+
+            PizVbInfo *v = ENT (PizVbInfo, z_file->vb_info[0], plan[i].vb_i - 1);
+            v->in_plan = !v->filtered_out;
+        }
+
+    FREE (vb_is_pulled_up);
+    buf_free (&evb->compressed);
 }
 
 // returns SL if this component has a SEC_RECON_PLAN section which matchs flag.luft
@@ -555,72 +787,55 @@ static const SecLiEnt *sorter_piz_get_recon_plan_sl (const PizCompInfo *comp)
     return NULL; // no RECON_PLAN matching flag.luft was found in this component
 }
 
-// for each VB in the component pointed by sl, sort VBs according to first appearance in recon plan
-static void sorter_piz_add_plan_from_recon_section (const PizCompInfo *comp, const SecLiEnt *recon_plan_sl,
-                                                    uint32_t *num_txt_data_bufs, uint32_t *vblock_mb) // out
-{
-    zfile_get_global_section (SectionHeaderReconPlan, SEC_RECON_PLAN, recon_plan_sl, 
-                              &evb->compressed, "compressed");
-
-    // assign outs
-    *num_txt_data_bufs = MAX (*num_txt_data_bufs, BGEN32 (header.num_txt_data_bufs));
-    *vblock_mb = BGEN32 (header.vblock_mb);
-
-    evb->compressed.len /= sizeof (uint32_t); // len to units of uint32_t
-    BGEN_u32_buf (&evb->compressed, 0);
-    evb->compressed.len /= 3; // len to units of ReconPlanItem
-
-    // concatenate reconstruction plan
-    buf_add_buf (evb, &txt_file->recon_plan, &evb->compressed, ReconPlanItem, "recon_plan");
-            
-    // track if VB has been pulled up already
-    uint8_t *vb_is_pulled_up = CALLOC (comp->num_vbs); // dynamic allocation as number of VBs in a component is unbound
-
-    ARRAY (const ReconPlanItem, plan, evb->compressed);
-    
-    const SecLiEnt *sl = comp->txt_header_sl;
-    for (uint64_t i=0; i < plan_len; i++)
-        if (!vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i]) {
-            // move all sections of vb_i to be immediately after sl ; returns last section of vb_i after move
-            sl = sections_pull_vb_up (plan[i].vb_i, sl); 
-            vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i] = true;
-        }
-
-    FREE (vb_is_pulled_up);
-    buf_free (&evb->compressed);
-}
-
-// PIZ main thread: if --sort: read one (if unbind) or all (if concat) reconstruction plans (for primary OR luft) from z_file
-// if a component has no plan (because not --sort or not in z_file) - create a trival reconstruction plan
+// PIZ main thread: create reconstruction plan for this z_file, taking account RECON_PLAN sections and interleaving.
 // re-sort all VBs within each component in sections according to VB appearance order in reconstruction plan
-static void sorter_piz_create_plan (uint32_t component_i /* 0 if not unbinding */)
+void sorter_piz_create_plan (void)
 {
     if (flag.genocat_no_reconstruct_output && !flag.show_recon_plan) return;
 
+    // when showing in liftover coordinates, bring the rejects component forward before the primary component 
+    if (z_file->z_flags.dual_coords && flag.luft) 
+        sorter_move_liftover_rejects_to_front(); // must be before sorter_piz_init_vb_info as components order changes
+//TODO sorter_move_liftover_rejects_to_front supoprt multiple rejects components
+    // when showing the primary coordinates - skip the rejects component
+
     sorter_piz_init_vb_info();
 
-    unsigned first_comp_i = flag.unbind ? component_i : 0;
-    unsigned last_comp_i  = flag.unbind ? component_i : z_file->num_components-1;
-    unsigned num_comps = last_comp_i - first_comp_i + 1;
     uint32_t num_txt_data_bufs=0, vblock_mb=0;
 
-    ASSERTE (!flag.interleave || !(num_comps % 2), "%s has %u components, but --interleave expects an even number", 
-             z_name, num_comps);
+    ASSERT (!flag.interleave || !(z_file->num_components % 2), "%s has %u components, but --interleave expects an even number", 
+            z_name, z_file->num_components);
 
-    for (unsigned comp_i = first_comp_i; comp_i <= last_comp_i; comp_i += 1 + flag.interleave) {
+    PizTxtFileInfo *tf_ent = FIRSTENT (PizTxtFileInfo, z_file->txt_file_info);
+
+    for (unsigned comp_i = 0; comp_i < z_file->num_components; comp_i += 1 + flag.interleave) {
 
         PizCompInfo *comp = ENT (PizCompInfo, z_file->comp_info, comp_i);
         const SecLiEnt *recon_plan_sl;
 
+        // start plan for this txt_file (unless already started in previous comp)
+        if (!tf_ent->plan_len) 
+            tf_ent->first_plan_i = (uint32_t)z_file->recon_plan.len;
+
+        // add this txt_header to the plan if needed
+        if (comp->in_plan)
+            sorter_piz_add_txtheader_plan (comp);
+                    
         // case: interleave the VBs of two components - we ignore RECON_PLAN sections 
         if (flag.interleave) 
             sorter_piz_add_interleave_plan (comp);
 
+        // case: we have a SEC_RECON section (occurs in dual-coordinates files)
         else if (flag.sort && (recon_plan_sl = sorter_piz_get_recon_plan_sl (comp)))
             sorter_piz_add_plan_from_recon_section (comp, recon_plan_sl, &num_txt_data_bufs, &vblock_mb);
 
+        // case: just a plain-vanilla VB
         else 
             sorter_piz_add_trival_plan (comp);
+
+        tf_ent->plan_len = (uint32_t)z_file->recon_plan.len - tf_ent->first_plan_i;
+        
+        if (flag.unbind && !comp->liftover_rejects) tf_ent++; // note: if this is a rejects component, we stay on the same txt file one more component 
     }
 
     // actual number of buffers - compute threads: num_txt_data_bufs ; writer thread: num_txt_data_bufs (at least 3) ; but no more than num_vbs
@@ -633,22 +848,14 @@ static void sorter_piz_create_plan (uint32_t component_i /* 0 if not unbinding *
 
 #if defined _WIN32 || defined APPLE
     ASSERTW ((uint64_t)num_txt_data_bufs * (((uint64_t)vblock_mb) << 20) < MEMORY_WARNING_THREASHOLD,
-                "\nWARNING: This file will be output sorted. Sorting is done in-memory and will consume %u MB.\n"
-                "Alternatively, use the --unsorted option to avoid in-memory sorting", vblock_mb * num_txt_data_bufs);
+             "\nWARNING: This file will be output sorted. Sorting is done in-memory and will consume %u MB.\n"
+             "Alternatively, use the --unsorted option to avoid in-memory sorting", vblock_mb * num_txt_data_bufs);
 #endif
 }
 
 // ----------------
 // PIZ writer stuff
 // ----------------
-
-static void destroy_one_vb_info (PizVbInfo *v)
-{
-    buf_destroy (&v->txt_data);
-    buf_destroy (&v->bgzf_blocks);
-    buf_destroy (&v->compressed);
-    buf_destroy (&v->line_start);
-}
 
 // final filter of output lines, based on downsample and shard. returns true if line is to be output
 static inline bool sorter_piz_line_survived_downsampling (void)
@@ -675,7 +882,7 @@ static void sorter_piz_write_line_range (PizVbInfo *v, uint32_t start_line, uint
             if (sorter_piz_line_survived_downsampling())
                 txtfile_write_to_disk (0, start, line_len);
             
-            txt_file->lines_so_far++; // increment even if downsampled-out, but not if filtered out during reconstruction
+            txt_file->lines_so_far++; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
         }
     }
     txtfile_flush_if_stdout();
@@ -684,9 +891,9 @@ static void sorter_piz_write_line_range (PizVbInfo *v, uint32_t start_line, uint
 // write 4 lines at time, interleaved from v and v2
 static void sorter_piz_write_lines_interleaves (PizVbInfo *v1, PizVbInfo *v2)
 {
-    ASSERTE (v1->num_lines % 4 == 0, "vb_i=%u has %u lines, which is not a multiple of 4", v1->vblock_i, v1->num_lines);
-    ASSERTE (v1->num_lines == v2->num_lines, "when interleaving, expecting number of lines of vb_i=%u (%u) to be the same as vb_i=%u (%u)",
-             v1->vblock_i, v1->num_lines, v2->vblock_i, v2->num_lines);
+    ASSERT (v1->num_lines % 4 == 0, "vb_i=%u has %u lines, which is not a multiple of 4", v1->vblock_i, v1->num_lines);
+    ASSERT (v1->num_lines == v2->num_lines, "when interleaving, expecting number of lines of vb_i=%u (%u) to be the same as vb_i=%u (%u)",
+            v1->vblock_i, v1->num_lines, v2->vblock_i, v2->num_lines);
 
     for (uint32_t line_i=0; line_i < v1->num_lines; line_i += 4) {
 
@@ -701,7 +908,7 @@ static void sorter_piz_write_lines_interleaves (PizVbInfo *v1, PizVbInfo *v2)
                 txtfile_write_4_lines (&v2->txt_data, start2, 2);
             }
 
-            txt_file->lines_so_far += 8; // increment even if downsampled-out, but not if filtered out during reconstruction
+            txt_file->lines_so_far += 8; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
         }
     }
 
@@ -711,46 +918,61 @@ static void sorter_piz_write_lines_interleaves (PizVbInfo *v1, PizVbInfo *v2)
 // Thread entry point for writer thread - at this point, the reconstruction plan is ready and unmutable
 static void *sorter_piz_writer (void *unused)
 {
-    ARRAY (ReconPlanItem, plan, txt_file->recon_plan);
-    ASSERTE0 (plan_len, "txt_file has no reconstruction plan");
+    ASSERTNOTEMPTY (txt_file->recon_plan);
 
-    for (uint64_t i=0; i < plan_len; i++) {
+    for (uint64_t i=0; i < txt_file->recon_plan.len; i++) {
 
-        ASSERTE (plan[i].vb_i >= 1 && plan[i].vb_i <= z_file->vb_info[0].len, 
-                 "plan[%u].vb_i=%u expected to be in range [1,%u] ", (unsigned)i, plan[i].vb_i, (unsigned)z_file->vb_info[0].len);
+        ReconPlanItem *p = ENT (ReconPlanItem, txt_file->recon_plan, i);
 
-        PizVbInfo *v  =                   ENT (PizVbInfo, z_file->vb_info[0], plan[i].vb_i  - 1),
-                  *v2 = flag.interleave ? ENT (PizVbInfo, z_file->vb_info[0], plan[i].vb2_i - 1) : NULL;
+        ASSERT (p->vb_i >= 0 && p->vb_i <= z_file->vb_info[0].len, 
+                "plan[%u].vb_i=%u expected to be in range [1,%u] ", (unsigned)i, p->vb_i, (unsigned)z_file->vb_info[0].len);
+
+        PizVbInfo *v  = p->vb_i                    ? ENT (PizVbInfo, z_file->vb_info[0], p->vb_i  - 1) : NULL,
+                  *v2 = p->vb_i && flag.interleave ? ENT (PizVbInfo, z_file->vb_info[0], p->vb2_i - 1) : NULL;
+
+        PizCompInfo *comp = !p->vb_i ? ENT (PizCompInfo, z_file->comp_info, p->rp_comp_i) : NULL;
+
+        // skip this plan item if its VB is filtered out (note: filtering out can happen also after plan is created, in piz_dispatch_one_vb)
+        if ((v && v->filtered_out) || (v2 && v2->filtered_out)) 
+            continue;
 
         // if data for this VB is not ready yet, wait for it
-        if (!v->is_loaded) {
-            if (flag.show_threads) iprintf ("Writer thread: waiting for data from vb_i=%u\n", plan[i].vb_i);
+        if (v && !v->is_loaded) {
+            if (flag.show_threads) iprintf ("Writer thread: waiting for data from vb_i=%u\n", p->vb_i);
             mutex_wait (v->wait_for_data);
         }
 
         if (v2 && !v2->is_loaded) {
-            if (flag.show_threads) iprintf ("Writer thread: waiting for data from vb_i=%u\n", plan[i].vb2_i);
+            if (flag.show_threads) iprintf ("Writer thread: waiting for data from vb_i=%u\n", p->vb2_i);
             mutex_wait (v2->wait_for_data);
         }
 
+        if (comp && !comp->is_loaded) {
+            if (flag.show_threads) iprintf ("Writer thread: waiting for txtheader from component_i=%u\n", p->rp_comp_i);
+            mutex_wait (comp->wait_for_data);
+        }
+
         // case: free data if this is the last line of the VB
-        switch (plan[i].num_lines) {
+        switch (p->num_lines) {
+
+            case PLAN_FULL_TXTHEADER:   // write entire txt header
+                txtfile_write_one_vblock (&comp->txt_data, &comp->bgzf_blocks, &comp->compressed, 0, 0, 0, 0);
+                txtfile_flush_if_stdout();
+                destroy_one_comp_info (comp);
+                break;
 
             case PLAN_FULL_VB:   // write entire VB
-                if (!(v->is_header && flag.no_header)) {
-
-                    if (!flag.may_drop_lines) {
-                        txtfile_write_one_vblock (&v->txt_data, &v->bgzf_blocks, &v->compressed, 
-                                                  plan[i].vb_i, v->vb_data_size, v->num_lines, v->first_line);
-                        
-                        txt_file->lines_so_far += v->num_lines; // textual, not data-type, line
-                    }
-
-                    else  // expecting some lines to be dropped - we write lines one at a time, watching for dropped lines
-                        sorter_piz_write_line_range (v, 0, v->num_lines);
-
-                    txtfile_flush_if_stdout();
+                if (!flag.may_drop_lines) {
+                    txtfile_write_one_vblock (&v->txt_data, &v->bgzf_blocks, &v->compressed, 
+                                                p->vb_i, v->vb_data_size, v->num_lines, v->first_line);
+                    
+                    txt_file->lines_so_far += v->num_lines; // textual, not data-type, line (for downsampling accounting)
                 }
+
+                else  // expecting some lines to be dropped - we write lines one at a time, watching for dropped lines
+                    sorter_piz_write_line_range (v, 0, v->num_lines);
+
+                txtfile_flush_if_stdout();
                 destroy_one_vb_info (v);
                 break;
 
@@ -765,7 +987,7 @@ static void *sorter_piz_writer (void *unused)
                 break;
 
             default: 
-                sorter_piz_write_line_range (v, plan[i].start_line, plan[i].num_lines);
+                sorter_piz_write_line_range (v, p->start_line, p->num_lines);
                 break;
         }
     }
@@ -780,14 +1002,13 @@ void sorter_piz_handover_data (VBlock *vb)
     PizVbInfo *v = ENT (PizVbInfo, z_file->vb_info[0], vb->vblock_i - 1);
 
     // move data from the vb to vb_info
-    buf_grab (&v->txt_data,    "vb_info->txt_data",    &vb->txt_data);
-    buf_grab (&v->bgzf_blocks, "vb_info->bgzf_blocks", &vb->bgzf_blocks);
-    buf_grab (&v->compressed,  "vb_info->compressed",  &vb->compressed);
+    buf_grab (evb, &v->txt_data,    "vb_info->txt_data",    &vb->txt_data);
+    buf_grab (evb, &v->bgzf_blocks, "vb_info->bgzf_blocks", &vb->bgzf_blocks);
+    buf_grab (evb, &v->compressed,  "vb_info->compressed",  &vb->compressed);
     
     v->num_lines    = DTPT (line_height) ? vb->lines.len * DTPT (line_height) : 1; // textual lines, not Seg lines
     v->vb_data_size = vb->vb_data_size;
     v->first_line   = vb->first_line;
-    v->is_header    = vb->is_rejects_vb;
     
     buf_alloc (evb, &v->line_start, 0, v->num_lines + 1, char *, 0, "vb_info->line_start");
     v->line_start.len = v->num_lines + 1;
@@ -802,12 +1023,35 @@ void sorter_piz_handover_data (VBlock *vb)
     mutex_unlock (v->wait_for_data);
 }
 
-// PIZ main thread: create reconstruction plan for the requested component(s) and launch writer thread
-void sorter_piz_start_writing (uint32_t component_i /* 0 if not unbinding */)
+// PIZ main thread: hand over data from a txtheader whose reconstruction main thread has completed, to the writer thread
+void sorter_piz_handover_txtheader (uint32_t component_i)
 {
-    sorter_piz_create_plan (component_i);
+    if (flag.genocat_no_reconstruct_output) return;
+
+    PizCompInfo *comp = ENT (PizCompInfo, z_file->comp_info, component_i);
+
+    // move data from the vb to vb_info
+    buf_grab (evb, &comp->txt_data,    "comp_info->txt_data",    &evb->txt_data);
+    buf_grab (evb, &comp->bgzf_blocks, "comp_info->bgzf_blocks", &evb->bgzf_blocks);
+    buf_grab (evb, &comp->compressed,  "comp_info->compressed",  &evb->compressed);
+    
+    comp->is_loaded = true;
+    mutex_unlock (comp->wait_for_data);
+}
+
+// PIZ main thread: create reconstruction plan for the requested component(s) and launch writer thread
+void sorter_piz_start_writing (uint32_t txt_file_i)
+{
+    if (writer_thread_running || // already started
+        flag.genocat_no_reconstruct_output || flag_loading_auxiliary) return;
+
+    PizTxtFileInfo *tf = ENT (PizTxtFileInfo, z_file->txt_file_info, txt_file_i);
+
+    // copy the portion of the reconstruction plan related to this txt file 
+    buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, tf->first_plan_i, tf->plan_len, 0);
 
     writer_thread = threads_create (sorter_piz_writer, NULL, "writer_thread", THREADS_NO_VB);
+    writer_thread_running = true;
 }
 
 void sorter_piz_finish_writing (void)
@@ -815,7 +1059,10 @@ void sorter_piz_finish_writing (void)
     if (flag.genocat_no_reconstruct_output || !txt_file) return;
 
     // wait for thread to complete (possibly it completed already)
-    threads_join (writer_thread);
+    if (writer_thread_running) {
+        threads_join (writer_thread, true);
+        writer_thread_running = false;
+    }
 
     // sanity check
     for (uint32_t i=0; i < z_file->vb_info[0].len; i++) {

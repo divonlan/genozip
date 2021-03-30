@@ -69,6 +69,9 @@ extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 #define KH_INFO_LB     "##INFO=<ID=" INFO_LIFTBACK ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for retrieving the variant in the primary coordinates\",Source=\"genozip\",Version=\"%s\">"
 #define KH_INFO_LR     "##INFO=<ID=" INFO_LIFTREJT ",Number=1,Type=String,Description=\"dual-coordinates VCF: Reason variant was rejected for lift over\",Source=\"genozip\",Version=\"%s\">"
 
+extern void vcf_header_get_contigs (ConstBufferP *contigs_dict_p, ConstBufferP *contigs_p,
+                                    ConstBufferP *ocontigs_dict_p, ConstBufferP *ocontigs_p);
+
 extern void vcf_seg_ref_alt (VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len);
 
 // Samples stuff
@@ -76,7 +79,7 @@ extern void vcf_samples_add  (const char *samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_AC, vcf_piz_special_SVLEN, \
                       vcf_piz_special_DS, vcf_piz_special_BaseCounts, vcf_piz_special_SF, \
-                      vcf_piz_special_OREF, vcf_piz_special_LIFTREJT, vcf_piz_special_LIFTBACK }
+                      vcf_piz_special_oREF, vcf_piz_special_LIFTREJT, vcf_piz_special_LIFTBACK }
 SPECIAL (VCF, 0, REFALT,     vcf_piz_special_REFALT);
 SPECIAL (VCF, 1, FORMAT,     vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2, AC,         vcf_piz_special_AC);
@@ -84,7 +87,7 @@ SPECIAL (VCF, 3, SVLEN,      vcf_piz_special_SVLEN);
 SPECIAL (VCF, 4, DS,         vcf_piz_special_DS);
 SPECIAL (VCF, 5, BaseCounts, vcf_piz_special_BaseCounts);
 SPECIAL (VCF, 6, SF,         vcf_piz_special_SF);
-SPECIAL (VCF, 7, OREF,       vcf_piz_special_OREF);     // added v12
+SPECIAL (VCF, 7, OREF,       vcf_piz_special_oREF);     // added v12
 SPECIAL (VCF, 8, LIFTREJT,   vcf_piz_special_LIFTREJT); // added v12 - maybe be used by other data types too in the future
 SPECIAL (VCF, 9, LIFTBACK,   vcf_piz_special_LIFTBACK); // added v12 - maybe be used by other data types too in the future
 

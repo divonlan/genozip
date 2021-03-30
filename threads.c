@@ -56,6 +56,13 @@ void threads_print_call_stack (void)
 static void threads_sigsegv_handler (void) 
 {
     threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
+    threads_cancel_other_threads();
+    abort();
+}
+
+static void threads_sighup_handler (void) 
+{
+    threads_cancel_other_threads();
     abort();
 }
 
@@ -64,15 +71,16 @@ static void *threads_signal_handler (void *sigset)
 {    
     while (1) {
         int sig, err;
-        ASSERTE (!(err = sigwait ((sigset_t *)sigset, &sig)), "sigwait failed: %s", strerror (err));
+        ASSERT (!(err = sigwait ((sigset_t *)sigset, &sig)), "sigwait failed: %s", strerror (err));
 
         switch (sig) {
             case SIGSEGV : threads_sigsegv_handler();            break;
+            case SIGHUP  : threads_sighup_handler();             break;
             case SIGUSR1 : buf_display_memory_usage_handler();   break;
             default      : ABORT ("Unexpected signal %s", strsignal (sig));
         }
     }
-    return 0; // never reaches here
+    return 0; // never reaches here`
 }
 
 #endif
@@ -89,9 +97,10 @@ void threads_initialize (void)
     sigset_t sigset;
     sigemptyset (&sigset);
     sigaddset (&sigset, SIGSEGV);
+    sigaddset (&sigset, SIGHUP);
     sigaddset (&sigset, SIGUSR1);
     int err = pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-    ASSERTE (!err, "pthread_sigmask failed: %s", strerror (err));
+    ASSERT (!err, "pthread_sigmask failed: %s", strerror (err));
 
     threads_create (threads_signal_handler, 0, "signal_handler", THREADS_NO_VB);
 #endif
@@ -105,11 +114,11 @@ bool threads_am_i_main_thread (void)
 int threads_create (void *(*func)(void *), void *arg, const char *task_name, uint32_t vb_i)
 {
     if (flag.show_threads) 
-        iprintf ("Creating thread %u (vb_i=%s)\n", next_thread_number, vb_i != THREADS_NO_VB ? str_int_s (vb_i).s : "NONE");
+        iprintf ("%s: Creating thread %u (vb_i=%s)\n", task_name, next_thread_number, vb_i != THREADS_NO_VB ? str_int_s (vb_i).s : "NONE");
 
     pthread_t thread;
     unsigned err = pthread_create (&thread, NULL, func, arg);
-    ASSERTE (!err, "failed to create thread task=\"%s\" vb_i=%d: error=%u", task_name, (int)vb_i, err);
+    ASSERT (!err, "failed to create thread task=\"%s\" vb_i=%d: error=%u", task_name, (int)vb_i, err);
 
     mutex_lock (threads_mutex);
 
@@ -133,20 +142,32 @@ int threads_create (void *(*func)(void *), void *arg, const char *task_name, uin
     return thread_id;
 }
 
-void threads_join (int thread_id)
+// returns success if joined (which is always the case if blocking)
+bool threads_join (int thread_id, bool blocking)
 {
     ThreadEnt *ent = ENT (ThreadEnt, threads, thread_id);
 
     if (flag.show_threads) 
-        iprintf ("Wait for thread %u (vb_i=%s)\n", ent->number, ent->vb_i != THREADS_NO_VB ? str_int_s (ent->vb_i).s : "NONE");
+        iprintf ("%s: Wait for thread %u (vb_i=%s)\n", ent->task_name, ent->number, ent->vb_i != THREADS_NO_VB ? str_int_s (ent->vb_i).s : "NONE");
 
-    // wait for thread to complete (possibly it completed already)
-    pthread_join (ent->thread, NULL);
-
+    // case: wait for thread to complete (possibly it completed already)
+    if (blocking)
+        pthread_join (ent->thread, NULL);
+    else {
+#ifdef _WIN32
+        int err = _pthread_tryjoin (ent->thread, NULL);
+#else
+        int err = pthread_tryjoin_np (ent->thread, NULL);
+#endif
+        if (err == EBUSY) return false;
+        ASSERT (!err, "Error in pthread_tryjoin_np: %s", strerror (err));
+    }
+    
     if (flag.show_threads) 
-        iprintf ("Joined thread %u (vb_i=%s)\n", ent->number, ent->vb_i != THREADS_NO_VB ? str_int_s (ent->vb_i).s : "NONE");
+        iprintf ("%s: Joined thread %u (vb_i=%s)\n", ent->task_name, ent->number, ent->vb_i != THREADS_NO_VB ? str_int_s (ent->vb_i).s : "NONE");
 
     ent->in_use = 0; // recycle entry
+    return true;
 }
 
 // kills all other threads

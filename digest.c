@@ -97,7 +97,7 @@ void digest_one_vb (VBlock *vb)
     for (unsigned i=0; ; i++) {
         mutex_lock (vb_digest_mutex);
 
-        ASSERTE (vb_digest_last < vb->vblock_i, "Expecting vb_digest_last=%u < vb->vblock_i=%u", vb_digest_last, vb->vblock_i);
+        ASSERT (vb_digest_last < vb->vblock_i, "Expecting vb_digest_last=%u < vb->vblock_i=%u", vb_digest_last, vb->vblock_i);
         
         if (vb_digest_last == vb->vblock_i - 1) break; // its our turn now
 
@@ -106,8 +106,8 @@ void digest_one_vb (VBlock *vb)
         usleep (10000);
 
         // timeout after approx 30 seconds
-        ASSERTE (i < DIGEST_TIMEOUT*100, "Timeout (%u sec) while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", 
-                 DIGEST_TIMEOUT, vb->vblock_i, vb_digest_last);
+        ASSERT (i < DIGEST_TIMEOUT*100, "Timeout (%u sec) while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", 
+                DIGEST_TIMEOUT, vb->vblock_i, vb_digest_last);
     }
 
     if (command == ZIP) {
@@ -132,6 +132,8 @@ void digest_one_vb (VBlock *vb)
             // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
             if (!digest_is_equal (vb->digest_so_far, piz_digest_so_far) && !digest_is_equal (vb->digest_so_far, DIGEST_NONE)) {
 
+                TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
+
                 // dump bad vb to disk
                 WARN ("%s of reconstructed vblock=%u,component=%u (%s) differs from original file (%s).\n"
                       "Note: genounzip is unable to check the %s subsequent vblocks once a vblock is bad\n"
@@ -143,6 +145,8 @@ void digest_one_vb (VBlock *vb)
                       txtfile_dump_vb (vb, z_name),
                       codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
                       vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len, txtfile_dump_filename (vb, z_name, "good"));
+
+                RESTORE_FLAG (quiet);
 
                 failed = true; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
             }

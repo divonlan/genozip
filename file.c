@@ -23,6 +23,7 @@
 #include "codec.h"
 #include "mutex.h"
 #include "bgzf.h"
+#include "flags.h"
 
 // globals
 File *z_file   = NULL;
@@ -318,7 +319,7 @@ static const char *file_samtools_no_PG (void)
     } 
     samtools_help_text[len] = '\0'; // terminate string (more portable, strnstr and memmem are non-standard)
 
-    ASSERTE0 (len >= MIN_ACCEPTABLE_LEN, "no response from \"samtools view --junk\"");
+    ASSERT0 (len >= MIN_ACCEPTABLE_LEN, "no response from \"samtools view --junk\"");
 
     return ret_str[(has_no_PG = !!strstr (samtools_help_text, "--no-PG"))];
 }
@@ -378,7 +379,7 @@ static bool file_open_txt_read (File *file)
                        : file->redirected        ? fdopen (STDIN_FILENO,  "rb") 
                        : flag.processing_rejects ? z_file->rejects_file  // already open
                        :                           fopen (file->name, READ);
-            ASSERTE (file->file, "failed to open %s: %s", file->name, strerror (errno));
+            ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
 
             if (flag.processing_rejects)
                 file_seek (file, 0, SEEK_SET, false); // we finished writing the reject file - now we will read it
@@ -420,7 +421,7 @@ static bool file_open_txt_read (File *file)
             // (note: we cannot re-read the bytes from the file as the file might be piped in)
             else if (bgzf_uncompressed_size == BGZF_BLOCK_GZIP_NOT_BGZIP) {
                 
-                ASSERTE0 (!file->redirected, "genozip can't read gzip data from a pipe - piped data must be either plain or in BGZF format - i.e. compressed with bgzip, htslib etc");
+                ASSERT0 (!file->redirected, "genozip can't read gzip data from a pipe - piped data must be either plain or in BGZF format - i.e. compressed with bgzip, htslib etc");
 
                 file->codec = CODEC_GZ;
                 file->file  = gzdopen (fileno((FILE *)file->file), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
@@ -521,8 +522,8 @@ static bool file_open_txt_read (File *file)
 // returns true if successful
 static bool file_open_txt_write (File *file)
 {
-    ASSERTE (file->data_type > DT_NONE && file->data_type < NUM_DATATYPES ,"invalid data_type=%s (%u)", 
-             dt_name (file->data_type), file->data_type);
+    ASSERT (file->data_type > DT_NONE && file->data_type < NUM_DATATYPES ,"invalid data_type=%s (%u)", 
+            dt_name (file->data_type), file->data_type);
 
     // check if type derived from file name is supported, and if not - set it to plain or .gz
     if (file_get_data_type (file->type, false) == DT_NONE) {
@@ -580,8 +581,8 @@ static bool file_open_txt_write (File *file)
     if (exe_type == EXE_GENOCAT && file->codec == CODEC_BGZF && flag.bgzf == FLAG_BGZF_BY_ZFILE) 
         flag.bgzf = 0;
 
-    // don't actually open the output file if we're just testing in genounzip or PIZing a reference or chain file
-    if (flag.test || flag.reading_reference || flag.reading_chain) return true;
+    // don't actually open the output file if we're just testing in genounzip or PIZing an auxiliary file
+    if (flag.test || flag_loading_auxiliary) return true;
 
     // open the file, based on the codec 
     switch (file->codec) { 
@@ -685,7 +686,7 @@ static bool file_open_z (File *file)
                 "Tip: You can create a genozip chain file from a chain file with eg 'genozip my-chain-file.chain.gz'",
                 file->name, GENOZIP_EXT);
 
-        if (!flag.seg_only || flag.reading_reference || flag.reading_chain) {
+        if (!flag.seg_only || flag_loading_auxiliary) {
             file->file = fopen (file->name, READ);
 
             // verify that this is a genozip file 
@@ -935,6 +936,7 @@ void file_close (File **file_p,
         buf_destroy (&file->vb_info[1]);
         buf_destroy (&file->recon_plan);
         buf_destroy (&file->comp_info);
+        buf_destroy (&file->txt_file_info);
 
         FREE (file->name);
         FREE (file->basename);
@@ -958,7 +960,7 @@ void file_write (File *file, const void *data, unsigned len)
     if (bytes_written < len && !file->name) exit (0);
 
     // error if failed to write to file
-    ASSERTE (bytes_written == len, "failed to write %u bytes to %s: %s", len, file->name, strerror(errno));
+    ASSERT (bytes_written == len, "failed to write %u bytes to %s: %s", len, file->name, strerror(errno));
 }
 
 void file_remove (const char *filename, bool fail_quietly)
@@ -971,7 +973,7 @@ void file_mkfifo (const char *filename)
 {
 #ifndef _WIN32
     file_remove (filename, true);
-    ASSERTE (!mkfifo (filename, 0666), "mkfifo failed for %s: %s", filename, strerror (errno));
+    ASSERT (!mkfifo (filename, 0666), "mkfifo failed for %s: %s", filename, strerror (errno));
 
 #else
     ABORT0 ("file_mkfifo not supported on Windows");
@@ -984,7 +986,7 @@ bool file_is_fifo (const char *filename)
     return false; // we don't support FIFOs in Win32 yet
 #endif
     struct stat st;
-    ASSERTE (!stat (filename, &st), "stat failed on %s", filename);
+    ASSERT (!stat (filename, &st), "stat failed on %s", filename);
 
     return S_ISFIFO (st.st_mode);
 }
@@ -1055,7 +1057,7 @@ bool file_seek (File *file, int64_t offset,
         }
     } 
     else {
-        ASSERTE (!ret, "fseeko failed on file %s: %s", file_printname (file), strerror (errno));
+        ASSERT (!ret, "fseeko failed on file %s: %s", file_printname (file), strerror (errno));
     }
 
     return !ret;
@@ -1081,7 +1083,7 @@ uint64_t file_get_size (const char *filename)
     struct stat64 st;
     
     int ret = stat64(filename, &st);
-    ASSERTE (!ret, "stat64 failed on '%s': %s", filename, strerror(errno));
+    ASSERT (!ret, "stat64 failed on '%s': %s", filename, strerror(errno));
     
     return st.st_size;
 }
@@ -1105,7 +1107,7 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
     ASSINP (file, "cannot open \"%s\": %s", filename, strerror (errno));
 
     size_t bytes_read = fread (buf->data, 1, size, file);
-    ASSERTE (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));
+    ASSERT (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));
 
     buf->len = size;
 
@@ -1137,8 +1139,8 @@ bool file_put_data (const char *filename, void *data, uint64_t len)
     RESTORE_VALUE (errno); // in cases caller wants to print fwrite error
 
     if (written == len) { // successful
-        ASSERTE (!rename (tmp_filename, filename), "failed to rename %s to %s: %s", 
-                 tmp_filename, filename, strerror (errno));
+        ASSERT (!rename (tmp_filename, filename), "failed to rename %s to %s: %s", 
+                tmp_filename, filename, strerror (errno));
         return true;
     } 
     else

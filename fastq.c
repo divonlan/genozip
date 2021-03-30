@@ -109,7 +109,7 @@ static inline int fastq_is_end_of_line (VBlock *vb, uint32_t first_i, int32_t tx
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 {    
-    ASSERTE (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
     for (; *i >= (int32_t)first_i; (*i)--) {
         // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
@@ -161,7 +161,7 @@ static void fastq_txtfile_count_lines (VBlockP vb)
     for (uint32_t i=0; i < vb->txt_data.len; i++)
         if (txt[i] == '\n') num_lines++;
 
-    ASSERTE (num_lines % 4 == 0, "expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
+    ASSERT (num_lines % 4 == 0, "expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
 
     vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
     txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
@@ -231,8 +231,8 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 
      if (flag.pair == PAIR_READ_2) {
 
-        ASSERTE (vb->lines.len == vb->pair_num_lines, "in vb=%u (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
-                 vb->vblock_i, vb->pair_num_lines, (unsigned)vb->lines.len);
+        ASSERT (vb->lines.len == vb->pair_num_lines, "in vb=%u (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
+                vb->vblock_i, vb->pair_num_lines, (unsigned)vb->lines.len);
 
         gpos_ctx->pair_local = strand_ctx->pair_local = true;
 
@@ -296,7 +296,7 @@ void fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i)
     vb->pair_vb_i = pair_vb_i;
 
     const SecLiEnt *sl = sections_vb_first (vb->pair_vb_i, true);
-    ASSERTE (sl, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
+    ASSERT (sl, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
 
     // get num_lines from vb header
     SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER);
@@ -315,7 +315,7 @@ void fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i)
             
             NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
             int32_t ret = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "data", sl->st, sl); // returns 0 if section is skipped
-            ASSERTE (ret != EOF, "vb_i=%u failed to read from pair_vb=%u dict_id=%s", vb->vblock_i, vb->pair_vb_i, dis_dict_id (sl->dict_id).s);
+            ASSERT (ret != EOF, "vb_i=%u failed to read from pair_vb=%u dict_id=%s", vb->vblock_i, vb->pair_vb_i, dis_dict_id (sl->dict_id).s);
         }
         
         sl++;
@@ -609,7 +609,7 @@ void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_le
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
  
     int64_t seq_len_64;
-    ASSERTE (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
+    ASSERT (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
     vb->seq_len = (uint32_t)seq_len_64;
 
     // normal reconstruction

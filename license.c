@@ -51,7 +51,7 @@ static char *get_license_filename (bool create_folder_if_needed)
 
     if (create_folder_if_needed) {
         int ret = _mkdir (folder); 
-        ASSERTE (ret >= 0 || errno == EEXIST, "failed to created the folder %s", folder);
+        ASSERT (ret >= 0 || errno == EEXIST, "failed to created the folder %s", folder);
     }
 
 #else
@@ -73,7 +73,7 @@ static void license_store_locally (uint32_t license_num)
     ASSINP (fp, "Error: failed to open %s for writing: %s", filename, strerror (errno));
 
     int res = fprintf (fp, "%u\n", license_num);
-    ASSERTE (res > 0, "failed to write to %s: %s", filename, strerror (errno));
+    ASSERT (res > 0, "failed to write to %s: %s", filename, strerror (errno));
 
     fclose (fp);
 
@@ -88,7 +88,7 @@ static uint32_t licence_retrieve_locally (void)
     if (!fp) return 0; // no license
 
     uint32_t license_num=0; // initialize - so that we return 0 if fscanf fails to read a number
-    ASSERTE0 (fscanf (fp, "%u", &license_num) == 1, "failed to read license_num");
+    ASSERT0 (fscanf (fp, "%u", &license_num) == 1, "failed to read license_num");
     
     fclose (fp);
     free (filename);

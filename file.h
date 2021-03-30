@@ -282,8 +282,7 @@ typedef struct File {
     bool is_eof;                       // we've read the entire file
     DataType data_type;
     Codec codec;                       // ZIP - txt_file: generic codec used with this file (in PIZ we use flag.bgzf instead)
-                                       // ZIP - z_file: copy from txt_file.codec, but not for rejects file
-
+                                       // ZIP - z_file: copy from txt_file.codec, but not for rejects file    
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
                                        // note: this is different from txt_data_size_single as disk_size might be compressed (gz, bz2 etc)
@@ -304,7 +303,8 @@ typedef struct File {
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
     DigestContext digest_ctx_bound;    // md5 context of txt file. in bound mode - of the resulting bound txt file
     DigestContext digest_ctx_single;   // used only in bound mode - md5 of the single txt component
-    
+    Digest digest;                     // PIZ: as read from header: z_file: digest_bound txt_file: digest_single
+
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
 
     // Used for READING GENOZIP files
@@ -337,7 +337,7 @@ typedef struct File {
 
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
-    uint32_t num_txt_components_so_far;
+    uint32_t num_txt_components_so_far;// ZIP/PIZ z_file
 
     // TXT file: stuff reading and writing txt files compressed with BGZF
     Buffer bgzf_isizes;                // of the bgzf blocks in which this txt file is compressed (in BGEN16)
@@ -365,8 +365,10 @@ typedef struct File {
                                        // Z_FILE   PIZ: array of PizVbInfo per VB, indexed by (vb_i-1), only vb_info[0] is used
     Buffer line_info[2];               // TXT_FILE ZIP: array of LineInfo per line or gapless range in txt_file
     Buffer recon_plan;                 // TXT_FILE ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file
+                                       // Z_FILE   PIZ: plan for entire z_file, txt_file.recon_plan is assigned a portion of this plan
     Buffer comp_info;                  // Z_FILE   PIZ: array of PizCompInfo - component information
-    uint32_t lines_so_far;             // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downlsampling, and is to be written to txt_file, or downsampled-out
+    Buffer txt_file_info;              // Z_FILE   PIZ: array of PizTxtFileInfo - txt_file information
+    uint32_t lines_so_far;             // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downsampling, and is to be written to txt_file, or downsampled-out
 
     // Z_FILE: stats data
     Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)

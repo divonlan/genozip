@@ -190,7 +190,7 @@ uint32_t url_read_string (const char *url, char *data, uint32_t data_size,
 // returns a FILE* which streams the content of a URL
 FILE *url_open (StreamP parent_stream, const char *url)
 {
-    ASSERTE0 (!curl, "Error url_open failed because curl is already running");
+    ASSERT0 (!curl, "Error url_open failed because curl is already running");
 
     curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
                           "To compress files from a URL", "curl", "--silent", url, NULL);

@@ -88,7 +88,7 @@ static inline int fasta_is_end_of_config (VBlock *vb, uint32_t first_i,
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    ASSERTE (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
     // case: reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
     // (note: first_i=0 when flag.make_reference)
@@ -491,7 +491,7 @@ bool fasta_piz_initialize_contig_grepped_out (VBlock *vb_, bool does_vb_have_any
 
     // we're continuing the contig in the previous VB - until DESC is encountered
     vb->contig_grepped_out = prev_vb_last_contig_grepped_out || // last contig of previous VB had last_desc_in_this_vb_matches_grep
-                             (prev_vb_i + 1 < vb->vblock_i);    // previous VB was skipped in piz_one_file due to random_access_is_vb_included
+                             (prev_vb_i + 1 < vb->vblock_i);    // previous VB was skipped in piz_one_txt_file due to random_access_is_vb_included
     
     // update for use of next VB, IF this VB contains any DESC line, otherwise just carry forward the current value
     if (does_vb_have_any_desc) 

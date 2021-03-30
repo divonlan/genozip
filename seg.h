@@ -135,7 +135,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 // create extendent field contexts in the correct order of the fields
 #define EXTENDED_FIELD_CTX(extended_field, dict_id_num) do { \
     Context *ctx = ctx_get_ctx (vb, (DictId)dict_id_num); \
-    ASSERTE (ctx->did_i == extended_field, "EXTENDED_FIELD_CTX: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
+    ASSERT (ctx->did_i == extended_field, "EXTENDED_FIELD_CTX: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
     dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
 } while(0)
 

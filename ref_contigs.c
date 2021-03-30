@@ -16,16 +16,12 @@
 #include "seg.h"
 #include "refhash.h"
 #include "profiler.h"
+#include "txtheader.h"
 
 // contigs loaded from a reference file
 Buffer loaded_contigs                     = EMPTY_BUFFER; // array of RefContig
 static Buffer loaded_contigs_dict         = EMPTY_BUFFER;
 static Buffer loaded_contigs_sorted_index = EMPTY_BUFFER; // an array of uint32 of indexes into loaded_contigs - sorted by alphabetical order of the snip in contig_dict
-
-// contigs loaded from the header (eg SAM or BAM header)
-bool has_header_contigs    = false;
-Buffer header_contigs      = EMPTY_BUFFER; // array of RefContig
-Buffer header_contigs_dict = EMPTY_BUFFER;
 
 #ifdef __linux__ 
 extern int strncasecmp (const char *s1, const char *s2, size_t n); // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
@@ -117,10 +113,11 @@ void ref_contigs_compress (void)
 
             // case: we have header contigs. In this case, the contigs in reference (including in ranges) have a different index
             // as their index is relative to the reference
-            if (has_header_contigs) {
+            const Buffer *header_contigs = txtheader_get_contigs();
+            if (header_contigs) {
                 // search for the reference chrom index r->chrom in header_contigs to find the equivalent chrom (same or alt name) in txt
-                for (uint32_t i=0; i < header_contigs.len; i++)
-                    if (ENT (RefContig, header_contigs, i)->chrom_index == r->chrom) {
+                for (uint32_t i=0; i < header_contigs->len; i++)
+                    if (ENT (RefContig, *header_contigs, i)->chrom_index == r->chrom) {
                         txt_chrom = i;
                         break; // found
                     }
@@ -228,9 +225,9 @@ void ref_contigs_load_contigs (void)
     loaded_contigs.len /= sizeof (RefContig);
     BGEN_ref_contigs (&loaded_contigs);
 
-    ASSERTE0 (z_file->contexts[CHROM].dict.len, "CHROM dictionary is empty");
+    ASSERT0 (z_file->contexts[CHROM].dict.len, "CHROM dictionary is empty");
 
-    buf_copy (evb, &loaded_contigs_dict, &z_file->contexts[CHROM].dict, 1, 0, 0, "loaded_contigs_dict");
+    buf_copy (evb, &loaded_contigs_dict, &z_file->contexts[CHROM].dict, char, 0, 0, "loaded_contigs_dict");
 
     ref_contigs_create_sorted_index();
 
@@ -317,7 +314,7 @@ void ref_contigs_generate_data_if_denovo (void)
     ASSINP (flag.reference == REF_INTERNAL || (buf_is_allocated (&chrom_ctx->dict) && buf_is_allocated (&chrom_ctx->word_list)),
             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);
 
-    buf_copy (evb, &loaded_contigs_dict, &chrom_ctx->dict, 1, 0, 0, "contig_dict");
+    buf_copy (evb, &loaded_contigs_dict, &chrom_ctx->dict, char, 0, 0, "contig_dict");
     
     // we copy from the z_file context after we completed segging a file
     // note: we can't rely on chrom_ctx->nodes for the correct order as vb_i=1 resorted. rather, by mimicking the
@@ -344,7 +341,7 @@ void ref_contigs_generate_data_if_denovo (void)
 }
 
 // ZIP SAM/BAM: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 
-// called by sam_header_add_contig. returns true if contig is in reference
+// called by txtheader_add_contig. returns true if contig is in reference
 WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos,
                                                    WordIndex header_chrom)
 {               
@@ -425,7 +422,7 @@ const RefContig *ref_contigs_get_contig (WordIndex chrom_index, bool soft_fail)
 {
     const RefContig *rc = ref_contigs_get_contig_do (chrom_index, 0, loaded_contigs.len-1);
 
-    ASSERTE (rc || soft_fail, "cannot find contig for chrom_index=%d", chrom_index);
+    ASSERT (rc || soft_fail, "cannot find contig for chrom_index=%d", chrom_index);
 
     return rc;
 }
@@ -454,8 +451,8 @@ PosType ref_contigs_get_genome_nbases (void)
     // note: gpos can exceed MAX_GPOS if compressed with REF_INTERNAL (and will, if there are a lot of tiny contigs
     // to which we grant 1M gpos space) - this is ok because denovo doesn't use gpos, rather the POS from the SAM alighment
 
-    ASSERTE ((rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS) || IS_REF_INTERNAL (z_file),
-             "gpos=%"PRId64" out of range 0-%"PRId64, rc_with_largest_gpos->gpos, MAX_GPOS);
+    ASSERT ((rc_with_largest_gpos->gpos >= 0 && rc_with_largest_gpos->gpos <= MAX_GPOS) || IS_REF_INTERNAL (z_file),
+            "gpos=%"PRId64" out of range 0-%"PRId64, rc_with_largest_gpos->gpos, MAX_GPOS);
 
     return rc_with_largest_gpos->gpos + (rc_with_largest_gpos->max_pos - rc_with_largest_gpos->min_pos + 1);
 }

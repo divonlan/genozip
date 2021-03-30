@@ -18,7 +18,7 @@ static Range *ref_make_ref_get_range (uint32_t vblock_i)
     // access ranges.len under the protection of the mutex
     spin_lock (make_ref_spin);
     ranges.len = MAX (ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from FASTA ZIP compute thread)
-    ASSERTE (ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
+    ASSERT (ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
     spin_unlock (make_ref_spin);
 
     return ENT (Range, ranges, vblock_i-1);
@@ -51,14 +51,14 @@ void ref_make_create_range (VBlockP vb)
         }
     }
 
-    ASSERTE (seq_len * 2 == bit_i, "Expecting SEQ.local.len (x2 = %"PRId64") == bit_i (%"PRId64")", seq_len * 2, bit_i);
+    ASSERT (seq_len * 2 == bit_i, "Expecting SEQ.local.len (x2 = %"PRId64") == bit_i (%"PRId64")", seq_len * 2, bit_i);
 }
 
 // in make_ref, each VB gets it own range indexed by vb->vblock_i - so they can work on them in parallel without
 // worrying about byte overlap. called from zip_one_file as zip_initialize
 void ref_make_ref_init (void)
 {
-    ASSERTE0 (flag.make_reference, "Expecting flag.make_reference=true");
+    ASSERT0 (flag.make_reference, "Expecting flag.make_reference=true");
 
     // remove old cache files
     ref_remove_cache();

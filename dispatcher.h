@@ -22,7 +22,7 @@ typedef void (*DispatcherFunc)(VBlockP);
 extern void dispatcher_compute (Dispatcher dispatcher, DispatcherFunc func);
 extern VBlockP dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i);       
 extern bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final);                                  
-extern VBlockP dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final);
+extern VBlockP dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool blocking);
 extern bool dispatcher_has_free_thread (Dispatcher dispatcher);
 extern bool dispatcher_has_active_threads (Dispatcher dispatcher);
 extern VBlockP dispatcher_get_next_vb (Dispatcher dispatcher);

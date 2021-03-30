@@ -351,7 +351,7 @@ int str_print_text (const char **text, unsigned num_lines,
                     const char *newline_separator, 
                     unsigned line_width /* 0=calcuate optimal */)
 {                       
-    ASSERTE0 (text, "text is NULL");
+    ASSERTNOTNULL (text);
     
     if (!line_width) {
 #ifdef _WIN32
@@ -387,7 +387,7 @@ int str_print_text (const char **text, unsigned num_lines,
 // receives a user response, a default "Y" or "N" (or NULL) and modifies the response to be "Y" or "N"
 bool str_verify_y_n (char *response, unsigned response_size, const char *y_or_n)
 {
-    ASSERTE0 (!y_or_n || (strlen (y_or_n)==1 && (y_or_n[0]=='Y' || y_or_n[0]=='N')), 
+    ASSERT0 (!y_or_n || (strlen (y_or_n)==1 && (y_or_n[0]=='Y' || y_or_n[0]=='N')), 
               "y_or_n needs to be NULL, \"Y\" or \"N\"");
 
     // default is N (or no default) and first character of the user's response is y or Y

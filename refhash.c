@@ -106,10 +106,10 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
     PosType this_range_size = ref_size (r);
     PosType next_range_size = ref_size (next_r);
     
-    ASSERTE (this_range_size * 2 == r->ref.nbits, 
-             "mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64" r->range_id=%u", 
-             this_range_size, this_range_size*2, r->ref.nbits, ENT (char, z_file->contexts[0].dict, ENT (CtxNode, z_file->contexts[0].nodes, r->chrom)->char_index), 
-             r->first_pos, r->last_pos, r->range_id);
+    ASSERT (this_range_size * 2 == r->ref.nbits, 
+            "mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64" r->range_id=%u", 
+            this_range_size, this_range_size*2, r->ref.nbits, ENT (char, z_file->contexts[0].dict, ENT (CtxNode, z_file->contexts[0].nodes, r->chrom)->char_index), 
+            r->first_pos, r->last_pos, r->range_id);
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
     // end of this one (note: we only look at one next range - even if it is very short, we will not overflow to the next one after)
@@ -268,7 +268,7 @@ void refhash_create_cache_join (void)
 {
     if (!refhash_creating_cache) return;
 
-    threads_join (refhash_cache_creation_thread_id);
+    threads_join (refhash_cache_creation_thread_id, true);
     refhash_creating_cache = false;
 }
 
@@ -289,11 +289,11 @@ static void refhash_uncompress_one_vb (VBlockP vb)
                  vb->vblock_i, header->num_layers, layer_i, header->layer_bits, start, size, BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
     // sanity checks
-    ASSERTE (layer_i < num_layers, "expecting header->layer_i=%u < num_layers=%u", layer_i, num_layers);
+    ASSERT (layer_i < num_layers, "expecting header->layer_i=%u < num_layers=%u", layer_i, num_layers);
 
-    ASSERTE (header->layer_bits == layer_bits[layer_i], "expecting header->layer_bits=%u to be %u", header->layer_bits, layer_bits[layer_i]);
+    ASSERT (header->layer_bits == layer_bits[layer_i], "expecting header->layer_bits=%u to be %u", header->layer_bits, layer_bits[layer_i]);
 
-    ASSERTE (start + size <= layer_size[layer_i], "expecting start=%u + size=%u <= layer_size=%u", start, size, layer_size[layer_i]);
+    ASSERT (start + size <= layer_size[layer_i], "expecting start=%u + size=%u <= layer_size=%u", start, size, layer_size[layer_i]);
 
     // a hack for uncompressing to a location withing the buffer - while multiple threads are uncompressing into 
     // non-overlappying regions in the same buffer in parallel
@@ -316,7 +316,7 @@ static void refhash_read_one_vb (VBlockP vb)
     if (((SectionHeaderRefHash *)vb->z_data.data)->layer_i >= num_layers)
         return; // don't read the high layers if beyond the requested num_layers
 
-    ASSERTE (section_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
+    ASSERT (section_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
 
     NEXTENT (int32_t, vb->z_section_headers) = section_offset;
 
@@ -333,12 +333,12 @@ void refhash_load_standalone (void)
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
 
-    zfile_read_genozip_header (0, 0, 0, 0);
+    zfile_read_genozip_header (0, 0, 0);
 
     refhash_initialize (NULL);
 
     file_close (&z_file, false, false);
-    file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
+    file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtheader_piz_read_and_reconstruct.
     
     RESTORE_FLAG (test);
     RESTORE_VALUE (command);

@@ -133,7 +133,7 @@ bool codec_hapmat_compress (VBlock *vb_,
 {
     START_TIMER;
     
-    ASSERTE0 (uncompressed && !callback, "callback option not supported");
+    ASSERT0 (uncompressed && !callback, "callback option not supported");
 
     VBlockVCF *vb = (VBlockVCF *)vb_;
     HaploTypeSortHelperIndex *helper_index = codec_hapmat_count_alt_alleles (vb);
@@ -198,7 +198,7 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb_)
     ARRAY (const char *, hapmat_columns_data, vb->hapmat_columns_data); 
     ARRAY (const unsigned, permutatation_index, vb->hapmat_index_ctx->local);
     
-    ASSERTE0 (permutatation_index, "hapmat_hapmat_index_ctx.local is empty");
+    ASSERT0 (permutatation_index, "hapmat_hapmat_index_ctx.local is empty");
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
     // note: txt_file->max_lines_per_vb will be zero if genozip file was created by redirecting output

@@ -21,18 +21,18 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
                         const char *uncompressed_data,  // option 1 - compress contiguous data
                         LocalGetLineCB callback)        // option 2 - compress data one line at a time
 { 
-    ASSERTE0 (!uncompressed_data || !callback, "expecting either uncompressed_data or callback but not both");
+    ASSERT0 (!uncompressed_data || !callback, "expecting either uncompressed_data or callback but not both");
 
-    ASSERTE0 (BGEN32 (header->magic) == GENOZIP_MAGIC, "corrupt header - bad magic");
+    ASSERT0 (BGEN32 (header->magic) == GENOZIP_MAGIC, "corrupt header - bad magic");
 
-    ASSERTE (header->codec < NUM_CODECS, "unsupported section compressor=%u", header->codec);
+    ASSERT (header->codec < NUM_CODECS, "unsupported section compressor=%u", header->codec);
 
     unsigned compressed_offset     = BGEN32 (header->compressed_offset);
     unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
     unsigned data_compressed_len   = 0;
     unsigned data_encrypted_len=0, data_padding=0, header_padding=0;
 
-    ASSERTE0 (!data_uncompressed_len || uncompressed_data || callback, "data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided");
+    ASSERT0 (!data_uncompressed_len || uncompressed_data || callback, "data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided");
 
     bool is_encrypted = false;
     unsigned encryption_padding_reserve = 0;
@@ -162,7 +162,7 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
                       const char *compressed, uint32_t compressed_len,
                       Buffer *uncompressed_data, uint64_t uncompressed_len)
 {
-    ASSERTE0 (compressed_len, "compressed_len=0");
+    ASSERT0 (compressed_len, "compressed_len=0");
 
     // if this is (1) a simple codec (including CODEC_UNKNOWN) that has a sub-codec or
     // (2) or no codec uncompressor - the sub-codec now run it now
@@ -180,7 +180,7 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
         // case: uncompressed data is now going to be the compressed data for the sub-codec
         if (run_subcodec) {
             // move the intermediary data after primary codec decompression to vb->compressed
-            buf_copy (vb, &vb->compressed, uncompressed_data, 0,0,0, "compressed");
+            buf_copy (vb, &vb->compressed, uncompressed_data, char, 0,0, "compressed");
             compressed     = vb->compressed.data;
             compressed_len = vb->compressed.len;
             
