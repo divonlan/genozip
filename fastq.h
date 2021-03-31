@@ -40,7 +40,7 @@ extern unsigned fastq_vb_size (void);
 extern unsigned fastq_vb_zip_dl_size (void);
 
 // file pairing (--pair) stuff
-extern void fastq_read_pair_1_data (VBlockP vb, uint32_t pair_vb_i);
+extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t pair_vb_i, bool must_have);
 extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
 
 // --genobwa stuff

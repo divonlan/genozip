@@ -227,18 +227,18 @@ void sam_seg_finalize (VBlockP vb)
 
     // top level snip - reconstruction as FASTQ
     SmallContainer top_level_fastq = { 
-        .repeats   = vb->lines.len,
+        .repeats     = vb->lines.len,
         .is_toplevel = true,
-        .filter_repeats = true,  // drop non-primary chimeric reads and reads without QUAL data
-        .nitems_lo = 7,
-        .items     = { { .dict_id = (DictId)dict_id_fields[SAM_QNAME],    .seperator = "\n"                 }, 
-                       { .dict_id = (DictId)dict_id_fields[SAM_RNAME],    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq 
-                       { .dict_id = (DictId)dict_id_fields[SAM_POS],      .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
-                       { .dict_id = (DictId)dict_id_fields[SAM_FLAG],     .seperator = { CI_TRANS_NOR }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-                       { .dict_id = (DictId)dict_id_fields[SAM_CIGAR],    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
-                       { .dict_id = (DictId)dict_id_fields[SAM_SQBITMAP], .seperator = "\n",             .translator =SAM2FASTQ_SEQ  }, 
-                       { .dict_id = (DictId)dict_id_fields[SAM_QUAL],     .seperator = "\n",             .translator =SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
-                     }
+        .callback    = true,  // drop non-primary chimeric reads and reads without QUAL data
+        .nitems_lo   = 7,
+        .items       = { { .dict_id = (DictId)dict_id_fields[SAM_QNAME],    .seperator = "\n"                 }, 
+                         { .dict_id = (DictId)dict_id_fields[SAM_RNAME],    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq 
+                         { .dict_id = (DictId)dict_id_fields[SAM_POS],      .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
+                         { .dict_id = (DictId)dict_id_fields[SAM_FLAG],     .seperator = { CI_TRANS_NOR }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
+                         { .dict_id = (DictId)dict_id_fields[SAM_CIGAR],    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
+                         { .dict_id = (DictId)dict_id_fields[SAM_SQBITMAP], .seperator = "\n",             .translator =SAM2FASTQ_SEQ  }, 
+                         { .dict_id = (DictId)dict_id_fields[SAM_QUAL],     .seperator = "\n",             .translator =SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
+                       }
     };
 
     // add a '@' to the description line, use a prefix to add the + line    

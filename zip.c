@@ -643,9 +643,8 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
     
         uint32_t pair_vb_i = prev_file_first_vb_i + (vb->vblock_i - prev_file_last_vb_i - 1);
         
-        read_txt = (pair_vb_i <= prev_file_last_vb_i); // false if there is no vb with vb_i in the previous file
-
-        fastq_read_pair_1_data (vb, pair_vb_i); // read here, decompressed in fastq_seg_initialize
+        read_txt = (pair_vb_i <= prev_file_last_vb_i)  // false if there is no vb with vb_i in the previous file
+                 && fastq_read_pair_1_data (vb, pair_vb_i, false); // read here, decompressed in fastq_seg_initialize
     }
 
     if (read_txt) {
@@ -741,8 +740,7 @@ void zip_one_file (const char *txt_basename,
     DT_FUNC (txt_file, zip_initialize)();
 
     // copy contigs from reference or txtheader to CHROM (and RNEXT too, for SAM/BAM)
-    if (DTPZ (has_header_contigs))
-        txtheader_zip_prepopulate_contig_ctxs();
+    txtheader_zip_prepopulate_contig_ctxs();
 
     max_lines_per_vb=0;
 

@@ -363,10 +363,11 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     ref_create_cache_join();
     refhash_create_cache_join();
     
-    // free memory 
-    ref_destroy_reference();
-
-    vb_destroy_all_vbs();
+    // if ZIP consumed more than 2GB, free memory before PIZ. Note: on Windows, freeing memory takes considerable time.
+    if (buf_get_memory_usage () > (1ULL<<31)) {
+        ref_destroy_reference();
+        vb_destroy_all_vbs();
+    }
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",

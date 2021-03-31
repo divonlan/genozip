@@ -66,10 +66,10 @@ void sections_list_concat (VBlock *vb)
 }
 
 // section iterator. returns true if a section of this type was found.
-bool sections_next_sec2 (const SecLiEnt **sl_ent, // optional in/out. if NULL - search entire list
-                                         SectionType st1, SectionType st2, 
-                                         bool must_be_next_section,       // check only next section, not entire remaining list
-                                         bool seek)                       // if true, seek if found
+bool sections_next_sec2 (const SecLiEnt **sl_ent,   // optional in/out. if NULL - search entire list
+                         SectionType st1, SectionType st2, 
+                         bool must_be_next_section, // check only next section, not entire remaining list
+                         bool seek)                 // if true, seek if found
 {
     const SecLiEnt *sl = sl_ent ? *sl_ent : NULL; 
     bool found = false;
@@ -101,7 +101,7 @@ bool sections_next_sec2 (const SecLiEnt **sl_ent, // optional in/out. if NULL - 
 }
 
 // section iterator. skips to the last consecutive section from after sl, that is type st1, st2 or st3.
-const SecLiEnt *sections_last_sec3 (const SecLiEnt *sl, SectionType st1, SectionType st2, SectionType st3)
+const SecLiEnt *sections_last_sec4 (const SecLiEnt *sl, SectionType st1, SectionType st2, SectionType st3, SectionType st4)
 {
     while (sl < AFTERENT (const SecLiEnt, z_file->section_list_buf) - 1) {
 
@@ -109,7 +109,8 @@ const SecLiEnt *sections_last_sec3 (const SecLiEnt *sl, SectionType st1, Section
 
         if (!((st1 != SEC_NONE && sl->st == st1) ||
               (st2 != SEC_NONE && sl->st == st2) ||
-              (st3 != SEC_NONE && sl->st == st2))) {
+              (st3 != SEC_NONE && sl->st == st3) ||
+              (st4 != SEC_NONE && sl->st == st4))) {
             break;
         }
     } 
@@ -175,6 +176,8 @@ void BGEN_sections_list (void)
     for (unsigned i=0; i < ent_len; i++) {
         ent[i].vblock_i = BGEN32 (ent[i].vblock_i);
         ent[i].offset   = BGEN64 (ent[i].offset);
+        if (command==PIZ && z_file->genozip_version < 12) // flags were introduced in v12
+            ent[i].flags.flags = 0;
     }
 }
 
@@ -309,6 +312,32 @@ const SecLiEnt *sections_pull_vb_up (uint32_t vb_i, const SecLiEnt *sl)
              
     return new_vb_sl + vb_sections_len - 1; // last section of the VB
 }
+
+// move all sections of component txtfile_sl_move_me to be immediately txtfile_sl_after_me
+void sections_pull_component_up (const SecLiEnt *txtfile_sl_after_me, // destination - after this component (NULL means move to beginning)
+                                 const SecLiEnt *txtfile_sl_move_me)  // this is the component to move
+{    
+    const SecLiEnt *dst_sl = txtfile_sl_after_me ? sections_component_last (txtfile_sl_after_me) + 1
+                                                 : FIRSTENT (SecLiEnt, z_file->section_list_buf);
+
+    // case: component is already in its desired place
+    if (dst_sl == txtfile_sl_move_me) return;
+
+    // save all entries of the VB in temp
+    const SecLiEnt *last_moving_sl = sections_component_last (txtfile_sl_move_me);
+    uint32_t vb_sections_len  = (last_moving_sl - txtfile_sl_move_me) + 1;
+    uint32_t vb_sections_size = vb_sections_len * sizeof (SecLiEnt);
+    
+    SecLiEnt *temp = MALLOC (vb_sections_size);
+    
+    // swap
+    memcpy (temp, txtfile_sl_move_me, vb_sections_size); // moving component moves to temp
+    memcpy ((SecLiEnt *)dst_sl + vb_sections_len, dst_sl, (txtfile_sl_move_me - dst_sl) * sizeof (SecLiEnt)); // push down all sections after dst_sl, making room for moving component
+    memcpy ((SecLiEnt *)dst_sl, temp, vb_sections_size); // moving component moves to dst
+
+    FREE (temp);
+}
+
 
 const char *lt_name (LocalType lt)
 {

@@ -17,6 +17,7 @@
 #else // LINUX
 #include <sched.h>
 #include <sys/sysinfo.h>
+#include <pthread.h>
 #endif
 #endif
 #include "genozip.h"
@@ -102,7 +103,9 @@ void threads_initialize (void)
     int err = pthread_sigmask(SIG_BLOCK, &sigset, NULL);
     ASSERT (!err, "pthread_sigmask failed: %s", strerror (err));
 
-    threads_create (threads_signal_handler, 0, "signal_handler", THREADS_NO_VB);
+    pthread_t signal_handler_thread;
+    err = pthread_create (&signal_handler_thread, NULL, threads_signal_handler, &sigset); // can't use threads_create as evb isn't initialized yet
+    ASSERT (!err, "failed to create signal_handler_thread: %s", strerror(err));
 #endif
 }
 
@@ -113,12 +116,14 @@ bool threads_am_i_main_thread (void)
 
 int threads_create (void *(*func)(void *), void *arg, const char *task_name, uint32_t vb_i)
 {
+    ASSERT (evb, "evb is NULL. task=%s", task_name);
+
     if (flag.show_threads) 
         iprintf ("%s: Creating thread %u (vb_i=%s)\n", task_name, next_thread_number, vb_i != THREADS_NO_VB ? str_int_s (vb_i).s : "NONE");
 
     pthread_t thread;
     unsigned err = pthread_create (&thread, NULL, func, arg);
-    ASSERT (!err, "failed to create thread task=\"%s\" vb_i=%d: error=%u", task_name, (int)vb_i, err);
+    ASSERT (!err, "failed to create thread task=\"%s\" vb_i=%d: %s", task_name, (int)vb_i, strerror(err));
 
     mutex_lock (threads_mutex);
 

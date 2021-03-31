@@ -75,6 +75,8 @@ extern LastValueType container_reconstruct (VBlockP vb, ContextP ctx, WordIndex 
 
 extern void container_display (ConstContainerP con);
 
+CONTAINER_FILTER_FUNC (container_no_filter);
+
 // Translators reconstructing last_value as a little endian binary
 TRANSLATOR_FUNC (container_translate_I8);   
 TRANSLATOR_FUNC (container_translate_U8);   

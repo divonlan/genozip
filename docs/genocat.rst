@@ -104,7 +104,7 @@ One or more file names must be given.
 
 **Analysis options**
 
-.. option:: --list-chroms.  (VCF SAM BAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file. case. Altnernative option names: show-chroms, show-contigs, list-contigs.
+.. option:: --show-chroms.  (VCF SAM BAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file. Altnernative option names: --show-contigs --list-chroms --list-contigs.
     
           |
 
@@ -112,11 +112,7 @@ One or more file names must be given.
     
           |
 
-.. option:: --show-coverage[=all].  (SAM BAM) Shows the coverage and depth of each contig. Without =all it shows only contigs that are chromosomes and groups the other contigs under "Other contigs". See "Coverage and Depth" use case. Altnernative option name: --converage.
-    
-          |
-
-.. option:: --show-coverage-chrom.  (SAM BAM) Same as --show-coverage but shows only contigs that are chromosomes.
+.. option:: --show-coverage[=all].  (SAM BAM) Shows the coverage and depth of each contig. Without =all it shows only contigs that are chromosomes and groups the other contigs under "Other contigs". See "Coverage and Depth" use case. Altnernative option name: --coverage.
     
           |
 

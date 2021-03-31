@@ -407,17 +407,21 @@ CONTAINER_FILTER_FUNC (fasta_piz_filter)
         dict_id.num == dict_id_fields[FASTA_TOPLEVEL] &&
         item == 1 /* EOL */ && 
         fasta_vb->last_line == FASTA_LINE_DESC) 
-        return false; 
+        
+        vb->dont_show_curr_line = true;
 
-    return true; // show this item as normal
+    return true; // reconstruct (then drop)
 }
 
 // remove trailing newline before SEQ lines in case of --sequential. Note that there might be more than one newline
 // in which case the subsequent newlines were part of empty COMMENT lines
-static inline void fasta_piz_remove_trailing_newlines (VBlockFASTA *vb)
+static inline void fasta_piz_unreconstruct_trailing_newlines (VBlockFASTA *vb)
 {
-    while (*LASTENT (char, vb->txt_data) == '\n' || *LASTENT (char, vb->txt_data) == '\r')
+    char c;
+    while ((c = *LASTENT (char, vb->txt_data)) == '\n' || c == '\r') {
         vb->txt_data.len--;
+        if (c == '\n') vb->lines.len--;
+    }
 }
 
 // this is used for end-of-lines of a sequence line, that are not the last line of the sequence. we skip reconstructing
@@ -428,12 +432,12 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
 
     bool is_first_seq_line_in_this_contig = snip[0] - '0';
 
-    // --sequential - if this is NOT the first seq line in the contig, we delete the previous end-of-line
-    if (flag.sequential && !is_first_seq_line_in_this_contig) 
-        fasta_piz_remove_trailing_newlines (fasta_vb);
-
     // skip showing line if this contig is grepped - but consume it anyway
     if (fasta_vb->contig_grepped_out) vb->dont_show_curr_line = true;
+
+    // --sequential - if this is NOT the first seq line in the contig, we delete the previous end-of-line
+    else if (flag.sequential && !is_first_seq_line_in_this_contig) 
+        fasta_piz_unreconstruct_trailing_newlines (fasta_vb);
 
     // in case of not showing the SEQ in the entire file - we can skip consuming it
     if (flag.header_only_fast) // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
@@ -446,7 +450,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
           vb->line_i - vb->first_line == vb->lines.len-1 && // and this is the last line in this vb 
           !vb->dont_show_curr_line && 
           random_access_does_last_chrom_continue_in_next_vb (vb->vblock_i)) // and this sequence continues in the next VB 
-        fasta_piz_remove_trailing_newlines (fasta_vb); // then: delete final newline if this VB ends with a 
+        fasta_piz_unreconstruct_trailing_newlines (fasta_vb); // then: delete final newline if this VB ends with a 
 
     fasta_vb->last_line = FASTA_LINE_SEQ;
 

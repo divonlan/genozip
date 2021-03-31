@@ -319,7 +319,7 @@ static const char *help_genocat[] = {
 #endif
     "",
     "Analysis options (options resulting a report about the data):",    
-    "   --list-chroms     List the names of the chromosomes (or contigs) included in the file",
+    "   --show-chroms     List the names of the chromosomes (or contigs) included in the file. Alternative names: --list-chroms, --list-contigs, --show-contigs",
     "",
     "   --show-sex        (SAM, BAM, FASTQ) Determine whether a SAM/BAM is a Male or a Female. See http://genozip.com/sex-assignment.html",
     "",

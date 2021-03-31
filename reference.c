@@ -490,7 +490,7 @@ static void ref_read_one_range (VBlockP vb)
 
     if (range_is_included) { 
 
-        buf_alloc_old (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers"); // room for 2 section headers  
+        buf_alloc (vb, &vb->z_section_headers, 0, 2, int32_t, 0, "z_section_headers"); // room for 2 section headers  
 
         ASSERT0 (vb->z_section_headers.len < 2, "unexpected 3rd recursive entry");
 
@@ -1152,7 +1152,7 @@ void ref_compress_ref (void)
     if (ranges_type == RT_LOADED || ranges_type == RT_CACHED)
         ref_copy_compressed_sections_from_reference_file ();
 
-    buf_alloc_old (evb, &ref_stored_ra, sizeof (RAEntry) * ranges.len, 1, "ref_stored_ra");
+    buf_alloc (evb, &ref_stored_ra, 0, ranges.len, RAEntry, 1, "ref_stored_ra");
     ref_stored_ra.len = 0; // re-initialize, in case we read the external reference into here
     
     spin_initialize (ref_stored_ra_spin);
@@ -1351,7 +1351,7 @@ static void ref_initialize_loaded_ranges (RangesType type)
     // 3. in case loading from a reference file, the number of contigs will match the number of chroms, so no issues.
     ranges.len = IS_REF_INTERNAL (z_file) ? z_file->contexts[CHROM].word_list.len : ref_contigs_num_contigs();
 
-    buf_alloc_old (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges");     
+    buf_alloc (evb, &ranges, ranges.len, 0, Range, 1, "ranges");     
     buf_zero (&ranges);
     ranges_type = type;
 
@@ -1435,7 +1435,7 @@ void ref_initialize_ranges (RangesType type)
 
         ranges.len   = REF_NUM_DENOVO_RANGES;
         ranges_type = RT_DENOVO;
-        buf_alloc_old (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges"); 
+        buf_alloc (evb, &ranges, 0, ranges.len, Range, 1, "ranges"); 
         buf_zero (&ranges);
         ref_lock_initialize_denovo_genome();
     }

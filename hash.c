@@ -439,8 +439,8 @@ WordIndex hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
     }
 
     // case: not found in hash table, and we are required to provide a new hash entry on the linked list
-    buf_alloc_old (segging_vb, &vb_ctx->local_hash, sizeof (LocalHashEnt) * (1 + vb_ctx->local_hash.len), // realloc if needed
-                1.5, "contexts->local_hash");
+    buf_alloc (segging_vb, &vb_ctx->local_hash, 0, 1 + vb_ctx->local_hash.len, LocalHashEnt, // realloc if needed
+               1.5, "contexts->local_hash");
 
     l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent_i);  // might have changed after realloc
     l_hashent->next = vb_ctx->local_hash.len++;

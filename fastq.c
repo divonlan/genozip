@@ -287,7 +287,7 @@ bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 // ZIP/PIZ main thread: called ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
 // returns true if successful, false if there isn't a vb with vb_i in the previous file
-void fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i)
+bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint64_t save_offset = file_tell (z_file);
@@ -296,7 +296,8 @@ void fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i)
     vb->pair_vb_i = pair_vb_i;
 
     const SecLiEnt *sl = sections_vb_first (vb->pair_vb_i, true);
-    ASSERT (sl, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
+    ASSERT (!must_have || sl, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
+    if (!sl) return false;
 
     // get num_lines from vb header
     SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER);
@@ -323,6 +324,8 @@ void fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i)
 
     file_seek (z_file, save_offset, SEEK_SET, false); // restore
     z_file->disk_so_far = save_disk_so_far;
+
+    return true;
 }
 
 // main thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
@@ -336,7 +339,7 @@ bool fastq_piz_read_one_vb (VBlockP vb_, ConstSecLiEntP sl)
         // in case of this is a paired fastq file, get just the pair_1 data that is needed to resolve the grep
         if (i_am_pair_2) {
             vb->grep_stages = GS_TEST; // tell piz_is_skip_section to skip decompressing sections not needed for determining the grep
-            fastq_read_pair_1_data (vb_, pair_vb_i);
+            fastq_read_pair_1_data (vb_, pair_vb_i, true);
         }
 
         // if we're grepping we we uncompress and reconstruct the DESC from the main thread, and terminate here if this VB is to be skipped
@@ -345,7 +348,7 @@ bool fastq_piz_read_one_vb (VBlockP vb_, ConstSecLiEntP sl)
 
     // in case of this is a paired fastq file, get all the pair_1 data not already fetched for the grep above
     if (i_am_pair_2) 
-        fastq_read_pair_1_data (vb_, pair_vb_i);
+        fastq_read_pair_1_data (vb_, pair_vb_i, true);
 
     return true;
 }
@@ -558,11 +561,14 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
                                           !fastq_genobwa_is_seq_included (ENT (char, vb->txt_data, vb->txt_data.len - vb->seq_len), vb->seq_len);            
 
             // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
-            if (flag.header_only_fast && item >= 2) return false; // skip this item
+            if (flag.header_only_fast && item >= 2) {
+                if (item == 2) RECONSTRUCT ("\b\n\b\n\b\n", 6); // tell sorter to skip 3 textual lines
+                return false; // don't reconstruct this item (non-header textual)
+            }
         }
     }
 
-    return true; // show this item as normal
+    return true; // reconstruct
 }
 
 static void fastq_update_coverage (VBlockFASTQ *vb)

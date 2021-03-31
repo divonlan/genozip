@@ -213,7 +213,7 @@ void regions_transform_negative_to_positive_complement()
 
     // initialize regions for each chr - to be the whole chr
     for (unsigned chr_i=0; chr_i < num_chroms; chr_i++) {
-        buf_alloc_old (evb, &chregs[chr_i], sizeof (Chreg), 1, "chregs");
+        buf_alloc (evb, &chregs[chr_i], 0, 1, Chreg, 1, "chregs");
         Chreg *chreg = ENT (Chreg, chregs[chr_i], 0);
         chreg->start_pos   = 0;
         chreg->end_pos     = MAX_POS;
@@ -246,7 +246,7 @@ void regions_transform_negative_to_positive_complement()
                 // case: negative is strictly within positive - split positive to the two flanking regions
                 else if (neg_chreg->start_pos > pos_chreg->start_pos && neg_chreg->end_pos < pos_chreg->end_pos) {
                     chregs[chr_i].len++;
-                    buf_alloc_old (evb, &chregs[chr_i], chregs[chr_i].len * sizeof (Chreg), 2, "chregs");
+                    buf_alloc (evb, &chregs[chr_i], 0, chregs[chr_i].len, Chreg, 2, "chregs");
                     
                     Chreg *new_pos_chreg = LASTENT (Chreg, chregs[chr_i]);
                     Chreg *pos_chreg = ENT (Chreg, chregs[chr_i], posreg_i); // update after realloc

@@ -54,7 +54,7 @@ void vcf_seg_initialize (VBlock *vb_)
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_nodes.len;
-    buf_alloc_old (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Container), 1.2, "format_mapper_buf");
+    buf_alloc (vb, &vb->format_mapper_buf, 0, vb->format_mapper_buf.len, Container, 1.2, "format_mapper_buf");
     buf_zero (&vb->format_mapper_buf);
 
     // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
@@ -68,11 +68,11 @@ void vcf_seg_initialize (VBlock *vb_)
     for (int i=0; i < NUM_LO_STATUSES; i++)
         ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[VCF_oSTATUS], liftover_status_names[i], strlen (liftover_status_names[i]), NULL);
 
-    for (char c='0'; c <= '1'; c++) {
+/*    for (char c='0'; c <= '1'; c++) {
         char oref_special[3] = { SNIP_SPECIAL, VCF_SPECIAL_OREF, c }; 
         ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[VCF_oREF], oref_special, 3, NULL);
     }
-
+*/
     // when compressing a Luft file, some lines are already known to be rejects. we just copy them to liftover_rejects
     if (vb->luft_reject_bytes) 
         buf_copy (vb, &vb->liftover_rejects, &vb->txt_data, char, 0, vb->luft_reject_bytes, "liftover_rejects");
@@ -299,7 +299,8 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         ASSERT (node_index == vb->format_mapper_buf.len, 
                 "node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
-        buf_alloc_old (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Container), 2, "format_mapper_buf");
+        vb->format_mapper_buf.len++;
+        buf_alloc (vb, &vb->format_mapper_buf, 0, vb->format_mapper_buf.len, Container, 2, "format_mapper_buf");
     }    
 
     ContainerP con = ENT (Container, vb->format_mapper_buf, node_index);
@@ -347,7 +348,7 @@ static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, const char *value, int value_le
         case USE_SF_YES: 
             // we store the SF value in a buffer, since seg_FORMAT_GT overlays the haplotype buffer onto txt_data and may override the SF field
             // we will need the SF data if the field fails verification in vcf_seg_INFO_SF_one_sample
-            buf_alloc_old (vb, &vb->sf_txt, value_len + 1, 2, "sf_txt"); // +1 for nul-terminator
+            buf_alloc (vb, &vb->sf_txt, 0, value_len + 1, char, 2, "sf_txt"); // +1 for nul-terminator
             memcpy (FIRSTENT (char, vb->sf_txt), value, value_len);
             vb->sf_txt.len = value_len;
             *AFTERENT (char, vb->sf_txt) = 0; // nul-terminate
@@ -355,7 +356,7 @@ static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, const char *value, int value_le
             adjustment = 0;      
             
             // snip being contructed 
-            buf_alloc_old (vb, &vb->sf_snip, value_len + 20, 2, "sf_snip"); // initial value - we will increase if needed
+            buf_alloc (vb, &vb->sf_snip, 0, value_len + 20, char, 2, "sf_snip"); // initial value - we will increase if needed
             NEXTENT (char, vb->sf_snip) = SNIP_SPECIAL;
             NEXTENT (char, vb->sf_snip) = VCF_SPECIAL_SF;
 
@@ -577,8 +578,11 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
     // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
     // POS and END share the same delta stream - the next POS will be a delta vs this END)
     else if (dict_id.num == dict_id_INFO_END) {
-        seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, true, *this_value, *this_value_len, 0, *this_value_len); // END is an alias of POS
-        return false; // do not add to dictionary/b250 - we already did it
+        // we postpone segging END to the end of the INFO field, as we POS must be seggeed before, and
+        // it might be segged as part of a INFO/LIFTBACK field
+        vb->end = *this_value; 
+        vb->end_len = *this_value_len; 
+        return false; // don't seg now
     }
 
     // if SVLEN is negative, it is expected to be minus the delta between END and POS
@@ -738,6 +742,10 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
                 seg_by_dict_id (vb, vb->ac, vb->ac_len, dict_id_INFO_AC, vb->ac_len);
             }
         }
+
+        // we seg END here, so that if a INFO/LIFTBACK (which contains POS) is present, END is segged after
+        if (vb->end) 
+            seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, true, vb->end, vb->end_len, 0, vb->end_len); // END is an alias of POS
     }
 
     return true; // procedue with adding to dictionary/b250
@@ -1064,7 +1072,7 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
         }
 
         if (!cell || !cell_len)
-            node_index = seg_by_ctx (vb, cell, cell_len, ctx, cell_len);
+            node_index = seg_by_ctx (vb, end_of_sample ? NULL : cell, cell_len, ctx, cell_len);
 
         // note: cannot use switch bc dict_id_* are variables, not constants
 
@@ -1131,8 +1139,8 @@ static void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP sa
         if (num_colons) *num_colons += !end_of_sample;
 
         ASSSEG (!end_of_sample || !cell || cell[-1] == '\t' || cell[-1] == '\n', &cell[-1], 
-                "Error in vcf_seg_one_sample - end_of_sample and yet separator is %c (ASCII %u) is not \\t or \\n",
-                cell[-1], cell[-1]);
+                "Error in vcf_seg_one_sample - end_of_sample and yet separator is '%c' (ASCII %u) is not \\t or \\n (cell[-3]='%c' (%u) cell[-2]='%c' (%u) *has_13=%u cell_len=%u node_index=%d)",
+                cell[-1], cell[-1], cell[-3], cell[-3], cell[-2], cell[-2], *has_13, cell_len, node_index);
     }
     ASSSEG0 (end_of_sample, cell, "More FORMAT subfields data than expected by the specification in the FORMAT field");
 }
@@ -1243,7 +1251,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
-    vb->ac = vb->an = vb->af = NULL;
+    vb->ac = vb->an = vb->af = vb->end = NULL;
     vb->has_basecounts = false;
 
     const char *next_field=field_start_line, *field_start;
@@ -1302,7 +1310,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     vb->last_txt_len(VCF_REFALT) = ref_len + alt_len + 1;
     vb->last_txt_len(VCF_oREF)   = ref_len; // we use this to store ref_len regardless if it is REF or oREF - for liftover_seg_LIFTOVER/BACK
  
-    // coords=PRIMARY: REFALT is segged here and oREF is segged in liftover_seg_LIFTOVER()
+    // coords=PRIMARY: REFALT is segged here and oREF (if it exists) is segged in liftover_seg_LIFTOVER()
     // coords=LUFT: REFALT and oREF are segged in liftover_seg_LIFTBACK()
     if (coords == DC_PRIMARY) 
         vcf_seg_ref_alt (vb_, ref_start, ref_len, alt_start, alt_len);

@@ -43,7 +43,7 @@ extern void bam_seg_initialize (VBlockP vb);
 extern const char *bam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 
 // SAM-to-FASTQ stuff
-CONTAINER_FILTER_FUNC (sam_piz_sam2fq_filter);
+CONTAINER_CALLBACK (sam_piz_container_cb);
 
 // VB stuff
 extern void sam_vb_release_vb();

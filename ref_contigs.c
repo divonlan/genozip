@@ -85,7 +85,7 @@ void ref_contigs_compress (void)
 
     // the number of contigs is at most the number of chroms - but could be less if some chroms have no sequence
     // in SAM with header and -E, we don't copy the contigs to CHROM, so we take the length from loaded_contigs.
-    buf_alloc_old (evb, &created_contigs, sizeof (RefContig) * MAX (z_file->contexts[CHROM].nodes.len, loaded_contigs.len), 1, "created_contigs");
+    buf_alloc (evb, &created_contigs, 0, MAX (z_file->contexts[CHROM].nodes.len, loaded_contigs.len), RefContig, 1, "created_contigs");
 
     RefContig *last = NULL;
 
@@ -179,7 +179,7 @@ static void ref_contigs_create_sorted_index (void)
     if (buf_is_allocated (&loaded_contigs_sorted_index)) return; // already done
 
     // contig_words_sorted_index - an array of uint32 of indexes into contig_words - sorted by alphabetical order of the snip in contig_dict
-    buf_alloc_old (evb, &loaded_contigs_sorted_index, sizeof(uint32_t) * loaded_contigs.len, 1, "loaded_contigs_sorted_index");
+    buf_alloc (evb, &loaded_contigs_sorted_index, 0, loaded_contigs.len, uint32_t, 1, "loaded_contigs_sorted_index");
     for (uint32_t i=0; i < loaded_contigs.len; i++)
         NEXTENT (uint32_t, loaded_contigs_sorted_index) = i;
 
@@ -206,7 +206,7 @@ void ref_contigs_sort_chroms (void)
     uint32_t num_chroms = z_file->contexts[CHROM].word_list.len;
 
     // z_file->chroms_sorted_index - an array of uint32 of indexes into z_file->contexts[CHROM].word_list - sorted by alphabetical order of the snip in z_file->contexts[CHROM].dict
-    buf_alloc_old (evb, &z_file->chroms_sorted_index, sizeof(uint32_t) * num_chroms, 1, "z_file->chroms_sorted_index");
+    buf_alloc (evb, &z_file->chroms_sorted_index, 0, num_chroms, uint32_t, 1, "z_file->chroms_sorted_index");
     for (uint32_t i=0; i < num_chroms; i++)
         NEXTENT (uint32_t, z_file->chroms_sorted_index) = i;
 
@@ -321,7 +321,7 @@ void ref_contigs_generate_data_if_denovo (void)
     // word_list generation as done in PIZ, we guarantee that we will get the same chrom_index
     // in case of multiple bound files, we re-do this in every file in case of additional chroms (not super effecient, but good enough because the context is small)
     loaded_contigs.len = chrom_ctx->nodes.len;
-    buf_alloc_old (evb, &loaded_contigs, loaded_contigs.len * sizeof (RefContig), 1, "loaded_contigs");
+    buf_alloc (evb, &loaded_contigs, 0, loaded_contigs.len, RefContig, 1, "loaded_contigs");
 
     // similar logic to ctx_dict_build_word_lists
     char *start = loaded_contigs_dict.data;

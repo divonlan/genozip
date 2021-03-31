@@ -32,7 +32,7 @@ void random_access_alloc_ra_buf (VBlock *vb, int32_t chrom_node_index)
     uint64_t old_len = vb->ra_buf.len;
     uint64_t new_len = chrom_node_index + 2; // +2 because we store for chrom_node_index [-1, chrom_node_index]
     if (new_len > old_len) {
-        buf_alloc_old (vb, &vb->ra_buf, sizeof (RAEntry) * MAX (new_len, 500), 2, "ra_buf");
+        buf_alloc (vb, &vb->ra_buf, 0, MAX (new_len, 500), RAEntry, 2, "ra_buf");
         memset (ENT (RAEntry, vb->ra_buf, old_len), 0, (new_len - old_len) * sizeof (RAEntry));
         vb->ra_buf.len = new_len;
     }
@@ -122,7 +122,7 @@ void random_access_merge_in_vb (VBlock *vb)
 {
     mutex_lock (ra_mutex);
 
-    buf_alloc_old (evb, &z_file->ra_buf, (z_file->ra_buf.len + vb->ra_buf.len) * sizeof(RAEntry), 2, "z_file->ra_buf"); 
+    buf_alloc (evb, &z_file->ra_buf, 0, z_file->ra_buf.len + vb->ra_buf.len, RAEntry, 2, "z_file->ra_buf"); 
 
     ARRAY (RAEntry, src_ra, vb->ra_buf);
 
@@ -183,7 +183,7 @@ void random_access_finalize_entries (Buffer *ra_buf)
 
     // use sorter to consturct a sorted RA
     static Buffer sorted_ra_buf = EMPTY_BUFFER; // must be static because its added to buf_list
-    buf_alloc_old (evb, &sorted_ra_buf, sizeof (RAEntry) * ra_buf->len, 1, ra_buf->name);
+    buf_alloc (evb, &sorted_ra_buf, 0, ra_buf->len, RAEntry, 1, ra_buf->name);
     sorted_ra_buf.len = ra_buf->len;
 
     for (uint32_t i=0; i < ra_buf->len; i++) 
@@ -295,7 +295,7 @@ void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min_pos, P
     if (!buf_is_allocated (&z_file->ra_min_max_by_chrom)) {
         uint64_t num_chroms = z_file->contexts[CHROM].word_list.len;
 
-        buf_alloc_old (evb, &z_file->ra_min_max_by_chrom, num_chroms * sizeof (MinMax), 1, "z_file->ra_min_max_by_chrom");
+        buf_alloc (evb, &z_file->ra_min_max_by_chrom, 0, num_chroms, MinMax, 1, "z_file->ra_min_max_by_chrom");
         buf_zero (&z_file->ra_min_max_by_chrom); // safety
         z_file->ra_min_max_by_chrom.len = num_chroms;
 
@@ -422,7 +422,7 @@ uint32_t random_access_verify_all_contigs_same_length (void)
 {
     static Buffer max_lens_buf = EMPTY_BUFFER;
     const Context *ctx = &z_file->contexts[CHROM];
-    buf_alloc_old (evb, &max_lens_buf, ctx->word_list.len * sizeof (PosType), 1, "max_lens");
+    buf_alloc (evb, &max_lens_buf, 0, ctx->word_list.len, PosType, 1, "max_lens");
     buf_zero (&max_lens_buf);
 
     ARRAY (const RAEntry, ra, z_file->ra_buf);

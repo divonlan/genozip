@@ -93,7 +93,7 @@ typedef struct {
          processing_rejects, // ZIP & PIZ: currently zipping liftover rejects file / component
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_reconstruct,  // PIZ: User requested to genocat with only metadata to be shown, not file contents
-         genocat_no_reconstruct_output, // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
+         genocat_no_write,   // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks

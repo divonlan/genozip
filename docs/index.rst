@@ -7,16 +7,12 @@ Genozip
    :maxdepth: 2
 
    Installing <installing> 
-   Examples <examples> 
-   Use cases <use-cases>
-   Using genozip <genozip>
-   Using genounzip <genounzip>
-   Using genocat <genocat>
-   Using genols <genols>
+   Capabilities <capabilities>
+   Pipelines <pipelines> 
+   Manual <manual>
    Publications & Citing <publications>
    Algorithms <algorithms>
    Source code <source>
-   Developer options <developer>
    License <license>
    Contact <contact>
   

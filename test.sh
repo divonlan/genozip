@@ -6,7 +6,7 @@ TESTDIR=test
 OUTDIR=$TESTDIR/tmp
 
 cleanup() { 
-    rm -f $OUTDIR/* $TESTDIR/*.!(ref).genozip $TESTDIR/*.bad # uses extglob
+    rm -f $OUTDIR/* $TESTDIR/*.!(ref).genozip $TESTDIR/*.bad $TESTDIR/*.rejects.* # uses extglob
 }
 
 cmp_2_files() {
@@ -28,10 +28,11 @@ test_header() {
 }
 
 test_count_genocat_lines() { # $1 - genozip arguments $2 - genocat arguments $3 - expected number of output lines
-    local cmd="$genocat $output $2"
-    test_header "$cmd"
+    test_header "genozip $1 ; genocat $2"
     $genozip $1 -fo $output || exit 1
-    local wc=`$cmd | wc -l`
+    $genocat $output $2 -fo $recon || exit 1
+    local wc=`cat $recon |wc -l`
+
     if (( $wc != $3 )); then
         echo "FAILED - expected $3 lines, but getting $wc"
         exit 1
@@ -107,7 +108,7 @@ test_unix_style() {  # $1=filename  ; optional $2=rm
 
     if [ ! -f $file ] ; then echo "$1: File $file not found"; exit 1; fi
 
-    cat $file | tr -d "\r" > $OUTDIR/unix-nl.$1
+    cat $file | tr -d "\r" > $OUTDIR/unix-nl.$1 || exit 1
     $genozip $OUTDIR/unix-nl.$1 -ft -o $output || exit 1    
 
     # no cleanup as we need the output for test_windows_style
@@ -145,17 +146,29 @@ test_multi_bound() # $1=filename $2=REPLACE (optional)
     local file1=$OUTDIR/copy1.$1
     local file2=$OUTDIR/copy2.$1
 
-    cp -f $file $file1
+    cp -f $file $file1 || exit 1
     if [[ $2 == "REPLACE" ]]; then
-        cat $file | sed 's/PRFX/FILE2/g' > $file2
+        cat $file | sed 's/PRFX/FILE2/g' > $file2 || exit 1
     else
-        cp -f $file $file2
+        cp -f $file $file2 || exit 1
     fi
 
     $genozip $file1 $file2 -ft -o $output || exit 1 # test as bound
     local output2=$OUTDIR/output2.genozip
-    cp -f $output $output2
+    cp -f $output $output2 || exit 1
     $genounzip $output $output2 -t || exit 1 # test unbind 2x2
+
+    # test --comoponent
+    if [[ $2 == "REPLACE" ]]; then
+        $genocat $output --component 1 -fo $recon || exit 1
+        local wc=`cat $recon | grep PRFX | wc -l`
+        if (( "$wc" == 0 )); then echo "FAILED --component 1 - expected 1 lines, but getting $wc" ; exit 1; fi
+
+        $genocat $output --component 2 -fo $recon || exit 1
+        local wc=`cat $recon | grep FILE2 | wc -l`
+        if (( "$wc" == 0 )); then echo "FAILED --component 2 - expected 1 lines, but getting $wc" ; exit 1; fi
+    fi  
+
     cleanup
 }
 
@@ -195,7 +208,7 @@ test_translate_sam_to_bam() # $1 bam file
     if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
 
     $genozip -f $sam -o $output  || exit 1
-    $genounzip $output --bam --no-PG -fo $new_bam || exit 1
+    $genocat $output --bam --no-PG -fo $new_bam || exit 1
     
     # we compare the BAMs on a textual basis as the original BAM might be produced with a different version
     samtools view --no-PG -h $new_bam > $new_sam || exit 1
@@ -212,8 +225,8 @@ test_translate_sambam_to_fastq() # $1 sam or bam file
     local fastq=$OUTDIR/copy.fastq.gz
     if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
 
-    $genozip -f $sambam -o $output  || exit 1
-    $genounzip $output -fo $fastq   || exit 1
+    $genozip -f $sambam -o $output || exit 1
+    $genocat $output -fo $fastq    || exit 1
 
     cleanup
 }
@@ -227,8 +240,8 @@ test_translate_23andMe_to_vcf() # $1 23andMe file
     local vcf=$OUTDIR/copy.vcf.gz
     if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
 
-    $genozip -f $me23 -o $output  || exit 1
-    $genounzip $output -fo $vcf -e $hg19  || exit 1
+    $genozip -f $me23 -o $output       || exit 1
+    $genocat $output -fo $vcf -e $hg19 || exit 1
 
     cleanup
 }
@@ -236,7 +249,7 @@ test_translate_23andMe_to_vcf() # $1 23andMe file
 view_file()
 {
     if [[ $1 =~ \.gz$ ]]; then  
-        gunzip -c $1
+        gunzip -c $1 || exit 1
     else
         cat $1
     fi 
@@ -281,7 +294,7 @@ batch_basic()
         test_redirected $file
         test_stdout $file
         test_standard "COPY" " " $file
-        test_multi_bound $file REPLACE # REPLAEC to adjust the contig name for .fa as we can't have two contigs with the same name
+        test_multi_bound $file REPLACE # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
         test_optimize $file
     done
 }
@@ -582,6 +595,7 @@ batch_genols()
 make --quiet testfiles
 
 output=${OUTDIR}/output.genozip
+recon=${OUTDIR}/recon.txt
 
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
@@ -639,7 +653,11 @@ fi
 
 mkdir $OUTDIR >& /dev/null
 cleanup
-rm -f ${hg19}.*cache* ${GRCh38}.*cache* # delete genome and hash caches
+
+# only if doing a full test - delete genome and hash caches
+if (( $1 == 1 )) ; then
+    rm -f ${hg19}.*cache* ${GRCh38}.*cache* 
+fi
 
 # unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
 batch_id=$1
@@ -655,8 +673,8 @@ if (( $1 <= 7  )) ; then  batch_sam_translations       ; fi
 if (( $1 <= 8  )) ; then  batch_23andMe_translations   ; fi
 if (( $1 <= 9  )) ; then  batch_genocat_tests          ; fi
 if (( $1 <= 10 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 11 )) ; then  batch_real_world_subsets     ; fi # natural VB size
-if (( $1 <= 12 )) ; then  batch_real_world_subsets -B1 ; fi # many VBs
+if (( $1 <= 11 )) ; then  batch_real_world_subsets     ; fi ; # natural VB size
+if (( $1 <= 12 )) ; then  batch_real_world_subsets -B1 ; fi ; # many VBs
 if (( $1 <= 13 )) ; then  batch_multifasta             ; fi
 if (( $1 <= 14 )) ; then  batch_misc_cases             ; fi
 if (( $1 <= 15 )) ; then  batch_external_cram          ; fi

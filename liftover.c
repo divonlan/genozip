@@ -254,7 +254,7 @@ static void liftover_seg_parse_record (VBlockP vb, char *value, int value_len, c
 {
     const char *strs[5];
     unsigned str_lens[5];
-    ASSSEG (str_split (value, value_len, 5, ',', strs, str_lens), value, "Invalid %s field: \"%.*s\"", field_name, value_len, value);
+    ASSSEG (str_split (value, value_len, 5, ',', strs, str_lens, 0), value, "Invalid %s field: \"%.*s\"", field_name, value_len, value);
 
     *chrom     = strs[0]; 
     *chrom_len = str_lens[0];

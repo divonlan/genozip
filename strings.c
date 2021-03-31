@@ -287,29 +287,33 @@ bool str_case_compare (const char *str1, const char *str2, unsigned len,
     return true; // case-insenstive identical
 }
 
-// splits a string (doesn't need to be nul-terminated) to exactly num_items.
+// splits a string with (num_items-1) separators (doesn't need to be nul-terminated) to exactly num_items
 // returns true is successful
-bool str_split (const char *str, unsigned str_len, unsigned num_items, char sep,
-                const char **items,  // out - array of char*
-                unsigned *item_lens) // optional out - corresponding lengths
+bool str_split (const char *str, unsigned str_len, uint32_t num_items, char sep,
+                const char **items,  // out - array of char* of length num_items - one more than the number of separators
+                unsigned *item_lens, // optional out - corresponding lengths
+                const char *enforce_msg)   // non-NULL if enforcement of length is requested
 
 {
     items[0] = str;
-    unsigned item_i=1;
+    uint32_t item_i=1;
 
-    for (unsigned i=0; i < str_len ; i++) 
+    for (uint32_t i=0; i < str_len ; i++) 
         if (str[i] == sep) {
             if (item_i == num_items) return false; // too many separators
             items[item_i++] = &str[i+1];
         }
 
     if (item_lens) {
-        for (unsigned i=0; i < num_items-1; i++)    
+        for (uint32_t i=0; i < num_items-1; i++)    
             item_lens[i] = items[i+1] - items[i] - 1;
             
         item_lens[num_items-1] = &str[str_len] - items[num_items-1];
     }
 
+    ASSERT (!enforce_msg || item_i == num_items, "Expecting the number of %s to be %u, but it is %u", 
+            enforce_msg, num_items, item_i);
+    
     return item_i == num_items; // false if too few separators
 }
 

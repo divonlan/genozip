@@ -110,6 +110,17 @@ bool piz_test_grep (VBlock *vb)
     return found; 
 }
 
+bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
+{
+    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+
+    bool skip = 
+        (flag.dump_one_local_dict_id.num && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num)
+    ||  (flag.dump_one_b250_dict_id.num  && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num);
+
+    return skip;
+}
+
 // PIZ compute thread: decompress all contexts
 // ZIP compute thread in FASTQ: decompress pair_1 contexts when compressing pair_2
 uint32_t piz_uncompress_all_ctxs (VBlock *vb, 
@@ -305,7 +316,8 @@ DataType piz_read_global_area (void)
         ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
 
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
-        ref_alt_chroms_load();
+        if (!flag.genocat_no_ref_file)
+            ref_alt_chroms_load();
 
         // case: reading reference file
         if (flag.reading_reference) {
@@ -389,7 +401,7 @@ static bool piz_read_one_vb (VBlock *vb)
     ASSERT (vb_header_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
-    buf_alloc_old (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(uint32_t), 0, "z_section_headers"); // room for section headers  
+    buf_alloc (vb, &vb->z_section_headers, 0, MAX_DICTS * 2 + 50, uint32_t, 0, "z_section_headers"); // room for section headers  
 
     NEXTENT (uint32_t, vb->z_section_headers) = vb_header_offset; // vb_header_offset is always 0 for VB header
 
@@ -456,7 +468,7 @@ static Digest piz_one_verify_digest (void)
 // returns false if VB was dispatched, and true if vb was skipped
 static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
 {
-    if (!sorter_is_vb_in_plan (sl_ent->vblock_i)) return true; // skip this VB - we don't need it
+    if (sorter_piz_is_vb_no_read (sl_ent->vblock_i)) return true; // skip this VB - we don't need it
     
     VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
     next_vb->component_i = z_file->num_txt_components_so_far;
@@ -464,8 +476,9 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
     // read one VB's genozip data
     bool grepped_out = !piz_read_one_vb (next_vb);
 
-    if (grepped_out) {
-        sorter_filter_out_vb (next_vb->vblock_i);
+    // case: we won't proceed to uncompressing, reconstructing and writing now that we're done reading
+    if (grepped_out) { 
+        sorter_piz_remove_vb_from_recon_plan (next_vb->vblock_i);
         dispatcher_abandon_next_vb (dispatcher);
         return true; // VB skipped
     }
@@ -525,7 +538,7 @@ void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_f
             if (found_header && sl->st == SEC_TXT_HEADER && z_file->num_txt_components_so_far < first_comp_this_txt + num_comps_this_txt) { 
 
                 // case: skip entire component 
-                if (sorter_is_component_skipped (z_file->num_txt_components_so_far)) 
+                if (sorter_piz_is_component_no_read (z_file->num_txt_components_so_far)) 
                     sl = sections_component_last (sl);
 
                 else {

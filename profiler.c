@@ -33,7 +33,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(sam_seg_seq_field);
     ADD(ctx_compress_one_dict_fragment);
     ADD(zfile_uncompress_section);
-    ADD(buf_alloc_old);
+    ADD(buf_alloc);
     ADD(txtfile_read_vblock);
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
@@ -159,7 +159,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (codec_hapmat_count_alt_alleles, 2);
     }    
 
-    PRINT (buf_alloc_old, 0);
+    PRINT (buf_alloc, 0);
     PRINT (generate_rev_complement_genome, 0);
     
     fprintf (info_stream, "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));

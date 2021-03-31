@@ -306,7 +306,7 @@ static void refhash_uncompress_one_vb (VBlockP vb)
 
 static void refhash_read_one_vb (VBlockP vb)
 {
-    buf_alloc_old (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
+    buf_alloc (vb, &vb->z_section_headers, 0, 1, int32_t, 0, "z_section_headers"); // room for 1 section header
 
     if (!sections_next_sec1 (&sl_ent, SEC_REF_HASH, true, false))
         return; // no more refhash sections

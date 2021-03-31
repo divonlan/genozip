@@ -1,11 +1,12 @@
-Use cases
-=========
+Capabilities
+============
 
 .. toctree::
    :maxdepth: 1
 
+   Compression <compression>
+   File transfer and archiving <transfer-archiving>
    Dual-coordinates VCF <dual-coordinates-vcf>
-   FASTQ to BAM pipeline <fastq-to-bam-pipeline>
    Downsampling <downsampling>
    Per-contig coverage <coverage>
    Sex assignment <sex-assignment>

@@ -269,7 +269,7 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
-    if (dd->max_threads > 1 && !dd->num_running_compute_threads) return NULL; // no running compute threads 
+    if (!dd->num_running_compute_threads) return NULL; // no running compute threads 
 
     Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
 

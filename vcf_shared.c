@@ -18,8 +18,8 @@ bool vcf_vb_has_haplotype_data (VBlockP vb) { return !!((VBlockVCFP)vb)->ht_matr
 void vcf_vb_release_vb (VBlockVCF *vb) 
 {
     vb->ploidy = 0;
-    vb->ac = vb->an = vb->af = NULL;
-    vb->ac_len = vb->an_len = vb->af_len = 0;
+    vb->ac = vb->an = vb->af = vb->end = NULL;
+    vb->ac_len = vb->an_len = vb->af_len = vb->end_len = 0;
     vb->is_af_before_ac = vb->is_an_before_ac = vb->has_basecounts = false;
     vb->use_special_sf = 0;
     vb->gt_prev_ploidy = 0;

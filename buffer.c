@@ -259,58 +259,67 @@ static int buf_stats_sort_by_bytes(const void *a, const void *b)
     return ((MemStats*)a)->bytes < ((MemStats*)b)->bytes ? 1 : -1;
 }
 
+static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), void *arg)
+{
+    VBlockPool *vb_pool = vb_get_pool ();
+
+    for (int vb_i=-1; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
+
+        ARRAY (const Buffer *, bl, vb_i == -1 ? evb->buffer_list : vb_pool->vb[vb_i]->buffer_list);
+        
+        for (uint32_t buf_i=0; buf_i < bl_len; buf_i++)
+            if (bl[buf_i] && bl[buf_i]->memory) callback (bl[buf_i], arg); // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
+    }
+}
+
+static void buf_count_mem_usage (const Buffer *buf, void *mem_usage)
+{
+    *((uint64_t *)mem_usage) += buf->size + control_size;
+}
+
+uint64_t buf_get_memory_usage (void)
+{
+    uint64_t mem_usage=0;
+    buf_foreach_buffer (buf_count_mem_usage, &mem_usage);
+    return mem_usage;
+}
+
+#define MAX_MEMORY_STATS 100
+static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_display_memory_usage is called when malloc fails, so it cannot malloc
+static unsigned num_stats=0, num_buffers=0;
+
+static void buf_add_mem_usage_to_stats (const Buffer *buf, void *unused)
+{
+    ASSERTW (buf->name && strlen (buf->name) > 0, "FYI: buffer allocated in %s:%u has no name", buf->func, buf->code_line);
+
+    bool found = false;
+    for (unsigned st_i=0; st_i < num_stats && !found; st_i++) 
+        if (!strcmp (stats[st_i].name, buf->name)) {
+            stats[st_i].buffers++;
+            stats[st_i].bytes += buf->size + control_size;
+            found = true;
+        }
+
+    if (!found) {
+        stats[num_stats++] = (MemStats){ .buffers = 1, 
+                                         .name    = buf->name, 
+                                         .bytes   = buf->size + control_size };
+        ASSERT (num_stats < MAX_MEMORY_STATS, "# memory stats exceeded %u, consider increasing MAX_MEMORY_STATS", MAX_MEMORY_STATS);
+    }
+
+    num_buffers++;
+}
+
 void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads)
 {
-    #define MAX_MEMORY_STATS 100
-    static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_display_memory_usage is called when malloc fails, so it cannot malloc
-    unsigned num_stats = 0, num_buffers = 0;
+    memset (stats, 0, sizeof(stats));
+    num_stats = num_buffers = 0;
+    buf_foreach_buffer (buf_add_mem_usage_to_stats, 0);
 
     if (memory_full)
         fprintf (stderr, "\n\nError memory is full:\n");
     else
         iprint0 ("\n-------------------------------------------------------------------------------------\n");
-
-    VBlockPool *vb_pool = vb_get_pool ();
-
-    for (int vb_i=-1; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
-
-        Buffer *buf_list = (vb_i == -1) ? &evb->buffer_list
-                                        : &vb_pool->vb[vb_i]->buffer_list; // a pointer to a buffer, which contains an array of pointers to buffers of a single vb/non-vb
-
-        if (!buf_list->len) continue; // no buffers allocated yet for this VB
-
-        for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) {
-    
-            ASSERT (buf_list->memory, "memory of buffer_list of vb_i=%u is not allocated", vb_i); // this should never happen
-
-            Buffer *buf = ((Buffer **)buf_list->data)[buf_i];
-            
-            if (!buf || !buf->memory) continue; // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
-
-            ASSERTW (buf->name && strlen (buf->name) > 0, "FYI: buffer allocated in %s:%u has no name", buf->func, buf->code_line);
-
-            bool found = false;
-            for (unsigned st_i=0; st_i < num_stats && !found; st_i++) {
-                MemStats *st = &stats[st_i];
-
-                if (!strcmp (st->name, buf->name)) {
-                    st->buffers++;
-                    st->bytes += buf->size + control_size;
-                    found = true;
-                }
-            }
-
-            if (!found) {
-                stats[num_stats].name    = buf->name;
-                stats[num_stats].bytes   = buf->size + control_size;
-                stats[num_stats].buffers = 1;
-                num_stats++;
-                ASSERT (num_stats < MAX_MEMORY_STATS, "# memory stats exceeded %u, consider increasing MAX_MEMORY_STATS", MAX_MEMORY_STATS);
-            }
-
-            num_buffers++;
-        }
-    }
 
     // add non-Buffer reference memory
     if (flag.reference != REF_NONE) 
@@ -322,7 +331,7 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     uint64_t total_bytes=0;
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
-    fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists:\n", str_size (total_bytes).s, num_buffers, vb_pool->num_allocated_vbs);
+    fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists:\n", str_size (total_bytes).s, num_buffers, vb_get_pool()->num_allocated_vbs);
     if (command == ZIP) 
         fprintf (memory_full ? stderr : info_stream, "vblock_memory = %u MB\n", (unsigned)(flag.vblock_memory >> 20));
     
@@ -414,14 +423,14 @@ uint64_t buf_alloc_do (VBlock *vb,
     if (!requested_size) return 0; // nothing to do
 
 #define REQUEST_TOO_BIG_THREADSHOLD (4ULL*1024*1024*1024) // 4 GB
-    ASSERTW (requested_size < REQUEST_TOO_BIG_THREADSHOLD, "Warning: buf_alloc_old called from %s:%u requested %s. This is suspeciously high and might indicate a bug. buf=%s",
+    ASSERTW (requested_size < REQUEST_TOO_BIG_THREADSHOLD, "Warning: buf_alloc called from %s:%u requested %s. This is suspeciously high and might indicate a bug. buf=%s",
              func, code_line, str_size (requested_size).s, buf_desc (buf).s);
 
     // sanity checks
-    ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc_old a buffer of type %s. details: %s", 
+    ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
             func, code_line, buf_display_type (buf), buf_desc (buf).s);
 
-    ASSERT0 (vb, "null vb");
+    ASSERT (vb, "called from %s:%u: null vb", func, code_line);
 
     // case 1: we have enough memory already
     if (requested_size <= buf->size) {
@@ -501,7 +510,7 @@ uint64_t buf_alloc_do (VBlock *vb,
     }
 
 finish:
-    if (vb != evb) COPY_TIMER (buf_alloc_old); // this is not thread-safe for evb as evb buffers might be allocated by any thread
+    if (vb != evb) COPY_TIMER (buf_alloc); // this is not thread-safe for evb as evb buffers might be allocated by any thread
     return buf->size;
 }
 
@@ -643,7 +652,7 @@ error:
     return false;
 }
 
-// free buffer - without freeing memory. A future buf_alloc_old of this buffer will reuse the memory if possible.
+// free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
 void buf_free_do (Buffer *buf, const char *func, uint32_t code_line) 
 {
     uint16_t *overlay_count; // number of buffers (overlay and regular) sharing buf->memory
@@ -811,7 +820,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
     uint64_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
-    buf_alloc_old (dst_vb, dst, num_entries * bytes_per_entry, 1, dst_name ? dst_name : src->name); // use realloc rather than malloc to allocate exact size
+    buf_alloc (dst_vb, dst, 0, num_entries * bytes_per_entry, char, 1, dst_name ? dst_name : src->name); // use realloc rather than malloc to allocate exact size
 
     memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);
 
@@ -1024,7 +1033,7 @@ void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
-    buf_alloc_old (buf->vb, &buf->vb->compressed, buf->len, 1, "compressed");
+    buf_alloc (buf->vb, &buf->vb->compressed, 0, buf->len, uint8_t, 1, "compressed");
     ARRAY (uint8_t, target, buf->vb->compressed);
     ARRAY (uint8_t, transposed, *buf);
 
@@ -1047,7 +1056,7 @@ void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
-    buf_alloc_old (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint16_t), 1, "compressed");
+    buf_alloc (buf->vb, &buf->vb->compressed, 0, buf->len, uint16_t, 1, "compressed");
     ARRAY (uint16_t, target, buf->vb->compressed);
     ARRAY (uint16_t, transposed, *buf);
 
@@ -1070,7 +1079,7 @@ void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
-    buf_alloc_old (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint32_t), 1, "compressed");
+    buf_alloc (buf->vb, &buf->vb->compressed, 0, buf->len, uint32_t, 1, "compressed");
     ARRAY (uint32_t, target, buf->vb->compressed);
     ARRAY (uint32_t, transposed, *buf);
 
@@ -1093,7 +1102,7 @@ void BGEN_transpose_u64_buf (Buffer *buf, LocalType *lt)
     uint32_t cols = BGEN_transpose_num_cols (buf);
     uint32_t rows = buf->len / cols;
 
-    buf_alloc_old (buf->vb, &buf->vb->compressed, buf->len * sizeof (uint64_t), 1, "compressed");
+    buf_alloc (buf->vb, &buf->vb->compressed, 0, buf->len, uint64_t, 1, "compressed");
     ARRAY (uint64_t, target, buf->vb->compressed);
     ARRAY (uint64_t, transposed, *buf);
 

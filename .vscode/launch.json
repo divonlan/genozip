@@ -16,9 +16,10 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
              
-            //"args": ["test/basic.vcf","-Ctest/basic.chain.genozip","-fobug.vcf.genozip"],
+            //"args": ["test\\basic.fq","test\\basic.fq","-edata\\GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "-2fobug.genozip", "--show-header"],
             //"args": ["test\\test.human2-R1.100K.fq.gz", "test\\test.human2-R2.100K.fq.gz", "-2fobug.genozip", "-B1", "-edata\\GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip"],
-            "args": ["bug.vcf.genozip"],
+            //"args": ["test\\back-compat\\8.0.4\\basic.sam.genozip"],
+            "args": [ "test\\basic.vcf.genozip","-@1", "--GT", "--show-conta"],
 
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

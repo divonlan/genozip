@@ -515,10 +515,14 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 }
 
 // filtering during reconstruction: called by container_reconstruct_do for each sam alignment (repeat)
-CONTAINER_FILTER_FUNC (sam_piz_sam2fq_filter)
+CONTAINER_CALLBACK (sam_piz_container_cb)
 {
-    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
-    return !(sam_flag & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLAMENTARY)); // show only if this is a primary alignment (don't show its secondary or supplamentary alignments)
+    // case SAM to FQ translation: drop line if this is not a primary alignment (don't show its secondary or supplamentary alignments)
+    if (dict_id.num == dict_id_fields[SAM_TOP2FQ]) {
+        uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
+        if (sam_flag & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLAMENTARY)) 
+            vb->dont_show_curr_line = true;
+    }
 }
 
 // reverse-complement the sequence if needed, and drop if "*"

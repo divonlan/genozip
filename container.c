@@ -68,11 +68,8 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, ContainerP con,
                  vb->vblock_i, vb->line_i, ctx->did_i, ctx->name, con->repeats, con->repsep[0], con->repsep[1]);
         for (unsigned i=0; i < con_nitems (*con); i++) {
             ContainerItem *item = &con->items[i];
-            if (item->dict_id.num) {
-                Context *item_ctx = ctx_get_existing_ctx (vb, item->dict_id);
-                ASSERT (item_ctx, "dict_id=%s has no context", dis_dict_id (item->dict_id).s);
+            if (item->dict_id.num) 
                 fprintf (info_stream, "%u:%s ", ctx->did_i, dis_dict_id (item->dict_id).s); 
-            }
         }
         iprint0 ("\n");
     }
@@ -113,6 +110,15 @@ static inline void container_reconstruct_prefix (VBlockP vb, ConstContainerP con
     (*prefixes_len) -= len + 1;
 }
 
+
+CONTAINER_FILTER_FUNC (container_no_filter)
+{
+    ABORT ("File %s requires a filter for dict_id=%s item=%u. Please upgrade to the latest version of genozip",
+           z_name, dis_dict_id (dict_id).s, item);
+
+    return true;    
+}
+
 static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, ConstContainerP con, 
                                                       const char *prefixes, uint32_t prefixes_len)
 {
@@ -151,8 +157,9 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
             vb->dont_show_curr_line = false; // initialize for this line
         }
-    
-        if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1, NULL))) continue; // repeat is filtered out
+
+        if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1, NULL))) 
+            continue; // repeat is filtered out
 
         char *rep_reconstruction_start = AFTERENT (char, vb->txt_data);
 
@@ -181,7 +188,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                          vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctxs[i]->name, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 
-            container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len, false, ctx->dict_id, con->items[i].dict_id); // item prefix (we will have one per item or none at all)
+/*BRKPOINT*/container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len, false, ctx->dict_id, con->items[i].dict_id); // item prefix (we will have one per item or none at all)
 
             int32_t reconstructed_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
@@ -224,7 +231,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             // after all reconstruction and translation is done - move if needed
             if (flag.trans_containers && IS_CI_SET (CI_TRANS_MOVE))
                 vb->txt_data.len += (uint8_t)item->seperator[1];
-        }
+        } // items loop
 
         if (rep_i+1 < con->repeats || !con->drop_final_repeat_sep) {
             if (con->repsep[0]) RECONSTRUCT1 (con->repsep[0]);
@@ -240,11 +247,16 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             ASSERT0 (flag.may_drop_lines, "Lines cannot be dropped because flag.may_drop_lines=false");
             vb->txt_data.len = vb->line_start;
             
-            static const char *drop_lines[] = { "", "\b\n", "\b\n\b\n", "\b\n\b\n\b\n", "\b\n\b\n\b\n\b\n" };
-            unsigned ht = DTPT (line_height);
-            RECONSTRUCT (drop_lines[ht], ht*2); // tell sorter_piz_writer to drop line
+            // only add "dropped line" (\b\n) for sorter, if its a beginning of a textual line (in case of --sequential, it wont
+            // be for lines 2+ of the FASTA sequence)
+            if (!vb->txt_data.len || *LASTENT (char, vb->txt_data) == '\n') {
+                static const char *drop_lines[] = { "", "\b\n", "\b\n\b\n", "\b\n\b\n\b\n", "\b\n\b\n\b\n\b\n" };
+                unsigned ht = DTPT (line_height);
+                ASSERT (ht < sizeof (drop_lines) / sizeof (drop_lines[0]), "ht=%u is too large", ht);
+                RECONSTRUCT (drop_lines[ht], ht*2); // tell sorter_piz_writer to drop line
+            }
         }
-    }
+    } // repeats loop
 
     // remove final seperator, if we need to
     if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {

@@ -214,9 +214,9 @@ SPHINX = /home/divon/miniconda3/bin/sphinx-build
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/developer.rst docs/index.rst docs/license.rst \
        docs/publications.rst docs/installing.rst docs/contact.rst docs/examples.rst docs/source.rst docs/logo.png \
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-translation.rst \
-	   docs/use-cases.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
+	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
-	   docs/downsampling.rst docs/dual-coordinates-vcf.rst
+	   docs/downsampling.rst docs/dual-coordinates-vcf.rst docs/pipelines.rst docs/capabilities.rst
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
@@ -455,7 +455,7 @@ test:
 	@cat test.sh | tr -d "\r" | bash -
 
 clean-test.sh-files: 
-	@rm -f unix-nl.* windows-nl.* copy.* test-output.genozip td/*.genozip
+	@rm -f test/tmp/* test/*.rejects.*
 
 clean-debug:
 	@echo Cleaning up debug

@@ -852,7 +852,7 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
         // prepare sorter array containing indices into ctx->nodes. We are going to sort it rather than sort nodes directly
         // as the b250 data contains node indices into ctx->nodes.
         static Buffer sorter = EMPTY_BUFFER;
-        buf_alloc_old (vb, &sorter, ctx->nodes.len * sizeof (int32_t), CTX_GROWTH, "sorter");
+        buf_alloc (vb, &sorter, 0, ctx->nodes.len, int32_t, CTX_GROWTH, "sorter");
         for (WordIndex i=0; i < ctx->nodes.len; i++)
             NEXTENT (WordIndex, sorter) = i;
 
@@ -1099,7 +1099,7 @@ static Context *dict_ctx;
 
 static void ctx_dict_read_one_vb (VBlockP vb)
 {
-    buf_alloc_old (vb, &vb->z_section_headers, 1 * sizeof(int32_t), 0, "z_section_headers"); // room for 1 section header
+    buf_alloc (vb, &vb->z_section_headers, 0, 1, int32_t, 0, "z_section_headers"); // room for 1 section header
 
     if (!sections_next_sec1 (&dict_sl, SEC_DICT, false, false))
         return; // we're done - no more SEC_DICT sections
@@ -1179,7 +1179,7 @@ static void ctx_dict_build_word_lists (void)
 
         if (!ctx->word_list.len || ctx->word_list.data) continue; // skip if 1. no words, or 2. already built
 
-        buf_alloc_old (evb, &ctx->word_list, ctx->word_list.len * sizeof (CtxWord), 0, "contexts->word_list");
+        buf_alloc (evb, &ctx->word_list, 0, ctx->word_list.len, CtxWord, 0, "contexts->word_list");
         buf_set_overlayable (&ctx->word_list);
 
         const char *word_start = ctx->dict.data;

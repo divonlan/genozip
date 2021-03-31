@@ -188,6 +188,7 @@ typedef struct {
     unsigned buffers;
 } MemStats;
 
+uint64_t buf_get_memory_usage (void);
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
 extern void buf_display_memory_usage_handler (void);
 

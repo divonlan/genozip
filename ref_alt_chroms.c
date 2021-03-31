@@ -27,18 +27,21 @@
 
 void ref_alt_chroms_compress (void)
 {
-    // case: when compressing SAM or BAM with a header (including BAM header with no SQs - unaligned BAM), 
+    // case: when compressing SAM, BAM or VCF with a header (including BAM header with no SQs - unaligned BAM), 
     // alt chroms were already prepared in ref_contigs_ref_chrom_from_header_chrom
     if (txtheader_get_contigs()) goto just_compress;
 
     Context *ctx = &z_file->contexts[CHROM];
     uint32_t num_chroms = ctx->nodes.len;
     uint32_t num_contigs = ref_contigs_num_contigs();   // chroms that are in the reference file
+
+    ASSERT (num_chroms >= num_contigs, "expecting num_chroms=%u >= num_contigs=%u", num_chroms, num_contigs);
+
     uint32_t num_alt_chroms = num_chroms - num_contigs; // chroms that are only in the txt file, not in the reference
 
     if (!num_alt_chroms) return; // no need for an alt chroms sections as we have none
 
-    buf_alloc_old (evb, &z_file->alt_chrom_map, sizeof (AltChrom) * num_alt_chroms, 1, "z_file->alt_chrom_map");
+    buf_alloc (evb, &z_file->alt_chrom_map, 0, num_alt_chroms, AltChrom, 1, "z_file->alt_chrom_map");
 
     if (flag.show_ref_alts) 
         iprint0 ("\nAlternative chrom indices (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
@@ -86,7 +89,7 @@ void ref_alt_chroms_load (void)
     Context *ctx = &z_file->contexts[CHROM];
 
     // create mapping user index -> reference index
-    buf_alloc_old (evb, &z_file->alt_chrom_map, sizeof (WordIndex) * ctx->word_list.len, 1, "z_file->alt_chrom_map");
+    buf_alloc (evb, &z_file->alt_chrom_map, 0, ctx->word_list.len, WordIndex, 1, "z_file->alt_chrom_map");
     z_file->alt_chrom_map.len = ctx->word_list.len;
 
     // initialize with unity mapping

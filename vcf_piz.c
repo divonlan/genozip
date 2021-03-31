@@ -411,7 +411,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_REFALT)
 
     // split REFALT
     const char *ref_alt[2]; unsigned ref_alt_lens[2];
-    ASSERT (str_split (reconstructed, reconstructed_len, 2, '\t', ref_alt, ref_alt_lens), 
+    ASSERT (str_split (reconstructed, reconstructed_len, 2, '\t', ref_alt, ref_alt_lens, 0), 
             "expecting one tab in the REFALT snip: \"%.*s\"", reconstructed_len, reconstructed);
 
     liftback->len -= ref_alt_lens[1] + 1; // remove \tALT from INFO/LIFTBACK data (but data is still in the buffer...)
@@ -447,7 +447,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_oREF)
     char ref_alt_str[ref_alt_str_len];
     memcpy (ref_alt_str, last_txt (vb, VCF_REFALT), ref_alt_str_len);
     const char *ref_alt[2]; unsigned ref_alt_len[2];
-    ASSERT (str_split (ref_alt_str, ref_alt_str_len, 2, '\t', ref_alt, ref_alt_len),
+    ASSERT (str_split (ref_alt_str, ref_alt_str_len, 2, '\t', ref_alt, ref_alt_len, 0),
             "expecting one tab in the REFALT snip: \"%.*s\"", ref_alt_str_len, ref_alt_str);
 
     if (snip_len==1 && *snip=='0')      // ALT

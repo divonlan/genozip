@@ -18,6 +18,7 @@
 @CO	BI with and without BD
 @CO	Unaligned (no RNAME,POS) line
 @CO	reverse complemented (flag 16)
+@CO	PRFX - used by test.sh/test_multi_bound
 @SQ	SN:chr1	LN:10000000
 @SQ	SN:chr2	LN:23641578
 @SQ	SN:chr3	LN:10000000

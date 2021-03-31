@@ -47,7 +47,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --list-chroms.  ZUC.  List the names of the chromosomes (or contigs) included in the file.
+.. option:: --show-chroms.  ZUC.  List the names of the chromosomes (or contigs) included in the file.
 
           |
 

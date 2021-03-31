@@ -526,26 +526,27 @@ void flags_update (unsigned num_files, const char **filenames)
                     flag.pair         ? BIND_PAIRS : 
                                         BIND_NONE  ;
 
-    // cases where genocat is used to view some information, but not the file contents, and no reconstruction is needed
+    // if this flag is set, data will be read and uncompressed (unless blocked in piz_is_skip_section), 
+    // but not reconstructed or written
     flag.genocat_no_reconstruct = exe_type == EXE_GENOCAT &&
         (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
-         flag.show_index || flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || flag.dump_section || flag.show_headers ||
+         flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || // all other sections are blocked from reading in piz_default_skip_section
+         flag.show_index || flag.dump_section || flag.show_headers ||
          flag.show_reference || flag.show_ref_contigs || flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
          flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_recon_plan);
 
+    // if this flag is set, no data will be written, although it still could be read and reconstructed 
+    // (unless blocked in flag.genocat_no_reconstruct or piz_default_skip_section) 
+    flag.genocat_no_write = exe_type == EXE_GENOCAT &&
+        (flag.genocat_no_reconstruct || 
+         flag.show_sex || flag.show_coverage || flag.idxstats);
+
+    // cases where we don't need to load the reference file, even if the genozip file normally needs it
+    flag.genocat_no_ref_file = exe_type == EXE_GENOCAT &&
+        (flag.show_stats || flag.show_gheader || flag.show_aliases || flag.show_recon_plan);
+
     // where progress, metadata etc messages should go. data always goes to stdout and errors/warning always go to stderr.
     info_stream = (!flag.to_stdout || flag.genocat_no_reconstruct) ? stdout : stderr;
-
-    // cases where genocat is used to view some information, but not the file contents (including cases where reconstruction is needed or analysis)
-    flag.genocat_no_reconstruct_output = exe_type == EXE_GENOCAT &&
-        (flag.genocat_no_reconstruct || flag.show_sex || flag.show_coverage || flag.idxstats);
-
-    if (flag.genocat_no_reconstruct_output) 
-        flag.no_header = true; // don't show header
-
-    // cases where we don't need to load the reference file at all
-    flag.genocat_no_ref_file = exe_type == EXE_GENOCAT &&
-        (flag.show_stats || flag.show_gheader || flag.show_aliases);
 }
 
 // ZIP: called for each file, after opening txt and z files, but before calling zip_one_file 
@@ -597,13 +598,14 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         ASSINP (!dt_props[flag.out_dt].is_binary, "Cannot concatenate multiple %s files, because %s is a binary format",
                 dt_name (flag.out_dt), dt_name (flag.out_dt));
     }
-        // if this is genounzip of a bound file, set flag.unbind
+
+    // if this is genounzip of a bound file, set flag.unbind
     if (exe_type == EXE_GENOUNZIP && z_file->num_components >= (2 + z_file->z_flags.dual_coords) && !flag.unbind)
         flag.unbind = ""; // we always unbind in genounzip - if user didn't specify prefix, then no prefix
 
     ASSINP0 (exe_type != EXE_GENOUNZIP || !flag.to_stdout, "Cannot use --stdout with genounzip, use genocat instead");
 
-    ASSINP (!flag.out_filename || z_file->num_components <= (1 + z_file->z_flags.dual_coords), 
+    ASSINP (exe_type != EXE_GENOUNZIP || !flag.out_filename || z_file->num_components <= (1 + z_file->z_flags.dual_coords), 
             "Cannot use --output because %s is a bound file containing multiple components. Use --prefix to set a prefix for output filenames, use genocat to output as a single concatenated file, or use genols to see the components' metadata",
             z_name);
              
@@ -638,6 +640,10 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
                               (flag.out_dt == DT_BAM            && z_file->data_type==DT_SAM && is_binary ) ||
                               (flag.out_dt == z_file->data_type && z_file->data_type!=DT_SAM);
 
+    ASSINP (exe_type == EXE_GENOCAT || flag.reconstruct_as_src, 
+            "genozip file is of type %s, but output file is of type %s. Translating between types is not possible in genounzip, use genocat instead",
+            dt_name (z_file->data_type), dt_name (flag.out_dt));             
+
     // true if the output txt file will NOT be identical to the source file as recorded in z_file
     // note: this does not account for changes to the data done at the compression stage with --optimize
     flag.data_modified = !flag.reconstruct_as_src || // translating to another data
@@ -660,9 +666,9 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     flag.may_drop_lines = exe_type == EXE_GENOCAT && 
                           (flag.grep || flag.regions || flag.downsample || flag.genobwa || flag.luft ||
                            flag.header_only_fast || (flag.no_header && flag.out_dt == DT_FASTA) ||
-                           (z_file->data_type == DT_ME23 && flag.out_dt == DT_VCF) || // translating ME23->VCF
-                           (z_file->data_type == DT_SAM && flag.out_dt == DT_FASTQ)); // translating SAM->FASTQ
-
+                           (z_file->data_type == DT_ME23  && flag.out_dt == DT_VCF)   || // translating ME23->VCF - we filter out lines lines with bad genotype
+                           (z_file->data_type == DT_SAM   && flag.out_dt == DT_FASTQ) || // translating SAM->FASTQ - we filter out lines with bad flags
+                           (z_file->data_type == DT_FASTA && flag.out_dt == DT_PHYLIP)); // translating FASTA->PHYLIP - we drop some EOL lines
     ASSINP (!flag.may_drop_lines || dt_props[flag.out_dt].line_height, "Options that cause dropping lines are not possible for a %s output file",
             dt_name (flag.out_dt));
 
@@ -696,6 +702,11 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 
         flag.interleave = (z_file->num_components==2);
     }
+
+    // version limitations
+    ASSINP (z_file->genozip_version >= 12 || !(z_file->data_type == DT_SAM && flag.out_dt == DT_FASTQ),
+            "%s was created with genozip version %u, SAM/BAM to FASTQ translation is supported only for files created with genozip version 12+",
+            z_name, z_file->genozip_version);
 
     flags_test_conflicts(0); // test again after updating flags
 }

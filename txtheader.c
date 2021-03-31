@@ -295,7 +295,7 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
     if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
     // hand-over txt header if it is needed:
-    if (sorter_is_txtheader_in_plan (component_i)) {
+    if (sorter_piz_is_txtheader_in_plan (component_i)) {
 
         if (evb->txt_data.len) {
             bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest

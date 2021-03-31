@@ -32,8 +32,8 @@ typedef struct VBlockVCF {
         
     // values stored during segging the INFO field and used when finalizing it - attempting to represent AC
     // as a function of AN and AF if possible
-    const char *ac, *an, *af;  
-    uint32_t ac_len, af_len, an_len;
+    const char *ac, *an, *af, *end;  
+    uint32_t ac_len, af_len, an_len, end_len;
     bool is_an_before_ac, is_af_before_ac, has_basecounts;
     
     Context *sf_ctx;
