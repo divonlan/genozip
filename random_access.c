@@ -449,7 +449,7 @@ void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const 
     if (!ra_sl) return; // section doesn't exist
 
     zfile_get_global_section (SectionHeader, sec_type, ra_sl, ra_buf, buf_name);
-
+    
     ra_buf->len /= sizeof (RAEntry);
     BGEN_random_access (ra_buf);
 

@@ -88,8 +88,8 @@ SPECIAL (SAM, 7, XA_POS, sam_piz_special_XA_POS);
     { DT_BAM,  &dict_id_OPTION_U2,          &dict_id_fields[SAM_U2_Z]     },
 
 #define BAM_LOCAL_GET_LINE_CALLBACKS  \
-    { DT_BAM,   &dict_id_OPTION_BD_BI,      sam_zip_bd_bi }, \
-    { DT_BAM,   &dict_id_fields[SAM_QUAL],  sam_zip_qual  }, 
+    { DT_BAM,  &dict_id_OPTION_BD_BI,       sam_zip_bd_bi }, \
+    { DT_BAM,  &dict_id_fields[SAM_QUAL],   sam_zip_qual  }, 
 
 
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
@@ -124,5 +124,7 @@ TRANSLATOR (SAM, FASTQ, 18, FLAG,       sam_piz_sam2fastq_FLAG)     // emit 1 if
 TXTHEADER_TRANSLATOR (txtheader_bam2sam);
 TXTHEADER_TRANSLATOR (txtheader_sam2bam);
 TXTHEADER_TRANSLATOR (txtheader_sam2fq);
+
+#define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:"PRId64
 
 #endif

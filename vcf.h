@@ -65,6 +65,9 @@ extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 #define HK_DC          "##dual_coordinates"
 #define HK_DC_PRIMARY  HK_DC"=PRIMARY"
 #define HK_DC_LUFT     HK_DC"=LUFT"
+
+#define VCF_CONTIG_FMT "##contig=<ID=%.*s,length=%"PRId64">"
+
 #define KH_INFO_LO     "##INFO=<ID=" INFO_LIFTOVER ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for lifting over the variant to luft coordinates\",Source=\"genozip\",Version=\"%s\">"
 #define KH_INFO_LB     "##INFO=<ID=" INFO_LIFTBACK ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for retrieving the variant in the primary coordinates\",Source=\"genozip\",Version=\"%s\">"
 #define KH_INFO_LR     "##INFO=<ID=" INFO_LIFTREJT ",Number=1,Type=String,Description=\"dual-coordinates VCF: Reason variant was rejected for lift over\",Source=\"genozip\",Version=\"%s\">"

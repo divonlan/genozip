@@ -256,7 +256,7 @@ static int sorter_line_cmp (const void *a_, const void *b_)
         if (b->end_pos == a->start_pos) return +1; // b is smaller
     }
 
-    // same chrome and pos ranges overlap (not expected in normal VCFs) - sort by vb then line number
+    // same chrom and pos ranges overlap (not expected in normal VCFs) - sort by vb then line number
     if (a->vblock_i != b->vblock_i)
         return a->vblock_i - b->vblock_i;
 
@@ -1007,6 +1007,8 @@ static void *sorter_piz_writer (void *unused)
 // PIZ main thread: hand over data from a VB whose reconstruction compute thread has completed, to the writer thread
 void sorter_piz_handover_data (VBlock *vb)
 {
+    if (flag.genocat_no_write || flag_loading_auxiliary) return;
+
     PizVbInfo *v = ENT (PizVbInfo, z_file->vb_info[0], vb->vblock_i - 1);
     if (!v->in_plan) return; // we don't need this data as we are not going to write any of it
 
@@ -1027,7 +1029,7 @@ void sorter_piz_handover_data (VBlock *vb)
 // PIZ main thread: hand over data from a txtheader whose reconstruction main thread has completed, to the writer thread
 void sorter_piz_handover_txtheader (uint32_t component_i)
 {
-    if (flag.genocat_no_write) return;
+    if (flag.genocat_no_write || flag_loading_auxiliary) return;
 
     PizCompInfo *comp = ENT (PizCompInfo, z_file->comp_info, component_i);
 

@@ -72,7 +72,7 @@ typedef struct {
     
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest, show_recon_plan,
-        show_index, show_gheader, show_ref_contigs, show_ref_seq,
+        show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         debug_progress, show_hash, debug_memory, show_vblocks, show_threads,
@@ -105,6 +105,7 @@ typedef struct {
 
     char *reading_chain;     // system is currently reading a chain file by this name
     char *unbind;
+    char *log_filename;      // output to info_stream goes here
 
     enum { BIND_NONE, BIND_ALL, BIND_PAIRS, BIND_REJECTS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
     uint64_t stdin_size;
@@ -122,7 +123,6 @@ typedef struct {
 } Flags;
 
 extern Flags flag;
-extern FILE *info_stream;
 
 #define SAVE_FLAGS Flags save_flag = flag
 #define RESTORE_FLAGS flag = save_flag

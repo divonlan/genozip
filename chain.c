@@ -24,7 +24,6 @@
 #include "version.h"
 #include "chain.h"
 #include "reconstruct.h"
-#include "liftover.h"
 
 typedef struct {
     WordIndex src_chrom; // index in CHAIN_NAMESRC
@@ -37,6 +36,17 @@ typedef struct {
 static Buffer chain = EMPTY_BUFFER;   // immutable after loaded
 static Mutex chain_mutex = {};        // protect chain wnile loading
 static PosType next_dst_0pos=0, next_src_0pos=0; // used for loading chain
+
+// 1) When pizzing a chain as a result of genozip --chain: chain_piz_initialize: src_contig and dst_contig are generated 
+//    from z_file->contexts of a chain file 
+// 2) Contig lengths are added when pizzing each alignment set, in chain_piz_filter_add_contig_length
+// 3) At the beginning of ZIP of a file with --chain: dst_contig copied to z_file->contexts of the file being compressed
+// 4) liftover_get_liftover_coords src_contig is consulted to get map the index of the primary chrom from the node_index
+//    of the file being compressed to the word_index of src_contig in the chain data
+static Buffer src_contig_dict = EMPTY_BUFFER;
+static Buffer src_contigs     = EMPTY_BUFFER;
+static Buffer dst_contig_dict = EMPTY_BUFFER;
+static Buffer dst_contigs     = EMPTY_BUFFER;
 
 char *chain_filename = NULL; // global - chain filename
 
@@ -75,8 +85,10 @@ void chain_seg_initialize (VBlock *vb)
 
     vb->contexts[CHAIN_STARTSRC].flags.store = 
     vb->contexts[CHAIN_ENDSRC]  .flags.store = 
+    vb->contexts[CHAIN_SIZESRC] .flags.store = 
     vb->contexts[CHAIN_STARTDST].flags.store = 
     vb->contexts[CHAIN_ENDDST]  .flags.store = 
+    vb->contexts[CHAIN_SIZEDST] .flags.store = 
     vb->contexts[CHAIN_SIZE]    .flags.store = 
     vb->contexts[CHAIN_GAPS]    .flags.store = STORE_INT;
 
@@ -95,12 +107,12 @@ void chain_seg_finalize (VBlockP vb)
         .items        = { { .dict_id = (DictId)dict_id_fields[CHAIN_CHAIN],    .seperator = {' '} },
                           { .dict_id = (DictId)dict_id_fields[CHAIN_SCORE],    .seperator = {' '} },
                           { .dict_id = (DictId)dict_id_fields[CHAIN_NAMESRC],  .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_TQSIZE],   .seperator = {' '} },
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_SIZESRC],  .seperator = {' '} },
                           { .dict_id = (DictId)dict_id_fields[CHAIN_STRNDSRC], .seperator = {' '} },
                           { .dict_id = (DictId)dict_id_fields[CHAIN_STARTSRC], .seperator = {' '} },
                           { .dict_id = (DictId)dict_id_fields[CHAIN_ENDSRC],   .seperator = {' '} },
                           { .dict_id = (DictId)dict_id_fields[CHAIN_NAMEDST],  .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_TQSIZE],   .seperator = {' '} },
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_SIZEDST],  .seperator = {' '} },
                           { .dict_id = (DictId)dict_id_fields[CHAIN_STRNDDST], .seperator = {' '} },
                           { .dict_id = (DictId)dict_id_fields[CHAIN_STARTDST], .seperator = {' '} },
                           { .dict_id = (DictId)dict_id_fields[CHAIN_ENDDST],   .seperator = {' '} },
@@ -160,8 +172,8 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
 
     SEG_NEXT_ITEM_SP (CHAIN_CHAIN);
     SEG_NEXT_ITEM_SP (CHAIN_SCORE);
-    SEG_NEXT_ITEM_SP (CHAIN_NAMESRC);    
-    SEG_NEXT_ITEM_SP (CHAIN_TQSIZE); // only a handful a LN values in the file (one per chrom)
+    SEG_NEXT_ITEM_SP (CHAIN_NAMESRC);
+    SEG_NEXT_ITEM_SP (CHAIN_SIZESRC);
     SEG_NEXT_ITEM_SP (CHAIN_STRNDSRC);
 
     GET_NEXT_ITEM_SP ("tSTART");
@@ -170,8 +182,8 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     GET_NEXT_ITEM_SP ("tEND");
     seg_pos_field (vb, CHAIN_ENDSRC, CHAIN_STARTSRC, false, false, field_start, field_len, 0,field_len + 1);
 
-    SEG_NEXT_ITEM_SP (CHAIN_NAMEDST);    
-    SEG_NEXT_ITEM_SP (CHAIN_TQSIZE); 
+    SEG_NEXT_ITEM_SP (CHAIN_NAMEDST);
+    SEG_NEXT_ITEM_SP (CHAIN_SIZEDST);
     SEG_NEXT_ITEM_SP (CHAIN_STRNDDST);
 
     GET_NEXT_ITEM_SP ("qSTART");
@@ -240,10 +252,33 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
 // PIZ functions
 //--------------
 
+static void chain_piz_initialize_copy_contigs (Buffer *contigs, Buffer *dict, DidIType name_did_i)
+{
+    // copy dictionary buffer
+    buf_copy (evb, dict, &z_file->contexts[name_did_i].dict, char, 0, 0, "chain_contig_dict");
+
+    ARRAY (CtxWord, contig_words, z_file->contexts[name_did_i].word_list);
+    dict->param = contig_words_len; // dict param contains number of words
+
+    // copy word_list into a contigs buffer - for convenience of using ctx_build_zf_ctx_from_contigs later
+    buf_alloc (evb, contigs, 0, contig_words_len, RefContig, 0, "chain_contigs");
+    contigs->len = contig_words_len;
+    ARRAY (RefContig, ctg, *contigs);
+
+    for (uint32_t i=0; i < contig_words_len; i++)
+        ctg[i] = (RefContig) { .char_index = contig_words[i].char_index,
+                               .snip_len   = contig_words[i].snip_len   };
+}
+
 // called after reconstructing the txt header and before compute threads
 void chain_piz_initialize (void)
 {
     mutex_initialize (chain_mutex);
+
+    if (flag.reading_chain) {
+        chain_piz_initialize_copy_contigs (&src_contigs, &src_contig_dict, CHAIN_NAMESRC);
+        chain_piz_initialize_copy_contigs (&dst_contigs, &dst_contig_dict, CHAIN_NAMEDST);
+    }
 }
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
@@ -284,7 +319,7 @@ static void chain_display_alignments (void)
         const char *dst_chrom = ctx_get_words_snip (&z_file->contexts[CHAIN_NAMEDST], aln[i].dst_chrom);
         const char *src_chrom = ctx_get_words_snip (&z_file->contexts[CHAIN_NAMESRC], aln[i].src_chrom);
 
-        fprintf (info_stream, "Primary: %s %"PRId64"-%"PRId64" Luft: %s %"PRId64"-%"PRId64"\n",
+        iprintf ("Primary: %s %"PRId64"-%"PRId64" Luft: %s %"PRId64"-%"PRId64"\n",
                  src_chrom, aln[i].src_first_1pos, aln[i].src_last_1pos,
                  dst_chrom, aln[i].dst_first_1pos, aln[i].dst_last_1pos);
     }
@@ -351,6 +386,20 @@ static inline void chain_piz_filter_verify_alignment_set (VBlock *vb)
     mutex_unlock (chain_mutex);
 }
 
+// set contig lengths according to tSize and qSize
+static inline void chain_piz_filter_add_contig_length (VBlock *vb)
+{
+    mutex_lock (chain_mutex);
+
+    RefContig *src_rc = ENT (RefContig, src_contigs, vb->last_index(CHAIN_NAMESRC));
+    RefContig *dst_rc = ENT (RefContig, dst_contigs, vb->last_index(CHAIN_NAMEDST));
+
+    src_rc->LN = src_rc->max_pos = vb->last_int(CHAIN_SIZESRC);
+    dst_rc->LN = dst_rc->max_pos = vb->last_int(CHAIN_SIZEDST);
+
+    mutex_unlock (chain_mutex);
+}
+
 CONTAINER_FILTER_FUNC (chain_piz_filter)
 {
     // ingest alignments (and report Chain file data issues) only when consuming with --chain, not when merely pizzing
@@ -368,9 +417,11 @@ CONTAINER_FILTER_FUNC (chain_piz_filter)
     else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 3) 
         chain_piz_filter_ingest_alignmet (vb);
 
-    // before alignment-set second EOL and after alignments - verify that numbers add up
-    else if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 15) 
+    // before alignment-set second EOL and after alignments - verify that numbers add up, and also set contigs
+    else if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 15) {
         chain_piz_filter_verify_alignment_set (vb);
+        chain_piz_filter_add_contig_length (vb);
+    }
 
 done:    
     return true;    
@@ -385,6 +436,55 @@ static int chain_sorter (const void *a_, const void *b_)
         return a->src_chrom - b->src_chrom;
     else 
         return a->src_first_1pos - b->src_first_1pos;
+}
+
+// main thread: ZIP with --chain, reading txt header: returns null-terminated string of contig, or NULL if contig_i is out of range
+const char *chain_get_dst_contig (uint32_t contig_i, PosType *length)
+{
+    if (contig_i >= dst_contigs.len) return NULL;
+
+    const RefContig *ctg = ENT (RefContig, dst_contigs, contig_i);
+
+    *length = ctg->LN;
+    return ENT (char, dst_contig_dict, ctg->char_index);
+}
+
+// returns the contig index in src_contigs, word WORD_INDEX_NONE if there is none
+WordIndex chain_get_src_contig_index (const char *contig, unsigned contig_len)
+{
+    WordIndex ctg_i;
+    ARRAY (RefContig, src_ctgs, src_contigs);
+    
+    for (ctg_i=0; ctg_i < src_ctgs_len; ctg_i++) {
+        const char *src_contig = ENT (char, src_contig_dict, src_ctgs[ctg_i].char_index);
+
+        if (src_ctgs[ctg_i].snip_len == contig_len && 
+            !memcmp (contig, src_contig, contig_len)) break; // found
+    }
+
+    return (ctg_i == src_ctgs_len) ? WORD_INDEX_NONE : ctg_i;
+}
+
+void chain_copy_dst_contigs_to_z_file (DidIType dst_contig_did_i)
+{
+    ctx_build_zf_ctx_from_contigs (dst_contig_did_i, &dst_contigs, &dst_contig_dict);
+}
+
+static void chain_contigs_show (const Buffer *contigs, const Buffer *dict, const char *type)
+{
+    ARRAY (const RefContig, cn, *contigs);
+
+    iprintf ("\n%s contigs calculated from the chain file alignments:\n", type);
+    for (uint32_t i=0; i < cn_len; i++) {
+
+        const char *chrom_name = ENT (const char, *dict, cn[i].char_index);
+
+        if (cn[i].snip_len)
+            iprintf ("i=%u '%s' LN=%"PRId64" chrom_index=%d char_index=%"PRIu64" snip_len=%u\n",
+                     i, chrom_name, cn[i].LN, cn[i].chrom_index, cn[i].char_index, cn[i].snip_len);
+        else
+            iprintf ("i=%u chrom_index=%d (unused - not present in txt data)\n", i, cn[i].chrom_index);
+    }
 }
 
 // zip: load chain file as a result of genozip --chain
@@ -414,8 +514,12 @@ void chain_load (void)
     piz_one_txt_file (dispachter, 0, true, false);
     RESTORE_FLAG (quiet);
 
-    // copy src_contig and dst_contig dictionaries before z_file of the chain file is freed
-    liftover_copy_data_from_chain_file();
+    // --show-chain-contigs
+    if (flag.show_chain_contigs) {
+        chain_contigs_show (&src_contigs, &src_contig_dict, "SRC");
+        chain_contigs_show (&dst_contigs, &dst_contig_dict, "DST");
+        if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
+    }
 
     // sort the alignmants by (dst_contig_index, qstart)
     qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sorter);

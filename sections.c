@@ -189,21 +189,21 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
 
     if (header) {
         iprintf ("Contents of the genozip header (output of --show-gheader) of %s:\n", z_name);
-        fprintf (info_stream, "  genozip_version: %u\n",         header->genozip_version);
-        fprintf (info_stream, "  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
-        fprintf (info_stream, "  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
-        fprintf (info_stream, "  uncompressed_data_size: %s\n",  str_uint_commas (BGEN64 (header->uncompressed_data_size)).s);
-        fprintf (info_stream, "  num_items_bound: %"PRIu64"\n",  BGEN64 (header->num_items_bound));
-        fprintf (info_stream, "  num_sections: %u\n",            (unsigned)ents_len);
-        fprintf (info_stream, "  num_components: %u\n",          BGEN32 (header->num_components));
-        fprintf (info_stream, "  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
-        fprintf (info_stream, "  created: %*s\n",                -FILE_METADATA_LEN, header->created);
-        fprintf (info_stream, "  license_hash: %s\n",            digest_display (header->license_hash).s);
-        fprintf (info_stream, "  reference filename: %*s\n",     -REF_FILENAME_LEN, header->ref_filename);
-        fprintf (info_stream, "  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
+        iprintf ("  genozip_version: %u\n",         header->genozip_version);
+        iprintf ("  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
+        iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
+        iprintf ("  uncompressed_data_size: %s\n",  str_uint_commas (BGEN64 (header->uncompressed_data_size)).s);
+        iprintf ("  num_items_bound: %"PRIu64"\n",  BGEN64 (header->num_items_bound));
+        iprintf ("  num_sections: %u\n",            (unsigned)ents_len);
+        iprintf ("  num_components: %u\n",          BGEN32 (header->num_components));
+        iprintf ("  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
+        iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);
+        iprintf ("  license_hash: %s\n",            digest_display (header->license_hash).s);
+        iprintf ("  reference filename: %*s\n",     -REF_FILENAME_LEN, header->ref_filename);
+        iprintf ("  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
     }
 
-    fprintf (info_stream, "  sections:\n");
+    iprint0 ("  sections:\n");
 
     for (unsigned i=0; i < ents_len; i++) {
      
@@ -213,13 +213,11 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
                              : header               ? this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader) // we're at the last section genozip header+footer
                              :                        this_offset; // without the GenozipHeader, we can't know its length
 
-        fprintf (info_stream, "    %3u. %-24.24s %s vb_i=%u offset=%"PRIu64" size=%"PRId64" flags=%u\n", 
+        iprintf ("    %3u. %-24.24s %s vb_i=%u offset=%"PRIu64" size=%"PRId64" flags=%u\n", 
                  i, st_name(ents[i].st), 
                  dis_dict_id (ents[i].dict_id.num ? ents[i].dict_id : ents[i].dict_id).s, 
                  ents[i].vblock_i, this_offset, next_offset - this_offset, ents[i].flags.flags);
     }
-
-    fflush (info_stream);
 }
 
 const char *st_name (SectionType sec_type)

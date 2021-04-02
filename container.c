@@ -64,12 +64,12 @@ WordIndex container_seg_by_ctx (VBlock *vb, Context *ctx, ContainerP con,
     container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
 
     if (flag.show_containers) { 
-        fprintf (info_stream, "VB=%u Line=%u Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
+        iprintf ("VB=%u Line=%u Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
                  vb->vblock_i, vb->line_i, ctx->did_i, ctx->name, con->repeats, con->repsep[0], con->repsep[1]);
         for (unsigned i=0; i < con_nitems (*con); i++) {
             ContainerItem *item = &con->items[i];
             if (item->dict_id.num) 
-                fprintf (info_stream, "%u:%s ", ctx->did_i, dis_dict_id (item->dict_id).s); 
+                iprintf ("%u:%s ", ctx->did_i, dis_dict_id (item->dict_id).s); 
         }
         iprint0 ("\n");
     }
@@ -233,6 +233,15 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                 vb->txt_data.len += (uint8_t)item->seperator[1];
         } // items loop
 
+        // remove final seperator, if we need to (introduced v12)
+        if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
+            const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
+
+            vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (flag.trans_containers ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
+                                                    : (!!item->seperator[0] + !!item->seperator[1]);
+        }
+
+        // reconstruct repeats separator, if neeeded
         if (rep_i+1 < con->repeats || !con->drop_final_repeat_sep) {
             if (con->repsep[0]) RECONSTRUCT1 (con->repsep[0]);
             if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
@@ -258,8 +267,8 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         }
     } // repeats loop
 
-    // remove final seperator, if we need to
-    if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
+    // remove final seperator, only of final item (since v12, only remained used (by mistake) by SAM arrays - TODO: obsolete this. see sam_seg_array_field)
+    if (con->drop_final_item_sep_of_final_repeat && last_non_filtered_item_i >= 0) {
         const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
         vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (flag.trans_containers ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
@@ -375,13 +384,13 @@ void container_display (ConstContainerP con)
 {
     uint32_t num_items = con_nitems (*con);
 
-    fprintf (info_stream, "repeats=%u\nnum_items=%u\ndrop_final_item_sep=%u\ndrop_final_repeat_sep=%u\n"
+    iprintf ("repeats=%u\nnum_items=%u\ndrop_final_item_sep=%u\ndrop_final_repeat_sep=%u\n"
                           "filter_repeats=%u\nfilter_items=%u\nis_toplevel=%u\nrepsep={ %u %u }\n",
              con->repeats, num_items, con->drop_final_item_sep, con->drop_final_repeat_sep, 
              con->filter_repeats, con->filter_items, con->is_toplevel, con->repsep[0], con->repsep[1]);
     
     for (unsigned i=0; i < num_items; i++)
-        fprintf (info_stream, "item %u: dict_id=%s seperator={ %u %u } translator=%u\n",
+        iprintf ("item %u: dict_id=%s seperator={ %u %u } translator=%u\n",
                  i, dis_dict_id (con->items[i].dict_id).s,  
                  con->items[i].seperator[0], con->items[i].seperator[1], con->items[i].translator);
     

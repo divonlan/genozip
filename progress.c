@@ -134,16 +134,12 @@ void progress_update_status (const char *status)
     static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
     static const char *spaces = "                                                                                ";
 
-    iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
+    if (is_terminal && !flag.debug_progress) 
+        iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
+    else 
+        iprintf ("%s\n", status); // if we're outputting to a log file or debugging progress, show every status on its own line
 
     last_len = strlen (status);
-
-    if (flag.debug_progress) { // if we're debugging progress, show every status on its own line
-        iprint0 ("\n");
-        last_len = 0;
-    }
-
-    fflush (info_stream);
 }
 
 void progress_finalize_component (const char *status)

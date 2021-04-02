@@ -115,8 +115,8 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     if (!vb) return false; // we don't skip reading any SEC_DICT sections
 
     bool skip = 
-        (flag.dump_one_local_dict_id.num && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num)
-    ||  (flag.dump_one_b250_dict_id.num  && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num);
+        (flag.dump_one_local_dict_id.num && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num && dict_id.num != dict_id_fields[CHROM])
+    ||  (flag.dump_one_b250_dict_id.num  && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num && dict_id.num != dict_id_fields[CHROM]);
 
     return skip;
 }
@@ -136,7 +136,8 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         SectionHeaderCtx *header = (SectionHeaderCtx *)ENT (char, vb->z_data, section_index[section_i]);
 
         bool is_local = header->h.section_type == SEC_LOCAL;
-        if (header->h.section_type == SEC_B250 || is_local) {
+        bool is_b250  = header->h.section_type == SEC_B250;
+        if (is_b250 || is_local) {
             Context *ctx = ctx_get_ctx (vb, header->dict_id); // creates the context
 
             // case: in ZIP & we are PAIR_2, reading PAIR_1 info - save flags, ltype, lcodec to restore later
@@ -153,8 +154,22 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
                 pair_vb_i = fastq_get_pair_vb_i (vb);
 
             bool is_pair_section = (BGEN32 (header->h.vblock_i) == pair_vb_i); // is this a section of "pair 1" 
-            
-            if (is_pair_section) ctx->pair_flags = header->h.flags.ctx;            
+
+            if (is_pair_section) {
+                // overcome bug in ZIP --pair - local sections with junk data created in addition to the expected b250.
+                // we ignore these local sections (or allow b250 to overwrite them)
+                if (is_local && ctx->pair_b250) goto skip_uncompress_due_to_old_bug;
+
+                ctx->pair_flags = header->h.flags.ctx;            
+                ctx->pair_b250  = is_b250;                
+                ctx->pair_local = is_local;
+            }
+
+            // initialize b250 iterator
+            if (is_b250) {
+                if (is_pair_section) ctx->pair_b250_iter = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->pair), .prev_word_index = WORD_INDEX_NONE };
+                else                 ctx->iterator       = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->b250), .prev_word_index = WORD_INDEX_NONE };
+            }
 
             Buffer *target_buf = is_local ? &ctx->local : &ctx->b250;
 
@@ -186,6 +201,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
             if (header->h.flags.ctx.copy_param)
                 target_buf->param = header->param;
 
+skip_uncompress_due_to_old_bug:
             // restore
             if (pair_vb_i && command == ZIP) { ctx->flags=save_flags; ctx->ltype=save_ltype; ctx->lcodec=save_lcodec; }
 
@@ -213,9 +229,9 @@ static void piz_uncompress_one_vb (VBlock *vb)
 {
     START_TIMER;
 
-    ASSERT0 (!flag.reference || (genome && genome->nbits) ||
-              (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage || flag.idxstats)), // reference data not loaded in genocat --show-sex/coverage
-              "reference is not loaded correctly");
+    ASSERT (!flag.reference || (genome && genome->nbits) ||
+             (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage || flag.idxstats)), // reference data not loaded in genocat --show-sex/coverage
+             "reference is not loaded correctly (vb=%u)", vb->vblock_i);
 
     DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
 
@@ -477,7 +493,7 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
     bool grepped_out = !piz_read_one_vb (next_vb);
 
     // case: we won't proceed to uncompressing, reconstructing and writing now that we're done reading
-    if (grepped_out) { 
+    if (grepped_out || flag.show_headers) { 
         sorter_piz_remove_vb_from_recon_plan (next_vb->vblock_i);
         dispatcher_abandon_next_vb (dispatcher);
         return true; // VB skipped

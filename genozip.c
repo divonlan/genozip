@@ -49,19 +49,22 @@ uint32_t global_max_threads = DEFAULT_MAX_THREADS;
 
 void main_exit (bool show_stack, bool is_error) 
 {
-    fflush (stderr);
-
     if (show_stack) threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
 
     buf_test_overflows_all_vbs("exit_on_error");
 
-    url_kill_curl();
-    file_kill_external_compressors(); 
+    if (is_error) {
+        url_kill_curl();  /* <--- BREAKPOINT */
+        file_kill_external_compressors(); 
+    }
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
     if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) {
-        char save_name[strlen (z_file->name)+1];
-        strcpy (save_name, z_file->name);
+        char *save_name = NULL;
+        if (z_file && z_file->name) {
+            save_name = malloc (strlen (z_file->name)+1);
+            strcpy (save_name, z_file->name);
+        }
 
         // cancel all other threads before closing z_file, so other threads don't attempt to access it 
         // (eg. z_file->data_type) and get a segmentation fault.
@@ -71,8 +74,14 @@ void main_exit (bool show_stack, bool is_error)
 
         // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
         // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
-        file_remove (save_name, true);
+        if (save_name) file_remove (save_name, true);
     }
+
+    if (flag.log_filename) {
+        iprintf ("%s - execution ended %s\n", str_time().s, is_error ? "with an error" : "normally");
+        fclose (info_stream);
+    } else
+        fflush (info_stream);
 
     if (is_error)
         abort();
@@ -105,7 +114,7 @@ static void main_print_help (bool explicit)
                         "                          ",  "\n", 0);
 
     else if (flag.help && !strcmp (flag.help, "input")) 
-        printf ("Supported file types for --input:\n%s\n", file_compressible_extensions (false));
+        iprintf ("Supported file types for --input:\n%s\n", file_compressible_extensions (false));
     
     else 
         str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
@@ -117,7 +126,7 @@ static void main_print_help (bool explicit)
 // from Windows Explorer - the terminal will open and he will see the help
 #ifdef _WIN32
     if (!explicit) {
-        printf ("Press any key to continue...\n");
+        iprint0 ("Press any key to continue...\n");
         getc(stdin);
     }
 #endif
@@ -125,7 +134,7 @@ static void main_print_help (bool explicit)
 
 static void main_print_version()
 {
-    printf ("version=%s\n", GENOZIP_CODE_VERSION);  
+    iprintf ("version=%s\n", GENOZIP_CODE_VERSION);  
 }
 
 static void main_list_dir(); // forward declaration
@@ -732,5 +741,6 @@ int main (int argc, char **argv)
     ref_create_cache_join();
     refhash_create_cache_join();
 
+    exit_ok;
     return 0;
 }

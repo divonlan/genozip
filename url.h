@@ -15,6 +15,7 @@ extern bool url_is_url (const char *filename);
 extern const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file_size);
 
 extern FILE *url_open (StreamP parent_stream, const char *url);
+extern void url_reset_if_curl (StreamP maybe_curl_stream);
 
 extern uint32_t url_read_string (const char *url, char *data, uint32_t data_size, const char *reason);
 

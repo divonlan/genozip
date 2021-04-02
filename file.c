@@ -246,6 +246,8 @@ FileType file_get_stdin_type (void)
 
 static void file_ask_user_to_confirm_overwrite (const char *filename)
 {
+    if (!strcmp (filename, "/dev/null")) return; // don't ask for /dev/null
+    
     fprintf (stderr, "%s: output file %s already exists: in the future, you may use --force to overwrite\n", global_cmd, filename);
     
     if (!isatty(0) || !isatty(2)) exit_on_error(false); // if we stdin or stderr is redirected - we cannot ask the user an interactive question

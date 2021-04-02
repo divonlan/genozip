@@ -70,7 +70,7 @@ void txtheader_add_contig (const char *chrom_name, unsigned chrom_name_len, PosT
     WordIndex ref_chrom=WORD_INDEX_NONE;
 
     if (!liftover && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE))
-        ref_chrom = ref_contigs_ref_chrom_from_header_chrom (chrom_name, chrom_name_len, last_pos, contigs.len);
+        ref_chrom = ref_contigs_ref_chrom_from_header_chrom (chrom_name, chrom_name_len, &last_pos, contigs.len);
 
     Buffer *this_contigs = liftover ? &ocontigs      : &contigs;
     Buffer *this_dict    = liftover ? &ocontigs_dict : &contigs_dict;

@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <errno.h>
+#define _GNU_SOURCE // needed for pthread_tryjoin_np
 #include <pthread.h>
 #include <string.h>
 #include <sys/types.h>

@@ -908,7 +908,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
     Context *container_ctx     = ctx_get_ctx (vb, dict_id);
 
     SmallContainer con = { .nitems_lo = 2, 
-                           .drop_final_item_sep = true,
+                           .drop_final_item_sep_of_final_repeat = true, // TODO - get rid of this flag and move to making the seperators to be repeat seperators as they should have been, using drop_final_repeat_sep and obsoleting this flag 
                            .repsep    = {0,0}, 
                            .items     = { { .translator = SAM2BAM_ARRAY_SELF  },  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
                                           { .seperator  = {0, ','}            } } // item[1] is actual array item

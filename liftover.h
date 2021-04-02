@@ -27,9 +27,7 @@ extern const char *liftover_status_names[];
 
 #define LIFTOVER_STATUS_NAMES { "OK", "NO_CHROM", "NO_MAPPING", "REF_SPLIT", "END_MAPPING", "UNSUPPORTED", "LINE_TOO_LONG" }
  
-extern void liftover_copy_data_from_chain_file (void);
 extern void liftover_zip_initialize (DidIType tname_did_i, char special_liftback_snip_id);
-extern const char *liftover_get_luft_contig (uint32_t contig_i);
 
 // Seg
 extern void liftover_append_rejects_file (VBlockP vb);

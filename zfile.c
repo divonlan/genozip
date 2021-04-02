@@ -45,7 +45,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
 
     char str[1000];
-    #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else printf ("%s", str); } 
+    #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 
 
     sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x\n",
              rw, 
@@ -168,7 +168,7 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
     mutex_initialize (show_b250_mutex); // possible unlikely race condition on initializing - good enough for debugging purposes
     mutex_lock (show_b250_mutex);
 
-    fprintf (info_stream, "vb_i=%u %*.*s: ", BGEN32 (header->h.vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_typeless (header->dict_id).id);
+    iprintf ("vb_i=%u %*.*s: ", BGEN32 (header->h.vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_typeless (header->dict_id).id);
 
     const uint8_t *data  = FIRSTENT (const uint8_t, *b250_data);
     const uint8_t *after = AFTERENT (const uint8_t, *b250_data);
@@ -176,15 +176,13 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
     while (data < after) {
         WordIndex word_index = base250_decode (&data, true, "zfile_show_b250_section");
         switch (word_index) {
-            case WORD_INDEX_ONE_UP     : fprintf (info_stream, "ONE_UP "); break;
-            case WORD_INDEX_EMPTY_SF   : fprintf (info_stream, "EMPTY "); break;
-            case WORD_INDEX_MISSING_SF : fprintf (info_stream, "MISSING "); break;
-            default: fprintf (info_stream, "%u ", word_index);
+            case WORD_INDEX_ONE_UP     : iprint0 ("ONE_UP "); break;
+            case WORD_INDEX_EMPTY_SF   : iprint0 ("EMPTY "); break;
+            case WORD_INDEX_MISSING_SF : iprint0 ("MISSING "); break;
+            default: iprintf ("%u ", word_index);
         }
     }
-    fprintf (info_stream, "\n");
-
-    fflush (info_stream);
+    iprint0 ("\n");
 
     mutex_unlock (show_b250_mutex);
 }
@@ -472,7 +470,7 @@ int32_t zfile_read_section_do (File *file,
 
     if (flag.show_headers) {
         zfile_show_header (header, NULL, sl ? sl->offset : 0, 'R');
-        if (exe_type == EXE_GENOCAT && (expected_sec_type == SEC_B250 || expected_sec_type == SEC_LOCAL || expected_sec_type == SEC_DICT))
+        if (exe_type == EXE_GENOCAT && (expected_sec_type == SEC_B250 || expected_sec_type == SEC_LOCAL || expected_sec_type == SEC_DICT || expected_sec_type == SEC_REFERENCE || expected_sec_type == SEC_REF_IS_SET))
              return header_offset; // in genocat --show-header - we only show headers, nothing else
     }
 

@@ -84,31 +84,62 @@ static void vcf_header_add_genozip_command (Buffer *txt_header)
     bufprintf (evb, txt_header, "\" %s\n", str_time().s);
 }
 
+#define TEMP_EOS(i) char save = line[i]; ((char*)line)[i] = 0
+#define RESTORE_EOS(i) ((char*)line)[i] = save
+
+static void vcf_header_get_subvalue (const char *line, unsigned line_len, unsigned key_len,
+                                     const char *subkey, unsigned subkey_len, bool enforce,// in
+                                     const char **snip, unsigned *snip_len) // out
+{
+    const char *start = strstr (line + key_len, subkey);
+    if (!start) goto missing; // subkey doesn't exist
+    start += subkey_len;
+
+    const char *comma   = memchr (start, ',', &line[line_len] - start);
+    const char *bracket = memchr (start, '>', &line[line_len] - start);
+
+    if (!comma && !bracket) goto missing; // subkey isn't terminated with a comma or >
+    const char *after = !comma ? bracket : !bracket ? comma : MIN (comma,bracket);
+    
+    *snip = start;
+    *snip_len = after - start;
+    return;
+
+missing:
+    ASSINP (!enforce, "missing subkey %s in header line %.*s", subkey, line_len, line);
+}
+
 // add contig to buffer if line is a valid contig, and fail silently if not
 static void vcf_header_parse_contig_line (const char *line, unsigned line_len, bool liftover)
 {
-    DECLARE_SNIP;
+    const char *id=0, *len_str=0;
+    unsigned id_len=0, len_str_len=0;
+    PosType length = 0; 
+
+    #define HK_CONTIG "contig=<"
+    #define HK_CONTIG_LEN 8
 
     // parse eg "##contig=<ID=NKLS02001838.1,length=29167>" and "##liftover_contig=<ID=22>"
-    if (!(snip = strstr (line, "contig=<ID="))) return;
-    snip += 11;
+    TEMP_EOS(line_len-1);
+    if (!strstr (line, HK_CONTIG)) goto done;
 
-    const char *bracket = memchr (snip, '>', line + line_len - snip);
-    if (!bracket) return;
+    vcf_header_get_subvalue (line, line_len, HK_CONTIG_LEN, "ID=", 3, true, &id, &id_len);
+    vcf_header_get_subvalue (line, line_len, HK_CONTIG_LEN, "length=", 7, false, &len_str, &len_str_len);
 
-    const char *comma = memchr (snip, ',', bracket - snip);
-
-    snip_len = (comma ? comma : bracket) - snip;
+    str_get_int_range64 (len_str, len_str_len, 1, 1000000000000ULL, &length); // length stays 0 if len_str_len=0
 
     // if its the 2nd+ file while binding in ZIP - we just check that the contigs are the same
     // (or a subset) of previous file's contigs (to do: merge headers, bug 327) 
     if (command == ZIP && flag.bind && z_file->num_txt_components_so_far /* 2nd+ file */) 
-        txtheader_verify_contig (snip, snip_len, 0, (void *)liftover);
+        txtheader_verify_contig (id, id_len, length, (void *)liftover);
 
     else {
-        txtheader_alloc_contigs (1, snip_len+1, liftover);
-        txtheader_add_contig (snip, snip_len, 0, (void *)liftover);
+        txtheader_alloc_contigs (1, id_len+1, liftover);
+        txtheader_add_contig (id, id_len, length, (void *)liftover);
     }
+
+done:
+    RESTORE_EOS(line_len-1);
 }
 
 static bool vcf_header_extract_contigs (const char *line, unsigned line_len, void *unused1, void *unused2, unsigned unused3)
@@ -245,8 +276,10 @@ static void vcf_header_zip_convert_header_to_dual_coords (Buffer *txt_header)
 
     // add all Luft contigs (note: we get them from liftover directly, as they zip_initialize that adds them to zf_ctx has not been called yet)
     const char *luft_contig;
-    for (unsigned i=0; (luft_contig = liftover_get_luft_contig(i)); i++) 
-        bufprintf (evb, txt_header, HK_LO_CONTIG"<ID=%s>\n", luft_contig);
+    PosType length;
+    for (unsigned i=0; (luft_contig = chain_get_dst_contig(i, &length)); i++) 
+        if (length) bufprintf (evb, txt_header, HK_LO_CONTIG"<ID=%s,length=%"PRId64">\n", luft_contig, length);
+        else        bufprintf (evb, txt_header, HK_LO_CONTIG"<ID=%s>\n", luft_contig);
 
     buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_header"); // careful not to use bufprintf as it is unbound
 }

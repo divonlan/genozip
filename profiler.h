@@ -74,7 +74,7 @@ typedef struct timespec TimeSpecType;
 
 #define PRINT_TIMER(str) { TimeSpecType tb; \
                            clock_gettime(CLOCK_REALTIME, &tb); \
-                           printf ("%u.%06u: %s\n", (uint32_t)tb.tv_sec, (uint32_t)(tb.tv_nsec/1000), (str)); }
+                           iprintf, "%u.%06u: %s\n", (uint32_t)tb.tv_sec, (uint32_t)(tb.tv_nsec/1000), (str)); }
 
 extern void profiler_add (ProfilerRec *dst, const ProfilerRec *src);
 extern const char *profiler_print_short (const ProfilerRec *p);

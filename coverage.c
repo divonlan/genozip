@@ -75,14 +75,14 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
     return (double)coverage_AS / (double)len_AS;
 }
 
-// output of genocat --show-sex, called from piz_one_txt_file
+// output of genocat --sex, called from piz_one_txt_file
 void coverage_sex_classifier (bool is_first_z_file)
 {    
     const Buffer *header_contigs = txtheader_get_contigs();
 
     if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs) {
         flag.quiet = false;
-        WARN ("%s: %s: --show-sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
+        WARN ("%s: %s: --sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
 
@@ -105,7 +105,7 @@ void coverage_sex_classifier (bool is_first_z_file)
                     : header_contigs                ? ENT (RefContig, *header_contigs, index_chrY)->max_pos
                     :                                 ENT (RefContig, loaded_contigs,  index_chrY)->max_pos;
 
-    //printf ("chrY: index=%u cov=%"PRIu64" len=%f\n", index_chrY, *ENT (uint64_t, txt_file->coverage, index_chrY), len_chrY);
+    //iprintf ("chrY: index=%u cov=%"PRIu64" len=%f\n", index_chrY, *ENT (uint64_t, txt_file->coverage, index_chrY), len_chrY);
     
     // in SAM, it is sufficient to look at chr1 as it is already mapped. this allows as to run with --regions, 10 times faster
     // in FASTQ, we rely on our own approximate aligner, so we compare against all autosomes
@@ -157,35 +157,36 @@ void coverage_sex_classifier (bool is_first_z_file)
                                   };
 
     if (is_first_z_file) 
-        printf (isatty(1) ? "\n--show-sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
-                          : "\n--show-sex for: %s\n%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
+        iprintf (is_terminal ? "\n--sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
+                                          : "\n--sex for: %s\n%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
                 z_name, "Sex", flag.longest_filename, "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
                 is_sam ? "1/X" : "AS/X", "X/Y");
                 
-    printf (isatty(1) ? "%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n" : "%s\t%*s\t%f\t%f\t%f\t%f\t%f\n",  
+    iprintf (is_terminal ? "%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n" : "%s\t%*s\t%f\t%f\t%f\t%f\t%f\n",  
             is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y], 
             flag.longest_filename, z_name, 
             depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y);
 
-    fflush (stdout); // in case output is redirected
+    fflush (info_stream); // in case output is redirected
 }
 
-// output of genocat --show-coverage, called from piz_one_txt_file
+// output of genocat --coverage, called from piz_one_txt_file
 void coverage_show_coverage (void)
 {
     const Buffer *header_contigs = txtheader_get_contigs();
 
     if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs) {
         flag.quiet = false;
-        WARN ("%s: %s: --show-coverage for FASTQ only works on files compressed with a reference", global_cmd, z_name);
+        WARN ("%s: %s: --coverage for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
 
     unsigned chr_width = flag.show_coverage==1 ? 26 : 13;
 
-    printf (isatty(1) ? "\n--show-coverage for: %s\n%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" 
-                      : "\n--show-coverage for: %s\n%*s\t%s\t%s\t%s\t%s\t%s\n", 
-                       z_name, chr_width, "Contig", "LN", "Reads", "Bases", "Bases", "Depth");
+    if (flag.show_coverage != 3)
+        iprintf (is_terminal ? "\n--coverage for: %s\n%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" 
+                                          : "\n--coverage for: %s\n%*s\t%s\t%s\t%s\t%s\t%s\n", 
+                          z_name, chr_width, "Contig", "LN", "Reads", "Bases", "Bases", "Depth");
 
     txt_file->coverage.len -= NUM_COVER_TYPES; // real contigs only
     ARRAY (uint64_t, coverage, txt_file->coverage);
@@ -194,10 +195,19 @@ void coverage_show_coverage (void)
     uint64_t *coverage_special   = &coverage[coverage_len];
     uint64_t *read_count_special = &read_count[coverage_len];
 
+    // calculate CVR_TOTAL - all bases in the file
     for (uint64_t i=0; i < coverage_len + NUM_COVER_TYPES - 1; i++) {
         coverage_special  [CVR_TOTAL] += coverage[i];
         read_count_special[CVR_TOTAL] += read_count[i];
     }
+
+    // calculate CVR_PRIMARY - all bases in the contig (i.e. excluding unmapped, secondary, supplementary, duplicate, soft-clipped)
+    for (uint64_t i=0; i < coverage_len; i++) {
+        coverage_special  [CVR_ALL_CONTIGS] += coverage[i];
+        read_count_special[CVR_ALL_CONTIGS] += read_count[i];
+    }
+
+    PosType genome_nbases = 0;
 
     for (uint64_t i=0; i < coverage_len; i++) {
         if (!coverage[i]) continue;
@@ -209,29 +219,43 @@ void coverage_show_coverage (void)
                     : header_contigs                    ? ENT (RefContig, *header_contigs, i)->max_pos
                     :                                     ENT (RefContig, loaded_contigs,  i)->max_pos;
 
-        if (flag.show_coverage==1 || cn_len <= 5) 
-            printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %-6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
-                    chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, 
-                    100.0 * (double)coverage[i] / (double)coverage_special[CVR_TOTAL], 
-                    len ? (double)coverage[i] / (double)len : 0);
+        if (flag.show_coverage==1 || (flag.show_coverage==2 && cn_len <= 5))
+            iprintf (is_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
+                     chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, 
+                     100.0 * (double)coverage[i] / (double)coverage_special[CVR_TOTAL], 
+                     len ? (double)coverage[i] / (double)len : 0);
 
         else {
-            coverage_special[CVR_CONTIGS]   += coverage[i]; // other non-chromosome contigs
-            read_count_special[CVR_CONTIGS] += read_count[i];
+            coverage_special[CVR_OTHER_CONTIGS]   += coverage[i]; // other non-chromosome contigs
+            read_count_special[CVR_OTHER_CONTIGS] += read_count[i];
         }
+
+        if (cn_len <= 5) genome_nbases += len;
     }
 
-    char *cvr_names[NUM_COVER_TYPES] = { "Soft clip", "Unmapped", "Secondary", "Failed filters", "Duplicate", "Other contigs", "TOTAL"};
+    char all_coverage[7];
+    sprintf (all_coverage, "%*.2f", (int)sizeof(all_coverage)-1, (double)coverage_special[CVR_ALL_CONTIGS] / (double)genome_nbases);
 
-    for (uint64_t i=0; i < NUM_COVER_TYPES; i++) 
-        if (coverage_special[i])
-            printf (isatty(1) ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%\n" : "%*s\t%s\t%s\t%s\t%4.1f\n", 
-                    chr_width, cvr_names[i], "",
-                    (i == CVR_SOFT_CLIP ? "" : str_uint_commas (read_count_special[i]).s),
-                    str_bases(coverage_special[i]).s,
-                    100.0 * (double)coverage_special[i] / (double)coverage_special[CVR_TOTAL]);
+    if (flag.show_coverage == 3) 
+        iprintf ("%s:\t%s\n", z_name, all_coverage);
 
-    fflush (stdout); // in case output is redirected
+    else {
+        char *cvr_names[NUM_COVER_TYPES] = { "Other contigs", "All contigs", "Soft clip", "Unmapped", "Secondary", "Supplementary", "Failed filters", "Duplicate", "TOTAL"};
+
+        for (uint64_t i=0; i < NUM_COVER_TYPES; i++) {
+
+            if (coverage_special[i])
+                iprintf (is_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %s\n" : "%*s\t%s\t%s\t%s\t%4.1f%%\t%s\n", 
+                        chr_width, cvr_names[i], "",
+                        (i == CVR_SOFT_CLIP ? "" : str_uint_commas (read_count_special[i]).s),
+                        str_bases(coverage_special[i]).s,
+                        100.0 * (double)coverage_special[i] / (double)coverage_special[CVR_TOTAL],
+                        i == CVR_ALL_CONTIGS ? all_coverage : "");
+            
+            if (i == CVR_OTHER_CONTIGS && is_terminal)
+                iprint0 ("-----");
+        }
+    }
 }
 
 // output of genocat --idxstats - designed to identical to samtools idxstats
@@ -257,13 +281,13 @@ void coverage_show_idxstats (void)
                     : header_contigs                ? ENT (RefContig, *header_contigs, i)->max_pos
                     :                                 ENT (RefContig, loaded_contigs,  i)->max_pos;
 
-        printf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", cn_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
+        iprintf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", cn_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
     }
 
     // FASTQ (but not SAM) unmapped reads
     uint64_t unmapped_unknown = AFTERENT(uint64_t, txt_file->read_count)[CVR_UNMAPPED]; 
     if (unmapped_unknown)
-        printf ("*\t0\t0\t%"PRIu64"\n", unmapped_unknown);
+        iprintf ("*\t0\t0\t%"PRIu64"\n", unmapped_unknown);
 
-    fflush (stdout); // in case output is redirected
+    fflush (info_stream); // in case output is redirected
 }

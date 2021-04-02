@@ -130,15 +130,16 @@ static inline void sam_piz_update_coverage (VBlockP vb, const uint16_t sam_flag,
 {
     ARRAY (uint64_t, read_count, vb->read_count);
     ARRAY (uint64_t, coverage, vb->coverage);
-    uint64_t *coverage_special   = AFTERENT (uint64_t, vb->coverage) - NUM_COVER_TYPES;
+    uint64_t *coverage_special   = AFTERENT (uint64_t, vb->coverage)   - NUM_COVER_TYPES;
     uint64_t *read_count_special = AFTERENT (uint64_t, vb->read_count) - NUM_COVER_TYPES;
     WordIndex chrom_index = vb->last_index(SAM_RNAME);
 
     if (chrom_index == WORD_INDEX_NONE ||
-             sam_flag & SAM_FLAG_UNMAPPED)       { coverage_special[CVR_UNMAPPED]  += vb->seq_len; read_count_special[CVR_UNMAPPED] ++; }
-    else if (sam_flag & SAM_FLAG_SECONDARY)      { coverage_special[CVR_SECONDARY] += vb->seq_len; read_count_special[CVR_SECONDARY]++; }
-    else if (sam_flag & SAM_FLAG_FAILED_FILTERS) { coverage_special[CVR_FAILED]    += vb->seq_len; read_count_special[CVR_FAILED]   ++; }
-    else if (sam_flag & SAM_FLAG_DUPLICATE)      { coverage_special[CVR_DUPLICATE] += vb->seq_len; read_count_special[CVR_DUPLICATE]++; }
+             sam_flag & SAM_FLAG_UNMAPPED)       { coverage_special[CVR_UNMAPPED]      += vb->seq_len; read_count_special[CVR_UNMAPPED]     ++; }
+    else if (sam_flag & SAM_FLAG_FAILED_FILTERS) { coverage_special[CVR_FAILED]        += vb->seq_len; read_count_special[CVR_FAILED]       ++; }
+    else if (sam_flag & SAM_FLAG_DUPLICATE)      { coverage_special[CVR_DUPLICATE]     += vb->seq_len; read_count_special[CVR_DUPLICATE]    ++; }
+    else if (sam_flag & SAM_FLAG_SECONDARY)      { coverage_special[CVR_SECONDARY]     += vb->seq_len; read_count_special[CVR_SECONDARY]    ++; }
+    else if (sam_flag & SAM_FLAG_SUPPLAMENTARY)  { coverage_special[CVR_SUPPLEMENTARY] += vb->seq_len; read_count_special[CVR_SUPPLEMENTARY]++; }
     else {
         coverage_special[CVR_SOFT_CLIP] += soft_clip;
         coverage[chrom_index] += vb->seq_len - soft_clip;

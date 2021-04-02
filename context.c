@@ -141,17 +141,18 @@ WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned sn
     return WORD_INDEX_NONE;
 }
 
-// PIZ only (uses word_list): returns word index, and advances the iterator
-WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same,
-                             SnipIterator *override_iterator,   // if NULL, defaults to ctx->iterator
+// PIZ and reading Pair1 in ZIP (uses word_list): returns word index, and advances the iterator
+WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool is_pair,
                              const char **snip, uint32_t *snip_len) // optional out 
 {
-    WordIndex word_index;
-    ASSERT (ctx || override_iterator, "ctx is NULL. vb_i=%u", vb->vblock_i);
+    ASSERT (ctx, "ctx is NULL. vb_i=%u", vb->vblock_i);
+
+    const Buffer *b250 = is_pair ? &ctx->pair : &ctx->b250;
+    SnipIterator *iterator = is_pair ? &ctx->pair_b250_iter : &ctx->iterator;
 
     // if the entire b250 in a VB consisted of word_index=0, we don't output the b250 to the file, and just 
     // consider it to always emit 0
-    if (!buf_is_allocated (&ctx->b250)) {
+    if (!b250->len) {
         if (snip) {
             CtxWord *dict_word = FIRSTENT (CtxWord, ctx->word_list);
             *snip = &ctx->dict.data[dict_word->char_index];
@@ -160,16 +161,16 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same,
         return 0;
     }
     
-    SnipIterator *iterator = override_iterator ? override_iterator : &ctx->iterator;
-    
-    if (!override_iterator && !iterator->next_b250) 
-        iterator->next_b250 = FIRSTENT (uint8_t, ctx->b250); // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
+    if (!iterator->next_b250)  // initialize
+        *iterator = (SnipIterator){ .next_b250       = FIRSTENT (uint8_t, *b250), 
+                                    .prev_word_index = WORD_INDEX_NONE };
 
-    // an imperfect test for overflow, but this should never happen anyway 
-    ASSERT (override_iterator || iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), 
-            "while reconstrucing line %u vb_i=%u: iterator for %s reached end of data", vb->line_i, vb->vblock_i, ctx->name);
-            
-    word_index = base250_decode (&iterator->next_b250, !all_the_same, ctx->name);  // if this line has no non-GT subfields, it will not have a ctx 
+    WordIndex word_index = base250_decode (&iterator->next_b250, !all_the_same, ctx->name);  // if this line has no non-GT subfields, it will not have a ctx 
+
+    // we check after (no risk of segfault because of buffer overflow protector) - since b250 word is variable length
+    ASSERT (iterator->next_b250 <= AFTERENT (uint8_t, *b250), 
+            "while reconstrucing line %u vb_i=%u: iterator for %s %sreached end of data. b250.len=%"PRIu64, 
+            vb->line_i, vb->vblock_i, ctx->name, is_pair ? "(PAIR) ": " ", b250->len);
 
     // case: a Container item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
     if (word_index == WORD_INDEX_MISSING_SF) {
@@ -192,8 +193,9 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same,
             word_index = iterator->prev_word_index + 1;
 
         ASSERT (word_index < ctx->word_list.len, 
-                "while parsing line %u: word_index=%u is out of bounds - %s dictionary has only %u entries",
-                vb->line_i, word_index, ctx->name, (uint32_t)ctx->word_list.len);
+                "while parsing vb=%u line=%u: word_index=%u is out of bounds - %s %sdictionary (did=%u) has only %u entries. b250.len=%"PRId64" iterator(after)=%"PRId64,
+                vb->vblock_i, vb->line_i, word_index, ctx->name, is_pair ? "(PAIR) ": " ", 
+                ctx->did_i, (uint32_t)ctx->word_list.len, b250->len, (char*)iterator->next_b250 - (char*)b250->data);
 
         CtxWord *dict_word = ENT (CtxWord, ctx->word_list, word_index);
 
@@ -216,7 +218,7 @@ int64_t ctx_peek_next_int (VBlock *vb, Context *ctx)
         uint32_t snip_len;
 
         SnipIterator save = ctx->iterator;
-        ctx_get_next_snip (vb, ctx, ctx->flags.all_the_same, NULL, &snip, &snip_len);
+        ctx_get_next_snip (vb, ctx, ctx->flags.all_the_same, false, &snip, &snip_len);
         ctx->iterator = save; // restore
 
         return atoi (snip);
@@ -240,7 +242,7 @@ double ctx_peek_next_float (VBlock *vb, Context *ctx)
         uint32_t snip_len;
 
         SnipIterator save = ctx->iterator;
-        ctx_get_next_snip (vb, ctx, ctx->flags.all_the_same, NULL, &snip, &snip_len);
+        ctx_get_next_snip (vb, ctx, ctx->flags.all_the_same, false, &snip, &snip_len);
         ctx->iterator = save; // restore
 
         return atof (snip);
@@ -797,6 +799,9 @@ CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index)
 const char *ctx_get_snip_by_word_index (const Context *ctx, WordIndex word_index, 
                                         const char **snip, uint32_t *snip_len)
 {
+    ASSERT ((uint32_t)word_index < ctx->word_list.len, "word_index=%d out of range: word_list.len=%u for ctx=%s",
+            word_index, (uint32_t)ctx->word_list.len, ctx->name);
+
     CtxWord *word = ENT (CtxWord, ctx->word_list, word_index);
     const char *my_snip = ENT (const char, ctx->dict, word->char_index);
     

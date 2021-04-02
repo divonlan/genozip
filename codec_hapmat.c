@@ -97,7 +97,7 @@ static void codec_hapmat_compress_one_array (VBlockP vb_, uint32_t ht_i,
     *line_data_len_1 = vb->hapmat_one_array.len;
 
     if (flag.show_alleles)
-        printf ("Col %-2u : %.*s\n", orig_col_i, (int)vb->hapmat_one_array.len, column);
+        iprintf ("Col %-2u : %.*s\n", orig_col_i, (int)vb->hapmat_one_array.len, column);
 }
 
 // build the reverse index that will allow access by the original index to the sorted array, to be included in the genozip file
@@ -144,7 +144,7 @@ bool codec_hapmat_compress (VBlock *vb_,
     buf_alloc_old (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array");
     
     if (flag.show_alleles) 
-        printf ("\nAfter transpose and sorting:\n");
+        iprint0 ("\nAfter transpose and sorting:\n");
 
     // compress the matrix one column at a time, by the order of helper index
     uint64_t save_lines_len = vb->lines.len;
@@ -250,7 +250,7 @@ static inline void codec_hapmat_piz_get_one_line (VBlockVCF *vb)
     }
 
     if (flag.show_alleles)
-        printf ("Line %-2u : %.*s\n", vb_line_i, (int)vb->hapmat_one_array.len, vb->hapmat_one_array.data);
+        iprintf ("Line %-2u : %.*s\n", vb_line_i, (int)vb->hapmat_one_array.len, vb->hapmat_one_array.data);
 
     COPY_TIMER (codec_hapmat_piz_get_one_line);
 }

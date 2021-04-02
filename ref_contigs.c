@@ -62,13 +62,13 @@ static void ref_contigs_show (const Buffer *contigs_buf, bool created)
     Context *chrom_ctx = &z_file->contexts[CHROM];
 
     iprintf ("\nContigs as they appear in the reference%s:\n", created ? " created (note: contig names are as they appear in the txt data, not the reference)" : "");
-    for (uint32_t i=0; i < contigs_buf->len; i++) {
+    for (uint32_t i=0; i < cn_len; i++) {
 
         const char *chrom_name = ENT (const char, chrom_ctx->dict, cn[i].char_index);
 
         if (cn[i].snip_len)
             iprintf ("i=%u '%s' gpos=%"PRId64" min_pos=%"PRId64" max_pos=%"PRId64" chrom_index=%d char_index=%"PRIu64" snip_len=%u\n",
-                    i, chrom_name, cn[i].gpos, cn[i].min_pos, cn[i].max_pos, cn[i].chrom_index, cn[i].char_index, cn[i].snip_len);
+                     i, chrom_name, cn[i].gpos, cn[i].min_pos, cn[i].max_pos, cn[i].chrom_index, cn[i].char_index, cn[i].snip_len);
         else
             iprintf ("i=%u chrom_index=%d (unused - not present in txt data)\n", i, cn[i].chrom_index);
     }
@@ -220,7 +220,6 @@ void ref_contigs_load_contigs (void)
     if (!sl) return; // section doesn't exist
 
     zfile_get_global_section (SectionHeader, SEC_REF_CONTIGS, sl, &loaded_contigs, "loaded_contigs");
-    if (flag.show_headers && exe_type == EXE_GENOCAT) return;
 
     loaded_contigs.len /= sizeof (RefContig);
     BGEN_ref_contigs (&loaded_contigs);
@@ -340,9 +339,10 @@ void ref_contigs_generate_data_if_denovo (void)
     ref_contigs_create_sorted_index();
 }
 
-// ZIP SAM/BAM: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 
+// ZIP SAM/BAM and VCF: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 
 // called by txtheader_add_contig. returns true if contig is in reference
-WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos,
+WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsigned chrom_name_len, 
+                                                   PosType *last_pos, // if 0, set from reference, otherwise verify
                                                    WordIndex header_chrom)
 {               
     WordIndex ref_chrom = ref_contigs_get_word_index (chrom_name, chrom_name_len, WI_REF_CONTIG, true);
@@ -380,8 +380,16 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsig
 
     if (buf_is_allocated (&ranges)) { // it is not allocated in --show-sex/coverage
         PosType ref_last_pos = ENT (Range, ranges, ref_chrom)->last_pos; // get from ranges because RefContig.LN=0 - we don't populate it at reference creation
-        ASSINP (last_pos == ref_last_pos, "Error: wrong reference file: %s has an @SQ line 'SN:%.*s LN:%"PRId64"', but in %s '%s' has LN=%"PRId64,
-                txt_name, chrom_name_len, chrom_name, last_pos, ref_filename, ref_chrom_name, ref_last_pos);
+        
+        // case: file header is missing length, update from reference
+        if (! *last_pos) *last_pos = ref_last_pos;
+
+        // case: file header specifies length - it must be the same as the reference
+        else if (*last_pos != ref_last_pos) {
+            char fmt[200]; // no unbound names in fmt
+            sprintf (fmt, "Error: wrong reference file: %%s has a \"%s\", but in %%s '%%s' has LN=%%"PRId64, DTPT (header_contigs));
+            ASSINP (false, fmt, txt_name, chrom_name_len, chrom_name, *last_pos, ref_filename, ref_chrom_name, ref_last_pos);
+        }
     }
 
     return ref_chrom;

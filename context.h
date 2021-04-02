@@ -106,8 +106,10 @@ typedef struct Context {
 
     // ZIP-only instructions NOT written to the genozip file
     bool no_stons;             // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
-    bool pair_local;           // this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_LOCAL
-    bool pair_b250;            // this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
+    bool pair_local;           // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_LOCAL
+                               // PIZ: pair local data is loaded to context.pair
+    bool pair_b250;            // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
+                               // PIZ: pair b250 data is loaded to context.pair
     bool stop_pairing;         // this is the 2nd file of a pair - don't use SNIP_PAIR_LOOKUP/DELTA anymore until the end of this VB
     bool no_callback;          // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
     bool local_param;          // copy local.param to SectionHeaderCtx
@@ -186,7 +188,7 @@ static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (
 static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
 extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
-extern WordIndex ctx_get_next_snip (VBlockP vb, Context *ctx, bool all_the_same, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
+extern WordIndex ctx_get_next_snip (VBlockP vb, Context *ctx, bool all_the_same, bool is_pair, const char **snip, uint32_t *snip_len);
 //extern const char *ctx_peek_next_snip (VBlockP vb, Context *ctx);
 extern int64_t ctx_peek_next_int (VBlockP vb, ContextP ctx);
 extern double ctx_peek_next_float (VBlockP vb, ContextP ctx);

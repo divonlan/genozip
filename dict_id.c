@@ -268,11 +268,10 @@ void dict_id_initialize (DataType data_type)
 
 static void dict_id_show_aliases (void)
 {
-    fprintf (info_stream, "Contents of SEC_DICT_ID_ALIASES section:\n");
+    iprint0 ("Contents of SEC_DICT_ID_ALIASES section:\n");
     for (unsigned i=0; i < dict_id_num_aliases; i++) 
-        fprintf (info_stream, "alias=%s dst=%s\n", 
+        iprintf ("alias=%s dst=%s\n", 
                  dis_dict_id (dict_id_aliases[i].alias).s, dis_dict_id (dict_id_aliases[i].dst).s);
-    fflush (info_stream);
 
     if (exe_type == EXE_GENOCAT) exit_ok;
 }

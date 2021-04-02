@@ -198,10 +198,8 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     }
     case SNIP_PAIR_LOOKUP: {
-        ASSERT (snip_ctx->pair_b250_iter.next_b250, "no pair_1 data for ctx=%s, while reconstructing pair_2 vb=%u", 
-                snip_ctx->name, vb->vblock_i);
-
-        ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags.all_the_same, &snip_ctx->pair_b250_iter, &snip, &snip_len);
+        ASSERT (snip_ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->name, vb->vblock_i);
+        ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags.all_the_same, true, &snip, &snip_len);
         reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len, reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
         break;
     }
@@ -217,6 +215,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
 
     case SNIP_PAIR_DELTA: { // used for FASTQ_GPOS - uint32_t stored in originating in the pair's local
+        ASSERT (snip_ctx->pair_local, "no pair_1 local data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->name, vb->vblock_i);
         uint32_t fastq_line_i = vb->line_i / 4 - vb->first_line; // see fastq_piz_filter for calculation
         int64_t pair_value = (int64_t) *ENT (uint32_t, snip_ctx->pair, fastq_line_i);  
         int64_t delta = (int64_t)strtoull (snip+1, NULL, 10 /* base 10 */); 
@@ -292,7 +291,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
                                  char sep, // if non-zero, outputs after the reconstruction
                                  bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data
 {
-    ASSERT (did_i < vb->num_contexts, "did_i=%u out of range: vb->num_contexts=%u", did_i, vb->num_contexts);
+    ASSERT (did_i < vb->num_contexts, "did_i=%u out of range: vb->num_contexts=%u for vb=%u", did_i, vb->num_contexts, vb->vblock_i);
 
     Context *ctx = &vb->contexts[did_i];
 

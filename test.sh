@@ -528,7 +528,7 @@ batch_reference()
     test_standard "COPY -E$GRCh38 --pair" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz
 
     echo "4 paired FASTQ with --REFERENCE (BZ2, decompress unbound)"
-    test_standard "COPY CONCAT -E$GRCh38 -2" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    test_standard "COPY CONCAT -E$GRCh38 -2" " " test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
@@ -544,7 +544,7 @@ batch_reference()
     test_standard "-E$GRCh38 --password 123" "-p123" test.human-unsorted.sam
     
     echo "multiple bound VCF with --reference, --md5 using hg19, and unbind"
-    test_standard "COPY CONCAT -me$hg19" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    test_standard "COPY CONCAT -me$hg19" " " test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
     echo "multiple VCF with --REFERENCE using hg19" 
     test_standard "-mE$hg19" " " test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf test.human2.filtered.snp.vcf
@@ -632,9 +632,9 @@ else
     path=$PWD/
 fi
 
-genozip="$genozip_exe $2"
-genounzip="$genounzip_exe $2"
-genocat="$genocat_exe $2"
+genozip="$genozip_exe -@3 $2"
+genounzip="$genounzip_exe -@5 $2"
+genocat="$genocat_exe -@5 $2"
 genols=$genols_exe 
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)

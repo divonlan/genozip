@@ -328,6 +328,7 @@ int stream_close (Stream **stream, StreamCloseMode close_mode)
         // TerminateProcess is asynchronous - we need to wait to make sure the process is terminated (not sure about kill)
         exit_code = stream_wait_for_exit (*stream);
 
+    url_reset_if_curl (*stream);
     FREE (*stream);
 
     return exit_code;

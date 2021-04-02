@@ -24,12 +24,16 @@ extern CONTAINER_FILTER_FUNC (chain_piz_filter);
 
 // using the chain data in genozip --chain
 extern void chain_load (void);
+extern const char *chain_get_dst_contig (uint32_t contig_i, PosType *length);
+extern void chain_copy_dst_contigs_to_z_file (DidIType dst_contig_did_i);
+extern WordIndex chain_get_src_contig_index (const char *contig, unsigned contig_len);
+
 extern LiftOverStatus chain_get_liftover_coords (WordIndex src_contig_index,  PosType src_1pos, 
                                                  WordIndex *dst_contig_index, PosType *dst_1pos);
 
 #define CHAIN_SPECIAL { chain_piz_special_BACKSPACE, chain_piz_special_ENDDST, chain_piz_special_SIZE }
 SPECIAL (CHAIN, 0, BACKSPACE, chain_piz_special_BACKSPACE);
-SPECIAL (CHAIN, 1, ENDDST,      chain_piz_special_ENDDST);
+SPECIAL (CHAIN, 1, ENDDST,    chain_piz_special_ENDDST);
 SPECIAL (CHAIN, 2, SIZE,      chain_piz_special_SIZE);
 #define NUM_CHAIN_SPECIAL 3
 

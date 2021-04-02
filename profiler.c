@@ -74,7 +74,7 @@ const char *profiler_print_short (const ProfilerRec *p)
 void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs)
 {
     static const char *space = "                                                   ";
-#   define PRINT(x, level) if (p->x) fprintf (info_stream, "%.*s" #x ": %u\n", level*3, space, ms(p->x));
+#   define PRINT(x, level) if (p->x) iprintf ("%.*s" #x ": %u\n", level*3, space, ms(p->x));
     
 #if defined _WIN32
     static const char *os ="Windows";
@@ -86,28 +86,28 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     static const char *os ="Unknown OS";
 #endif
 
-    fprintf (info_stream, "\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
-    fprintf (info_stream, "OS=%s\n", os);
+    iprintf ("\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
+    iprintf ("OS=%s\n", os);
 #ifdef DEBUG
-    fprintf (info_stream, "Build=Debug\n");
+    iprint0 ("Build=Debug\n");
 #else
-    fprintf (info_stream, "Build=Optimized\n");
+    iprint0 ("Build=Optimized\n");
 #endif
-    fprintf (info_stream, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
-    fprintf (info_stream, "file=%s\n\n", filename ? filename : "(not file)");
+    iprintf ("Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
+    iprintf ("file=%s\n\n", filename ? filename : "(not file)");
     
-    fprintf (info_stream, "Wallclock: %u milliseconds\n", ms (p->wallclock));
+    iprintf ("Wallclock: %u milliseconds\n", ms (p->wallclock));
 
     if (command != ZIP) { // this is a uncompress operation
 
-        fprintf (info_stream, "GENOUNZIP main thread (piz_one_txt_file):\n");
+        iprint0 ("GENOUNZIP main thread (piz_one_txt_file):\n");
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
         PRINT (ctx_read_all_dictionaries, 1)
         PRINT (ctx_dict_build_word_lists, 2);
         PRINT (bgzf_io_thread, 1);
         PRINT (write, 1);
-        fprintf (info_stream, "GENOUNZIP compute threads: %u\n", ms(p->compute));
+        iprintf ("GENOUNZIP compute threads: %u\n", ms(p->compute));
         PRINT (zfile_uncompress_section, 1);
         PRINT (compressor_bz2,  2);
         PRINT (compressor_lzma, 2);
@@ -123,7 +123,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (codec_hapmat_piz_get_one_line, 2);
     }
     else { // compress
-        fprintf (info_stream, "GENOZIP main thread (zip_one_file):\n");
+        iprint0 ("GENOZIP main thread (zip_one_file):\n");
         PRINT (txtfile_read_header, 1);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
@@ -132,7 +132,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (ref_contigs_compress, 1);
         PRINT (sorter_compress_recon_plan, 1);
         PRINT (sorter_compress_qsort, 2);
-        fprintf (info_stream, "GENOZIP compute threads %u\n", ms(p->compute));
+        iprintf ("GENOZIP compute threads %u\n", ms(p->compute));
         PRINT (ctx_clone, 1);
         PRINT (seg_all_data_lines, 1);
         PRINT (aligner_best_match, 2);
@@ -162,16 +162,14 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     PRINT (buf_alloc, 0);
     PRINT (generate_rev_complement_genome, 0);
     
-    fprintf (info_stream, "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
+    iprintf ("tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
 
-    fprintf (info_stream, "\nVblock stats:\n");
-    fprintf (info_stream, "  Vblocks: %u\n", num_vbs);
-    fprintf (info_stream, "  Maximum vblock size: %"PRIu64" MB\n", flag.vblock_memory >> 20);
-    fprintf (info_stream, "  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
-    fprintf (info_stream, "  Average read time: %u\n", ms(p->read) / num_vbs);
-    fprintf (info_stream, "  Average compute time: %u\n", ms(p->compute) / num_vbs);
-    fprintf (info_stream, "  Average write time: %u\n", ms(p->write) / num_vbs);
-    fprintf (info_stream, "\n");
-
-    fflush (info_stream);
+    iprint0 ("\nVblock stats:\n");
+    iprintf ("  Vblocks: %u\n", num_vbs);
+    iprintf ("  Maximum vblock size: %"PRIu64" MB\n", flag.vblock_memory >> 20);
+    iprintf ("  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
+    iprintf ("  Average read time: %u\n", ms(p->read) / num_vbs);
+    iprintf ("  Average compute time: %u\n", ms(p->compute) / num_vbs);
+    iprintf ("  Average write time: %u\n", ms(p->write) / num_vbs);
+    iprint0 ("\n");
 }

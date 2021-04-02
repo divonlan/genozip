@@ -50,15 +50,6 @@
 #include "strings.h"
 #include "random_access.h"
 
-// 1) At the end of PIZ of a chain file: src_contig and dst_contig are generated from z_file->contexts of a chain file when pizzing a chain file during genozip of a file with --liftover
-// 2) At the beginning of ZIP of a file with --liftover: dst_contig copied to z_file->contexts of the file being compressed
-// 3) liftover_get_liftover_coords src_contig is consulted to get map the index of the primary chrom from the node_index
-//    of the file being compressed to the word_index of src_contig in the chain data
-static Buffer src_contig_dict  = EMPTY_BUFFER;
-static Buffer src_contig_words = EMPTY_BUFFER;
-static Buffer dst_contig_dict  = EMPTY_BUFFER;
-static Buffer dst_contigs      = EMPTY_BUFFER;
-
 enum { OCHROM_OFFSET, OPOS_OFFSET, OREF_OFFSET, OSTRAND_OFFSET, OALTRULE_OFFSET, OSTATUS_OFFSET };
 
 const char *liftover_status_names[] = LIFTOVER_STATUS_NAMES;
@@ -70,37 +61,6 @@ static char liftover_snip[200];
 static unsigned liftover_snip_len;
 static char liftback_snip_id;
 
-// generate dst_contig dict and nodes at the end of chain_load; to be copied z_file->contexts of file being zipped
-void liftover_copy_data_from_chain_file (void)
-{
-    // save src_contig  
-    buf_copy (evb, &src_contig_dict,  &z_file->contexts[CHAIN_NAMESRC].dict, char, 0, 0, "src_contig_dict");
-    buf_copy (evb, &src_contig_words, &z_file->contexts[CHAIN_NAMESRC].word_list, CtxWord, 0, 0, "src_contig_words");
-
-    // copy dictionary buffer
-    buf_copy (evb, &dst_contig_dict, &z_file->contexts[CHAIN_NAMEDST].dict, char, 0, 0, "dst_contig_dict");
-
-    ARRAY (CtxWord, dst_contig_words, z_file->contexts[CHAIN_NAMEDST].word_list);
-    dst_contig_dict.param = dst_contig_words_len; // dict param contains number of words
-
-    // copy word_list into a contigs buffer - for convenience of using ctx_build_zf_ctx_from_contigs later
-    buf_alloc (evb, &dst_contigs, 0, dst_contig_words_len, RefContig, 0, "dst_contigs");
-    dst_contigs.len = dst_contig_words_len;
-    ARRAY (RefContig, contigs, dst_contigs);
-
-    for (uint32_t i=0; i < dst_contig_words_len; i++)
-        contigs[i] = (RefContig) { .char_index = dst_contig_words[i].char_index,
-                                   .snip_len   = dst_contig_words[i].snip_len   };
-}
-
-// returns null-terminated string of contig, or NULL if contig_i is out of range
-const char *liftover_get_luft_contig (uint32_t contig_i)
-{
-    if (contig_i >= dst_contigs.len) return NULL;
-
-    return ENT (char, dst_contig_dict, ENT (RefContig, dst_contigs, contig_i)->char_index);
-}
-
 // ---------------
 // ZIP & SEG stuff
 // ---------------
@@ -111,7 +71,7 @@ void liftover_zip_initialize (DidIType dst_contig_did_i, char special_liftback_s
 {
     // case: --chain : create SRCNAME context from liftover contigs and dict
     if (chain_is_loaded)
-        ctx_build_zf_ctx_from_contigs (dst_contig_did_i, &dst_contigs, &dst_contig_dict);
+        chain_copy_dst_contigs_to_z_file (dst_contig_did_i);
 
     // prepare (constant) snips. note: we need these snips both for --chain and when zipping dual-coord files
 
@@ -151,30 +111,17 @@ static LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover
     ARRAY (WordIndex, map, *liftover_chrom2chainsrc);
 
     // if chrom is not yet mapped to src_contig, map it now
-    if (map[vb->chrom_node_index] == WORD_INDEX_MISSING) {
-        WordIndex src_contig_index;
-        ARRAY (CtxWord, words, src_contig_words);
-        
-        for (src_contig_index=0; src_contig_index < words_len; src_contig_index++) {
-            const char *src_contig = ENT (char, src_contig_dict, words[src_contig_index].char_index);
-
-            if (words[src_contig_index].snip_len == vb->chrom_name_len && 
-                !memcmp (vb->chrom_name, src_contig, vb->chrom_name_len)) break; // found
-        }
-
-        map[vb->chrom_node_index] = (src_contig_index == words_len) ? WORD_INDEX_NONE : src_contig_index;
-    }
-
-    WordIndex src_contig_index = map[vb->chrom_node_index];
+    if (map[vb->chrom_node_index] == WORD_INDEX_MISSING) 
+        map[vb->chrom_node_index] = chain_get_src_contig_index (vb->chrom_name, vb->chrom_name_len);
 
     *dst_1pos = 0; // initialize
-    if (src_contig_index == WORD_INDEX_NONE) {
+    if (map[vb->chrom_node_index] == WORD_INDEX_NONE) {
         *dst_contig_index = WORD_INDEX_NONE;
         *dst_1pos = 0;
         return LO_NO_CHROM;
     }
     else 
-        return chain_get_liftover_coords (src_contig_index, vb->last_int(DTF(pos)), dst_contig_index, dst_1pos);
+        return chain_get_liftover_coords (map[vb->chrom_node_index], vb->last_int(DTF(pos)), dst_contig_index, dst_1pos);
 }                                
 
 // --------------------------------------------------------------

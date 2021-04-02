@@ -197,6 +197,10 @@ FILE *url_open (StreamP parent_stream, const char *url)
     return stream_from_stream_stdout (curl);
 }
 
+void url_reset_if_curl (StreamP maybe_curl_stream)
+{
+    if (curl == maybe_curl_stream) curl = NULL;
+}
 
 // kill curl - used in case of an
 void url_kill_curl (void)

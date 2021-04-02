@@ -116,10 +116,10 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
             if (!item_len) goto badly_formatted;
 
             if (!is_last_item)
-                seg_by_dict_id (vb, snip, item_len, ctxs[item_i]->dict_id, item_len + (con.items[item_i].seperator[0] != 0) + (con.items[item_i].seperator[1] != 0));
+                seg_by_dict_id (vb, snip, item_len, ctxs[item_i]->dict_id, item_len);
             else {
                 is_last_entry = (snip_len - item_len == 0);
-                seg_id_field ((VBlockP)vb, (DictId)dict_id_ENSTid, snip, item_len, !is_last_entry);
+                seg_id_field ((VBlockP)vb, (DictId)dict_id_ENSTid, snip, item_len, false);
             }
     
             snip     += item_len + 1 - is_last_entry; // 1 for either the , or the ' ' (except in the last item of the last entry)
@@ -135,7 +135,8 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
     }
 
     // finally, the Container snip itself
-    container_seg_by_ctx ((VBlockP)vb, subfield_ctx, (ContainerP)&con, NULL, 0, 0);
+    container_seg_by_ctx ((VBlockP)vb, subfield_ctx, (ContainerP)&con, NULL, 0, 
+                           con.repeats * (num_items-1) /* space seperators */ + con.repeats-1 /* comma separators */);
 
     return;
 
@@ -172,12 +173,12 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_Variant_effect) {
         static const SmallContainer Variant_effect = {
             .nitems_lo   = 4, 
-            .drop_final_item_sep = true,
-            .repsep      = {0,0},
+            .drop_final_repeat_sep = true,
+            .repsep      = {','},
             .items       = { { .dict_id={.id="V0arEff" }, .seperator = {' '} },
                              { .dict_id={.id="V1arEff" }, .seperator = {' '} },
                              { .dict_id={.id="V2arEff" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"  }, .seperator = {','} } }
+                             { .dict_id={.id="ENSTid"  },                    } }
         };
         gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), Variant_effect, *this_value, *this_value_len);
         return false;
@@ -186,12 +187,12 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_sift_prediction) {
         static const SmallContainer sift_prediction = {
             .nitems_lo   = 4, 
-            .drop_final_item_sep = true,
-            .repsep      = {0,0},
+            .drop_final_repeat_sep = true,
+            .repsep      = {','},
             .items       = { { .dict_id={.id="S0iftPr" }, .seperator = {' '} },
                              { .dict_id={.id="S1iftPr" }, .seperator = {' '} },
                              { .dict_id={.id="S2iftPr" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"  }, .seperator = {','} } }
+                             { .dict_id={.id="ENSTid"  },                    } }
         };
         gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), sift_prediction, *this_value, *this_value_len);
         return false;
@@ -200,12 +201,12 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_polyphen_prediction) {
         static const SmallContainer polyphen_prediction = {
             .nitems_lo   = 4, 
-            .drop_final_item_sep = true,
-            .repsep      = {0,0},
+            .drop_final_repeat_sep = true,
+            .repsep      = {','},
             .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = {' '} },
                              { .dict_id={.id="P1olyPhP" }, .seperator = {' '} },
                              { .dict_id={.id="P2olyPhP" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"   }, .seperator = {','} } }
+                             { .dict_id={.id="ENSTid"   },                    } }
         };
         gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), polyphen_prediction, *this_value, *this_value_len);
         return false;
@@ -214,11 +215,11 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_variant_peptide) {
         static const SmallContainer variant_peptide = {
             .nitems_lo   = 3, 
-            .drop_final_item_sep = true,
-            .repsep      = {0,0},
+            .drop_final_repeat_sep = true,
+            .repsep      = {','},
             .items       = { { .dict_id={.id="v0arPep" }, .seperator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
                              { .dict_id={.id="v1arPep" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"  }, .seperator = {','} } }
+                             { .dict_id={.id="ENSTid"  },                    } }
         };
         gff3_seg_array_of_struct (vb, ctx_get_ctx (vb, dict_id), variant_peptide, *this_value, *this_value_len);
         return false;

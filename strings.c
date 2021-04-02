@@ -88,10 +88,13 @@ StrText str_bases (uint64_t num_bases)
 {
     StrText s;
 
-    if      (num_bases >= 1000000) sprintf (s.s, "%.1lf Mb", ((double)num_bases) / 1000000.0);
-    else if (num_bases >= 1000)    sprintf (s.s, "%.1lf Kb", ((double)num_bases) / 1000.0);
-    else if (num_bases >  0   )    sprintf (s.s, "%u b", (unsigned)num_bases);
-    else                           sprintf (s.s, "-");
+    if      (num_bases >= 1000000000000000) sprintf (s.s, "%.1lf Pb", ((double)num_bases) / 1000000000000000.0);
+    else if (num_bases >= 1000000000000)    sprintf (s.s, "%.1lf Tb", ((double)num_bases) / 1000000000000.0);
+    else if (num_bases >= 1000000000)       sprintf (s.s, "%.1lf Gb", ((double)num_bases) / 1000000000.0);
+    else if (num_bases >= 1000000)          sprintf (s.s, "%.1lf Mb", ((double)num_bases) / 1000000.0);
+    else if (num_bases >= 1000)             sprintf (s.s, "%.1lf Kb", ((double)num_bases) / 1000.0);
+    else if (num_bases >  0   )             sprintf (s.s, "%u b",    (unsigned)num_bases);
+    else                                    sprintf (s.s, "-");
 
     return s;
 }
@@ -168,6 +171,8 @@ bool str_get_int (const char *str, unsigned str_len,
 
 bool str_get_int_range64 (const char *str, unsigned str_len, int64_t min_val, int64_t max_val, int64_t *value)
 {
+    if (!str) return false;
+
     if (!str_get_int (str, str_len ? str_len : strlen (str), value)) return false;
     
     return *value >= min_val && *value <= max_val;
@@ -175,6 +180,8 @@ bool str_get_int_range64 (const char *str, unsigned str_len, int64_t min_val, in
 
 bool str_get_int_range32 (const char *str, unsigned str_len, int32_t min_val, int32_t max_val, int32_t *value)
 {
+    if (!str) return false;
+
     int64_t value64;
     if (!str_get_int (str, str_len ? str_len : strlen (str), &value64)) return false;
     *value = (int32_t)value64;
@@ -378,12 +385,12 @@ int str_print_text (const char **text, unsigned num_lines,
             int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); 
                         c>=0 && (IS_LETTER(line[c]) || IS_DIGIT (line[c])); // wrap lines at - and | too, so we can break very long regex strings like in genocat
                         c--); // find 
-            printf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
+            iprintf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
             line += c + (line[c]==' '); // skip space too
             line_len -= c + (line[c]==' ');
             wrapped = true;
         }
-        printf ("%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
+        iprintf ("%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
     }
     return 0;
 }

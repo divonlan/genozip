@@ -37,6 +37,7 @@
 static const unsigned control_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
 
 static Mutex overlay_mutex = {}; // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
+static Mutex only_once_mutex = {};
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
@@ -45,6 +46,7 @@ static void *buf_low_level_realloc (void *p, size_t size, const char *name, cons
 void buf_initialize()
 {
     mutex_initialize (overlay_mutex);
+    mutex_initialize (only_once_mutex);
 }
 
 static const char *buf_display_type (const Buffer *buf)
@@ -312,6 +314,9 @@ static void buf_add_mem_usage_to_stats (const Buffer *buf, void *unused)
 
 void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads)
 {
+    // if memory is full - only one thread needs to show this - others threads hang until we exit the process
+    if (memory_full) mutex_lock (only_once_mutex);
+    
     memset (stats, 0, sizeof(stats));
     num_stats = num_buffers = 0;
     buf_foreach_buffer (buf_add_mem_usage_to_stats, 0);
@@ -340,6 +345,8 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
 
     for (unsigned i=0; i < num_stats; i++)
         fprintf (memory_full ? stderr : info_stream, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str_size (stats[i].bytes).s, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
+
+    fprintf (memory_full ? stderr : info_stream, "\n");
 }
 
 #ifndef _WIN32
@@ -385,13 +392,11 @@ static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_siz
     ASSERT (buf->name, "buffer has no name. func=%s:%u", buf->func, buf->code_line);
 
     if (!memory) {
-        if (flag.show_memory)
-            buf_display_memory_usage (true, 0, 0);
+        buf_display_memory_usage (true, 0, 0);
 
-        ABORT ("%s: Out of memroy. %s%sDetails: %s:%u failed to allocate %s bytes. Buffer: %s", 
+        ABORT ("%s: Out of memory. %sDetails: %s:%u failed to allocate %s bytes. Buffer: %s", 
                global_cmd, 
                (command==ZIP ? "Try running with a lower vblock size using --vblock. " : ""), 
-               (!flag.show_memory ? "To see memory details - run again with --show-memory. " : ""), 
                func, code_line, str_uint_commas (size + control_size).s, buf_desc(buf).s);
     }
 

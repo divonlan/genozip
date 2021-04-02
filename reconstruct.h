@@ -18,7 +18,7 @@ extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char sepera
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
 
 // gets snip, snip_len from b250 data
-#define LOAD_SNIP(did_i) ctx_get_next_snip ((VBlockP)vb, &vb->contexts[(did_i)], vb->contexts[(did_i)].flags.all_the_same, NULL, &snip, &snip_len); 
+#define LOAD_SNIP(did_i) ctx_get_next_snip ((VBlockP)vb, &vb->contexts[(did_i)], vb->contexts[(did_i)].flags.all_the_same, false, &snip, &snip_len); 
 
 #define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (char*)(s), (len))
 #define RECONSTRUCT1(c) NEXTENT (char, vb->txt_data) = c

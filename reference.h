@@ -88,7 +88,7 @@ extern WordIndex ref_contigs_get_word_index (const char *chrom_name, unsigned ch
 extern void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs);
 extern uint32_t ref_num_loaded_contigs (void);
 extern PosType ref_contigs_get_contig_length (const char *chrom_name, unsigned chrom_name_len);
-extern WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, WordIndex header_chrom);
+extern WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsigned chrom_name_len, PosType *last_pos, WordIndex header_chrom);
 extern void ref_contigs_sort_chroms (void);
 extern void ref_contigs_load_contigs (void);
 

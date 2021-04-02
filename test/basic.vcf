@@ -40,7 +40,7 @@
 ##co= 32. INFO/BaseCounts and INFO/DP
 ##co= 33. Some lines can be lifted over with basic.chain
 ##contig=<ID=1>
-##contig=<ID=12>
+##contig=<ID=12,length=300000000>
 ##contig=<ID=13>
 ##PRFX=used by test.sh/test_multi_bound
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Person1	Person2	Person3	Person4	Person5

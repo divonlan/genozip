@@ -669,7 +669,8 @@ void seg_compound_field (VBlock *vb,
 
                 sf_ctx->last_value.i = this_value;
             }
-            else if (flag.pair == PAIR_READ_1)
+            
+            if (flag.pair == PAIR_READ_1)
                 sf_ctx->no_stons = true; // prevent singletons, so pair-2 can compare to us
             
             // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
@@ -763,9 +764,9 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         con = FIRSTENT (MiniContainer, container_ctx->con_cache);
         *con = (MiniContainer){ .nitems_lo = 1, 
-                                .drop_final_item_sep = true,
-                                .items     = { { .dict_id   = arr_dict_id, // only one item
-                                                 .seperator = { sep } } } };
+                                .drop_final_repeat_sep = true,
+                                .repsep    = { sep },
+                                .items     = { { .dict_id = arr_dict_id } } }; // only one item
 
         arr_ctx = ctx_get_ctx (vb, arr_dict_id);
         arr_ctx->st_did_i = stats_conslidation_did_i;

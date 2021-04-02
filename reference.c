@@ -580,11 +580,13 @@ void ref_remove_cache (void)
 // mmap the reference cached file, as copy-on-write - modifications are private to process and not written to the file
 bool ref_mmap_cached_reference (void)
 {  
-    ASSERT0 (!buf_is_allocated (&ranges), "expecting ranges to be unallocated (this can happen when specifying --reference for a file that doesn't need it)");
-    
-    if (!file_exists (ref_get_cache_fn())) return false; // file doesn't exist
+    if (!buf_is_allocated (&ranges)) {  // possibly already loaded from previous file
+        //ASSERT0 (!buf_is_allocated (&ranges), "expecting ranges to be unallocated (this can happen when specifying --reference for a file that doesn't need it)");
+        
+        if (!file_exists (ref_get_cache_fn())) return false; // file doesn't exist
 
-    ref_initialize_ranges (RT_CACHED); // also does the actual buf_mmap
+        ref_initialize_ranges (RT_CACHED); // also does the actual buf_mmap
+    }
 
     if (ref_has_is_set()) buf_zero (&genome_is_set_buf);
 
@@ -1237,7 +1239,7 @@ static void ref_display_ref (void)
         if (!regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, &display_first_pos, &display_last_pos))
             continue;
 
-        printf ("%.*s\n", r->chrom_name_len, r->chrom_name);
+        iprintf ("%.*s\n", r->chrom_name_len, r->chrom_name);
 
         // case: normal sequence
         if (flag.reference == REF_EXTERNAL)

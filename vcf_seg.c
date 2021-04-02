@@ -68,11 +68,6 @@ void vcf_seg_initialize (VBlock *vb_)
     for (int i=0; i < NUM_LO_STATUSES; i++)
         ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[VCF_oSTATUS], liftover_status_names[i], strlen (liftover_status_names[i]), NULL);
 
-/*    for (char c='0'; c <= '1'; c++) {
-        char oref_special[3] = { SNIP_SPECIAL, VCF_SPECIAL_OREF, c }; 
-        ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[VCF_oREF], oref_special, 3, NULL);
-    }
-*/
     // when compressing a Luft file, some lines are already known to be rejects. we just copy them to liftover_rejects
     if (vb->luft_reject_bytes) 
         buf_copy (vb, &vb->liftover_rejects, &vb->txt_data, char, 0, vb->luft_reject_bytes, "liftover_rejects");
@@ -274,7 +269,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
         format_mapper.items[con_nitems (format_mapper)] = (ContainerItem) {
             .dict_id   = dict_id,
-            .seperator = { last_item ? 0 : ':' },
+            .seperator = {':'}
         };
         con_inc_nitems (format_mapper);
 
