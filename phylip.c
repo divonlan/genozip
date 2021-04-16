@@ -110,7 +110,7 @@ void phy_seg_finalize (VBlockP vb)
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 2,
-        .items     = { { .dict_id = (DictId)dict_id_fields[PHY_ID],  .seperator = "\n"   },
+        .items     = { { .dict_id = (DictId)dict_id_fields[PHY_ID],  .seperator = "\n", .translator = PHYLIP2FASTA_ID },
                        { .dict_id = (DictId)dict_id_fields[PHY_SEQ], .seperator = "\n\n" } }
     };
 
@@ -156,12 +156,22 @@ const char *phy_seg_txt_line (VBlock *vb, const char *line, uint32_t remaining_t
     return line + PHY_ID_LEN + phy_seq_len + *has_13 + 1;
 }
 
-//--------------
-// PIZ functions
-//--------------
+//---------------------------------------
+// PHYLIP -> Multifasta translation stuff
+//---------------------------------------
 
 // remove Phylip header line
 TXTHEADER_TRANSLATOR (txtheader_phy2fa)
 {
     txtheader_buf->len = 0;
 }
+
+// Translating PHYLIP->FASTA: remove redundant terminating spaces from ID (FASTA's DESC)
+TRANSLATOR_FUNC (phy_piz_phy2fasta_ID)
+{
+    while (vb->txt_data.len && *LASTENT (char, vb->txt_data)==' ')
+        vb->txt_data.len--;
+
+    return 0;
+}
+

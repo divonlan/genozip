@@ -19,6 +19,7 @@
 #include "container.h"
 #include "stats.h"
 #include "txtheader.h"
+#include "kraken.h"
 
 static const StoreType optional_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
@@ -160,6 +161,12 @@ void sam_seg_initialize (VBlock *vb)
 
     codec_acgt_comp_init (vb);
 
+    if (kraken_is_loaded) {
+        vb->contexts[SAM_TAXID].flags.store    = STORE_INT;
+        vb->contexts[SAM_TAXID].no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
+        vb->contexts[SAM_TAXID].counts_section = true; 
+    }
+
     COPY_TIMER (seg_initialize);
 }
 
@@ -176,6 +183,7 @@ void sam_seg_finalize (VBlockP vb)
     SmallContainer top_level_sam = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
+        .callback  = true,
         .nitems_lo = 13,
         .items     = { { .dict_id = (DictId)dict_id_fields[SAM_QNAME],    .seperator = "\t" },
                        { .dict_id = (DictId)dict_id_fields[SAM_FLAG],     .seperator = "\t" },
@@ -200,6 +208,7 @@ void sam_seg_finalize (VBlockP vb)
     SmallContainer top_level_bam = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
+        .callback  = true,
         .nitems_lo = 13,
         .items     = { { .dict_id = (DictId)dict_id_fields[SAM_RNAME],    .seperator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
                        { .dict_id = (DictId)dict_id_fields[SAM_POS],      .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
@@ -261,6 +270,7 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == dict_id_fields[SAM_QNAME]     ||
         dict_id.num == dict_id_fields[SAM_OPTIONAL]  ||
         dict_id.num == dict_id_fields[SAM_EOL]       ||
+        dict_id.num == dict_id_fields[SAM_TAXID]     ||
 
         // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
         dict_id.num == dict_id_OPTION_AM ||
@@ -302,11 +312,7 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == dict_id_fields[SAM_RNAME] ||
         dict_id.num == dict_id_fields[SAM_RNEXT] ||
         dict_id.num == dict_id_OPTION_RNAME      ||
-        dict_id.num == dict_id_OPTION_CC         ||
-
-        // these require a ~50000 hash, so this is still small
-        dict_id.num == dict_id_fields[SAM_CIGAR] || 
-        dict_id.num == dict_id_OPTION_MC;
+        dict_id.num == dict_id_OPTION_CC;
 }
 
 void sam_seg_verify_pos (VBlock *vb, PosType this_pos)
@@ -981,6 +987,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
         sam_seg_XA_field (vb, value, value_len);
 
     // fields containing CIGAR format data - aliases of dict_id_OPTION_CIGAR (not the main CIGAR field that all snips have SNIP_SPECIAL)
+    // MC: "Mate Cigar", added by eg https://manpages.debian.org/unstable/biobambam2/bamsort.1.en.html  
     else if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
         seg_by_dict_id (vb, value, value_len, dict_id_OPTION_CIGAR, add_bytes); 
 
@@ -1243,7 +1250,10 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     GET_NEXT_ITEM ("QNAME");
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
-    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], field_start, field_len, arg, 0, 1 /* \n */);
+    seg_compound_field (vb_, &vb->contexts[SAM_QNAME], field_start, field_len, arg, 0, 1 /* \n */);
+
+    if (kraken_is_loaded)
+        kraken_seg_taxid (vb_, SAM_TAXID, field_start, field_len, true);
 
     SEG_NEXT_ITEM (SAM_FLAG);
     int64_t flag;

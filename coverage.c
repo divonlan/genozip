@@ -81,7 +81,6 @@ void coverage_sex_classifier (bool is_first_z_file)
     const Buffer *header_contigs = txtheader_get_contigs();
 
     if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs) {
-        flag.quiet = false;
         WARN ("%s: %s: --sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
@@ -105,15 +104,23 @@ void coverage_sex_classifier (bool is_first_z_file)
                     : header_contigs                ? ENT (RefContig, *header_contigs, index_chrY)->max_pos
                     :                                 ENT (RefContig, loaded_contigs,  index_chrY)->max_pos;
 
+    ARRAY (uint64_t, coverage, txt_file->coverage);
+
+    if (!coverage_len || !coverage[index_chr1] || !coverage[index_chrX]) {
+        WARN ("%s: %s: --sex doesn't work for this file, because it is missing some of the autosomal or sex chromosomes (chr1_bases=%"PRIu64" chrX_bases=%"PRIu64")", 
+               global_cmd, z_name, coverage_len ? coverage[index_chr1] : 0, coverage_len ? coverage[index_chrX] : 0);
+        return;
+    }
+
     //iprintf ("chrY: index=%u cov=%"PRIu64" len=%f\n", index_chrY, *ENT (uint64_t, txt_file->coverage, index_chrY), len_chrY);
     
     // in SAM, it is sufficient to look at chr1 as it is already mapped. this allows as to run with --regions, 10 times faster
     // in FASTQ, we rely on our own approximate aligner, so we compare against all autosomes
-    double depth_AS   = is_sam ? (len_chr1 ? (double)*ENT (uint64_t, txt_file->coverage, index_chr1) / len_chr1 : 0)
+    double depth_AS   = is_sam ? (len_chr1 ? (double)coverage[index_chr1] / len_chr1 : 0)
                                : coverage_get_autosome_depth (index_chrX, index_chrY);
 
-    double depth_chrX = len_chrX ? (double)*ENT (uint64_t, txt_file->coverage, index_chrX) / len_chrX : 0;
-    double depth_chrY = len_chrY ? (double)*ENT (uint64_t, txt_file->coverage, index_chrY) / len_chrY : 0;
+    double depth_chrX = len_chrX ? (double)coverage[index_chrX] / len_chrX : 0;
+    double depth_chrY = len_chrY ? (double)coverage[index_chrY] / len_chrY : 0;
 
     // correct for Genozip Aligner's bias in favour X and Y (vs autosomes) in humans (in FASTQ)
     double correction = is_fastq ? 1.333 : 1;
@@ -156,13 +163,13 @@ void coverage_sex_classifier (bool is_first_z_file)
                                     { "Unassigned",        "Unassigned",                "Unassigned", "Unassigned" }  // XTEST_NA
                                   };
 
-    if (is_first_z_file) 
-        iprintf (is_terminal ? "\n--sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
+    if (!flag.multiple_files) 
+        iprintf (is_info_stream_terminal ? "\n--sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
                                           : "\n--sex for: %s\n%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
                 z_name, "Sex", flag.longest_filename, "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
                 is_sam ? "1/X" : "AS/X", "X/Y");
                 
-    iprintf (is_terminal ? "%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n" : "%s\t%*s\t%f\t%f\t%f\t%f\t%f\n",  
+    iprintf (is_info_stream_terminal ? "%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n" : "%s\t%*s\t%f\t%f\t%f\t%f\t%f\n",  
             is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y], 
             flag.longest_filename, z_name, 
             depth_AS, depth_chrX, depth_chrY, ratio_AS_X, ratio_X_Y);
@@ -173,10 +180,11 @@ void coverage_sex_classifier (bool is_first_z_file)
 // output of genocat --coverage, called from piz_one_txt_file
 void coverage_show_coverage (void)
 {
+    ASSERTNOTEMPTY (txt_file->coverage);
+
     const Buffer *header_contigs = txtheader_get_contigs();
 
     if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs) {
-        flag.quiet = false;
         WARN ("%s: %s: --coverage for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
@@ -184,7 +192,7 @@ void coverage_show_coverage (void)
     unsigned chr_width = flag.show_coverage==1 ? 26 : 13;
 
     if (flag.show_coverage != 3)
-        iprintf (is_terminal ? "\n--coverage for: %s\n%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" 
+        iprintf (is_info_stream_terminal ? "\n--coverage for: %s\n%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" 
                                           : "\n--coverage for: %s\n%*s\t%s\t%s\t%s\t%s\t%s\n", 
                           z_name, chr_width, "Contig", "LN", "Reads", "Bases", "Bases", "Depth");
 
@@ -220,7 +228,7 @@ void coverage_show_coverage (void)
                     :                                     ENT (RefContig, loaded_contigs,  i)->max_pos;
 
         if (flag.show_coverage==1 || (flag.show_coverage==2 && cn_len <= 5))
-            iprintf (is_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
+            iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
                      chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, 
                      100.0 * (double)coverage[i] / (double)coverage_special[CVR_TOTAL], 
                      len ? (double)coverage[i] / (double)len : 0);
@@ -233,8 +241,9 @@ void coverage_show_coverage (void)
         if (cn_len <= 5) genome_nbases += len;
     }
 
-    char all_coverage[7];
-    sprintf (all_coverage, "%*.2f", (int)sizeof(all_coverage)-1, (double)coverage_special[CVR_ALL_CONTIGS] / (double)genome_nbases);
+    char all_coverage[7] = "0";
+    if (genome_nbases) // avoid division by 0
+        sprintf (all_coverage, "%*.2f", (int)sizeof(all_coverage)-1, (double)coverage_special[CVR_ALL_CONTIGS] / (double)genome_nbases);
 
     if (flag.show_coverage == 3) 
         iprintf ("%s:\t%s\n", z_name, all_coverage);
@@ -245,15 +254,15 @@ void coverage_show_coverage (void)
         for (uint64_t i=0; i < NUM_COVER_TYPES; i++) {
 
             if (coverage_special[i])
-                iprintf (is_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %s\n" : "%*s\t%s\t%s\t%s\t%4.1f%%\t%s\n", 
+                iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %s\n" : "%*s\t%s\t%s\t%s\t%4.1f%%\t%s\n", 
                         chr_width, cvr_names[i], "",
                         (i == CVR_SOFT_CLIP ? "" : str_uint_commas (read_count_special[i]).s),
                         str_bases(coverage_special[i]).s,
                         100.0 * (double)coverage_special[i] / (double)coverage_special[CVR_TOTAL],
                         i == CVR_ALL_CONTIGS ? all_coverage : "");
             
-            if (i == CVR_OTHER_CONTIGS && is_terminal)
-                iprint0 ("-----");
+            if (i == CVR_OTHER_CONTIGS && is_info_stream_terminal)
+                iprint0 ("-----\n");
         }
     }
 }
@@ -261,10 +270,11 @@ void coverage_show_coverage (void)
 // output of genocat --idxstats - designed to identical to samtools idxstats
 void coverage_show_idxstats (void)
 {
+    ASSERTNOTEMPTY (txt_file->coverage);
+
     const Buffer *header_contigs = txtheader_get_contigs();
 
     if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && header_contigs) {
-        flag.quiet = false;
         WARN ("%s: %s: --idxstats for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }

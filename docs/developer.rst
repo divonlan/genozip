@@ -35,6 +35,10 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
+.. option:: --show-counts=field  ZUC. Show (per snip in dictionary) the number of words in the file using this snip. genozip - works for any context (use --STATS to see context names). genounzip/genocat - works only for contexts that have a SEC_COUNTS section (which include any contexts in a file generated with genozip --show-counts of that context). 
+
+          |
+
 .. option:: --show-b250=field  ZUC. Show b250 sections content - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). With optional <field> (eg CHROM ; RNAME ; POS ; AN etc) shows only that one field. This also works with genounzip and genocat but without the line numbers. 
 
           |
@@ -79,11 +83,19 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
+.. option:: --show-ref-alts  ZUC. Show the details of the file contigs that are mapped to a different contig name in the reference (eg '22' -> 'chr22'). 
+
+          |
+
 .. option:: --show-ref-contigs  ZUC. Show the details of the reference contigs. 
 
           |
 
-.. option:: --show-ref-alts  ZUC. Show the details of the file contigs that are mapped to a different contig name in the reference (eg '22' -> 'chr22'). 
+.. option:: --show-chain-contigs  Z. Show the details of the chain file contigs. Used in combination with --chain.
+
+          |
+
+.. option:: --show-kraken  C. Show inclusion or exclusion of lines. Used in combination with --taxid.
 
           |
 
@@ -126,6 +138,10 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
           |
 
 .. option:: --show-threads  ZUC.  Show thread dispatcher activity.
+
+          |
+
+.. option:: --debug-threads  ZUCL.  Alternative to --show-threads - store thread log in a buffer rather than sending to I/O.
 
           |
 

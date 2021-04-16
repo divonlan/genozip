@@ -82,6 +82,7 @@ void progress_new_component (const char *new_component_name,
 
 void progress_update (uint64_t sofar, uint64_t total, bool done)
 {
+    char time_str[70], progress[200];
     if (!show_progress && !flag.debug_progress) return; 
 
     TimeSpecType tb; 
@@ -94,20 +95,25 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
         percent = MIN (((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
     else
         percent = MIN (((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
-    
+
     // need to update progress indicator, max once a second or if 100% is reached
 
     // case: we've reached 99% prematurely... we under-estimated the time
-    if (!done && percent > 99 && (last_seconds_so_far < seconds_so_far)) 
-        progress_update_status ("Finalizing...");
-
+    if (!done && percent > 99 && (last_seconds_so_far < seconds_so_far)) {
+        if (!flag.debug_progress)
+            progress_update_status ("Finalizing...");
+        else {
+            sprintf (progress, "Finalizing... %u%% sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, sofar, total);            
+            progress_update_status (progress);
+        }
+    }
+    
     // case: we're making progress... show % and time remaining
     else if (!done && percent && (last_seconds_so_far < seconds_so_far)) { 
 
         if (!done) { 
 
             // time remaining
-            char time_str[70], progress[200];
             unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
             progress_human_time (secs, time_str);
 
@@ -134,7 +140,7 @@ void progress_update_status (const char *status)
     static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
     static const char *spaces = "                                                                                ";
 
-    if (is_terminal && !flag.debug_progress) 
+    if (is_info_stream_terminal && !flag.debug_progress) 
         iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
     else 
         iprintf ("%s\n", status); // if we're outputting to a log file or debugging progress, show every status on its own line

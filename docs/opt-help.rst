@@ -1,3 +1,11 @@
+.. option:: --log filename.  Send non-file output to a log file, instead of the terminal.
+
+|
+
+.. option:: --echo  Output the full command line upon successful or failed completion of execution.
+
+|
+
 .. option:: -h, --help[=topic]  Show this help page. Optional topic can be:
 
 |

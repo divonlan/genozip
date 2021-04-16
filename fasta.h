@@ -29,8 +29,6 @@ extern void fasta_reconstruct_vb(); // no parameter - implicit casting of VBlock
 extern bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 extern bool fasta_piz_initialize_contig_grepped_out (VBlockP vb, bool does_vb_have_any_desc, bool last_desc_in_this_vb_matches_grep);
 
-CONTAINER_FILTER_FUNC (fasta_piz_filter);
-
 // VBlock stuff
 extern void fasta_vb_release_vb();
 extern void fasta_vb_destroy_vb();
@@ -49,6 +47,17 @@ SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
 #define FASTA_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTA, &dict_id_fields[FASTA_NONREF], fasta_zip_seq }, 
 
+// Multifasta to Phylip translation stuff
+
+// Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
+// (they are included in the TOPLEVEL container)
+// translator numbers must start from 1 - 0 is reserved for "none"
+TRANSLATOR (FASTA, PHYLIP, 1, EOL, fasta_piz_fa2phy_EOL)   // drop EOL after DESC
+
+#define NUM_FASTA_TRANS 2 // including "none"
+#define FASTA_TRANSLATORS { NULL /* none */, fasta_piz_fa2phy_EOL }
+
 TXTHEADER_TRANSLATOR (txtheader_fa2phy);
+CONTAINER_FILTER_FUNC (fasta_piz_filter);
 
 #endif

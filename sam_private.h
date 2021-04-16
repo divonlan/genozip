@@ -27,7 +27,7 @@
 #define SAM_FLAG_SECONDARY      0x0100
 #define SAM_FLAG_FAILED_FILTERS 0x0200
 #define SAM_FLAG_DUPLICATE      0x0400
-#define SAM_FLAG_SUPPLAMENTARY  0x0800
+#define SAM_FLAG_SUPPLEMENTARY  0x0800
 
 
 typedef struct {
@@ -46,6 +46,8 @@ typedef struct VBlockSAM {
     uint32_t ref_and_seq_consumed; // ZIP: how many bp in the last seq consumes both ref and seq, according to CIGAR
     Buffer bd_bi_line;             // ZIP: interlaced BD and BI data for one line
 
+    uint32_t soft_clip;            // PIZ: number of bases that were soft-clipped in this line
+    
     // data used in genocat --show-sex
     WordIndex x_index, y_index, a_index;    // word index of the X, Y and chr1 chromosomes
     uint64_t x_bases, y_bases, a_bases;     // counters of number chromosome X, Y and chr1 bases
@@ -88,6 +90,9 @@ extern const uint8_t cigar_lookup_bam[16];
 #define NEXT_UINT8  *((const uint8_t *)next_field++)
 #define NEXT_UINT16 GET_UINT16 (next_field); next_field += sizeof (uint16_t);
 #define NEXT_UINT32 GET_UINT32 (next_field); next_field += sizeof (uint32_t);
+
+#define dict_id_is_sam_qname_sf dict_id_is_type_1
+#define dict_id_sam_qname_sf dict_id_type_1
 
 extern void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len, unsigned *seq_consumed, unsigned *ref_consumed, unsigned *seq_and_ref, unsigned *coverage);
 extern void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len, int64_t tlen_value, PosType pnext_pos_delta, int32_t cigar_seq_len);

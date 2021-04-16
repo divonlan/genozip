@@ -4,8 +4,9 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <errno.h>
-#define _GNU_SOURCE // needed for pthread_tryjoin_np
+#define __USE_GNU // needed for pthread_tryjoin_np on Linux
 #include <pthread.h>
+#undef __USE_GNU
 #include <string.h>
 #include <sys/types.h>
 #ifdef _WIN32
@@ -27,18 +28,22 @@
 #include "flags.h"
 #include "strings.h"
 #include "threads.h"
+#include "vblock.h"
 
 static Buffer threads = EMPTY_BUFFER;
 static Mutex threads_mutex = {};
 static unsigned next_thread_number=0;
 static pthread_t main_thread;
 
+static Buffer log = EMPTY_BUFFER; // for debugging thread issues, activated with --debug-threads
+static Mutex log_mutex = {};
+
 typedef struct {
     bool in_use;
-    pthread_t thread;
+    pthread_t pthread;
     unsigned number; // unique number of thread in execution history
     const char *task_name;
-    uint32_t vb_i;
+    uint32_t vb_i, vb_id;
 } ThreadEnt;
 
 void threads_print_call_stack (void) 
@@ -59,13 +64,13 @@ static void threads_sigsegv_handler (void)
 {
     threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
     threads_cancel_other_threads();
-    abort();
+    abort(); // dumps core
 }
 
 static void threads_sighup_handler (void) 
 {
     threads_cancel_other_threads();
-    abort();
+    exit(1);
 }
 
 // explicitly catch signals, that we otherwise blocked
@@ -93,6 +98,11 @@ void threads_initialize (void)
 
     main_thread = pthread_self(); // we can't put it in buffer yet, because evb is not yet initialized
 
+    if (flag.debug_threads) {
+        buf_alloc (evb, &log, 0, 10000000, char, 1, "log");
+        mutex_initialize (log_mutex);
+    }
+
 #ifndef _WIN32
 
     // block some signals - we will wait for them explicitly in threads_signal_handler(). this is inherited by all threads
@@ -115,16 +125,60 @@ bool threads_am_i_main_thread (void)
     return pthread_self() == main_thread;
 }
 
-int threads_create (void *(*func)(void *), void *arg, const char *task_name, uint32_t vb_i)
+// called by MAIN thread only
+static void threads_log_by_ent (const ThreadEnt *ent, const char *event)
+{
+    bool has_vb = ent->vb_i != (uint32_t)-1;
+
+    if (flag.show_threads)  {
+        if (has_vb) iprintf ("%s: vb_i=%u vb_id=%u %s thread=%u pthread=%u\n", ent->task_name, ent->vb_i, ent->vb_id, event, ent->number, (unsigned)ent->pthread);
+        else        iprintf ("%s: %s: thread=%u pthread=%u\n", ent->task_name, event, ent->number, (unsigned)ent->pthread);
+    }
+    
+    if (flag.debug_threads) {
+        mutex_lock (log_mutex);
+        if (has_vb) bufprintf (evb, &log, "%s: vb_i=%u vb_id=%u %s thread=%u pthread=%u\n", ent->task_name, ent->vb_i, ent->vb_id, event, ent->number, (unsigned)ent->pthread);
+        else        bufprintf (evb, &log, "%s: %s thread %u pthread=%u\n", ent->task_name, event, ent->number, (unsigned)ent->pthread);
+        mutex_unlock (log_mutex);
+    }
+}
+
+// called by any thread
+void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *event)
+{
+    if (flag.show_threads)  
+        iprintf ("%s: vb_i=%u vb_id=%u %s\n", task_name, vb->vblock_i, vb->id, event);
+    
+    if (flag.debug_threads) {
+        mutex_lock (log_mutex);
+        
+        // if thread other than main allocates evb it could cause corruption. we allocating
+        ASSERT0 (log.size - log.len < 100 && !threads_am_i_main_thread(), "Thread log is out of space");
+        
+        bufprintf (evb, &log, "%s: vb_i=%u vb_id=%u %s\n", task_name, vb->vblock_i, vb->id, event);
+        mutex_unlock (log_mutex);
+    }
+}
+
+static void (*thread_entry)(void *arg); // global - counting on threads_create to only be called from the main thread
+
+static void *thread_entry_caller (void *arg)
+{
+    thread_entry (arg);
+
+    return NULL;
+}
+
+// called from main thread only
+int threads_create (void (*func)(void *), void *arg, const char *task_name, ConstVBlockP vb)
 {
     ASSERT (evb, "evb is NULL. task=%s", task_name);
-
-    if (flag.show_threads) 
-        iprintf ("%s: Creating thread %u (vb_i=%s)\n", task_name, next_thread_number, vb_i != THREADS_NO_VB ? str_int_s (vb_i).s : "NONE");
+    ASSERT0 (threads_am_i_main_thread(), "threads_create can only be called from the main thread");
 
     pthread_t thread;
-    unsigned err = pthread_create (&thread, NULL, func, arg);
-    ASSERT (!err, "failed to create thread task=\"%s\" vb_i=%d: %s", task_name, (int)vb_i, strerror(err));
+    thread_entry = func;
+    unsigned err = pthread_create (&thread, NULL, thread_entry_caller, arg);
+    ASSERT (!err, "failed to create thread task=\"%s\" vb_i=%d: %s", task_name, vb ? (int)vb->vblock_i : -1, strerror(err));
 
     mutex_lock (threads_mutex);
 
@@ -132,18 +186,22 @@ int threads_create (void *(*func)(void *), void *arg, const char *task_name, uin
     for (thread_id=0; thread_id < threads.len; thread_id++)
         if (!ENT (ThreadEnt, threads, thread_id)->in_use) break;
 
-    buf_alloc (evb, &threads, 0, thread_id+1, ThreadEnt, 2, "threads");
+    buf_alloc (evb, &threads, 1, global_max_threads + 3, ThreadEnt, 2, "threads");
     threads.len = MAX (threads.len, thread_id+1);
 
-    *ENT (ThreadEnt, threads, thread_id) = (ThreadEnt){ 
+    ThreadEnt ent = (ThreadEnt){ 
         .in_use    = true, 
         .number    = next_thread_number++,
         .task_name = task_name, 
-        .vb_i      = vb_i, 
-        .thread    = thread 
+        .vb_i      = vb ? vb->vblock_i : (uint32_t)-1,
+        .vb_id     = vb ? vb->id       : (uint32_t)-1,
+        .pthread   = thread 
     };
-    
+    *ENT (ThreadEnt, threads, thread_id) = ent;
+
     mutex_unlock (threads_mutex);
+
+    threads_log_by_ent (&ent, "CREATED");
 
     return thread_id;
 }
@@ -151,28 +209,32 @@ int threads_create (void *(*func)(void *), void *arg, const char *task_name, uin
 // returns success if joined (which is always the case if blocking)
 bool threads_join (int thread_id, bool blocking)
 {
-    ThreadEnt *ent = ENT (ThreadEnt, threads, thread_id);
+    mutex_lock (threads_mutex);
+    const ThreadEnt ent = *ENT (ThreadEnt, threads, thread_id); // make a copy as array be realloced
+    mutex_unlock (threads_mutex);
 
-    if (flag.show_threads) 
-        iprintf ("%s: Wait for thread %u (vb_i=%s)\n", ent->task_name, ent->number, ent->vb_i != THREADS_NO_VB ? str_int_s (ent->vb_i).s : "NONE");
+    threads_log_by_ent (&ent, "JOINING: Wait for");
 
     // case: wait for thread to complete (possibly it completed already)
     if (blocking)
-        pthread_join (ent->thread, NULL);
+        pthread_join (ent.pthread, NULL);
     else {
 #ifdef _WIN32
-        int err = _pthread_tryjoin (ent->thread, NULL);
+        int err = _pthread_tryjoin (ent.pthread, NULL);
 #else
-        int err = pthread_tryjoin_np (ent->thread, NULL);
+        int err = pthread_tryjoin_np (ent.pthread, NULL);
 #endif
         if (err == EBUSY) return false;
-        ASSERT (!err, "Error in pthread_tryjoin_np: %s", strerror (err));
+        ASSERT (!err, "Error in pthread_tryjoin_np: thread=%u pthread=%u thread_id=%u task=%s vb_i=%u: %s", 
+                ent.number, (unsigned)ent.pthread, thread_id, ent.task_name, ent.vb_i, strerror (err));
     }
     
-    if (flag.show_threads) 
-        iprintf ("%s: Joined thread %u (vb_i=%s)\n", ent->task_name, ent->number, ent->vb_i != THREADS_NO_VB ? str_int_s (ent->vb_i).s : "NONE");
+    threads_log_by_ent (&ent, "JOINED:");
 
-    ent->in_use = 0; // recycle entry
+    mutex_lock (threads_mutex);
+    ENT (ThreadEnt, threads, thread_id)->in_use = false;
+    mutex_unlock (threads_mutex);
+
     return true;
 }
 
@@ -183,8 +245,8 @@ void threads_cancel_other_threads (void)
 
     ARRAY (ThreadEnt, th, threads);
     for (unsigned i=0; i < th_len; i++)
-        if (th->in_use && th->thread != pthread_self()) {
-            pthread_cancel (th->thread);    
+        if (th->in_use && th->pthread != pthread_self()) {
+            pthread_cancel (th->pthread);    
             th->in_use = false;
         }
 

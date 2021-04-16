@@ -67,6 +67,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
 
         codec_verify_free_all (vb, "compressor", comp_codec);
 
+        vb->codec_using_codec_bufs = comp_codec;
         bool success = 
             codec_args[comp_codec].compress (vb, header, uncompressed_data, &data_uncompressed_len,
                                              callback,  
@@ -92,6 +93,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
 
             codec_free_all (vb); // just in case
         }
+        vb->codec_using_codec_bufs = CODEC_UNKNOWN;
     
         // update uncompressed length - complex codecs (like domqual, pbwt) might change it
         header->data_uncompressed_len = BGEN32 (data_uncompressed_len);
@@ -173,9 +175,10 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
 
         codec_verify_free_all (vb, "uncompressor", codec);
 
+        vb->codec_using_codec_bufs = codec;
         codec_args[codec].uncompress (vb, codec, param, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
-
         codec_free_all (vb); // just in case
+        vb->codec_using_codec_bufs = CODEC_UNKNOWN;
 
         // case: uncompressed data is now going to be the compressed data for the sub-codec
         if (run_subcodec) {
@@ -192,8 +195,10 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
 
     if (run_subcodec) { // might run with or without first running the primary codec
         codec_verify_free_all (vb, "uncompressor", sub_codec);
+        vb->codec_using_codec_bufs = sub_codec;
         codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, uncompressed_data, uncompressed_len, CODEC_UNKNOWN);
         codec_free_all (vb); // just in case
+        vb->codec_using_codec_bufs = CODEC_UNKNOWN;
     }
 }
 

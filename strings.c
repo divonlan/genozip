@@ -169,25 +169,69 @@ bool str_get_int (const char *str, unsigned str_len,
     return true;
 }
 
-bool str_get_int_range64 (const char *str, unsigned str_len, int64_t min_val, int64_t max_val, int64_t *value)
-{
-    if (!str) return false;
+#define str_get_int_range_type(func_num,type) \
+bool str_get_int_range##func_num (const char *str, unsigned str_len, type min_val, type max_val, type *value) \
+{                                                                                     \
+    if (!str) return false;                                                           \
+                                                                                      \
+    int64_t value64;                                                                  \
+    if (!str_get_int (str, str_len ? str_len : strlen (str), &value64)) return false; \
+    *value = (type)value64;                                                           \
+                                                                                      \
+    return *value >= min_val && *value <= max_val;                                    \
+}
+str_get_int_range_type(8,uint8_t)   // unsigned
+str_get_int_range_type(16,uint16_t) // unsigned
+str_get_int_range_type(32,int32_t)  // signed
+str_get_int_range_type(64,int64_t)  // signed
 
-    if (!str_get_int (str, str_len ? str_len : strlen (str), value)) return false;
-    
-    return *value >= min_val && *value <= max_val;
+// get a positive hexadecimal integer, may have leading zeros eg 00FFF
+bool str_get_int_hex (const char *str, unsigned str_len, 
+                      uint64_t *value) // out - modified only if str is an integer
+{
+    uint64_t out = 0;
+
+    for (unsigned i=0; i < str_len; i++) {
+        uint64_t prev_out = out;
+        char c = str[i];
+        
+        if      (c >= '0' && c <= '9') out = (out * 16) + (c - '0');
+        else if (c >= 'A' && c <= 'F') out = (out * 16) + (c - 'A' + 10);
+        else if (c >= 'a' && c <= 'f') out = (out * 16) + (c - 'a' + 10);
+        else return false;
+
+        if (out < prev_out) return false; // number overflowed beyond maximum uint64_t
+    }
+
+    if (value) *value = out; // update only if successful
+    return true;
 }
 
-bool str_get_int_range32 (const char *str, unsigned str_len, int32_t min_val, int32_t max_val, int32_t *value)
-{
-    if (!str) return false;
-
-    int64_t value64;
-    if (!str_get_int (str, str_len ? str_len : strlen (str), &value64)) return false;
-    *value = (int32_t)value64;
-
-    return *value >= min_val && *value <= max_val;
+// positive integer, may be hex prefixed with 0x
+#define str_get_int_range_allow_hex_bits(bits) \
+bool str_get_int_range_allow_hex##bits (const char *str, unsigned str_len, uint##bits##_t min_val, uint##bits##_t max_val, uint##bits##_t *value) \
+{                                                                                             \
+    if (!str) return false;                                                                   \
+                                                                                              \
+    if (str_len >= 3 && str[0]=='0' && str[1]=='x') {                                         \
+        uint64_t value64; /* unsigned */                                                      \
+        if (!str_get_int_hex (&str[2], str_len ? str_len-2 : strlen (str)-2, &value64)) return false; \
+        *value = (uint##bits##_t)value64;                                                     \
+    }                                                                                         \
+    else {                                                                                    \
+        int64_t value64; /* signed bc str_get_int 0 - max is 07fff... */                      \
+        if (!str_get_int (str, str_len ? str_len : strlen (str), &value64)) return false;     \
+        *value = (uint##bits##_t)value64;                                                     \
+    }                                                                                         \
+                                                                                              \
+    return *value >= min_val && *value <= max_val;                                            \
 }
+str_get_int_range_allow_hex_bits(8)  // unsigned
+str_get_int_range_allow_hex_bits(16) // unsigned
+str_get_int_range_allow_hex_bits(32) // unsigned
+str_get_int_range_allow_hex_bits(64) // unsigned
+
+
 
 StrText str_uint_commas (int64_t n)
 {
@@ -307,7 +351,11 @@ bool str_split (const char *str, unsigned str_len, uint32_t num_items, char sep,
 
     for (uint32_t i=0; i < str_len ; i++) 
         if (str[i] == sep) {
-            if (item_i == num_items) return false; // too many separators
+            if (item_i == num_items) {
+                ASSERT (!enforce_msg, "expecting %u %s separators but found more: (100 first) %.*s", 
+                        num_items-1, enforce_msg, MIN (str_len, 100), str);
+                return false; // too many separators
+            }
             items[item_i++] = &str[i+1];
         }
 
@@ -318,8 +366,8 @@ bool str_split (const char *str, unsigned str_len, uint32_t num_items, char sep,
         item_lens[num_items-1] = &str[str_len] - items[num_items-1];
     }
 
-    ASSERT (!enforce_msg || item_i == num_items, "Expecting the number of %s to be %u, but it is %u", 
-            enforce_msg, num_items, item_i);
+    ASSERT (!enforce_msg || item_i == num_items, "Expecting the number of %s to be %u, but it is %u: (100 first) \"%.*s\"", 
+            enforce_msg, num_items, str_len ? item_i : 0, MIN (100, str_len), str);
     
     return item_i == num_items; // false if too few separators
 }

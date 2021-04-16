@@ -52,7 +52,7 @@ static bool ctx_is_show_dict_id (DictId dict_id)
 typedef enum { DICT_VB, DICT_ZF, DICT_ZF_SINGLETON } DictType;
 static inline CharIndex ctx_insert_to_dict (VBlock *vb_of_dict, Context *ctx, DictType type, const char *snip, uint32_t snip_len)
 {
-    Buffer *dict = (type == DICT_ZF_SINGLETON) ? &ctx->ol_dict : &ctx->dict;
+    Buffer *dict = (type == DICT_ZF_SINGLETON) ? &ctx->ol_dict : &ctx->dict; // in z_file, ol_dict contains singletons
 
     static const char *buf_name[3] = { "contexts->dict", "zf_ctx->dict", "zf_ctx->ol_dict" };
     buf_alloc (vb_of_dict, dict, snip_len + 1, INITIAL_NUM_NODES * MIN (10, snip_len), char,CTX_GROWTH, buf_name[type]);
@@ -258,20 +258,21 @@ double ctx_peek_next_float (VBlock *vb, Context *ctx)
 // 1. During segregate - as snips are encountered in the data. No base250 encoding yet
 // 2. During ctx_merge_in_vb_ctx_one_dict_id() - to enter snips into z_file->contexts - also encoding in base250
 static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, Context *vb_ctx, 
-                                          const char *snip, uint32_t snip_len, uint32_t count,
+                                          const char *snip, uint32_t snip_len, int64_t count,
                                           CtxNode **node, bool *is_new)  // out
 {
     // if this turns out to be a singelton - i.e. a new snip globally - where it goes depends on whether its a singleton in the VB 
     // and whether we are allowed to move singletons to local. if its a singleton:
-    // 1. we keep it in ol_nodes and the index in the node is negative to indicate that
-    // 2. we insert it to ol_dict instead of dict - i.e. it doesn't get written the dict section
+    // 1. we keep it in ston_nodes and the index in the node is negative to indicate that
+    // 2. we insert it to ston_nodes instead of dict - i.e. it doesn't get written the dict section
     // 3. we move it to the local section of this vb
     // 4. we set the word_index of its nodes to be the word_index of the SNIP_LOOKUP snip
     bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == LT_TEXT) && !vb_ctx->no_stons); // is singleton in this VB
 
-    // attempt to get the node from the hash table
-    WordIndex node_index = hash_global_get_entry (zf_ctx, snip, snip_len, is_singleton_in_vb ? HASH_NEW_OK_SINGLETON_IN_VB : HASH_NEW_OK_NOT_SINGLETON, node);
-    
+    // attempt to get the node from the hash table 
+    WordIndex node_index = hash_global_get_entry (zf_ctx, snip, snip_len, 
+                                                  is_singleton_in_vb ? HASH_NEW_OK_SINGLETON_IN_VB : HASH_NEW_OK_NOT_SINGLETON, node);
+
     // case: existing non-singleton node. Possibly it was a singleton node before, that thanks to us hash_global_get_entry
     // converted to non-singleton - i.e. node_index is always >= 0.
     if (*node) { 
@@ -281,18 +282,18 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
     
     // NEW SNIP globally - this snip was just added to the hash table - either as a regular or singleton node
     bool is_singleton_in_global = (node_index < 0);
-    Buffer *nodes = is_singleton_in_global ? &zf_ctx->ol_nodes : &zf_ctx->nodes;
+    Buffer *nodes = is_singleton_in_global ? &zf_ctx->ston_nodes : &zf_ctx->nodes;
     ASSERT (nodes->len <= MAX_WORDS_IN_CTX, 
             "too many words in ctx %s, max allowed number of words is is %u", zf_ctx->name, MAX_WORDS_IN_CTX);
 
-    buf_alloc (evb, nodes, 0, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, 
-                    is_singleton_in_global ? "zf_ctx->ol_nodes" : "zf_ctx->nodes");
 
     // set either singleton node or regular node with this snip
-    *node = LASTENT (CtxNode, *nodes);
-    memset (*node, 0, sizeof(CtxNode)); // safety
-    (*node)->snip_len   = snip_len;
-    (*node)->char_index = ctx_insert_to_dict (evb, zf_ctx, (is_singleton_in_global ? DICT_ZF_SINGLETON : DICT_ZF), snip, snip_len);
+    buf_alloc (evb, nodes, 1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, is_singleton_in_global ? "zf_ctx->ston_nodes" : "zf_ctx->nodes");
+    *node = LASTENT (CtxNode, *nodes); // note: (*nodes).len was already incremented in hash_global_get_entry
+    **node = (CtxNode){
+        .snip_len   = snip_len,
+        .char_index = ctx_insert_to_dict (evb, zf_ctx, (is_singleton_in_global ? DICT_ZF_SINGLETON : DICT_ZF), snip, snip_len)
+    };
 
     // case: vb singleton turns out to be a global singleton - we add it to local and return the SNIP_LOOKUP node
     // instead of the singleton node (which is guaranteed to be non-singleton, and hence >= 0)
@@ -301,14 +302,19 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
         seg_add_to_local_text (merging_vb, vb_ctx, snip, snip_len, 0);
         
         static char lookup = SNIP_LOOKUP;
-        return ctx_evaluate_snip_merge (merging_vb, zf_ctx, vb_ctx, &lookup, 1, 2 /* not singleton */, node, is_new);
+        return ctx_evaluate_snip_merge (merging_vb, zf_ctx, vb_ctx, &lookup, 1, -1 /* not singleton */, node, is_new);
     }
 
     // case: not singleton - we return this (new) node
     else {
         buf_set_overlayable (&zf_ctx->nodes);
         (*node)->word_index.n = node_index;
+
+        buf_alloc_zero (evb, &zf_ctx->counts, 1, INITIAL_NUM_NODES, int64_t, CTX_GROWTH, "zf_ctx->counts");
+        zf_ctx->counts.len++; // actually assigned in ctx_merge_in_vb_ctx_one_dict_id 
+
         *is_new = true;
+
         return node_index; // >= 0
     }
 }
@@ -341,7 +347,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
     CtxNode *node;
     WordIndex existing_node_index = hash_get_entry_for_seg (segging_vb, vb_ctx, snip, snip_len, node_index_if_new, &node);
     if (existing_node_index != NODE_INDEX_NONE) {
-        node->count++;
+        (*ENT (int64_t, vb_ctx->counts, existing_node_index))++; // note: counts.len = nodes.len + ol_nodes.len
         if (is_new) *is_new = false;
         return existing_node_index; // snip found - we're done
     }
@@ -349,16 +355,19 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
     // this snip isn't in the hash table - its a new snip
     ASSERT (vb_ctx->nodes.len < MAX_NODE_INDEX, "too many words in dictionary %s (MAX_NODE_INDEX=%u)", vb_ctx->name, MAX_NODE_INDEX);
 
-    buf_alloc (segging_vb, &vb_ctx->nodes, 1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, "contexts->nodes");
+    buf_alloc (segging_vb, &vb_ctx->nodes,  1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, "contexts->nodes");
+    buf_alloc (segging_vb, &vb_ctx->counts, 1, INITIAL_NUM_NODES, int64_t, CTX_GROWTH, "contexts->counts");
 
-    vb_ctx->nodes.len++; // new hash entry or extend linked list
+    NEXTENT (CtxNode, vb_ctx->nodes) = (CtxNode){
+        .snip_len     = snip_len,
+        .char_index   = ctx_insert_to_dict (segging_vb, vb_ctx, DICT_VB, snip, snip_len),
+        .word_index.n = node_index_if_new
+    };
 
-    node = ctx_node_vb (vb_ctx, node_index_if_new, NULL, NULL);
-    memset (node, 0, sizeof(CtxNode)); // safety
-    node->snip_len     = snip_len;
-    node->char_index   = ctx_insert_to_dict (segging_vb, vb_ctx, DICT_VB, snip, snip_len);
-    node->word_index.n = node_index_if_new;
-    node->count++;
+    NEXTENT (int64_t, vb_ctx->counts) = 1;
+
+    ASSERT (vb_ctx->counts.len == vb_ctx->nodes.len + vb_ctx->ol_nodes.len, "Expecting vb_ctx->counts.len=%"PRId64" == vb_ctx->nodes.len=%"PRId64" + vb_ctx->ol_nodes.len=%"PRId64,
+            vb_ctx->counts.len, vb_ctx->nodes.len, vb_ctx->ol_nodes.len);
 
     if (is_new) *is_new = true;
     return node_index_if_new;
@@ -389,7 +398,7 @@ void ctx_clone (VBlock *vb)
 
             // overlay the global dict and nodes - these will not change by this (or any other) VB
             //iprintf ( ("ctx_clone: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dis_dict_id (zf_ctx->dict_id).s, vb->vblock_i, did_i);
-            buf_overlay (vb, &vb_ctx->ol_dict, &zf_ctx->dict, "ctx->ol_dict");   
+            buf_overlay (vb, &vb_ctx->ol_dict,  &zf_ctx->dict,  "ctx->ol_dict");   
             buf_overlay (vb, &vb_ctx->ol_nodes, &zf_ctx->nodes, "ctx->ol_nodes");   
 
             // overlay the hash table, that may still change by future vb's merging... this vb will only use
@@ -398,6 +407,9 @@ void ctx_clone (VBlock *vb)
             vb_ctx->merge_num = zf_ctx->merge_num;
             vb_ctx->global_hash_prime = zf_ctx->global_hash_prime; // can never change
             vb_ctx->num_new_entries_prev_merged_vb = zf_ctx->num_new_entries_prev_merged_vb;
+
+            vb_ctx->counts.len = vb_ctx->ol_nodes.len;
+            buf_alloc_zero (vb, &vb_ctx->counts, 0, vb_ctx->counts.len, int64_t, CTX_GROWTH, "contexts->counts");
         }
 
         vb_ctx->did_i    = did_i;
@@ -434,6 +446,10 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
 
     bool is_zf_ctx = z_file && (ctx - z_file->contexts) >= 0 && (ctx - z_file->contexts) <= (sizeof(z_file->contexts)/sizeof(z_file->contexts[0]));
 
+    // add a user-requested SEC_COUNT section
+    if (command == ZIP && flag.show_one_counts.num == dict_id_typeless (ctx->dict_id).num) 
+        ctx->counts_section = ctx->no_stons = true;
+
     if (is_zf_ctx && command == ZIP) mutex_initialize (ctx->mutex);
 }
 
@@ -463,7 +479,7 @@ void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf
     buf_set_overlayable (&zf_ctx->dict);
 
     // build nodes from word_list
-    buf_alloc_old (evb, &zf_ctx->nodes, sizeof (CtxNode) * contigs_buf->len, 1, "z_file->contexts->nodes");
+    buf_alloc (evb, &zf_ctx->nodes, 0, contigs_buf->len, CtxNode, 1, "z_file->contexts->nodes");
     buf_set_overlayable (&zf_ctx->nodes);
     zf_ctx->nodes.len = contigs_buf->len;
 
@@ -472,9 +488,10 @@ void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf
         node->char_index = contigs[i].char_index;
         node->snip_len   = contigs[i].snip_len;
         node->word_index = base250_encode (i);
-        node->count      = 0;
     }
-    
+
+    buf_alloc_zero (evb, &zf_ctx->counts, 0, contigs_buf->len, int64_t, 1, "z_file->contexts->counts");
+
     // allocate and populate hash from zf_ctx->nodes
     hash_alloc_global (zf_ctx, zf_ctx->nodes.len);
 
@@ -568,6 +585,10 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     zf_ctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
     zf_ctx->num_new_entries_prev_merged_vb = vb_ctx->nodes.len; // number of new words in this dict from this VB
     zf_ctx->num_singletons += vb_ctx->num_singletons; // add singletons created by seg (i.e. SNIP_LOOKUP_* in b250, and snip in local)
+    zf_ctx->counts_section |= vb_ctx->counts_section; // for use of ctx_compress_counts
+
+    uint64_t ol_len = vb_ctx->ol_nodes.len;
+    bool has_count = zf_ctx->counts_section;
 
     if (!flag.processing_rejects)
         zf_ctx->txt_len += vb_ctx->txt_len; // for stats
@@ -582,7 +603,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     if (!vb_ctx->lcodec) vb_ctx->lcodec = zf_ctx->lcodec;
     if (!vb_ctx->bcodec) vb_ctx->bcodec = zf_ctx->bcodec;
     
-    if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // nothing yet for this dict_id
+    if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // no new snips introduced in this VB
  
     if (!buf_is_allocated (&zf_ctx->dict)) {
         // allocate hash table, based on the statitics gather by this first vb that is merging this dict and 
@@ -595,18 +616,21 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
     // merge in words that are potentially new (but may have been already added by other VBs since we cloned for this VB)
     // (vb_ctx->nodes contains only new words, old words from previous vbs are in vb_ctx->ol_nodes)
-    for (unsigned i=0; i < vb_ctx->nodes.len; i++) {
-        CtxNode *vb_node = &((CtxNode *)vb_ctx->nodes.data)[i];
-        
-        CtxNode *zf_node;
+    for (uint64_t i=0; i < vb_ctx->nodes.len; i++) {
+        CtxNode *vb_node = ENT (CtxNode, vb_ctx->nodes, i), *zf_node;
+        const char *snip = ENT (char, vb_ctx->dict, vb_node->char_index);
+        int64_t count = *ENT (int64_t, vb_ctx->counts, ol_len + i);
         bool is_new;
+
         // use evb and not vb because zf_context is z_file (which belongs to evb)
         WordIndex zf_node_index = 
-            ctx_evaluate_snip_merge (merging_vb, zf_ctx, vb_ctx, &vb_ctx->dict.data[vb_node->char_index], 
-                                     vb_node->snip_len, vb_node->count, &zf_node, &is_new);
+            ctx_evaluate_snip_merge (merging_vb, zf_ctx, vb_ctx, snip, vb_node->snip_len, count, &zf_node, &is_new);
 
         ASSERT (zf_node_index >= 0 && zf_node_index < zf_ctx->nodes.len, 
                 "zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vb_ctx->nodes.len);
+
+        if (has_count) 
+            *ENT (int64_t, zf_ctx->counts, zf_node_index) += *ENT (int64_t, vb_ctx->counts, ol_len + i);
 
         // set word_index to be indexing the global dict - to be used by vcf_zip_generate_genotype_one_section() and zip_generate_b250_section()
         if (is_new)
@@ -618,6 +642,11 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     }
 
 finish:
+    // just update counts for ol_node (i.e. known to be existing) snips
+    if (has_count) 
+        for (uint64_t i=0; i < ol_len; i++) 
+            *ENT (int64_t, zf_ctx->counts, i) += *ENT (int64_t, vb_ctx->counts, i);
+
     COPY_TIMER_VB (merging_vb, ctx_merge_in_vb_ctx_one_dict_id)
     mutex_unlock (zf_ctx->mutex);
 }
@@ -838,11 +867,11 @@ const char *ctx_get_snip_by_node_index (const Buffer *nodes, const Buffer *dict,
     return my_snip; 
 }
 
-static Buffer *sorter_cmp_mtf = NULL; // for use by sorter_cmp - used only in vblock_i=1, so no thread safety issues
+static Buffer *sorter_cmp_counts = NULL; // for use by sorter_cmp - used only in vblock_i=1, so no thread safety issues
 static int sorter_cmp(const void *a, const void *b)  
 { 
-    return ENT (CtxNode, *sorter_cmp_mtf, *(uint32_t *)b)->count -
-           ENT (CtxNode, *sorter_cmp_mtf, *(uint32_t *)a)->count;
+    return (int)(ENT (int64_t, *sorter_cmp_counts, *(WordIndex *)b) -
+                 ENT (int64_t, *sorter_cmp_counts, *(WordIndex *)a));
 }
 
 void ctx_sort_dictionaries_vb_1(VBlock *vb)
@@ -857,12 +886,12 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
         // prepare sorter array containing indices into ctx->nodes. We are going to sort it rather than sort nodes directly
         // as the b250 data contains node indices into ctx->nodes.
         static Buffer sorter = EMPTY_BUFFER;
-        buf_alloc (vb, &sorter, 0, ctx->nodes.len, int32_t, CTX_GROWTH, "sorter");
+        buf_alloc (vb, &sorter, 0, ctx->nodes.len, WordIndex, CTX_GROWTH, "sorter");
         for (WordIndex i=0; i < ctx->nodes.len; i++)
             NEXTENT (WordIndex, sorter) = i;
 
         // sort in ascending order of nodes->count
-        sorter_cmp_mtf = &ctx->nodes; // communicate the ctx to sorter_cmp via a global var
+        sorter_cmp_counts = &ctx->counts; // communicate the ctx to sorter_cmp via a global var
         qsort (sorter.data, ctx->nodes.len, sizeof (WordIndex), sorter_cmp);
 
         // rebuild dictionary is the sorted order, and update char and word indices in nodes
@@ -924,6 +953,7 @@ void ctx_update_stats (VBlock *vb)
     func (&ctx->ol_dict);       \
     func (&ctx->ol_nodes);      \
     func (&ctx->nodes);         \
+    func (&ctx->counts);        \
     func (&ctx->local_hash);    \
     func (&ctx->global_hash);   \
     func (&ctx->word_list);     \
@@ -946,7 +976,7 @@ void ctx_free_context (Context *ctx)
     ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback =
-    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = 
+    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_all_the_same =
     ctx->dynamic_size_local = ctx->numeric_only = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
@@ -1104,7 +1134,7 @@ static Context *dict_ctx;
 
 static void ctx_dict_read_one_vb (VBlockP vb)
 {
-    buf_alloc (vb, &vb->z_section_headers, 0, 1, int32_t, 0, "z_section_headers"); // room for 1 section header
+//    buf_alloc (vb, &vb->z_section_headers, 0, 1, int32_t, 0, "z_section_headers"); // room for 1 section header
 
     if (!sections_next_sec1 (&dict_sl, SEC_DICT, false, false))
         return; // we're done - no more SEC_DICT sections
@@ -1136,7 +1166,7 @@ static void ctx_dict_read_one_vb (VBlockP vb)
         // this allows us to calculate the FRAGMENT_SIZE with which this file was compressed and hence an upper bound on the size
         uint32_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : roundup2pow (vb->fragment_len) * num_fragments;
         
-        buf_alloc_old (evb, &dict_ctx->dict, size_upper_bound, 0, "contexts->dict");
+        buf_alloc (evb, &dict_ctx->dict, 0, size_upper_bound, char, 0, "contexts->dict");
         buf_set_overlayable (&dict_ctx->dict);
     }
 
@@ -1170,7 +1200,7 @@ static void ctx_dict_uncompress_one_vb (VBlockP vb)
     // non-overlappying regions in the same buffer in parallel
     Buffer copy = vb->fragment_ctx->dict;
     copy.data   = vb->fragment_start;
-    zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc_old
+    zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc
 
 done:
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
@@ -1248,4 +1278,131 @@ void ctx_read_all_dictionaries (void)
     }
 
     COPY_TIMER_VB (evb, ctx_read_all_dictionaries);
+}
+
+// -----------------------------
+// ZIP & PIZ: SEC_COUNT sections
+// -----------------------------
+
+typedef struct {
+    int64_t count;
+    const char *snip;
+} ShowCountsEnt;
+
+static int show_counts_cmp (const void *a_, const void *b_)
+{
+    int64_t count_a = ((ShowCountsEnt *)a_)->count,
+            count_b = ((ShowCountsEnt *)b_)->count;
+    
+    return count_b > count_a ? 1
+         : count_a > count_b ? -1
+         :                     0;  // don't use minus as numbers are 64b and return value is int
+}
+
+static void ctx_show_counts (Context *ctx)
+{
+    static Buffer show_counts_buf = EMPTY_BUFFER;
+    buf_free (&show_counts_buf);
+    buf_alloc (evb, &show_counts_buf, 0, ctx->counts.len, ShowCountsEnt, 0, "show_counts_buf");
+
+    int64_t total=0;
+    for (uint32_t i=0; i < ctx->counts.len; i++) {
+        int64_t count = *ENT (int64_t, ctx->counts, i);
+        total += count;
+        NEXTENT (ShowCountsEnt, show_counts_buf) = (ShowCountsEnt){ 
+            .count = count,
+            .snip  = (command==ZIP) ? ctx_get_nodes_snip (ctx, i) : ctx_get_words_snip (ctx, i)
+        };
+    }
+
+    ARRAY (ShowCountsEnt, counts, show_counts_buf);
+    qsort (counts, counts_len, sizeof (ShowCountsEnt), show_counts_cmp);
+
+    iprintf ("Showing counts of %s (did_i=%u). Total sequences=%"PRId64" Number of taxids=%u\n", ctx->name, ctx->did_i, total, (unsigned)counts_len);    
+
+    if (total)
+        for (uint32_t i=0; i < counts_len; i++) 
+            iprintf ("%s\t%"PRId64"\t%-4.2f%%\n", counts[i].snip, counts[i].count, 
+                     100 * (double)counts[i].count / (double)total);
+
+    if (exe_type == EXE_GENOCAT) exit_ok;
+}
+
+const char *ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count)
+{
+    Context *ctx = &z_file->contexts[did_i];
+    ARRAY (CtxNode, nodes, ctx->nodes);
+    ARRAY (int64_t, counts, ctx->counts);
+
+    *count = -1;
+    const char *snip = "";
+
+    for (WordIndex i=0; i < nodes_len; i++)
+        if (counts[i] > *count) {
+            *count = counts[i];
+            snip = ENT (char, ctx->dict, nodes[i].char_index);
+        }
+
+    return snip;
+}
+
+void ctx_compress_counts (void)
+{
+    for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) {
+        Context *ctx = &z_file->contexts[did_i];
+
+        if (flag.show_one_counts.num == dict_id_typeless (ctx->dict_id).num) 
+            ctx_show_counts (ctx);
+
+        if (ctx->counts_section && ctx->counts.len) {
+
+            BGEN_u64_buf (&ctx->counts, NULL);       
+
+            ctx->counts.len *= sizeof (int64_t);
+
+            Codec codec = codec_assign_best_codec (evb, NULL, &ctx->counts, SEC_COUNTS);
+
+            SectionHeaderCounts header = (SectionHeaderCounts){ 
+                .h.magic                 = BGEN32 (GENOZIP_MAGIC),
+                .h.section_type          = SEC_COUNTS,
+                .h.data_uncompressed_len = BGEN32 (ctx->counts.len),
+                .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCounts)),
+                .h.codec                 = codec,
+                .h.vblock_i              = 0,
+                .nodes_param             = BGEN64 (ctx->nodes.param),
+                .dict_id                 = ctx->dict_id
+            };
+
+            comp_compress (evb, &evb->z_data, (SectionHeader*)&header, ctx->counts.data, NULL);
+
+            BGEN_u64_buf (&ctx->counts, NULL); // we need it for stats
+            ctx->counts.len /= sizeof (int64_t);
+        }
+    }
+}
+
+// PIZ: called by the main threads from piz_read_global_area
+void ctx_read_all_counts (void)
+{
+    const SecLiEnt *sl = NULL;
+    bool counts_shown=false;
+    while (sections_next_sec1 (&sl, SEC_COUNTS, false, false))  {
+
+        if (piz_is_skip_sectionz (SEC_COUNTS, sl->dict_id)) continue;
+
+        Context *ctx = ctx_get_zf_ctx (sl->dict_id);
+        
+        zfile_get_global_section (SectionHeaderCounts, SEC_COUNTS, sl, &ctx->counts, "counts");
+        ctx->counts.len /= sizeof (int64_t);
+        BGEN_u64_buf (&ctx->counts, NULL);
+
+        ctx->nodes.param = BGEN64 (header.nodes_param);
+        
+        if (flag.show_one_counts.num == dict_id_typeless (sl->dict_id).num) {
+            ctx_show_counts (ctx);
+            counts_shown=true;
+        }
+    }
+
+    ASSINP (counts_shown || !flag.show_one_counts.num || exe_type != EXE_GENOCAT, "There is no SEC_COUNTS section for %s", dis_dict_id (flag.show_one_counts).s);
 }

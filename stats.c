@@ -33,7 +33,7 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_
 
         count_per_section[i]++; // we're optimistically assuming section will be count_per_section - we will revert if not
 
-        if (section->dict_id.num == dict_id.num && section->st == SEC_DICT)
+        if (section->dict_id.num == dict_id.num && (section->st == SEC_DICT || section->st == SEC_COUNTS))
             *dict_compressed_size += sec_size;
 
         else if (section->dict_id.num == dict_id.num && section->st == SEC_B250)
@@ -82,6 +82,17 @@ static void stats_output_file_metadata (Buffer *buf)
     bufprintf (evb, buf, "%s: %s   Dictionaries: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines).s, z_file->num_contexts, 
                z_file->num_vbs, (uint32_t)(flag.vblock_memory >> 20), (uint32_t)z_file->section_list_buf.len);
+
+    if (z_file->data_type == DT_KRAKEN) {
+        int64_t dominant_taxid_count;
+        const char *dominant_taxid = ctx_get_snip_with_largest_count (KRAKEN_TAXID, &dominant_taxid_count);
+
+        if (dominant_taxid_count != -1)
+            bufprintf (evb, buf, "Dominant TaxID: %s  %s: %s (%-5.2f%%)\n", dominant_taxid, DTPZ (show_stats_line_name),
+                       str_uint_commas (dominant_taxid_count).s, 100.0 * (double)dominant_taxid_count / (double)z_file->num_lines); 
+        else
+            bufprint0 (evb, buf, "Dominant TaxID: No dominant species\n"); 
+    }           
 
     if (chain_is_loaded || txt_file->dual_coords) 
         bufprintf (evb, buf, "Features: Dual-coordinates\n%s", "");
@@ -260,7 +271,7 @@ void stats_compress (void)
 
         Context *ctx = (i>=0) ? &z_file->contexts[i] : NULL;
 
-        if (SEC(i) == SEC_DICT || SEC(i) == SEC_B250 || SEC(i) == SEC_LOCAL) continue; // these are covered by indiviual contexts
+        if (SEC(i) == SEC_DICT || SEC(i) == SEC_B250 || SEC(i) == SEC_LOCAL || SEC(i) == SEC_COUNTS) continue; // these are covered by individual contexts
 
         int64_t dict_compressed_size, b250_compressed_size, local_compressed_size;
         stats_get_sizes (ctx ? ctx->dict_id : DICT_ID_NONE, SEC(i), 
@@ -336,7 +347,7 @@ void stats_compress (void)
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS));
 
     stats_consolidate_non_ctx (sbl, num_stats, "Other", 16, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
-                               TOPLEVEL, "TOP2BAM", "TOP2FQ", "TOP2VCF", "LINEMETA", "CONTIG",
+                               TOPLEVEL, "TOP2BAM", "TOP2FQ", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG",
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
 

@@ -116,10 +116,10 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     
     case SEC_RECON_PLAN: {
         SectionHeaderReconPlan *h = (SectionHeaderReconPlan *)header;
-        sprintf (str, SEC_TAB "num_txt_data_bufs=%u luft=%u\n", BGEN32 (h->num_txt_data_bufs), h->h.flags.recon_plan.luft); 
+        sprintf (str, SEC_TAB "conc_writing_vbs=%u luft=%u\n", BGEN32 (h->conc_writing_vbs), h->h.flags.recon_plan.luft); 
         break;
     }
-    
+        
     case SEC_BGZF: {
         SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
         sprintf (str, SEC_TAB "level=%u has_eof=%u\n", h->h.flags.bgzf.level, h->h.flags.bgzf.has_eof_block); 
@@ -147,6 +147,12 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     case SEC_DICT: {
         SectionHeaderDictionary *h = (SectionHeaderDictionary *)header;
         sprintf (str, SEC_TAB "%s num_snips=%u\n", dis_dict_id (h->dict_id).s, BGEN32 (h->num_snips)); 
+        break;
+    }
+
+    case SEC_COUNTS: {
+        SectionHeaderCounts *h = (SectionHeaderCounts *)header;
+        sprintf (str, SEC_TAB "%s\n", dis_dict_id (h->dict_id).s); 
         break;
     }
 
@@ -217,14 +223,16 @@ void zfile_uncompress_section (VBlock *vb,
     START_TIMER;
 
     DictId dict_id = DICT_ID_NONE;
-    uint8_t param = 0;
+    uint8_t codec_param = 0;
 
     if (expected_section_type == SEC_DICT)
         dict_id = ((SectionHeaderDictionary *)section_header_p)->dict_id;
     else if (expected_section_type == SEC_B250 || expected_section_type == SEC_LOCAL) {
         dict_id = ((SectionHeaderCtx *)section_header_p)->dict_id;
-        param   = ((SectionHeaderCtx *)section_header_p)->param;
+        codec_param   = ((SectionHeaderCtx *)section_header_p)->param; 
     }
+    else if (expected_section_type == SEC_COUNTS) 
+        dict_id = ((SectionHeaderCounts *)section_header_p)->dict_id;
 
     if (piz_is_skip_section (vb, expected_section_type, dict_id)) return; // we skip some sections based on flags
 
@@ -253,7 +261,7 @@ void zfile_uncompress_section (VBlock *vb,
             uncompressed_data->len = data_uncompressed_len;
         }
 
-        comp_uncompress (vb, section_header->codec, section_header->sub_codec, param,
+        comp_uncompress (vb, section_header->codec, section_header->sub_codec, codec_param,
                          (char*)section_header + compressed_offset, data_compressed_len, 
                          uncompressed_data, data_uncompressed_len);
     }
@@ -392,8 +400,7 @@ void zfile_compress_section_data_ex (VBlock *vb, SectionType section_type,
                    callback);
 }
 
-// reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
-// this doesn't make a big difference for SSD, but makes a huge difference for HD
+// reads exactly the length required, error otherwise. 
 // return a pointer to the data read
 static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t len, SectionType st)
 {
@@ -408,7 +415,7 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
     ASSERT (bytes == len, "reading %s: read only %u bytes out of len=%u", st_name (st), bytes, len);
 
     buf->len += bytes;
-    file->disk_so_far += bytes;
+    file->disk_so_far += bytes; // consumed by dispatcher_show_progress
 
     COPY_TIMER (read);
 
@@ -428,7 +435,9 @@ int32_t zfile_read_section_do (File *file,
     ASSERT (!sl || expected_sec_type == sl->st, "expected_sec_type=%s but encountered sl->st=%s. vb_i=%u",
             st_name (expected_sec_type), st_name(sl->st), vb->vblock_i);
 
-    if (sl && file == z_file && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
+    if (sl && file == z_file && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) 
+        return 0; // skip if this section is not needed according to flags
+
     uint32_t unencrypted_header_size = header_size;
 
     // note: for an encrypted file, while reading the reference, we don't yet know until getting the header whether it
@@ -470,7 +479,9 @@ int32_t zfile_read_section_do (File *file,
 
     if (flag.show_headers) {
         zfile_show_header (header, NULL, sl ? sl->offset : 0, 'R');
-        if (exe_type == EXE_GENOCAT && (expected_sec_type == SEC_B250 || expected_sec_type == SEC_LOCAL || expected_sec_type == SEC_DICT || expected_sec_type == SEC_REFERENCE || expected_sec_type == SEC_REF_IS_SET))
+        if (exe_type == EXE_GENOCAT && (expected_sec_type == SEC_B250 || expected_sec_type == SEC_LOCAL || 
+                                        expected_sec_type == SEC_DICT || expected_sec_type == SEC_COUNTS || 
+                                        expected_sec_type == SEC_REFERENCE || expected_sec_type == SEC_REF_IS_SET))
              return header_offset; // in genocat --show-header - we only show headers, nothing else
     }
 
@@ -609,7 +620,7 @@ bool zfile_read_genozip_header (uint64_t *txt_data_size, uint64_t *num_items_bou
     uint64_t footer_offset = BGEN64 (footer.genozip_header_offset);
     
     SecLiEnt dummy_sl = { .st     = SEC_GENOZIP_HEADER,
-                                  .offset = footer_offset };
+                          .offset = footer_offset };
 
     // header might be smaller for older versions - we limit our reading of it to the entire section size so we don't
     // fail due to end-of-file. This is just so we can observe the section number, and give a proper error message
@@ -621,7 +632,7 @@ bool zfile_read_genozip_header (uint64_t *txt_data_size, uint64_t *num_items_bou
 
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
-    ASSERTGOTO (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
+    ASSERTGOTO (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION || flag.show_stats, // --stats works on files compressed with newer versions 
                 "Error: %s cannot be opened because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
                 "You might want to consider upgrading genozip to the newest version.\n",
                 z_name, header->genozip_version, GENOZIP_CODE_VERSION);
@@ -708,7 +719,8 @@ bool zfile_read_genozip_header (uint64_t *txt_data_size, uint64_t *num_items_bou
                     "%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
 
         // handle reference file info
-        zfile_read_genozip_header_handle_ref_info (header);
+        if (!flag.genocat_no_ref_file)
+            zfile_read_genozip_header_handle_ref_info (header);
     }
      
     buf_free (&evb->z_data);
@@ -746,7 +758,8 @@ void zfile_compress_genozip_header (Digest single_component_digest)
         .aligner      = (flag.ref_use_aligner > 0),
         .bgzf         = (txt_file->codec == CODEC_BGZF),
         .adler        = !flag.md5,
-        .dual_coords  = z_file->z_flags.dual_coords
+        .dual_coords  = z_file->z_flags.dual_coords,
+        .has_taxid    = kraken_is_loaded
     };
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
@@ -949,8 +962,8 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
     vb_header->first_line   = BGEN32 (txt_first_line_i);
 
     if (flag.show_vblocks) 
-        iprintf ("vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
-                 vb->vblock_i, z_file->num_txt_components_so_far, txt_first_line_i, BGEN32 (vb_header->num_lines), 
+        iprintf ("UPDATE_VB_HEADER(id=%u) vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
+                 vb->id, vb->vblock_i, z_file->num_txt_components_so_far, txt_first_line_i, BGEN32 (vb_header->num_lines), 
                  BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
                  BGEN32 (vb_header->longest_line_len));
 
@@ -960,6 +973,7 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
                   BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
 }
 
+// ZIP
 void zfile_output_processed_vb (VBlock *vb)
 {
     START_TIMER;

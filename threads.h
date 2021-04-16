@@ -8,11 +8,14 @@
 
 extern void threads_initialize (void);
 
-#define THREADS_NO_VB ((uint32_t)-1)
-extern int threads_create (void *(*func)(void *), void *arg, const char *task_name, uint32_t vb_i);
+#define THREAD_ID_NONE (-1)
+extern int threads_create (void (*func)(void *), void *arg, const char *task_name, ConstVBlockP vb);
 extern bool threads_join (int thread_id, bool blocking);
 extern void threads_cancel_other_threads (void);
 extern bool threads_am_i_main_thread (void);
 extern void threads_print_call_stack (void);
+
+// for debugging thread issues, activated with --debug-threads or --show-threads
+void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *event);
 
 #endif

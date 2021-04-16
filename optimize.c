@@ -19,10 +19,9 @@ bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_
     bool negative = (snip[0] == '-');
 
     // temporarily nul-terminate string and get number
-    char save = snip[len];
-    ((char*)snip)[len] = 0;
+    SAFE_NUL (&snip[len]);
     double fp = atof (snip);
-    ((char*)snip)[len] = save;
+    SAFE_RESTORE;
 
     // cap value if requested
     if (cap_value_at && fp > cap_value_at) fp = cap_value_at;

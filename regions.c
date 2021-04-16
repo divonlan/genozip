@@ -191,7 +191,8 @@ void regions_make_chregs (void)
              chr_i         <= (chrom_word_index == WORD_INDEX_NONE ? num_chroms-1 : chrom_word_index);
              chr_i++) {
             
-            buf_alloc_old (evb, &chregs[chr_i], (++chregs[chr_i].len) * sizeof (Chreg), 2, "chregs");
+            chregs[chr_i].len++;
+            buf_alloc (evb, &chregs[chr_i], 0, chregs[chr_i].len, Chreg, 2, "chregs");
             
             Chreg *chreg = LASTENT (Chreg, chregs[chr_i]);
             chreg->start_pos = reg->start_pos;
@@ -273,27 +274,19 @@ void regions_transform_negative_to_positive_complement()
 // PIZ: we calculate which regions (specified in the command line -r/-R) intersect with 
 // the ra (=a range of a single chrome within a vb) (represented by the parameters of this funciton) - 
 // filling in a bytemap of the intersection, and returning true if there is any intersection at all
-bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos,
-                                  char *intersection_array) // optional out
+bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos)
 {
     if (!flag.regions) return true; // nothing to do
 
     ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
 
-    Buffer *chregs_buf = &chregs[chrom_word_index];
-
     // if any -r region intersects with this VB random_access region - this this VB should be considered
-    bool intersection_found = false;
-    for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
-
-        Chreg *chreg = ENT (Chreg, *chregs_buf, chreg_i);
-
-        if (chreg->start_pos <= max_pos && chreg->end_pos >= min_pos) { // regions are intersecting
-            if (intersection_array) intersection_array[chreg_i] = true;
-            intersection_found = true;
-        }
-    }
-    return intersection_found;
+    ARRAY (Chreg, ch, chregs[chrom_word_index]);
+    for (uint64_t chreg_i=0; chreg_i < ch_len; chreg_i++) 
+        if (ch[chreg_i].start_pos <= max_pos && ch[chreg_i].end_pos >= min_pos)  // regions are intersecting
+            return true; //intersection found
+    
+    return false; // no intersection found
 }
 
 // used by ref_display_ref. if an intersection was found - returns the min,max pos and true, otherwise returns false

@@ -1,0 +1,78 @@
+.. _sam2fq:
+
+Viewing SAM/BAM as FASTQ
+========================
+
+Data Types: SAM, BAM
+
+**Usage**
+
+``genocat --fastq [genozip files...]``
+
+Viewing only R1 reads:
+
+``genocat --fastq --FLAG +0x40 [genozip files...]``
+
+Viewing only R2 reads:
+
+``genocat --fastq --FLAG +0x80 [genozip files...]``
+
+Outputting fq.gz (BGZF-compressed FASTQ):
+
+``genocat myfile.bam.genozip --output myfile.fq.gz``
+
+**Description**
+
+Displays the contents of the SAM / BAM data in FASTQ format:
+
+- The alignments are outputted as FASTQ reads in the order they appear in the SAM/BAM file. 
+    |
+- Alignments with FLAG 0x10 (*reverse complimented*) have their SEQ reverse complimented and their QUAL reversed. 
+    |
+- Alignments with FLAG 0x0800 (*supplementary*) or 0x0100 (secondary) are dropped. 
+    |
+- Alignments with FLAG 0x40 (*first segment in the template*) have a /1 added after the read name *unless* --FLAG is specified as well.
+    |
+- Alignments with FLAG 0x80 (*last segment in the template*) have a /2 added after the read name *unless* --FLAG is specified as well.
+    |
+- If --output specifies a filename ending with .fq[.gz] or .fastq[.gz] then --fastq is activated implicitly.
+    |
+
+*Example*:
+
+Consider a simple paired-end SAM file with three alignments, all with the same QNAME. The first two are the primary alignments of R1 and R2, and the third is a secondary alignment of R1:
+
+::
+
+    $ genocat myfile.sam.genozip
+    ST-E00185:547:HCNMNCCX2:5:1118:17269:28593	99	chr1	33656	0	14M1D136M	=	33901	386	CCTAATGCTATCCCCCCCCCGCCCCCCACGCCCTGACAAGCCCCCGTGTGTGATGTTTTCCGCCCCCTGTCCAAGCCTTCCCATTGTTCAATTCCCCCCTGTGAGTGAGAACATGCAGGGTTTGGGTTTCTGTCTTTGTGATAGTTTGCT	AAAFFJJJJJJJJJJJJJJ-AAJJFJJ-77F-77FFJ----AJJ---7-77-A-<FJ-FF-7-AJJ---7-A-F-A-<FJ-7<<JJFJ-AF-<7AJ-<<-7--7A----<7-A-77-77A-AF-A7FJJ7J<FJ7J<-A--AA7-AA--7	NM:i:16	MD:Z:0T13^T5A9C1A6G5A4A7C2T5A9G3T15A21T6T24	AS:i:72	XS:i:72	MQ:i:0	ms:i:5286	mc:i:34049	MC:Z:141M8S
+    ST-E00185:547:HCNMNCCX2:5:1118:17269:28593	147	chr1	33901	0	141M8S	=	33656	-386	CACATTTTCTTAATCCAGTCTGTCATTAATGGACATTTGGGTTGGTTCAAAGTCTTTGCTATTGTGAATAGTGCCACAATAAACATACATGTGCATGTGTCTTTATAGTAGCACGATTTATAATCCTTTGGGTATATACCCAGTAATGG	JJFAF7-7F7<--<AA-JJF<JAJAA<JJ<A--F-<AJJFFAAAJAJJJF7FJJJ7FJFJFJFJJJJJ7FJ<JJF<FJJJJJJJJ<JFJAJJF<<-JJJJJJJFJJJJJJJJJFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJFFFAA	NM:i:3	MD:Z:6C20G42C70	AS:i:126	XS:i:129	MQ:i:0	ms:i:3466	mc:i:33656	MC:Z:14M1D136M
+    ST-E00185:547:HCNMNCCX2:5:1118:17269:28593	355	chr22	33656	0	14M1D136M	=	33901	386	CCTAATGCTATCCCCCCCCCGCCCCCCACGCCCTGACAAGCCCCCGTGTGTGATGTTTTCCGCCCCCTGTCCAAGCCTTCCCATTGTTCAATTCCCCCCTGTGAGTGAGAACATGCAGGGTTTGGGTTTCTGTCTTTGTGATAGTTTGCT	AAAFFJJJJJJJJJJJJJJ-AAJJFJJ-77F-77FFJ----AJJ---7-77-A-<FJ-FF-7-AJJ---7-A-F-A-<FJ-7<<JJFJ-AF-<7AJ-<<-7--7A----<7-A-77-77A-AF-A7FJJ7J<FJ7J<-A--AA7-AA--7	NM:i:16	MD:Z:0T13^T5A9C1A6G5A4A7C2T5A9G3T15A21T6T24	AS:i:72	XS:i:72	MQ:i:0	ms:i:5286	mc:i:34049	MC:Z:141M8S
+
+| Let's now display the data as FASTQ. Notice that:
+| 1. The last SAM line is eliminated because it is a secondary alignment.
+| 2. The read names have /1 and /2 added to them.
+
+::
+
+    genocat myfile.sam.genozip --fastq
+    @ST-E00185:547:HCNMNCCX2:5:1118:17269:28593/1
+    CCTAATGCTATCCCCCCCCCGCCCCCCACGCCCTGACAAGCCCCCGTGTGTGATGTTTTCCGCCCCCTGTCCAAGCCTTCCCATTGTTCAATTCCCCCCTGTGAGTGAGAACATGCAGGGTTTGGGTTTCTGTCTTTGTGATAGTTTGCT
+    +
+    AAAFFJJJJJJJJJJJJJJ-AAJJFJJ-77F-77FFJ----AJJ---7-77-A-<FJ-FF-7-AJJ---7-A-F-A-<FJ-7<<JJFJ-AF-<7AJ-<<-7--7A----<7-A-77-77A-AF-A7FJJ7J<FJ7J<-A--AA7-AA--7
+    @ST-E00185:547:HCNMNCCX2:5:1118:17269:28593/2
+    CCATTACTGGGTATATACCCAAAGGATTATAAATCGTGCTACTATAAAGACACATGCACATGTATGTTTATTGTGGCACTATTCACAATAGCAAAGACTTTGAACCAACCCAAATGTCCATTAATGACAGACTGGATTAAGAAAATGTG
+    +
+    AAFFFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJFJJJJJJJJJFJJJJJJJ-<<FJJAJFJ<JJJJJJJJF<FJJ<JF7JJJJJFJFJFJF7JJJF7FJJJAJAAAFFJJA<-F--A<JJ<AAJAJ<FJJ-AA<--<7F7-7FAFJJ
+
+| Finally, let's now output only the R1 reads (the first SAM line in this case). Notice that:
+| 1. /1 is no longer added.
+| 2. --fq is an alternative spelling for activating the --fastq option.
+
+::
+
+    $ genocat myfile.sam.genozip --fq --FLAG +0x40
+    @ST-E00185:547:HCNMNCCX2:5:1118:17269:28593
+    CCTAATGCTATCCCCCCCCCGCCCCCCACGCCCTGACAAGCCCCCGTGTGTGATGTTTTCCGCCCCCTGTCCAAGCCTTCCCATTGTTCAATTCCCCCCTGTGAGTGAGAACATGCAGGGTTTGGGTTTCTGTCTTTGTGATAGTTTGCT
+    +
+    AAAFFJJJJJJJJJJJJJJ-AAJJFJJ-77F-77FFJ----AJJ---7-77-A-<FJ-FF-7-AJJ---7-A-F-A-<FJ-7<<JJFJ-AF-<7AJ-<<-7--7A----<7-A-77-77A-AF-A7FJJ7J<FJ7J<-A--AA7-AA--7

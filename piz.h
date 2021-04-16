@@ -10,8 +10,8 @@
 #include "dispatcher.h"
 
 extern bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id);
-#define piz_is_skip_section(vb,st,dict_id) (vb->data_type     != DT_NONE && (piz_default_skip_section ((VBlockP)(vb), (st), (dict_id)) || DT_FUNC (vb, is_skip_secetion)((VBlockP)(vb), (st), (dict_id))))
-#define piz_is_skip_sectionz(st,dict_id)   (z_file->data_type != DT_NONE && (piz_default_skip_section ((VBlockP)(vb), (st), (dict_id)) || (DTPZ(is_skip_secetion) && DTPZ(is_skip_secetion)(NULL, (st), (dict_id)))))
+#define piz_is_skip_section(vb,st,dict_id) (vb->data_type     != DT_NONE && (piz_default_skip_section ((VBlockP)(vb), (st), (dict_id)) || DT_FUNC (vb, is_skip_section)((VBlockP)(vb), (st), (dict_id))))
+#define piz_is_skip_sectionz(st,dict_id)   (z_file->data_type != DT_NONE && (piz_default_skip_section (NULL, (st), (dict_id)) || (DTPZ(is_skip_section) && DTPZ(is_skip_section)(NULL, (st), (dict_id)))))
 
 extern Dispatcher piz_z_file_initialize (bool is_last_z_file);
 extern DataType piz_read_global_area (void);

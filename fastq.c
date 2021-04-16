@@ -22,7 +22,8 @@
 #include "stats.h"
 #include "reconstruct.h"
 #include "coverage.h"
-#include "sorter.h"
+#include "writer.h"
+#include "kraken.h"
 
 #define dict_id_is_fastq_desc_sf dict_id_is_type_1
 #define dict_id_fastq_desc_sf dict_id_type_1
@@ -41,7 +42,6 @@ typedef struct VBlockFASTQ {
     uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
     char *optimized_desc;    // base of desc in flag.optimize_DESC 
     uint32_t optimized_desc_len;
-    Buffer genobwa_show_line; // genobwa only: bitmap - 1 if line survived the filter
 
 } VBlockFASTQ;
 
@@ -54,29 +54,10 @@ void fastq_vb_release_vb (VBlockFASTQ *vb)
 {
     vb->pair_num_lines = vb->pair_vb_i = vb->optimized_desc_len = 0;
     FREE (vb->optimized_desc);
-    buf_free (&vb->genobwa_show_line);
 }
 
 void fastq_vb_destroy_vb (VBlockFASTQ *vb)
 {
-    buf_destroy (&vb->genobwa_show_line);
-}
-
-//------------------
-// GENOBWA STUFF
-//------------------
-
-WordIndex fastq_get_genobwa_chrom (void) { return 0; }
-
-// Called by thread I/O to initialize for a new genozip file
-static inline void fastq_genobwa_initialize (void)
-{
-
-}
-
-static inline bool fastq_genobwa_is_seq_included (const char *seq, uint32_t seq_len)
-{
-    return true;
 }
 
 //-----------------------
@@ -244,6 +225,12 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     if (flag.optimize_DESC) 
         fastq_get_optimized_desc_read_name (vb);
 
+    if (kraken_is_loaded) {
+        vb->contexts[FASTQ_TAXID].flags.store    = STORE_INT;
+        vb->contexts[FASTQ_TAXID].no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
+        vb->contexts[FASTQ_TAXID].counts_section = true; 
+    }
+
     // in --stats, consolidate stats into SQBITMAP
     stats_set_consolidation ((VBlockP)vb, FASTQ_SQBITMAP, 4, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND);
 
@@ -262,6 +249,7 @@ void fastq_seg_finalize (VBlockP vb)
         .is_toplevel    = true,
         .filter_items   = true,
         .filter_repeats = true,
+        .callback       = true,
         .nitems_lo      = 7,
         .items          = { 
             { .dict_id = (DictId)dict_id_fields[FASTQ_DESC],     },
@@ -281,6 +269,7 @@ bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return dict_id.num == dict_id_fields[FASTQ_TOPLEVEL] ||
            dict_id.num == dict_id_fields[FASTQ_DESC]     ||
+           dict_id.num == dict_id_fields[FASTQ_TAXID]    ||
            dict_id.num == dict_id_fields[FASTQ_E1L]      ||
            dict_id.num == dict_id_fields[FASTQ_E2L];
 }
@@ -307,7 +296,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
     sl++;
-    buf_alloc_old (vb, &vb->z_section_headers, MAX ((MAX_DICTS * 2 + 50),  vb->z_section_headers.len + MAX_SUBFIELDS + 10) * sizeof(uint32_t), 0, "z_section_headers"); // room for section headers  
+    buf_alloc (vb, &vb->z_section_headers, MAX_SUBFIELDS + 10, MAX_DICTS * 2 + 50, uint32_t, 0, "z_section_headers"); // room for section headers  
 
     while (sl->st == SEC_B250 || sl->st == SEC_LOCAL) {
         
@@ -316,6 +305,8 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
             
             NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
             int32_t ret = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "data", sl->st, sl); // returns 0 if section is skipped
+            if (!ret) vb->z_section_headers.len--; // section skipped
+            
             ASSERT (ret != EOF, "vb_i=%u failed to read from pair_vb=%u dict_id=%s", vb->vblock_i, vb->pair_vb_i, dis_dict_id (sl->dict_id).s);
         }
         
@@ -333,7 +324,7 @@ bool fastq_piz_read_one_vb (VBlockP vb_, ConstSecLiEntP sl)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint32_t pair_vb_i=0;
-    bool i_am_pair_2 = sorter_piz_get_pair (vb->vblock_i, &pair_vb_i) == 2;
+    bool i_am_pair_2 = vb && writer_get_pair (vb->vblock_i, &pair_vb_i) == 2;
 
     if (flag.grep) {
         // in case of this is a paired fastq file, get just the pair_1 data that is needed to resolve the grep
@@ -382,8 +373,23 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     // See here for details of Illumina subfields: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     next_field = seg_get_next_line (vb, field_start, &len, &field_len, has_13, "DESC");
  
+    if (kraken_is_loaded) {
+        unsigned qname_len = strcspn (field_start + 1, " \t\r\n"); // +1 to skip the '@'
+
+        bool taxid_found = kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, field_start + 1, qname_len, false);
+
+        // if not found tax id for this read, try again, perhaps removing /1 or /2
+        if (!taxid_found) {
+            if (qname_len > 2 && field_start[qname_len-2] == '/' &&
+                (field_start[qname_len-1] == '1' ||field_start[qname_len-1] == '2'))
+                qname_len -= 2;
+
+            kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, field_start + 1, qname_len, true); // this fail if missing
+        }
+    }
+
     // if flag.optimize_DESC is on, we replace the description with filename:line_i 
-    unsigned unoptimized_len = 0; // 0 unless optimized
+unsigned unoptimized_len = 0; // 0 unless optimized
     if (flag.optimize_DESC) {
         unoptimized_len = field_len;
         field_start = vb->optimized_desc;
@@ -393,7 +399,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     }
 
     // we segment it using / | : and " " as separators. 
-    SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
+    static SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
     seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, arg, 0, 0);
     SEG_EOL (FASTQ_E1L, true);
 
@@ -471,20 +477,19 @@ void fastq_zip_qual (VBlock *vb, uint32_t vb_line_i,
 
 void fastq_piz_initialize (void)
 {
-    if (flag.genobwa) fastq_genobwa_initialize();
 }
 
 // returns true if section is to be skipped reading / uncompressing
 bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
-    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+    if (!vb) return false; // we don't skip reading any SEC_DICT/SEC_COUNTS sections
 
     // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L
     if (flag.header_only_fast && 
-        (dict_id.num == dict_id_fields[FASTQ_E2L]      || dict_id.num == dict_id_fields[FASTQ_SQBITMAP] || 
-         dict_id.num == dict_id_fields[FASTQ_NONREF]   || dict_id.num == dict_id_fields[FASTQ_NONREF_X] || 
-         dict_id.num == dict_id_fields[FASTQ_GPOS]     || dict_id.num == dict_id_fields[FASTQ_STRAND]   || 
-         dict_id.num == dict_id_fields[FASTQ_QUAL]     || dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] ))
+        (dict_id.num == dict_id_fields[FASTQ_E2L]    || dict_id.num == dict_id_fields[FASTQ_SQBITMAP] || 
+         dict_id.num == dict_id_fields[FASTQ_NONREF] || dict_id.num == dict_id_fields[FASTQ_NONREF_X] || 
+         dict_id.num == dict_id_fields[FASTQ_GPOS]   || dict_id.num == dict_id_fields[FASTQ_STRAND]   || 
+         dict_id.num == dict_id_fields[FASTQ_QUAL]   || dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] ))
         return true;
         
     // when grepping by main thread - skipping all sections but DESC
@@ -498,14 +503,26 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
 
     // if we're doing --show-sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
-    if ((flag.show_sex || flag.show_coverage || flag.idxstats) && 
-        (st==SEC_B250 || st==SEC_LOCAL || st==SEC_DICT) &&
-        (     dict_id.num == dict_id_fields[FASTQ_DESC] || 
-              dict_id.num == dict_id_fields[FASTQ_QUAL] || 
-              dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] || 
-              dict_id.num == dict_id_fields[FASTQ_STRAND] ||
-              dict_id.num == dict_id_fields[FASTQ_NONREF] || 
-              dict_id.num == dict_id_fields[FASTQ_NONREF_X])) return true;
+    if (flag.collect_coverage && 
+        (dict_id.num == dict_id_fields[FASTQ_DESC]     || 
+         dict_id.num == dict_id_fields[FASTQ_QUAL]     || 
+         dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] || 
+         dict_id.num == dict_id_fields[FASTQ_STRAND]   ||
+         dict_id.num == dict_id_fields[FASTQ_NONREF]   || 
+         dict_id.num == dict_id_fields[FASTQ_NONREF_X])) 
+        return true;
+
+    // no need for the TAXID data if user didn't specify --taxid
+    if (flag.kraken_taxid==-1 && dict_id.num == dict_id_fields[FASTQ_TAXID])
+        return true;
+
+    // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep)
+    if (flag.count && sections_has_dict_id (st) &&
+        (dict_id.num != dict_id_fields[FASTQ_TOPLEVEL] && 
+         (dict_id.num != dict_id_fields[FASTQ_TAXID] || flag.kraken_taxid==-1) && 
+         (dict_id.num != dict_id_fields[FASTQ_DESC]  || (!kraken_is_loaded && !flag.grep)) && 
+         (!dict_id_is_fastq_desc_sf(dict_id)         || (!kraken_is_loaded && !flag.grep)))) 
+        return true;
 
     return false;
 }
@@ -551,20 +568,13 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
             if (flag.grep && item == 2 /* first EOL */) {
                 *AFTERENT (char, vb->txt_data) = 0; // for strstr
                 
-                vb->dont_show_curr_line = vb->dont_show_curr_line ||
+                vb->drop_curr_line = vb->drop_curr_line ||
                                           !strstr (ENT (char, vb->txt_data, vb->line_start), flag.grep);
             }
 
-            // case: --genobwa: check if line is included after SEQ 
-            if (flag.genobwa && item == 4) // 2nd EOL
-                vb->dont_show_curr_line = vb->dont_show_curr_line ||
-                                          !fastq_genobwa_is_seq_included (ENT (char, vb->txt_data, vb->txt_data.len - vb->seq_len), vb->seq_len);            
-
             // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
-            if (flag.header_only_fast && item >= 2) {
-                if (item == 2) RECONSTRUCT ("\b\n\b\n\b\n", 6); // tell sorter to skip 3 textual lines
+            if (flag.header_only_fast && item >= 2) 
                 return false; // don't reconstruct this item (non-header textual)
-            }
         }
     }
 
@@ -619,11 +629,30 @@ void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_le
     vb->seq_len = (uint32_t)seq_len_64;
 
     // normal reconstruction
-    if (!flag.show_sex && !flag.show_coverage && !flag.idxstats) 
+    if (!flag.collect_coverage) 
         aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
 
     // just update coverage
     else
         fastq_update_coverage (vb);
+}
+
+// filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat)
+CONTAINER_CALLBACK (fastq_piz_container_cb)
+{
+    // --taxid: filter out by Kraken taxid 
+    if (flag.kraken_taxid && dict_id.num == dict_id_fields[FASTQ_TOPLEVEL]) {
+        
+        if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID))
+            vb->drop_curr_line = true;
+        
+        else if (kraken_is_loaded && flag.kraken_taxid >= 0) {
+            const char *qname = last_txt (vb, FASTQ_DESC) + 1; // +1 to skip the "@"
+            unsigned qname_len = strcspn (qname, " \t\n\r");
+
+            if (!kraken_is_included_loaded (vb, qname, qname_len)) 
+                vb->drop_curr_line = true;
+        }
+    }
 }
 

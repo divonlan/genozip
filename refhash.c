@@ -247,11 +247,9 @@ void refhash_remove_cache (void)
 }
 
 // thread entry for creating refhash cache
-static void *refhash_create_cache (void *unused_arg)
+static void refhash_create_cache (void *unused_arg)
 {
     buf_dump_to_file (refhash_get_cache_fn(), &refhash_buf, 1, true, false, false);
-
-    return NULL;
 }
 
 static void refhash_create_cache_in_background (void)
@@ -259,7 +257,7 @@ static void refhash_create_cache_in_background (void)
     // start creating the genome cache now in a background thread, but only if we loaded the entire reference
     if (!flag.regions) { 
         refhash_get_cache_fn(); // generate name before we close z_file
-        refhash_cache_creation_thread_id = threads_create (refhash_create_cache, NULL, "create_refhash_cache", THREADS_NO_VB);
+        refhash_cache_creation_thread_id = threads_create (refhash_create_cache, NULL, "create_refhash_cache", 0);
         refhash_creating_cache = true;
     }
 }

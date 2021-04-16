@@ -412,8 +412,11 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memo
 
     ASSERT (passed_up_len >= 0, "Reason: failed to find a full line (i.e. newline-terminated) in vb=%u data_type=%s codec=%s.\n"
             "Known possible causes:\n"
-            "- The file is missing a newline on the last line.\n%sVB dumped: %s", 
+            "- The file is missing a newline on the last line.\n"
+            "- The file is not a %s file.\n"
+            "%sVB dumped: %s\n",  
             vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec),
+            dt_name (txt_file->data_type),
             txt_file->data_type == DT_FASTA ? "- A FASTA file in which each sequence is in a single line (without newlines), and the length of the longest line (sequence) in the file exceeds the vblock size. Solution: use --vblock to increase vblock size to a value (in MB) larger than the length of longest line.\n" : "",
             txtfile_dump_vb (vb, txt_name));
 
@@ -580,88 +583,6 @@ bool txtfile_test_data (char first_char,            // first character in every 
 
 done:
     return (double)successes / (double)num_lines_so_far >= success_threashold;
-}
-
-// PIZ
-void txtfile_write_to_disk (const Buffer *buf, // option 1
-                            const char *data, unsigned len) // option 2
-{
-    if (buf) {
-        data = buf->data;
-        len  = buf->len;
-    }
-
-    if (!len) return;
-    
-    if (!flag.test) 
-        file_write (txt_file, data, len);
-    
-    txt_file->txt_data_so_far_single += len;
-    txt_file->disk_so_far            += len;
-}
-
-void txtfile_flush_if_stdout (void)
-{
-    if (!flag.test && flag.to_stdout) 
-         fflush (txt_file->file);
-}
-
-void txtfile_write_one_vblock (ConstBufferP txt_data, ConstBufferP bgzf_blocks, BufferP compressed,
-                               uint32_t vb_i, uint32_t vb_data_size, uint32_t num_lines, uint32_t first_line)
-{
-    START_TIMER;
-
-    if (txt_file->codec == CODEC_BGZF)
-        bgzf_write_to_disk (txt_data, bgzf_blocks, compressed); 
-    else
-        txtfile_write_to_disk (txt_data, 0, 0);
-
-    if (vb_i) { // a VB, not a txt header
-        ASSERTW (txt_data->len == vb_data_size || // files are the same size, expected
-                exe_type == EXE_GENOCAT       || // many genocat flags modify the output file, so don't compare
-                !dt_get_translation().is_src_dt, // we are translating between data types - the source and target txt files have different sizes
-                "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-                vb_i, num_lines, first_line, str_uint_commas (vb_data_size).s, dt_name (txt_file->data_type), 
-                str_uint_commas (txt_data->len).s, 
-                (int32_t)txt_data->len - (int32_t)vb_data_size);
-    }
-
-    COPY_TIMER_VB (evb, write);
-}
-
-// PIZ - called from fastq_txtfile_write_one_vblock_interleave
-void txtfile_write_4_lines (ConstBufferP txt_data, 
-                            const char *line_start[5], // 5 pointers into txt_data (5th is the after the 4th line)
-                            unsigned pair)       // 1 or 2 to add /1 or /2 to the end of the qname
-{
-    static const char *suffixes[3] = { "", "/1", "/2" }; // suffixes for pair 1 and pair 2 reads
-
-    for (unsigned nl=0; nl < 4; nl++) {
-
-        unsigned line_len = line_start[nl+1] - line_start[nl];
-
-        if (nl || !pair)
-            file_write (txt_file, line_start[nl], line_len);
-
-        else {
-            // insert a /1 or /2 just before the first space, tab or newline
-            const char *sep;
-            for (sep = line_start[0]; *sep != ' ' && *sep != '\t' && *sep != '\n'; sep++);
-            unsigned qname_len = (unsigned)(sep - line_start[0]); // excluding the separator
-
-            // write up to the separator
-            file_write (txt_file, line_start[0], qname_len);
-
-            // write suffix if requested, and suffix is not already present
-            if (pair && (qname_len < 3 || sep[-2] != '/' || sep[-1] != '0' + pair))
-                file_write (txt_file, suffixes[pair], 2);
-
-            file_write (txt_file, sep, line_len - qname_len);
-        }
-        
-        txt_file->txt_data_so_far_single += line_len;
-        txt_file->disk_so_far            += line_len;
-    }
 }
 
 // ZIP only - estimate the size of the txt data in this file. affects the hash table size and the progress indicator.

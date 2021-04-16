@@ -30,7 +30,7 @@ uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0, dict_id_INFO_DP4=0, dict_id_INFO_SF=0,
          dict_id_INFO_LIFTOVER=0, dict_id_INFO_LIFTBACK=0, dict_id_INFO_LIFTREJT=0, 
-         dict_id_INFO_BaseCounts=0,
+         dict_id_INFO_BaseCounts=0, dict_id_INFO_MLEAC, dict_id_INFO_MLEAF, dict_id_INFO_MQ0,
 
          // tags from VEP (Varient Effect Predictor) and similar tools
          dict_id_INFO_CSQ=0, dict_id_INFO_vep=0, dict_id_INFO_DP_HIST=0, dict_id_INFO_GQ_HIST=0, 
@@ -64,34 +64,7 @@ uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_s
 uint64_t dict_id_WindowsEOL=0;         
 
 DictId dict_id_make (const char *str, unsigned str_len, DictIdType dict_id_type) 
-{ /*
-    DictId dict_id = DICT_ID_NONE; 
-
-    if (!str_len) str_len = strlen (str);
-
-    if (str_len <= DICT_ID_LEN) 
-        memcpy (dict_id.id, str, str_len);
-    
-    // case: name is too long - compress it
-    else { 
-        union { uint32_t i; uint8_t s[4]; } adler = {
-            .i = libdeflate_adler32 (1, str, str_len)
-        };
-        
-        // compressed dict_id uses 2 characters from the Adler32 to disambiguate, including one in id[1] that
-        // goes into the map, hopefully avoiding a map contention
-        dict_id.id[0] = str[0];
-        dict_id.id[1] = adler.s[0];
-        dict_id.id[2] = str[2];
-        dict_id.id[3] = str[3];
-        dict_id.id[4] = adler.s[1];
-        dict_id.id[5] = str[str_len-3];
-        dict_id.id[6] = str[str_len-2];
-        dict_id.id[7] = str[str_len-1];
-    }
-
-    return dict_id;
-*/
+{ 
     DictId dict_id = DICT_ID_NONE; 
 
     if (!str_len) str_len = strlen (str);
@@ -132,46 +105,51 @@ void dict_id_initialize (DataType data_type)
     switch (data_type) { 
     case DT_VCF:
     case DT_BCF:
-        dict_id_FORMAT_DP     = dict_id_make ("DP", 2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_DS     = dict_id_make ("DS", 2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GT     = dict_id_make ("GT", 2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GT_HT  = dict_id_make ("@HT", 3, DTYPE_VCF_FORMAT).num; // different first 2 letters than GT, for lookup table
+        dict_id_FORMAT_DP     = dict_id_make ("DP",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_DS     = dict_id_make ("DS",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GT     = dict_id_make ("GT",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GT_HT  = dict_id_make ("@HT",      3, DTYPE_VCF_FORMAT).num; // different first 2 letters than GT, for lookup table
         dict_id_FORMAT_GT_HT_INDEX = dict_id_make ("@INDEXHT", 8, DTYPE_VCF_FORMAT).num; // different first 2 letters
         dict_id_FORMAT_GT_SHARK_DB = dict_id_make ("@1SHRKDB", 8, DTYPE_VCF_FORMAT).num; // different first 2 letters, 
         dict_id_FORMAT_GT_SHARK_GT = dict_id_make ("@2SHRKGT", 8, DTYPE_VCF_FORMAT).num;
         dict_id_FORMAT_GT_SHARK_EX = dict_id_make ("@3SHRKEX", 8, DTYPE_VCF_FORMAT).num;  
         dict_id_PBWT_RUNS     = dict_id_make ("@1BWTRUN", 8, DTYPE_VCF_FORMAT).num; // PBWT runs
         dict_id_PBWT_FGRC     = dict_id_make ("@2BWTFGR", 8, DTYPE_VCF_FORMAT).num; // PBWT foreground run count
-        dict_id_FORMAT_PL     = dict_id_make ("PL", 2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GP     = dict_id_make ("GP", 2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GL     = dict_id_make ("GL", 2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GQ     = dict_id_make ("GQ", 2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_AD     = dict_id_make ("AD", 2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_ADF    = dict_id_make ("ADF", 3, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_ADR    = dict_id_make ("ADR", 3, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_ADALL  = dict_id_make ("^ADALL", 6, DTYPE_VCF_FORMAT).num; // different 2 letters than AD
-        dict_id_INFO_AC       = dict_id_make ("AC", 2, DTYPE_VCF_INFO).num;
-        dict_id_INFO_AF       = dict_id_make ("AF", 2, DTYPE_VCF_INFO).num;
+        dict_id_FORMAT_PL     = dict_id_make ("PL",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GP     = dict_id_make ("GP",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GL     = dict_id_make ("GL",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GQ     = dict_id_make ("GQ",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_AD     = dict_id_make ("AD",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_ADF    = dict_id_make ("ADF",      3, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_ADR    = dict_id_make ("ADR",      3, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_ADALL  = dict_id_make ("^ADALL",   6, DTYPE_VCF_FORMAT).num; // different 2 letters than AD
+        dict_id_INFO_AC       = dict_id_make ("AC",       2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_AF       = dict_id_make ("AF",       2, DTYPE_VCF_INFO).num;
         dict_id_INFO_AGE_HISTOGRAM_HET = dict_id_make ("AGE_HISTOGRAM_HET", 17, DTYPE_VCF_INFO).num; 
         dict_id_INFO_AGE_HISTOGRAM_HOM = dict_id_make ("AGE_HISTOGRAM_HOM", 17, DTYPE_VCF_INFO).num;
-        dict_id_INFO_AN       = dict_id_make ("AN", 2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_AN       = dict_id_make ("AN",       2, DTYPE_VCF_INFO).num;
         dict_id_INFO_BaseCounts = dict_id_make ("BaseCounts", 10, DTYPE_VCF_INFO).num;
-        dict_id_INFO_CSQ      = dict_id_make ("CSQ", 3, DTYPE_VCF_INFO).num;
-        dict_id_INFO_DP       = dict_id_make ("DP", 2, DTYPE_VCF_INFO).num;
-        dict_id_INFO_DP4      = dict_id_make ("DP4", 3, DTYPE_VCF_INFO).num;
-        dict_id_INFO_DP_HIST  = dict_id_make ("DP_HIST", 7, DTYPE_VCF_INFO).num; // unfortunately there's a 2-letter conflict with DP, but we can't change names of INFO fields 
-        dict_id_INFO_GQ_HIST  = dict_id_make ("GQ_HIST", 7, DTYPE_VCF_INFO).num;
-        dict_id_INFO_SF       = dict_id_make ("SF", 2, DTYPE_VCF_INFO).num;
-        dict_id_INFO_vep      = dict_id_make ("vep", 3, DTYPE_VCF_INFO).num;
-        dict_id_INFO_VQSLOD   = dict_id_make ("VQSLOD", 6, DTYPE_VCF_INFO).num;
+        dict_id_INFO_CSQ      = dict_id_make ("CSQ",      3, DTYPE_VCF_INFO).num;
+        dict_id_INFO_DP       = dict_id_make ("DP",       2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_DP4      = dict_id_make ("DP4",      3, DTYPE_VCF_INFO).num;
+        dict_id_INFO_DP_HIST  = dict_id_make ("DP_HIST",  7, DTYPE_VCF_INFO).num; // unfortunately there's a 2-letter conflict with DP, but we can't change names of INFO fields 
+        dict_id_INFO_GQ_HIST  = dict_id_make ("GQ_HIST",  7, DTYPE_VCF_INFO).num;
+        dict_id_INFO_SF       = dict_id_make ("SF",       2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_vep      = dict_id_make ("vep",      3, DTYPE_VCF_INFO).num;
+        dict_id_INFO_VQSLOD   = dict_id_make ("VQSLOD",   6, DTYPE_VCF_INFO).num;
         dict_id_INFO_LIFTOVER = dict_id_make (INFO_LIFTOVER, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
         dict_id_INFO_LIFTBACK = dict_id_make (INFO_LIFTBACK, INFO_LIFTBACK_LEN, DTYPE_VCF_INFO).num;
         dict_id_INFO_LIFTREJT = dict_id_make (INFO_LIFTREJT, INFO_LIFTREJT_LEN, DTYPE_VCF_INFO).num;
 
         // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
-        dict_id_INFO_END      = dict_id_make ("END", 3, DTYPE_VCF_INFO).num;
-        dict_id_INFO_SVLEN    = dict_id_make ("SVLEN", 5, DTYPE_VCF_INFO).num;
-        dict_id_FORMAT_MIN_DP = dict_id_make ("MIN_DP", 6, DTYPE_VCF_FORMAT).num;
+        dict_id_INFO_END      = dict_id_make ("END",      3, DTYPE_VCF_INFO).num;
+        dict_id_INFO_MLEAC    = dict_id_make ("MLEAC",    5, DTYPE_VCF_INFO).num;
+        dict_id_INFO_MLEAF    = dict_id_make ("MLEAF",    5, DTYPE_VCF_INFO).num;
+        dict_id_INFO_MQ0      = dict_id_make ("MQ0",      3, DTYPE_VCF_INFO).num;    
+        dict_id_FORMAT_MIN_DP = dict_id_make ("MIN_DP",   6, DTYPE_VCF_FORMAT).num;
+
+        // Structural variants (also uses INFO/END): https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
+        dict_id_INFO_SVLEN    = dict_id_make ("SVLEN",    5, DTYPE_VCF_INFO).num;
 
         // This appears if the VCF line has a Windows-style \r\n line ending
         break;
@@ -240,9 +218,6 @@ void dict_id_initialize (DataType data_type)
 
         break;
 
-    case DT_FASTA:
-        break;
-
     case DT_GFF3:
         // standard GVF fields (ID is also a standard GFF3 field)
         dict_id_ATTR_ID               = dict_id_make ("ID", 2, DTYPE_GFF3_ATTR).num;
@@ -289,7 +264,7 @@ Buffer *dict_id_create_aliases_buf (void)
 
     // build global alias reference, which will be immutable until the end of this z_file
     dict_id_aliases_buf.len = dict_id_num_aliases * sizeof (DictIdAlias);
-    buf_alloc_old (evb, &dict_id_aliases_buf, dict_id_aliases_buf.len, 1, "dict_id_aliases_buf");
+    buf_alloc (evb, &dict_id_aliases_buf, 0, dict_id_aliases_buf.len, char, 1, "dict_id_aliases_buf");
 
     DictIdAlias *next = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)

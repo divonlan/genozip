@@ -15,7 +15,7 @@
 #include "zfile.h"
 #include "crypt.h"
 #include "bgzf.h"
-#include "sorter.h"
+#include "writer.h"
 
 // contigs loaded from the txt header (eg SAM or BAM, VCF header)
 static bool has_contigs     = false;        // for BAM, this will be true even for contig-less header, indicting the file has no contigs (as opposed to contigs just not defined in the header)
@@ -219,9 +219,10 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
     flag.processing_rejects = flag.luft && header->h.flags.txt_header.liftover_rejects;
 
     // 1. in unbind mode - we open the output txt file of the component
-    // 2. when reading an auxiliary file - we create txt_file here (but don't actually open the physical file)
-    if (flag.unbind || flag_loading_auxiliary) {
-        ASSERT0 (!txt_file, "not expecting txt_file to be open already in unbind mode or when reading an auxiliary file");
+    // 2. when reading an auxiliary file or no_writer- we create txt_file here (but don't actually open the physical file)
+    if (!txt_file) { 
+    // if (flag.unbind || flag_loading_auxiliary) {
+        //ASSERT0 (!txt_file, "not expecting txt_file to be open already in unbind mode or when reading an auxiliary file");
         
         const char *filename = txtfile_piz_get_filename (header->txt_filename, flag.unbind, false);
         txt_file = file_open (filename, WRITE, TXT_FILE, z_file->data_type);
@@ -246,8 +247,8 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
 
         // load the source file isize if we have it and we are attempting to reconstruct an unmodifed file identical to the source
         bool loaded = false;
-        if (!flag.data_modified &&   
-            (z_file->num_components == 1 || flag.unbind))  // not concatenating multiple files
+        if (!flag.data_modified    
+        && (z_file->num_components == 1 || flag.unbind))  // not concatenating multiple files
             loaded = bgzf_load_isizes (sl); // also sets txt_file->bgzf_flags
 
         // case: user wants to see this section header, despite not needing BGZF data
@@ -295,7 +296,7 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
     if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
 
     // hand-over txt header if it is needed:
-    if (sorter_piz_is_txtheader_in_plan (component_i)) {
+    if (writer_is_txtheader_in_plan (component_i)) {
 
         if (evb->txt_data.len) {
             bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
@@ -303,11 +304,9 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
 
             if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
 
-            // compress the txt header with BGZF if needed
-            if (txt_file->codec == CODEC_BGZF) { 
-                bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len);
-                bgzf_compress_vb (evb); // compress data (but not if we are re-creating SEC_BGZF blocks and header is too small to fit into the first block)
-            } 
+            // inherit BGZF blocks from source file, if available - into evb->bgzf_blocks
+            if (txt_file->codec == CODEC_BGZF) 
+                bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len); 
 
             if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
                 Digest reconstructed_header_digest = digest_do (evb->txt_data.data, evb->txt_data.len);
@@ -326,7 +325,7 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
             }
         }
 
-        sorter_piz_handover_txtheader (component_i); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
+        writer_handover_txtheader (component_i); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
     }
 
     buf_free (&evb->z_data);

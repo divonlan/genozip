@@ -37,13 +37,13 @@
 #define SNIP_SPECIAL             '\x8'   // Special algorithm followed by ID of the algorithm 
 #define SNIP_REDIRECTION         '\xB'   // Get the data from another dict_id (can be in b250, local...)
 #define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding flags.store)
+#define SNIP_OTHER_COPY          '\xE'   // Copy the last_txt of another dict_id 
 
 #define DECLARE_SNIP const char *snip=NULL; uint32_t snip_len=0
 
 typedef struct CtxNode {
     CharIndex char_index; // character index into dictionary array
     uint32_t snip_len;    // not including SNIP_SEP terminator present in dictionary array
-    int32_t  count;       // number of times this snip has been evaluated in this VB
     Base250  word_index;  // word index into dictionary 
 } CtxNode;
 
@@ -94,12 +94,16 @@ typedef struct Context {
     // ----------------------------
     // ZIP only fields
     // ----------------------------
-    Buffer ol_dict;            // VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
-                               // zfile: singletons are stored here
-    Buffer ol_nodes;           // MTF nodes - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
-                               // zfile: nodes of singletons
-    Buffer nodes;              // array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
-    
+    Buffer ol_dict;            // ZIP VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
+                               // ZIP zfile: singletons are stored here
+                               // PIZ: counts are read to here (from SEC_COUNTS) - aligned to the words in word_list/dict
+    Buffer ol_nodes;           // ZIP array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
+#define ston_nodes ol_nodes    // ZIP zfile: nodes of singletons
+    Buffer nodes;              // ZIP: array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
+                               // PIZ: in kraken's KRAKEN_QNAME context - contains qname_nodes 
+                               // ZIP->PIZ zf_ctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
+    Buffer counts;             // ZIP/PIZ: counts of snips (array of int64_t)
+
     // settings
     Codec lcodec, bcodec;      // codec used to compress local and b250
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
@@ -114,10 +118,12 @@ typedef struct Context {
     bool no_callback;          // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
     bool local_param;          // copy local.param to SectionHeaderCtx
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
+    bool no_all_the_same;      // the b250 section cannot be optimized away in no_all_the_same (eg if we need section header to carry a param)
     bool local_always;         // always create a local section in zfile, even if it is empty 
     bool dynamic_size_local;   // resize LT_UINT32 according to data during generate (also do BGEN)
     bool numeric_only;         // if both numeric_only and dynamic_size_local are set, 
     bool is_stats_parent;      // other contexts have this context in st_did_i
+    bool counts_section;       // output a SEC_COUNTS section for this context
 
     // hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
@@ -176,7 +182,6 @@ static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (
 #define CTX_GROWTH 1.75  
 
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
-#define node_count(vb,did_i,index) ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->count
 #define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index.n : WORD_INDEX_NONE)
 
 #define last_int(did_i)     contexts[did_i].last_value.i
@@ -249,6 +254,9 @@ extern void ctx_initialize_primary_field_ctxs (Context *contexts /* an array */,
 
 extern void ctx_read_all_dictionaries (void);
 extern void ctx_compress_dictionaries (void);
+extern void ctx_read_all_counts (void);
+extern void ctx_compress_counts (void);
+extern const char *ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count);
 extern void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs, ConstBufferP contigs_dict);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);

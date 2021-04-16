@@ -14,6 +14,7 @@
 #include "crypt.h"
 #include "dict_id.h"
 #include "zfile.h"
+#include "piz.h"
 
 static const struct {const char *name; uint32_t header_size; } abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
 
@@ -25,9 +26,10 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
     DictId dict_id = DICT_ID_NONE;
     bool has_dict_id = true;
 
-    if      (header->section_type == SEC_DICT ) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
-    else if (header->section_type == SEC_B250 ) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
-    else if (header->section_type == SEC_LOCAL) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
+    if      (header->section_type == SEC_DICT  ) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
+    else if (header->section_type == SEC_B250  ) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
+    else if (header->section_type == SEC_LOCAL ) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
+    else if (header->section_type == SEC_COUNTS) dict_id = ((SectionHeaderCounts     *)header)->dict_id;
     else has_dict_id = false;
 
     ASSERT0 (!has_dict_id || dict_id.num, "dict_id=0");
@@ -336,6 +338,89 @@ void sections_pull_component_up (const SecLiEnt *txtfile_sl_after_me, // destina
     FREE (temp);
 }
 
+int64_t sections_get_section_size (const SecLiEnt *sl)
+{
+    // last section is always the genozip header
+    if (sl->st == SEC_GENOZIP_HEADER)
+        return z_file->disk_size - sl->offset;
+
+    // case: the sections are consecutive
+    const SecLiEnt *next_vb_sl;
+    if ((sl->st != SEC_B250 && sl->st != SEC_LOCAL) ||              // this is not a B250/LOCAL section
+        (sl+1)->st == SEC_B250 || (sl+1)->st == SEC_LOCAL ||        // next section is still a B250/LOCAL section
+        ((sl+1)->st == SEC_VB_HEADER && (sl+1)->vblock_i == sl->vblock_i+1) || // next section is the consecutive VB header
+        !(next_vb_sl = sections_vb_first (sl->vblock_i + 1, true))) // this is the last VB in the file
+        return (sl+1)->offset - sl->offset;
+
+    // at this point, we know sl is the last B250/LOCAL section of a VB (but not the last VB of the file) 
+    // and the next VB doesn't follow immediately
+    
+    // case: next VB is in the same component (because it NOT the first in a new component)
+    if ((next_vb_sl-1)->st != SEC_TXT_HEADER) 
+        return (next_vb_sl->offset - sl->offset);
+
+    // case: next VB is in a new component directly consecutive - only a TXT_HEADER or a RECON_PLAN+TXT_HEADER 
+    // are between the two VBs - next section is consecutive
+    if (next_vb_sl - sl <= 2) 
+        return (sl+1)->offset - sl->offset;
+
+    // case: this is the last VB of the component - and this component has a recon plan - the recon plan is the next section
+    const SecLiEnt *sl_after_b250_local = sl;
+    if (sections_next_sec2 (&sl_after_b250_local, SEC_TXT_HEADER, SEC_RECON_PLAN, false, false) &&
+        sl_after_b250_local->st == SEC_RECON_PLAN)
+        return sl_after_b250_local->offset - sl->offset;
+
+    // case: this is the last VB of the component - the next section is the TXT_HEADER of the next vb's component
+    return (next_vb_sl-1)->offset - sl->offset;
+}
+
+int64_t sections_get_vb_size (const SecLiEnt *sl)
+{
+    ASSERT0 (sl->st == SEC_VB_HEADER, "expecing sl to be of a VB header");
+
+    const SecLiEnt *last_sl_in_vb = sections_vb_last (sl);
+
+    return last_sl_in_vb->offset - sl->offset +       // size of all B250/LOCAL sections except the last
+           sections_get_section_size (last_sl_in_vb); // size of the last B250/LOCAL
+}
+
+int64_t sections_get_vb_skipped_sections_size (const SecLiEnt *vb_header_sl)
+{
+    ASSERT0 (vb_header_sl->st == SEC_VB_HEADER, "expecing sl to be of a VB header");
+
+    const SecLiEnt *last_sl_in_vb = sections_vb_last (vb_header_sl);
+    int64_t size=0;
+
+    for (const SecLiEnt *sl = vb_header_sl+1; sl <= last_sl_in_vb; sl++)
+        if (piz_is_skip_sectionz (sl->st, sl->dict_id))
+            size += (sl==last_sl_in_vb) ? sections_get_section_size (last_sl_in_vb)
+                                        : (sl+1)->offset - sl->offset;
+
+    ASSERT (size >= 0, "expecting size=%"PRId64 "to be >=0", size);
+
+    return size;
+}
+
+// returns the total size SEC_REFERENCE, SEC_REF_IS_SET, SEC_REF_RAND_ACCESS and SEC_REF_CONTIGS occupy in z_file
+int64_t sections_get_ref_size (void)
+{
+    const SecLiEnt *first_sl = sections_get_first_section_of_type (SEC_REFERENCE, true);
+    if (!first_sl) return 0;
+
+    const SecLiEnt *sl = sections_last_sec4 (first_sl, SEC_REFERENCE, SEC_REF_IS_SET, SEC_NONE, SEC_NONE);
+    
+    int64_t size = (sl+1)->offset - first_sl->offset;
+
+    if ((sl = sections_get_first_section_of_type (SEC_REF_RAND_ACC, true))) // there is only one section of this type
+        size += (sl+1)->offset - sl->offset;
+
+    if ((sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, true))) // there is only one section of this type
+        size += (sl+1)->offset - sl->offset;
+
+    ASSERT (size >= 0, "expecting size=%"PRId64 "to be >=0", size);
+
+    return size;
+}
 
 const char *lt_name (LocalType lt)
 {

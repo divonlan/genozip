@@ -13,9 +13,8 @@
 #include "strings.h"
 #include "dict_id.h"
 
-#define NO_NEXT 0xffffffff
 typedef struct {        
-    WordIndex node_index;     // index into Context.ol_nodes (if < ol_nodes.len) or Context.nodes or NODE_INDEX_NONE
+    WordIndex node_index;     // index into Context.ston_nodes (if < ston_nodes.len) or Context.nodes or NODE_INDEX_NONE
     uint32_t next;            // linked list - index into Context.global/local_hash or NO_NEXT
                               //               local_hash indices started at LOCAL_HASH_OFFSET
 } LocalHashEnt;
@@ -31,17 +30,20 @@ typedef struct {
 #pragma pack()
 
 // get the size of the hash table - a primary number between roughly 0.5K and 8M that is close to size, or a bit bigger
-static uint32_t hash_next_size_up (uint64_t size)
+uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
 {
     // if user set a low --vblock, use this as the limit for the hash table size too, but don't restrict tighter than 16MB
     size = MIN (size, MAX (16000000, flag.vblock_memory));
 
     // primary numbers just beneath the powers of 2^0.5 (and 2^0.25 for the larger numbers)
     // minimum ~64K to prevent horrible miscalculations in edge cases that result in dramatic slow down
-    static uint32_t hash_sizes[] = { /* 509, 719, 1021, 1447, 2039, 2887, 4039, 5791, 8191, 11579, 16381, 23167, 32749, 46337,*/ 65521, 92681, 131071, 
+    static uint32_t hash_sizes[] = { 65521, 92681, 131071, 
                                      185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
-                                     11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859 };
-    #define NUM_HASH_SIZES (sizeof(hash_sizes) / sizeof(hash_sizes[0]))
+                                     11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
+                                     94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
+    #define NUM_HASH_REGULAR 25
+    #define NUM_HASH_HUGE (sizeof(hash_sizes) / sizeof(hash_sizes[0]))
+    #define NUM_HASH_SIZES (allow_huge ? NUM_HASH_HUGE : NUM_HASH_REGULAR)
 
     for (int i=0; i < NUM_HASH_SIZES; i++)
         if (size < (uint64_t)hash_sizes[i]) return hash_sizes[i];
@@ -74,19 +76,19 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
     // if known from previously merged vb - use those values
     if (vb_ctx->num_new_entries_prev_merged_vb)
         // 3X the expected number of entries to reduce spill-over
-        vb_ctx->local_hash_prime = hash_next_size_up (vb_ctx->num_new_entries_prev_merged_vb * 3);
+        vb_ctx->local_hash_prime = hash_next_size_up (vb_ctx->num_new_entries_prev_merged_vb * 3, false);
 
     // if known to small, use hash table of ~ 64K
     else if (DT_ (segging_vb, seg_is_small)(segging_vb, vb_ctx->dict_id))
-        vb_ctx->local_hash_prime = hash_next_size_up(1);
+        vb_ctx->local_hash_prime = hash_next_size_up(1, false);
     
     // default: it could be big - start with num_lines / 10 (this is an estimated num_lines that is likely inflated)
     else
-        vb_ctx->local_hash_prime = hash_next_size_up ((uint32_t)segging_vb->lines.len / 10);
+        vb_ctx->local_hash_prime = hash_next_size_up ((uint32_t)segging_vb->lines.len / 10, false);
 
     // note: we can't be too generous with the initial allocation because this memory is usually physically allocated
     // to ALL VB structures before any of them merges. Better start smaller for vb_i=1 and let it extend if needed
-    buf_alloc_old (segging_vb, &vb_ctx->local_hash, (vb_ctx->local_hash_prime * 1.2) * sizeof (LocalHashEnt) /* room for expansion */, 1, 
+    buf_alloc (segging_vb, &vb_ctx->local_hash, 0, vb_ctx->local_hash_prime * 1.2, LocalHashEnt /* room for expansion */, 1, 
                "contexts->local_hash");
     vb_ctx->local_hash.len = vb_ctx->local_hash_prime;
     memset (vb_ctx->local_hash.data, 0xff, vb_ctx->local_hash_prime * sizeof (LocalHashEnt)); // initialize core table
@@ -119,7 +121,7 @@ uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zf_ctx, const 
 
         if (flag.show_hash)
             iprintf ("dict=%s : known to be small. hashsize=%s\n", 
-                     first_merging_vb_ctx->name, str_uint_commas (hash_next_size_up (1)).s); 
+                     first_merging_vb_ctx->name, str_uint_commas (hash_next_size_up (1, false)).s); 
 
         return 1; // will yield smallest hash table - around 64K
     }
@@ -220,7 +222,7 @@ uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zf_ctx, const 
                  "n2_n3_lines=%s vb_ctx->nodes.len=%u est_entries=%d hashsize=%s\n", 
                  first_merging_vb_ctx->name, (int)n1, (int)n2, (int)n3, n2n3_density_ratio, gp, (unsigned)effective_num_vbs, 
                  str_uint_commas ((uint64_t)n2_n3_lines).s, (uint32_t)first_merging_vb_ctx->nodes.len, (int)estimated_entries, 
-                 str_uint_commas (hash_next_size_up (estimated_entries * 5)).s); 
+                 str_uint_commas (hash_next_size_up (estimated_entries * 5, false)).s); 
     }
 
     return (uint32_t)estimated_entries;
@@ -228,9 +230,9 @@ uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zf_ctx, const 
 
 void hash_alloc_global (ContextP zf_ctx, uint32_t estimated_entries)
 {
-    zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
+    zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5, false);
 
-    buf_alloc_old (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
+    buf_alloc (evb, &zf_ctx->global_hash, 0, zf_ctx->global_hash_prime * 1.5, GlobalHashEnt, 1,  // 1.5 - leave some room for extensions
                "z_file->contexts->global_hash");
     buf_set (&zf_ctx->global_hash, 0xff); // we set all entries to {NO_NEXT, NODE_INDEX_NONE, NODE_INDEX_NONE} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
     buf_set_overlayable (&zf_ctx->global_hash);
@@ -240,25 +242,10 @@ void hash_alloc_global (ContextP zf_ctx, uint32_t estimated_entries)
     hash_populate_from_nodes (zf_ctx);
 }
 
-// tested hash table sizes up to 5M. turns out smaller tables (up to a point) are faster, despite having longer
-// average linked lists. probably bc the CPU can store the entire hash and nodes arrays in L1 or L2
-// memory cache during segmentation
-static inline uint32_t hash_do (uint32_t hash_len, const char *snip, unsigned snip_len)
-{
-    if (!hash_len) return NO_NEXT; // hash table does not exist
-    
-    // spread the snip throughout the 64bit word before taking a mod - to ensure about-even distribution 
-    // across the hash table
-    uint64_t result=0;
-    for (unsigned i=0; i < snip_len; i++) 
-        result = ((result << 23) | (result >> 41)) ^ (uint64_t)((uint8_t)snip[i]);
-
-    return (uint32_t)(result % hash_len);
-}
 
 // creates a node in the hash table, unless the snip is already there. 
 // the old node is in node, and NULL if its a new node.
-// returns the node_index (positive if in nodes and negative-2 if in ol_nodes - the singleton buffer)
+// returns the node_index (positive if in nodes and negative-2 if in ston_nodes - the singleton buffer)
 WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
                                  CtxNode **old_node)        // out - node if node is found, NULL if not
 {
@@ -284,7 +271,7 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
 
             if (mode != HASH_READ_ONLY) {
                 g_hashent->next = NO_NEXT;
-                g_hashent->node_index = (mode == HASH_NEW_OK_SINGLETON_IN_VB) ? (-zf_ctx->ol_nodes.len++ - 2) : zf_ctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+                g_hashent->node_index = (mode == HASH_NEW_OK_SINGLETON_IN_VB) ? (-zf_ctx->ston_nodes.len++ - 2) : zf_ctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
                 __atomic_store_n (&g_hashent->merge_num, zf_ctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_index
             }
 
@@ -333,10 +320,10 @@ WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned sni
     GlobalHashEnt *new_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, next);
     new_hashent->merge_num     = zf_ctx->merge_num; // stamp our merge_num as the ones that set the node_index
     
-    // we enter the node as a singleton (=in ol_nodes) if this was a singleton in this VB but not in any previous VB 
+    // we enter the node as a singleton (=in ston_nodes) if this was a singleton in this VB but not in any previous VB 
     // (the second occurange in the file isn't a singleton anymore)
     bool is_singleton_global   = ((mode == HASH_NEW_OK_SINGLETON_IN_VB) && !singleton_encountered);
-    new_hashent->node_index    = is_singleton_global ? (-zf_ctx->ol_nodes.len++ - 2) : zf_ctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+    new_hashent->node_index    = is_singleton_global ? (-zf_ctx->ston_nodes.len++ - 2) : zf_ctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
     new_hashent->next          = NO_NEXT;
 
     ASSERT (zf_ctx->nodes.len <= MAX_NODE_INDEX, "number of nodes in context %s exceeded the maximum of %u", 

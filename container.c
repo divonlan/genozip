@@ -153,9 +153,11 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         // case this is the top-level snip
         if (con->is_toplevel) {
             vb->line_i = vb->first_line + rep_i; // 1-based line from the begginging for the file, including the header
+            
+            *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); // note: cannot use NEXTENT as lines.len is set in advance
             vb->line_start = vb->txt_data.len;
 
-            vb->dont_show_curr_line = false; // initialize for this line
+            vb->drop_curr_line = false; // initialize for this line
         }
 
         if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1, NULL))) 
@@ -193,7 +195,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             int32_t reconstructed_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
-                reconstruct = reconstruct && !flag.show_sex && !flag.show_coverage && !flag.idxstats && // no reconstruction with these flags
+                reconstruct = reconstruct && !flag.collect_coverage && // no reconstruction with these flags
                                   (  !flag.trans_containers ||   // not translating OR... 
                                      !IS_CI_SET (CI_TRANS_NOR)); // no prohibition on reconstructing when translating
 
@@ -247,25 +249,29 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
         }
 
-        // call callback if needed now that repeat reconstruction is done
-        if (con->callback) 
-            DT_FUNC(vb, container_cb)(vb, ctx->dict_id, rep_i, rep_reconstruction_start, AFTERENT (char, vb->txt_data) - rep_reconstruction_start);
+        // call callback if needed now that repeat reconstruction is done (always callback for top level)
+        if (con->callback || (con->is_toplevel && DTP (container_cb)))
+            DT_FUNC(vb, container_cb)(vb, ctx->dict_id, con->is_toplevel, rep_i, rep_reconstruction_start, AFTERENT (char, vb->txt_data) - rep_reconstruction_start);
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
-        if (con->is_toplevel && vb->dont_show_curr_line) {
-            ASSERT0 (flag.may_drop_lines, "Lines cannot be dropped because flag.may_drop_lines=false");
-            vb->txt_data.len = vb->line_start;
-            
-            // only add "dropped line" (\b\n) for sorter, if its a beginning of a textual line (in case of --sequential, it wont
-            // be for lines 2+ of the FASTA sequence)
-            if (!vb->txt_data.len || *LASTENT (char, vb->txt_data) == '\n') {
-                static const char *drop_lines[] = { "", "\b\n", "\b\n\b\n", "\b\n\b\n\b\n", "\b\n\b\n\b\n\b\n" };
-                unsigned ht = DTPT (line_height);
-                ASSERT (ht < sizeof (drop_lines) / sizeof (drop_lines[0]), "ht=%u is too large", ht);
-                RECONSTRUCT (drop_lines[ht], ht*2); // tell sorter_piz_writer to drop line
+        if (con->is_toplevel) {
+            if (vb->drop_curr_line) {
+                ASSERT0 (flag.may_drop_lines, "Lines cannot be dropped because flag.may_drop_lines=false. This is bug in the code.");
+
+                vb->txt_data.len = vb->line_start;
             }
+            else
+                vb->num_nondrop_lines++;
         }
     } // repeats loop
+
+    if (con->is_toplevel) {
+        ASSERT (vb->lines.len == con->repeats, "Reconstructed vb=%u has %"PRIu64" lines, but toplevel container has %u repeats",
+                vb->vblock_i, vb->lines.len, con->repeats); 
+
+        // final line_start entry (it has a total of num_lines+1 entires) - done last, after possibly dropping line
+        *AFTERENT (char *, vb->lines) = AFTERENT (char, vb->txt_data); // we allocated vb->lines.len+1 entries in lines
+    }
 
     // remove final seperator, only of final item (since v12, only remained used (by mistake) by SAM arrays - TODO: obsolete this. see sam_seg_array_field)
     if (con->drop_final_item_sep_of_final_repeat && last_non_filtered_item_i >= 0) {
@@ -350,7 +356,7 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
             // place Container followed by prefix in the cache
             *ENT (uint32_t, ctx->con_index, word_index) = (uint32_t)ctx->con_cache.len;
 
-            buf_alloc_old (vb, &ctx->con_cache, ctx->con_cache.len + st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 2, "context->con_cache");
+            buf_alloc (vb, &ctx->con_cache, st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, "context->con_cache");
             
             char *cached_con = AFTERENT (char, ctx->con_cache);
             buf_add (&ctx->con_cache, con_p, st_size);

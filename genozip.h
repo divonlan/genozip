@@ -42,7 +42,7 @@ typedef struct Container *ContainerP;
 typedef const struct Container *ConstContainerP;
 typedef struct Context *ContextP;
 typedef const struct Context *ConstContextP;
-typedef struct CtxNode *MtfNodeP;
+typedef struct CtxNode *CtxNodeP;
 typedef const struct CtxNode *ConstMtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
 typedef struct SectionListEntry *SecLiEntP;
@@ -54,6 +54,7 @@ typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
 typedef union LastValueType *LastValueTypeP;
 typedef struct Mutex *MutexP;
+typedef struct Semaphore *SemaphoreP;
 
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);
@@ -63,7 +64,7 @@ typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPE
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
 typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF3=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
-               DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, NUM_DATATYPES 
+               DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN, NUM_DATATYPES 
              } DataType; 
         
 #pragma pack(1) // structures that are part of the genozip format are packed.
@@ -120,7 +121,7 @@ typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LI
 extern CommandType command, primary_command;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
-extern VBlockP evb;
+extern VBlockP evb, wvb;
 
 // macros
 #ifndef MIN
@@ -163,7 +164,7 @@ typedef uint8_t TranslatorId;
 // NOTE: for a callback to be called on items of a container, the Container.callback flag needs to be set
 #define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item, bool *reconstruct)
 
-#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, unsigned rep, char *reconstructed, int32_t reconstructed_len)
+#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, char *reconstructed, int32_t reconstructed_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (BufferP txtheader_buf)
 
@@ -189,6 +190,8 @@ typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
     char __save = *__addr; \
     *__addr = (char_val)
 
+#define SAFE_NUL(addr) SAFE_ASSIGN((addr), 0)
+
 #define SAFE_RESTORE *__addr = __save
 
 // sanity checks
@@ -197,48 +200,47 @@ extern void main_exit (bool show_stack, bool is_error);
 #define exit_ok main_exit (false, false)
 
 extern FILE *info_stream;
-extern bool is_terminal; // is info_stream going to a terminal
+extern bool is_info_stream_terminal; // is info_stream going to a terminal
 
-#define errstream (info_stream ? info_stream : stderr)
-#define iputc(c)                             fputc ((c), errstream) // no flushing
-#define iprintf(format, ...)                 do { fprintf (errstream, (format), __VA_ARGS__); fflush (info_stream); } while(0)
-#define iprint0(str)                         do { fprintf (errstream, (str)); fflush (info_stream); } while(0)
+#define iputc(c)                             fputc ((c), info_stream) // no flushing
+#define iprintf(format, ...)                 do { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); } while(0)
+#define iprint0(str)                         do { fprintf (info_stream, (str)); fflush (info_stream); } while(0)
 
 // check for a user error
-#define ASSINP(condition, format, ...)       do { if (!(condition)) { fprintf (errstream, "\n%s: ", global_cmd); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\ncommand: %s\n", flags_command_line()->data); exit_on_error(false); }} while(0)
-#define ASSINP0(condition, string)           do { if (!(condition)) { fprintf (errstream, "\n%s: %s\ncommand: %s\n", global_cmd, string, flags_command_line()->data); exit_on_error(false); }} while(0)
-#define ABORTINP(format, ...)                do { fprintf (errstream, "\n%s: ", global_cmd); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\n"); exit_on_error(false);} while(0)
-#define ABORTINP0(string)                    do { fprintf (errstream, "\n%s: %s\n", global_cmd, string); exit_on_error(false);} while(0)
+#define ASSINP(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\ncommand: %s\n", flags_command_line()->data); exit_on_error(false); }} while(0)
+#define ASSINP0(condition, string)           do { if (!(condition)) { fprintf (stderr, "\n%s: %s\ncommand: %s\n", global_cmd, string, flags_command_line()->data); exit_on_error(false); }} while(0)
+#define ABORTINP(format, ...)                do { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);} while(0)
+#define ABORTINP0(string)                    do { fprintf (stderr, "\n%s: %s\n", global_cmd, string); exit_on_error(false);} while(0)
 
 // check for a bug - prints stack
-#define ASSERT(condition, format, ...)       do { if (!(condition)) { fprintf (errstream, "\nError in %s:%u: ", __FUNCTION__, __LINE__); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\n"); exit_on_error(true); }} while(0)
-#define ASSERT0(condition, string)           do { if (!(condition)) { fprintf (errstream, "\nError in %s:%u: %s\n", __FUNCTION__, __LINE__, string); exit_on_error(true); }} while(0)
+#define ASSERT(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\nError in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
+#define ASSERT0(condition, string)           do { if (!(condition)) { fprintf (stderr, "\nError in %s:%u: %s\n", __FUNCTION__, __LINE__, string); exit_on_error(true); }} while(0)
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
-#define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { fprintf (errstream, "\n"); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\n"); }} while(0)
-#define ASSERTW0(condition, string)          do { if (!(condition) && !flag.quiet) { fprintf (errstream, "\n%s\n", string); } } while(0)
-#define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { fprintf (errstream, "\n"); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\n"); } return ret; }} while(0)
-#define RETURNW0(condition, ret, string)     do { if (!(condition)) { if (!flag.quiet) { fprintf (errstream, "\n%s\n", string); } return ret; } } while(0)
-#define ABORT(format, ...)                   do { fprintf (errstream, "\n"); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\n"); exit_on_error(true);} while(0)
-#define ABORT_R(format, ...) /*w/ return 0*/ do { fprintf (errstream, "\n"); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\n"); exit_on_error(true); return 0;} while(0)
-#define ABORT0(string)                       do { fprintf (errstream, "\n%s\n", string); exit_on_error(true);} while(0)
-#define ABORT0_R(string)                     do { fprintf (errstream, "\n%s\n", string); exit_on_error(true); return 0; } while(0)
-#define WARN(format, ...)                    do { if (!flag.quiet) { fprintf (errstream, "\n"); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\n"); } } while(0)
-#define WARN0(string)                        do { if (!flag.quiet) fprintf (errstream, "\n%s\n", string); } while(0)
+#define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)
+#define ASSERTW0(condition, string)          do { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n%s\n", string); } } while(0)
+#define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} while(0)
+#define RETURNW0(condition, ret, string)     do { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n%s\n", string); } return ret; } } while(0)
+#define ABORT(format, ...)                   do { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);} while(0)
+#define ABORT_R(format, ...) /*w/ return 0*/ do { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); return 0;} while(0)
+#define ABORT0(string)                       do { fprintf (stderr, "\n%s\n", string); exit_on_error(true);} while(0)
+#define ABORT0_R(string)                     do { fprintf (stderr, "\n%s\n", string); exit_on_error(true); return 0; } while(0)
+#define WARN(format, ...)                    do { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
+#define WARN0(string)                        do { if (!flag.quiet) fprintf (stderr, "\n%s\n", string); } while(0)
 
 #define WARN_ONCE(format, ...)               do { static bool warning_shown = false; \
                                                   if (!flag.quiet && !warning_shown) { \
-                                                      fprintf (errstream, "\n"); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\n"); \
+                                                      fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); \
                                                       warning_shown = true; \
                                                   } \
                                              } while(0) 
 
 #define WARN_ONCE0(string)                   do { static bool warning_shown = false; \
                                                   if (!flag.quiet && !warning_shown) { \
-                                                      fprintf (errstream, "\n%s\n", string); \
+                                                      fprintf (stderr, "\n%s\n", string); \
                                                       warning_shown = true; \
                                                   } \
                                              } while(0) 
 
-#define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { fprintf (errstream, "\n"); fprintf (errstream, format, __VA_ARGS__); fprintf (errstream, "\n"); goto error; }} while(0)
+#define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} while(0)
 
 #endif

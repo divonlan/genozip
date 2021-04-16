@@ -227,7 +227,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     
     if (b1 == '-' || b2 == '-' || // filter out variants if the genotype is not fully called
        (b1 == 'D' || b2 == 'D' || b1 == 'I' || b2 == 'I')) { // discard INDELs
-        vb->dont_show_curr_line = true;
+        vb->drop_curr_line = true;
         return 0;
     }
 

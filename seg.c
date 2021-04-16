@@ -727,7 +727,7 @@ void seg_compound_field (VBlock *vb,
 
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
-                con.items[con_nitems(con)].seperator[0] = sep;
+                con.items[con_nitems(con)].seperator[0] = sep; // 0 for last item
                 con.items[con_nitems(con)].seperator[1] = double_sep ? sep : 0;
                 snip = &field[i+1];
                 snip_len = 0;
@@ -746,8 +746,8 @@ void seg_compound_field (VBlock *vb,
 WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslidation_did_i, 
                      const char *value, int32_t value_len, // must be signed
                      char sep, 
-                     char subarray_sep,      // if non-zero, will attempt to find internal arrays
-                     bool use_integer_delta) // first item stored as is, subsequent items stored as deltas
+                     char subarray_sep,         // if non-zero, will attempt to find internal arrays
+                     bool use_integer_delta)    // first item stored as is, subsequent items stored as deltas
 {
     MiniContainer *con;
     DictId arr_dict_id;
@@ -802,7 +802,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         unsigned this_item_len  = (unsigned)(value - this_item);
 
-        // case: its a sub-array
+        // case: it has a sub-array
         if (is_subarray) {
             seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0, use_integer_delta);
             add_bytes -= this_item_len; // sub-array will account for itself

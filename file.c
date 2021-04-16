@@ -146,7 +146,7 @@ FileType file_get_type (const char *filename)
             return ft;
     }
 
-    return UNKNOWN_FILE_TYPE;
+    return UNKNOWN_FILE_TYPE; // this should never happen, because GNRIC_ is "" so it will catch everything
 }
 
 // returns the filename without the extension eg myfile.1.sam.gz -> myfile.1. 
@@ -365,6 +365,9 @@ static bool file_open_txt_read (File *file)
     // show meaningful error if file is not a supported data type
     if (file_open_txt_read_test_valid_dt (file)) return true; // skip this file
 
+    if (file->data_type == DT_GENERIC && !stdin_type) 
+        WARN_ONCE ("%s: FYI: genozip can't recognize this file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
+    
     // open the file, based on the codec
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, READ);
 
@@ -571,20 +574,29 @@ static bool file_open_txt_write (File *file)
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, WRITE);
     
     // set to bgzf if the file type implies it
-    if (file->codec == CODEC_GZ || file->codec == CODEC_BGZF) 
+    if (file->codec == CODEC_GZ) 
         file->codec = CODEC_BGZF; // we always write gzip format output with BGZF
 
-    // case the user overrides with --bgzf=0 (override bgzf set here or before, in flags_update_piz_one_file)
-    if (flag.bgzf == 0 && file->codec == CODEC_BGZF) 
+    // cases we output as plain: 
+    // 1. the user overrides with --bgzf=0 (override bgzf set here or before, in flags_update_piz_one_file)
+    //    note: a user-specified --bgzf=0 is CODEC_NONE, but a genocat without --bgzf is CODEC_BGZF with level=0 (set in flags_update_piz_one_file)
+    // 2. genocat, unless user specified a --bgzf > 0 or its a BAM (binary)
+    if (file->codec == CODEC_BGZF && 
+        (flag.bgzf == 0 || (flag.bgzf == -1 && exe_type == EXE_GENOCAT && !z_file->z_flags.txt_is_bin)))
         file->codec = CODEC_NONE;
+    
+    // set BGZF compression level, in cases we can't or won't compress to the original file's BGZF blocks
+    if (file->codec == CODEC_BGZF && flag.bgzf == FLAG_BGZF_BY_ZFILE) { // user did not use --bgzf to explicitly set the level
+        if (exe_type == EXE_GENOCAT && z_file->z_flags.txt_is_bin) // genocat of a BAM
+            flag.bgzf = 1; // some downstream tools (eg GATK) expect BAM to always be BGZF-compressed
 
-    // in genocat (including translation) with CODEC_BGZF, set bgzf=0 unless user specicied --bgzf (ignoring SEC_BGZF).
-    // note: a user-specified --bgzf=0 is CODEC_NONE, but a genocat without --bgzf is CODEC_BGZF with level=0
-    if (exe_type == EXE_GENOCAT && file->codec == CODEC_BGZF && flag.bgzf == FLAG_BGZF_BY_ZFILE) 
-        flag.bgzf = 0;
+        // if we're modifying the data we can't recompress using the original BGZF blocks         
+        else if (flag.data_modified)             
+            flag.bgzf = BGZF_COMP_LEVEL_DEFAULT; 
+    }
 
     // don't actually open the output file if we're just testing in genounzip or PIZing an auxiliary file
-    if (flag.test || flag_loading_auxiliary) return true;
+    if (flag.no_writer || flag_loading_auxiliary) return true;
 
     // open the file, based on the codec 
     switch (file->codec) { 
@@ -706,16 +718,19 @@ static bool file_open_z (File *file)
 
                 static char *causes[] = { "file->file is NULL", "file_seek failed", "fread failed", "bad magic" };
 
-                if (flag.multiple_files) 
-                    RETURNW (false, true, 
-                             flag.validate ? "%s is not a valid genozip file: %s" : "Skipping %s - it is not a valid genozip file: %s", 
+                if (flag.multiple_files) {
+                    iprintf (flag.validate ? "%s is not a valid genozip file: %s\n" 
+                                           : "Skipping %s - it is not a valid genozip file: %s\n", 
                              file_printname (file), causes[cause-1]);
+                    return true;
+                }
                 else
                     ABORTINP ("%s is not a valid genozip file: %s", file_printname (file), causes[cause-1]);
             }
         }
 
         file->data_type = DT_NONE; // we will get the data type from the genozip header, not by the file name
+        file->disk_size_minus_skips = file->disk_size; // will be reduced as we skip sections
     }
     else { // WRITE or WRITEREAD - data_type is already set by file_open
         ASSINP (file_has_ext (file->name, GENOZIP_EXT), 
@@ -748,8 +763,8 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
     bool is_file_exists = false;
 
-    // is_remote is only possible in READ mode
-    ASSINP (mode == READ || !file->is_remote, "expecting output file %s to be local, not a URL", filename);
+    // is_remote is only possible in READ of a txt_file
+    ASSINP ((mode == READ && supertype == TXT_FILE) || !file->is_remote, "expecting file %s to be local, not a URL", filename);
 
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
     const char *error = NULL;
@@ -1103,7 +1118,7 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
 {
     uint64_t size = file_get_size (filename);
 
-    buf_alloc_old (vb, buf, size + add_string_terminator, 1, buf_name);
+    buf_alloc (vb, buf, 0, size + add_string_terminator, char, 1, buf_name);
 
     FILE *file = fopen (filename, "rb");
     ASSINP (file, "cannot open \"%s\": %s", filename, strerror (errno));

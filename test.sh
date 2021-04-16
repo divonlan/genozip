@@ -1,12 +1,12 @@
 #!/bin/bash 
 
-shopt -s extglob  # Enables extglob
+shopt -s extglob  # Enables extglob - see https://mywiki.wooledge.org/glob
 
 TESTDIR=test
 OUTDIR=$TESTDIR/tmp
 
 cleanup() { 
-    rm -f $OUTDIR/* $TESTDIR/*.!(ref).genozip $TESTDIR/*.bad $TESTDIR/*.rejects.* # uses extglob
+    rm -f $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
 }
 
 cmp_2_files() {
@@ -133,7 +133,7 @@ test_stdout()
     local file=$TESTDIR/$1
     
     $genozip ${file} -fo $output || exit 1
-    ($genocat $output || exit 1) | tr -d "\r" > $OUTDIR/unix-nl.$1 
+    ($genocat --no-pg $output || exit 1) | tr -d "\r" > $OUTDIR/unix-nl.$1 
 
     cmp_2_files $file $OUTDIR/unix-nl.$1
     cleanup
@@ -148,13 +148,12 @@ test_multi_bound() # $1=filename $2=REPLACE (optional)
 
     cp -f $file $file1 || exit 1
     if [[ $2 == "REPLACE" ]]; then
-        cat $file | sed 's/PRFX/FILE2/g' > $file2 || exit 1
+        cat $file | sed 's/PRFX/FIL2/g' > $file2 || exit 1 # note - FIL2 needs to be the same length of PRFX or basic.phy will break
     else
         cp -f $file $file2 || exit 1
     fi
 
     $genozip $file1 $file2 -ft -o $output || exit 1 # test as bound
-    local output2=$OUTDIR/output2.genozip
     cp -f $output $output2 || exit 1
     $genounzip $output $output2 -t || exit 1 # test unbind 2x2
 
@@ -165,7 +164,7 @@ test_multi_bound() # $1=filename $2=REPLACE (optional)
         if (( "$wc" == 0 )); then echo "FAILED --component 1 - expected 1 lines, but getting $wc" ; exit 1; fi
 
         $genocat $output --component 2 -fo $recon || exit 1
-        local wc=`cat $recon | grep FILE2 | wc -l`
+        local wc=`cat $recon | grep FIL2 | wc -l`
         if (( "$wc" == 0 )); then echo "FAILED --component 2 - expected 1 lines, but getting $wc" ; exit 1; fi
     fi  
 
@@ -231,21 +230,6 @@ test_translate_sambam_to_fastq() # $1 sam or bam file
     cleanup
 }
 
-# note: only runs it to see that it doesn't crash, doesn't validate results
-test_translate_23andMe_to_vcf() # $1 23andMe file
-{
-    test_header "$1 - translate 23andMe to VCF"
-
-    local me23=$TESTDIR/$1
-    local vcf=$OUTDIR/copy.vcf.gz
-    if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
-
-    $genozip -f $me23 -o $output       || exit 1
-    $genocat $output -fo $vcf -e $hg19 || exit 1
-
-    cleanup
-}
-
 view_file()
 {
     if [[ $1 =~ \.gz$ ]]; then  
@@ -271,7 +255,7 @@ batch_print_header()
 batch_minimal()
 {
     batch_print_header
-    local files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf minimal.genome_Full.me23.txt)
+    local files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf minimal.genome_Full.me23.txt minimal.kraken)
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
@@ -282,8 +266,7 @@ batch_minimal()
 batch_basic()
 {
     batch_print_header
-    local files=(basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt basic.chain)
-# TO DO add back basic.phy - fails redirection on Windows
+    local files=(basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt basic.chain basic.kraken basic.phy)
     local file
     for file in ${files[@]}; do
         
@@ -291,8 +274,10 @@ batch_basic()
         test_windows_style $file
         test_standard "NOPREFIX CONCAT" " " file://${path}${TESTDIR}/$file
         test_standard "-p123" "--password 123" $file
-        test_redirected $file
-        test_stdout $file
+        if [ $file != basic.phy ]; then # issue with redirection on Windows of Phylip files (bug 339)
+            test_redirected $file
+            test_stdout $file
+        fi
         test_standard "COPY" " " $file
         test_multi_bound $file REPLACE # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
         test_optimize $file
@@ -386,6 +371,64 @@ batch_dual_coordinates()
     done
 }
 
+batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kraken)
+{
+    batch_print_header
+
+    local files=(test/basic-test-kraken.fa test/basic-test-kraken.fq test/basic.kraken test/basic.sam) # SAM must be last
+    local file
+
+    $genozip test/basic.kraken -i kraken -fo $kraken
+
+    # testing filtering FASTA, FASTQ, SAM and KRAKEN itself with --taxid 
+    for file in ${files[@]}; do
+        test_header "$file - kraken test (genozip $1 ; genocat $2)"
+
+        echo -n genozip $file : 
+        $genozip $1 $file -fo $output || exit 1
+
+        local chars_plus=`($genocat $2 -Hq $output -k570 || exit 1) | wc -c`
+        local chars_minus=`($genocat $2 -Hq $output -k^570 || exit 1) | wc -c`
+        local chars=`($genocat -Hq $output || exit 1) | wc -c`
+        echo "$file : chars_plus=$chars_plus chars_minus=$chars_minus chars=$chars"
+        if [ $(($chars_plus + $chars_minus)) -ne $chars ]; then
+            echo "$file: adding up kraken positive- and negative- filtered data, isn't the size of the original file"
+            exit 1
+        fi        
+    done
+
+    # testing filtering SAM translated to FASTQ with --taxid 
+    file=test/basic.sam
+    test_header "$file --fastq - kraken test"
+
+    local chars_plus=`($genocat $2 --fastq -Hq $output -k570 || exit 1) | wc -c`
+    local chars_minus=`($genocat $2 --fastq -Hq $output -k^570 || exit 1) | wc -c`
+    local chars=`($genocat --fastq -Hq $output || exit 1) | wc -c`
+    echo "$file --fastq : chars_plus=$chars_plus chars_minus=$chars_minus chars=$chars"
+    if [ $(($chars_plus + $chars_minus)) -ne $chars ]; then
+        echo "$file: adding up kraken positive- and negative- filtered data, isn't the size of the original file"
+        exit 1
+    fi        
+    
+    # testing filtering SAM with a concatenated KRAKEN file (representing slightly different classifications
+    # originating from separate kraken2 of R1 and R2 FASTQ files)
+    file=test/basic.sam
+    test_header "$file concatenated kraken filter test"
+
+    $genozip test/basic.kraken test/basic-2nd-file.kraken -fo $kraken
+
+    local chars_plus=`($genocat $2 -Hq $output -k570 || exit 1) | wc -c`
+    local chars_minus=`($genocat $2 -Hq $output -k^570 || exit 1) | wc -c`
+    local chars=`($genocat -Hq $output || exit 1) | wc -c`
+    echo "$file : chars_plus=$chars_plus chars_minus=$chars_minus chars=$chars"
+    if [ $(($chars_plus + $chars_minus)) -ne $chars ]; then
+        echo "$file: adding up kraken positive- and negative- filtered data, isn't the size of the original file"
+        exit 1
+    fi        
+    
+    cleanup
+}
+
 # Test SAM/BAM translations
 batch_sam_translations()
 {
@@ -409,10 +452,45 @@ batch_sam_translations()
 }
 
 # Test 23andMe translations
+# note: only runs it to see that it doesn't crash, doesn't validate results
 batch_23andMe_translations()
 {
     batch_print_header
-    test_translate_23andMe_to_vcf test.genome_Full.txt
+
+    local file=test.genome_Full.txt
+ 
+    test_header "$file - translate 23andMe to VCF"
+
+    local me23=$TESTDIR/$file
+    local vcf=$OUTDIR/copy.vcf.gz
+    if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
+
+    $genozip -f $me23 -o $output       || exit 1
+    $genocat $output -fo $vcf -e $hg19 || exit 1
+
+    cleanup
+}
+
+batch_phylip_translations()
+{
+    batch_print_header
+
+    local multifasta=$TESTDIR/basic-multifasta.fa
+    local phylip=$OUTDIR/phylip.phy
+    local seq=$OUTDIR/seq.fa
+    local multifasta2=$OUTDIR/multifasta2.fa
+
+    test_header "$file - translate multifasta to phylip and back"
+ 
+    $genozip $multifasta -fo $output           || exit 1 # compress multifasta
+    $genocat $output --sequential --header-one \
+        | tr -d "\r" > $seq                    || exit 1 # reconstruct as phylip
+    $genocat $output --phylip -fo $phylip      || exit 1 # reconstruct as phylip
+    $genozip $phylip -fo $output2              || exit 1 # compress the phylip
+    $genocat $output2 --fasta -fo $multifasta2 || exit 1 # reconstruct as multifasta
+    cmp $multifasta2 $seq                      || exit 1 # compare
+
+    cleanup
 }
 
 batch_genocat_tests()
@@ -431,7 +509,6 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--grep cytochrome --sequential --no-header " 1
 
     # Multi-FASTA to Phylip
-# TO DO: compare output to basic.phy and vice verse
     local file=$TESTDIR/basic-multifasta.fa
     test_count_genocat_lines $file "--phylip" 4
 
@@ -463,15 +540,21 @@ batch_real_world_subsets()
 {
     batch_print_header
 
-    cleanup # unfortunately, these go to TESTDIR not OUTDIR
+    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
-    if [ -x "$(command -v xz)" ] ; then # xz available
-        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* basic.phy test.*chain* test.*gvf* test.*txt*` )
-    else
-        local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* test.*fa* test.*fasta* basic.phy test.*chain* test.*gvf* test.*txt*|grep -v xz` )
+    filter_out=nothing
+    if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
+        filter_out=.xz
     fi
+
+    local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* \
+                   test.*fq* test.*fastq* test.*fa* test.*fasta* \
+                   basic.phy* test.*chain* test.*gvf* \
+                   test.*txt* test.*kraken* | \
+                   grep -v "$filter_out" | grep -v .genozip` )
+
     echo "subsets (~3 VBs) or real world files"
-    test_standard "-m $1" " " ${files[@]}
+    test_standard "-mf $1" " " ${files[*]}
 }
 
 batch_multifasta()
@@ -595,7 +678,9 @@ batch_genols()
 make --quiet testfiles
 
 output=${OUTDIR}/output.genozip
+output2=${OUTDIR}/output2.genozip
 recon=${OUTDIR}/recon.txt
+kraken=${OUTDIR}/kraken.genozip
 
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
@@ -604,7 +689,7 @@ hg19=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 
 if (( $# < 1 )); then
-    echo "Usage: test.sh <batch_id-test> [optional-genozip-arg]"
+    echo "Usage: test.sh [debug] <batch_id-test> [optional-genozip-arg]"
     exit 0
 fi
 
@@ -632,9 +717,9 @@ else
     path=$PWD/
 fi
 
-genozip="$genozip_exe -@3 $2"
-genounzip="$genounzip_exe -@5 $2"
-genocat="$genocat_exe -@5 $2"
+genozip="$genozip_exe -@3 --echo $2"
+genounzip="$genounzip_exe --echo -@5 $2"
+genocat="$genocat_exe --echo -@5 $2"
 genols=$genols_exe 
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
@@ -671,18 +756,21 @@ if (( $1 <= 5  )) ; then  batch_special_algs           ; fi
 if (( $1 <= 6  )) ; then  batch_dual_coordinates       ; fi
 if (( $1 <= 7  )) ; then  batch_sam_translations       ; fi
 if (( $1 <= 8  )) ; then  batch_23andMe_translations   ; fi
-if (( $1 <= 9  )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 10 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 11 )) ; then  batch_real_world_subsets     ; fi ; # natural VB size
-if (( $1 <= 12 )) ; then  batch_real_world_subsets -B1 ; fi ; # many VBs
-if (( $1 <= 13 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 14 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 15 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 16 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 17 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 18 )) ; then  batch_reference              ; fi
-if (( $1 <= 19 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 20 )) ; then  batch_genols                 ; fi
+if (( $1 <= 9  )) ; then  batch_phylip_translations    ; fi
+if (( $1 <= 10 )) ; then  batch_genocat_tests          ; fi
+if (( $1 <= 11 )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 12 )) ; then  batch_kraken " " "-K$kraken" ;      # genocat loads kraken data
+                          batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
+if (( $1 <= 13 )) ; then  batch_real_world_subsets     ; fi ; # natural VB size
+if (( $1 <= 14 )) ; then  batch_real_world_subsets -B1 ; fi ; # many VBs
+if (( $1 <= 15 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 16 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 17 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 18 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 19 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 20 )) ; then  batch_reference              ; fi
+if (( $1 <= 21 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 22 )) ; then  batch_genols                 ; fi
 
 printf "\nALL GOOD!\n"
 

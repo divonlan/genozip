@@ -32,6 +32,8 @@ extern uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md
 extern bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 extern void sam_reconstruct_vb ();
 extern void sam_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
+extern void sam_set_FLAG_filter (const char *optarg);
+extern void sam_set_MAPQ_filter (const char *optarg);
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
@@ -93,7 +95,7 @@ SPECIAL (SAM, 7, XA_POS, sam_piz_special_XA_POS);
 
 
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
-// (included in the TOP2BAM container)
+// (they are included in the TOP2BAM container)
 // translator numbers must start from 1 - 0 is reserved for "none"
 TRANSLATOR (SAM, BAM,   1,  I8,         container_translate_I8)   // reconstruct binary little endian functions
 TRANSLATOR (SAM, BAM,   2,  U8,         container_translate_U8)   // 

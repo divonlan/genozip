@@ -23,12 +23,22 @@ const DtTranslation dt_get_translation (void)
 
     bool i_am_binary = z_file->z_flags.txt_is_bin;
 
-    for (unsigned i=0; i < NUM_TRANSLATIONS; i++)
+    for (unsigned i=0; i < NUM_TRANSLATIONS; i++) {
+/*if (i==NUM_TRANSLATIONS-1) { printf ("translations[i].src_z_non_bin_dt=%u z_file->data_type=%u " //xxx
+            "translations[i].src_z_is_binary=%u i_am_binary=%u "
+            "translations[i].dst_txt_dt=%u  flag.out_dt=%u "
+            "translations[i].is_translation=%u *translations[i].is_translation=%u\n", 
+            translations[i].src_z_non_bin_dt , z_file->data_type ,
+            translations[i].src_z_is_binary  , i_am_binary ,
+            translations[i].dst_txt_dt       , flag.out_dt ,
+            translations[i].is_translation , *translations[i].is_translation); exit_ok;}
+*/
         if (translations[i].src_z_non_bin_dt == z_file->data_type &&
             translations[i].src_z_is_binary  == i_am_binary &&
             translations[i].dst_txt_dt       == flag.out_dt &&
             (!translations[i].is_translation || *translations[i].is_translation)) // if non-NULL, this flag determines if it is a translation
             return translations[i];
+}
 
     // translation not found - return a non-translation "translation"
     return (DtTranslation){ .dst_txt_dt      = z_file->data_type, 

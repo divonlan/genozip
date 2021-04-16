@@ -8,6 +8,8 @@ Capabilities
    File transfer and archiving <transfer-archiving>
    Dual-coordinates VCF <dual-coordinates-vcf>
    Downsampling <downsampling>
+   Viewing SAM/BAM as FASTQ <sam2fq>
+   Filtering by species using kraken2 <kraken>
    Per-contig coverage <coverage>
    Sex assignment <sex-assignment>
    idxstats <idxstats>

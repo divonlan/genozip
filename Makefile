@@ -30,11 +30,11 @@ endif
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
 MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
-          zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c liftover.c sorter.c threads.c \
-		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c  \
+          zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c liftover.c linesorter.c threads.c \
+		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c writer.c \
 		  vcf_piz.c vcf_seg.c vcf_shared.c vcf_header.c \
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
-		  fasta.c fastq.c gff3_seg.c me23.c phylip.c chain.c generic.c \
+		  fasta.c fastq.c gff3_seg.c me23.c phylip.c chain.c kraken.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_pbwt.c codec_none.c \
@@ -62,12 +62,12 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
              buffer.h file.h context.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h liftover.h  \
-			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h coverage.h sorter.h threads.h \
-			 arch.h license.h data_types.h base64.h txtheader.h \
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h gff3.h phylip.h chain.h generic.h \
+			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
+			 arch.h license.h data_types.h base64.h txtheader.h writer.h \
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
-			 zlib/deflate.h zlib/trees.h	 \
+			 zlib/deflate.h zlib/trees.h \
 			 zlib/zlib.h zlib/zutil.h \
 			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
 			 lzma/Precomp.h lzma/Threads.h \
@@ -83,7 +83,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 libdeflate/compiler_gcc.h          libdeflate/libdeflate.h \
 			 libdeflate/cpu_features_common.h   libdeflate/matchfinder_common.h
 
-BAM_FILES = test/basic.bam test/minimal.bam
+GENERATED_TEST_FILES = test/basic.bam test/minimal.bam # test/basic.cram test/minimal.cram (our test files don't fit a reference - which is required to make a CRAM)
 
 ifeq ($(CC),cl) # Microsoft Visual C
 	$(error Only the gcc compiler is currently supported)
@@ -102,7 +102,7 @@ else
     uname := $(shell uname -s)
     ifeq ($(uname),Linux)
 # Linux
-        LDFLAGS += -lrt
+        LDFLAGS += -lrt # required by pthreads
     	OBJDIR=objdir.linux
 	endif
     ifeq ($(uname),Darwin)
@@ -178,6 +178,10 @@ test/%.bam : test/%.sam
 	@echo "Generating $@ from $<"
 	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools  view $< -OBAM -o $@"
 
+test/%.cram : test/%.sam
+	@echo "Generating $@ from $<"
+	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OCRAM -o $@ -T data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz"
+
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
@@ -216,7 +220,8 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-translation.rst \
 	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
-	   docs/downsampling.rst docs/dual-coordinates-vcf.rst docs/pipelines.rst docs/capabilities.rst
+	   docs/downsampling.rst docs/dual-coordinates-vcf.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst\
+	   docs/sam2fq.rst
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
@@ -233,7 +238,7 @@ docs: docs/_build/html/.buildinfo
 docs-debug: docs/_build/html/.buildinfo
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe file:///C:/Users/USER/projects/genozip/docs/_build/html/index.html; exit 0)
 	
-testfiles : $(BAM_FILES)
+testfiles : $(GENERATED_TEST_FILES)
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)

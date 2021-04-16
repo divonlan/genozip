@@ -70,6 +70,24 @@ One or more file names must be given.
    | *Note*: Multiple ``-s`` arguments may be specified - this is equivalent to chaining their samples with a comma separator in a single argument.
    |
 
+.. option:: --FLAG {+-^}value.  (SAM BAM) Filter lines based on the FLAG value: <value> is a decimal or hexadecimal value and should be prefixed by + - or ^: 
+
+==  =======================================================================
+\+  INCLUDES lines in which ALL flags in *value* are set in the line's FLAG
+\-  INCLUDES lines in which NO flags in *value* are set in the line's FLAG
+^   EXCLUDES lines in which ALL flags in *value* are set in the line's FLAG
+==  =======================================================================
+
+| *Example*: --FLAG -192 includes only lines in which neither FLAG 64 nor 128 are set. This can also be expressed as --FLAG -0xC0 
+|
+| More information of FLAGs can be found in section 1.4 of the `SAM spec <https://samtools.github.io/hts-specs/SAMv1.pdf>`_.
+
+   |
+
+.. option:: --MAPQ [^]value.  (SAM BAM) Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
+   
+   |
+
 .. option:: -g, --grep string.  (FASTQ FASTA) Show only records in which <string> is a case-sensitive substring of the description.
 
           |
@@ -108,11 +126,19 @@ One or more file names must be given.
     
           |
 
-.. option:: --show-sex.  (SAM BAM) Determine whether a SAM/BAM is a Male or a Female. See "Sex assignment" use case. Altnernative option name: --sex.
+.. option:: --sex.  (SAM BAM FASTQ) Determine whether a SAM/BAM is a Male or a Female. Limitations when using on FASTQ. See "Sex assignment" for  details.
     
           |
 
-.. option:: --show-coverage[=all].  (SAM BAM) Shows the coverage and depth of each contig. Without =all it shows only contigs that are chromosomes and groups the other contigs under "Other contigs". See "Coverage and Depth" use case. Altnernative option name: --coverage.
+.. option:: --coverage[=all|=one].  (SAM BAM FASTQ) Shows the coverage and depth of each contig. Approximate values when using on FASTQ. "Coverage and Depth" for details. 
+    
+          |
+
+.. option:: --idxstats.  (SAM BAM FASTQ) Shows the count of mapped and unmapped reads by contig. Approximate values when using on FASTQ. Same output format as samtools idxstats. 
+    
+          |
+
+.. option:: --count.  Shows the coverage and depth of each contig. "Coverage and Depth" for details. 
     
           |
 
@@ -121,6 +147,9 @@ One or more file names must be given.
 **General options**
 
 .. include:: opt-piz.rst
+
+.. option:: -z, --bgzf level.  Compress the output to the BGZF format (.gz extension). Note that by default genocat does not compress with BGZF (except for BAM that is compressed with level 1). Use this option if downstream tools require it.
+
 .. include:: opt-quiet.rst
 
 .. option:: --no-PG.  (VCF SAM BAM) When modifying the data in a file using genocat Genozip normally adds information about the modification in the file header. With this option it doesn't.

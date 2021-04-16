@@ -408,6 +408,24 @@ bug fixes, including major bug with mc:i optional field in SAM
 12.0.0
 - Support dual-coordinates VCF files: genozip --chain to create a dual-coordinates file ; genocat --luft ("lifted") to see the
        lifted-over coordinates
-- Support genocat --sort for mildly-unsorted VCF files, implied for dual-coordinates VCF files. Disabled by --unsorted.
+- Support genocat --sort for VCF files ; --sort implied for dual-coordinates VCF files. Disabled by --unsorted.
 - Fixed bug with subsetting samples in VCF (genocat --sample). The fix will work on files compressed with 11.0.9 onwards.
 - Now, genounzip always unbinds files, and genocat always concatenates
+- new option: genocat --component <component-number> - to view a single component of a bound file (including one of the fastq files in a paired file)
+- new option: genocat --FLAG - filters a SAM or BAM file by the value of the FLAG field
+- new option: genocat --MAPQ - filters a SAM or BAM file by the value of the MAPQ field
+- new option: genocat --counts - displays the number of lines (or reads in the case of FASTQ), that
+  survived any filters applied (--regions, --grep, --taxid, --FLAGS, --MAPQ, --component, --one-vb etc)
+- new option: --echo displays the command line and a timestamp upon completion of execution (successful or failed)
+
+Option changes:
+- genounzip now always unbinds files, and the --unbind is canceled. the --prefix can now used to set a prefix.
+- genocat --fastq will NOT add /1 or /2 to R1 and R2 reads in the case that --FLAG is specified as well
+- genolos --unbind (-u) option is renamed --list (-l). genozip --list option is canceled.
+- --sex, --coverage, --stats and --STATS replace --show-sex, --show-coverage --show-stats, --SHOW-STATS resptively
+- --chroms, and --contigs are accepted as alternative names for --list-chroms
+
+New developer options:
+- new option: genozip --show-chain-contigs - used in combination with --chain
+- new option: genozip --show-kraken - used in combination with --taxid
+

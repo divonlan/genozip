@@ -32,6 +32,7 @@ extern bool fastq_piz_read_one_vb (VBlockP vb, ConstSecLiEntP sl);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 extern void fastq_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len);
+extern CONTAINER_CALLBACK (fastq_piz_container_cb);
 
 // VBlock stuff
 extern void fastq_vb_release_vb();
@@ -42,9 +43,6 @@ extern unsigned fastq_vb_zip_dl_size (void);
 // file pairing (--pair) stuff
 extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t pair_vb_i, bool must_have);
 extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
-
-// --genobwa stuff
-extern WordIndex fastq_get_genobwa_chrom (void);
 
 #define FASTQ_DICT_ID_ALIASES 
 

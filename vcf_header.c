@@ -84,9 +84,6 @@ static void vcf_header_add_genozip_command (Buffer *txt_header)
     bufprintf (evb, txt_header, "\" %s\n", str_time().s);
 }
 
-#define TEMP_EOS(i) char save = line[i]; ((char*)line)[i] = 0
-#define RESTORE_EOS(i) ((char*)line)[i] = save
-
 static void vcf_header_get_subvalue (const char *line, unsigned line_len, unsigned key_len,
                                      const char *subkey, unsigned subkey_len, bool enforce,// in
                                      const char **snip, unsigned *snip_len) // out
@@ -120,7 +117,7 @@ static void vcf_header_parse_contig_line (const char *line, unsigned line_len, b
     #define HK_CONTIG_LEN 8
 
     // parse eg "##contig=<ID=NKLS02001838.1,length=29167>" and "##liftover_contig=<ID=22>"
-    TEMP_EOS(line_len-1);
+    SAFE_NUL (&line[line_len]);
     if (!strstr (line, HK_CONTIG)) goto done;
 
     vcf_header_get_subvalue (line, line_len, HK_CONTIG_LEN, "ID=", 3, true, &id, &id_len);
@@ -139,7 +136,7 @@ static void vcf_header_parse_contig_line (const char *line, unsigned line_len, b
     }
 
 done:
-    RESTORE_EOS(line_len-1);
+    SAFE_RESTORE;
 }
 
 static bool vcf_header_extract_contigs (const char *line, unsigned line_len, void *unused1, void *unused2, unsigned unused3)

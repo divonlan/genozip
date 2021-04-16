@@ -36,7 +36,7 @@
 #include "codec.h"
 #include "threads.h"
 #include "dispatcher.h"
-
+#include "linesorter.h"
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
 ExeType exe_type;
@@ -49,6 +49,9 @@ uint32_t global_max_threads = DEFAULT_MAX_THREADS;
 
 void main_exit (bool show_stack, bool is_error) 
 {
+    if (flag.echo)
+        fprintf (stderr, "\n%s: %s\n", str_time().s, flags_command_line()->data);
+
     if (show_stack) threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
 
     buf_test_overflows_all_vbs("exit_on_error");
@@ -83,10 +86,7 @@ void main_exit (bool show_stack, bool is_error)
     } else
         fflush (info_stream);
 
-    if (is_error)
-        abort();
-    else
-        exit (0);
+    exit (is_error);
 } 
 
 static void main_print_help (bool explicit)
@@ -312,15 +312,17 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     // 4) reset flag.unbind if file contains only one component
     if (!z_file->file || !zfile_read_genozip_header (0,0,0)) goto done; 
 
-    // if we're genocatting a BAM file, output it as a SAM unless user requested otherwise
-    if (z_file->data_type == DT_SAM && z_file->z_flags.txt_is_bin && flag.out_dt==-1 && exe_type == EXE_GENOCAT)
-        flag.out_dt = DT_SAM;
+    if (z_file->z_flags.dual_coords)
+        z_file->max_conc_writing_vbs = linesorter_get_max_conc_writing_vbs(); // get data by reading all SEC_RECON_PLAN headers
+
+    if (z_file->max_conc_writing_vbs < 3) z_file->max_conc_writing_vbs = 3;
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
     if (flag.reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
         ASSINP0 (flag.reference != REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
-        if (!flag.genocat_no_reconstruct || flag.show_coverage || flag.show_sex || flag.idxstats) { // in show_sex/coverage/idxstats we read the non-data sections of the reference
+        if (!flag.genocat_no_reconstruct || 
+            (flag.collect_coverage && z_file->data_type == DT_FASTQ)) { // in collect_coverage with FASTQ we read the non-data sections of the reference
             SAVE_VALUE (z_file); // actually, read the reference first
             ref_load_external_reference (false, false /* argument ignored for REF_EXTERNAL */);
             RESTORE_VALUE (z_file);
@@ -333,13 +335,13 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     if (!txt_filename && !flag.to_stdout && !flag.unbind) 
         txt_filename = txtfile_piz_get_filename (z_filename, "", true);
 
-    // open output txt file (except if unbinding or outputting to stdout)
-    if (txt_filename || flag.to_stdout) {
+    // open output txt file (except if unbinding)
+    if (txt_filename || (flag.to_stdout && !flag.no_writer)) {
         ASSERT0 (!txt_file, "txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
         txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag.out_dt);
     }
-    else if (flag.unbind) {
-        // do nothing - the component files will be opened by txtheader_piz_read_and_reconstruct()
+    else if (flag.unbind || flag.no_writer) {
+        // do nothing - in unbind, the component files will be opened by txtheader_piz_read_and_reconstruct()
     }
     else {
         ABORT0 ("Error: unrecognized configuration for the txt_file");
@@ -506,12 +508,13 @@ static void main_genozip (const char *txt_filename,
         }
     }
 
-    if (remove_txt_file) file_remove (txt_filename, true); 
-
     RESTORE_FLAG (quiet); // don't pass on quiet to test, just because we turned it on for rejects 
 
     // test the compression, if the user requested --test
     if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_txt_file);
+
+    // remove after test (if any) was successful - NOT GOOD ENOUGH - bug 342
+    if (remove_txt_file) file_remove (txt_filename, true); 
 
 done: {
     SAVE_FLAG(vblock_memory);  
@@ -586,6 +589,9 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
     // no need to load the reference if genocat just wants to see some sections (unless its genocat of the refernece file itself)
     if (flag.genocat_no_reconstruct && dt != DT_REF) return;
 
+    // no need to load the reference if just collecting coverage except FASTQ for which we need the contigs
+    if (flag.collect_coverage && dt != DT_FASTQ) return;
+
     // we also need the aligner if this is an unaligned SAM 
     if (!flag.ref_use_aligner && dt==DT_SAM && primary_command==ZIP) {
 
@@ -613,10 +619,11 @@ void TEST() {
 
 int main (int argc, char **argv)
 {
+    info_stream = stdout; // may be changed during intialization
     buf_initialize(); 
     arch_initialize (argv[0]);
     threads_initialize();
-    vb_initialize_evb();
+    evb = vb_initialize_special_vb(EVB);
     random_access_initialize();
     codec_initialize();
 
@@ -695,8 +702,8 @@ int main (int argc, char **argv)
     // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
     if (command == ZIP) license_get(); 
 
-    if (flag.reading_chain) 
-        chain_load();
+    if (flag.reading_chain) chain_load();
+    if (flag.reading_kraken) kraken_load();
 
     for (unsigned file_i=0, z_file_i=0; file_i < MAX (num_files, 1); file_i++) {
 

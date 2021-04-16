@@ -27,7 +27,7 @@ extern bool dispatcher_has_free_thread (Dispatcher dispatcher);
 extern bool dispatcher_has_active_threads (Dispatcher dispatcher);
 extern VBlockP dispatcher_get_next_vb (Dispatcher dispatcher);
 extern uint32_t dispatcher_get_next_vb_i (Dispatcher dispatcher);
-extern void dispatcher_recycle_vbs (Dispatcher dispatcher);
+extern void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb);
 extern void dispatcher_abandon_next_vb (Dispatcher dispatcher);
 extern void dispatcher_set_input_exhausted (Dispatcher dispatcher, bool exhausted);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);

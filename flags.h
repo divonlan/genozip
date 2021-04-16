@@ -40,9 +40,14 @@ typedef struct {
 
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
-        regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted;
+        regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted,
+        kraken_taxid, kraken_taxid_negative;
     char *grep;
     uint32_t one_vb, one_component, downsample, shard ;
+    enum { SAM_FLAG_INCLUDE_IF_ALL=1, SAM_FLAG_INCLUDE_IF_NONE, SAM_FLAG_EXCLUDE_IF_ALL } sam_flag_filter;
+    enum { SAM_MAPQ_INCLUDE_IF_AT_LEAST=1, SAM_MAPQ_EXCLUDE_IF_AT_LEAST } sam_mapq_filter;
+    uint16_t FLAG; // the value for sam_flag_filter
+    uint8_t MAPQ;  // the value for sam_mapq_filter
 
     // genols options
     int bytes;
@@ -60,27 +65,27 @@ typedef struct {
 
     ReferenceType reference;
 
-    // undocumented options for internal use
-    char *genobwa; // --genobwa=<contig-name> is used by the genobwa script in genozip / genocat to filter a fastq to a superset that includes all the reads that *might* be mapped to a chromosome 
-
     // stats / metadata flags for end users
     int show_stats, 
         validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     
     // analysis
-    int list_chroms, show_sex, show_coverage, idxstats; 
+    int list_chroms, show_sex, show_coverage, idxstats, count; 
     
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
-        debug_progress, show_hash, debug_memory, show_vblocks, show_threads,
-        seg_only, xthreads,
+        show_vblocks, show_threads, show_kraken,
+        debug_progress, show_hash, debug_memory, debug_threads,
+        seg_only, xthreads, 
+        echo,    // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
 
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
+           show_one_counts,
            dump_one_b250_dict_id,   // argument of --dump-b250-one
            dump_one_local_dict_id;  // argument of --dump-local-one
     char *show_one_dict;    // argument of --show-dict-one
@@ -93,17 +98,23 @@ typedef struct {
          processing_rejects, // ZIP & PIZ: currently zipping liftover rejects file / component
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_reconstruct,  // PIZ: User requested to genocat with only metadata to be shown, not file contents
-         genocat_no_write,   // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
+         no_writer,          // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
+         data_modified_by_txtheader,
+         data_modified_by_reconstruction,
+         data_modified_by_sorter,
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
          may_drop_lines,     // PIZ: reconstruction is allowed to drop lines
-         explicit_ref;       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
+         explicit_ref,       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
+         dyn_set_mem,        // ZIP: we're now segging as part of zip_dynamically_set_max_memory()
+         collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
 
-#define flag_loading_auxiliary (flag.reading_reference || flag.reading_chain) // PIZ: currently reading auxiliary file (reference, chain etc)
+#define flag_loading_auxiliary (flag.reading_reference || flag.reading_chain || flag.reading_kraken) // PIZ: currently reading auxiliary file (reference, chain etc)
 
-    char *reading_chain;     // system is currently reading a chain file by this name
+    char *reading_chain;     // system is currently loading a chain file by this name
+    char *reading_kraken;    // system is currently loading a kraken file by this name
     char *unbind;
     char *log_filename;      // output to info_stream goes here
 
@@ -112,7 +123,7 @@ typedef struct {
     unsigned longest_filename; // length of longest filename of the txt/z files on the command line
 
     // default max amount of txt data in each variant block. this is user-configurable with --vblock
-    #define MAX_VBLOCK_MEMORY      2048       // in MB
+    #define MAX_VBLOCK_MEMORY      2048         // in MB
     #define VBLOCK_MEMORY_MIN_DYN  (16   << 20) // VB memory - min/max when set in zip_dynamically_set_max_memory
     #define VBLOCK_MEMORY_MAX_DYN  (512  << 20) 
     #define VBLOCK_MEMORY_FAST     (16   << 20) // VB memory with --fast
@@ -127,6 +138,16 @@ extern Flags flag;
 #define SAVE_FLAGS Flags save_flag = flag
 #define RESTORE_FLAGS flag = save_flag
 
+// save and reset flags that are intended to operate on the compressed file rather than the reference file
+#define SAVE_FLAGS_AUX Flags save_flag = flag; \
+    flag.test = flag.md5 = flag.show_memory = flag.show_stats= flag.no_header = flag.show_bgzf =\
+    flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =  \
+    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.interleave = flag.count = \
+    flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads= \
+    flag.show_sex = flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */ \
+    flag.grep = flag.show_time = flag.unbind = flag.show_one_dict = NULL; /* char* */ \
+    flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE; /* DictId */ 
+    
 #define SAVE_FLAG(f) typeof(flag.f) save_##f = flag.f 
 #define TEMP_FLAG(f,value) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)value
 #define SET_FLAG(f) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)1

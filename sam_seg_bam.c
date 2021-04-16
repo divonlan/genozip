@@ -20,6 +20,7 @@
 #include "flags.h"
 #include "profiler.h"
 #include "context.h"
+#include "kraken.h"
 
 // set an estimated number of lines, so that seg_all_data_lines doesn't call seg_estimate_num_lines which
 // won't work for BAM as it scans for newlines. Then proceed to sam_seg_initialize
@@ -358,6 +359,10 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
     seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], next_field, // QNAME
                         l_read_name-1, arg, 0, 2 /* account for \0 and l_read_name */); 
+
+    if (kraken_is_loaded)
+        kraken_seg_taxid (vb_, SAM_TAXID, next_field, l_read_name-1, true);
+
     next_field += l_read_name; // inc. \0
 
     // *** ingest & segment variable-length fields ***

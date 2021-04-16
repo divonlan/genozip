@@ -27,7 +27,7 @@ void *codec_alloc (VBlock *vb, int size, double grow_at_least_factor)
     // so subsequent VBs will allocate roughly the same amount of memory for each buffer
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (!buf_is_allocated (&vb->codec_bufs[i])) {
-            buf_alloc_old (vb, &vb->codec_bufs[i], size, grow_at_least_factor, names[i]);
+            buf_alloc (vb, &vb->codec_bufs[i], 0, size, char, grow_at_least_factor, names[i]);
             //printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;
         }
@@ -47,8 +47,8 @@ void codec_free (void *vb_, void *addr)
             return;
         }
 
-    ABORT ("Error: codec_free failed to find buffer to free. vb_i=%d addr=%s", 
-           vb->vblock_i, str_pointer (addr).s);
+    ABORT ("Error: codec_free failed to find buffer to free. vb_i=%d codec=%s addr=%s", 
+           vb->vblock_i, codec_name(vb->codec_using_codec_bufs), str_pointer (addr).s);
 }
 
 void codec_free_all (VBlock *vb)

@@ -30,7 +30,7 @@
 #include "compressor.h"
 #include "strings.h"
 #include "bgzf.h"
-#include "sorter.h"
+#include "linesorter.h"
 #include "txtheader.h"
 
 static Mutex wait_for_vb_1_mutex = {};
@@ -39,7 +39,9 @@ static void zip_display_compression_ratio (Digest md5, bool is_final_component)
 {
     double z_bytes        = MAX ((double)z_file->disk_so_far, 1.0); // at least one, to avoid division by zero in case of a z_bytes=0 issue
     double plain_bytes    = (double)z_file->txt_data_so_far_bind;
-    double comp_bytes     = (double)txt_file->disk_so_far; // unlike disk_size, works also for piped-in files
+    double comp_bytes     = file_is_read_via_ext_decompressor (txt_file) 
+                              ? (double)txt_file->disk_size    // 0 if via pipe or url, as we have no knowledge of file size
+                              : (double)txt_file->disk_so_far; // unlike disk_size, works also for piped-in files (but not CRAM, BCF, XZ, ZIP)
     double ratio_vs_plain = plain_bytes / z_bytes;
     double ratio_vs_comp  = -1;
 
@@ -89,7 +91,7 @@ static void zip_display_compression_ratio (Digest md5, bool is_final_component)
             progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
-        if (txt_file->codec == CODEC_NONE || ratio_vs_comp < 1.05)  // source file was plain txt or ratio_vs_comp is low (nothing to brag about)
+        if (txt_file->codec == CODEC_NONE || ratio_vs_comp < 1.05) // disk_so_far doesn't give us the true txt file size 
             progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_plain, md5);
         
         else // source was compressed
@@ -140,6 +142,7 @@ static void zip_dynamically_set_max_memory (void)
             flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
             flag.show_reference = flag.show_vblocks = false;
             flag.quiet = true;
+            flag.dyn_set_mem = true;
 
             seg_all_data_lines (vb);
 
@@ -186,7 +189,7 @@ static void zip_dynamically_set_max_memory (void)
         }
 
         // try again with a larger size (note: all data arleady read is waiting in txt_file->unconsumed_txt)
-        vb_release_vb (vb);
+        vb_release_vb (vb, __FUNCTION__);
     }
 
     // if we failed to calculate - use default
@@ -261,7 +264,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
     ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
 
     WordIndex first_node_index = *ENT (WordIndex, ctx->b250, 0);
-    bool all_the_same = true; // are all the node_index of this context the same in this VB
+    bool all_the_same = !ctx->no_all_the_same; // init to true, unless not allowed - are all the node_index of this context the same in this VB
 
     // we assign the b250 data back onto the same buffer. this words, because the b250 numerals are of length 1 or 4, 
     // therefore smaller than node_index
@@ -519,7 +522,9 @@ static void zip_write_global_area (Digest single_component_digest)
         random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
     ctx_compress_dictionaries(); // note: sorter_move_liftover_rejects_to_front() depends on SEC_DICT being the first non-VB sections
-    
+
+    ctx_compress_counts();
+        
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL) 
         ref_alt_chroms_compress();
@@ -600,7 +605,7 @@ static void zip_compress_one_vb (VBlock *vb)
 
     // case: we sorting - add line data to txt_file's line_info
     if (flag.sort) 
-        sorter_zip_merge_vb (vb);
+        linesorter_merge_vb (vb);
 
     if (vb->vblock_i == 1) mutex_unlock (wait_for_vb_1_mutex); // locked in zip_one_file
 
@@ -656,12 +661,11 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
 
         txtfile_read_vblock (vb, false);
 
+        // estimate txt_data_size_single, consumed by hash_get_estimated_entries() and dispatcher_show_progress()
+        txt_file->txt_data_size_single = txtfile_estimate_txt_data_size (vb);
+
         // initializations after reading the first vb and before running any compute thread
         if (vb->vblock_i == 1) { 
-
-            // estimate txt_data_size_single that will be used for the global_hash and the progress indicator
-            txt_file->txt_data_size_single = txtfile_estimate_txt_data_size (vb);
-
             // we lock, so vb>=2 will block on merge, until vb=1 has completed its merge and unlocked it in zip_compress_one_vb()
             mutex_initialize (wait_for_vb_1_mutex);
             mutex_lock (wait_for_vb_1_mutex); 
@@ -770,7 +774,7 @@ finish:
 
     // reconstruction plan for sorting the data (per txt file)
     if (flag.sort && !flag.seg_only)
-        sorter_compress_recon_plan();
+        linesorter_compress_recon_plan();
 
     if (z_closes_after_me && !flag.seg_only)
         zip_write_global_area (single_component_digest);

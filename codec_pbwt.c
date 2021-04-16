@@ -426,7 +426,7 @@ void codec_pbwt_reconstruct (VBlock *vb, Codec codec, Context *ctx)
         ht = NEXTLOCAL (Allele, vb->ht_matrix_ctx);
     } while (ht == '*' && vb->ht_matrix_ctx->next_local < vb->ht_matrix_ctx->local.len);
 
-    if (vb->dont_show_curr_line) return;
+    if (vb->drop_curr_line) return;
 
     if (IS_DIGIT(ht) || ht == '.') 
         RECONSTRUCT1 (ht);

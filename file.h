@@ -119,6 +119,13 @@
 #define CHAIN_XZ_      ".chain.xz"
 #define CHAIN_GENOZIP_ ".chain" GENOZIP_EXT
 
+// kraken files
+#define KRAKEN_         ".kraken" // kraken files have no standard extension, we make one up to avoid irregularities
+#define KRAKEN_GZ_      ".kraken.gz"
+#define KRAKEN_BZ2_     ".kraken.bz2"
+#define KRAKEN_XZ_      ".kraken.xz"
+#define KRAKEN_GENOZIP_ ".kraken" GENOZIP_EXT
+
 // generic files
 #define GNRIC_           ""
 #define GNRIC_GZ_        ".gz"
@@ -145,6 +152,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     ME23,  ME23_ZIP,                      ME23_GENOZIP, 
                     PHY,   PHY_GZ,   PHY_BZ2,   PHY_XZ,   PHY_GENOZIP,
                     CHAIN, CHAIN_GZ, CHAIN_BZ2, CHAIN_XZ, CHAIN_GENOZIP,
+                    KRAKEN, KRAKEN_GZ, KRAKEN_BZ2, KRAKEN_XZ, KRAKEN_GENOZIP,
                     BAM,                                  BAM_GENOZIP,
                     BCF, BCF_GZ, BCF_BGZF,                BCF_GENOZIP,  
                     // the GNRIC row *must* be the last row, as it consists catch-all extensions (*.gz etc)
@@ -168,9 +176,10 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    ME23_,  ME23_ZIP_,                        ME23_GENOZIP_,          \
                    PHY_,   PHY_GZ_,   PHY_BZ2_,   PHY_XZ_,   PHY_GENOZIP_,           \
                    CHAIN_, CHAIN_GZ_, CHAIN_BZ2_, CHAIN_XZ_, CHAIN_GENOZIP_,         \
+                   KRAKEN_, KRAKEN_GZ_, KRAKEN_BZ2_, KRAKEN_XZ_, KRAKEN_GENOZIP_,  \
                    BAM_,                                     BAM_GENOZIP_,           \
                    BCF_,   BCF_GZ_,   BCF_BGZF_,             BCF_GENOZIP_,           \
-                   GNRIC_GZ_, GNRIC_BZ2_, GNRIC_XZ_,         GNRIC_GENOZIP_, GNRIC_, \
+                   GNRIC_GZ_, GNRIC_BZ2_, GNRIC_XZ_,         GNRIC_GENOZIP_, GNRIC_, /* GNRIC_ is catch all */ \
                    "stdin", "stdout" }
 extern const char *file_exts[];
 
@@ -215,6 +224,8 @@ extern const char *file_exts[];
                              { PHY_BZ2,   CODEC_BZ2,  PHY_GENOZIP   }, { PHY_XZ,   CODEC_XZ,  PHY_GENOZIP   }, { } },\
                            { { CHAIN,     CODEC_NONE, CHAIN_GENOZIP }, { CHAIN_GZ, CODEC_GZ,  CHAIN_GENOZIP },\
                              { CHAIN_BZ2, CODEC_BZ2,  CHAIN_GENOZIP }, { CHAIN_XZ, CODEC_XZ,  CHAIN_GENOZIP }, { } },\
+                           { { KRAKEN,     CODEC_NONE, KRAKEN_GENOZIP }, { KRAKEN_GZ, CODEC_GZ,  KRAKEN_GENOZIP },\
+                             { KRAKEN_BZ2, CODEC_BZ2,  KRAKEN_GENOZIP }, { KRAKEN_XZ, CODEC_XZ,  KRAKEN_GENOZIP }, { } },\
                         }
 
 // Ordered by data_type: Supported output formats for genounzip
@@ -227,11 +238,12 @@ extern const char *file_exts[];
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
                            { GVF, GVF_GZ, /*GFF3, GFF3_GZ,*/ 0 }, \
                            { ME23, ME23 /* no GZ */, ME23_ZIP, 0 }, \
-                           { 0 }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
+                           { BAM }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
                            { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
                            { GNRIC, GNRIC_GZ, 0 }, \
                            { PHY, PHY_GZ, 0 }, \
                            { CHAIN, CHAIN_GZ, 0 }, \
+                           { KRAKEN, KRAKEN_GZ, 0 }, \
                          }                        
 
 // Ordered by data_type
@@ -247,6 +259,7 @@ extern const char *file_exts[];
                      { GNRIC_GENOZIP, 0 },                  \
                      { PHY_GENOZIP, 0 },                    \
                      { CHAIN_GENOZIP, 0 },                  \
+                     { KRAKEN_GENOZIP, 0 },                \
                    } 
 
 typedef const char *FileMode;
@@ -287,6 +300,7 @@ typedef struct File {
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
                                        // note: this is different from txt_data_size_single as disk_size might be compressed (gz, bz2 etc)
     int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite)
+    int64_t disk_size_minus_skips;     // PIZ z_file: disk_size minus any data skipped
 
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
     int64_t txt_data_size_single;      // txt_file: size of the txt data. ZIP: if its a plain txt file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
@@ -378,9 +392,10 @@ typedef struct File {
 
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;
+    uint32_t max_conc_writing_vbs;     // PIZ z_file: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in the file
 
     // Used for reading txt files
-    Buffer unconsumed_txt;             // excess data read from the txt file - moved to the next VB
+    Buffer unconsumed_txt;             // ZIP: excess data read from the txt file - moved to the next VB
 } File;
 
 // methods

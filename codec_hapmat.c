@@ -277,7 +277,7 @@ void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
     while (ht == '*' && vb->hapmat_one_array.len < vb->ht_per_line)
         ht = *ENT(uint8_t, vb->hapmat_one_array, vb->hapmat_one_array.len++);
 
-    if (vb->dont_show_curr_line) return;
+    if (vb->drop_curr_line) return;
 
     switch (ht) {
         case '.': case '0' ... '9':

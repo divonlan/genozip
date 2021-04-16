@@ -7,7 +7,7 @@ Data Types: VCF, SAM, BAM, FASTQ, GVF, 23andMe
 
 **Usage**
 
-``genocat --downsample <rate>[,<shard>]``
+``genocat --downsample <rate>[,<shard>] [genozip files...]``
 
 **Description**
 

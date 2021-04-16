@@ -43,7 +43,7 @@ bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
 
         // copy data to vb->compressed
         ASSERTNOTINUSE (vb->compressed);
-        buf_alloc_old (vb, &vb->compressed, *uncompressed_len, 1.2, "compressed");
+        buf_alloc (vb, &vb->compressed, 0, *uncompressed_len, char, 1.2, "compressed");
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
             char *start1=0;

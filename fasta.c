@@ -16,6 +16,7 @@
 #include "stats.h"
 #include "reconstruct.h"
 #include "vblock.h"
+#include "kraken.h"
 
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
@@ -184,6 +185,12 @@ void fasta_seg_initialize (VBlockFASTA *vb)
     vb->contexts[FASTA_CONTIG  ].no_stons = true; // needs b250 node_index for reference
     vb->contexts[FASTA_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 
+    if (kraken_is_loaded) {
+        vb->contexts[FASTA_TAXID].flags.store    = STORE_INT;
+        vb->contexts[FASTA_TAXID].no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
+        vb->contexts[FASTA_TAXID].counts_section = true; 
+    }
+
     COPY_TIMER (seg_initialize);
 }
 
@@ -193,10 +200,10 @@ void fasta_seg_finalize (VBlockP vb)
     SmallContainer top_level = { 
         .repeats      = vb->lines.len,
         .is_toplevel  = true,
-        .filter_items = true,
+        .callback     = true,
         .nitems_lo    = 2,
         .items        = { { .dict_id = (DictId)dict_id_fields[FASTA_LINEMETA]  },
-                          { .dict_id = (DictId)dict_id_fields[FASTA_EOL]       } }
+                          { .dict_id = (DictId)dict_id_fields[FASTA_EOL], .translator = FASTA2PHYLIP_EOL } }
     };
 
     container_seg_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
@@ -207,6 +214,7 @@ bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
     return dict_id.num == dict_id_fields[FASTA_TOPLEVEL] ||
            dict_id.num == dict_id_fields[FASTA_DESC]     ||
            dict_id.num == dict_id_fields[FASTA_LINEMETA] ||
+           dict_id.num == dict_id_fields[FASTA_TAXID]    ||
            dict_id.num == dict_id_fields[FASTA_EOL];
 }
 
@@ -221,7 +229,7 @@ static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_
     ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
 
     if (!flag.make_reference) {
-        SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
+        static SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
         seg_compound_field ((VBlockP)vb, &vb->contexts[FASTA_DESC], line_start, line_len, arg, 0, 0);
         
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
@@ -346,8 +354,14 @@ const char *fasta_seg_txt_line (VBlockFASTA *vb, const char *line_start, uint32_
     const char *next_field = seg_get_next_line (vb, line_start, &remaining_vb_txt_len, &line_len, has_13, "FASTA line");
 
     // case: description line - we segment it to its components
-    if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) 
+    if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
         fast_seg_desc_line (vb, line_start, line_len, has_13);
+
+        if (kraken_is_loaded) {
+            unsigned qname_len = strcspn (line_start + 1, " \t\r\n"); // +1 to skip the '>' or ';'
+            kraken_seg_taxid ((VBlockP)vb, FASTA_TAXID, line_start + 1, qname_len, true);
+        }
+    }
 
     // case: comment line - stored in the comment buffer
     else if (*line_start == ';' || !line_len) 
@@ -375,7 +389,7 @@ void fasta_piz_initialize (void)
 // returns true if section is to be skipped reading / uncompressing
 bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
-    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+    if (!vb) return false; // we don't skip reading any SEC_DICT/SEC_COUNTS sections
 
     if (flag.reading_reference) return false;  // doesn't apply when using FASTA as a reference
 
@@ -394,23 +408,11 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (dict_id.num == dict_id_fields[FASTA_DESC] || dict_id_is_fasta_desc_sf (dict_id)))
         return true;
 
+    // no need for the TAXID data if user didn't specify --taxid
+    if (flag.kraken_taxid==-1 && dict_id.num == dict_id_fields[FASTA_TAXID])
+        return true;
+
     return false;
-}
-
-// filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat) and each toplevel item
-CONTAINER_FILTER_FUNC (fasta_piz_filter)
-{
-    VBlockFASTA *fasta_vb = (VBlockFASTA *)vb;
-
-    // if --phylip, don't reconstruct the EOL after DESC
-    if (flag.out_dt == DT_PHYLIP && 
-        dict_id.num == dict_id_fields[FASTA_TOPLEVEL] &&
-        item == 1 /* EOL */ && 
-        fasta_vb->last_line == FASTA_LINE_DESC) 
-        
-        vb->dont_show_curr_line = true;
-
-    return true; // reconstruct (then drop)
 }
 
 // remove trailing newline before SEQ lines in case of --sequential. Note that there might be more than one newline
@@ -418,10 +420,14 @@ CONTAINER_FILTER_FUNC (fasta_piz_filter)
 static inline void fasta_piz_unreconstruct_trailing_newlines (VBlockFASTA *vb)
 {
     char c;
-    while ((c = *LASTENT (char, vb->txt_data)) == '\n' || c == '\r') {
+    while ((c = *LASTENT (char, vb->txt_data)) == '\n' || c == '\r') 
         vb->txt_data.len--;
-        if (c == '\n') vb->lines.len--;
-    }
+
+    // update final entries vb->lines to reflect the removal of the final newlines
+    for (int32_t line_i = vb->line_i - vb->first_line; 
+         line_i >= 0 && *ENT (char *, vb->lines, line_i) > AFTERENT (char, vb->txt_data); 
+         line_i--)
+        *ENT (char *, vb->lines, line_i) = AFTERENT (char, vb->txt_data);
 }
 
 // this is used for end-of-lines of a sequence line, that are not the last line of the sequence. we skip reconstructing
@@ -433,7 +439,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
     bool is_first_seq_line_in_this_contig = snip[0] - '0';
 
     // skip showing line if this contig is grepped - but consume it anyway
-    if (fasta_vb->contig_grepped_out) vb->dont_show_curr_line = true;
+    if (fasta_vb->contig_grepped_out) vb->drop_curr_line = true;
 
     // --sequential - if this is NOT the first seq line in the contig, we delete the previous end-of-line
     else if (flag.sequential && !is_first_seq_line_in_this_contig) 
@@ -441,14 +447,14 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
 
     // in case of not showing the SEQ in the entire file - we can skip consuming it
     if (flag.header_only_fast) // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
-        vb->dont_show_curr_line = true;     
+        vb->drop_curr_line = true;     
     else 
         reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, true);    
 
     // case: --sequential, and this seq line is the last line in the vb, and it continues in the next vb
     if (  flag.sequential && // if we are asked for a sequential SEQ
           vb->line_i - vb->first_line == vb->lines.len-1 && // and this is the last line in this vb 
-          !vb->dont_show_curr_line && 
+          !vb->drop_curr_line && 
           random_access_does_last_chrom_continue_in_next_vb (vb->vblock_i)) // and this sequence continues in the next VB 
         fasta_piz_unreconstruct_trailing_newlines (fasta_vb); // then: delete final newline if this VB ends with a 
 
@@ -464,11 +470,11 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_COMMENT)
     // skip showing comment line in case cases - but consume it anyway:
     if (  fasta_vb->contig_grepped_out || // 1. if this contig is grepped out
           flag.out_dt == DT_PHYLIP)       // 2. if we're outputting in Phylis format
-        vb->dont_show_curr_line = true;
+        vb->drop_curr_line = true;
 
     // in case of not showing the COMMENT in the entire file (--header-only or this is a --reference) - we can skip consuming it
     if (flag.header_only_fast)  // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
-        vb->dont_show_curr_line = true;     
+        vb->drop_curr_line = true;     
     else 
         reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
 
@@ -529,7 +535,7 @@ static inline void fasta_piz_desc_header_one (VBlock *vb, char *desc_start)
     *AFTERENT (char, vb->txt_data) = 0; // nul-terminate
     unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
     
-    vb->txt_data.len -= reconstructed_len - chrom_name_len;
+    vb->txt_data.len -= reconstructed_len - chrom_name_len -1;
 }
 
 SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
@@ -545,12 +551,19 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
     if (flag.grep) 
         fasta_vb->contig_grepped_out = !strstr (desc_start, flag.grep);
     
-    unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
+    unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n"); // +1 to skip the '>'
+    
+    // --taxid: grep out by Kraken taxid 
+    if (flag.kraken_taxid) 
+        fasta_vb->contig_grepped_out |= 
+            (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTA_TAXID)) ||
+            ( kraken_is_loaded && !kraken_is_included_loaded (vb, desc_start + 1, chrom_name_len));
+    
     vb->chrom_node_index = ctx_search_for_word_index (&vb->contexts[CHROM], desc_start + 1, chrom_name_len);
 
     // note: this logic allows the to grep contigs even if --no-header 
     if (fasta_vb->contig_grepped_out || flag.no_header)
-        fasta_vb->dont_show_curr_line = true;     
+        fasta_vb->drop_curr_line = true;     
 
     if (flag.out_dt == DT_PHYLIP) 
         fasta_piz_translate_desc_to_phylip (vb, desc_start);
@@ -571,6 +584,10 @@ bool fasta_piz_read_one_vb (VBlock *vb, ConstSecLiEntP sl)
     return true;
 }
 
+//---------------------------------------
+// Multifasta -> PHYLIP translation stuff
+//---------------------------------------
+
 // create Phylip header line
 TXTHEADER_TRANSLATOR (txtheader_fa2phy)
 {
@@ -578,4 +595,24 @@ TXTHEADER_TRANSLATOR (txtheader_fa2phy)
     uint32_t contig_len = random_access_verify_all_contigs_same_length();
 
     bufprintf (evb, txtheader_buf, "%"PRIu64" %u\n", z_file->contexts[FASTA_CONTIG].word_list.len, contig_len);
+}
+
+// Translating FASTA->PHYLIP: drop EOL after DESC + don't allow multiple consecutive EOL
+TRANSLATOR_FUNC (fasta_piz_fa2phy_EOL)
+{
+    VBlockFASTA *fasta_vb = (VBlockFASTA *)vb;
+
+    if (fasta_vb->last_line == FASTA_LINE_DESC // line is a DESC
+    ||  reconstructed == vb->txt_data.data     // initial EOL - not allowed in Phylip)
+    ||  reconstructed[-1] == '\n')             // previous item was an EOL - remove this one then
+    
+        vb->txt_data.len -= reconstructed_len;
+    
+    return 0;
+}
+
+CONTAINER_FILTER_FUNC (fasta_piz_filter)
+{
+    // currently unused, but specified in FASTA toplevel containers created up to v11, so the function needs to exist
+    return 0;
 }

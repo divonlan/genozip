@@ -133,6 +133,9 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == dict_id_INFO_AF              ||
         dict_id.num == dict_id_INFO_AN              ||
         dict_id.num == dict_id_INFO_DP              ||
+        dict_id.num == dict_id_INFO_MLEAC           ||
+        dict_id.num == dict_id_INFO_MLEAF           ||
+        dict_id.num == dict_id_INFO_MQ0             ||
         dict_id.num == dict_id_INFO_LIFTOVER        ||
         dict_id.num == dict_id_INFO_LIFTBACK        ||
         dict_id.num == dict_id_INFO_LIFTREJT        ||
@@ -445,7 +448,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, const char *value, int value
 
     uint32_t counts[4], sorted_counts[4] = {}; // corresponds to A, C, G, T
 
-    SAFE_ASSIGN (&value[value_len], 0);
+    SAFE_NUL (&value[value_len]);
     for (unsigned i=0; i < 4; i++) {
         counts[i] = strtoul (str, &str, 10);
         str++; // skip comma seperator

@@ -23,7 +23,18 @@ extern void phy_seg_finalize (VBlockP vb);
 extern bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern const char *phy_seg_txt_line (VBlockP vb, const char *line, uint32_t remaining_txt_len, bool *has_13);
 
-// PIZ side
+//---------------------------------------
+// PHYLIP -> Multifasta translation stuff
+//---------------------------------------
+
+// Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
+// (they are included in the TOPLEVEL container)
+// translator numbers must start from 1 - 0 is reserved for "none"
+TRANSLATOR (PHYLIP, FASTA, 1, ID, phy_piz_phy2fasta_ID)   // remove final spaces
+
+#define NUM_PHYLIP_TRANS 2 // including "none"
+#define PHYLIP_TRANSLATORS { NULL /* none */, phy_piz_phy2fasta_ID }
+
 TXTHEADER_TRANSLATOR (txtheader_phy2fa);
 
 #endif

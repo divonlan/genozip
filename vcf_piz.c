@@ -26,16 +26,22 @@ bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (dict_id.num == dict_id_fields[VCF_FORMAT] || dict_id.num == dict_id_fields[VCF_SAMPLES] || dict_id_is_vcf_format_sf (dict_id)))
         return true;
 
-    if (flag.gt_only && dict_id_is_vcf_format_sf (dict_id) 
+    if (flag.gt_only && sections_has_dict_id (st) && dict_id_is_vcf_format_sf (dict_id) 
         && dict_id.num != dict_id_FORMAT_GT
         && dict_id.num != dict_id_FORMAT_GT_HT
-        && dict_id.num != dict_id_FORMAT_GT_HT_INDEX
-        && dict_id.num != dict_id_FORMAT_GT_SHARK_DB
-        && dict_id.num != dict_id_FORMAT_GT_SHARK_GT
-        && dict_id.num != dict_id_FORMAT_GT_SHARK_EX
         && dict_id.num != dict_id_PBWT_RUNS
-        && dict_id.num != dict_id_PBWT_FGRC)
+        && dict_id.num != dict_id_PBWT_FGRC
+        && dict_id.num != dict_id_FORMAT_GT_HT_INDEX
+        && dict_id.num != dict_id_FORMAT_GT_SHARK_DB // --gtshark last existed in v10
+        && dict_id.num != dict_id_FORMAT_GT_SHARK_GT
+        && dict_id.num != dict_id_FORMAT_GT_SHARK_EX)
         return true;
+
+    // if --count, we only need TOPLEVEL and the fields needed for the available filters (--regions)
+    if (flag.count && sections_has_dict_id (st) &&
+        (     dict_id.num != dict_id_fields[VCF_TOPLEVEL] && 
+              dict_id.num != dict_id_fields[VCF_CHROM]    && // easier to always have CHROM
+             (dict_id.num != dict_id_fields[VCF_POS] || !flag.regions))) return true;
 
     return false;
 }
@@ -487,9 +493,9 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFTBACK)
 void vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (VBlock *vb)
 {
     // conditions for dropping a line in --luft
-    if ((!vb->is_rejects_vb && vb->last_index (VCF_oSTATUS) != LO_OK) || // drop primary lines that are rejected (note: for sorted files, rejects are already excluded from the reconstruction plan in sorter_zip_merge_vb_do)
+    if ((!vb->is_rejects_vb && vb->last_index (VCF_oSTATUS) != LO_OK) || // drop primary lines that are rejected (note: for sorted files, rejects are already excluded from the reconstruction plan in linesorter_merge_vb_do)
         ( vb->is_rejects_vb && (flag.no_header || flag.header_one)))     // drop rejects in --no-header or --header-one 
-        vb->dont_show_curr_line = true;
+        vb->drop_curr_line = true;
 }
 
 TRANSLATOR_FUNC (vcf_piz_luft_AC)
@@ -534,7 +540,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_GL)
 CONTAINER_CALLBACK (vcf_piz_container_cb)
 {
     VBlockVCFP vcf_vb = (VBlockVCFP)vb;
-    bool have_INFO_SF = vcf_vb->sf_snip.len > 0;
+    #define have_INFO_SF  (vcf_vb->sf_snip.len > 0)
 
     // case: we have an INFO/SF field and we reconstructed and we reconstructed a repeat (i.e. one ht) GT field of a sample 
     if (dict_id.num == dict_id_FORMAT_GT && have_INFO_SF) 

@@ -24,6 +24,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
 #define VBLOCK_COMMON_FIELDS \
     uint32_t vblock_i;         /* number of variant block within VCF file */\
     int id;                    /* id of vb within the vb pool (-1 is the external vb) */\
+    int compute_thread_id;     /* id of compute thread currently processing this VB */ \
+    \
     DataType data_type;        /* type of this VB */\
     \
     /* memory management  */\
@@ -34,7 +36,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     bool in_use;               /* this vb is in use */\
     \
     /* tracking lines */\
-    Buffer lines;              /* An array of *DataLine* - the lines in this VB */\
+    Buffer lines;              /* ZIP: An array of *DataLine* - the lines in this VB */\
+                               /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is AFTERENT(txt_data). */\
     uint32_t first_line;       /* PIZ: line number in txt file (counting from 1), of this variant block */\
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
     \
@@ -48,7 +51,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Digest digest_so_far;      /* partial calculation of MD5 up to and including this VB */ \
     uint32_t component_i;      /* PIZ: 0-based txt component within z_file that this VB belongs to */ \
     \
-    bool dont_show_curr_line;  /* PIZ: line currently in reconstruction is grepped out due to --grep or --regions and should not be displayed */\
+    bool drop_curr_line;       /* PIZ: line currently in reconstruction is grepped out due to --grep or --regions and should not be displayed */\
+    uint32_t num_nondrop_lines;/* PIZ: number of lines NOT dropped as a result of drop_curr_line */\
     GrepStages grep_stages;    /* PIZ: tell piz_is_skip_section what to skip in case of --grep */\
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
@@ -79,7 +83,6 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint32_t seq_len;          /* PIZ - last calculated seq_len (as defined by each data_type) */\
     \
     /* regions & filters */ \
-    Buffer region_X_ra_matrix; /* PIZ: a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region */\
     \
     /* used by --show-coverage and --show-sex */ \
     Buffer coverage;           /* number of bases of each contig - exluding 'S' CIGAR, excluding reads flagged as Duplicate, Seconday arnd Failed filters */ \
@@ -129,6 +132,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer section_list_buf;   /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     \
     /* Codec stuff */ \
+    Codec codec_using_codec_bufs; /* codec currently using codec_bufs */\
     Buffer codec_bufs[NUM_CODEC_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
     \
     /* used by CODEC_ACGT (For SEQ) */ \
@@ -156,10 +160,17 @@ typedef struct ZipDataLine {
 
 extern void vb_cleanup_memory(void);
 extern VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i);
-extern void vb_initialize_evb(void);
-extern void vb_release_vb (VBlock *vb);
+extern void vb_destroy_vb (VBlockP *vb_p);
+
+#define EVB -1 // ID of VB used by main thread 
+#define WVB -2 // ID of VB used by writer thread
+extern VBlockP vb_initialize_special_vb(int vb_id);
+extern void vb_release_vb (VBlock *vb, const char *func);
 extern void vb_destroy_all_vbs (void);
 
+// -------------
+// vb_pool stuff
+// -------------
 typedef struct {
     unsigned num_vbs; // length of array of pointers to VBlock
     unsigned num_allocated_vbs; // number of VBlocks allocated ( <= num_vbs )
@@ -167,6 +178,8 @@ typedef struct {
 } VBlockPool;
 extern void vb_create_pool (unsigned num_vbs);
 extern VBlockPool *vb_get_pool(void);
+#define vb_get_from_pool(vb_i) (((vb_i) == EVB) ? evb : ((vb_i) == WVB) ? wvb : vb_pool->vb[vb_i])
+
 #endif
 
 //-----------------------------------------

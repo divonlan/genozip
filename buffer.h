@@ -89,7 +89,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     buf_alloc_old ((VBlockP)(vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
 
 #define buf_alloc_zero(vb, buf, more, at_least, element_type, grow_at_least_factor,name) do { \
-    uint64_t size_before = ((buf)->type == BUF_UNALLOCATED) ? 0 : (buf)->size; \
+    uint64_t size_before = (buf)->data ? (buf)->size : 0; \
     buf_alloc((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
     if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 } while(0)
@@ -176,6 +176,7 @@ extern void buf_add_int (VBlockP vb, Buffer *buf, int64_t value);
 
 #define BUFPRINTF_MAX_LEN 5000
 #define bufprintf(vb, buf, format, ...)  do { char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_add_string ((vb), (buf), __s); } while (0)
+#define bufprint0 buf_add_string 
 
 extern void buf_print (Buffer *buf, bool add_newline);
 
@@ -204,6 +205,9 @@ extern void buf_low_level_free (void *p, const char *func, uint32_t code_line);
 extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t code_line);
 #define MALLOC(size) buf_low_level_malloc (size, false, __FUNCTION__, __LINE__)
 #define CALLOC(size) buf_low_level_malloc (size, true,  __FUNCTION__, __LINE__)
+
+extern void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line);
+#define REALLOC(p,size,name) buf_low_level_realloc ((p), (size), (name), __FUNCTION__, __LINE__)
 
 extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs, bool verbose);
 

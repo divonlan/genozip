@@ -32,6 +32,7 @@ void sam_vb_release_vb (VBlockSAM *vb)
     vb->ref_consumed = vb->ref_and_seq_consumed = 0;
     vb->a_bases = vb->x_bases = vb->y_bases = 0;
     vb->a_index = vb->x_index = vb->y_index = 0;
+    vb->soft_clip = 0;
     buf_free (&vb->bd_bi_line);
     buf_free (&vb->textual_cigar);
     buf_free (&vb->textual_seq);

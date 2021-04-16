@@ -24,6 +24,7 @@
 #include "version.h"
 #include "chain.h"
 #include "reconstruct.h"
+#include "zfile.h"
 
 typedef struct {
     WordIndex src_chrom; // index in CHAIN_NAMESRC
@@ -98,7 +99,7 @@ void chain_seg_initialize (VBlock *vb)
 
 void chain_seg_finalize (VBlockP vb)
 {
-    // top level snip - IMPORTNAT - if changing fields, update chain_piz_filter
+    // top level snip - IMPORTNAT - chain_piz_filter needs to changed and support backward compatability
     SmallContainer top_level = { 
         .repeats      = vb->lines.len,
         .is_toplevel  = true,
@@ -365,7 +366,7 @@ static inline void chain_piz_filter_ingest_alignmet (VBlock *vb)
     
     mutex_unlock (chain_mutex);
 
-    vb->dont_show_curr_line = true;
+    vb->drop_curr_line = true;
 }
 
 // verify that adding up all alignments and gaps, results in the end position specified in the header
@@ -491,28 +492,24 @@ static void chain_contigs_show (const Buffer *contigs, const Buffer *dict, const
 void chain_load (void)
 {
     ASSERTNOTNULL (flag.reading_chain);
-    SAVE_FLAGS;
+    SAVE_FLAGS_AUX;
 
     buf_alloc (evb, &chain, 0, 1000, ChainAlignment, 1, "chain"); // must be allocated by main thread
     
     z_file = file_open (flag.reading_chain, READ, Z_FILE, DT_CHAIN);    
-    z_file->basename = file_basename (flag.reading_chain, false, "(chain-file)", NULL, 0);
+    zfile_read_genozip_header (0,0,0);
+    
+    ASSINP (z_file->data_type == DT_CHAIN, "expected %s to be a genozip'ed chain file, but its a %s file. Tip: compress the chain with \"genozip --input chain\"", 
+            z_name, dt_name (z_file->data_type));
 
-    // save and reset flags that are intended to operate on the compressed file rather than the reference file
-    flag.test = flag.md5 = flag.show_memory = flag.show_stats= flag.no_header =
-    flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict = 
-    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.interleave = 0;
-    flag.grep = flag.show_time = flag.unbind = 0;
-    flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE;
-    flag.show_one_dict = NULL;
+    z_file->basename = file_basename (flag.reading_chain, false, "(chain-file)", NULL, 0);
 
     TEMP_VALUE (command, PIZ);
 
-    TEMP_FLAG (quiet, true); // don't show progress indicator for the chain file - it is very fast 
+    flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.may_drop_lines = true; // if fact, we drop all the lines
     Dispatcher dispachter = piz_z_file_initialize (false);
     piz_one_txt_file (dispachter, 0, true, false);
-    RESTORE_FLAG (quiet);
 
     // --show-chain-contigs
     if (flag.show_chain_contigs) {

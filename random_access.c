@@ -235,39 +235,24 @@ static const RAEntry *random_access_get_first_ra_of_vb_do (uint32_t vb_i, const 
 }
 #define random_access_get_first_ra_of_vb(vb_i) random_access_get_first_ra_of_vb_do (vb_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf))
 
-// PIZ main thread: check if for the given VB,
+// PIZ main thread (called from writer_init_vb_info): check if for the given VB,
 // the ranges in random access (from the file) overlap with the ranges in regions (from the command line --regions)
-bool random_access_is_vb_included (uint32_t vb_i,
-                                   Buffer *region_X_ra_matrix) // out - a bytemap - rows are ra's of this VB, columns are regions, a cell is 1 if there's an intersection
+bool random_access_is_vb_included (uint32_t vb_i)
 {
     if (!flag.regions ||      // no --regions were specified
         !z_file->ra_buf.len)  // this file has no RA data (eg unaligned SAM/BAM)
         return true; // all VBs are included
-
-    ASSERT0 (region_X_ra_matrix, "region_X_ra_matrix is NULL");
-
-    // allocate bytemap.
-    ASSERTNOTINUSE (*region_X_ra_matrix);
 
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i);
     
     // case: an entire VB without RA data while some other VBs do have. For example - a sorted SAM where unaligned reads are pushed to the end of the file
     if (!ra) return false; // don't include this VB
 
-    unsigned num_regions = regions_max_num_chregs();
-    buf_alloc_old (evb, region_X_ra_matrix, z_file->ra_buf.len * num_regions, 1, "region_X_ra_matrix");
-    buf_zero (region_X_ra_matrix);
+    for (uint32_t ra_i=0; ra->vblock_i == vb_i; ra_i++, ra++) 
+        if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos))
+            return true; // vb is included
 
-    bool vb_is_included = false;
-    for (unsigned ra_i=0; ra->vblock_i == vb_i; ra_i++, ra++) {
-        if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos,
-                                         &region_X_ra_matrix->data[ra_i * num_regions]))  // the matrix row for this ra
-            vb_is_included = true; 
-    }   
-
-    if (!vb_is_included) buf_destroy (region_X_ra_matrix);
-
-    return vb_is_included; 
+    return false; 
 }
 
 // PIZ main threads: get last vb_i that is included in the regions requested with --regions, or -1 if no vb includes regions.
@@ -280,7 +265,7 @@ int32_t random_access_get_last_included_vb_i (void)
         const RAEntry *ra = ENT (RAEntry, z_file->ra_buf, ra_i);
         if ((int32_t)ra->vblock_i <= last_vb_i) continue; // we already decided to include this vb_i - no need to check further
 
-        if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos, NULL))
+        if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos))
             last_vb_i = (int32_t)ra->vblock_i; 
     }   
     return last_vb_i;

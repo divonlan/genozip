@@ -29,7 +29,8 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_REF_ALT_CHROMS  = 13,
     SEC_STATS           = 14,
     SEC_BGZF            = 15, // optionally appears per component (txt header) and contains the uncompressed sizes of the source file bgzf block
-    SEC_RECON_PLAN      = 16,
+    SEC_RECON_PLAN      = 16, // introduced v12
+    SEC_COUNTS          = 17, // introduced v12
 
     NUM_SEC_TYPES // fake section for counting
 } SectionType;
@@ -53,6 +54,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     {"SEC_STATS",           sizeof (SectionHeader)              }, \
     {"SEC_BGZF",            sizeof (SectionHeader)              }, \
     {"SEC_RECON_PLAN",      sizeof (SectionHeaderReconPlan)     }, \
+    {"SEC_COUNTS",          sizeof (SectionHeaderCounts)        }, \
 }
 
 // Section headers - big endian
@@ -83,6 +85,7 @@ typedef union SectionFlags {
         uint8_t bgzf             : 1;        // Reconstruct as BGZF (user may override) (determined by the last component)
         uint8_t adler            : 1;        // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
         uint8_t dual_coords      : 1;        // file supports dual coordinates - last TXT section is the "liftover rejects" data
+        uint8_t has_taxid        : 1;        // each line in the file has Taxonomic ID information
     } genozip_header;
 
     struct FlagsTxtHeader {
@@ -184,7 +187,13 @@ typedef struct {
     SectionHeader h;           
     uint32_t num_snips;        // number of items in dictionary
     DictId   dict_id;           
-} SectionHeaderDictionary; 
+} SectionHeaderDictionary;    
+
+typedef struct {
+    SectionHeader h;           
+    int64_t  nodes_param;      // an extra piece of data transferred to/from Context.counts_extra
+    DictId   dict_id;           
+} SectionHeaderCounts;     
 
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
 typedef enum __attribute__ ((__packed__)) { // 1 byte
@@ -243,8 +252,9 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 typedef struct {
     SectionHeader h;
     LocalType ltype; // used by SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
-    uint8_t param;   // Two options: 1. goes into ctx.b250/local.param if flags.copy_param. 
-                     //              2. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
+    uint8_t param;   // Three options: 1. goes into ctx.b250/local.param if flags.copy_param. (4/4/2021: actually NOT b250 bc not implemented in zfile_compress_b250_data) 
+                     //                2. given to comp_uncompress as a codec parameter
+                     //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
     uint8_t ffu[2];
     DictId dict_id;           
 } SectionHeaderCtx;         
@@ -276,7 +286,7 @@ typedef struct {
 // SEC_RECON_PLAN, contains ar array of ReconPlanItem
 typedef struct SectionHeaderReconPlan {
     SectionHeader h;
-    uint32_t num_txt_data_bufs;// max number of concurrent txt_data buffers needed to execute this plan    
+    uint32_t conc_writing_vbs; // max number of concurrent VBs in possesion of the writer thread needed to execute this plan    
     uint32_t vblock_mb;        // size of vblock in MB
 } SectionHeaderReconPlan;
 
@@ -363,12 +373,19 @@ extern void sections_pull_component_up (const SecLiEnt *txtfile_sl_after_me, con
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);
+#define sections_has_dict_id(st) ((st) == SEC_B250 || (st) == SEC_LOCAL || (st) == SEC_DICT || (st) == SEC_COUNTS)
 extern SectionType sections_st_by_name (char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
 extern void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */);
 
 extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
+
+// z_file sizes
+extern int64_t sections_get_section_size (const SecLiEnt *sl);
+extern int64_t sections_get_vb_size (const SecLiEnt *sl);
+extern int64_t sections_get_vb_skipped_sections_size (const SecLiEnt *vb_header_sl);
+extern int64_t sections_get_ref_size (void);
 
 extern const char *lt_name (LocalType lt);
 

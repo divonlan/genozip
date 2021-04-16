@@ -9,9 +9,10 @@
 #include "genozip.h"
 
 #define IS_NUCLEOTIDE(c) ((c) == 'A' || (c) == 'T' || (c) == 'C' || (c) == 'G')
-#define IS_DIGIT(c)   ((c)>='0' && (c)<='9')
-#define IS_CLETTER(c) ((c)>='A' && (c)<='Z')
-#define IS_SLETTER(c) ((c)>='a' && (c)<='z')
+#define IS_DIGIT(c)    ((c)>='0' && (c)<='9')
+#define IS_HEXDIGIT(c) (((c)>='0' && (c)<='9') || ((c)>='A' && (c)<='F') || ((c)>='a' && (c)<='f'))
+#define IS_CLETTER(c)  ((c)>='A' && (c)<='Z')
+#define IS_SLETTER(c)  ((c)>='a' && (c)<='z')
 #define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
 #define IS_NON_WS_PRINTABLE(c) (((c)>=33) && ((c)<=126))
 #define IS_VALID_URL_CHAR(c) (IS_LETTER(c) || IS_DIGIT(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
@@ -39,8 +40,16 @@ extern StrText str_int_s (int64_t n);
 
 extern unsigned str_int (int64_t n, char *str /* out */);
 extern _Bool str_get_int (const char *str, unsigned str_len, int64_t *value); // note: for a reason beyond me, Docker hub won't compile if its "bool" and not "_Bool"
-extern _Bool str_get_int_range64 (const char *str, unsigned str_len, int64_t min_val, int64_t max_val, int64_t *value);
-extern _Bool str_get_int_range32 (const char *str, unsigned str_len, int32_t min_val, int32_t max_val, int32_t *value);
+extern _Bool str_get_int_range8  (const char *str, unsigned str_len, uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
+extern _Bool str_get_int_range16 (const char *str, unsigned str_len, uint16_t min_val, uint16_t max_val, uint16_t *value);
+extern _Bool str_get_int_range64 (const char *str, unsigned str_len, int64_t  min_val, int64_t  max_val, int64_t  *value);
+extern _Bool str_get_int_range32 (const char *str, unsigned str_len, int32_t  min_val, int32_t  max_val, int32_t  *value);
+
+extern _Bool str_get_int_hex (const char *str, unsigned str_len, uint64_t *value); 
+extern _Bool str_get_int_range_allow_hex8  (const char *str, unsigned str_len, uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
+extern _Bool str_get_int_range_allow_hex16 (const char *str, unsigned str_len, uint16_t min_val, uint16_t max_val, uint16_t *value);
+extern _Bool str_get_int_range_allow_hex32 (const char *str, unsigned str_len, uint32_t min_val, uint32_t max_val, uint32_t *value);
+extern _Bool str_get_int_range_allow_hex64 (const char *str, unsigned str_len, uint64_t min_val, uint64_t max_val, uint64_t *value);
 
 #define str_is_int(str,str_len) str_get_int ((str), (str_len), NULL)
 

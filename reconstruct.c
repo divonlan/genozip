@@ -15,6 +15,7 @@
 #include "piz.h"
 #include "base64.h"
 #include "regions.h"
+#include "threads.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new lacon_pos
 // Special values:
@@ -225,6 +226,13 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     }
 
+    case SNIP_OTHER_COPY: 
+        base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
+        RECONSTRUCT (ENT (char, vb->txt_data, base_ctx->last_txt), base_ctx->last_txt_len);
+        new_value = base_ctx->last_value; 
+        have_new_value = true;
+        break;
+
     case SNIP_CONTAINER:
         new_value = container_reconstruct (vb, snip_ctx, word_index, snip+1, snip_len-1);
         have_new_value = true;
@@ -291,7 +299,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
                                  char sep, // if non-zero, outputs after the reconstruction
                                  bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data
 {
-    ASSERT (did_i < vb->num_contexts, "did_i=%u out of range: vb->num_contexts=%u for vb=%u", did_i, vb->num_contexts, vb->vblock_i);
+    ASSERT (did_i < vb->num_contexts, "did_i=%u out of range: vb->num_contexts=%u for vb_i=%u", did_i, vb->num_contexts, vb->vblock_i);
 
     Context *ctx = &vb->contexts[did_i];
 
@@ -326,7 +334,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         // test for exclusion of the line due to --regions
         if (flag.regions && did_i == DTF(test_regions) && vb->chrom_node_index != WORD_INDEX_NONE &&
             !regions_is_site_included (vb->chrom_node_index, DTF(pos)!=-1 ? vb->contexts[DTF(pos)].last_value.i : 1))
-            vb->dont_show_curr_line = true;
+            vb->drop_curr_line = true;
     }
     
     // case: all data is only in local
@@ -371,7 +379,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         if (reconstruct) { RECONSTRUCT1('\n'); }
     }
 
-    else ASSERT (flag.show_sex || flag.show_coverage || flag.idxstats || flag.drop_genotypes, // in --show-sex/coverage/idxstats, we filtered out most contexts in sam_piz_is_skip_section, so this is expected
+    else ASSERT (flag.collect_coverage || flag.count || flag.drop_genotypes, // in collect_coverage and count, we filtered out most contexts in sam_piz_is_skip_section, so this is expected
                  "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
                  ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 

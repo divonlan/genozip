@@ -28,7 +28,9 @@
 #include "flags.h"
 #include "reconstruct.h"
 #include "coverage.h"
-#include "sorter.h"
+#include "writer.h"
+#include "strings.h"
+#include "threads.h"
 
 // called by main thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
@@ -47,7 +49,7 @@ bool piz_test_grep (VBlock *vb)
     if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
     
     // we only need room for one line for now 
-    buf_alloc_old (vb, &vb->txt_data, vb->longest_line_len, 1.1, "txt_data");
+    buf_alloc (vb, &vb->txt_data, 0, vb->longest_line_len, char, 1.1, "txt_data");
 
     // uncompress & map desc field (filtered by piz_is_skip_section)
     vb->grep_stages = GS_TEST; // tell piz_is_skip_section to skip decompressing sections not needed for determining the grep
@@ -112,12 +114,18 @@ bool piz_test_grep (VBlock *vb)
 
 bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
-    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+    if (!vb) return false; // we don't skip reading any SEC_DICT / SEC_COUNTS sections
 
-    bool skip = 
-        (flag.dump_one_local_dict_id.num && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num && dict_id.num != dict_id_fields[CHROM])
-    ||  (flag.dump_one_b250_dict_id.num  && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num && dict_id.num != dict_id_fields[CHROM]);
+    bool skip = exe_type == EXE_GENOCAT && dict_id.num != dict_id_fields[CHROM] && (
+    
+    // if dump_local/dump_b250/show_counts - we only need the requested section and CHROM.
+        (flag.dump_one_local_dict_id.num && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num)
+    ||  (flag.dump_one_b250_dict_id.num  && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num)
+    ||  (flag.show_one_counts.num        && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
 
+    // if --counts, we filter here - TOPLEVEL only - unless there's a skip_section function which will do the filtering
+    ||  (flag.count && !DTPZ(is_skip_section) && dict_id.num != dict_id_fields[DTFZ(toplevel)]) 
+    );
     return skip;
 }
 
@@ -128,87 +136,81 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 {
     ARRAY (const unsigned, section_index, vb->z_section_headers);
     
-    uint32_t section_i = pair_vb_i ? 0 : 1; // normally, we skip the VB header, but when uncompressing paired sections there is no VB header
-    while (section_i < vb->z_section_headers.len) {
-
-        if (section_i == vb->z_section_headers.len) break; // no more sections left
+    uint64_t section_i = pair_vb_i ? 0 : 1; // normally, we skip the VB header (starting from 1), but when uncompressing paired sections there is no VB header
+    for ( ; section_i < vb->z_section_headers.len; section_i++) {
 
         SectionHeaderCtx *header = (SectionHeaderCtx *)ENT (char, vb->z_data, section_index[section_i]);
 
         bool is_local = header->h.section_type == SEC_LOCAL;
         bool is_b250  = header->h.section_type == SEC_B250;
-        if (is_b250 || is_local) {
-            Context *ctx = ctx_get_ctx (vb, header->dict_id); // creates the context
+        if (!is_b250 && !is_local) break;
 
-            // case: in ZIP & we are PAIR_2, reading PAIR_1 info - save flags, ltype, lcodec to restore later
-            struct FlagsCtx save_flags={}; LocalType save_ltype=0; Codec save_lcodec=0;
-            if (pair_vb_i && command == ZIP) { save_flags=ctx->flags; save_ltype=ctx->ltype; save_lcodec=ctx->lcodec; }
-            
-            *(uint8_t*)&ctx->flags |= header->h.flags.flags; // ??? is |= really needed? or is assignment sufficient?
+        Context *ctx = ctx_get_ctx (vb, header->dict_id); // creates the context
 
-            ctx->ltype  = header->ltype;
-            if (is_local) ctx->lcodec = header->h.codec;
+        // case: in ZIP & we are PAIR_2, reading PAIR_1 info - save flags, ltype, lcodec to restore later
+        struct FlagsCtx save_flags={}; LocalType save_ltype=0; Codec save_lcodec=0;
+        if (pair_vb_i && command == ZIP) { save_flags=ctx->flags; save_ltype=ctx->ltype; save_lcodec=ctx->lcodec; }
+        
+        *(uint8_t*)&ctx->flags |= header->h.flags.flags; // ??? is |= really needed? or is assignment sufficient?
 
-            // case: in PIZ: flags.paired appears on the sections the "pair 2" VB (that come first in section_index)
-            if (ctx->flags.paired && !pair_vb_i) 
-                pair_vb_i = fastq_get_pair_vb_i (vb);
+        ctx->ltype  = header->ltype;
+        if (is_local) ctx->lcodec = header->h.codec;
 
-            bool is_pair_section = (BGEN32 (header->h.vblock_i) == pair_vb_i); // is this a section of "pair 1" 
+        // case: in PIZ: flags.paired appears on the sections the "pair 2" VB (that come first in section_index)
+        if (ctx->flags.paired && !pair_vb_i) 
+            pair_vb_i = fastq_get_pair_vb_i (vb);
 
-            if (is_pair_section) {
-                // overcome bug in ZIP --pair - local sections with junk data created in addition to the expected b250.
-                // we ignore these local sections (or allow b250 to overwrite them)
-                if (is_local && ctx->pair_b250) goto skip_uncompress_due_to_old_bug;
+        bool is_pair_section = (BGEN32 (header->h.vblock_i) == pair_vb_i); // is this a section of "pair 1" 
 
-                ctx->pair_flags = header->h.flags.ctx;            
-                ctx->pair_b250  = is_b250;                
-                ctx->pair_local = is_local;
-            }
+        if (is_pair_section) {
+            // overcome bug in ZIP --pair - local sections with junk data created in addition to the expected b250.
+            // we ignore these local sections (or allow b250 to overwrite them)
+            if (is_local && ctx->pair_b250) goto skip_uncompress_due_to_old_bug;
 
-            // initialize b250 iterator
-            if (is_b250) {
-                if (is_pair_section) ctx->pair_b250_iter = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->pair), .prev_word_index = WORD_INDEX_NONE };
-                else                 ctx->iterator       = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->b250), .prev_word_index = WORD_INDEX_NONE };
-            }
+            ctx->pair_flags = header->h.flags.ctx;            
+            ctx->pair_b250  = is_b250;                
+            ctx->pair_local = is_local;
+        }
 
-            Buffer *target_buf = is_local ? &ctx->local : &ctx->b250;
+        // initialize b250 iterator
+        if (is_b250) {
+            if (is_pair_section) ctx->pair_b250_iter = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->pair), .prev_word_index = WORD_INDEX_NONE };
+            else                 ctx->iterator       = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->b250), .prev_word_index = WORD_INDEX_NONE };
+        }
 
-            zfile_uncompress_section (vb, header, 
-                                      is_pair_section ? &ctx->pair      : target_buf, 
-                                      is_pair_section ? "context->pair" : is_local ? "contexts->local" : "contexts->b250", 
-                                      is_pair_section ? pair_vb_i : vb->vblock_i,
-                                      header->h.section_type); 
+        Buffer *target_buf = is_local ? &ctx->local : &ctx->b250;
 
-            if (!is_pair_section && is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
-                ctx_dump_binary (vb, ctx, true);
+        zfile_uncompress_section (vb, header, 
+                                    is_pair_section ? &ctx->pair      : target_buf, 
+                                    is_pair_section ? "context->pair" : is_local ? "contexts->local" : "contexts->b250", 
+                                    is_pair_section ? pair_vb_i : vb->vblock_i,
+                                    header->h.section_type); 
 
-            if (!is_pair_section && !is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
-                ctx_dump_binary (vb, ctx, false);
+        if (!is_pair_section && is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
+            ctx_dump_binary (vb, ctx, true);
+
+        if (!is_pair_section && !is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
+            ctx_dump_binary (vb, ctx, false);
 
 #           define adjust_lens(buf) { \
-                buf.len /= lt_desc[ctx->ltype].width; \
-                if (ctx->ltype == LT_BITMAP) { \
-                    buf.param = buf.len * 64 - header->param ; /* number of bits */ \
-                    LTEN_bit_array (buf_get_bitarray (&buf)); \
-                } \
-                else if (lt_desc[ctx->ltype].file_to_native)   \
-                    lt_desc[ctx->ltype].file_to_native (&buf, &ctx->ltype); \
-            }
+            buf.len /= lt_desc[ctx->ltype].width; \
+            if (ctx->ltype == LT_BITMAP) { \
+                buf.param = buf.len * 64 - header->param ; /* number of bits */ \
+                LTEN_bit_array (buf_get_bitarray (&buf)); \
+            } \
+            else if (lt_desc[ctx->ltype].file_to_native)   \
+                lt_desc[ctx->ltype].file_to_native (&buf, &ctx->ltype); \
+        }
 
-            if      (is_pair_section) adjust_lens (ctx->pair)
-            else if (is_local)        adjust_lens (ctx->local)
+        if      (is_pair_section) adjust_lens (ctx->pair)
+        else if (is_local)        adjust_lens (ctx->local)
 
-            if (header->h.flags.ctx.copy_param)
-                target_buf->param = header->param;
+        if (header->h.flags.ctx.copy_param)
+            target_buf->param = header->param;
 
 skip_uncompress_due_to_old_bug:
-            // restore
-            if (pair_vb_i && command == ZIP) { ctx->flags=save_flags; ctx->ltype=save_ltype; ctx->lcodec=save_lcodec; }
-
-            section_i++;
-        }    
-
-        else break;
+        // restore
+        if (pair_vb_i && command == ZIP) { ctx->flags=save_flags; ctx->ltype=save_ltype; ctx->lcodec=save_lcodec; }
     }
 
     // initialize pair iterators (pairs only exist in fastq)
@@ -225,19 +227,20 @@ skip_uncompress_due_to_old_bug:
 }
 
 // PIZ compute thread entry point
-static void piz_uncompress_one_vb (VBlock *vb)
+static void piz_reconstruct_one_vb (VBlock *vb)
 {
     START_TIMER;
 
-    ASSERT (!flag.reference || (genome && genome->nbits) ||
-             (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage || flag.idxstats)), // reference data not loaded in genocat --show-sex/coverage
-             "reference is not loaded correctly (vb=%u)", vb->vblock_i);
+    ASSERTNOTNULL (vb);
+    ASSERT (!flag.reference || (genome && genome->nbits) || flag.genocat_no_ref_file,
+            "reference is not loaded correctly (vb=%u)", vb->vblock_i);
 
     DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
 
     // note: txt_data is fully allocated in advance and cannot be extended mid-reconstruction (container_reconstruct_do and possibly others rely on this)
-    buf_alloc_old (vb, &vb->txt_data, vb->vb_data_size * trans.factor + 10000, 1.1, "txt_data"); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
-
+    buf_alloc (vb, &vb->txt_data, 0, vb->vb_data_size * trans.factor + 10000, char, 1.1, "txt_data"); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
+    buf_alloc (vb, &vb->lines, 0, vb->lines.len+1, char *, 1.1, "lines");
+    
     piz_uncompress_all_ctxs (vb, 0);
 
     // genocat flags that with which we needn't reconstruct
@@ -253,6 +256,8 @@ static void piz_uncompress_one_vb (VBlock *vb)
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
     if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified && !flag.reading_chain) 
         digest_one_vb (vb); 
+
+    threads_log_by_vb (vb, "piz", "READY TO BE JOINED");
 
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
@@ -272,7 +277,6 @@ static void piz_read_all_ctxs (VBlock *vb, ConstSecLiEntP *next_sl)
         ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, (*next_sl)->dict_id);
 
         int32_t ret = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", (*next_sl)->st, *next_sl); // returns 0 if section is skipped
-
         if (ret) vb->z_section_headers.len++;
         (*next_sl)++;                             
     }
@@ -306,6 +310,8 @@ DataType piz_read_global_area (void)
         
         ctx_read_all_dictionaries(); // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs()
 
+        ctx_read_all_counts(); // read all counts section
+
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
         if (flag.regions && z_file->contexts[CHROM].word_list.len) // FASTQ compressed without reference, has no CHROMs 
             regions_make_chregs();
@@ -329,7 +335,8 @@ DataType piz_read_global_area (void)
             !(flag.show_headers && exe_type == EXE_GENOCAT))
             ref_contigs_sort_chroms(); // create alphabetically sorted index for user file chrom word list
 
-        ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
+        if (!flag.genocat_no_ref_file)
+            ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
 
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
         if (!flag.genocat_no_ref_file)
@@ -369,11 +376,15 @@ DataType piz_read_global_area (void)
         }
 
         // case: non-reference file has stored reference sections
-        else if (has_ref_sections && !flag.show_sex && !flag.show_coverage && !flag.idxstats) { 
-            ref_load_stored_reference();
+        else if (has_ref_sections) {
+            if (!flag.genocat_no_ref_file) { 
+                ref_load_stored_reference();
 
-            // exit now if all we wanted was just to see the reference (we've already shown it)
-            if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok;
+                // exit now if all we wanted was just to see the reference (we've already shown it)
+                if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok;
+            }
+            else
+                z_file->disk_size_minus_skips -= sections_get_ref_size();    
         }
 
         // read dict_id aliases, if there are any
@@ -411,8 +422,8 @@ static bool piz_read_one_vb (VBlock *vb)
     if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
 
     if (flag.show_vblocks) 
-        iprintf ("vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
-                 vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
+        iprintf ("READING(id=%u) vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
+                 vb->id, vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
     ASSERT (vb_header_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
@@ -432,7 +443,7 @@ static bool piz_read_one_vb (VBlock *vb)
         bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
 
     // initialize coverage counters
-    if (flag.show_coverage || flag.show_sex || flag.idxstats)
+    if (flag.collect_coverage)
         coverage_initialize (vb);
             
     COPY_TIMER (piz_read_one_vb); 
@@ -452,13 +463,7 @@ static Digest piz_one_verify_digest (void)
     Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound, "file:digest_ctx_bound"); 
     char s[200]; 
 
-/*    if (digest_is_zero (original_digest)) { 
-        sprintf (s, "%s = %s", digest_name(), digest_display (decompressed_file_digest).s);
-        progress_finalize_component (s); 
-    }
-
-    else*/ if (digest_is_equal (decompressed_file_digest, original_digest)) {
-
+    if (digest_is_equal (decompressed_file_digest, original_digest)) {
         if (flag.test) { 
             sprintf (s, "%s = %s verified as identical to the original %s", 
                      digest_name(), digest_display (decompressed_file_digest).s, dt_name (txt_file->data_type));
@@ -484,8 +489,9 @@ static Digest piz_one_verify_digest (void)
 // returns false if VB was dispatched, and true if vb was skipped
 static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
 {
-    if (sorter_piz_is_vb_no_read (sl_ent->vblock_i)) return true; // skip this VB - we don't need it
-    
+    if (writer_is_vb_no_read (sl_ent->vblock_i)) 
+        return true; // skip this VB - we don't need it
+
     VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
     next_vb->component_i = z_file->num_txt_components_so_far;
     
@@ -494,15 +500,12 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
 
     // case: we won't proceed to uncompressing, reconstructing and writing now that we're done reading
     if (grepped_out || flag.show_headers) { 
-        sorter_piz_remove_vb_from_recon_plan (next_vb->vblock_i);
+        writer_remove_vb_from_recon_plan (next_vb->vblock_i);
         dispatcher_abandon_next_vb (dispatcher);
-        return true; // VB skipped
+        return true; // VB skipped. note: we don't update disk_size_minus_skips in this case, because the data was read in piz_read_one_vb  
     }
 
-    buf_grab (next_vb, &next_vb->region_X_ra_matrix, "region_X_ra_matrix", 
-              sorter_piz_get_region_X_ra_matrix (next_vb->vblock_i));
-
-    dispatcher_compute (dispatcher, piz_uncompress_one_vb);
+    dispatcher_compute (dispatcher, piz_reconstruct_one_vb);
 
     return false;
 }
@@ -516,7 +519,7 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
     if (data_type == DT_NONE || flag.reading_reference) 
         return NULL; // no components in this file (as is always the case with reference files) 
 
-    sorter_piz_create_plan();
+    writer_create_plan();
 
     ASSINP (!flag.test || !digest_is_zero (z_file->digest), 
             "Error testing %s: --test cannot be used with this file, as it was not compressed (in genozip v8) with --md5 or --test", z_name);
@@ -537,8 +540,9 @@ void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_f
     bool header_only_file = true; // initialize - true until we encounter a VB header
     uint32_t first_comp_this_txt, num_comps_this_txt;
     const SecLiEnt *sl;
+    uint64_t num_nondrop_lines = 0;
 
-    sorter_piz_get_txt_file_info (txt_file_i, &first_comp_this_txt, &num_comps_this_txt, &sl);
+    writer_get_txt_file_info (txt_file_i, &first_comp_this_txt, &num_comps_this_txt, &sl);
 
     while (!dispatcher_is_done (dispatcher)) {
 
@@ -554,15 +558,15 @@ void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_f
             if (found_header && sl->st == SEC_TXT_HEADER && z_file->num_txt_components_so_far < first_comp_this_txt + num_comps_this_txt) { 
 
                 // case: skip entire component 
-                if (sorter_piz_is_component_no_read (z_file->num_txt_components_so_far)) 
+                if (writer_is_component_no_read (z_file->num_txt_components_so_far)) 
                     sl = sections_component_last (sl);
 
                 else {
+                    // stand ready to start outputing txt from completed VBs (called here, since in --unbind txt file is opened in txtheader_piz_read_and_reconstruct)
+                    writer_start_writing (txt_file_i);
+
                     // note: if unbinding, this will also open the txt file
                     txtheader_piz_read_and_reconstruct (z_file->num_txt_components_so_far, sl); 
-
-                    // stand ready to start outputing txt from completed VBs (called here, since in --unbind txt file is opened in txtheader_piz_read_and_reconstruct)
-                    sorter_piz_start_writing (txt_file_i);
 
                     if (flag.unbind) dispatcher_resume (dispatcher);  // handle --unbind progress printing and unpausing after previous txt_file pause
                 }
@@ -578,23 +582,37 @@ void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_f
                 dispatcher_set_input_exhausted (dispatcher, true);
 
                 if (header_only_file)
-                    dispatcher_recycle_vbs (dispatcher);
+                    dispatcher_recycle_vbs (dispatcher, true);
             }
         }
 
         // if the next thread (by sequential order) is ready, hand over the data to the writer thread
-        VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
-        if (processed_vb) {
-            // read of a normal file - output uncompressed block (unless we're reading a reference - we don't need to output it)
-            if (!flag_loading_auxiliary) {
-                sorter_piz_handover_data (processed_vb);
-                coverage_add_one_vb (processed_vb);
+        VBlock *recon_vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
+        if (recon_vb) {
+
+            ASSERTW (recon_vb->txt_data.len == recon_vb->vb_data_size || flag.data_modified, // files are the same size, unless we intended to modify the data
+                    "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
+                    recon_vb->vblock_i, (unsigned)recon_vb->lines.len, recon_vb->first_line, str_uint_commas (recon_vb->vb_data_size).s, dt_name (txt_file->data_type), 
+                    str_uint_commas (recon_vb->txt_data.len).s, 
+                    (int32_t)recon_vb->txt_data.len - (int32_t)recon_vb->vb_data_size);
+
+            num_nondrop_lines += recon_vb->num_nondrop_lines;
+
+            if (flag.collect_coverage)    
+                coverage_add_one_vb (recon_vb);
+            
+            else if (flag.reading_kraken)
+                kraken_piz_handover_data (recon_vb);
+
+            z_file->txt_data_so_far_single += recon_vb->vb_data_size; 
+
+            // case: normal piz - output uncompressed block (unless we're reading a reference - we don't need to output it)
+            if (!flag_loading_auxiliary && !flag.no_writer) {
+                writer_handover_data (recon_vb);
+                dispatcher_recycle_vbs (dispatcher, false); // don't release VB- it will be released in writer_release_vb when writing is completed
             }
-
-            z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
-
-            dispatcher_recycle_vbs (dispatcher);
-            achieved_something = true;
+            else
+                dispatcher_recycle_vbs (dispatcher, true); // also release VB
         }
 
         if (!achieved_something) usleep (100000); // nothing for us to do right now - wait 100ms
@@ -606,19 +624,18 @@ void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_f
     if (!flag.test) progress_finalize_component_time ("Done", decompressed_file_digest);
 
     // finish writing the txt_file
-    sorter_piz_finish_writing();
+    writer_finish_writing (is_last_txt_file);
 
     // --show-sex and --show-coverage - output results
     if (txt_file && !flag_loading_auxiliary) {
         if (flag.show_coverage) coverage_show_coverage();
         if (flag.show_sex) coverage_sex_classifier (is_first_z_file);
         if (flag.idxstats) coverage_show_idxstats();
+        if (flag.count) iprintf ("%"PRIu64"\n", num_nondrop_lines);
     }
 
-    if (is_last_txt_file) 
-        dispatcher_finish (&dispatcher, NULL);
-    else
-        dispatcher_pause (dispatcher); // we're unbinding and still have more txt_files
+    if (is_last_txt_file) dispatcher_finish (&dispatcher, NULL);
+    else                  dispatcher_pause (dispatcher); // we're unbinding and still have more txt_files
      
     DT_FUNC (z_file, piz_finalize)();
 }

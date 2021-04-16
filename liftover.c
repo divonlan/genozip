@@ -321,8 +321,7 @@ void liftover_seg_LIFTREJT (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, c
     dl->pos[1] = 0;
 
     // get status from string
-    char save = value[value_len];
-    ((char *)value)[value_len] = 0; // temporarily nul-terminate
+    SAFE_NUL (&value[value_len]);
     
     for (unsigned i=0; i < NUM_LO_STATUSES; i++)
         if (!strcmp (value, liftover_status_names[i])) { // found
@@ -331,7 +330,7 @@ void liftover_seg_LIFTREJT (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, c
             seg_by_did_i (vb, value, status_len, ochrom_did_i + OSTATUS_OFFSET, status_len);
             seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJT }), 2, (DictId)dict_id_INFO_LIFTREJT, 0); // 0 bc no comma and name is accounted for by INFO
 
-            ((char *)value)[value_len] = save; // recover
+            SAFE_RESTORE;
 
             vb->last_index (ochrom_did_i + OSTATUS_OFFSET) = i;
 

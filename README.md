@@ -16,7 +16,7 @@
 <br>
 (available on <b>Conda</b>, <b>Docker Hub</b> and https://github.com/divonlan/genozip ; Documentation: http://genozip.com)<br>
 <br>
-<b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, PHYLIP, Chain and 23andMe files.<br>
+<b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, PHYLIP, Chain, Kraken and 23andMe files.<br>
 <br>
 <b>Citing</b> Do you find Genozip useful? Please cite:<br>
 Lan, D., et al. (2021) <b>Genozip: a universal extensible genomic data compressor</b>. <i>Bioinformatics</i>, https://doi.org/10.1093/bioinformatics/btab102<br>

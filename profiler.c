@@ -51,8 +51,8 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(generate_rev_complement_genome);
     ADD(ctx_read_all_dictionaries);
     ADD(ref_contigs_compress);
-    ADD(sorter_compress_recon_plan);
-    ADD(sorter_compress_qsort);
+    ADD(linesorter_compress_recon_plan);
+    ADD(linesorter_compress_qsort);
     ADD(tmp1);
     ADD(tmp2);
     ADD(tmp3);
@@ -130,8 +130,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (write, 1);
         PRINT (bgzf_io_thread, 1);
         PRINT (ref_contigs_compress, 1);
-        PRINT (sorter_compress_recon_plan, 1);
-        PRINT (sorter_compress_qsort, 2);
+        PRINT (linesorter_compress_recon_plan, 1);
+        PRINT (linesorter_compress_qsort, 2);
         iprintf ("GENOZIP compute threads %u\n", ms(p->compute));
         PRINT (ctx_clone, 1);
         PRINT (seg_all_data_lines, 1);

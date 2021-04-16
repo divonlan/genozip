@@ -602,10 +602,9 @@ bool ref_mmap_cached_reference (void)
     return true;
 }
 
-static void *ref_create_cache (void *unused_arg)
+static void ref_create_cache (void *unused_arg)
 {
     buf_dump_to_file (ref_get_cache_fn(), &genome_cache, 1, true, false, false);
-    return NULL;
 }
 
 void ref_create_cache_in_background (void)
@@ -613,7 +612,7 @@ void ref_create_cache_in_background (void)
     // start creating the genome cache now in a background thread, but only if we loaded the entire reference
     if (!flag.regions) { 
         ref_get_cache_fn(); // generate name before closing z_file
-        ref_cache_creation_thread_id = threads_create (ref_create_cache, NULL, "create_ref_cache", THREADS_NO_VB);
+        ref_cache_creation_thread_id = threads_create (ref_create_cache, NULL, "create_ref_cache", 0);
         ref_creating_cache = true;
     }
 }
@@ -1302,20 +1301,12 @@ bool ref_is_reference_loaded (void)
 void ref_load_external_reference (bool display, bool is_last_z_file)
 {
     ASSERTNOTNULL (ref_filename);
-    SAVE_FLAGS;
+    SAVE_FLAGS_AUX;
 
     flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
 
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
-
-    // save and reset flags that are intended to operate on the compressed file rather than the reference file
-    flag.test = flag.md5 = flag.show_memory = flag.show_stats= flag.no_header =
-    flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict = 
-    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.interleave = 0;
-    flag.grep = flag.show_time = flag.unbind = 0;
-    flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE;
-    flag.show_one_dict = NULL;
 
     TEMP_VALUE (command, PIZ);
 

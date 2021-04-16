@@ -41,8 +41,6 @@ static Mutex only_once_mutex = {};
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
-static void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line);
-
 void buf_initialize()
 {
     mutex_initialize (overlay_mutex);
@@ -119,8 +117,8 @@ static void buf_find_underflow_culprit (const char *memory, const char *msg)
     VBlockPool *vb_pool = vb_get_pool();
     
     bool found=false;
-    for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
-        VBlock *vb = (vb_i == -1) ? evb : vb_pool->vb[vb_i]; 
+    for (int vb_i=-2; vb_i < (int)vb_pool->num_vbs; vb_i++) {
+        VBlock *vb = vb_get_from_pool (vb_i);
 
         if (!vb) continue;
         
@@ -159,9 +157,9 @@ static void buf_test_overflows_all_other_vb(const VBlock *caller_vb, const char 
     VBlockPool *vb_pool = vb_get_pool();
 
     fprintf (stderr, "Testing all other VBs:\n");
-    for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
-        VBlock *vb = (vb_i == -1) ? evb : vb_pool->vb[vb_i]; 
-        if (vb == caller_vb) continue; // skip caller's VB
+    for (int vb_i=-2; vb_i < (int)vb_pool->num_vbs; vb_i++) {
+        VBlock *vb = vb_get_from_pool (vb_i);
+        if (!vb || vb == caller_vb) continue; // skip caller's VB
         buf_test_overflows_do (vb, false, msg);
     }
 }
@@ -265,9 +263,12 @@ static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), voi
 {
     VBlockPool *vb_pool = vb_get_pool ();
 
-    for (int vb_i=-1; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
+    for (int vb_i=-2; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
 
-        ARRAY (const Buffer *, bl, vb_i == -1 ? evb->buffer_list : vb_pool->vb[vb_i]->buffer_list);
+        VBlockP vb = vb_get_from_pool (vb_i);
+        if (!vb) continue;
+
+        ARRAY (const Buffer *, bl, vb->buffer_list);
         
         for (uint32_t buf_i=0; buf_i < bl_len; buf_i++)
             if (bl[buf_i] && bl[buf_i]->memory) callback (bl[buf_i], arg); // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
@@ -515,7 +516,7 @@ uint64_t buf_alloc_do (VBlock *vb,
     }
 
 finish:
-    if (vb != evb) COPY_TIMER (buf_alloc); // this is not thread-safe for evb as evb buffers might be allocated by any thread
+    if (vb != evb) COPY_TIMER (buf_alloc); // this is not thread-safe for evb as evb buffers might be allocated by any thread (?? is this still the case?)
     return buf->size;
 }
 
@@ -890,7 +891,7 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
     free (p);
 }
 
-static void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line)
+void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line)
 {
     void *new = realloc (p, size);
     ASSERT (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", func, code_line, name, (uint64_t)size, 
