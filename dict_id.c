@@ -49,7 +49,8 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          dict_id_OPTION_ZM=0,
   
          // private genozip dict
-         dict_id_OPTION_STRAND=0, dict_id_OPTION_RNAME=0, dict_id_OPTION_POS=0, dict_id_OPTION_CIGAR=0, dict_id_OPTION_MAPQ=0; 
+         dict_id_OPTION_STRAND=0, dict_id_OPTION_RNAME=0, dict_id_OPTION_POS=0, dict_id_OPTION_CIGAR=0, dict_id_OPTION_MAPQ=0,
+         dict_id_OPTION_TX=0;
 
 // GVF stuff
 uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_seq=0, dict_id_ATTR_Variant_freq=0,
@@ -215,7 +216,7 @@ void dict_id_initialize (DataType data_type)
         dict_id_OPTION_POS    = dict_id_make ("@POS",    4, DTYPE_SAM_OPTIONAL).num;
         dict_id_OPTION_CIGAR  = dict_id_make ("@CIGAR",  6, DTYPE_SAM_OPTIONAL).num;
         dict_id_OPTION_MAPQ   = dict_id_make ("@MAPQ",   5, DTYPE_SAM_OPTIONAL).num;
-
+        dict_id_OPTION_TX     = dict_id_make ("TX:i",    4, DTYPE_SAM_OPTIONAL).num;
         break;
 
     case DT_GFF3:

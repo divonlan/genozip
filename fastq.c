@@ -304,10 +304,9 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
             sl->dict_id.num == dict_id_fields[FASTQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_STRAND]) { 
             
             NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
-            int32_t ret = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "data", sl->st, sl); // returns 0 if section is skipped
-            if (!ret) vb->z_section_headers.len--; // section skipped
-            
-            ASSERT (ret != EOF, "vb_i=%u failed to read from pair_vb=%u dict_id=%s", vb->vblock_i, vb->pair_vb_i, dis_dict_id (sl->dict_id).s);
+            int32_t offset = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "data", sl->st, sl); // returns 0 if section is skipped
+
+            if (offset == SECTION_SKIPPED) vb->z_section_headers.len--; // section skipped
         }
         
         sl++;
@@ -376,7 +375,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     if (kraken_is_loaded) {
         unsigned qname_len = strcspn (field_start + 1, " \t\r\n"); // +1 to skip the '@'
 
-        bool taxid_found = kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, field_start + 1, qname_len, false);
+        unsigned taxid_found = kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, field_start + 1, qname_len, false);
 
         // if not found tax id for this read, try again, perhaps removing /1 or /2
         if (!taxid_found) {
@@ -564,7 +563,7 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
 
         else { // filter for item
 
-            // case: --grep (note: appears before --header-one filter below, so both can be used together)
+            // case: --grep (note: appears before --header-only filter below, so both can be used together)
             if (flag.grep && item == 2 /* first EOL */) {
                 *AFTERENT (char, vb->txt_data) = 0; // for strstr
                 
@@ -643,7 +642,7 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
     // --taxid: filter out by Kraken taxid 
     if (flag.kraken_taxid && dict_id.num == dict_id_fields[FASTQ_TOPLEVEL]) {
         
-        if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID))
+        if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, false))
             vb->drop_curr_line = true;
         
         else if (kraken_is_loaded && flag.kraken_taxid >= 0) {

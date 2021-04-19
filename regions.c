@@ -381,7 +381,7 @@ void regions_display(const char *title)
 {
     iprintf ("regions_display: %s\n", title);
 
-    if (buf_is_allocated (&regions_buf)) {
+    if (buf_is_alloc (&regions_buf)) {
 
         iprintf ("Showing %u %s regions:\n", (uint32_t)regions_buf.len, is_negative_regions ? "NEGATIVE" : "POSITIVE");
 

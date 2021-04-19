@@ -32,6 +32,7 @@
 #include "bgzf.h"
 #include "linesorter.h"
 #include "txtheader.h"
+#include "threads.h"
 
 static Mutex wait_for_vb_1_mutex = {};
 
@@ -112,8 +113,6 @@ static void zip_dynamically_set_max_memory (void)
         return;
     }
 
-    VBlock *vb = vb_get_vb ("dynamically_set_memory", 1);
-
     bool done = false;
     unsigned num_tests = sizeof (test_vb_sizes) / sizeof (test_vb_sizes[0]);
     for (unsigned test_i=0; !done && test_i < num_tests; test_i++) {
@@ -122,8 +121,10 @@ static void zip_dynamically_set_max_memory (void)
 
         // If this is a Luft file (with LIFTREJT lines passed down from the header) - if possible, test lines beyond the 
         // the rejected lines, as they have more contexts.
-        if (flag.vblock_memory < txt_file->luft_reject_bytes && test_i != num_tests-1) continue;
+        if (flag.vblock_memory < txt_file->luft_reject_bytes && test_i != num_tests-1) 
+            continue;
 
+        VBlock *vb = vb_get_vb ("dynamically_set_memory", 1);
         txtfile_read_vblock (vb, true);
 
         // case: we found at least one full line - we can calculate the memory now
@@ -189,7 +190,7 @@ static void zip_dynamically_set_max_memory (void)
         }
 
         // try again with a larger size (note: all data arleady read is waiting in txt_file->unconsumed_txt)
-        vb_release_vb (vb, __FUNCTION__);
+        vb_release_vb (&vb);
     }
 
     // if we failed to calculate - use default
@@ -400,7 +401,7 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
         if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
         if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
         if (ctx->nodes.len < vb->lines.len / 5) continue; // don't bother if this is a rare field less than 20% of the lines
-        if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
+        if (buf_is_alloc (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
         // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
         if (ctx->no_stons || ctx->ltype != LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
@@ -521,7 +522,7 @@ static void zip_write_global_area (Digest single_component_digest)
     if (DTPZ(has_random_access)) 
         random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
-    ctx_compress_dictionaries(); // note: sorter_move_liftover_rejects_to_front() depends on SEC_DICT being the first non-VB sections
+    ctx_compress_dictionaries(); 
 
     ctx_compress_counts();
         
@@ -653,8 +654,6 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
     }
 
     if (read_txt) {
-        if (flag.show_threads) dispatcher_show_time ("main thread", "Read input data", -1, vb->vblock_i);            
-
         // if vblock_memory is not already set by user options or previous files, set the size of the VBs for optimal compression
         if (!flag.vblock_memory)
             zip_dynamically_set_max_memory();
@@ -672,8 +671,6 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         }
 
         vb->is_rejects_vb = flag.processing_rejects;
-        
-        if (flag.show_threads) dispatcher_show_time ("main thread", "Read input data done", -1, vb->vblock_i);
     }
 
     if (vb->txt_data.len)   // we found some data 
@@ -749,7 +746,7 @@ void zip_one_file (const char *txt_basename,
     max_lines_per_vb=0;
 
     dispatcher = 
-        dispatcher_fan_out_task (txt_basename, PROGRESS_PERCENT, 0, false, *is_last_file, z_closes_after_me, 
+        dispatcher_fan_out_task ("zip", txt_basename, PROGRESS_PERCENT, 0, false, *is_last_file, z_closes_after_me, 
                                  flag.xthreads, prev_file_last_vb_i, 100000,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 

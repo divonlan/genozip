@@ -671,7 +671,7 @@ void seg_compound_field (VBlock *vb,
             }
             
             if (flag.pair == PAIR_READ_1)
-                sf_ctx->no_stons = true; // prevent singletons, so pair-2 can compare to us
+                sf_ctx->no_stons = true; // prevent singletons, so pair_2 can compare to us
             
             // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
             // i.e. its already in the dictionary and hash table - so no resources wasted
@@ -960,7 +960,7 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 
     // allocate more to the b250 buffer of the fields, which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
-        if (buf_is_allocated (&vb->contexts[f].b250))
+        if (buf_is_alloc (&vb->contexts[f].b250))
             buf_alloc_zero (vb, &vb->contexts[f].b250, vb->lines.len - num_old_lines, 0, uint32_t, 1, "contexts->b250");
 }
 

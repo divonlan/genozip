@@ -86,7 +86,7 @@ CtxNode *ctx_node_vb_do (const Context *vb_ctx, WordIndex node_index,
 
     if (snip_in_dict) {
         const Buffer *dict = is_ol ? &vb_ctx->ol_dict : &vb_ctx->dict;
-        ASSERT0 (buf_is_allocated (dict), "dict not allocated");
+        ASSERT0 (buf_is_alloc (dict), "dict not allocated");
 
         ASSERT (node->char_index + (uint64_t)node->snip_len < dict->len, "snip of %s out of range: node->char_index=%"PRIu64" + node->snip_len=%u >= %s->len=%"PRIu64,
                 vb_ctx->name, node->char_index, node->snip_len, is_ol ? "ol_dict" : "dict", dict->len);
@@ -117,7 +117,7 @@ CtxNode *ctx_node_zf_do (const Context *zf_ctx, int32_t node_index,
 
     if (snip_in_dict) {
         const Buffer *dict = is_singleton ? &zf_ctx->ol_dict : &zf_ctx->dict;
-        ASSERT0 (buf_is_allocated (dict), "dict not allocated");
+        ASSERT0 (buf_is_alloc (dict), "dict not allocated");
 
         *snip_in_dict = &dict->data[node->char_index];
     }
@@ -394,7 +394,7 @@ void ctx_clone (VBlock *vb)
 
         mutex_lock (zf_ctx->mutex);
 
-        if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this dict_id
+        if (buf_is_alloc (&zf_ctx->dict)) {  // something already for this dict_id
 
             // overlay the global dict and nodes - these will not change by this (or any other) VB
             //iprintf ( ("ctx_clone: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dis_dict_id (zf_ctx->dict_id).s, vb->vblock_i, did_i);
@@ -463,7 +463,7 @@ void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf
     // note: in REF_INTERNAL it is possible that there are no contigs - unaligned SAM
     if (flag.reference == REF_INTERNAL && (!contigs_buf || !contigs_buf->len)) return;
 
-    ASSERT0 (buf_is_allocated (contigs_buf) && buf_is_allocated (contigs_dict_buf),
+    ASSERT0 (buf_is_alloc (contigs_buf) && buf_is_alloc (contigs_dict_buf),
              "expecting contigs and contigs_dict to be allocated");
 
     // this is usually not yet initialized
@@ -603,9 +603,9 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     if (!vb_ctx->lcodec) vb_ctx->lcodec = zf_ctx->lcodec;
     if (!vb_ctx->bcodec) vb_ctx->bcodec = zf_ctx->bcodec;
     
-    if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // no new snips introduced in this VB
+    if (!buf_is_alloc (&vb_ctx->dict)) goto finish; // no new snips introduced in this VB
  
-    if (!buf_is_allocated (&zf_ctx->dict)) {
+    if (!buf_is_alloc (&zf_ctx->dict)) {
         // allocate hash table, based on the statitics gather by this first vb that is merging this dict and 
         // populate the hash table without needing to reevalate the snips (we know none are in the hash table, but all are in nodes and dict)
         if (zf_ctx->global_hash.size <= 1) { // only initial allocation in zip_dict_data_initialize
@@ -804,10 +804,10 @@ void ctx_overlay_dictionaries_to_vb (VBlock *vb)
 
         ctx_init_iterator (vb_ctx);
 
-        if (buf_is_allocated (&zf_ctx->dict))
+        if (buf_is_alloc (&zf_ctx->dict))
             buf_overlay (vb, &vb_ctx->dict, &zf_ctx->dict, "ctx->dict");    
         
-        if (buf_is_allocated (&zf_ctx->word_list))
+        if (buf_is_alloc (&zf_ctx->word_list))
             buf_overlay (vb, &vb_ctx->word_list, &zf_ctx->word_list, "ctx->word_list");
     }
     vb->num_contexts = z_file->num_contexts;
@@ -1120,7 +1120,7 @@ void ctx_compress_dictionaries (void)
     frag_ctx = &z_file->contexts[0];
     frag_next_node = NULL;
 
-    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, true, true, false, 0, 20000,
+    dispatcher_fan_out_task ("compress_dicts", NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, true, true, false, 0, 20000,
                              ctx_prepare_for_dict_compress, 
                              ctx_compress_one_dict_fragment, 
                              zfile_output_processed_vb);
@@ -1134,8 +1134,6 @@ static Context *dict_ctx;
 
 static void ctx_dict_read_one_vb (VBlockP vb)
 {
-//    buf_alloc (vb, &vb->z_section_headers, 0, 1, int32_t, 0, "z_section_headers"); // room for 1 section header
-
     if (!sections_next_sec1 (&dict_sl, SEC_DICT, false, false))
         return; // we're done - no more SEC_DICT sections
 
@@ -1147,9 +1145,9 @@ static void ctx_dict_read_one_vb (VBlockP vb)
 
     if (piz_is_skip_sectionz (SEC_DICT, dict_sl->dict_id)) goto done;
     
-    zfile_read_section (z_file, vb, dict_sl->vblock_i, &vb->z_data, "z_data", SEC_DICT, dict_sl);    
-    SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
-    // note: header is NULL if this dicionary is skipped
+    int32_t offset = zfile_read_section (z_file, vb, dict_sl->vblock_i, &vb->z_data, "z_data", SEC_DICT, dict_sl);    
+    SectionHeaderDictionary *header = 
+        (offset != SECTION_SKIPPED) ? (SectionHeaderDictionary *)vb->z_data.data : NULL;
 
     vb->fragment_len = header ? BGEN32 (header->h.data_uncompressed_len) : 0;
 
@@ -1243,9 +1241,12 @@ void ctx_read_all_dictionaries (void)
     dict_sl = NULL;
     dict_ctx = NULL;
 
-    dispatcher_fan_out_task (NULL, PROGRESS_NONE, "Reading dictionaries...", 
-                             flag.test, 
-                             true, true, 
+    dispatcher_fan_out_task (flag.reading_reference ? "read_ref_dicts" 
+                            :flag.reading_chain     ? "read_chain_dicts" 
+                            :flag.reading_kraken    ? "read_kraken_dicts" 
+                            :                         "read_dicts",
+                             NULL, PROGRESS_NONE, "Reading dictionaries...", 
+                             flag.test, true, true, 
                              z_file->genozip_version == 8, // For v8 files, we read all fragments in the main thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
                              0, 20000,
                              ctx_dict_read_one_vb, 

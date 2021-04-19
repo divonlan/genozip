@@ -66,7 +66,7 @@ typedef struct {
     { 0, "XCGT", "+",      NA0,           USE_SUBCODEC,          codec_xcgt_uncompress, NA3,                    USE_SUBCODEC,       CODEC_BZ2  /* NONREF_X */ }, \
     { 0, "HAPM", "+",      NA0,           codec_hapmat_compress, USE_SUBCODEC,          codec_hapmat_reconstruct, USE_SUBCODEC,     CODEC_BZ2  /* GT_HT    */ }, \
     { 0, "DOMQ", "+",      NA0,           codec_domq_compress,   USE_SUBCODEC,          codec_domq_reconstruct, USE_SUBCODEC,       CODEC_BSC  /* QUAL     */ }, \
-    { 0, "GTSH", "+",      NA0,           codec_gtshark_compress, codec_gtshark_uncompress, codec_pbwt_reconstruct, NA4,            }, \
+    { 0, "GTSH", "+",      NA0,           NA1,                   codec_gtshark_uncompress, codec_pbwt_reconstruct, NA4,            }, /* gtshark discontinued in v12. keep for displaying an error */\
     { 0, "PBWT", "+",      NA0,           codec_pbwt_compress,   codec_pbwt_uncompress, codec_pbwt_reconstruct, codec_none_est_size }, \
     { 0, "FF16", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
     { 0, "FF17", "+",      NA0,           NA1,                   NA2,                   NA3,                    NA4                 }, \
@@ -83,7 +83,7 @@ typedef struct {
 extern CodecArgs codec_args[NUM_CODECS];
 
 extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compress, codec_hapmat_compress, codec_bsc_compress, 
-                     codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_gtshark_compress, codec_pbwt_compress;
+                     codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_pbwt_compress;
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
                        codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress, codec_pbwt_uncompress;
@@ -118,9 +118,6 @@ extern void codec_bsc_initialize (void);
 // HATMAP stuff
 extern void codec_hapmat_comp_init (VBlockP vb);
 extern void codec_hapmat_piz_calculate_columns (VBlockP vb);
-
-// GTSHARK stuff
-extern void codec_gtshark_comp_init (VBlockP vb);
 
 // DOMQ stuff
 extern bool codec_domq_comp_init (VBlockP vb, DidIType qual_did_i, LocalGetLineCB callback);

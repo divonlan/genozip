@@ -15,7 +15,6 @@
 #include "piz.h"
 #include "base64.h"
 #include "regions.h"
-#include "threads.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new lacon_pos
 // Special values:
@@ -297,9 +296,11 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 // returns reconstructed length or -1 if snip is missing and item's operator should not be emitted
 int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, 
                                  char sep, // if non-zero, outputs after the reconstruction
-                                 bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data
+                                 bool reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
+                                 const char *func)
 {
-    ASSERT (did_i < vb->num_contexts, "did_i=%u out of range: vb->num_contexts=%u for vb_i=%u", did_i, vb->num_contexts, vb->vblock_i);
+    ASSERT (did_i < vb->num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u for vb_i=%u", 
+            func, did_i, vb->num_contexts, vb->vblock_i);
 
     Context *ctx = &vb->contexts[did_i];
 

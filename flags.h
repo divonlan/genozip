@@ -20,7 +20,7 @@ typedef enum {
 typedef struct {
     
     // genozip options that affect the compressed file
-    int gtshark, fast, make_reference, multifasta, md5;
+    int fast, make_reference, multifasta, md5;
     char *vblock;
     
     // ZIP: data modifying options
@@ -70,16 +70,17 @@ typedef struct {
         validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     
     // analysis
-    int list_chroms, show_sex, show_coverage, idxstats, count; 
-    
+    int list_chroms, show_sex, idxstats, count; 
+    enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage;
+
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
-        show_vblocks, show_threads, show_kraken,
+        show_vblocks, show_threads, show_kraken, show_uncompress,
         debug_progress, show_hash, debug_memory, debug_threads,
-        seg_only, xthreads, 
+        seg_only, xthreads, show_flags,
         echo,    // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
@@ -91,19 +92,21 @@ typedef struct {
     char *show_one_dict;    // argument of --show-dict-one
 
     // internal flags set by the system, not the command line
-    bool ref_use_aligner,    // ZIP: compression requires using the aligner
+    bool debug,              // set if DEBUG is defined
+         ref_use_aligner,    // ZIP: compression requires using the aligner
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
          reading_reference,  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
          trans_containers,   // PIZ: decompression invokes container translators
          processing_rejects, // ZIP & PIZ: currently zipping liftover rejects file / component
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
+         genocat_no_dicts,   // PIZ (genocat): we don't need to read the dicts
          genocat_no_reconstruct,  // PIZ: User requested to genocat with only metadata to be shown, not file contents
          no_writer,          // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          data_modified_by_txtheader,
          data_modified_by_reconstruction,
-         data_modified_by_sorter,
+         data_modified_by_writer,
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
          may_drop_lines,     // PIZ: reconstruction is allowed to drop lines
@@ -145,7 +148,7 @@ extern Flags flag;
     flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.interleave = flag.count = \
     flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads= \
     flag.show_sex = flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */ \
-    flag.grep = flag.show_time = flag.unbind = flag.show_one_dict = NULL; /* char* */ \
+    flag.grep = flag.show_time = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */ \
     flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE; /* DictId */ 
     
 #define SAVE_FLAG(f) typeof(flag.f) save_##f = flag.f 
@@ -164,9 +167,10 @@ extern void flags_update_zip_one_file (void);
 extern void flags_update_piz_one_file (int z_file_i);
 
 extern void flags_store_command_line (int argc, char **argv);
-const BufferP flags_command_line (void);
-const char *flags_pipe_in_process_name (void);
-unsigned flags_pipe_in_pid (void);
-bool flags_pipe_in_process_died (void);
+extern const BufferP flags_command_line (void);
+extern void flags_display_debugger_params (void);
+extern const char *flags_pipe_in_process_name (void);
+extern unsigned flags_pipe_in_pid (void);
+extern bool flags_pipe_in_process_died (void);
 
 #endif

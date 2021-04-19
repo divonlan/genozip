@@ -32,7 +32,7 @@
 #include "strings.h"
 #include "threads.h"
 
-// called by main thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
+// called by main thread in fastq, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
 bool piz_test_grep (VBlock *vb)
 {
@@ -181,10 +181,10 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         Buffer *target_buf = is_local ? &ctx->local : &ctx->b250;
 
         zfile_uncompress_section (vb, header, 
-                                    is_pair_section ? &ctx->pair      : target_buf, 
-                                    is_pair_section ? "context->pair" : is_local ? "contexts->local" : "contexts->b250", 
-                                    is_pair_section ? pair_vb_i : vb->vblock_i,
-                                    header->h.section_type); 
+                                  is_pair_section ? &ctx->pair      : target_buf, 
+                                  is_pair_section ? "context->pair" : is_local ? "contexts->local" : "contexts->b250", 
+                                  is_pair_section ? pair_vb_i : vb->vblock_i,
+                                  header->h.section_type); 
 
         if (!is_pair_section && is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
             ctx_dump_binary (vb, ctx, true);
@@ -216,7 +216,7 @@ skip_uncompress_due_to_old_bug:
     // initialize pair iterators (pairs only exist in fastq)
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
         Context *ctx = &vb->contexts[did_i];
-        if (buf_is_allocated (&ctx->pair))
+        if (buf_is_alloc (&ctx->pair))
             ctx->pair_b250_iter = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->pair),
                                                   .prev_word_index = -1 };
     }
@@ -232,6 +232,9 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     START_TIMER;
 
     ASSERTNOTNULL (vb);
+    ASSERT (vb->vblock_i, "vb->vblock_i is 0: vb->compute_thread_id=%d pthread=%"PRIu64, 
+            vb->compute_thread_id, (uint64_t)pthread_self());
+
     ASSERT (!flag.reference || (genome && genome->nbits) || flag.genocat_no_ref_file,
             "reference is not loaded correctly (vb=%u)", vb->vblock_i);
 
@@ -257,8 +260,6 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified && !flag.reading_chain) 
         digest_one_vb (vb); 
 
-    threads_log_by_vb (vb, "piz", "READY TO BE JOINED");
-
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
     COPY_TIMER (compute);
@@ -276,8 +277,8 @@ static void piz_read_all_ctxs (VBlock *vb, ConstSecLiEntP *next_sl)
         // create a context even if section is skipped, for containters to work (skipping a section should be mirrored in a container filter)
         ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, (*next_sl)->dict_id);
 
-        int32_t ret = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", (*next_sl)->st, *next_sl); // returns 0 if section is skipped
-        if (ret) vb->z_section_headers.len++;
+        int32_t offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", (*next_sl)->st, *next_sl); // returns 0 if section is skipped
+        if (offset != SECTION_SKIPPED) vb->z_section_headers.len++;
         (*next_sl)++;                             
     }
 }
@@ -304,11 +305,11 @@ DataType piz_read_global_area (void)
         flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
     }
 
-    // if the user wants to see only the header, we can skip the dictionaries, regions and random access
-    // (except in --luft where dictionaries are needed to reconstruct rejects in the header)
-    if (!flag.header_only || flag.luft) {
-        
+    if (!flag.genocat_no_dicts)    
         ctx_read_all_dictionaries(); // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs()
+
+    // if the user wants to see only the header, we can skip regions and random access
+    if (!flag.header_only) {
 
         ctx_read_all_counts(); // read all counts section
 
@@ -425,7 +426,6 @@ static bool piz_read_one_vb (VBlock *vb)
         iprintf ("READING(id=%u) vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
-    ASSERT (vb_header_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
     buf_alloc (vb, &vb->z_section_headers, 0, MAX_DICTS * 2 + 50, uint32_t, 0, "z_section_headers"); // room for section headers  
@@ -486,6 +486,16 @@ static Digest piz_one_verify_digest (void)
     return decompressed_file_digest;
 }
 
+static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
+{
+    if (!flag_loading_auxiliary && !flag.no_writer) {
+        writer_handover_data (vb);
+        dispatcher_recycle_vbs (dispatcher, false); // don't release VB- it will be released in writer_release_vb when writing is completed
+    }
+    else
+        dispatcher_recycle_vbs (dispatcher, true); // also release VB
+}
+
 // returns false if VB was dispatched, and true if vb was skipped
 static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
 {
@@ -498,14 +508,14 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
     // read one VB's genozip data
     bool grepped_out = !piz_read_one_vb (next_vb);
 
-    // case: we won't proceed to uncompressing, reconstructing and writing now that we're done reading
-    if (grepped_out || flag.show_headers) { 
-        writer_remove_vb_from_recon_plan (next_vb->vblock_i);
-        dispatcher_abandon_next_vb (dispatcher);
-        return true; // VB skipped. note: we don't update disk_size_minus_skips in this case, because the data was read in piz_read_one_vb  
+    // case: we won't proceed to uncompressing, reconstructing we're done reading - just handover
+    // an empty VB as it appears in the recon plan, and writer might be already blocking on waiting for it
+    if (grepped_out) {
+        dispatcher_abandon_next_vb (dispatcher); // we're not going to reconstruct it
+        piz_handover_or_discard_vb (dispatcher, &next_vb);
     }
-
-    dispatcher_compute (dispatcher, piz_reconstruct_one_vb);
+    else
+        dispatcher_compute (dispatcher, piz_reconstruct_one_vb);
 
     return false;
 }
@@ -533,8 +543,10 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
 }
 
 // called once per txt_file created: i.e. if concatenating - a single call, if unbinding there will be multiple calls to this function
-void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_file, bool is_first_z_file)
+void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
 {
+    bool is_last_txt_file = (z_file->num_txt_components_so_far == z_file->txt_file_info.len-1);
+ 
     if (DTPZ(piz_initialize)) DTPZ(piz_initialize)();
       
     bool header_only_file = true; // initialize - true until we encounter a VB header
@@ -542,7 +554,7 @@ void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_f
     const SecLiEnt *sl;
     uint64_t num_nondrop_lines = 0;
 
-    writer_get_txt_file_info (txt_file_i, &first_comp_this_txt, &num_comps_this_txt, &sl);
+    writer_get_txt_file_info (&first_comp_this_txt, &num_comps_this_txt, &sl);
 
     while (!dispatcher_is_done (dispatcher)) {
 
@@ -562,19 +574,20 @@ void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_f
                     sl = sections_component_last (sl);
 
                 else {
-                    // stand ready to start outputing txt from completed VBs (called here, since in --unbind txt file is opened in txtheader_piz_read_and_reconstruct)
-                    writer_start_writing (txt_file_i);
-
-                    // note: if unbinding, this will also open the txt file
+                    // note: also starts writer, and if unbinding, also opens the txt file and hands data over to the writer
                     txtheader_piz_read_and_reconstruct (z_file->num_txt_components_so_far, sl); 
 
-                    if (flag.unbind) dispatcher_resume (dispatcher);  // handle --unbind progress printing and unpausing after previous txt_file pause
+                    // case --unbind: unpausing after previous txt_file pause (requires txt file to be open)
+                    if (flag.unbind) dispatcher_resume (dispatcher);  
+
+                    if (flag.header_only)
+                        sl = sections_component_last (sl); // skip all VBs
                 }
                 z_file->num_txt_components_so_far++;
             }
 
             // case SEC_VB_HEADER
-            else if (found_header && sl->st == SEC_VB_HEADER)
+            else if (found_header && sl->st == SEC_VB_HEADER) 
                 header_only_file &= piz_dispatch_one_vb (dispatcher, sl);  // function returns true if VB was skipped
 
             // case: we're done with this txt_file (either no header bc EOF, or TXT_HEADER belongs to the next txt_file when unbinding)
@@ -589,7 +602,6 @@ void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_f
         // if the next thread (by sequential order) is ready, hand over the data to the writer thread
         VBlock *recon_vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
         if (recon_vb) {
-
             ASSERTW (recon_vb->txt_data.len == recon_vb->vb_data_size || flag.data_modified, // files are the same size, unless we intended to modify the data
                     "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
                     recon_vb->vblock_i, (unsigned)recon_vb->lines.len, recon_vb->first_line, str_uint_commas (recon_vb->vb_data_size).s, dt_name (txt_file->data_type), 
@@ -606,13 +618,7 @@ void piz_one_txt_file (Dispatcher dispatcher, int txt_file_i, bool is_last_txt_f
 
             z_file->txt_data_so_far_single += recon_vb->vb_data_size; 
 
-            // case: normal piz - output uncompressed block (unless we're reading a reference - we don't need to output it)
-            if (!flag_loading_auxiliary && !flag.no_writer) {
-                writer_handover_data (recon_vb);
-                dispatcher_recycle_vbs (dispatcher, false); // don't release VB- it will be released in writer_release_vb when writing is completed
-            }
-            else
-                dispatcher_recycle_vbs (dispatcher, true); // also release VB
+            piz_handover_or_discard_vb (dispatcher, &recon_vb);
         }
 
         if (!achieved_something) usleep (100000); // nothing for us to do right now - wait 100ms

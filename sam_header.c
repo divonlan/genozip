@@ -20,10 +20,6 @@
 #include "version.h"
 #include "txtheader.h"
 
-#define HDRLEN evb->txt_data.len
-#define HDRSKIP(n) if (HDRLEN < next + n) goto incomplete_header; next += n
-#define HDR32 (next + 4 <= HDRLEN ? GET_UINT32 (&evb->txt_data.data[next]) : 0) ; if (HDRLEN < next + 4) goto incomplete_header; next += 4;
-
 // call a callback for each SQ line (contig). Note: callback function is the same as ref_contigs_iterate
 void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string
                           RefContigsIteratorCallback callback, void *callback_param)
@@ -62,9 +58,12 @@ void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string
 }
 
 // call a callback for each SQ line (contig). Note: callback function is the same as ref_contigs_iterate
-static void bam_foreach_SQ_line (const char *txt_header, // binary BAM header
+static void bam_foreach_SQ_line (const char *txt_header, uint32_t txt_header_len, // binary BAM header
                                  RefContigsIteratorCallback callback, void *callback_param)
 {
+    #define HDRSKIP(n) if (txt_header_len < next + n) goto incomplete_header; next += n
+    #define HDR32 (next + 4 <= txt_header_len ? GET_UINT32 (&txt_header[next]) : 0) ; if (txt_header_len < next + 4) goto incomplete_header; next += 4;
+
     uint32_t next=0;
 
     // skip magic, l_text, text
@@ -86,6 +85,9 @@ static void bam_foreach_SQ_line (const char *txt_header, // binary BAM header
 
 incomplete_header:
     ABORT ("Error in bam_foreach_SQ_line: incomplete BAM header (next=%u)", next);
+
+    #undef HDRSKIP
+    #undef HDR32
 }   
 
 typedef struct { uint32_t num_contigs, dict_len; } NumRangesCbParam;
@@ -98,9 +100,9 @@ static void sam_header_get_num_ranges_cb (const char *chrom_name, unsigned chrom
 }
 
 // constructs header_contigs, and in ZIP, also initialzes refererence ranges and random_access
-bool sam_header_inspect (BufferP txt_header)
+bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header)
 {    
-    #define foreach_SQ_line(cb,cb_param) (IS_BAM ? bam_foreach_SQ_line : sam_foreach_SQ_line)(txt_header->data, cb, cb_param)
+    #define foreach_SQ_line(cb,cb_param) (IS_BAM ? bam_foreach_SQ_line (txt_header->data, txt_header->len, cb, cb_param) : sam_foreach_SQ_line(txt_header->data, cb, cb_param))
 
     if (command == ZIP) {
         // if there is no external reference provided, then we create our internal one, and store it
@@ -145,11 +147,15 @@ bool sam_header_inspect (BufferP txt_header)
     return true;
 }
 
+// ZIP: called from txtfile_read_header
 // returns header length if header read is complete + sets lines.len, -1 not complete yet 
 // note: usually a BAM header fits into a single 512KB READ BUFFER, so this function is called only twice (without and then with data).
 // callback from DataTypeProperties.is_header_done
 int32_t bam_is_header_done (bool is_eof)
 {
+    #define HDRSKIP(n) if (evb->txt_data.len < next + n) goto incomplete_header; next += n
+    #define HDR32 (next + 4 <= evb->txt_data.len ? GET_UINT32 (&evb->txt_data.data[next]) : 0) ; if (evb->txt_data.len < next + 4) goto incomplete_header; next += 4;
+
     uint32_t next=0;
 
     HDRSKIP(4); // magic
@@ -177,6 +183,9 @@ int32_t bam_is_header_done (bool is_eof)
 
 incomplete_header:
     return -1;
+
+    #undef HDRSKIP
+    #undef HDR32
 }   
 
 //------------------------------------------------------------------
@@ -194,10 +203,10 @@ static inline void txtheader_sam_add_PG (Buffer *txtheader_buf)
     uint32_t unique_id = libdeflate_adler32 (1, &tb, sizeof (tb));
 
     // the command line length is unbound, careful not to put it in a bufprintf
-    bufprintf (evb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
+    bufprintf (txtheader_buf->vb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
                unique_id, GENOZIP_URL, GENOZIP_CODE_VERSION);
-    buf_add_string (evb, txtheader_buf, flags_command_line()->data);
-    buf_add_string (evb, txtheader_buf, "\n");
+    buf_add_string (txtheader_buf->vb, txtheader_buf, flags_command_line()->data);
+    buf_add_string (txtheader_buf->vb, txtheader_buf, "\n");
 }
 
 // PIZ main thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
@@ -208,7 +217,7 @@ TXTHEADER_TRANSLATOR (txtheader_bam2sam)
         return;
     }
 
-    ASSERT0 (buf_is_allocated (txtheader_buf), "txtheader_buf not allocated");
+    ASSERT0 (buf_is_alloc (txtheader_buf), "txtheader_buf not allocated");
 
     uint32_t l_text = GET_UINT32 (ENT (char, *txtheader_buf, 4));
     memcpy (txtheader_buf->data, ENT (char, *txtheader_buf, 8), l_text);
@@ -226,7 +235,7 @@ static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_n
 {
     Buffer *txtheader_buf = (Buffer *)callback_param;
 
-    buf_alloc (evb, txtheader_buf, chrom_name_len+9, 0, char, 1, 0);
+    buf_alloc (txtheader_buf->vb, txtheader_buf, chrom_name_len+9, 0, char, 1, 0);
 
     // l_name
     chrom_name_len++; // inc. nul terminator
@@ -252,7 +261,7 @@ static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_n
 TXTHEADER_TRANSLATOR (txtheader_sam2bam)
 {
     // grow buffer to accommodate the BAM header fixed size and text (inc. nul terminator)
-    buf_alloc_old (evb, txtheader_buf, 12 + txtheader_buf->len + 1, 1, "txt_data");
+    buf_alloc (comp_vb, txtheader_buf, 12 + 1, 0, char, 1, "txt_data");
 
     // nul-terminate text - required by sam_foreach_SQ_line - but without enlengthening buffer
     *AFTERENT (char, *txtheader_buf) = 0;
@@ -274,7 +283,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     if (!from_SQ) n_ref = ref_num_loaded_contigs();
 
     // grow buffer to accommodate estimated reference size (we will more in txtheader_sam2bam_ref_info if not enough)
-    buf_alloc (evb, txtheader_buf, n_ref * 100 + (50 + flags_command_line()->len) , 0, char, 1, 0);
+    buf_alloc (comp_vb, txtheader_buf, n_ref * 100 + (50 + flags_command_line()->len) , 0, char, 1, 0);
 
     // add PG
     txtheader_sam_add_PG (txtheader_buf);

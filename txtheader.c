@@ -135,7 +135,7 @@ bool txtheader_zip_read_and_compress (uint32_t *txt_line_i)
     //          also: header is modified if --chain or compressing a Luft file
     // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
     uint64_t unmodified_txt_header_len = evb->txt_data.len;
-    if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(&evb->txt_data))) { 
+    if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(evb, &evb->txt_data))) { 
         // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
         return false;
@@ -211,20 +211,21 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
 
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "header_section", SEC_TXT_HEADER, sl);
+    VBlock *comp_vb = vb_get_vb ("piz", 0);
+
+    zfile_read_section (z_file, comp_vb, 0, &comp_vb->z_data, "header_section", SEC_TXT_HEADER, sl);
 
     // handle the GENOZIP header of the txt header section
-    SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)evb->z_data.data;
+    SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)comp_vb->z_data.data;
 
     flag.processing_rejects = flag.luft && header->h.flags.txt_header.liftover_rejects;
 
-    // 1. in unbind mode - we open the output txt file of the component
-    // 2. when reading an auxiliary file or no_writer- we create txt_file here (but don't actually open the physical file)
+    // 1. if flag.unbind (genounzip) - we open the output txt file of the component
+    // 2. if flag.one_component (genocat) - output to stdout or --output
+    // 3. when reading an auxiliary file or no_writer- we create txt_file here (but don't actually open the physical file)
     if (!txt_file) { 
-    // if (flag.unbind || flag_loading_auxiliary) {
-        //ASSERT0 (!txt_file, "not expecting txt_file to be open already in unbind mode or when reading an auxiliary file");
-        
-        const char *filename = txtfile_piz_get_filename (header->txt_filename, flag.unbind, false);
+        const char *filename = flag.unbind ? txtfile_piz_get_filename (header->txt_filename, flag.unbind, false) 
+                                           : flag.out_filename;
         txt_file = file_open (filename, WRITE, TXT_FILE, z_file->data_type);
         FREE (filename); // file_open copies the names
     }
@@ -265,7 +266,7 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
                 .level         = BGZF_COMP_LEVEL_DEFAULT 
             };
 
-        header = (SectionHeaderTxtHeader *)evb->z_data.data; // re-assign after possible realloc of z_data in bgzf_load_isizes
+        header = (SectionHeaderTxtHeader *)comp_vb->z_data.data; // re-assign after possible realloc of z_data in bgzf_load_isizes
     }
 
     // case: the user wants us to reconstruct (or not) the BGZF blocks in a particular way, this overrides the z_file instructions 
@@ -285,31 +286,31 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
 
     // now get the text of the txt header itself
     if (!show_headers_only)
-        zfile_uncompress_section (evb, header, &evb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
+        zfile_uncompress_section (comp_vb, header, &comp_vb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
 
-    if (evb->txt_data.len)
-        DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(&evb->txt_data); // ignore return value
+    if (comp_vb->txt_data.len)
+        DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(comp_vb, &comp_vb->txt_data); // ignore return value
 
     // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
     // note: in a header-less SAM, after translating to BAM, we will have a header
     DtTranslation trans = dt_get_translation();
-    if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (&evb->txt_data); 
+    if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (comp_vb, &comp_vb->txt_data); 
 
     // hand-over txt header if it is needed:
     if (writer_is_txtheader_in_plan (component_i)) {
 
-        if (evb->txt_data.len) {
+        if (comp_vb->txt_data.len) {
             bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
                                 !flag.data_modified; // no point calculating digest if we know already the file will be different
 
-            if (test_digest) digest_update (&txt_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
+            if (test_digest) digest_update (&txt_file->digest_ctx_bound, &comp_vb->txt_data, "txt_header:digest_ctx_bound");
 
-            // inherit BGZF blocks from source file, if available - into evb->bgzf_blocks
+            // inherit BGZF blocks from source file, if available - into comp_vb->bgzf_blocks
             if (txt_file->codec == CODEC_BGZF) 
-                bgzf_calculate_blocks_one_vb (evb, evb->txt_data.len); 
+                bgzf_calculate_blocks_one_vb (comp_vb, comp_vb->txt_data.len); 
 
             if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
-                Digest reconstructed_header_digest = digest_do (evb->txt_data.data, evb->txt_data.len);
+                Digest reconstructed_header_digest = digest_do (comp_vb->txt_data.data, comp_vb->txt_data.len);
                 
                 TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
@@ -319,19 +320,18 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
                         "%s of reconstructed %s header (%s) differs from original file (%s)\n"
                         "Bad reconstructed header has been dumped to: %s\n", digest_name(),
                         dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
-                        txtfile_dump_vb (evb, z_name));
+                        txtfile_dump_vb (comp_vb, z_name));
 
                 RESTORE_FLAG (quiet);
             }
         }
 
-        writer_handover_txtheader (component_i); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
+        writer_handover_txtheader (&comp_vb, component_i); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
     }
 
-    buf_free (&evb->z_data);
-    buf_free (&evb->txt_data);
-    buf_free (&evb->compressed); 
-    buf_free (&evb->bgzf_blocks); 
+    // case: component is not in plan - discard the VB
+    else
+        vb_release_vb (&comp_vb);    
     
     if (!flag.reading_chain && !flag.reading_reference)
         is_first_txt = false;

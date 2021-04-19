@@ -34,10 +34,6 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               (!dict_id_is_sam_qname_sf(dict_id)        || !kraken_is_loaded) && 
               (dict_id.num != dict_id_fields[SAM_POS]   || !flag.regions))) return true;
 
-    // no need for the TAXID data if user didn't specify --taxid
-    if (flag.kraken_taxid==-1 && dict_id.num == dict_id_fields[SAM_TAXID])
-        return true;
-
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--regions, --FLAG, --MAPQ, --kraken, --taxid)
     if (flag.count && sections_has_dict_id (st) && 
         (     dict_id.num != dict_id_fields[SAM_TOPLEVEL] && 
@@ -565,7 +561,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
     if (flag.kraken_taxid 
      && (dict_id.num == dict_id_fields[SAM_TOPLEVEL] || dict_id.num == dict_id_fields[SAM_TOP2BAM] || (is_fq = (dict_id.num == dict_id_fields[SAM_TOP2FQ])))
      && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, reconstructed + is_fq, vb->last_txt_len (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
-         || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID)))) 
+         || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, true)))) 
         vb->drop_curr_line = true;
 
     if (flag.sam_flag_filter && is_top_level) {

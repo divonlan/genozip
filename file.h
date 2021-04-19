@@ -380,7 +380,7 @@ typedef struct File {
     Buffer line_info[2];               // TXT_FILE ZIP: array of LineInfo per line or gapless range in txt_file
     Buffer recon_plan;                 // TXT_FILE ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file
                                        // Z_FILE   PIZ: plan for entire z_file, txt_file.recon_plan is assigned a portion of this plan
-    Buffer comp_info;                  // Z_FILE   PIZ: array of PizCompInfo - component information
+    Buffer comp_info;                  // Z_FILE   PIZ: array of PizCompInfo - component information (param=1 if locks initialized)
     Buffer txt_file_info;              // Z_FILE   PIZ: array of PizTxtFileInfo - txt_file information
     uint32_t lines_so_far;             // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downsampling, and is to be written to txt_file, or downsampled-out
 

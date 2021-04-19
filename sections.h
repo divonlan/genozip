@@ -291,11 +291,10 @@ typedef struct SectionHeaderReconPlan {
 } SectionHeaderReconPlan;
 
 // special values of ReconPlanItem.num_lines
-#define PLAN_END_OF_VB      0xffffffff
-#define PLAN_FULL_VB        0xfffffffe
-#define PLAN_INTERLEAVE     0xfffffffd
-#define PLAN_TXTHEADER 0xfffffffc
-
+#define PLAN_END_OF_VB   0xffffffff
+#define PLAN_FULL_VB     0xfffffffe
+#define PLAN_INTERLEAVE  0xfffffffd
+#define PLAN_TXTHEADER   0xfffffffc
 typedef struct {
     uint32_t vb_i;               // 0 if PLAN_TXTHEADER
     uint32_t start_line;         // 0-based line within vb_i

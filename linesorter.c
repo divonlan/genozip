@@ -42,12 +42,13 @@ void linesorter_show_recon_plan (File *file, bool is_luft, uint32_t conc_writing
                : plan[i].plan_type == PLAN_TXTHEADER  ? "component"
                :                                        "start_line",
                  plan[i].start_line, 
-                 plan[i].num_lines < 0xfffffff0       ? "num_lines"  : "plan_type",
-                 plan[i].plan_type == PLAN_END_OF_VB  ? "END_OF_VB"  : 
-                 plan[i].plan_type == PLAN_FULL_VB    ? "FULL_VB"    :
-                 plan[i].plan_type == PLAN_INTERLEAVE ? "INTERLEAVE" :
-                 plan[i].plan_type == PLAN_TXTHEADER  ? "TXTHEADER"  :
-                                                        str_int_s (plan[i].num_lines).s); 
+                 plan[i].num_lines < 0xfffffff0        ? "num_lines"   
+               :                                         "plan_type",
+                 plan[i].plan_type == PLAN_END_OF_VB   ? "END_OF_VB"    
+               : plan[i].plan_type == PLAN_FULL_VB     ? "FULL_VB"     
+               : plan[i].plan_type == PLAN_INTERLEAVE  ? "INTERLEAVE"  
+               : plan[i].plan_type == PLAN_TXTHEADER   ? "TXTHEADER"   
+               :                                         str_int_s (plan[i].num_lines).s); 
 }
 
 static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)

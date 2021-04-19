@@ -20,9 +20,6 @@
 #include "bgzf.h"
 #include "mutex.h"
 
-VBlockP wvb = NULL; // writer thread VB (global)
-static uint8_t writer_thread_done_initialization = false;
-
 // ---------------
 // Data structures
 // ---------------
@@ -39,17 +36,10 @@ typedef struct {
 } VbInfo;
 
 typedef struct {
-    // sychronization between the main thread and the Writer thread
-    uint32_t comp_i;
-    bool is_loaded;               // has data moving to txt_data completed
-    Mutex wait_for_data;          // initialized locked, unlocked when data is made available by the main thread to the writer thread
-    Mutex data_copy_complete;     // initialized locked, unlocked when data is copy is complete by the writer thread
-
+    VbInfo info;                  // data in here (in_plan, no_read etc) refers to entire component, vb is txt_header
     const SecLiEnt *txt_header_sl;
     uint32_t first_vb_i;
     uint32_t num_vbs;
-    bool in_plan;                 // the txt header should be reconstructed. this paramater doesn't affect the VBs of this component.
-    bool no_read;                 // the this component in its entirety should be ignored. if false, txt header should be read and inspected.
     bool liftover_rejects;        // this component is the "liftover rejects" component
 } CompInfo;
 
@@ -59,23 +49,11 @@ typedef struct {
     uint32_t first_plan_i, plan_len;
 } TxtFileInfo;
 
-#define vb_info       z_file->vb_info[0]
+#define vb_info       z_file->vb_info[0] // we use only [0] on the PIZ side
 #define comp_info     z_file->comp_info
 #define txt_file_info z_file->txt_file_info
 
-static int writer_thread=0;
-
-// writer thread: release the VB
-static void writer_release_vb (VbInfo *v)
-{
-    buf_test_overflows(v->vb, "writer_release_vb"); // just to be safe, this isn't very expensive
-
-    // add the timing information accucumlated in the VB to the writer's data
-    if (flag.show_time) profiler_add (&wvb->profile, &v->vb->profile); 
-
-    vb_release_vb (v->vb, __FUNCTION__); // cleanup vb and get it ready for another usage (without freeing memory)
-    v->vb = NULL;
-}
+static ThreadId writer_thread = THREAD_ID_NONE;
 
 // --------------------------------
 // VBlock and Txt Header properties
@@ -102,14 +80,14 @@ bool writer_is_liftover_rejects (uint32_t component_i)
 bool writer_is_txtheader_in_plan (uint32_t component_i)
 {
     bool is_txtheader_in_plan = comp_info.len && // will fail if loading an auxiliary file
-                                ENT (CompInfo, comp_info, component_i)->in_plan;
+                                ENT (CompInfo, comp_info, component_i)->info.in_plan;
     return is_txtheader_in_plan;                             
 }
 
 bool writer_is_component_no_read (uint32_t component_i)
 {
     bool is_component_skipped = comp_info.len && // will be false if loading an auxiliary file
-                                ENT (CompInfo, comp_info, component_i)->no_read;
+                                ENT (CompInfo, comp_info, component_i)->info.no_read;
     return is_component_skipped;                             
 }
 
@@ -119,18 +97,9 @@ bool writer_is_vb_no_read (uint32_t vb_i)
     return no_read;
 }
 
-void writer_remove_vb_from_recon_plan (uint32_t vb_i)
+void writer_get_txt_file_info (uint32_t *first_comp_i, uint32_t *num_comps, ConstSecLiEntP *start_sl) // out
 {
-    VbInfo *v = ENT (VbInfo, vb_info, vb_i);
-
-    v->in_plan = false;
-    writer_release_vb (v);
-}
-
-void writer_get_txt_file_info (uint32_t txt_file_i, 
-                                   uint32_t *first_comp_i, uint32_t *num_comps, ConstSecLiEntP *start_sl) // out
-{
-    const TxtFileInfo *tf = ENT (TxtFileInfo, txt_file_info, txt_file_i);
+    const TxtFileInfo *tf = ENT (TxtFileInfo, txt_file_info, z_file->num_txt_components_so_far);
     const CompInfo *first_comp = ENT (CompInfo, comp_info, tf->first_comp_i);
 
     *first_comp_i = tf->first_comp_i;
@@ -146,9 +115,9 @@ void writer_get_txt_file_info (uint32_t txt_file_i,
 // PIZ main thread
 static void sort_piz_init_txt_file_info (void)
 {
-    buf_alloc (evb, &txt_file_info, 0, flag.unbind ? comp_info.len : 1, TxtFileInfo, 1, "txt_file_info"); // maximal size
+    buf_alloc (evb, &txt_file_info, 0, flag.unbind || flag.one_component ? comp_info.len : 1, TxtFileInfo, 1, "txt_file_info"); // maximal size
 
-    if (flag.unbind) {
+    if (flag.unbind || flag.one_component) {
         uint32_t txt_file_i = 0;
         for (uint32_t comp_i=0; comp_i < comp_info.len; comp_i++) {
             
@@ -184,23 +153,23 @@ static uint32_t writer_init_comp_info (void)
                 "Expecting %s to have %u components, but found only %u", z_name, z_file->num_components, comp_i);
 
         *comp = (CompInfo){ 
-            .comp_i           = comp_i, 
+            .info.comp_i      = comp_i, 
             .txt_header_sl    = sl, 
             .first_vb_i       = 0xffffffff,
             .liftover_rejects = sl->flags.txt_header.liftover_rejects,
         };
 
         // conditions entire component (header and all VBs) should be skipped (i.e. not even read and inspected)
-        comp->no_read =
+        comp->info.no_read =
            (!flag.luft && comp->liftover_rejects && !flag.one_component)
         ||
            (flag.one_component && flag.one_component-1 != comp_i); // --component specifies a single component, and this is not it 
 
         // conditions we write the txt header
-        comp->in_plan =
+        comp->info.in_plan =
            !flag_loading_auxiliary
         &&
-           !comp->no_read
+           !comp->info.no_read
         &&
            !flag.no_header
         &&
@@ -213,17 +182,12 @@ static uint32_t writer_init_comp_info (void)
            || (!flag.one_component && comp_i==0)    // concatenating: show first header (0 if no rejects)
            || (!flag.one_component && (comp-1)->liftover_rejects)); // concatenating: show first header (first after rejects)
 
-        if (comp->in_plan) {
+        if (comp->info.in_plan) {
             // mutex: locked:    here (at initialization)
             //        waited on: writer thread, wanting the data
             //        unlocked:  by main thread after txtheader data is handed over.
-            mutex_initialize (comp->wait_for_data);
-            mutex_lock (comp->wait_for_data);
-
-            // mutex: locked:    writer thread when started
-            //        waited on: main thread after data is handed over
-            //        unlocked:  writer thread, after copy complete
-            mutex_initialize (comp->data_copy_complete);
+            mutex_initialize (comp->info.wait_for_data);
+            mutex_lock (comp->info.wait_for_data);
         } 
         else
             z_file->disk_size_minus_skips -= sections_get_section_size (sl); // remove txt header here, VBs will be removed in writer_init_vb_info
@@ -247,30 +211,29 @@ static void writer_init_vb_info (void)
     buf_alloc_zero (evb, &vb_info, 0, vb_info.len, VbInfo, 1, "z_file->vb_info");
 
     const SecLiEnt *sl = NULL;
-    uint32_t vb_i=1;
+
     for (unsigned comp_i=0; comp_i < comp_info.len; comp_i++) {
 
         CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
 
-        for (uint32_t v_comp_i=0; v_comp_i < comp->num_vbs; v_comp_i++, vb_i++) {
+        for (uint32_t v_comp_i=0; v_comp_i < comp->num_vbs; v_comp_i++) {
 
             ASSERT0 (sections_next_sec1 (&sl, SEC_VB_HEADER, 0, 0), "Unexpected end of section list");
-            ASSERT (sl->vblock_i == vb_i, "expected sl->vblock_i=%u == vb_i=%u", sl->vblock_i, vb_i);
             
-            VbInfo *v = ENT (VbInfo, vb_info, vb_i);
+            VbInfo *v = ENT (VbInfo, vb_info, sl->vblock_i); // note: VBs are out of order in --luft bc writer_move_liftover_rejects_to_front()
             v->comp_i    = comp_i;
 
             // set pairs (used even if not interleaving)
             if (z_file->z_flags.dts_paired) 
-                v->pair_vb_i = vb_i + comp->num_vbs * (comp_i % 2 ? -1 : 1);  
+                v->pair_vb_i = sl->vblock_i + comp->num_vbs * (comp_i % 2 ? -1 : 1);  
 
             // conditions this VB should not be read or reconstructed 
             v->no_read = 
-                comp->no_read                                 // entire component is skipped
-            ||  (flag.one_vb && flag.one_vb != vb_i)          // --one-vb: user only wants to see a single VB, and this is not it
+                comp->info.no_read                            // entire component is skipped
+            ||  (flag.one_vb && flag.one_vb != sl->vblock_i)  // --one-vb: user only wants to see a single VB, and this is not it
             ||  (flag.no_header && comp->liftover_rejects)    // --no-header: this a rejects VB which is displayed as a header
             ||  (flag.header_only && !comp->liftover_rejects) // --header-only (except rejects VB)
-            ||  !random_access_is_vb_included (vb_i);         // --regions: this VB is excluded
+            ||  !random_access_is_vb_included (sl->vblock_i); // --regions: this VB is excluded
 
             // conditions in which VB should be written 
             v->in_plan = 
@@ -310,13 +273,13 @@ void writer_move_liftover_rejects_to_front (void)
 // PIZ main thread: add txtheader entry for the component
 static void writer_add_txtheader_plan (CompInfo *comp)
 {
-    if (!comp->in_plan) return; 
+    if (!comp->info.in_plan) return; 
 
     buf_alloc (evb, &z_file->recon_plan, 1, 1000, ReconPlanItem, 1.5, "recon_plan");
 
     NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
         .vb_i       = 0, // component, not VB
-        .rp_comp_i  = comp->comp_i,
+        .rp_comp_i  = comp->info.comp_i,
         .plan_type  = PLAN_TXTHEADER
     };
 }
@@ -440,7 +403,7 @@ static const SecLiEnt *writer_get_recon_plan_sl (const CompInfo *comp)
 // PIZ main thread: create reconstruction plan for this z_file, taking account RECON_PLAN sections and interleaving.
 // re-sort all VBs within each component in sections according to VB appearance order in reconstruction plan
 void writer_create_plan (void)
-{
+{  
     // when showing in liftover coordinates, bring the rejects component(s) forward before the primary component(s)
     if (z_file->z_flags.dual_coords && flag.luft) 
         writer_move_liftover_rejects_to_front(); // must be before writer_init_vb_info as components order changes
@@ -466,7 +429,7 @@ void writer_create_plan (void)
             tf_ent->first_plan_i = (uint32_t)z_file->recon_plan.len;
 
         // add this txt_header to the plan if needed
-        if (comp->in_plan)
+        if (comp->info.in_plan)
             writer_add_txtheader_plan (comp);
                     
         // case: interleave the VBs of two components - we ignore RECON_PLAN sections 
@@ -513,7 +476,7 @@ static void writer_flush_vb (VBlockP vb)
 
         // compress now if not compressed yet (txt header or modified VB which cannot be compressed by the compute thread)
         if (!vb->compressed.len) 
-            bgzf_compress_vb (vb); // compress data into wvb->compressed (using BGZF blocks from source file or new ones)
+            bgzf_compress_vb (vb); // compress data into vb->compressed (using BGZF blocks from source file or new ones)
 
         bgzf_write_to_disk (vb); 
     }
@@ -529,7 +492,7 @@ static void writer_flush_vb (VBlockP vb)
     buf_free (&vb->compressed);
     buf_free (&vb->bgzf_blocks);
 
-    COPY_TIMER_VB (wvb, write);
+    COPY_TIMER (write);
 }
 
 // final filter of output lines, based on downsample and shard. returns true if line is to be output
@@ -544,8 +507,10 @@ static inline bool writer_line_survived_downsampling (VbInfo *v)
 }
 
 // write lines one at a time, watching for dropped lines
-static void writer_write_line_range (VbInfo *v, uint32_t start_line, uint32_t num_lines)
+static void writer_write_line_range (VBlock *wvb, VbInfo *v, uint32_t start_line, uint32_t num_lines)
 {
+    if (!v->vb->txt_data.len) return; // no data in the VB 
+
     ARRAY (const char *, lines, v->vb->lines); 
 
     ASSERT (start_line + num_lines <= lines_len, "vb_i=%u Expecting lines_len=%u to be at least %u", 
@@ -569,7 +534,7 @@ static void writer_write_line_range (VbInfo *v, uint32_t start_line, uint32_t nu
     }
 }
 
-static void writer_write_lines_add_pair (VbInfo *v, const char *start, unsigned len, unsigned pair /* 1 or 2 */)
+static void writer_write_lines_add_pair (VBlock *wvb, VbInfo *v, const char *start, unsigned len, unsigned pair /* 1 or 2 */)
 {
     static const char *suffixes[3] = { "", "/1", "/2" }; // suffixes for pair 1 and pair 2 reads
 
@@ -590,9 +555,11 @@ static void writer_write_lines_add_pair (VbInfo *v, const char *start, unsigned 
     buf_add_more (wvb, &wvb->txt_data, sep, len - qname_len, "txt_data");
 }
 
-// write one fastq "line" (actually 4 textual lines) at time, interleaved from v and v2
-static void writer_write_lines_interleaves (VbInfo *v1, VbInfo *v2)
+// write one fastq "line" (actually 4 textual lines) at time, interleaved from v1 and v2
+static void writer_write_lines_interleaves (VBlock *wvb, VbInfo *v1, VbInfo *v2)
 {
+    if (!v1->vb->txt_data.len || v2->vb->txt_data.len) return; // no data in the either of the VBs 
+
     ASSERT (v1->vb->lines.len == v2->vb->lines.len, "when interleaving, expecting number of lines of vb_i=%u (%"PRIu64") to be the same as vb_i=%u (%"PRIu64")",
             v1->vb->vblock_i, v1->vb->lines.len, v2->vb->vblock_i, v2->vb->lines.len);
 
@@ -607,8 +574,8 @@ static void writer_write_lines_interleaves (VbInfo *v1, VbInfo *v2)
         if (len1 && len2) {
 
             if (writer_line_survived_downsampling(v1)) { 
-                writer_write_lines_add_pair (v1, *start1, len1, 1); // also adds /1 and /2 if paired
-                writer_write_lines_add_pair (v2, *start2, len2, 2);
+                writer_write_lines_add_pair (wvb, v1, *start1, len1, 1); // also adds /1 and /2 if paired
+                writer_write_lines_add_pair (wvb, v2, *start2, len2, 2);
             }
 
             txt_file->lines_so_far += 2; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
@@ -616,47 +583,27 @@ static void writer_write_lines_interleaves (VbInfo *v1, VbInfo *v2)
     }
 }
 
-static void writer_load_txt_header (CompInfo *comp)
-{
-    if (flag.show_threads) iprintf ("Writer thread: waiting for txtheader from component_i=%u\n", comp->comp_i);
-    mutex_wait (comp->wait_for_data);
-
-    // copy data from evb to wvb (so the Writer thread can destroy these buffers - it can't destroy evb buffers)
-    // plain data, and BGZF blocks inherited from the source file (if any) - generated in txtheader_piz_read_and_reconstruct
-    if (evb->txt_data.len)    buf_copy (wvb, &wvb->txt_data,    &evb->txt_data,    char, 0, 0, "comp_info->txt_data");
-    if (evb->bgzf_blocks.len) buf_copy (wvb, &wvb->bgzf_blocks, &evb->bgzf_blocks, BgzfBlockPiz, 0, 0, "comp_info->bgzf_blocks");
-    
-    comp->is_loaded = true;
-
-    mutex_unlock (comp->data_copy_complete); // release the main thread to continue, and free the evb data
-}
-
 // writer thread: waiting for data from a VB and loading it
 static void writer_load_vb (VbInfo *v)
 {
-    if (flag.show_threads) iprintf ("Writer thread: waiting for data from vb_i=%u\n", ENTNUM (vb_info, v));
+    bool is_comp = (v < FIRSTENT (VbInfo, vb_info) || v > LASTENT (VbInfo, vb_info));
+
+    if (flag.show_threads && !is_comp) 
+        iprintf ("writer: vb_i=%u WAITING FOR VB\n", ENTNUM (vb_info, v));
+    
+    else if (flag.show_threads && is_comp) 
+        iprintf ("writer: component_i=%u WAITING FOR TXT_HEADER\n", v->comp_i);
+
     mutex_wait (v->wait_for_data);
 
     v->is_loaded = true;
 }
 
-static void writer_init_data_copy_mutexes (void)
-{
-    // lock all in_plan comp mutexes
-    for (unsigned comp_i=0; comp_i < comp_info.len; comp_i++) {
-        CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
-        if (comp->in_plan)
-            mutex_lock (comp->data_copy_complete);
-    }
-    writer_thread_done_initialization = true; // release main thread to exit busy wait and continue
-}
-
 // Thread entry point for writer thread - at this point, the reconstruction plan is ready and unmutable
-static void writer_main_loop (void *unused)
+static void writer_main_loop (VBlockP wvb)
 {
     ASSERTNOTEMPTY (txt_file->recon_plan);
-
-    writer_init_data_copy_mutexes();
+    ASSERTNOTNULL (wvb);
 
     // execute reconstruction plan
     for (uint64_t i=0; i < txt_file->recon_plan.len; i++) {
@@ -666,55 +613,55 @@ static void writer_main_loop (void *unused)
         ASSERT (p->vb_i >= 0 && p->vb_i <= vb_info.len, 
                 "plan[%u].vb_i=%u expected to be in range [1,%u] ", (unsigned)i, p->vb_i, (unsigned)vb_info.len);
 
-        VbInfo *v  = p->vb_i                    ? ENT (VbInfo, vb_info, p->vb_i ) : NULL,
-               *v2 = p->vb_i && flag.interleave ? ENT (VbInfo, vb_info, p->vb2_i) : NULL;
+        VbInfo *v  = p->vb_i                        ? ENT (VbInfo, vb_info, p->vb_i) 
+                   : p->plan_type == PLAN_TXTHEADER ? &ENT (CompInfo, comp_info, p->rp_comp_i)->info
+                   :                                  NULL;
 
-        CompInfo *comp = !p->vb_i ? ENT (CompInfo, comp_info, p->rp_comp_i) : NULL;
-
-        // skip this plan item if its VB is filtered out (note: filtering out can happen also after plan is created, in piz_dispatch_one_vb)
-        if ((v && !v->in_plan) || (v2 && !v2->in_plan)) 
-            continue;
+        VbInfo *v2 = p->vb_i && flag.interleave ? ENT (VbInfo, vb_info, p->vb2_i) : NULL;
 
         // if data for this VB is not ready yet, wait for it
-        if (v  && !v ->is_loaded) writer_load_vb (v);
+        if (v && !v->is_loaded) 
+            writer_load_vb (v);
 
-        if (v2 && !v2->is_loaded) writer_load_vb (v2);
-
-        if (comp && !comp->is_loaded) 
-            writer_load_txt_header (comp);
+        if (v2 && !v2->is_loaded) 
+            writer_load_vb (v2);
 
         // case: free data if this is the last line of the VB
         switch (p->num_lines) {
 
-            case PLAN_TXTHEADER:   // write entire txt header
-                writer_flush_vb (wvb);
+            case PLAN_TXTHEADER:   
+                writer_flush_vb (v->vb); // write the txt header in its entirety
+                vb_release_vb (&v->vb);
                 break;
 
-            case PLAN_FULL_VB:   // write entire VB
+            case PLAN_FULL_VB:   
                 if (!flag.may_drop_lines) {
-                    writer_flush_vb (v->vb);
+                    writer_flush_vb (v->vb); // write entire VB
                     
                     txt_file->lines_so_far += v->vb->lines.len; // textual, not data-type, line (for downsampling accounting)
                 }
 
-                else  // expecting some lines to be dropped - we write lines one at a time, watching for dropped lines
-                    writer_write_line_range (v, 0, v->vb->lines.len);
-
-                writer_release_vb (v);
+                // case: some or all lines possibly dropped during reconstruction or VB not reconstructed
+                // if all lines were discovered to be grepped out by piz_dispatch_one_vb (FASTA/Q only)
+                // we write lines one at a time, not counting dropped lines in txt_file->lines_so_far
+                else 
+                    writer_write_line_range (wvb, v, 0, v->vb->lines.len);
+                
+                vb_release_vb (&v->vb);
                 break;
 
             case PLAN_END_OF_VB: // done with VB - free the memory (happens after a series of "default" line range entries)
-                writer_release_vb (v);
+                vb_release_vb (&v->vb);
                 break;
 
             case PLAN_INTERLEAVE:
-                writer_write_lines_interleaves (v, v2);
-                writer_release_vb (v);
-                writer_release_vb (v2);
+                writer_write_lines_interleaves (wvb, v, v2);
+                vb_release_vb (&v->vb);
+                vb_release_vb (&v2->vb);
                 break;
 
             default: 
-                writer_write_line_range (v, p->start_line, p->num_lines);
+                writer_write_line_range (wvb, v, p->start_line, p->num_lines);
                 break;
         }
 
@@ -723,77 +670,77 @@ static void writer_main_loop (void *unused)
     }
 
     writer_flush_vb (wvb);
+    vb_release_vb (&wvb); 
 }
 
-// PIZ main thread: hand over data from a VB whose reconstruction compute thread has completed, to the writer thread
-void writer_handover_data (VBlock *vb)
+// PIZ main thread: launch writer thread to write to a single txt_file (one or more components)
+static void writer_start_writing (uint32_t txt_file_i)
 {
-    VbInfo *v = ENT (VbInfo, vb_info, vb->vblock_i);
-    if (!v->in_plan) return; // we don't need this data as we are not going to write any of it
+    ASSERTNOTNULL (txt_file);
 
-    v->vb = vb; // writer thread now owns this VB, and is the only thread that will modify it, until finally destroying it
-
-    mutex_unlock (v->wait_for_data); 
-}
-
-// PIZ main thread: hand over data from a txtheader whose reconstruction main thread has completed, to the writer thread
-void writer_handover_txtheader (uint32_t component_i)
-{
-    if (flag.no_writer || flag_loading_auxiliary) return;
-
-    CompInfo *comp = ENT (CompInfo, comp_info, component_i);
-    
-    mutex_unlock (comp->wait_for_data);      // allow the writer thread to start copying the txt header data
-    mutex_wait (comp->data_copy_complete); // wait for completion of copying
-
-    buf_free (&evb->txt_data);
-    buf_free (&evb->bgzf_blocks);
-}
-
-// PIZ main thread: create reconstruction plan for the component(s) of a single output txt_file and launch writer thread
-void writer_start_writing (uint32_t txt_file_i)
-{
-    if (wvb || // already started
+    if (writer_thread != THREAD_ID_NONE || // already started
         flag.no_writer || flag_loading_auxiliary) return;
+
+    ASSERT (txt_file_i < txt_file_info.len, "txt_file_i=%u is out of range txt_file_info.len=%u", 
+            txt_file_i, (unsigned)txt_file_info.len);
 
     TxtFileInfo *tf = ENT (TxtFileInfo, txt_file_info, txt_file_i);
 
     // copy the portion of the reconstruction plan related to this txt file 
     buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, tf->first_plan_i, tf->plan_len, 0);
 
-    wvb = vb_initialize_special_vb (WVB); // writer thread's VB - an indication that the writer thread is running
-
-    writer_thread_done_initialization = false;
-    writer_thread = threads_create (writer_main_loop, NULL, "writer_thread", 0);
-
-    while (!writer_thread_done_initialization) // busy wait until writer thread initializes
-        usleep (1000); // 1 ms
+    VBlockP wvb = vb_get_vb ("writer", 0);
+    writer_thread = threads_create (writer_main_loop, wvb);
 }
 
-// PIZ main thread: wait for writer thread to finish
+// PIZ main thread: wait for writer thread to finish writing a single txt_file (one or more components)
 void writer_finish_writing (bool is_last_txt_file)
 {
-    if (flag.no_writer || !txt_file || !wvb) return;
+    if (flag.no_writer || !txt_file || writer_thread == THREAD_ID_NONE) return;
 
     // wait for thread to complete (possibly it completed already)
-    threads_join (writer_thread, true);
+    threads_join (&writer_thread, true); // also sets writer_thread=THREAD_ID_NONE
     
-    // add the timing information accucumlated in the writer (including all VBs) to the evb's data
-    profiler_add (&evb->profile, &wvb->profile);
-
     // all mutexes destroyed by main thread, that created them (not sure its important)    
     if (is_last_txt_file) {
         for (unsigned comp_i=0; comp_i < comp_info.len; comp_i++) {
             CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
-            mutex_destroy (comp->wait_for_data);
-            mutex_destroy (comp->data_copy_complete);
+            mutex_destroy (comp->info.wait_for_data);
         }
         
         for (uint32_t vb_i=0; vb_i < vb_info.len; vb_i++) {
             VbInfo *v = ENT (VbInfo, vb_info, vb_i);
             mutex_destroy (v->wait_for_data);
         }
-    }        
-        
-    vb_destroy_vb (&wvb);
+    }                
 }
+
+static void writer_handover (VbInfo *v, VBlock *vb)
+{
+    if (flag.no_writer || flag_loading_auxiliary) return;
+
+    if (!v->in_plan) return; // we don't need this data as we are not going to write any of it
+
+    writer_start_writing (v->comp_i); // start writer thread if not already started
+
+    v->vb = vb; // writer thread now owns this VB, and is the only thread that will modify it, until finally destroying it
+
+    threads_log_by_vb (vb, vb->compute_task, vb->vblock_i ? "HANDING OVER VB" : "HANDING OVER TXT_HEADER", 0);
+
+    mutex_unlock (v->wait_for_data); 
+}
+
+// PIZ main thread: hand over data from a txtheader whose reconstruction main thread has completed, to the writer thread
+void writer_handover_txtheader (VBlockP *comp_vb_p, uint32_t component_i)
+{
+    writer_handover (&ENT (CompInfo, comp_info, component_i)->info, *comp_vb_p);
+    *comp_vb_p = NULL;
+}
+
+// PIZ main thread: hand over data from a VB whose reconstruction compute thread has completed, to the writer thread
+void writer_handover_data (VBlockP *vb_p)
+{
+    writer_handover (ENT (VbInfo, vb_info, (*vb_p)->vblock_i), *vb_p);
+    *vb_p = NULL;
+}
+

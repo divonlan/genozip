@@ -509,7 +509,7 @@ void chain_load (void)
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.may_drop_lines = true; // if fact, we drop all the lines
     Dispatcher dispachter = piz_z_file_initialize (false);
-    piz_one_txt_file (dispachter, 0, true, false);
+    piz_one_txt_file (dispachter, false);
 
     // --show-chain-contigs
     if (flag.show_chain_contigs) {

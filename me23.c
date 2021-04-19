@@ -22,14 +22,14 @@
 // Header functions for 23andMe files
 //-----------------------------------------
 
-bool me23_header_inspect (BufferP txt_header)
+bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header)
 {
-    buf_alloc (evb, txt_header, 1, 0, char, 0, 0); // make room for \0
-    *AFTERENT (char, *txt_header) = 0; // nul-terminate for strstr
+    SAFE_NUL (AFTERENT (char, *txt_header));
 
     ASSINP (strstr (txt_header->data, "23andMe"), "file %s is missing a 23andMe header and thus not identified as a 23andMe file", 
             txt_name);
 
+    SAFE_RESTORE;
     return true;
 }
 
@@ -137,16 +137,16 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
                          "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%.*s\n"
     
     // move the me23 and header to the side for a sec
-    buf_move (evb, &evb->compressed, evb, txtheader_buf);
-    ARRAY (char, header23, evb->compressed);
+    buf_move (comp_vb, &comp_vb->compressed, comp_vb, txtheader_buf);
+    ARRAY (char, header23, comp_vb->compressed);
 
     Context *ctx = &z_file->contexts[ME23_CHROM];
     uint32_t num_chroms = (uint32_t)ctx->word_list.len;
     
-    buf_alloc_old (evb, txtheader_buf, 1.3*evb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3p1)+strlen (VCF_HEAD_3p2)+80 +
+    buf_alloc_old (comp_vb, txtheader_buf, 1.3*comp_vb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3p1)+strlen (VCF_HEAD_3p2)+80 +
                num_chroms * (strlen (VCF_HEAD_2) + 100), 1, "txt_data");
     
-    bufprintf (evb, txtheader_buf, VCF_HEAD_1, ref_filename);
+    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_1, ref_filename);
     
     // add contigs used in this file
     for (uint32_t chrom_i=0; chrom_i < num_chroms; chrom_i++) {
@@ -156,12 +156,12 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
         const char *chrom_name = ctx_get_snip_by_word_index (ctx, chrom_i, 0, &chrom_name_len);
         PosType contig_len = ref_contigs_get_contig_length (chrom_name, chrom_name_len);
 
-        bufprintf (evb, txtheader_buf, VCF_HEAD_2, chrom_name, contig_len);
+        bufprintf (comp_vb, txtheader_buf, VCF_HEAD_2, chrom_name, contig_len);
     }
 
     // add original 23andMe header, prefixing lines with "##co=" instead of "#"
     uint64_t header23_line_start = txtheader_buf->len;
-    for (uint64_t i=0; i < evb->compressed.len; i++) {
+    for (uint64_t i=0; i < comp_vb->compressed.len; i++) {
         if (header23[i] == '#') {
             header23_line_start = txtheader_buf->len;
             buf_add (txtheader_buf, "##co=", 5);
@@ -187,11 +187,11 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     }
 
     // add final lines - the command line length is unbound, careful not to put it in a bufprintf
-    bufprintf (evb, txtheader_buf, VCF_HEAD_3p1, GENOZIP_CODE_VERSION, GENOZIP_URL);
-    buf_add_string (evb, txtheader_buf, flags_command_line()->data);
-    bufprintf (evb, txtheader_buf, VCF_HEAD_3p2, sample_name_len, sample_name);
+    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p1, GENOZIP_CODE_VERSION, GENOZIP_URL);
+    buf_add_string (comp_vb, txtheader_buf, flags_command_line()->data);
+    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p2, sample_name_len, sample_name);
 
-    buf_free (&evb->compressed);
+    buf_free (&comp_vb->compressed);
 }
 
 // reconstruct VCF GENOTYPE field as VCF - REF,ALT,QUAL,FILTER,INFO,FORMAT,Sample

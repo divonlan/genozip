@@ -18,9 +18,10 @@ extern bool sam_zip_is_unaligned_line (const char *line, int len);
 extern bool sam_zip_dts_flag (void);
 
 // HEADER stuff
-extern bool sam_header_inspect (BufferP txt_header);
+extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header);
 
 // SEG Stuff
+extern void sam_zip_initialize (void);
 extern void sam_seg_initialize (VBlockP vb);
 extern void sam_seg_finalize (VBlockP vb);
 extern bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id);
@@ -39,7 +40,6 @@ extern void sam_set_MAPQ_filter (const char *optarg);
 extern void bam_seg_initialize (VBlockP vb);
 extern int32_t bam_is_header_done (bool is_eof);
 extern int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
-extern void txtheader_bam2sam (BufferP txt);
 extern void bam_read_vblock (VBlockP vb);
 extern void bam_seg_initialize (VBlockP vb);
 extern const char *bam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);

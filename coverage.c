@@ -189,12 +189,12 @@ void coverage_show_coverage (void)
         return;
     }
 
-    unsigned chr_width = flag.show_coverage==1 ? 26 : 13;
+    unsigned chr_width = (flag.show_coverage == COV_ALL ? 26 : 13);
 
-    if (flag.show_coverage != 3)
+    if (flag.show_coverage != COV_ONE)
         iprintf (is_info_stream_terminal ? "\n--coverage for: %s\n%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" 
-                                          : "\n--coverage for: %s\n%*s\t%s\t%s\t%s\t%s\t%s\n", 
-                          z_name, chr_width, "Contig", "LN", "Reads", "Bases", "Bases", "Depth");
+                                         : "\n--coverage for: %s\n%*s\t%s\t%s\t%s\t%s\t%s\n", 
+                 z_name, chr_width, "Contig", "LN", "Reads", "Bases", "Bases", "Depth");
 
     txt_file->coverage.len -= NUM_COVER_TYPES; // real contigs only
     ARRAY (uint64_t, coverage, txt_file->coverage);
@@ -227,7 +227,7 @@ void coverage_show_coverage (void)
                     : header_contigs                    ? ENT (RefContig, *header_contigs, i)->max_pos
                     :                                     ENT (RefContig, loaded_contigs,  i)->max_pos;
 
-        if (flag.show_coverage==1 || (flag.show_coverage==2 && cn_len <= 5))
+        if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && cn_len <= 5))
             iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
                      chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, 
                      100.0 * (double)coverage[i] / (double)coverage_special[CVR_TOTAL], 
@@ -245,7 +245,7 @@ void coverage_show_coverage (void)
     if (genome_nbases) // avoid division by 0
         sprintf (all_coverage, "%*.2f", (int)sizeof(all_coverage)-1, (double)coverage_special[CVR_ALL_CONTIGS] / (double)genome_nbases);
 
-    if (flag.show_coverage == 3) 
+    if (flag.show_coverage == COV_ONE) 
         iprintf ("%s:\t%s\n", z_name, all_coverage);
 
     else {

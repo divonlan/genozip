@@ -255,6 +255,17 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
         if (con->is_toplevel) {
+
+            // filter by --grep (but not for FASTQ or FASTA - they implement their own logic)
+            if (flag.grep && txt_file->data_type != DT_FASTA && txt_file->data_type != DT_FASTQ) {
+                SAFE_NUL (&rep_reconstruction_start[AFTERENT (char, vb->txt_data) - rep_reconstruction_start]);
+
+                if (!strstr (rep_reconstruction_start, flag.grep))
+                    vb->drop_curr_line = true;
+
+                SAFE_RESTORE;
+            }
+
             if (vb->drop_curr_line) {
                 ASSERT0 (flag.may_drop_lines, "Lines cannot be dropped because flag.may_drop_lines=false. This is bug in the code.");
 
@@ -293,7 +304,7 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
     const char *prefixes;
     uint32_t prefixes_len;
 
-    bool cache_exists = buf_is_allocated (&ctx->con_cache);
+    bool cache_exists = buf_is_alloc (&ctx->con_cache);
     uint16_t cache_item_len;
 
     // if this container exists in the cache - use the cached one

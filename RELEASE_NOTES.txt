@@ -417,10 +417,12 @@ bug fixes, including major bug with mc:i optional field in SAM
 - new option: genocat --counts - displays the number of lines (or reads in the case of FASTQ), that
   survived any filters applied (--regions, --grep, --taxid, --FLAGS, --MAPQ, --component, --one-vb etc)
 - new option: --echo displays the command line and a timestamp upon completion of execution (successful or failed)
+- discontinued support for GTShark codec - use genozip v11 to decompress old VCF files compressed with --gtshark
 
 Option changes:
 - genounzip now always unbinds files, and the --unbind is canceled. the --prefix can now used to set a prefix.
 - genocat --fastq will NOT add /1 or /2 to R1 and R2 reads in the case that --FLAG is specified as well
+- genocat --grep now works with most data types
 - genolos --unbind (-u) option is renamed --list (-l). genozip --list option is canceled.
 - --sex, --coverage, --stats and --STATS replace --show-sex, --show-coverage --show-stats, --SHOW-STATS resptively
 - --chroms, and --contigs are accepted as alternative names for --list-chroms
@@ -428,4 +430,6 @@ Option changes:
 New developer options:
 - new option: genozip --show-chain-contigs - used in combination with --chain
 - new option: genozip --show-kraken - used in combination with --taxid
+- new option: --show-uncompress. Shows uncompressing of section data.
+- new option: --show-flags. Shows internal flags after initialization.
 

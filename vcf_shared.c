@@ -24,7 +24,6 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->use_special_sf = 0;
     vb->gt_prev_ploidy = 0;
     vb->gt_prev_phase = 0;
-    vb->gtshark_gt_ctx = vb->gtshark_db_ctx = vb->gtshark_ex_ctx = vb->gt_ctx = NULL;
     vb->sf_ctx = NULL;
     
     buf_free (&vb->sf_txt);

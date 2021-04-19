@@ -277,7 +277,7 @@ void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min_pos, P
     typedef struct { PosType min_pos, max_pos, gpos; } MinMax;
 
     // first time here for this z_file - we initialize ra_min_max_by_chrom
-    if (!buf_is_allocated (&z_file->ra_min_max_by_chrom)) {
+    if (!buf_is_alloc (&z_file->ra_min_max_by_chrom)) {
         uint64_t num_chroms = z_file->contexts[CHROM].word_list.len;
 
         buf_alloc (evb, &z_file->ra_min_max_by_chrom, 0, num_chroms, MinMax, 1, "z_file->ra_min_max_by_chrom");

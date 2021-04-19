@@ -141,7 +141,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --debug-threads  ZUCL.  Alternative to --show-threads - store thread log in a buffer rather than sending to I/O.
+.. option:: --debug-threads  ZUCL.  Alternative to --show-threads - store thread log in a buffer and display it in case of an error.
 
           |
 
@@ -158,6 +158,14 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
           |
 
 .. option:: --show-mutex[=mutex-name].  ZUC. Shows locks and unlocks of all mutexes or a particular mutex.
+
+          |
+
+.. option:: --show-uncompress.  ZUC. Shows uncompressing of section data.
+
+          |
+
+.. option:: --show-flags.  ZUCL. Shows internal flags after initialization.
 
           |
 

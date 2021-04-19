@@ -65,7 +65,7 @@ const char complement[256] =  { ['A']='T', ['C']='G', ['G']='C', ['T']='A',  // 
                                 [0 ...'@']=4, ['B']=4, ['D'...'F']=4, ['U'...255]=0 };
 
 // cache stuff
-static int refhash_cache_creation_thread_id;
+static ThreadId refhash_cache_creation_thread_id;
 static bool refhash_creating_cache = false;
 
 // ------------------------------------------------------
@@ -218,7 +218,7 @@ void refhash_compress_refhash (void)
     next_task_layer = 0;
     next_task_start_within_layer = 0;
 
-    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing hash table (this can take several minutes)...", 
+    dispatcher_fan_out_task ("compress_refhash", NULL, PROGRESS_MESSAGE, "Writing hash table (this can take several minutes)...", 
                              false, true, true, false, 0, 20000,
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
@@ -247,7 +247,7 @@ void refhash_remove_cache (void)
 }
 
 // thread entry for creating refhash cache
-static void refhash_create_cache (void *unused_arg)
+static void refhash_create_cache (VBlockP unused)
 {
     buf_dump_to_file (refhash_get_cache_fn(), &refhash_buf, 1, true, false, false);
 }
@@ -257,7 +257,7 @@ static void refhash_create_cache_in_background (void)
     // start creating the genome cache now in a background thread, but only if we loaded the entire reference
     if (!flag.regions) { 
         refhash_get_cache_fn(); // generate name before we close z_file
-        refhash_cache_creation_thread_id = threads_create (refhash_create_cache, NULL, "create_refhash_cache", 0);
+        refhash_cache_creation_thread_id = threads_create (refhash_create_cache, evb);
         refhash_creating_cache = true;
     }
 }
@@ -266,7 +266,7 @@ void refhash_create_cache_join (void)
 {
     if (!refhash_creating_cache) return;
 
-    threads_join (refhash_cache_creation_thread_id, true);
+    threads_join (&refhash_cache_creation_thread_id, true);
     refhash_creating_cache = false;
 }
 
@@ -313,8 +313,6 @@ static void refhash_read_one_vb (VBlockP vb)
 
     if (((SectionHeaderRefHash *)vb->z_data.data)->layer_i >= num_layers)
         return; // don't read the high layers if beyond the requested num_layers
-
-    ASSERT (section_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
 
     NEXTENT (int32_t, vb->z_section_headers) = section_offset;
 
@@ -369,7 +367,7 @@ void refhash_initialize (bool *dispatcher_invoked)
     
     if (dispatcher_invoked) *dispatcher_invoked = false; // initialize
 
-    if (buf_is_allocated (&refhash_buf)) return; // already loaded from a previous file
+    if (buf_is_alloc (&refhash_buf)) return; // already loaded from a previous file
 
     // case 1: called from ref_make_ref_init - initialize for making a reference file
     if (flag.make_reference) {
@@ -406,13 +404,13 @@ void refhash_initialize (bool *dispatcher_invoked)
             refhash_initialize_refhashs_array();
 
             sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-            dispatcher_fan_out_task (ref_filename,
-                                    PROGRESS_MESSAGE, "Reading and caching reference hash table...", 
-                                    flag.test, true, true, false, 0, 20000,
-                                    refhash_read_one_vb, 
-                                    refhash_uncompress_one_vb, 
-                                    NULL);
-
+            dispatcher_fan_out_task ("load_refhash", ref_filename,
+                                     PROGRESS_MESSAGE, "Reading and caching reference hash table...", 
+                                     flag.test, true, true, false, 0, 20000,
+                                     refhash_read_one_vb, 
+                                     refhash_uncompress_one_vb, 
+                                     NULL);
+ 
             refhash_create_cache_in_background();
             
             if (dispatcher_invoked) *dispatcher_invoked = true;

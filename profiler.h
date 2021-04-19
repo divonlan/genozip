@@ -76,7 +76,8 @@ typedef struct timespec TimeSpecType;
                            clock_gettime(CLOCK_REALTIME, &tb); \
                            iprintf, "%u.%06u: %s\n", (uint32_t)tb.tv_sec, (uint32_t)(tb.tv_nsec/1000), (str)); }
 
-extern void profiler_add (ProfilerRec *dst, const ProfilerRec *src);
+extern void profiler_initialize (void);
+extern void profiler_add (ConstVBlockP vb);
 extern const char *profiler_print_short (const ProfilerRec *p);
 extern void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs);
 

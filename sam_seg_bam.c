@@ -359,9 +359,8 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
     seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], next_field, // QNAME
                         l_read_name-1, arg, 0, 2 /* account for \0 and l_read_name */); 
-
-    if (kraken_is_loaded)
-        kraken_seg_taxid (vb_, SAM_TAXID, next_field, l_read_name-1, true);
+    vb->contexts[SAM_QNAME].last_txt = ENTNUM (vb->txt_data, next_field); // store for kraken
+    vb->last_txt_len (SAM_QNAME) = l_read_name-1;
 
     next_field += l_read_name; // inc. \0
 

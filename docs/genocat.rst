@@ -88,7 +88,7 @@ One or more file names must be given.
    
    |
 
-.. option:: -g, --grep string.  (FASTQ FASTA) Show only records in which <string> is a case-sensitive substring of the description.
+.. option:: -g, --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
 
           |
 
@@ -138,7 +138,7 @@ One or more file names must be given.
     
           |
 
-.. option:: --count.  Shows the coverage and depth of each contig. "Coverage and Depth" for details. 
+.. option:: --count.  Rather than displaying the file content just report the number of lines (for FASTQ: reads) (excluding the header) that would have been displayed. Useful in combination with filtering options.
     
           |
 

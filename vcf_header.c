@@ -32,8 +32,8 @@ static char *vcf_sample_names_data;    // vcf_sample_names point into here
 
 #define LINEIS(s) (line_len > strlen(s) && !memcmp (line, (s), strlen(s))) // note: gcc optimizer resolves strlen("CONST") in compilation time
 
-#define SUBST_LABEL(old,new) do { buf_add_more (evb, new_txt_header, (new), strlen (new), NULL); \
-                                  buf_add_more (evb, new_txt_header, line + strlen (old), line_len - strlen (old), NULL); } while (0)
+#define SUBST_LABEL(old,new) do { buf_add_more (NULL, new_txt_header, (new), strlen (new), NULL); \
+                                  buf_add_more (NULL, new_txt_header, line + strlen (old), line_len - strlen (old), NULL); } while (0)
 
 void vcf_header_piz_init (void)
 {
@@ -76,12 +76,12 @@ static unsigned vcf_header_get_last_line (Buffer *txt_header, char **line_p)
     return is_field_name_line (line, line_len) ? (unsigned)line_len : 0;
 }
 
-static void vcf_header_add_genozip_command (Buffer *txt_header)
+static void vcf_header_add_genozip_command (VBlockP txt_header_vb, Buffer *txt_header)
 {
     // the command line length is unbound, careful not to put it in a bufprintf
-    buf_add_string (evb, txt_header, HK_GENOZIP_CMD"\"");
-    buf_add_string (evb, txt_header, flags_command_line()->data);
-    bufprintf (evb, txt_header, "\" %s\n", str_time().s);
+    buf_add_string (txt_header_vb, txt_header, HK_GENOZIP_CMD"\"");
+    buf_add_string (txt_header_vb, txt_header, flags_command_line()->data);
+    bufprintf (txt_header_vb, txt_header, "\" %s\n", str_time().s);
 }
 
 static void vcf_header_get_subvalue (const char *line, unsigned line_len, unsigned key_len,
@@ -182,23 +182,23 @@ static bool vcf_header_piz_liftover_header_one_line (const char *line, unsigned 
     else if (LINEIS ("##reference=")) SUBST_LABEL ("##reference=", HK_LB_REF);
     else if (LINEIS (HK_DC_PRIMARY))  SUBST_LABEL (HK_DC_PRIMARY, HK_DC_LUFT);
     else if (LINEIS ("##fileformat=")) {}  // remove ##fileformat as it will be reconstructed from the rejects component
-    else                              buf_add_more (evb, new_txt_header, line, line_len, NULL);
+    else                              buf_add_more (NULL, new_txt_header, line, line_len, NULL);
 
     return false; // continue iterating
 }
 
 // PIZ with --luft: remove fileformat, update *contig, *reference, dual_coordinates keys to Luft format
-static void vcf_header_piz_liftover_header (Buffer *txt_header)
+static void vcf_header_piz_liftover_header (VBlockP txt_header_vb, Buffer *txt_header)
 {
-    #define new_txt_header evb->codec_bufs[0]
+    #define new_txt_header txt_header_vb->codec_bufs[0]
 
-    buf_alloc_old (evb, &new_txt_header, txt_header->len, 0, "evb->codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
+    buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
 
     txtfile_foreach_line (txt_header, false, vcf_header_piz_liftover_header_one_line, &new_txt_header, 0, 0, 0);
 
     // replace txt_header with lifted back one
     buf_free (txt_header);
-    buf_copy (evb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
+    buf_copy (txt_header_vb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
 
     buf_free (&new_txt_header);
     #undef new_txt_header
@@ -229,7 +229,7 @@ static void vcf_header_zip_liftback_header (Buffer *txt_header)
 
     // case: Luft file - scan the header and for LIFTBACK_REJECT lines, and move them to txt_file->unconsumed (after removing the label) 
     // to be processsed as normal variants
-    buf_alloc_old (evb, &new_txt_header, txt_header->len, 0, "evb->codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
+    buf_alloc_old (evb, &new_txt_header, txt_header->len + 1 /*+1 to make sure alloc allocates */, 0, "evb->codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
     buf_alloc_old (evb, &rejects, 65536, 0, "evb->codec_bufs[1]"); // initial allocation
 
     txtfile_foreach_line (txt_header, false, vcf_header_zip_liftback_header_one_line, &new_txt_header, &rejects, 0, 0);
@@ -320,9 +320,9 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     return true; // all good
 }
 
-static bool vcf_inspect_txt_header_piz (Buffer *txt_header)
+static bool vcf_inspect_txt_header_piz (VBlock *txt_header_vb, Buffer *txt_header)
 {
-    vcf_header_set_globals (z_file->name, &evb->txt_data, false);
+    vcf_header_set_globals (z_file->name, txt_header, false);
 
     if (flag.genocat_no_reconstruct) return true;
 
@@ -354,26 +354,26 @@ static bool vcf_inspect_txt_header_piz (Buffer *txt_header)
 
     // if needed, liftover the header
     if (flag.luft && !flag.header_one && !flag.processing_rejects) 
-        vcf_header_piz_liftover_header (txt_header);
+        vcf_header_piz_liftover_header (txt_header_vb, txt_header);
 
     // add genozip command line
     if (!flag.header_one && exe_type == EXE_GENOCAT && !flag.genocat_no_reconstruct && !flag.processing_rejects
         && !flag.no_pg && (flag.data_modified || z_file->z_flags.dual_coords)) 
-        vcf_header_add_genozip_command (txt_header);
+        vcf_header_add_genozip_command (txt_header_vb, txt_header);
 
     if (flag.drop_genotypes) 
         vcf_header_trim_field_name_line (&vcf_field_name_line); // drop FORMAT and sample names
 
     // add the (perhaps modified) header
-    buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_data");
+    buf_add_buf (txt_header_vb, txt_header, &vcf_field_name_line, char, "txt_data");
 
     return true; // all good
 }
 
-bool vcf_inspect_txt_header (Buffer *txt_header)
+bool vcf_inspect_txt_header (VBlockP txt_header_vb, Buffer *txt_header)
 {
     return (command == ZIP) ? vcf_inspect_txt_header_zip (txt_header)
-                            : vcf_inspect_txt_header_piz (txt_header);
+                            : vcf_inspect_txt_header_piz (txt_header_vb, txt_header);
 }
 
 static bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bool soft_fail)
@@ -397,7 +397,7 @@ static bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bo
         else if (vcf_header->data[i] == '#' && (i==0 || vcf_header->data[i-1] == '\n' || vcf_header->data[i-1] == '\r')) {
         
             // if first vcf file - copy the header to the global
-            if (!buf_is_allocated (&vcf_field_name_line)) {
+            if (!buf_is_alloc (&vcf_field_name_line)) {
                 buf_copy (evb, &vcf_field_name_line, vcf_header, char, i, vcf_header->len - i, "vcf_field_name_line");
                 vcf_field_name_line_filename = filename;
             }

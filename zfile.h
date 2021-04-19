@@ -44,8 +44,7 @@ extern bool zfile_read_genozip_header (uint64_t *txt_data_size, uint64_t *num_it
 
 extern SectionHeader *zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, SectionType expected_sec_type);
 
-// returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag.unbind)
-#define SEEK_NONE ((uint64_t)-1)
+#define SECTION_SKIPPED ((int32_t)-1)
 extern int32_t zfile_read_section_do (FileP file, VBlockP vb, uint32_t original_vb_i, 
                                       BufferP data /* buffer to append */, const char *buf_name,
                                       SectionType expected_sec_type, 

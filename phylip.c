@@ -27,6 +27,7 @@ static uint32_t phy_seq_len = 0; // read from txt header
 // Header functions
 //-----------------
 
+// ZIP: called from txtfile_read_header
 // returns header length if header read is complete + sets lines.len, -1 not complete yet 
 int32_t phy_is_header_done (bool is_eof)
 {
@@ -43,9 +44,9 @@ int32_t phy_is_header_done (bool is_eof)
     return -1;
 }
 
-bool phy_header_inspect (BufferP txt_header)
+bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header)
 {
-    ARRAY (char, header, evb->txt_data);
+    ARRAY (char, header, *txt_header);
 
     uint32_t num_seqs;
     int ret = sscanf (header, "%u %u", &num_seqs, &phy_seq_len);

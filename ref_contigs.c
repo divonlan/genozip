@@ -81,7 +81,7 @@ void ref_contigs_compress (void)
 
     static Buffer created_contigs = EMPTY_BUFFER;  
 
-    if (!buf_is_allocated (&z_file->contexts[CHROM].nodes)) return; // no contigs
+    if (!buf_is_alloc (&z_file->contexts[CHROM].nodes)) return; // no contigs
 
     // the number of contigs is at most the number of chroms - but could be less if some chroms have no sequence
     // in SAM with header and -E, we don't copy the contigs to CHROM, so we take the length from loaded_contigs.
@@ -176,7 +176,7 @@ static int ref_contigs_sort_contigs_alphabetically (const void *a, const void *b
 
 static void ref_contigs_create_sorted_index (void)
 {
-    if (buf_is_allocated (&loaded_contigs_sorted_index)) return; // already done
+    if (buf_is_alloc (&loaded_contigs_sorted_index)) return; // already done
 
     // contig_words_sorted_index - an array of uint32 of indexes into contig_words - sorted by alphabetical order of the snip in contig_dict
     buf_alloc (evb, &loaded_contigs_sorted_index, 0, loaded_contigs.len, uint32_t, 1, "loaded_contigs_sorted_index");
@@ -310,7 +310,7 @@ void ref_contigs_generate_data_if_denovo (void)
     // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
     Context *chrom_ctx = &z_file->contexts[CHROM];
 
-    ASSINP (flag.reference == REF_INTERNAL || (buf_is_allocated (&chrom_ctx->dict) && buf_is_allocated (&chrom_ctx->word_list)),
+    ASSINP (flag.reference == REF_INTERNAL || (buf_is_alloc (&chrom_ctx->dict) && buf_is_alloc (&chrom_ctx->word_list)),
             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);
 
     buf_copy (evb, &loaded_contigs_dict, &chrom_ctx->dict, char, 0, 0, "contig_dict");
@@ -378,7 +378,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsig
 
     const char *ref_chrom_name = ENT (const char, loaded_contigs_dict, contig->char_index); // might be different that chrom_name if we used an alt_name
 
-    if (buf_is_allocated (&ranges)) { // it is not allocated in --show-sex/coverage
+    if (buf_is_alloc (&ranges)) { // it is not allocated in --show-sex/coverage
         PosType ref_last_pos = ENT (Range, ranges, ref_chrom)->last_pos; // get from ranges because RefContig.LN=0 - we don't populate it at reference creation
         
         // case: file header is missing length, update from reference

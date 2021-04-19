@@ -439,7 +439,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     buf_alloc (vb, &vb->txt_data, 0, flag.vblock_memory, char, 1, "txt_data");    
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
-    if (buf_is_allocated (&txt_file->unconsumed_txt)) {
+    if (buf_is_alloc (&txt_file->unconsumed_txt)) {
         buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, char ,0 ,0, "txt_data");
         buf_free (&txt_file->unconsumed_txt);
     }
@@ -471,7 +471,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
                 ASSINP (len, "File %s has less FASTQ reads than its R1 counterpart (vb=%u has %u lines while counterpart has %u lines)", 
                         txt_name, vb->vblock_i, my_lines, her_lines);
 
-                ASSERT (vb->txt_data.len, "txt_data.len=0 when reading pair-2 vb=%u", vb->vblock_i);
+                ASSERT (vb->txt_data.len, "txt_data.len=0 when reading pair_2 vb=%u", vb->vblock_i);
 
                 // if we need more lines - increase memory and keep on reading
                 max_memory_per_vb *= 1.1; 

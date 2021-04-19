@@ -39,7 +39,7 @@ typedef struct {
 
 // variables that persist across multiple dispatchers run sequentially
 static TimeSpecType profiler_timer; // wallclock
-
+/*
 void dispatcher_show_time (const char *task, const char *stage, int32_t thread_index, uint32_t vb_i)
 {
     static bool initialized = false;
@@ -64,7 +64,7 @@ void dispatcher_show_time (const char *task, const char *stage, int32_t thread_i
     prev_thread_index = thread_index;
     prev_vb_i         = vb_i;
 }
-
+*/
 static void dispatcher_show_progress (Dispatcher dispatcher)
 {
     uint64_t total=0, sofar=0;
@@ -125,8 +125,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool for all fan-outs throughout the execution
     vb_create_pool (MAX (1, global_max_threads)    // compute thread VBs
-                  + 1                              // evb
-                  + (command == PIZ)               // wvb (only applicable to PIZ)
+                  + (command == PIZ)               // txt header VB (only applicable to PIZ)
                   + z_file->max_conc_writing_vbs); // writer thread VBs 
 
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
@@ -182,16 +181,12 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     // must be before vb_cleanup_memory() 
     if (flag.show_memory) buf_display_memory_usage (false, dd->max_threads, dd->max_vb_id_so_far);    
 
-    // note: we can only test evb when no compute thread is running as compute threads might modify evb buffers
-    // mid-way through test causing a buffer to have an inconsistent state and for buf_test_overflows to therefore report an error
-    buf_test_overflows (evb, "dispatcher_finish"); 
-
     // free memory allocations between files, when compressing multiple non-bound files or 
     // decompressing multiple files. 
     // don't bother freeing (=save time) if this is the last file, unless we're going to test and need the memory
     if (dd->cleanup_after_me && (!dd->is_last_file || flag.test)) {
         vb_cleanup_memory(); 
-        vb_release_vb (evb, __FUNCTION__);
+        vb_release_vb (&evb); // reset memory 
     }
     
     if (last_vb_i && !dd->cleanup_after_me) 
@@ -217,9 +212,10 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP))
     DispatcherData *dd = (DispatcherData *)dispatcher;
     VBlockP vb = dd->vbs[dd->next_dispatched];
     ASSERTNOTNULL (vb);
-    
+    ASSERT0 (vb->vblock_i, "dispatcher_compute: cannot compute a VB because vb->vblock_i=0");
+
     if (dd->max_threads > 1) {
-        vb->compute_thread_id = threads_create ((void (*)(void *))func, vb, dd->task_name, vb);
+        threads_create (func, vb);
         dd->next_dispatched = (dd->next_dispatched + 1) % dd->max_threads;
     }
     else  
@@ -254,7 +250,7 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool
 
     if (dd->max_threads > 1) 
         // wait for thread to complete (possibly it completed already)
-        if (!threads_join (dd->vbs[dd->next_joined]->compute_thread_id, blocking))
+        if (!threads_join (&dd->vbs[dd->next_joined]->compute_thread_id, blocking))
             return NULL; // only happens if non-blocking
 
     // move VB from "vbs" array to processed_vb
@@ -288,16 +284,7 @@ VBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 void dispatcher_abandon_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-
-    VBlockP vb = dd->vbs[dd->next_dispatched];
-    if (!vb) return;
-
-    buf_test_overflows(vb, "dispatcher_abandon_next_vb"); 
-
-    if (flag.show_time) profiler_add (&evb->profile, &vb->profile);
-
-    vb_release_vb (vb, __FUNCTION__); 
-    dd->vbs[dd->next_dispatched] = NULL;
+    dd->vbs[dd->next_dispatched] = NULL; 
 }
 
 void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb)
@@ -306,17 +293,16 @@ void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb)
 
     if (dd->processed_vb) {
 
-        if (release_vb) { // note: if VB is sent to the writer thread, it is released there, not here
-            buf_test_overflows(dd->processed_vb, "dispatcher_recycle_vbs"); // just to be safe, this isn't very expensive
-            if (flag.show_time) profiler_add (&evb->profile, &dd->processed_vb->profile);
-            
+        if (release_vb) { 
             // WORKAROUND to bug 343: there is a race condition of unknown cause is flag.no_writer=true (eg --coverage, --count) crashes
             if (flag.no_writer) usleep (10000); 
             
-            vb_release_vb (dd->processed_vb, __FUNCTION__); // cleanup vb and get it ready for another usage (without freeing memory)
+            vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
         }
 
-        dd->processed_vb = NULL;
+        // case: VB dispatched to the writer thread, and released there
+        else
+            dd->processed_vb = NULL;
     }
 
     if (dd->prog == PROGRESS_PERCENT)
@@ -329,9 +315,7 @@ void dispatcher_set_input_exhausted (Dispatcher dispatcher, bool exhausted)
     dd->input_exhausted = exhausted;
 
     if (exhausted) {
-        vb_release_vb (dd->vbs[dd->next_dispatched], __FUNCTION__);
-        dd->vbs[dd->next_dispatched] = NULL;
-
+        vb_release_vb (&dd->vbs[dd->next_dispatched]);
         dd->next_vb_i--; // we didn't use this vb_i
     }
 }    
@@ -354,17 +338,17 @@ bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
 }
 
 // returns the number of VBs successfully outputted
-Dispatcher dispatcher_fan_out_task_do (const char *task_name,
-                                       const char *filename,   // NULL to continue with previous filename
-                                       ProgressType prog,
-                                       const char *prog_msg,   // used if prog=PROGRESS_MESSAGE 
-                                       bool test_mode,
-                                       bool is_last_file, 
-                                       bool cleanup_after_me, 
-                                       bool force_single_thread, 
-                                       uint32_t previous_vb_i, // used if binding file
-                                       uint32_t idle_sleep_microsec,
-                                       DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
+Dispatcher dispatcher_fan_out_task (const char *task_name,
+                                    const char *filename,   // NULL to continue with previous filename
+                                    ProgressType prog,
+                                    const char *prog_msg,   // used if prog=PROGRESS_MESSAGE 
+                                    bool test_mode,
+                                    bool is_last_file, 
+                                    bool cleanup_after_me, 
+                                    bool force_single_thread, 
+                                    uint32_t previous_vb_i, // used if binding file
+                                    uint32_t idle_sleep_microsec,
+                                    DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
     Dispatcher dispatcher = dispatcher_init (task_name, force_single_thread ? 1 : global_max_threads, 
                                              previous_vb_i, test_mode, is_last_file, cleanup_after_me, filename, prog, prog_msg);

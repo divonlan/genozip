@@ -47,6 +47,9 @@ static const char optional_sep_by_type[2][256] = { { // compressing from SAM
         ['B']=CI_NATIVE_NEXT                                                      // reconstruct array and then \t seperator if SAM and no seperator for BAM
 } };
 
+static char taxid_redirection_snip[100];
+static unsigned taxid_redirection_snip_len;
+
 // ----------------------
 // Compressor callbacks
 // ----------------------
@@ -128,6 +131,13 @@ bool sam_zip_dts_flag (void)
 // ----------------------
 // Seg stuff
 // ----------------------
+
+void sam_zip_initialize (void)
+{
+    taxid_redirection_snip_len = sizeof (taxid_redirection_snip);
+    seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_fields[SAM_TAXID], false, 0, 
+                            taxid_redirection_snip, &taxid_redirection_snip_len);
+}
 
 void sam_seg_initialize (VBlock *vb)
 {
@@ -407,7 +417,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     if (!recursion_level) {
         // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite nbits that overlays it
         //buf_alloc_old (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-        //        buf_is_allocated (&bitmap_ctx->local) ? NULL : "contexts->local", 0); 
+        //        buf_is_alloc (&bitmap_ctx->local) ? NULL : "contexts->local", 0); 
         
         ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspeciously high and might indicate a bug", seq_len);
         
@@ -1043,6 +1053,10 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
     else if (dict_id.num == dict_id_OPTION_mc) 
         sam_seg_mc_field (vb, dict_id, value, value_len, add_bytes);
 
+    // TX:i: - we actually seg this as a primary field SAM_TAX_ID
+    else if (dict_id.num == dict_id_OPTION_TX) 
+        seg_by_dict_id (vb, taxid_redirection_snip, taxid_redirection_snip_len, dict_id, add_bytes); 
+
     // E2 - SEQ data (note: E2 doesn't have a context - it shares with SEQ)
     else if (dict_id.num == dict_id_fields[SAM_E2_Z]) {
         ASSSEG0 (dl->seq_len, value, "E2 tag without a SEQ"); 
@@ -1109,6 +1123,23 @@ const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, int32_t
     return next_field;
 }
 
+static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bool *has_kraken, 
+                                       char *taxid_str, const char **tag, char *type,  // out
+                                       const char **value, unsigned *value_len, // out
+                                       bool is_bam)
+{
+    *tag        = "TX"; // genozip introduced tag (=taxid)
+    *type       = 'i';
+    *value      = taxid_str;
+    *has_kraken = false;
+    *value_len  = kraken_seg_taxid_do ((VBlockP)vb, SAM_TAXID, last_txt (vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME),
+                                       taxid_str, true);
+
+    vb->vb_data_size += is_bam ? 7 : (*value_len + 6); // txt modified
+
+    return next_field; // unmodified
+}
+
 const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field,
                                   int32_t len, bool *has_13, char separator, // sam only
                                   const char *after_field) // bam only 
@@ -1121,20 +1152,25 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
     const char *value, *tag;
     char type;
     unsigned value_len;
+    char added_value[20];
 
     // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
     con.items[con_nitems(con)] = (ContainerItem){ .translator = SAM2BAM_OPTIONAL_SELF }; 
     con_inc_nitems (con);
     
-    while (is_bam ? (next_field < after_field) : (separator != '\n')) {
+    bool has_kraken = kraken_is_loaded;
 
-        next_field = is_bam ? bam_get_one_optional (vb, next_field,                          &tag, &type, &value, &value_len)
-                            : sam_get_one_optional (vb, next_field, len, &separator, has_13, &tag, &type, &value, &value_len);
+    while ((is_bam ? (next_field < after_field) : (separator != '\n'))
+         || has_kraken) {
+
+        next_field = has_kraken ? sam_seg_get_kraken   (vb, next_field, &has_kraken, added_value, &tag, &type, &value, &value_len, is_bam)  
+                   : is_bam     ? bam_get_one_optional (vb, next_field,                           &tag, &type, &value, &value_len)
+                   :              sam_get_one_optional (vb, next_field, len, &separator, has_13,  &tag, &type, &value, &value_len);
 
         con.items[con_nitems(con)] = (ContainerItem) {
-            .dict_id      = sam_seg_optional_field (vb, dl, is_bam, tag, type, value, value_len),
-            .translator   = optional_field_translator ((uint8_t)type), // how to transform the field if reconstructing to BAM
-            .seperator    = { optional_sep_by_type[is_bam][(uint8_t)type], '\t' },
+            .dict_id    = sam_seg_optional_field (vb, dl, is_bam, tag, type, value, value_len),
+            .translator = optional_field_translator ((uint8_t)type), // how to transform the field if reconstructing to BAM
+            .seperator  = { optional_sep_by_type[is_bam][(uint8_t)type], '\t' },
         };
         con_inc_nitems (con);
 
@@ -1251,9 +1287,8 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     GET_NEXT_ITEM ("QNAME");
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
     seg_compound_field (vb_, &vb->contexts[SAM_QNAME], field_start, field_len, arg, 0, 1 /* \n */);
-
-    if (kraken_is_loaded)
-        kraken_seg_taxid (vb_, SAM_TAXID, field_start, field_len, true);
+    vb->contexts[SAM_QNAME].last_txt = ENTNUM (vb->txt_data, field_start); // store for kraken
+    vb->last_txt_len (SAM_QNAME) = field_len;
 
     SEG_NEXT_ITEM (SAM_FLAG);
     int64_t flag;

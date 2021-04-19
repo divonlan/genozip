@@ -26,7 +26,7 @@ void *codec_alloc (VBlock *vb, int size, double grow_at_least_factor)
     // get the next buffer - allocations are always in the same order in bzlib and lzma -
     // so subsequent VBs will allocate roughly the same amount of memory for each buffer
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
-        if (!buf_is_allocated (&vb->codec_bufs[i])) {
+        if (!buf_is_alloc (&vb->codec_bufs[i])) {
             buf_alloc (vb, &vb->codec_bufs[i], 0, size, char, grow_at_least_factor, names[i]);
             //printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;
@@ -60,7 +60,7 @@ void codec_free_all (VBlock *vb)
 void codec_verify_free_all (VBlock *vb, const char *op, Codec codec)
 {
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
-        ASSERT (!buf_is_allocated (&vb->codec_bufs[i]), "About to call %s for %s, but codec_bufs[%u] is allocated, expecting it to be free: %s",
+        ASSERT (!buf_is_alloc (&vb->codec_bufs[i]), "About to call %s for %s, but codec_bufs[%u] is allocated, expecting it to be free: %s",
                 op, codec_name (codec), i, buf_desc (&vb->codec_bufs[i]).s);
 }
 

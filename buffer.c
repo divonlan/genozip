@@ -117,7 +117,7 @@ static void buf_find_underflow_culprit (const char *memory, const char *msg)
     VBlockPool *vb_pool = vb_get_pool();
     
     bool found=false;
-    for (int vb_i=-2; vb_i < (int)vb_pool->num_vbs; vb_i++) {
+    for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
         VBlock *vb = vb_get_from_pool (vb_i);
 
         if (!vb) continue;
@@ -157,7 +157,7 @@ static void buf_test_overflows_all_other_vb(const VBlock *caller_vb, const char 
     VBlockPool *vb_pool = vb_get_pool();
 
     fprintf (stderr, "Testing all other VBs:\n");
-    for (int vb_i=-2; vb_i < (int)vb_pool->num_vbs; vb_i++) {
+    for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
         VBlock *vb = vb_get_from_pool (vb_i);
         if (!vb || vb == caller_vb) continue; // skip caller's VB
         buf_test_overflows_do (vb, false, msg);
@@ -263,7 +263,7 @@ static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), voi
 {
     VBlockPool *vb_pool = vb_get_pool ();
 
-    for (int vb_i=-2; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
+    for (int vb_i=-1; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
 
         VBlockP vb = vb_get_from_pool (vb_i);
         if (!vb) continue;
@@ -966,6 +966,8 @@ bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits)
 }
 
 // writes a buffer to a file, return true if successful
+// note: this is run as separate thread from ref_create_cache_in_background and refhash_create_cache_in_background
+// so it cannot allocate any buffers
 bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, 
                        bool no_dirs, bool verbose)
 {

@@ -6,10 +6,20 @@
 #include "genozip.h"
 #include "profiler.h"
 #include "flags.h"
+#include "vblock.h"
 
-void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
+static Mutex evb_profile_mutex = {};
+
+void profiler_initialize (void)
 {
-#   define ADD(x) dst->x += src->x
+    mutex_initialize (evb_profile_mutex);
+}
+
+void profiler_add (ConstVBlockP vb)
+{
+#   define ADD(x) evb->profile.x += vb->profile.x
+    
+    mutex_lock (evb_profile_mutex);
 
     ADD(read);
     ADD(compute);
@@ -59,6 +69,8 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(tmp4);
     ADD(tmp5);
 
+    mutex_unlock (evb_profile_mutex);
+
 #undef ADD
 }
 
@@ -88,11 +100,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
 
     iprintf ("\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
     iprintf ("OS=%s\n", os);
-#ifdef DEBUG
-    iprint0 ("Build=Debug\n");
-#else
-    iprint0 ("Build=Optimized\n");
-#endif
+    iprintf ("Build=%s\n", flag.debug ? "Debug" : "Optimized");
     iprintf ("Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
     iprintf ("file=%s\n\n", filename ? filename : "(not file)");
     

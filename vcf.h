@@ -35,7 +35,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb);
 
 // VCF Header stuff
 extern void vcf_header_piz_init (void);
-extern bool vcf_inspect_txt_header (BufferP txt_header);
+extern bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header);
 extern uint32_t vcf_header_get_num_samples (void);
 
 // VBlock stuff

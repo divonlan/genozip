@@ -495,7 +495,7 @@ void bgzf_compress_vb (VBlock *vb)
     ASSERTNOTINUSE (vb->compressed);
 
     // case: we don't have prescribed bgzf blocks bc we're modifying the data or the source file didn't provided them
-    if (!buf_is_allocated (&txt_file->bgzf_isizes)) {
+    if (!buf_is_alloc (&txt_file->bgzf_isizes)) {
         bgzf_compress_vb_no_blocks (vb);
         return;
     }
@@ -527,7 +527,7 @@ void bgzf_compress_vb (VBlock *vb)
 // PIZ Writer thread: complete the work Compute Thread cannot do - see 1,2,3 below
 void bgzf_write_to_disk (VBlockP vb)
 {
-    // uncompressed data to be dealt with by next call to this function (buffer belongs to wvb)
+    // uncompressed data to be dealt with by next call to this function (buffer belongs to writer thread)
     static Buffer intercall_txt = EMPTY_BUFFER; 
     
     // Step 1. bgzf-compress the BGZF block that is split between end the previous VB(s) (data currently in intercall_txt)
@@ -546,21 +546,21 @@ void bgzf_write_to_disk (VBlockP vb)
             memcpy (block, intercall_txt.data, intercall_txt.len);
             memcpy (&block[intercall_txt.len], FIRSTENT (char, vb->txt_data), first_data_len); 
 
-            // note: if we're writing the txt_header, then wvb->compressed will contain the first BGZF blocks of the txt_header. 
+            // note: if we're writing the txt_header, then vb->compressed will contain the first BGZF blocks of the txt_header. 
             // Luckily, there will be no unconsumed_data as there is nothing before the header, so Step 1 is not entered
-            ASSERTNOTINUSE (wvb->compressed);
+            ASSERTNOTINUSE (vb->compressed);
 
-            bgzf_alloc_compressor (wvb, txt_file->bgzf_flags);
-            bgzf_compress_one_block (wvb, block, first_block->txt_size, 0, first_block->txt_index); // compress into wvb->compressed
-            bgzf_free_compressor (wvb, txt_file->bgzf_flags);
+            bgzf_alloc_compressor (vb, txt_file->bgzf_flags);
+            bgzf_compress_one_block (vb, block, first_block->txt_size, 0, first_block->txt_index); // compress into vb->compressed
+            bgzf_free_compressor (vb, txt_file->bgzf_flags);
 
-            if (!flag.test) file_write (txt_file, wvb->compressed.data, wvb->compressed.len);
+            if (!flag.test) file_write (txt_file, vb->compressed.data, vb->compressed.len);
 
             txt_file->txt_data_so_far_single += first_block->txt_size;
-            txt_file->disk_so_far            += wvb->compressed.len;
+            txt_file->disk_so_far            += vb->compressed.len;
 
             buf_free (&intercall_txt);
-            buf_free (&wvb->compressed);
+            buf_free (&vb->compressed);
         }
 
         // case: we don't have enough data in this VB to complete the BGZF block
@@ -575,7 +575,7 @@ void bgzf_write_to_disk (VBlockP vb)
             file_write (txt_file, vb->compressed.data, vb->compressed.len);
 
         txt_file->txt_data_so_far_single += vb->compressed.uncomp_size;
-        txt_file->disk_so_far            += vb->compressed.len; // wvb->compressed.len;
+        txt_file->disk_so_far            += vb->compressed.len; // vb->compressed.len;
         buf_free (&vb->compressed);
     }
 
@@ -588,7 +588,7 @@ void bgzf_write_to_disk (VBlockP vb)
     uint32_t last_data_len   = (uint32_t)vb->txt_data.len - last_data_index;
 
     if (last_data_len)                            
-        buf_add_more (wvb, &intercall_txt, ENT (char, vb->txt_data, last_data_index), last_data_len, "intercall_txt");
+        buf_add_more (vb, &intercall_txt, ENT (char, vb->txt_data, last_data_index), last_data_len, "intercall_txt");
 }
 
 void bgzf_write_finalize (File *file)

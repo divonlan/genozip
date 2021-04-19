@@ -45,17 +45,32 @@ VBlock *evb = NULL;
     if (vb->data_type != DT_NONE) DT_FUNC (vb, vb_func)(vb);    
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
-void vb_release_vb (VBlock *vb, const char *func) 
+void vb_release_vb_do (VBlock **vb_p, const char *func) 
 {
+    VBlock *vb = *vb_p;
+
     if (!vb) return; // nothing to release
 
-    threads_log_by_vb (vb, func, "RELEASING VB");
+    ASSERT (vb->in_use || vb==evb, "Cannot release VB because it is not in_use (called from %s): vb->id=%u vb->vblock_id=%u", 
+            func, vb->id, vb->vblock_i);
+
+    threads_log_by_vb (vb, vb->compute_task ? vb->compute_task : func, "RELEASING VB", 0);
 
     if (flag.show_vblocks) 
         iprintf ("VB_RELEASE(id=%u) vb_i=%d\n", vb->id, vb->vblock_i);
 
+    if (flag.show_time) 
+        profiler_add (vb);
+
+    buf_test_overflows(vb, func); 
+
     // verify that gzip_compressor was released after use
     ASSERT (!vb->gzip_compressor, "vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
+
+    // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
+    // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used/
+    //                   we have logic in vb_get_vb() to update its vb_i
+    // vb->data_type   : type of this vb 
 
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
     vb->vb_data_size = vb->vb_data_size_0 = vb->luft_reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
@@ -79,24 +94,28 @@ void vb_release_vb (VBlock *vb, const char *func)
     vb->is_rejects_vb = 0;
     vb->vb_header_flags = (struct FlagsVbHeader){};
     vb->compute_thread_id = 0;
+    vb->compute_task = NULL;
+    vb->compute_func = NULL;
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
-    
+    mutex_destroy (vb->vb_ready_for_compute_thread);
+
     FINALIZE_VB_BUFS (buf_free, ctx_free_context, release_vb);
 
     // this release can be run by either the main or writer thread. we make sure to update in_use as the very
     // last change, and do so atomically
 
-    __atomic_store_n (&vb->in_use, (bool)0, __ATOMIC_RELAXED); // released the VB back into the pool - it may now be reused
-
-    // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
-    // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used/
-    //                   we have logic in vb_get_vb() to update its vb_i
-    // vb->data_type   : type of this vb 
+    // case: this VB is from the pool (i.e. not evb)
+    if (vb != evb) {
+        __atomic_store_n (&vb->in_use, (bool)0, __ATOMIC_RELAXED); // released the VB back into the pool - it may now be reused 
+        *vb_p = NULL;
+    }
 }
 
 void vb_destroy_vb (VBlockP *vb_p)
 {
+    ASSERTMAINTHREAD;
+
     VBlockP vb = *vb_p;
 
     if (!vb) return;
@@ -108,6 +127,8 @@ void vb_destroy_vb (VBlockP *vb_p)
 
 void vb_create_pool (unsigned num_vbs)
 {
+    ASSERTMAINTHREAD;
+
     if (!pool)  {
         // allocation includes array of pointers (initialized to NULL)
         pool = (VBlockPool *)CALLOC (sizeof (VBlockPool) + num_vbs * sizeof (VBlock *)); // note we can't use Buffer yet, because we don't have VBs yet...
@@ -127,17 +148,20 @@ VBlockPool *vb_get_pool (void)
     return pool;
 }
 
-VBlockP vb_initialize_special_vb (int vb_id)
+VBlockP vb_initialize_nonpool_vb (int vb_id)
 {
     VBlockP vb = CALLOC (sizeof (VBlock));
     vb->data_type = DT_NONE;
     vb->id = vb_id;
+    vb->compute_task = "evb";
     return vb;
 }
 
 // allocate an unused vb from the pool. seperate pools for zip and unzip
 VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
 {
+    ASSERTMAINTHREAD;
+
     // circle around until a VB becomes available (busy wait)
     unsigned vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
     
@@ -176,10 +200,13 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
     vb->vblock_i          = vblock_i;
     vb->buffer_list.vb    = vb;
     vb->compute_thread_id = THREAD_ID_NONE;
+    vb->compute_task      = task_name;
     memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_I_NONE
 
     if (flag.show_vblocks) 
         iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%d\n", task_name, vb->id, vb->vblock_i);
+
+    threads_log_by_vb (vb, task_name, "GET VB", 0);
 
     return vb;
 }
@@ -187,6 +214,8 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void vb_cleanup_memory (void)
 {
+    ASSERTMAINTHREAD;
+
     if (!pool) return;
 
     for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {
@@ -203,9 +232,11 @@ void vb_cleanup_memory (void)
     ref_unload_reference();
 }
 
-// frees memory of all VBs, except for evb and wvb
-void vb_destroy_all_vbs (void)
+// frees memory of all VBs, except for non-pool VBs (evb)
+void vb_destroy_pool_vbs (void)
 {
+    ASSERTMAINTHREAD;
+
     if (!pool) return;
 
     for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) 

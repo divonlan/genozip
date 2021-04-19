@@ -105,7 +105,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_ACGT    = 10, CODEC_XCGT = 11, // compress sequence data - slightly better compression LZMA, 20X faster (these compress NONREF and NONREF_X respectively)
     CODEC_HAPM    = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
     CODEC_DOMQ    = 13, // compress SAM/FASTQ quality scores, if dominated by a single character
-    CODEC_GTSHARK = 14, // compress VCF haplotype matrix with gtshark
+    CODEC_GTSHARK = 14, // compress VCF haplotype matrix with gtshark (discontinued in v12)
     CODEC_PBWT    = 15, // compress VCF haplotype matrix with pbwt
     
     // external compressors (used by executing an external application)
@@ -121,7 +121,11 @@ typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LI
 extern CommandType command, primary_command;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
-extern VBlockP evb, wvb;
+extern VBlockP evb;
+
+// threads
+typedef int ThreadId;
+#define THREAD_ID_NONE ((ThreadId)-1)
 
 // macros
 #ifndef MIN
@@ -166,7 +170,7 @@ typedef uint8_t TranslatorId;
 
 #define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, char *reconstructed, int32_t reconstructed_len)
 
-#define TXTHEADER_TRANSLATOR(func) void func (BufferP txtheader_buf)
+#define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 
 // IMPORTANT: This is part of the genozip file format. 
 typedef enum __attribute__ ((__packed__)) { // 1 byte

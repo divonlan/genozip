@@ -64,7 +64,7 @@ static const SecLiEnt *sl_ent = NULL; // NULL -> first call to this sections_get
 
 static char *ref_fasta_name = NULL;
 
-static int ref_cache_creation_thread_id;
+static ThreadId ref_cache_creation_thread_id;
 static bool ref_creating_cache = false;
 static bool external_ref_is_loaded = false;
 
@@ -87,7 +87,7 @@ static inline bool ref_has_is_set (void)
 
 static void ref_free_denovo_ranges (void)
 {
-    if (!buf_is_allocated (&ranges)) return;
+    if (!buf_is_alloc (&ranges)) return;
 
     ARRAY (Range, r, ranges);
     for (unsigned i=0; i < ranges.len ; i++) {
@@ -186,7 +186,7 @@ const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t n
 
     // gets the index of the matching chrom in the reference - either its the chrom itself, or one with an alternative name
     // eg 'chr22' instead of '22'
-    uint32_t index = buf_is_allocated (&z_file->alt_chrom_map) ? *ENT (WordIndex, z_file->alt_chrom_map, vb->chrom_node_index)
+    uint32_t index = buf_is_alloc (&z_file->alt_chrom_map) ? *ENT (WordIndex, z_file->alt_chrom_map, vb->chrom_node_index)
                                                                : vb->chrom_node_index;
     Range *r = ENT (Range, ranges, index);
     if (!r->ref.nwords) return NULL; // this can ligitimately happen if entire chromosome is verbatim in SAM, eg. unaligned (pos=4) or SEQ or CIGAR are unavailable
@@ -309,7 +309,7 @@ static void ref_show_sequence (void)
 // vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET section
 static void ref_uncompress_one_range (VBlockP vb)
 {
-    if (!buf_is_allocated (&vb->z_data) || !vb->z_data.len) goto finish; // we have no data in this VB because it was skipped due to --regions or genocat --show-headers
+    if (!buf_is_alloc (&vb->z_data) || !vb->z_data.len) goto finish; // we have no data in this VB because it was skipped due to --regions or genocat --show-headers
 
     SectionHeaderReference *header = (SectionHeaderReference *)vb->z_data.data;
 
@@ -497,8 +497,6 @@ static void ref_read_one_range (VBlockP vb)
         int32_t section_offset = 
             zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, "z_data", sl_ent->st, sl_ent);    
 
-        ASSERT (section_offset != EOF, "unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
-
         NEXTENT (int32_t, vb->z_section_headers) = section_offset;
 
         // allocate memory for entire chrom reference if this is the first range of this chrom
@@ -536,7 +534,7 @@ void ref_load_stored_reference (void)
     
     // decompress reference using Dispatcher
     bool external = flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE;
-    dispatcher_fan_out_task (external ? ref_filename     : z_file->basename, 
+    dispatcher_fan_out_task ("load_ref", external ? ref_filename     : z_file->basename, 
                              external ? PROGRESS_MESSAGE : PROGRESS_NONE, 
                              external ? "Reading and caching reference file..." : NULL, 
                              flag.test, true, true, false, 0, 5000,
@@ -552,8 +550,6 @@ void ref_load_stored_reference (void)
     ARRAY (RegionToSet, rts, region_to_set_list);
     for (uint32_t i=0; i < region_to_set_list.len; i++)
         bit_array_set_region (rts[i].is_set, rts[i].first_bit, rts[i].len);
-
-    buf_test_overflows_all_vbs ("ref_load_stored_reference");
 }
 
 // ---------------------
@@ -580,8 +576,8 @@ void ref_remove_cache (void)
 // mmap the reference cached file, as copy-on-write - modifications are private to process and not written to the file
 bool ref_mmap_cached_reference (void)
 {  
-    if (!buf_is_allocated (&ranges)) {  // possibly already loaded from previous file
-        //ASSERT0 (!buf_is_allocated (&ranges), "expecting ranges to be unallocated (this can happen when specifying --reference for a file that doesn't need it)");
+    if (!buf_is_alloc (&ranges)) {  // possibly already loaded from previous file
+        //ASSERT0 (!buf_is_alloc (&ranges), "expecting ranges to be unallocated (this can happen when specifying --reference for a file that doesn't need it)");
         
         if (!file_exists (ref_get_cache_fn())) return false; // file doesn't exist
 
@@ -602,7 +598,7 @@ bool ref_mmap_cached_reference (void)
     return true;
 }
 
-static void ref_create_cache (void *unused_arg)
+static void ref_create_cache (VBlockP unused)
 {
     buf_dump_to_file (ref_get_cache_fn(), &genome_cache, 1, true, false, false);
 }
@@ -612,7 +608,7 @@ void ref_create_cache_in_background (void)
     // start creating the genome cache now in a background thread, but only if we loaded the entire reference
     if (!flag.regions) { 
         ref_get_cache_fn(); // generate name before closing z_file
-        ref_cache_creation_thread_id = threads_create (ref_create_cache, NULL, "create_ref_cache", 0);
+        ref_cache_creation_thread_id = threads_create (ref_create_cache, evb);
         ref_creating_cache = true;
     }
 }
@@ -621,7 +617,7 @@ void ref_create_cache_join (void)
 {
     if (!ref_creating_cache) return;
 
-    threads_join (ref_cache_creation_thread_id, true);
+    threads_join (&ref_cache_creation_thread_id, true);
     ref_creating_cache = false;
 }
 
@@ -1137,12 +1133,12 @@ static void ref_finalize_denovo_ranges (void)
 // ZIP: compress and write reference sections. either compressed by us, or copied directly from the reference file.
 void ref_compress_ref (void)
 {
-    if (!buf_is_allocated (&ranges)) return;
+    if (!buf_is_alloc (&ranges)) return;
 
     ref_create_cache_join(); // finish dumping reference to cache before we modify it via compacting
 
     if ((ranges_type == RT_DENOVO) &&
-        buf_is_allocated (&z_file->contexts[CHROM].dict)) // did we have an aligned lines? (to do: this test is not enough)
+        buf_is_alloc (&z_file->contexts[CHROM].dict)) // did we have an aligned lines? (to do: this test is not enough)
         ref_finalize_denovo_ranges(); // assignes chroms; sorts ranges by chrom, pos; gets rid of unused ranges
 
     if (ranges_type != RT_MAKE_REF)
@@ -1164,7 +1160,7 @@ void ref_compress_ref (void)
 
     // proceed to compress all ranges that have still have data in them after copying
     Dispatcher dispatcher = 
-        dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing reference...", false, true, true, false, 0, 5000,
+        dispatcher_fan_out_task ("compress_ref", NULL, PROGRESS_MESSAGE, "Writing reference...", false, true, true, false, 0, 5000,
                                  flag.make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
                                  zfile_output_processed_vb);
@@ -1285,7 +1281,7 @@ static void ref_reverse_compliment_genome_do (VBlock *vb)
 void ref_generate_reverse_complement_genome (void)
 {
     START_TIMER;
-    dispatcher_fan_out_task (NULL, PROGRESS_NONE, 0, false, true, true, false, 0, 1000,
+    dispatcher_fan_out_task ("generate_rev_comp_genome", NULL, PROGRESS_NONE, 0, false, true, true, false, 0, 1000,
                              ref_reverse_compliment_genome_prepare, 
                              ref_reverse_compliment_genome_do, 
                              NULL);
@@ -1424,7 +1420,7 @@ void ref_initialize_ranges (RangesType type)
     }
 
     else { // RT_DENOVO
-        if (buf_is_allocated (&ranges)) return; // case: 2nd+ bound file
+        if (buf_is_alloc (&ranges)) return; // case: 2nd+ bound file
 
         ranges.len   = REF_NUM_DENOVO_RANGES;
         ranges_type = RT_DENOVO;

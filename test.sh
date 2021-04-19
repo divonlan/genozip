@@ -13,7 +13,7 @@ cmp_2_files() {
 #    if (( `$md5 $1 ${2%.*} | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
 
     if (( `$md5 $1 $2 | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
-        echo "MD5 comparison FAILED:"
+        echo "MD5 comparison FAILED: $1 $2"
 #        $md5 $1 ${2%.*}
         $md5 $1 $2
         exit 1
@@ -351,19 +351,19 @@ batch_dual_coordinates()
         local primary2=$OUTDIR/primary2.vcf
 
         # compare src to primary (ignoring header and INFO fields)
-        echo -n "make ${primary}.genozip from $file : " 
+        echo -n "Step 1: make ${primary}.genozip from $file : " 
         $genozip -C $chain test/$file -fo ${primary}.genozip || exit 1
-        echo -n "make ${primary} from ${primary}.genozip : " 
+        echo -n "Step 2: make ${primary} from ${primary}.genozip : " 
         $genocat ${primary}.genozip --no-pg -fo ${primary}
 
         # convert primary -> luft -> primary
-        echo -n "make ${luft} from ${primary}.genozip : " 
+        echo -n "Step 3: make ${luft} from ${primary}.genozip : " 
         $genocat --luft --no-pg ${primary}.genozip -fo ${luft} || exit 1
-        echo -n "make ${luft}.genozip from ${luft} : " 
+        echo -n "Step 4: make ${luft}.genozip from ${luft} : " 
         $genozip $luft -fo ${luft}.genozip || exit 1
-        echo -n "make ${primary2} from ${luft}.genozip : " 
+        echo -n "Step 5: make ${primary2} from ${luft}.genozip : " 
         $genocat ${luft}.genozip --no-pg -fo ${primary2} || exit 1
-        echo "compare $primary to $primary2" 
+        echo "Step 6: compare $primary to $primary2" 
         cmp $primary $primary2 || exit 1
 
         cleanup

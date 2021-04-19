@@ -236,7 +236,7 @@ static void inline codec_pbwt_run_len_encode (PbwtState *state, uint32_t line_le
     }
 }
 
-// this function is first called to compress the ht_matrix_ctx, as we set its codec to CODEC_PBWT in codec_gtshark_comp_init.
+// this function is first called to compress the ht_matrix_ctx.
 // but it creates no compressed data for ht_matrix_ctx - instead it generates one or more PBWT sections (one for each allele
 // in the VB) with CODEC_PBWT. Since these sections have a higher did_i, this function will call again compressing these sections,
 // and this time it will simply copy the data to z_data.

@@ -228,10 +228,10 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 
     // allocate bitmaps - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite nbits that overlays it + param must be 0
     buf_alloc_old (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-               buf_is_allocated (&bitmap_ctx->local) ? NULL : "contexts->local"); 
+               buf_is_alloc (&bitmap_ctx->local) ? NULL : "contexts->local"); 
 
     buf_alloc_old (vb, &strand_ctx->local, MAX (nonref_ctx->local.len + sizeof (int64_t), roundup_bits2bytes64 (vb->lines.len)), CTX_GROWTH, 
-               buf_is_allocated (&strand_ctx->local) ? NULL : "contexts->local"); 
+               buf_is_alloc (&strand_ctx->local) ? NULL : "contexts->local"); 
 
     buf_alloc_old (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "contexts->local"); 
     buf_alloc_old (vb, &gpos_ctx->local,   MAX (nonref_ctx->local.len + sizeof (uint32_t), vb->lines.len * sizeof (uint32_t)), CTX_GROWTH, "contexts->local"); 
@@ -244,7 +244,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     if (gpos_ctx->pair_local) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
         
-        ASSERT (vb->line_i < pair_strand->nbits, "vb=%u cannot get pair-1 STRAND bit for line_i=%u because pair-1 strand bitarray has only %u bits",
+        ASSERT (vb->line_i < pair_strand->nbits, "vb=%u cannot get pair_1 STRAND bit for line_i=%u because pair_1 strand bitarray has only %u bits",
                 vb->vblock_i, vb->line_i, (unsigned)pair_strand->nbits);
 
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
@@ -262,7 +262,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     bool store_local = true;
     if (gpos_ctx->pair_local) {
 
-        ASSERT (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair-1 GPOS for line_i=%u because pair-1 GPOS.len=%"PRIu64,
+        ASSERT (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair_1 GPOS for line_i=%u because pair_1 GPOS.len=%"PRIu64,
                 vb->vblock_i, vb->line_i, gpos_ctx->pair.len);
 
         PosType pair_gpos = (PosType)*ENT (uint32_t, gpos_ctx->pair, vb->line_i); // same location, in the pair's local
@@ -353,7 +353,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
     Context *gpos_ctx   = bitmap_ctx + 3;
     Context *strand_ctx = bitmap_ctx + 4;
     
-    if (buf_is_allocated (&bitmap_ctx->local)) { // not all non-ref
+    if (buf_is_alloc (&bitmap_ctx->local)) { // not all non-ref
 
         bool is_forward;
         PosType gpos;

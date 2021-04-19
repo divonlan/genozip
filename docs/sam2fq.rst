@@ -66,7 +66,7 @@ Consider a simple paired-end SAM file with three alignments, all with the same Q
     AAFFFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJFJJJJJJJJJFJJJJJJJ-<<FJJAJFJ<JJJJJJJJF<FJJ<JF7JJJJJFJFJFJF7JJJF7FJJJAJAAAFFJJA<-F--A<JJ<AAJAJ<FJJ-AA<--<7F7-7FAFJJ
 
 | Finally, let's now output only the R1 reads (the first SAM line in this case). Notice that:
-| 1. /1 is no longer added.
+| 1. /1 is not added.
 | 2. --fq is an alternative spelling for activating the --fastq option.
 
 ::

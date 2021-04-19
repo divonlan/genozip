@@ -61,7 +61,9 @@ You can generate a SAM/BAM, FASTQ or FASTA file with taxonomy information baked 
 
     genozip myfile.bam --kraken myfile.kraken.genozip
 
-This stores internally in the Genozip file, for each line, its taxid. Unless you need the kraken file for other purposes, you can discard it at this point.
+This stores internally in the Genozip file, for each line, its *taxid*. Unless you need the kraken file for other purposes, you can discard it at this point.
+
+In the case of SAM and BAM (but not FASTQ and FASTA), the *taxid* is will be visible as an additional field TX, for example: ``TX:i:9606``.
 
 Now, you can filter the file, as before, but this time it will be a lot faster since Genozip doesn't need to read the kraken file:
 

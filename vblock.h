@@ -11,7 +11,6 @@
 #include "profiler.h"
 #include "aes.h"
 #include "context.h"
-#include "bit_array.h"
 #include "data_types.h"
 #include "sections.h"
 
@@ -24,7 +23,12 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
 #define VBLOCK_COMMON_FIELDS \
     uint32_t vblock_i;         /* number of variant block within VCF file */\
     int id;                    /* id of vb within the vb pool (-1 is the external vb) */\
-    int compute_thread_id;     /* id of compute thread currently processing this VB */ \
+    \
+    /* compute thread stuff */ \
+    ThreadId compute_thread_id;/* id of compute thread currently processing this VB */ \
+    const char *compute_task;  /* task which the compute thread for this VB is performing */ \
+    void (*compute_func)(VBlockP); /* compute thread entry point */\
+    Mutex vb_ready_for_compute_thread; /* threads_create finished initializeing this VB */\
     \
     DataType data_type;        /* type of this VB */\
     \
@@ -163,10 +167,10 @@ extern VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i);
 extern void vb_destroy_vb (VBlockP *vb_p);
 
 #define EVB -1 // ID of VB used by main thread 
-#define WVB -2 // ID of VB used by writer thread
-extern VBlockP vb_initialize_special_vb(int vb_id);
-extern void vb_release_vb (VBlock *vb, const char *func);
-extern void vb_destroy_all_vbs (void);
+extern VBlockP vb_initialize_nonpool_vb(int vb_id);
+extern void vb_release_vb_do (VBlock **vb_p, const char *func);
+#define vb_release_vb(vb_p) vb_release_vb_do (vb_p, __FUNCTION__)
+extern void vb_destroy_pool_vbs (void);
 
 // -------------
 // vb_pool stuff
@@ -178,7 +182,7 @@ typedef struct {
 } VBlockPool;
 extern void vb_create_pool (unsigned num_vbs);
 extern VBlockPool *vb_get_pool(void);
-#define vb_get_from_pool(vb_i) (((vb_i) == EVB) ? evb : ((vb_i) == WVB) ? wvb : vb_pool->vb[vb_i])
+#define vb_get_from_pool(vb_i) (((vb_i) == EVB) ? evb : vb_pool->vb[vb_i])
 
 #endif
 

@@ -250,6 +250,9 @@ void zfile_uncompress_section (VBlock *vb,
             "bad vblock_i: vblock_i in file=%u but expecting it to be %u (section_type=%s)", 
             vblock_i, expected_vb_i, st_name (expected_section_type));
 
+    if (flag.show_uncompress)
+        iprintf ("Uncompress: vb_i=%u %s %s\n", vb->vblock_i, st_name (expected_section_type), dict_id.num ? dis_dict_id (dict_id).s : "");
+        
     // decrypt data (in-place) if needed
     if (data_encrypted_len) 
         crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_header->section_type, false);
@@ -423,7 +426,8 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
 }
 
 
-// read section header - called from the main thread. returns offset of header within data
+// read section header - called from the main thread. 
+// returns offset of header within data, or SECTION_SKIPPED if section is skipped
 int32_t zfile_read_section_do (File *file,
                                VBlock *vb, 
                                uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the main thread (vb=0)
@@ -435,8 +439,9 @@ int32_t zfile_read_section_do (File *file,
     ASSERT (!sl || expected_sec_type == sl->st, "expected_sec_type=%s but encountered sl->st=%s. vb_i=%u",
             st_name (expected_sec_type), st_name(sl->st), vb->vblock_i);
 
+    // skip if this section is not needed according to flags
     if (sl && file == z_file && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) 
-        return 0; // skip if this section is not needed according to flags
+        return SECTION_SKIPPED; 
 
     uint32_t unencrypted_header_size = header_size;
 
@@ -581,9 +586,9 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
         // Note: this code will be executed when zfile_read_genozip_header is called from main_genounzip.
         if (!flag.explicit_ref && // reference NOT was specified on command line
             !(ref_filename && !strcmp (ref_filename, header->ref_filename))) { // ref_filename already set from a previous file with the same reference
-            
-            if (file_exists (header->ref_filename)) {
-                ASSERTW (flag.genocat_no_reconstruct, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
+
+            if (!flag.genocat_no_ref_file && file_exists (header->ref_filename)) {
+                WARN ("Note: using the reference file %s. You can override this with --reference", header->ref_filename);
                 ref_set_reference (header->ref_filename, REF_EXTERNAL, false);
             }
             else 
@@ -603,6 +608,7 @@ bool zfile_read_genozip_header (uint64_t *txt_data_size, uint64_t *num_items_bou
 {
     // read the footer from the end of the file
     if (file_get_size (z_file->name) < sizeof(SectionFooterGenozipHeader) ||
+        !z_file->file ||
         !file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, 2))
         goto error;
 
@@ -632,7 +638,7 @@ bool zfile_read_genozip_header (uint64_t *txt_data_size, uint64_t *num_items_bou
 
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
-    ASSERTGOTO (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION || flag.show_stats, // --stats works on files compressed with newer versions 
+    ASSERTGOTO (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION,
                 "Error: %s cannot be opened because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
                 "You might want to consider upgrading genozip to the newest version.\n",
                 z_name, header->genozip_version, GENOZIP_CODE_VERSION);
@@ -990,10 +996,8 @@ void zfile_output_processed_vb (VBlock *vb)
     // it only if the user specifically requested --show-stats
     if (flag.show_stats) ctx_update_stats (vb);
 
-    if (flag.show_headers && buf_is_allocated (&vb->show_headers_buf))
+    if (flag.show_headers && buf_is_alloc (&vb->show_headers_buf))
         buf_print (&vb->show_headers_buf, false);
-
-    if (flag.show_threads) dispatcher_show_time ("main thread", "Write genozip data done", -1, vb->vblock_i);
 }
 
 DataType zfile_get_file_dt (const char *filename)

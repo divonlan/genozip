@@ -36,7 +36,8 @@
 			"*.tcc": "c",
 			"deque": "c",
 			"unordered_map": "c",
-			"vector": "c"
+			"vector": "c",
+			"arch.h": "c"
 		},
 		"files.autoSave": "onFocusChange",
 		"files.exclude": {

@@ -66,10 +66,10 @@ static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *
 
 extern void buf_initialize(void);
 
-#define buf_is_allocated(buf_p) ((buf_p)->data != NULL && (buf_p)->type != BUF_UNALLOCATED)
-#define ASSERTNOTINUSE(buf) ASSERT (!buf_is_allocated (&(buf)) && !(buf).len, "expecting "#buf" to be free, but it's not: %s", buf_desc (&(buf)).s)
-#define ASSERTISALLOCED(buf) ASSERT0 (buf_is_allocated (&(buf)), #buf" is not allocated")
-#define ASSERTNOTEMPTY(buf) ASSERT (buf_is_allocated (&(buf)) && (buf).len, "expecting "#buf" to be contain some data, but it doesn't: %s", buf_desc (&(buf)).s)
+#define buf_is_alloc(buf_p) ((buf_p)->data != NULL && (buf_p)->type != BUF_UNALLOCATED)
+#define ASSERTNOTINUSE(buf) ASSERT (!buf_is_alloc (&(buf)) && !(buf).len, "expecting "#buf" to be free, but it's not: %s", buf_desc (&(buf)).s)
+#define ASSERTISALLOCED(buf) ASSERT0 (buf_is_alloc (&(buf)), #buf" is not allocated")
+#define ASSERTNOTEMPTY(buf) ASSERT (buf_is_alloc (&(buf)) && (buf).len, "expecting "#buf" to be contain some data, but it doesn't: %s", buf_desc (&(buf)).s)
 
 extern uint64_t buf_alloc_do (VBlockP vb,
                               Buffer *buf, 
@@ -122,7 +122,7 @@ extern void buf_free_do (Buffer *buf, const char *func, uint32_t code_line);
 extern void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line);
 #define buf_destroy(buf) buf_destroy_do ((buf), __FUNCTION__, __LINE__)
 
-#define buf_is_large_enough(buf_p, requested_size) (buf_is_allocated ((buf_p)) && (buf_p)->size >= requested_size)
+#define buf_is_large_enough(buf_p, requested_size) (buf_is_alloc ((buf_p)) && (buf_p)->size >= requested_size)
 
 extern void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src, uint64_t bytes_per_entry,
                          uint64_t src_start_entry, uint64_t max_entries, // if 0 copies the entire buffer
@@ -146,17 +146,17 @@ extern void buf_grab_do (VBlockP dst_vb, Buffer *dst_buf, const char *dst_name, 
     (buf)->len += new_len; \
 } while(0)
 
-#define buf_add_more(vb, buf, new_data, new_data_len, name) do { \
+#define buf_add_more(vb_, buf, new_data, new_data_len, name) do { \
     uint32_t new_len = (uint32_t)(new_data_len); /* copy in case caller uses ++ */ \
     if (new_len) { \
-        buf_alloc ((vb), (buf), (new_len), (buf)->len+(new_len)+1 /* +1 - room for \0 or seperator */, char, 1.5, (name)); \
+        buf_alloc ((vb_) ? (VBlockP)(vb_) : (buf)->vb, (buf), (new_len), (buf)->len+(new_len)+1 /* +1 - room for \0 or seperator */, char, 1.5, (name)); \
         memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
         (buf)->len += new_len; \
     } \
 } while(0)
 
-#define buf_add_buf(vb,dst_buf,src_buf,type,name) do { \
-    buf_alloc ((vb), (dst_buf), (src_buf)->len, 0, type, 1.5, (name)); \
+#define buf_add_buf(vb_,dst_buf,src_buf,type,name) do { \
+    buf_alloc ((vb_) ? (vb_) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, 1.5, (name)); \
     memcpy (AFTERENT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
     (dst_buf)->len += (src_buf)->len; \
 } while (0)

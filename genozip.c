@@ -49,8 +49,14 @@ uint32_t global_max_threads = DEFAULT_MAX_THREADS;
 
 void main_exit (bool show_stack, bool is_error) 
 {
-    if (flag.echo)
-        fprintf (stderr, "\n%s: %s\n", str_time().s, flags_command_line()->data);
+    if (is_error && flag.debug_threads)
+        threads_display_log();
+        
+    if (is_error && flag.echo)
+        flags_display_debugger_params();
+
+    // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
+    if (is_error) { close (1); close (2); }
 
     if (show_stack) threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
 
@@ -83,8 +89,7 @@ void main_exit (bool show_stack, bool is_error)
     if (flag.log_filename) {
         iprintf ("%s - execution ended %s\n", str_time().s, is_error ? "with an error" : "normally");
         fclose (info_stream);
-    } else
-        fflush (info_stream);
+    } 
 
     exit (is_error);
 } 
@@ -172,13 +177,13 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     const unsigned FILENAME_WIDTH = 40;
 
-    const char *head_format = "\n%-5.5s %11s %10s %10s %6s %s  %*s %s\n";
-    const char *foot_format = "\nTotal:                  %10s %10s %5.*fX\n";
-    const char *item_format = "%-5.5s %11s %10s %10s %5.*fX  %s  %s%s%*.*s %s\n";
+    const char *head_format = "\n%-7.7s %11s %10s %10s %6s %s  %*s %s\n";
+    const char *foot_format = "\nTotal:              %10s %10s %5.*fX\n";
+    const char *item_format = "%-7.7s %11s %10s %10s %5.*fX  %s  %s%s%*.*s %s\n";
 
-    const char *head_format_bytes = "\n%-5.5s %11s %15s %15s %6s  %*s\n";
-    const char *foot_format_bytes = "\nTotal:            %15s %15s %5.*fX\n";
-    const char *item_format_bytes = "%-5.5s %11s %15s %15s %5.*fX  %s%s%*.*s\n";
+    const char *head_format_bytes = "\n%-7.7s %11s %15s %15s %6s  %*s\n";
+    const char *foot_format_bytes = "\nTotal:              %15s %15s %5.*fX\n";
+    const char *item_format_bytes = "%-7.7s %11s %15s %15s %5.*fX  %s%s%*.*s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
@@ -350,8 +355,8 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     Dispatcher dispatcher = piz_z_file_initialize (is_last_z_file);  
 
     // a loop for decompressing all txt_files (1 if concatenating, possibly more if unbinding)
-    for (int txt_file_i=0; txt_file_i < z_file->txt_file_info.len; txt_file_i++) {
-        piz_one_txt_file (dispatcher, txt_file_i, (txt_file_i==z_file->txt_file_info.len-1), is_first_z_file);
+    while (z_file->num_txt_components_so_far < z_file->num_components) {
+        piz_one_txt_file (dispatcher, is_first_z_file);
         file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
     }
 
@@ -377,22 +382,24 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     // if ZIP consumed more than 2GB, free memory before PIZ. Note: on Windows, freeing memory takes considerable time.
     if (buf_get_memory_usage () > (1ULL<<31)) {
         ref_destroy_reference();
-        vb_destroy_all_vbs();
+        vb_destroy_pool_vbs();
     }
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",
                                   exec_name, "--decompress", "--test", z_filename,
-                                  flag.quiet        ? "--quiet"        : SKIP_ARG,
-                                  password          ? "--password"     : SKIP_ARG,
-                                  password          ? password         : SKIP_ARG,
-                                  flag.show_digest  ? "--show-digest"  : SKIP_ARG,
-                                  flag.show_memory  ? "--show-memory"  : SKIP_ARG,
-                                  flag.show_time    ? "--show-time"    : SKIP_ARG,
-                                  flag.threads_str  ? "--threads"      : SKIP_ARG,
-                                  flag.threads_str  ? flag.threads_str : SKIP_ARG,
-                                  flag.xthreads     ? "--xthreads"     : SKIP_ARG,
-                                  flag.show_alleles ? "--show-alleles" : SKIP_ARG,
+                                  flag.quiet         ? "--quiet"         : SKIP_ARG,
+                                  password           ? "--password"      : SKIP_ARG,
+                                  password           ? password          : SKIP_ARG,
+                                  flag.show_digest   ? "--show-digest"   : SKIP_ARG,
+                                  flag.show_memory   ? "--show-memory"   : SKIP_ARG,
+                                  flag.show_time     ? "--show-time"     : SKIP_ARG,
+                                  flag.threads_str   ? "--threads"       : SKIP_ARG,
+                                  flag.threads_str   ? flag.threads_str  : SKIP_ARG,
+                                  flag.xthreads      ? "--xthreads"      : SKIP_ARG,
+                                  flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
+                                  flag.debug_threads ? "--debug-threads" : SKIP_ARG,
+                                  flag.echo          ? "--echo"          : SKIP_ARG,
                                   flag.reference == REF_EXTERNAL ? "--reference" : SKIP_ARG,
                                   flag.reference == REF_EXTERNAL ? ref_filename  : SKIP_ARG,
                                   NULL);
@@ -620,10 +627,11 @@ void TEST() {
 int main (int argc, char **argv)
 {
     info_stream = stdout; // may be changed during intialization
+    profiler_initialize();
     buf_initialize(); 
     arch_initialize (argv[0]);
-    threads_initialize();
-    evb = vb_initialize_special_vb(EVB);
+    evb = vb_initialize_nonpool_vb(EVB);
+    threads_initialize(); // requires evb
     random_access_initialize();
     codec_initialize();
 

@@ -556,7 +556,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
     // --taxid: grep out by Kraken taxid 
     if (flag.kraken_taxid) 
         fasta_vb->contig_grepped_out |= 
-            (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTA_TAXID)) ||
+            (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTA_TAXID, false)) ||
             ( kraken_is_loaded && !kraken_is_included_loaded (vb, desc_start + 1, chrom_name_len));
     
     vb->chrom_node_index = ctx_search_for_word_index (&vb->contexts[CHROM], desc_start + 1, chrom_name_len);
@@ -594,7 +594,7 @@ TXTHEADER_TRANSLATOR (txtheader_fa2phy)
     // get length of contigs and error if they are not all the same length
     uint32_t contig_len = random_access_verify_all_contigs_same_length();
 
-    bufprintf (evb, txtheader_buf, "%"PRIu64" %u\n", z_file->contexts[FASTA_CONTIG].word_list.len, contig_len);
+    bufprintf (comp_vb, txtheader_buf, "%"PRIu64" %u\n", z_file->contexts[FASTA_CONTIG].word_list.len, contig_len);
 }
 
 // Translating FASTA->PHYLIP: drop EOL after DESC + don't allow multiple consecutive EOL
@@ -614,5 +614,5 @@ TRANSLATOR_FUNC (fasta_piz_fa2phy_EOL)
 CONTAINER_FILTER_FUNC (fasta_piz_filter)
 {
     // currently unused, but specified in FASTA toplevel containers created up to v11, so the function needs to exist
-    return 0;
+    return true;
 }

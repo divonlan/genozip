@@ -49,6 +49,7 @@ mac/scripts/*
 !test/*
 !test/back-compat/*/*
 test/*.genozip
+test/tmp
 *bug*
 *stackdump
 .altool_app_specifc_password

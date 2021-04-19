@@ -73,7 +73,8 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 
                 // our own
                 dict_id_OPTION_STRAND, dict_id_OPTION_RNAME, dict_id_OPTION_POS, dict_id_OPTION_CIGAR, dict_id_OPTION_MAPQ,
-
+                dict_id_OPTION_TX,
+                
                 // GVF attributes - standard
                 dict_id_ATTR_ID, dict_id_ATTR_Variant_seq, dict_id_ATTR_Reference_seq, dict_id_ATTR_Variant_freq,
 

@@ -381,7 +381,7 @@ void stats_display (void)
 {
     Buffer *buf = flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf;
 
-    if (!buf_is_allocated (buf)) return; // no stats available
+    if (!buf_is_alloc (buf)) return; // no stats available
 
     buf_print (buf , false);
 

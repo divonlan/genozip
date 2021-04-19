@@ -55,9 +55,18 @@ typedef struct __attribute__((packed, aligned(4))) {
 
 #define QNAME_NODE_NONE 0xffffffff // entry in qname_hashtab indicating this qname is not in dict
 
+static char copy_taxid_snip[30];
+static unsigned copy_taxid_snip_len;
+
 //-----------------------
 // Segmentation functions
 //-----------------------
+
+void kraken_zip_initialize (void)
+{
+    copy_taxid_snip_len = sizeof (copy_taxid_snip);
+    seg_prepare_snip_other (SNIP_OTHER_COPY, (DictId)dict_id_fields[KRAKEN_TAXID], 0, 0, copy_taxid_snip, &copy_taxid_snip_len);
+}
 
 void kraken_seg_initialize (VBlock *vb)
 {
@@ -159,16 +168,13 @@ static void kraken_seg_kmers (VBlock *vb, const char *value, int32_t value_len, 
 
     for (unsigned k=0; k < num_kmers; k++) {
         const char *items[3];
-        char snip[30];
-        unsigned item_lens[3], snip_len = sizeof(snip);
+        unsigned item_lens[3];
 
         str_split (kmers[k], kmer_lens[k], 2, ':', items, item_lens, "kmer items");
 
         // KMER taxid - either copy from TAXID or seg a normal snip
-        if (taxid_len == item_lens[0] && !memcmp (taxid, items[0], taxid_len)) {
-            seg_prepare_snip_other (SNIP_OTHER_COPY, (DictId)dict_id_fields[KRAKEN_TAXID], 0, 0, snip, &snip_len);
-            seg_by_did_i (vb, snip, snip_len, KRAKEN_KMERTAX, item_lens[0]);
-        }
+        if (taxid_len == item_lens[0] && !memcmp (taxid, items[0], taxid_len)) 
+            seg_by_did_i (vb, copy_taxid_snip, copy_taxid_snip_len, KRAKEN_KMERTAX, item_lens[0]);
         else 
             seg_by_did_i (vb, items[0], item_lens[0], KRAKEN_KMERTAX, item_lens[0]);
 
@@ -206,7 +212,7 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
     GET_NEXT_ITEM ("SEQLEN"); // for paired files we will have eg "150|149", for non-paired eg "150"
     if (memchr (field_start, '|', field_len)) { 
         SegCompoundArg arg = { .pipe = true };
-        // compound and not array, bc pair-2's seq_len is often a lot more random than pair-1's so use different contexts
+        // compound and not array, bc pair_2's seq_len is often a lot more random than pair_1's so use different contexts
         seg_compound_field ((VBlockP)vb, &vb->contexts[KRAKEN_SEQLEN], field_start, field_len, arg, 0, 1 /* \t */); 
     }
     else 
@@ -283,7 +289,7 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
     else if (flag.kraken_taxid && 
              dict_id.num == dict_id_fields[KRAKEN_TOPLEVEL] && 
              (   ( kraken_is_loaded && !kraken_is_included_loaded (vb, last_txt (vb, KRAKEN_QNAME), vb->last_txt_len (KRAKEN_QNAME)))
-              || (!kraken_is_loaded && !kraken_is_included_stored (vb, KRAKEN_TAXID))))
+              || (!kraken_is_loaded && !kraken_is_included_stored (vb, KRAKEN_TAXID, true)))) // TAXID was reconstructed in the TOPLEVEL container
         
         vb->drop_curr_line = true;
 }
@@ -384,7 +390,7 @@ void kraken_load (void)
     z_file->basename = file_basename (flag.reading_kraken, false, "(kraken-file)", NULL, 0);
 
     Dispatcher dispachter = piz_z_file_initialize (false);
-    piz_one_txt_file (dispachter, 0, true, false);
+    piz_one_txt_file (dispachter, false);
 
     kraken_filename = file_make_unix_filename (z_name); // full-path unix-style filename, allocates memory
 
@@ -478,13 +484,13 @@ bool kraken_is_included_loaded (VBlockP vb, const char *qname, unsigned qname_le
 }
 
 // Find whether QNAME is included in the taxid filter in O(1) (using the loaded kraken file)
-bool kraken_is_included_stored (VBlockP vb, DidIType did_i_taxid)
+bool kraken_is_included_stored (VBlockP vb, DidIType did_i_taxid, bool already_reconstructed)
 {
     if (flag.kraken_taxid == -1) return true; // use didn't specify --taxid - everything's included
 
     ASSINP0 (z_file->z_flags.has_taxid, "To use --taxid, either use \"genocat --kraken <file> --taxid <taxid>\" to load a kraken file, or use \"genozip --kraken <file>\" to include taxonomic information in the genozip file");
 
-    if (vb->data_type != DT_KRAKEN) // in KRAKEN, it is reconstructed in the TOPLEVEL container
+    if (!already_reconstructed) 
         reconstruct_from_ctx (vb, did_i_taxid, 0, false); // update last_int without reconstructing
     
     uint32_t this_taxid = vb->last_int (did_i_taxid);
@@ -497,22 +503,37 @@ bool kraken_is_included_stored (VBlockP vb, DidIType did_i_taxid)
 // SEG helper functions for other data types segging with genozip --kraken
 //----------------------------------------------------------------------------------------------------
 
-// always segs if even_if_missing ; or if even_if_missing=false, returns true if taxid found and segged
-bool kraken_seg_taxid (VBlockP vb, DidIType did_i_taxid, const char *qname, unsigned qname_len, bool fail_if_missing)
+// returns snip_len if successful, or 0 if failed (only happens if fail_if_missing)
+unsigned kraken_seg_taxid_do (VBlockP vb, DidIType did_i_taxid, const char *qname, unsigned qname_len, 
+                              char *snip, // caller-allocated out
+                              bool fail_if_missing)
 {
     TaxonomyId taxid = kraken_get_taxid (qname, qname_len);
 
     ASSINP (!fail_if_missing || taxid != TAXID_NONE, 
             "Cannot find taxonomy id in kraken file for QNAME \"%.*s\"", qname_len, qname);
 
-    if (taxid == TAXID_NONE) return false;
+    if (taxid == TAXID_NONE) 
+        return 0; // failed
 
+    else {
+        unsigned snip_len = str_int (taxid, snip);
+
+        if (flag.show_kraken)
+            iprintf ("%.*s\t%d\n", qname_len, qname, taxid);
+
+        seg_by_did_i (vb, snip, snip_len, did_i_taxid, 0);
+
+        return snip_len;
+    }
+}
+
+// always segs if even_if_missing ; or if even_if_missing=false, returns true if taxid found and segged
+// returns snip_len if successful, or 0 if failed (only happens if fail_if_missing)
+unsigned kraken_seg_taxid (VBlockP vb, DidIType did_i_taxid, 
+                           const char *qname, unsigned qname_len, 
+                           bool fail_if_missing)
+{
     char snip[20];
-    unsigned snip_len = str_int (taxid, snip);
-    seg_by_did_i (vb, snip, snip_len, did_i_taxid, 0);
-
-    if (flag.show_kraken)
-        iprintf ("%.*s\t%d\n", qname_len, qname, taxid);
-
-    return true;
+    return kraken_seg_taxid_do (vb, did_i_taxid, qname, qname_len, snip, fail_if_missing);
 }

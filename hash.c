@@ -392,7 +392,7 @@ WordIndex hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
     // in our local hash table - and if not found there - we will add it
 
     // allocate hash table, if not already allocated, based on experience of previous VBs, or pre-set default if there isn't any
-    if (!buf_is_allocated (&vb_ctx->local_hash)) 
+    if (!buf_is_alloc (&vb_ctx->local_hash)) 
         hash_alloc_local (segging_vb, vb_ctx);
 
     LocalHashEnt l_head, *l_hashent = &l_head;

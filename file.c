@@ -1060,6 +1060,9 @@ bool file_seek (File *file, int64_t offset,
                 int whence, // SEEK_SET, SEEK_CUR or SEEK_END
                 int soft_fail) // 1=warning 2=silent
 {
+    ASSERTNOTNULL (file);
+    ASSERTNOTNULL (file->file);
+    
 #ifdef __APPLE__
     int ret = fseeko ((FILE *)file->file, offset, whence);
 #else
