@@ -86,11 +86,27 @@ One or more file names must be given.
 
 .. option:: --MAPQ [^]value.  (SAM BAM) Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
    
-   |
+          |
 
-.. option:: -g, --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
+.. option:: -g, --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads ; CHAIN: sets) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
 
           |
+
+.. option:: -n, --lines [first]-[last] or [first].  Show a certain range of lines. <first> and <last> are numbers of lines in the file (starting from 1). 
+
+| *Examples*: 
+
+================================ ========================================================
+``genocat --lines 1000-2000``    displays the 1001 lines between 1000 and 2000
+``genocat --lines=1000-``        displays all lines starting from 1000 (*optional* =)
+``genocat -n -2000``             displays lines 1 to 2000 (``-n`` *instead of* ``--lines``)
+``genocat -n 1000``              displays 10 lines starting from line 1000
+================================ ========================================================
+
+| *Note on outputting as BAM*: The numbering excludes the BAM header. 
+| *Note on FASTQ*: The numbering is of reads rather than lines. 
+| *Note*: The entire file header is included if any part of it is.
+| *Note*: Line numbers are taken before any additional filters are applied.
 
 .. option:: -G, --drop-genotypes.  (VCF) Output the data without the samples and FORMAT column.
    
@@ -138,7 +154,7 @@ One or more file names must be given.
     
           |
 
-.. option:: --count.  Rather than displaying the file content just report the number of lines (for FASTQ: reads) (excluding the header) that would have been displayed. Useful in combination with filtering options.
+.. option:: --count.  Rather than displaying the file content just report the number of lines (FASTQ: reads ; CHAIN: sets) (excluding the header) that would have been displayed. Useful in combination with filtering options.
     
           |
 
@@ -159,7 +175,7 @@ One or more file names must be given.
 .. include:: opt-threads.rst
 .. include:: opt-stats.rst
 
-.. option:: --validate  Validates that the file(s) are valid genozip files.
+.. option:: --validate[=valid]  Validates that the file(s) are valid genozip files. By default reports files that are invalid. With --validate=valid reports files that are valid.
     
           |
 

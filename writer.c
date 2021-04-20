@@ -500,10 +500,10 @@ static inline bool writer_line_survived_downsampling (VbInfo *v)
 {
     if (!flag.downsample) return true;
 
-    uint32_t line_i = txt_file->lines_so_far / (flag.interleave ? 2 : 1); // 2 lines at a time if interleave
+    uint64_t line_i = txt_file->lines_written_so_far / (flag.interleave ? 2ULL : 1ULL); // 2 lines at a time if interleave
 
     // show (or not) the line based on our downsampling rate and shard value
-    return (line_i % flag.downsample) == flag.shard;
+    return (line_i % (uint64_t)flag.downsample) == flag.shard;
 }
 
 // write lines one at a time, watching for dropped lines
@@ -517,6 +517,7 @@ static void writer_write_line_range (VBlock *wvb, VbInfo *v, uint32_t start_line
             ENTNUM (vb_info, v), (unsigned)lines_len, start_line + num_lines);
 
     for (uint32_t line_i=start_line; line_i < start_line + num_lines; line_i++) {
+        
         const char *start = lines[line_i];
         const char *after = lines[line_i+1];  // note: lines has one extra entry so this is always correct
         uint32_t line_len = (uint32_t)(after - start);
@@ -529,7 +530,7 @@ static void writer_write_line_range (VBlock *wvb, VbInfo *v, uint32_t start_line
             if (writer_line_survived_downsampling(v))
                 buf_add_more (wvb, &wvb->txt_data, start, line_len, "txt_data");
             
-            txt_file->lines_so_far++; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
+            txt_file->lines_written_so_far++; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
         }
     }
 }
@@ -558,7 +559,7 @@ static void writer_write_lines_add_pair (VBlock *wvb, VbInfo *v, const char *sta
 // write one fastq "line" (actually 4 textual lines) at time, interleaved from v1 and v2
 static void writer_write_lines_interleaves (VBlock *wvb, VbInfo *v1, VbInfo *v2)
 {
-    if (!v1->vb->txt_data.len || v2->vb->txt_data.len) return; // no data in the either of the VBs 
+    if (!v1->vb->txt_data.len || !v2->vb->txt_data.len) return; // no data in the either of the VBs 
 
     ASSERT (v1->vb->lines.len == v2->vb->lines.len, "when interleaving, expecting number of lines of vb_i=%u (%"PRIu64") to be the same as vb_i=%u (%"PRIu64")",
             v1->vb->vblock_i, v1->vb->lines.len, v2->vb->vblock_i, v2->vb->lines.len);
@@ -578,7 +579,7 @@ static void writer_write_lines_interleaves (VBlock *wvb, VbInfo *v1, VbInfo *v2)
                 writer_write_lines_add_pair (wvb, v2, *start2, len2, 2);
             }
 
-            txt_file->lines_so_far += 2; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
+            txt_file->lines_written_so_far += 2; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
         }
     }
 }
@@ -595,6 +596,8 @@ static void writer_load_vb (VbInfo *v)
         iprintf ("writer: component_i=%u WAITING FOR TXT_HEADER\n", v->comp_i);
 
     mutex_wait (v->wait_for_data);
+
+    threads_log_by_vb (v->vb, v->vb->compute_task, v->vb->vblock_i ? "WRITER LOADED VB" : "WRITER LOADED TXT_HEADER", 0);
 
     v->is_loaded = true;
 }
@@ -638,12 +641,12 @@ static void writer_main_loop (VBlockP wvb)
                 if (!flag.may_drop_lines) {
                     writer_flush_vb (v->vb); // write entire VB
                     
-                    txt_file->lines_so_far += v->vb->lines.len; // textual, not data-type, line (for downsampling accounting)
+                    txt_file->lines_written_so_far += v->vb->lines.len; // textual, not data-type, line (for downsampling accounting)
                 }
 
                 // case: some or all lines possibly dropped during reconstruction or VB not reconstructed
                 // if all lines were discovered to be grepped out by piz_dispatch_one_vb (FASTA/Q only)
-                // we write lines one at a time, not counting dropped lines in txt_file->lines_so_far
+                // we write lines one at a time, not counting dropped lines in txt_file->lines_written_so_far
                 else 
                     writer_write_line_range (wvb, v, 0, v->vb->lines.len);
                 
@@ -715,13 +718,14 @@ void writer_finish_writing (bool is_last_txt_file)
     }                
 }
 
+// PIZ main thread
 static void writer_handover (VbInfo *v, VBlock *vb)
 {
     if (flag.no_writer || flag_loading_auxiliary) return;
 
     if (!v->in_plan) return; // we don't need this data as we are not going to write any of it
 
-    writer_start_writing (v->comp_i); // start writer thread if not already started
+    writer_start_writing (flag.unbind ? v->comp_i : 0); // start writer thread if not already started
 
     v->vb = vb; // writer thread now owns this VB, and is the only thread that will modify it, until finally destroying it
 

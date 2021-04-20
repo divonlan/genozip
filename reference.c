@@ -187,7 +187,7 @@ const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t n
     // gets the index of the matching chrom in the reference - either its the chrom itself, or one with an alternative name
     // eg 'chr22' instead of '22'
     uint32_t index = buf_is_alloc (&z_file->alt_chrom_map) ? *ENT (WordIndex, z_file->alt_chrom_map, vb->chrom_node_index)
-                                                               : vb->chrom_node_index;
+                                                           : vb->chrom_node_index;
     Range *r = ENT (Range, ranges, index);
     if (!r->ref.nwords) return NULL; // this can ligitimately happen if entire chromosome is verbatim in SAM, eg. unaligned (pos=4) or SEQ or CIGAR are unavailable
 
@@ -1512,7 +1512,7 @@ const char *ref_get_cram_ref (void)
     // in that case, we will just load the reference file's header
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     flag.reading_reference=true;
-    zfile_read_genozip_header (0, 0, 0);
+    zfile_read_genozip_header (0);
     flag.reading_reference=false;
     file_close (&z_file, false, true);
 

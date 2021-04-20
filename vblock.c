@@ -211,6 +211,15 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
     return vb;
 }
 
+bool vb_has_free_vb (void)
+{
+    for (unsigned vb_id=0; vb_id < pool->num_vbs ; vb_id++) 
+        if (!pool->vb[vb_id] || ! __atomic_load_n (&pool->vb[vb_id]->in_use, __ATOMIC_RELAXED)) 
+            return true;
+
+    return false;
+}
+
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void vb_cleanup_memory (void)
 {

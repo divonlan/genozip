@@ -497,7 +497,7 @@ void chain_load (void)
     buf_alloc (evb, &chain, 0, 1000, ChainAlignment, 1, "chain"); // must be allocated by main thread
     
     z_file = file_open (flag.reading_chain, READ, Z_FILE, DT_CHAIN);    
-    zfile_read_genozip_header (0,0,0);
+    zfile_read_genozip_header (0);
     
     ASSINP (z_file->data_type == DT_CHAIN, "expected %s to be a genozip'ed chain file, but its a %s file. Tip: compress the chain with \"genozip --input chain\"", 
             z_name, dt_name (z_file->data_type));

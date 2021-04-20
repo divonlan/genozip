@@ -71,7 +71,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
                       SEC_TAB "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u dual_coords=%u ref=\"%.*s\" md5ref=%s\n"
                       SEC_TAB "created=\"%.*s\"\n",
                  h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
-                 BGEN64 (h->uncompressed_data_size), BGEN64 (h->num_items_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
+                 BGEN64 (h->uncompressed_data_size), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
                  digest_display (h->digest_bound).s, 
                  (dt==DT_FASTQ ? "dts_paired" : "dts_ref_internal"), f.dt_specific, 
                  f.aligner, f.txt_is_bin, f.bgzf, f.adler, f.dual_coords,
@@ -604,7 +604,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
 }
 
 // returns false if file should be skipped
-bool zfile_read_genozip_header (uint64_t *txt_data_size, uint64_t *num_items_bound, char *created) // optional outs
+bool zfile_read_genozip_header (char *created) // optional outs
 {
     // read the footer from the end of the file
     if (file_get_size (z_file->name) < sizeof(SectionFooterGenozipHeader) ||
@@ -696,9 +696,9 @@ bool zfile_read_genozip_header (uint64_t *txt_data_size, uint64_t *num_items_bou
     z_file->z_flags = header->h.flags.genozip_header;
     z_file->z_flags.dt_specific |= dts; 
     z_file->digest = header->digest_bound;
-
-    if (txt_data_size) *txt_data_size = BGEN64 (header->uncompressed_data_size);
-    if (num_items_bound) *num_items_bound = BGEN64 (header->num_items_bound); 
+    z_file->num_lines = BGEN64 (header->num_lines_bound);
+    z_file->txt_data_so_far_bind = BGEN64 (header->uncompressed_data_size);
+    
     if (created) memcpy (created, header->created, FILE_METADATA_LEN);
 
     zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", 0, SEC_GENOZIP_HEADER);
@@ -771,7 +771,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     header.data_type               = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
     header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
     header.uncompressed_data_size  = BGEN64 (z_file->txt_data_so_far_bind);
-    header.num_items_bound         = BGEN64 (z_file->num_lines);
+    header.num_lines_bound         = BGEN64 (z_file->num_lines);
     header.num_sections            = BGEN32 (num_sections); 
     header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
     

@@ -133,7 +133,11 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
     return true;
 }
 
-// used in case of flag.optimize_DESC to count the number of lines, as we need it for the description
+//---------------
+// ZIP / SEG stuff
+//---------------
+
+// Seg: used in case of flag.optimize_DESC to count the number of lines, as we need it for the description
 static void fastq_txtfile_count_lines (VBlockP vb)
 {
     uint32_t num_lines = 0;
@@ -148,9 +152,6 @@ static void fastq_txtfile_count_lines (VBlockP vb)
     txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
 }
 
-//---------------
-// ZIP / SEG stuff
-//---------------
 void fastq_zip_read_one_vb (VBlockP vb)
 {
     // in case we're optimizing DESC in FASTQ, we need to know the number of lines

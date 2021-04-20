@@ -16,6 +16,7 @@
 #include "crypt.h"
 #include "bgzf.h"
 #include "writer.h"
+#include "strings.h"
 
 // contigs loaded from the txt header (eg SAM or BAM, VCF header)
 static bool has_contigs     = false;        // for BAM, this will be true even for contig-less header, indicting the file has no contigs (as opposed to contigs just not defined in the header)
@@ -197,7 +198,6 @@ void txtheader_zip_prepopulate_contig_ctxs (void)
         ctx_build_zf_ctx_from_contigs (DTFT (ochrom), &ocontigs, &ocontigs_dict);
 }
 
-
 //----------
 // PIZ stuff
 //----------
@@ -236,9 +236,9 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
     if (txt_file->codec == CODEC_BGZF)
         memcpy (txt_file->bgzf_signature, header->codec_info, 3);
     
-    if (is_first_txt || flag.unbind) 
-        z_file->num_lines = BGEN64 (header->num_lines);
-
+//    if (is_first_txt || flag.unbind) 
+//        z_file->num_lines = BGEN64 (header->num_lines);
+    
     // note: in case of txt files containing two components - --luft and --interleave - this will be nonsense, 
     // but we don't test digest anyway as they are both flag.data_modified 
     txt_file->digest = header->digest_single; 
@@ -300,6 +300,10 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
     if (writer_is_txtheader_in_plan (component_i)) {
 
         if (comp_vb->txt_data.len) {
+
+            if (!DTPT (is_binary))
+                txt_file->num_lines += str_count_char (comp_vb->txt_data.data, comp_vb->txt_data.len, '\n');
+                
             bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
                                 !flag.data_modified; // no point calculating digest if we know already the file will be different
 
@@ -325,6 +329,10 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
                 RESTORE_FLAG (quiet);
             }
         }
+
+        // if entire header is excluded by --lines, don't write it
+        if (txt_file->num_lines && flag.lines_first >= txt_file->num_lines) 
+            comp_vb->txt_data.len = 0;
 
         writer_handover_txtheader (&comp_vb, component_i); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
     }

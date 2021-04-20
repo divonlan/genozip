@@ -139,7 +139,7 @@ typedef struct {
     EncryptionType encryption_type;   // one of ENC_TYPE_*
     uint16_t data_type;               // one of DATA_TYPE_*
     uint64_t uncompressed_data_size;  // data size of uncompressed` file, if uncompressed as a single file
-    uint64_t num_items_bound;         // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
+    uint64_t num_lines_bound;         // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;            // number sections in this file (including this one)
     uint32_t num_components;          // number of txt bound components in this file (1 if no binding)
     Digest   digest_bound;

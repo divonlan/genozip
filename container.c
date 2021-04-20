@@ -266,6 +266,21 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                 SAFE_RESTORE;
             }
 
+            if (flag.lines_first >= 0) {
+                int64_t abs_line_i = (int64_t)vb->line_i - 1LL; // 0-based 
+                if (abs_line_i < flag.lines_first) 
+                    vb->drop_curr_line = true;
+
+                else if (abs_line_i > flag.lines_last) {
+                    vb->drop_curr_line = true;
+                    vb->txt_data.len = vb->line_start;
+                    
+                     // skip to the end - no need to reconstruct any further lines
+                    for (rep_i=rep_i+1; rep_i < con->repeats; rep_i++)
+                        *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); 
+                }
+            }
+
             if (vb->drop_curr_line) {
                 ASSERT0 (flag.may_drop_lines, "Lines cannot be dropped because flag.may_drop_lines=false. This is bug in the code.");
 

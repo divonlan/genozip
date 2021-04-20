@@ -246,9 +246,6 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     
     piz_uncompress_all_ctxs (vb, 0);
 
-    // genocat flags that with which we needn't reconstruct
-    if (exe_type == EXE_GENOCAT && flag.genocat_no_reconstruct) goto done;
-
     // reconstruct from top level snip
     reconstruct_from_ctx (vb, trans.toplevel, 0, true);
 
@@ -258,9 +255,8 @@ static void piz_reconstruct_one_vb (VBlock *vb)
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
     if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified && !flag.reading_chain) 
-        digest_one_vb (vb); 
+        digest_one_vb (vb); // LOOKING FOR A DEADLOCK BUG? CHECK HERE
 
-done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
     COPY_TIMER (compute);
 }
@@ -286,7 +282,7 @@ static void piz_read_all_ctxs (VBlock *vb, ConstSecLiEntP *next_sl)
 // Called by PIZ main thread: read all the sections at the end of the file, before starting to process VBs
 DataType piz_read_global_area (void)
 {
-    bool success = zfile_read_genozip_header (0, 0, 0);
+    bool success = zfile_read_genozip_header (0);
 
     if (flag.show_stats) stats_read_and_display();
 
@@ -332,8 +328,7 @@ DataType piz_read_global_area (void)
                                        flag.show_ref_index && !flag.reading_reference ? "Reference random-access index contents (result of --show-index)" : NULL);
 
         if ((flag.reference == REF_STORED || flag.reference == REF_EXTERNAL) && 
-            !flag.reading_reference &&
-            !(flag.show_headers && exe_type == EXE_GENOCAT))
+            !flag.reading_reference && !flag.genocat_no_reconstruct)
             ref_contigs_sort_chroms(); // create alphabetically sorted index for user file chrom word list
 
         if (!flag.genocat_no_ref_file)
@@ -402,6 +397,9 @@ static bool piz_read_one_vb (VBlock *vb)
 {
     START_TIMER; 
 
+    if (flag.lines_last >= 0 && txt_file->num_lines > flag.lines_last)
+        return false; // we don't need this VB as we have read all the data needed according to --lines
+
     ConstSecLiEntP sl = sections_vb_first (vb->vblock_i, false); 
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
@@ -410,13 +408,15 @@ static bool piz_read_one_vb (VBlock *vb)
 
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)ENT (char, vb->z_data, vb_header_offset);
     vb->vb_data_size     = BGEN32 (header->vb_data_size); 
-    vb->first_line       = BGEN32 (header->first_line);      
+    vb->first_line       = 1 + txt_file->num_lines; // 1-based (inc. txt header) // BGEN32 (header->first_line);      
     vb->lines.len        = BGEN32 (header->num_lines);       
     vb->longest_line_len = BGEN32 (header->longest_line_len);
     vb->digest_so_far    = header->digest_so_far;
     vb->chrom_node_index = WORD_INDEX_NONE;
     vb->vb_header_flags  = header->h.flags.vb_header;
     vb->is_rejects_vb    = flag.processing_rejects; // note: flag.processing_rejects is valid in the main thread only - it may change before the compute thread completes
+    
+    txt_file->num_lines += vb->lines.len;
 
     // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every txt component
@@ -433,10 +433,12 @@ static bool piz_read_one_vb (VBlock *vb)
     NEXTENT (uint32_t, vb->z_section_headers) = vb_header_offset; // vb_header_offset is always 0 for VB header
 
     // read all b250 and local of all fields and subfields
-    piz_read_all_ctxs (vb, &sl);
+    if (txt_file->num_lines > flag.lines_first) // read only if it might be ok_to_compute
+        piz_read_all_ctxs (vb, &sl);
 
-    // read additional sections and other logic specific to this data type
-    bool ok_to_compute = DTPZ(piz_read_one_vb) ? DTPZ(piz_read_one_vb)(vb, sl) : true; // true if we should go forward with computing this VB (otherwise skip it)
+    // check some flags (--grep, --lines...)
+    bool ok_to_compute = (txt_file->num_lines > flag.lines_first) // --lines: we've reached the start line (note: if we passed lines_end, VB is dropped before calling this function)
+                      && (DTPZ(piz_read_one_vb) ? DTPZ(piz_read_one_vb)(vb, sl) : true); // logic specific to this data type (--grep for FASTQ, --grep,--regions for FASTA)
 
     // calculate the BGZF blocks from SEC_BGZF that the compute thread is expected to re-create
     if (flag.bgzf == FLAG_BGZF_BY_ZFILE && txt_file->codec == CODEC_BGZF)     
@@ -506,16 +508,18 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
     next_vb->component_i = z_file->num_txt_components_so_far;
     
     // read one VB's genozip data
-    bool grepped_out = !piz_read_one_vb (next_vb);
+    bool reconstruct = piz_read_one_vb (next_vb)  // read even if no_reconstruct
+                    && !flag.genocat_no_reconstruct; 
+
+    if (reconstruct) 
+        dispatcher_compute (dispatcher, piz_reconstruct_one_vb);
 
     // case: we won't proceed to uncompressing, reconstructing we're done reading - just handover
     // an empty VB as it appears in the recon plan, and writer might be already blocking on waiting for it
-    if (grepped_out) {
+    else {
         dispatcher_abandon_next_vb (dispatcher); // we're not going to reconstruct it
         piz_handover_or_discard_vb (dispatcher, &next_vb);
     }
-    else
-        dispatcher_compute (dispatcher, piz_reconstruct_one_vb);
 
     return false;
 }

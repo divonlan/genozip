@@ -306,13 +306,13 @@ typedef struct File {
     int64_t txt_data_size_single;      // txt_file: size of the txt data. ZIP: if its a plain txt file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
-    int64_t txt_data_so_far_bind;      // z_file & ZIP only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
+    int64_t txt_data_so_far_bind;      // z_file only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
                                        // note: txt_data_so_far_single/bind accounts for txt modifications due to --optimize or --chain or compressing a Luft file
     int64_t txt_data_so_far_single_0;  // z_file & ZIP only: same as txt_data_so_far_single/bind, but original sizes without 
     int64_t txt_data_so_far_bind_0;    //      modifications due to --chain/--optimize/Luft                                   
     int64_t txt_disk_so_far_bind;      // z_file & ZIP only: compressed (with txt_file.codec - eg bgzf) txt data represented in the GENOZIP data written so far for all bound files
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
-                                       // txt_file: number of lines in single txt file
+                                       // txt_file: number of lines (read so far) in single txt file
 
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
     DigestContext digest_ctx_bound;    // md5 context of txt file. in bound mode - of the resulting bound txt file
@@ -382,7 +382,7 @@ typedef struct File {
                                        // Z_FILE   PIZ: plan for entire z_file, txt_file.recon_plan is assigned a portion of this plan
     Buffer comp_info;                  // Z_FILE   PIZ: array of PizCompInfo - component information (param=1 if locks initialized)
     Buffer txt_file_info;              // Z_FILE   PIZ: array of PizTxtFileInfo - txt_file information
-    uint32_t lines_so_far;             // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downsampling, and is to be written to txt_file, or downsampled-out
+    uint64_t lines_written_so_far;     // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downsampling, and is to be written to txt_file, or downsampled-out
 
     // Z_FILE: stats data
     Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)

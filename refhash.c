@@ -329,7 +329,7 @@ void refhash_load_standalone (void)
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
 
-    zfile_read_genozip_header (0, 0, 0);
+    zfile_read_genozip_header (0);
 
     refhash_initialize (NULL);
 

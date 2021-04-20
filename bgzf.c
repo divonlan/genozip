@@ -108,7 +108,8 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
 
     uint32_t isize_lt32 = *(uint32_t *)&block[*block_size - 4];
     uint32_t isize = LTEN32 (isize_lt32); // 0...65536 per spec
-
+    ASSERT (isize <= 65536, "isize=%u out of range [0,65536]", isize);
+    
     // add isize to buffer that will be written to SEC_BGZF
     if (isize) { // don't store EOF block (bc isize=0 cannot be represented as (isize-1) )
         buf_alloc (evb, &file->bgzf_isizes, 1, flag.vblock_memory / 63000, uint16_t, 2, "bgzf_isizes");

@@ -164,6 +164,7 @@ typedef struct ZipDataLine {
 
 extern void vb_cleanup_memory(void);
 extern VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i);
+extern bool vb_has_free_vb (void);
 extern void vb_destroy_vb (VBlockP *vb_p);
 
 #define EVB -1 // ID of VB used by main thread 

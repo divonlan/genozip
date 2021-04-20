@@ -225,33 +225,32 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
 
-    uint64_t txt_data_size, num_lines;
     char created[FILE_METADATA_LEN];
-    if (!zfile_read_genozip_header (&txt_data_size, &num_lines, created))
+    if (!zfile_read_genozip_header (created))
         goto finish;
 
-    double ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
+    double ratio = z_file->disk_size ? ((double)z_file->txt_data_so_far_bind / (double)z_file->disk_size) : 0;
     
     // TODO: have an option to print ref_file_name and ref_file_md5
 
     DataType dt = z_file->z_flags.txt_is_bin ? DTPZ (bin_type) : z_file->data_type;
 
     if (flag.bytes) 
-        bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_uint_commas (num_lines).s, 
-                   str_int_s (z_file->disk_size).s, str_int_s (txt_data_size).s, ratio < 100, ratio, 
+        bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_uint_commas (z_file->num_lines).s, 
+                   str_int_s (z_file->disk_size).s, str_int_s (z_file->txt_data_so_far_bind).s, ratio < 100, ratio, 
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
                    z_filename);
     else 
-        bufprintf (evb, &str_buf, item_format, dt_name (dt), str_uint_commas (num_lines).s,
-                   str_size (z_file->disk_size).s, str_size (txt_data_size).s, ratio < 100, ratio, 
+        bufprintf (evb, &str_buf, item_format, dt_name (dt), str_uint_commas (z_file->num_lines).s,
+                   str_size (z_file->disk_size).s, str_size (z_file->txt_data_so_far_bind).s, ratio < 100, ratio, 
                    digest_display_ex (z_file->digest, DD_MD5_IF_MD5).s,
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
                    z_filename, created);
 
     total_compressed_len   += z_file->disk_size;
-    total_uncompressed_len += txt_data_size;
+    total_uncompressed_len += z_file->txt_data_so_far_bind;
     
     files_listed++;
 
@@ -274,8 +273,8 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             buf_free (&evb->compressed);
         }
 
-        if (num_lines_count != num_lines)
-            buf_add_string (evb, &str_buf, "\nNote: the difference between the file's Records and the total of its components' is the number of lines of the 1st component's header\n");
+        if (num_lines_count != z_file->num_lines)
+            buf_add_string (evb, &str_buf, "\nNote: the difference between the file's num_lines and the total of its components' is the number of lines of the 1st component's header\n");
     }
     file_close (&z_file, false, false);
 
@@ -315,7 +314,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
     // 3) identify skip cases (DT_NONE returned) - empty file, unzip of a reference
     // 4) reset flag.unbind if file contains only one component
-    if (!z_file->file || !zfile_read_genozip_header (0,0,0)) goto done; 
+    if (!z_file->file || !zfile_read_genozip_header (0)) goto done; 
 
     if (z_file->z_flags.dual_coords)
         z_file->max_conc_writing_vbs = linesorter_get_max_conc_writing_vbs(); // get data by reading all SEC_RECON_PLAN headers
@@ -749,7 +748,7 @@ int main (int argc, char **argv)
     // if this is "list", finalize
     if (command == LIST) main_genols (NULL, true, NULL, false);
 
-    if (flag.multiple_files && flag.validate==1 /* validating, and no invalid files found */) 
+    if (flag.multiple_files && flag.validate==VLD_REPORT_INVALID /* reporting invalid files, and none found */) 
         WARN0 ("All files are valid genozip files");
 
     // finish dumping reference and/or refhash to cache

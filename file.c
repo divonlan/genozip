@@ -714,19 +714,30 @@ static bool file_open_z (File *file)
 
                 FCLOSE (file->file, file_printname (file));
 
-                if (flag.validate) flag.validate = 2; // invalid files have been found
+                if (flag.validate == VLD_REPORT_INVALID) flag.validate = VLD_INVALID_FOUND; 
 
                 static char *causes[] = { "file->file is NULL", "file_seek failed", "fread failed", "bad magic" };
 
                 if (flag.multiple_files) {
-                    iprintf (flag.validate ? "%s is not a valid genozip file: %s\n" 
-                                           : "Skipping %s - it is not a valid genozip file: %s\n", 
-                             file_printname (file), causes[cause-1]);
+
+                    if (flag.validate == VLD_INVALID_FOUND)
+                        iprintf ("%s is not a valid genozip file: %s\n", file_printname (file), causes[cause-1]);
+                    else if (flag.validate == VLD_NONE)
+                        iprintf ("Skipping %s - it is not a valid genozip file: %s\n", file_printname (file), causes[cause-1]);
+
                     return true;
                 }
-                else
-                    ABORTINP ("%s is not a valid genozip file: %s", file_printname (file), causes[cause-1]);
+                else { // single file
+                    if (flag.validate == VLD_REPORT_VALID)
+                        exit (1); // exit quietly - with a return code indicating invalidity
+                    else
+                        ABORTINP ("%s is not a valid genozip file: %s", file_printname (file), causes[cause-1]);
+                }
             }
+            
+            // file is valid
+            else if (flag.validate == VLD_REPORT_VALID)
+                iprintf ("%s\n", file_printname (file)); // print just filename, so a script can use this output
         }
 
         file->data_type = DT_NONE; // we will get the data type from the genozip header, not by the file name

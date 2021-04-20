@@ -42,6 +42,7 @@ typedef struct {
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted,
         kraken_taxid, kraken_taxid_negative;
+    int64_t lines_first, lines_last; // set by --lines 
     char *grep;
     uint32_t one_vb, one_component, downsample, shard ;
     enum { SAM_FLAG_INCLUDE_IF_ALL=1, SAM_FLAG_INCLUDE_IF_NONE, SAM_FLAG_EXCLUDE_IF_ALL } sam_flag_filter;
@@ -66,8 +67,8 @@ typedef struct {
     ReferenceType reference;
 
     // stats / metadata flags for end users
-    int show_stats, 
-        validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
+    int show_stats; 
+    enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     
     // analysis
     int list_chroms, show_sex, idxstats, count; 
@@ -107,6 +108,7 @@ typedef struct {
          data_modified_by_txtheader,
          data_modified_by_reconstruction,
          data_modified_by_writer,
+         vbs_may_be_dropped_by_piz_read_one_vb,
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
          may_drop_lines,     // PIZ: reconstruction is allowed to drop lines

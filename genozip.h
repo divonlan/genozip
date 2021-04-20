@@ -211,8 +211,8 @@ extern bool is_info_stream_terminal; // is info_stream going to a terminal
 #define iprint0(str)                         do { fprintf (info_stream, (str)); fflush (info_stream); } while(0)
 
 // check for a user error
-#define ASSINP(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\ncommand: %s\n", flags_command_line()->data); exit_on_error(false); }} while(0)
-#define ASSINP0(condition, string)           do { if (!(condition)) { fprintf (stderr, "\n%s: %s\ncommand: %s\n", global_cmd, string, flags_command_line()->data); exit_on_error(false); }} while(0)
+#define ASSINP(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); if (flags_command_line()->data) fprintf (stderr, "\ncommand: %s\n", flags_command_line()->data); else fprintf (stderr, "\n"); exit_on_error(false); }} while(0)
+#define ASSINP0(condition, string)           do { if (!(condition)) { fprintf (stderr, "\n%s: %s\n", global_cmd, string); if (flags_command_line()->data) fprintf (stderr, "command: %s\n", flags_command_line()->data); exit_on_error(false); }} while(0)
 #define ABORTINP(format, ...)                do { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);} while(0)
 #define ABORTINP0(string)                    do { fprintf (stderr, "\n%s: %s\n", global_cmd, string); exit_on_error(false);} while(0)
 

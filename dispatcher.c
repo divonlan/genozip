@@ -266,7 +266,7 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool
 bool dispatcher_has_free_thread (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-    return dd->num_running_compute_threads < MAX(1, dd->max_threads);
+    return vb_has_free_vb() && dd->num_running_compute_threads < MAX(1, dd->max_threads);
 }
 
 bool dispatcher_has_active_threads (Dispatcher dispatcher)

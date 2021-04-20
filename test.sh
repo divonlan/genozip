@@ -141,7 +141,7 @@ test_stdout()
 
 test_multi_bound() # $1=filename $2=REPLACE (optional)
 {
-    test_header "$1 - bind & unbind (2 files with 2 components each)"
+    test_header "$1 - test_multi_bound - bind & unbind (2 files with 2 components each)"
     local file=$TESTDIR/$1
     local file1=$OUTDIR/copy1.$1
     local file2=$OUTDIR/copy2.$1
@@ -157,8 +157,9 @@ test_multi_bound() # $1=filename $2=REPLACE (optional)
     cp -f $output $output2 || exit 1
     $genounzip $output $output2 -t || exit 1 # test unbind 2x2
 
-    # test --comoponent
+    # test --component
     if [[ $2 == "REPLACE" ]]; then
+
         $genocat $output --component 1 -fo $recon || exit 1
         local wc=`cat $recon | grep PRFX | wc -l`
         if (( "$wc" == 0 )); then echo "FAILED --component 1 - expected 1 lines, but getting $wc" ; exit 1; fi
@@ -266,19 +267,26 @@ batch_minimal()
 batch_basic()
 {
     batch_print_header
-    local file
+    local file, replace
     for file in ${basics[@]}; do
         
-        test_unix_style $file
-        test_windows_style $file
+        if [ $file != basic.bam ] && [ $file != basic.generic ]; then # binary files have no \n 
+            test_unix_style $file
+            test_windows_style $file
+            replace=REPLACE
+        else
+            replace=
+        fi
+
         test_standard "NOPREFIX CONCAT" " " file://${path}${TESTDIR}/$file
         test_standard "-p123" "--password 123" $file
-        if [ $file != basic.phy ]; then # issue with redirection on Windows of Phylip files (bug 339)
+        if [ $file != basic.bam ] && [ $file != basic.generic ] && [ $file != basic.phy ]; then # issue with redirection on Windows of Phylip files (bug 339)
             test_redirected $file
             test_stdout $file
         fi
         test_standard "COPY" " " $file
-        test_multi_bound $file REPLACE # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
+
+        test_multi_bound $file $replace # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
         test_optimize $file
     done
 }
@@ -524,7 +532,8 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--grep line5 --header-only" 1
 }
 
-batch_grep()
+# test --grep, --count, --lines
+batch_grep_count_lines()
 {
     batch_print_header
 
@@ -536,12 +545,21 @@ batch_grep()
         local lines=1
         if [ $file == basic.fq ];    then lines=4; fi
         if [ $file == basic.chain ]; then lines=3; fi
-        
+
+        # grep        
         test_count_genocat_lines $TESTDIR/$file "--grep PRFX --no-header" $lines
         test_count_genocat_lines $TESTDIR/$file "--grep NONEXISTANT --no-header" 0
+
+        # count
+        $genozip $TESTDIR/$file -fo $output
+        local count=`$genocat --quiet --count $output || exit`
+echo count = $count
+        # lines
+        test_count_genocat_lines $TESTDIR/$file "--no-header --lines=${count}-${count}" $lines
+        test_count_genocat_lines $TESTDIR/$file "--no-header --lines=100000-" 0
+
     done
 }
-
 batch_backward_compatability()
 {
     batch_print_header
@@ -738,7 +756,7 @@ genounzip="$genounzip_exe --echo -@5 $2"
 genocat="$genocat_exe --echo -@5 $2"
 genols=$genols_exe 
 
-basics=(basic.vcf basic.sam basic.bam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
+basics=(basic.bam basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
         basic.chain basic.kraken basic.phy basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
@@ -777,7 +795,7 @@ if (( $1 <= 7  )) ; then  batch_sam_translations       ; fi
 if (( $1 <= 8  )) ; then  batch_23andMe_translations   ; fi
 if (( $1 <= 9  )) ; then  batch_phylip_translations    ; fi
 if (( $1 <= 10 )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 11 )) ; then  batch_grep                   ; fi
+if (( $1 <= 11 )) ; then  batch_grep_count_lines       ; fi
 if (( $1 <= 12 )) ; then  batch_backward_compatability ; fi
 if (( $1 <= 13 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
 if (( $1 <= 14 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
