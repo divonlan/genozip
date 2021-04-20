@@ -266,9 +266,8 @@ batch_minimal()
 batch_basic()
 {
     batch_print_header
-    local files=(basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt basic.chain basic.kraken basic.phy)
     local file
-    for file in ${files[@]}; do
+    for file in ${basics[@]}; do
         
         test_unix_style $file
         test_windows_style $file
@@ -519,11 +518,28 @@ batch_genocat_tests()
     # FASTQ genocat tests
     file=$TESTDIR/basic.fq
     test_count_genocat_lines $file "--header-only" `grep @ $file | wc -l` 
-    test_count_genocat_lines $file "--grep line5" 4
-    test_count_genocat_lines $file "--grep line5 --header-only" 1
     test_count_genocat_lines $file "--downsample 2" $(( 4 * `grep @ $file | wc -l` / 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave" $(( 4 * `grep @ $file | wc -l` * 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave --downsample=5,4" $(( 4 * `grep @ $file | wc -l` / 5 * 2 )) 
+    test_count_genocat_lines $file "--grep line5 --header-only" 1
+}
+
+batch_grep()
+{
+    batch_print_header
+
+    local file
+    for file in ${basics[@]}; do
+        if [ $file == basic.fa ] || [ $file == basic.bam ] || [ $file == basic.generic ]; then continue; fi
+
+        # number of expected lines
+        local lines=1
+        if [ $file == basic.fq ];    then lines=4; fi
+        if [ $file == basic.chain ]; then lines=3; fi
+        
+        test_count_genocat_lines $TESTDIR/$file "--grep PRFX --no-header" $lines
+        test_count_genocat_lines $TESTDIR/$file "--grep NONEXISTANT --no-header" 0
+    done
 }
 
 batch_backward_compatability()
@@ -722,6 +738,9 @@ genounzip="$genounzip_exe --echo -@5 $2"
 genocat="$genocat_exe --echo -@5 $2"
 genols=$genols_exe 
 
+basics=(basic.vcf basic.sam basic.bam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
+        basic.chain basic.kraken basic.phy basic.generic)
+
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
 for exe in ${exes[@]}; do
     if [ ! -x $exe ]; then
@@ -758,19 +777,20 @@ if (( $1 <= 7  )) ; then  batch_sam_translations       ; fi
 if (( $1 <= 8  )) ; then  batch_23andMe_translations   ; fi
 if (( $1 <= 9  )) ; then  batch_phylip_translations    ; fi
 if (( $1 <= 10 )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 11 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 12 )) ; then  batch_kraken " " "-K$kraken" ;      # genocat loads kraken data
-                          batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 13 )) ; then  batch_real_world_subsets     ; fi ; # natural VB size
-if (( $1 <= 14 )) ; then  batch_real_world_subsets -B1 ; fi ; # many VBs
-if (( $1 <= 15 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 16 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 17 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 18 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 19 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 20 )) ; then  batch_reference              ; fi
-if (( $1 <= 21 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 22 )) ; then  batch_genols                 ; fi
+if (( $1 <= 11 )) ; then  batch_grep                   ; fi
+if (( $1 <= 12 )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 13 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
+if (( $1 <= 14 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
+if (( $1 <= 15 )) ; then  batch_real_world_subsets     ; fi ; # natural VB size
+if (( $1 <= 16 )) ; then  batch_real_world_subsets -B1 ; fi ; # many VBs
+if (( $1 <= 17 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 18 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 19 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 20 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 21 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 22 )) ; then  batch_reference              ; fi
+if (( $1 <= 23 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 24 )) ; then  batch_genols                 ; fi
 
 printf "\nALL GOOD!\n"
 
