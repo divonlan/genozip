@@ -702,13 +702,25 @@ static bool file_open_z (File *file)
                 file->name, GENOZIP_EXT);
 
         if (!flag.seg_only || flag_loading_auxiliary) {
-            file->file = fopen (file->name, READ);
+
+            // make sure file is a regular file (not FIFO, directory etc)
+            struct stat sb;
+            int cause=0, stat_errno;
+            if (stat (file->name, &sb)) {
+                cause = 5;
+                stat_errno = errno;
+            }
+
+            if ((sb.st_mode & S_IFMT) != S_IFREG) cause=6; // not regular file
+
+            if (!cause)
+                file->file = fopen (file->name, READ);
 
             // verify that this is a genozip file 
             // we read the Magic at the end of the file (as the magic at the beginning may be encrypted)
             uint32_t magic;
-            int cause=0;
-            if (  (cause = 1 * !file->file) ||
+            if (  cause ||
+                  (cause = 1 * !file->file) ||
                   (cause = 2 * !file_seek (file, -(int)sizeof (magic), SEEK_END, true)) || 
                   (cause = 3 * !fread (&magic, sizeof (magic), 1, file->file)) ||
                   (cause = 4 * (BGEN32 (magic) != GENOZIP_MAGIC))) {
@@ -717,14 +729,17 @@ static bool file_open_z (File *file)
 
                 if (flag.validate == VLD_REPORT_INVALID) flag.validate = VLD_INVALID_FOUND; 
 
-                static char *causes[] = { "file->file is NULL", "file_seek failed", "fread failed", "bad magic" };
+                static char *causes[] = { "file->file is NULL", "file_seek failed", "fread failed", 
+                                          "bad magic", "stat() failed: ", "not a regular file" };
 
                 if (flag.multiple_files) {
 
                     if (flag.validate == VLD_INVALID_FOUND)
-                        iprintf ("%s is not a valid genozip file: %s\n", file_printname (file), causes[cause-1]);
+                        iprintf ("%s is not a valid genozip file: %s%s\n", file_printname (file), 
+                                causes[cause-1], cause==5 ? strerror (stat_errno) : "");
                     else if (flag.validate == VLD_NONE)
-                        iprintf ("Skipping %s - it is not a valid genozip file: %s\n", file_printname (file), causes[cause-1]);
+                        iprintf ("Skipping %s - it is not a valid genozip file: %s%s\n", file_printname (file), 
+                                 causes[cause-1], cause==5 ? strerror (stat_errno) : "");
 
                     return true;
                 }
