@@ -74,7 +74,7 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 }
 
 // get codec by txt file type
-static Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode)
+static Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft)
 {
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
         if (txt_in_ft_by_dt[dt][i].in == txt_ft) 
@@ -369,7 +369,7 @@ static bool file_open_txt_read (File *file)
         WARN_ONCE ("%s: FYI: genozip can't recognize this file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
     
     // open the file, based on the codec
-    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, READ);
+    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type);
 
 #ifdef _WIN32 
     ASSINP0 (!file->redirected || file->codec == CODEC_NONE, 
@@ -571,7 +571,7 @@ static bool file_open_txt_write (File *file)
         ASSINP0 (flag.reference, "--reference must be specified when translating 23andMe to VCF");
 
     // get the codec    
-    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, WRITE);
+    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type);
     
     // set to bgzf if the file type implies it
     if (file->codec == CODEC_GZ) 
@@ -580,14 +580,15 @@ static bool file_open_txt_write (File *file)
     // cases we output as plain: 
     // 1. the user overrides with --bgzf=0 (override bgzf set here or before, in flags_update_piz_one_file)
     //    note: a user-specified --bgzf=0 is CODEC_NONE, but a genocat without --bgzf is CODEC_BGZF with level=0 (set in flags_update_piz_one_file)
-    // 2. genocat, unless user specified a --bgzf > 0 or its a BAM (binary)
+    // 2. genocat to stdout (terminal or pipe), unless user specified a --bgzf > 0 or its a BAM (binary)
+    //    (some BAM downstream tools like GATK expects BGZF)
     if (file->codec == CODEC_BGZF && 
-        (flag.bgzf == 0 || (flag.bgzf == -1 && exe_type == EXE_GENOCAT && !z_file->z_flags.txt_is_bin)))
+        (flag.bgzf == 0 || (flag.bgzf == -1 && flag.to_stdout && flag.out_dt != DT_BAM)))
         file->codec = CODEC_NONE;
     
     // set BGZF compression level, in cases we can't or won't compress to the original file's BGZF blocks
     if (file->codec == CODEC_BGZF && flag.bgzf == FLAG_BGZF_BY_ZFILE) { // user did not use --bgzf to explicitly set the level
-        if (exe_type == EXE_GENOCAT && z_file->z_flags.txt_is_bin) // genocat of a BAM
+        if (flag.to_stdout && flag.out_dt == DT_BAM) // genocat of a BAM
             flag.bgzf = 1; // some downstream tools (eg GATK) expect BAM to always be BGZF-compressed
 
         // if we're modifying the data we can't recompress using the original BGZF blocks         
@@ -833,7 +834,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         file->type = stdin_type; 
         file->data_type = file_get_data_type (stdin_type, true);
 
-        Codec codec = file_get_codec_by_txt_ft (file->data_type, file->type, READ);
+        Codec codec = file_get_codec_by_txt_ft (file->data_type, file->type);
         if (supertype == TXT_FILE) file->codec = codec;
     }
     else { // stdout

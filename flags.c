@@ -870,10 +870,16 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 
     // when using genocat to concatenate multiple files - don't show the header for the 2nd+ file
     if (exe_type == EXE_GENOCAT && z_file_i >= 1 && !flag.no_writer) {
-        flag.no_header = true;
+        if (!flag.no_header) flag.no_header = 2; // 2 = assigned here and not from command line
 
-        ASSINP (!dt_props[flag.out_dt].is_binary, "Cannot concatenate multiple %s files, because %s is a binary format",
-                dt_name (flag.out_dt), dt_name (flag.out_dt));
+        // TODO: bug 349
+        ASSINP0 (flag.out_dt == BAM, "Cannot concatenate multiple BAM files");
+    }
+
+    // it is not possible to have BAM without a header (except for 2nd+ file if concatenating)
+    if (flag.no_header && flag.out_dt == DT_BAM && !flag.no_writer) {
+        ASSINP0 (flag.no_header == 2, "Cannot output a BAM without a header");
+        flag.no_header = false; // if no_header is due to the assigment above (=2), reset it silently
     }
 
     // true if the output txt file will NOT be identical to the source file as recorded in z_file
@@ -947,7 +953,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
             z_name, dt_name (z_file->data_type));
 
     // -- grep doesn't work with binary files
-    ASSINP (!flag.grep || !dt_props[flag.out_dt].is_binary, "--grep is not supported when outputting %s data", dt_name (flag.out_dt));
+    ASSINP (!flag.grep || !out_dt_is_binary, "--grep is not supported when outputting %s data", dt_name (flag.out_dt));
 
     // translator limitations
     ASSINP0 ((flag.out_dt != DT_SAM && flag.out_dt != DT_BAM) || z_file->data_type == DT_SAM || z_file->data_type == DT_BAM,

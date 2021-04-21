@@ -37,7 +37,8 @@ typedef struct {
     int bgzf;   // can be set by --bgzf, or by various other conditions. values 0-12 indicate the level of libdeflate, FLAG_BGZF_BY_ZFILE means use SEC_BGZF or default level if it is absent
     
     int out_dt; // used to indicate the desired dt of the output txt - consumed by file_open, and thereafter equal to txt_file->data_type
-
+    #define out_dt_is_binary dt_props[flag.out_dt].is_binary
+    
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted,
