@@ -188,6 +188,14 @@ extern const char *file_exts[];
 //                           { in         codec       out           }
 #define TXT_IN_FT_BY_DT  { { { FASTA,     CODEC_NONE, REF_GENOZIP   }, { FASTA_GZ, CODEC_GZ,  REF_GENOZIP   },\
                              { FASTA_BZ2, CODEC_BZ2,  REF_GENOZIP   }, { FASTA_XZ, CODEC_XZ,  REF_GENOZIP   },\
+                             { FAA,       CODEC_NONE, REF_GENOZIP   }, { FAA_GZ,   CODEC_GZ,  REF_GENOZIP   },\
+                             { FAA_BZ2,   CODEC_BZ2,  REF_GENOZIP   }, { FAA_XZ,   CODEC_XZ,  REF_GENOZIP   },\
+                             { FFN,       CODEC_NONE, REF_GENOZIP   }, { FFN_GZ,   CODEC_GZ,  REF_GENOZIP   },\
+                             { FFN_BZ2,   CODEC_BZ2,  REF_GENOZIP   }, { FFN_XZ,   CODEC_XZ,  REF_GENOZIP   },\
+                             { FNN,       CODEC_NONE, REF_GENOZIP   }, { FNN_GZ,   CODEC_GZ,  REF_GENOZIP   },\
+                             { FNN_BZ2,   CODEC_BZ2,  REF_GENOZIP   }, { FNN_XZ,   CODEC_XZ,  REF_GENOZIP   },\
+                             { FNA,       CODEC_NONE, REF_GENOZIP   }, { FNA_GZ,   CODEC_GZ,  REF_GENOZIP   },\
+                             { FNA_BZ2,   CODEC_BZ2,  REF_GENOZIP   }, { FNA_XZ,   CODEC_XZ,  REF_GENOZIP   },\
                              { FA,        CODEC_NONE, REF_GENOZIP   }, { FA_GZ,    CODEC_GZ,  REF_GENOZIP   },\
                              { FA_BZ2,    CODEC_BZ2,  REF_GENOZIP   }, { FA_XZ,    CODEC_XZ,  REF_GENOZIP   }, { } }, \
                            { { VCF,       CODEC_NONE, VCF_GENOZIP   }, { VCF_GZ,   CODEC_GZ,  VCF_GENOZIP   }, { VCF_BGZF, CODEC_GZ,  VCF_GENOZIP },\
