@@ -150,10 +150,10 @@ void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *even
 {
     if (flag.show_threads) {
         if (time_usec)
-            iprintf ("%s: vb_i=%u vb_id=%u %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
+            iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
                      task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self(), str_uint_commas (time_usec).s);
         else
-            iprintf ("%s: vb_i=%u vb_id=%u %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
+            iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
                      task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self());
     }
 
@@ -167,11 +167,11 @@ void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *even
             ASSERT (log.size - log.len > 100, "Thread log is out of space, log.size=%u log.len=%u", (unsigned)log.size, (unsigned)log.len);
         
         if (time_usec)
-            bufprintf (evb, &log, "%s: vb_i=%u vb_id=%u %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
-                    task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self(), str_uint_commas (time_usec).s);
+            bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
+                       task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self(), str_uint_commas (time_usec).s);
         else
-            bufprintf (evb, &log, "%s: vb_i=%u vb_id=%u %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
-                    task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self());
+            bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
+                       task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self());
 
         mutex_unlock (log_mutex);
     }

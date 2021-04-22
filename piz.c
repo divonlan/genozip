@@ -250,7 +250,8 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     reconstruct_from_ctx (vb, trans.toplevel, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
-    if (txt_file && txt_file->codec == CODEC_BGZF) 
+    if (txt_file && txt_file->codec == CODEC_BGZF && !flag.no_writer &&
+        !flag.maybe_vb_modified_by_writer)  // if --downsample, --interleave or sorting - writer will BGZF-compress
         bgzf_compress_vb (vb);
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
@@ -440,9 +441,10 @@ static bool piz_read_one_vb (VBlock *vb)
     bool ok_to_compute = (txt_file->num_lines > flag.lines_first) // --lines: we've reached the start line (note: if we passed lines_end, VB is dropped before calling this function)
                       && (DTPZ(piz_read_one_vb) ? DTPZ(piz_read_one_vb)(vb, sl) : true); // logic specific to this data type (--grep for FASTQ, --grep,--regions for FASTA)
 
-    // calculate the BGZF blocks from SEC_BGZF that the compute thread is expected to re-create
+    // calculate the BGZF blocks from SEC_BGZF that the compute thread is expected to re-create,
+    // unless isizes was not loaded (bc flag.data_modified).
     if (flag.bgzf == FLAG_BGZF_BY_ZFILE && txt_file->codec == CODEC_BGZF)     
-        bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size);
+        bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size); // does nothing if isizes is not loaded
 
     // initialize coverage counters
     if (flag.collect_coverage)
@@ -490,7 +492,7 @@ static Digest piz_one_verify_digest (void)
 
 static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
 {
-    if (!flag_loading_auxiliary && !flag.no_writer) {
+    if (!flag.no_writer) {
         writer_handover_data (vb);
         dispatcher_recycle_vbs (dispatcher, false); // don't release VB- it will be released in writer_release_vb when writing is completed
     }
@@ -541,8 +543,12 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
     if (flag.test || flag.md5) 
         ASSINP0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
 
-    Dispatcher dispatcher = dispatcher_init ("piz", flag.xthreads ? 1 : global_max_threads, 
-                                             0, flag.test, is_last_z_file, true, z_file->basename, PROGRESS_PERCENT, 0);
+    Dispatcher dispatcher = dispatcher_init (flag.reading_chain     ? "piz-chain"
+                                            :flag.reading_reference ? "piz-ref"
+                                            :flag.reading_kraken    ? "piz-kraken"
+                                            :                         "piz",
+                                             flag.xthreads ? 1 : global_max_threads, 0, flag.test, 
+                                             is_last_z_file, true, z_file->basename, PROGRESS_PERCENT, 0);
     return dispatcher;
 }
 
@@ -613,6 +619,8 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
                     (int32_t)recon_vb->txt_data.len - (int32_t)recon_vb->vb_data_size);
 
             num_nondrop_lines += recon_vb->num_nondrop_lines;
+            if (flag.count == COUNT_VBs)
+                iprintf ("vb_i=%u nondropped_lines=%u\n", recon_vb->vblock_i, recon_vb->num_nondrop_lines);
 
             if (flag.collect_coverage)    
                 coverage_add_one_vb (recon_vb);
@@ -641,7 +649,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
         if (flag.show_coverage) coverage_show_coverage();
         if (flag.show_sex) coverage_sex_classifier (is_first_z_file);
         if (flag.idxstats) coverage_show_idxstats();
-        if (flag.count) iprintf ("%"PRIu64"\n", num_nondrop_lines);
+        if (flag.count == CNT_TOTAL) iprintf ("%"PRIu64"\n", num_nondrop_lines);
     }
 
     if (is_last_txt_file) dispatcher_finish (&dispatcher, NULL);

@@ -507,7 +507,9 @@ void chain_load (void)
     TEMP_VALUE (command, PIZ);
 
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
-    flag.may_drop_lines = true; // if fact, we drop all the lines
+    flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines
+    flag.no_writer = true;
+
     Dispatcher dispachter = piz_z_file_initialize (false);
     piz_one_txt_file (dispachter, false);
 

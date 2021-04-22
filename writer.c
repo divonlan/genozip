@@ -19,6 +19,7 @@
 #include "zfile.h"
 #include "bgzf.h"
 #include "mutex.h"
+#include "codec.h" 
 
 // ---------------
 // Data structures
@@ -221,7 +222,7 @@ static void writer_init_vb_info (void)
             ASSERT0 (sections_next_sec1 (&sl, SEC_VB_HEADER, 0, 0), "Unexpected end of section list");
             
             VbInfo *v = ENT (VbInfo, vb_info, sl->vblock_i); // note: VBs are out of order in --luft bc writer_move_liftover_rejects_to_front()
-            v->comp_i    = comp_i;
+            v->comp_i = comp_i;
 
             // set pairs (used even if not interleaving)
             if (z_file->z_flags.dts_paired) 
@@ -473,9 +474,8 @@ static void writer_flush_vb (VBlockP vb)
     START_TIMER;
 
     if (txt_file->codec == CODEC_BGZF) {
-
-        // compress now if not compressed yet (txt header or modified VB which cannot be compressed by the compute thread)
-        if (!vb->compressed.len) 
+        // compress now if not compressed yet (--interleave, --downsample, sorting)
+        if (flag.maybe_vb_modified_by_writer) 
             bgzf_compress_vb (vb); // compress data into vb->compressed (using BGZF blocks from source file or new ones)
 
         bgzf_write_to_disk (vb); 
@@ -488,6 +488,7 @@ static void writer_flush_vb (VBlockP vb)
         txt_file->disk_so_far            += vb->txt_data.len;
     }
 
+    // free, so in case this is wvb we can use it for more lines
     buf_free (&vb->txt_data);
     buf_free (&vb->compressed);
     buf_free (&vb->bgzf_blocks);
@@ -509,6 +510,9 @@ static inline bool writer_line_survived_downsampling (VbInfo *v)
 // write lines one at a time, watching for dropped lines
 static void writer_write_line_range (VBlock *wvb, VbInfo *v, uint32_t start_line, uint32_t num_lines)
 {
+    ASSERT (!v->vb->compressed.len, "expecting vb_i=%u data to be BGZF-compressed by writer at flush, but it is already compressed by reconstructor: txt_file->codec=%s compressed.len=%"PRIu64" txt_data.len=%"PRIu64,
+            v->vb->vblock_i, codec_name (txt_file->codec), v->vb->compressed.len, v->vb->txt_data.len);
+
     if (!v->vb->txt_data.len) return; // no data in the VB 
 
     ARRAY (const char *, lines, v->vb->lines); 
@@ -531,6 +535,7 @@ static void writer_write_line_range (VBlock *wvb, VbInfo *v, uint32_t start_line
                 buf_add_more (wvb, &wvb->txt_data, start, line_len, "txt_data");
             
             txt_file->lines_written_so_far++; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
+            v->vb->num_nondrop_lines--;       // update lines remaining to be written (initialized during reconstruction in container_reconstruct_do)
         }
     }
 }
@@ -638,18 +643,13 @@ static void writer_main_loop (VBlockP wvb)
                 break;
 
             case PLAN_FULL_VB:   
-                if (!flag.may_drop_lines) {
+                if (!flag.downsample) {
                     writer_flush_vb (v->vb); // write entire VB
-                    
-                    txt_file->lines_written_so_far += v->vb->lines.len; // textual, not data-type, line (for downsampling accounting)
+                    txt_file->lines_written_so_far += v->vb->num_nondrop_lines;
                 }
-
-                // case: some or all lines possibly dropped during reconstruction or VB not reconstructed
-                // if all lines were discovered to be grepped out by piz_dispatch_one_vb (FASTA/Q only)
-                // we write lines one at a time, not counting dropped lines in txt_file->lines_written_so_far
                 else 
                     writer_write_line_range (wvb, v, 0, v->vb->lines.len);
-                
+
                 vb_release_vb (&v->vb);
                 break;
 
@@ -681,8 +681,7 @@ static void writer_start_writing (uint32_t txt_file_i)
 {
     ASSERTNOTNULL (txt_file);
 
-    if (writer_thread != THREAD_ID_NONE || // already started
-        flag.no_writer || flag_loading_auxiliary) return;
+    if (writer_thread != THREAD_ID_NONE || flag.no_writer) return;
 
     ASSERT (txt_file_i < txt_file_info.len, "txt_file_i=%u is out of range txt_file_info.len=%u", 
             txt_file_i, (unsigned)txt_file_info.len);
@@ -721,7 +720,7 @@ void writer_finish_writing (bool is_last_txt_file)
 // PIZ main thread
 static void writer_handover (VbInfo *v, VBlock *vb)
 {
-    if (flag.no_writer || flag_loading_auxiliary) return;
+    if (flag.no_writer) return;
 
     if (!v->in_plan) return; // we don't need this data as we are not going to write any of it
 

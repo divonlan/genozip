@@ -38,7 +38,7 @@ typedef struct {
     
     int out_dt; // used to indicate the desired dt of the output txt - consumed by file_open, and thereafter equal to txt_file->data_type
     #define out_dt_is_binary dt_props[flag.out_dt].is_binary
-    
+
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted,
@@ -72,7 +72,8 @@ typedef struct {
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     
     // analysis
-    int list_chroms, show_sex, idxstats, count; 
+    int list_chroms, show_sex, idxstats;
+    enum { CNT_NONE, CNT_TOTAL, COUNT_VBs } count; 
     enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage;
 
     // stats / debug useful mostly for developers
@@ -106,13 +107,14 @@ typedef struct {
          no_writer,          // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
-         data_modified_by_txtheader,
-         data_modified_by_reconstruction,
-         data_modified_by_writer,
-         vbs_may_be_dropped_by_piz_read_one_vb,
+         maybe_txt_header_modified,
+         maybe_vb_modified_by_reconstructor,
+         maybe_vb_modified_by_writer,
+         maybe_vb_dropped_before_read,
+         maybe_vb_dropped_after_read_vb_header,
+         maybe_vb_dropped_after_read,
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
-         may_drop_lines,     // PIZ: reconstruction is allowed to drop lines
          explicit_ref,       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          dyn_set_mem,        // ZIP: we're now segging as part of zip_dynamically_set_max_memory()
          collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats

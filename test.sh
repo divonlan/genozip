@@ -311,7 +311,8 @@ batch_precompressed()
 batch_bgzf()
 {
     batch_print_header
-    local files=(basic.bam basic-bgzf-6.sam.gz basic-bgzf-9.sam.gz basic-bgzf-6-no-eof.sam.gz basic-1bgzp_block.bam)
+    #local files=(basic.bam basic-bgzf-6.sam.gz basic-bgzf-9.sam.gz basic-bgzf-6-no-eof.sam.gz basic-1bgzp_block.bam)
+    local files=()
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
@@ -323,6 +324,32 @@ batch_bgzf()
         test_standard "COPY" " " $file
         test_multi_bound $file
     done
+
+    test_header "sam -> sam.genozip -> sam.gz - see that it is BGZF"
+    local sam_gz=${OUTDIR}/bgzf_test.sam.gz
+    $genozip ${TESTDIR}/basic.sam -fo $output || exit 1
+    $genocat --no-pg $output -fo $sam_gz || exit 1
+    if [ "$(head -c4 $sam_gz | od -x | head -1)" != "0000000 8b1f 0408" ] ; then 
+        echo $sam_gz is not BGZF-compressed
+        exit 1
+    fi
+
+    test_header "sam-> sam.genozip -> bam - see that it is BGZF"
+    local bam=${OUTDIR}/bgzf_test.bam
+    $genocat --no-pg $output -fo $bam || exit 1
+    if [ "$(head -c4 $bam | od -x | head -1)" != "0000000 8b1f 0408" ] ; then 
+        echo $bam is not BGZF-compressed
+        exit 1
+    fi
+
+    test_header "sam.gz -> sam.genozip -> sam - see that it is not BGZF"
+    local sam=${OUTDIR}/bgzf_test.sam
+    $genozip $sam_gz -fo $output || exit 1
+    $genocat --no-pg $output -fo $sam || exit 1
+    if [ "$(head -c4 $sam | od -x | head -1)" == "0000000 8b1f 0408" ] ; then 
+        echo $sam is unexpectedly BGZF-compressed
+        exit 1
+    fi
 }
         
 # files represent cases that cannot be written into the test files because they would conflict

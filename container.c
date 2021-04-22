@@ -282,7 +282,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             }
 
             if (vb->drop_curr_line) {
-                ASSERT0 (flag.may_drop_lines, "Lines cannot be dropped because flag.may_drop_lines=false. This is bug in the code.");
+                ASSERT0 (flag.maybe_vb_modified_by_reconstructor, "Lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code.");
 
                 vb->txt_data.len = vb->line_start;
             }

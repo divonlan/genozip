@@ -67,7 +67,7 @@ static void flags_show_flags (void)
     iprintf ("out_dt=%s\n", dt_name (flag.out_dt));
     iprintf ("header_one=%s\n", flag.header_one ? "true" : "false");
     iprintf ("header_only_fast=%s\n", flag.header_only_fast ? "true" : "false");
-    iprintf ("no_header=%s\n", flag.no_header ? "true" : "false");
+    iprintf ("no_header=%d\n", flag.no_header);
     iprintf ("header_only=%s\n", flag.header_only ? "true" : "false");
     iprintf ("regions=%s\n", flag.regions ? "true" : "false");
     iprintf ("samples=%s\n", flag.samples ? "true" : "false");
@@ -110,7 +110,7 @@ static void flags_show_flags (void)
     iprintf ("list_chroms=%s\n", flag.list_chroms ? "true" : "false");
     iprintf ("show_sex=%s\n", flag.show_sex ? "true" : "false");
     iprintf ("idxstats=%s\n", flag.idxstats ? "true" : "false");
-    iprintf ("count=%s\n", flag.count ? "true" : "false");
+    iprintf ("count=%d\n", flag.count);
     iprintf ("show_coverage=%d\n", flag.show_coverage);
     iprintf ("show_memory=%s\n", flag.show_memory ? "true" : "false");
     iprintf ("show_dict=%s\n", flag.show_dict ? "true" : "false");
@@ -168,12 +168,13 @@ static void flags_show_flags (void)
     iprintf ("no_writer=%s\n", flag.no_writer ? "true" : "false");
     iprintf ("multiple_files=%s\n", flag.multiple_files ? "true" : "false");
     iprintf ("reconstruct_as_src=%s\n", flag.reconstruct_as_src ? "true" : "false");
-    iprintf ("data_modified_by_txtheader=%s\n", flag.data_modified_by_txtheader ? "true" : "false");
-    iprintf ("vbs_may_be_dropped_by_piz_read_one_vb=%s\n", flag.vbs_may_be_dropped_by_piz_read_one_vb ? "true" : "false");
-    iprintf ("data_modified_by_reconstruction=%s\n", flag.data_modified_by_reconstruction ? "true" : "false");
-    iprintf ("data_modified_by_writer=%s\n", flag.data_modified_by_writer ? "true" : "false");
+    iprintf ("maybe_txt_header_modified=%s\n", flag.maybe_txt_header_modified ? "true" : "false");
+    iprintf ("maybe_vb_dropped_before_read=%s\n", flag.maybe_vb_dropped_before_read ? "true" : "false");
+    iprintf ("maybe_vb_dropped_after_read_vb_header=%s\n", flag.maybe_vb_dropped_after_read_vb_header ? "true" : "false");
+    iprintf ("maybe_vb_dropped_after_read=%s\n", flag.maybe_vb_dropped_after_read ? "true" : "false");
+    iprintf ("maybe_vb_modified_by_reconstructor=%s\n", flag.maybe_vb_modified_by_reconstructor ? "true" : "false");
+    iprintf ("maybe_vb_modified_by_writer=%s\n", flag.maybe_vb_modified_by_writer ? "true" : "false");
     iprintf ("data_modified=%s\n", flag.data_modified ? "true" : "false");
-    iprintf ("may_drop_lines=%s\n", flag.may_drop_lines ? "true" : "false");
     iprintf ("explicit_ref=%s\n", flag.explicit_ref ? "true" : "false");
     iprintf ("dyn_set_mem=%s\n", flag.dyn_set_mem ? "true" : "false");
     iprintf ("collect_coverage=%s\n", flag.collect_coverage ? "true" : "false");
@@ -374,10 +375,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dm {"debug-memory",  optional_argument, 0, 12                     }  
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
         #define _dt {"debug-threads", no_argument,       &flag.debug_threads,    1 }  
-        #define _oe {"echo",          no_argument,       &flag.echo,           1 }
+        #define _oe {"echo",          no_argument,       &flag.echo,             1 }
         #define _dh {"show-hash",     no_argument,       &flag.show_hash,        1 }  
         #define _sx {"sex",           no_argument,       &flag.show_sex,         1 }  
-        #define _ct {"count",         no_argument,       &flag.count,            1 }  
+        #define _ct {"count",         optional_argument, 0, 20 }  
         #define _SX {"coverage",      optional_argument, 0, 13                     }  
         #define _ix {"idxstats",      no_argument,       &flag.idxstats,         1 }
         #define _vl {"validate",      optional_argument, 0, 19                     }  
@@ -443,6 +444,7 @@ verify_command:
             case 17  : sam_set_FLAG_filter (optarg) ; break; // filter by SAM FLAG
             case 18  : sam_set_MAPQ_filter (optarg) ; break; // filter by SAM MAPQ
             case 19  : flag.validate = optarg ? VLD_REPORT_VALID : VLD_REPORT_INVALID ; break;
+            case 20  : flag.count = optarg ? COUNT_VBs : CNT_TOTAL; break;
             case 'n' : flag_set_lines (optarg)      ; break;
             case 'e' : ref_set_reference (optarg, REF_EXTERNAL,  true); break;
             case 'E' : ref_set_reference (optarg, REF_EXT_STORE, true); break;
@@ -882,50 +884,62 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         flag.no_header = false; // if no_header is due to the assigment above (=2), reset it silently
     }
 
-    // true if the output txt file will NOT be identical to the source file as recorded in z_file
-    // note: this does not account for changes to the data done at the compression stage with --optimize or --chain           
-    flag.data_modified_by_txtheader = exe_type == EXE_GENOCAT && 
-        (flag.header_one || flag.no_header || flag.header_only || flag.samples || flag.luft ||
-        flag.drop_genotypes || flag.lines_first >= 0 ||
-        (z_file->num_components > (1 + z_file->z_flags.dual_coords))); // txtheaders are dropped if concatenating
+    flag.maybe_txt_header_modified = exe_type == EXE_GENOCAT && 
+        (flag.no_header || flag.lines_first >= 0 || // options that may cause dropping of the txt header
+         flag.luft ||                               // --luft modifies the txt header
+         (z_file->data_type == DT_VCF && (flag.header_one || flag.samples || flag.drop_genotypes)) || // VCF specific options that modify the txt header
+         (z_file->num_components > (1 + z_file->z_flags.dual_coords))); // txtheaders are dropped if concatenating
 
-    flag.vbs_may_be_dropped_by_piz_read_one_vb = exe_type == EXE_GENOCAT && 
-        ((flag.grep && (z_file->data_type == DT_FASTQ || z_file->data_type == DT_FASTA)) ||
-         (flag.regions && z_file->data_type == DT_FASTA) ||
-         flag.lines_first >= 0);
+    flag.maybe_vb_dropped_before_read = exe_type == EXE_GENOCAT && // dropped by piz_dispatch_one_vb
+        (flag.lines_first >= 0 || // decided by piz_read_one_vb
+         flag.one_component    || // decided by writer_init_comp_info 
+         flag.regions          || // decided by writer_init_vb_info
+         flag.one_vb           || // decided by writer_init_vb_info
+         flag.header_only);       // decided by writer_init_vb_info
 
-    flag.data_modified_by_reconstruction = exe_type == EXE_GENOCAT && 
-        (!flag.reconstruct_as_src || // translating to another data
-         flag.samples || flag.drop_genotypes || flag.gt_only || flag.sequential || flag.kraken_taxid!=-1 ||
-         flag.grep || flag.regions || flag.sam_flag_filter || flag.sam_mapq_filter || flag.luft ||
-         flag.collect_coverage || flag.count || flag.header_only_fast ||
-         flag.lines_first >= 0);
+    flag.maybe_vb_dropped_after_read_vb_header = exe_type == EXE_GENOCAT &&  // dropped by piz_dispatch_one_vb
+        flag.lines_first >= 0;    // decided by piz_read_one_vb
 
-    flag.data_modified_by_writer = exe_type == EXE_GENOCAT && 
-        (flag.grep || flag.regions || flag.one_vb || flag.one_component || // entire VBs might be dropped
-         flag.downsample || // lines might be removed
+    flag.maybe_vb_dropped_after_read = exe_type == EXE_GENOCAT && // dropped by piz_dispatch_one_vb
+        ((flag.grep && (z_file->data_type == DT_FASTQ || z_file->data_type == DT_FASTA)) || // decided by piz_read_one_vb
+         (flag.regions && z_file->data_type == DT_FASTA)); // decided by piz_read_one_vb
+
+    flag.maybe_vb_modified_by_reconstructor = exe_type == EXE_GENOCAT && 
+         // translating to another data
+        (!flag.reconstruct_as_src || 
+         // VCF specific VB modifiers
+         (z_file->data_type == DT_VCF   && (flag.samples || flag.drop_genotypes || flag.gt_only)) || 
+         // FASTA specific modifiers
+         (z_file->data_type == DT_FASTA && (flag.sequential || flag.header_only_fast || flag.header_one)) || 
+         // FASTQ specific modifiers
+         (z_file->data_type == DT_FASTQ && flag.header_only_fast) || 
+         // SAM specific modifiers
+         (z_file->data_type == DT_SAM   && (flag.sam_flag_filter || flag.sam_mapq_filter)) || 
+         // general filters 
+         flag.kraken_taxid != TAXID_NONE || flag.grep || flag.regions || flag.luft || flag.lines_first >= 0 ||
+         // no-writer, but nevertheless modify the txt_data
+         flag.collect_coverage || flag.count);
+
+    flag.maybe_vb_modified_by_writer = exe_type == EXE_GENOCAT && 
+        (flag.downsample || // lines might be removed
          z_file->z_flags.dual_coords || flag.interleave); // lines are re-ordered
         
-    flag.data_modified = flag.data_modified_by_txtheader || 
-                         flag.vbs_may_be_dropped_by_piz_read_one_vb ||
-                         flag.data_modified_by_reconstruction || 
-                         flag.data_modified_by_writer;
+    // true if the PIZ output txt file will NOT be identical to the source file as recorded in z_file
+    flag.data_modified = flag.maybe_txt_header_modified || 
+                         flag.maybe_vb_dropped_after_read ||
+                         flag.maybe_vb_dropped_before_read ||
+                         flag.maybe_vb_dropped_after_read_vb_header ||
+                         flag.maybe_vb_modified_by_reconstructor || 
+                         flag.maybe_vb_modified_by_writer;
 
+    // calculation depends on flag.data_modified
     bool pg_line_added_to_header = ((flag.out_dt == DT_SAM || flag.out_dt == DT_BAM) && !flag.reconstruct_as_src)
                                 || (flag.out_dt == DT_VCF && (flag.data_modified || z_file->z_flags.dual_coords));
 
     if (pg_line_added_to_header && !flag.no_pg && exe_type == EXE_GENOCAT) 
-        flag.data_modified_by_txtheader = flag.data_modified = true;
+        flag.maybe_txt_header_modified = flag.data_modified = true;
 
     ASSINP0 (exe_type != EXE_GENOUNZIP || !flag.data_modified, "Data modification flags are not allowed in genounzip, use genocat instead");
-
-    flag.may_drop_lines = exe_type == EXE_GENOCAT && 
-        (flag.grep || flag.regions || flag.downsample || flag.luft || flag.kraken_taxid != TAXID_NONE ||
-        flag.lines_first >= 0 ||
-        flag.header_only_fast || (flag.no_header && flag.out_dt == DT_FASTA) ||
-        (z_file->data_type == DT_ME23  && flag.out_dt == DT_VCF)   || // translating ME23->VCF - we filter out lines lines with bad genotype
-        (z_file->data_type == DT_SAM   && flag.out_dt == DT_FASTQ) || // translating SAM->FASTQ - we filter out lines with bad flags
-        (z_file->data_type == DT_FASTA && flag.out_dt == DT_PHYLIP)); // translating FASTA->PHYLIP - we drop some EOL lines
 
     bool is_paired_fastq = fastq_piz_is_paired(); // also updates z_file->z_flags in case of backward compatability issues
 
@@ -985,7 +999,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 
     flags_test_conflicts(0); // test again after updating flags
 
-    info_stream = (!flag.to_stdout || flag.no_writer || flag_loading_auxiliary) ? stdout : stderr;
+    info_stream = (!flag.to_stdout || flag.no_writer) ? stdout : stderr;
     is_info_stream_terminal = isatty (fileno (info_stream)); 
 
     if (flag.show_flags) flags_show_flags();

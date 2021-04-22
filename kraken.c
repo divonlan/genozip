@@ -374,9 +374,10 @@ void kraken_load (void)
     ASSERTNOTNULL (flag.reading_kraken);
     SAVE_FLAGS_AUX;
 
-    flag.may_drop_lines   = true;    // we drop the lines not matching --taxid
+    flag.maybe_vb_modified_by_reconstructor = true;    // we drop the lines not matching --taxid
     flag.trans_containers = true;    // execute TOP2TAXID in translate mode
     flag.data_modified    = true;    // the reconstructed kraken file is not the same as the original...
+    flag.no_writer        = true;
     flag.out_dt           = DT_NONE; // needed for dt_get_translation to find the translation defined in TRANSLATIONS
     flag.reference        = REF_NONE;
     TEMP_VALUE (command, PIZ);

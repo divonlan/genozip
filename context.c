@@ -1241,9 +1241,9 @@ void ctx_read_all_dictionaries (void)
     dict_sl = NULL;
     dict_ctx = NULL;
 
-    dispatcher_fan_out_task (flag.reading_reference ? "read_ref_dicts" 
-                            :flag.reading_chain     ? "read_chain_dicts" 
-                            :flag.reading_kraken    ? "read_kraken_dicts" 
+    dispatcher_fan_out_task (flag.reading_reference ? "read_dicts_ref" 
+                            :flag.reading_chain     ? "read_dicts_chain" 
+                            :flag.reading_kraken    ? "read_dicts_kraken" 
                             :                         "read_dicts",
                              NULL, PROGRESS_NONE, "Reading dictionaries...", 
                              flag.test, true, true, 

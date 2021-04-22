@@ -1300,7 +1300,8 @@ void ref_load_external_reference (bool display, bool is_last_z_file)
     SAVE_FLAGS_AUX;
 
     flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
-
+    flag.no_writer = true;
+    
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
 

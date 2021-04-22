@@ -145,6 +145,10 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
+.. option:: --count=VB  CU. Show number of lines written for each VBlock (note: --count without an argument shows lines written in the entire file).
+
+          |
+
 .. option:: --debug-progress  ZUC. See raw numbers that feed into the progress indicator.
 
           |

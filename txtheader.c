@@ -309,9 +309,15 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
 
             if (test_digest) digest_update (&txt_file->digest_ctx_bound, &comp_vb->txt_data, "txt_header:digest_ctx_bound");
 
-            // inherit BGZF blocks from source file, if available - into comp_vb->bgzf_blocks
-            if (txt_file->codec == CODEC_BGZF) 
+            if (txt_file->codec == CODEC_BGZF) {
+                // inherit BGZF blocks from source file, if isizes was loaded (i.e. not flag.data_modified) - 
+                // into comp_vb->bgzf_blocks
                 bgzf_calculate_blocks_one_vb (comp_vb, comp_vb->txt_data.len); 
+
+                // compress unless flag.maybe_vb_modified_by_writer (we compress in writer_flush_vb instead)
+                if (!flag.maybe_vb_modified_by_writer)
+                    bgzf_compress_vb (comp_vb); 
+            }
 
             if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
                 Digest reconstructed_header_digest = digest_do (comp_vb->txt_data.data, comp_vb->txt_data.len);

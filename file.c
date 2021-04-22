@@ -574,30 +574,45 @@ static bool file_open_txt_write (File *file)
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type);
     
     // set to bgzf if the file type implies it
-    if (file->codec == CODEC_GZ) 
+    if (file->codec == CODEC_GZ) {
         file->codec = CODEC_BGZF; // we always write gzip format output with BGZF
 
-    // cases we output as plain: 
-    // 1. the user overrides with --bgzf=0 (override bgzf set here or before, in flags_update_piz_one_file)
-    //    note: a user-specified --bgzf=0 is CODEC_NONE, but a genocat without --bgzf is CODEC_BGZF with level=0 (set in flags_update_piz_one_file)
-    // 2. genocat to stdout (terminal or pipe), unless user specified a --bgzf > 0 or its a BAM (binary)
-    //    (some BAM downstream tools like GATK expects BGZF)
-    if (file->codec == CODEC_BGZF && 
-        (flag.bgzf == 0 || (flag.bgzf == -1 && flag.to_stdout && flag.out_dt != DT_BAM)))
-        file->codec = CODEC_NONE;
-    
-    // set BGZF compression level, in cases we can't or won't compress to the original file's BGZF blocks
-    if (file->codec == CODEC_BGZF && flag.bgzf == FLAG_BGZF_BY_ZFILE) { // user did not use --bgzf to explicitly set the level
-        if (flag.to_stdout && flag.out_dt == DT_BAM) // genocat of a BAM
-            flag.bgzf = 1; // some downstream tools (eg GATK) expect BAM to always be BGZF-compressed
-
-        // if we're modifying the data we can't recompress using the original BGZF blocks         
-        else if (flag.data_modified)             
+        // use default level if source file was not BGZF-compressed or it was of another type (translating)
+        if (!z_file->z_flags.bgzf || !flag.reconstruct_as_src)   
             flag.bgzf = BGZF_COMP_LEVEL_DEFAULT; 
     }
 
-    // don't actually open the output file if we're just testing in genounzip or PIZing an auxiliary file
-    if (flag.no_writer || flag_loading_auxiliary) return true;
+    if (file->codec == CODEC_BGZF) {
+
+        // cases we output as plain: 
+        // 1. the user overrides with --bgzf=0 (override bgzf set here or before, in flags_update_piz_one_file)
+        //    note: a user-specified --bgzf=0 is CODEC_NONE, but a genocat without --bgzf is CODEC_BGZF with level=0 (set in flags_update_piz_one_file)
+        // 2. genocat to stdout (terminal or pipe), unless user specified a --bgzf > 0 or its a BAM (binary)
+        //    (some BAM downstream tools like GATK expects BGZF)
+        if (flag.bgzf == 0 || (flag.bgzf == -1 && flag.to_stdout && flag.out_dt != DT_BAM))
+            file->codec = CODEC_NONE;
+        
+        // set BGZF compression level, in cases we can't or won't compress to the original file's BGZF blocks
+        else if (flag.bgzf == FLAG_BGZF_BY_ZFILE) { // user did not use --bgzf to explicitly set the level
+            
+            // if we're reconstructing as BAM (translated or not) - to stdout (terminal or pipe), use the 
+            // fastest BGZF compression if BAM (level) - some downstream tools (eg GATK) expect BAM to always be BGZF-compressed
+            if (flag.to_stdout && flag.out_dt == DT_BAM) // genocat of a BAM
+                flag.bgzf = 1; 
+
+            // case: translating a BGZF file to another data type (except BAM) - it is not BGZF compressed 
+            // (note: if set with --bgzf or implicitly with --output (eg sam.gz) then flag.bgzf>0)
+            else if (!flag.reconstruct_as_src && flag.out_dt != DT_BAM)
+                file->codec = CODEC_NONE;
+
+            // case: data_modified (inc. non-stdout BAM) we can't recompress using the original BGZF blocks         
+            else if (flag.data_modified)             
+                flag.bgzf = BGZF_COMP_LEVEL_DEFAULT; 
+        }
+    }
+    
+    // don't actually open the output file if we're not going to write to it
+    if (flag.no_writer) return true;
 
     // open the file, based on the codec 
     switch (file->codec) { 
@@ -707,7 +722,7 @@ static bool file_open_z (File *file)
             struct stat sb;
             int cause=0, stat_errno;
             if (stat (file->name, &sb)) {
-                cause = 5;
+                cause = 5; // stat failed
                 stat_errno = errno;
             }
 
