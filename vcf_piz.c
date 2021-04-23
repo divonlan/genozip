@@ -495,7 +495,7 @@ void vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (VBlock *vb)
     // conditions for dropping a line in --luft
     if ((!vb->is_rejects_vb && vb->last_index (VCF_oSTATUS) != LO_OK) || // drop primary lines that are rejected (note: for sorted files, rejects are already excluded from the reconstruction plan in linesorter_merge_vb_do)
         ( vb->is_rejects_vb && (flag.no_header || flag.header_one)))     // drop rejects in --no-header or --header-one 
-        vb->drop_curr_line = true;
+        vb->drop_curr_line = "luft";
 }
 
 TRANSLATOR_FUNC (vcf_piz_luft_AC)

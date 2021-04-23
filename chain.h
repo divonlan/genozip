@@ -19,7 +19,7 @@ extern const char *chain_seg_txt_line (VBlockP vb, const char *line, uint32_t re
 extern bool chain_seg_is_small (ConstVBlockP vb, DictId dict_id);
 
 // piz of a chain file
-extern void chain_piz_initialize (void);
+extern bool chain_piz_initialize (void);
 extern CONTAINER_FILTER_FUNC (chain_piz_filter);
 
 // using the chain data in genozip --chain

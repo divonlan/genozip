@@ -55,7 +55,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Digest digest_so_far;      /* partial calculation of MD5 up to and including this VB */ \
     uint32_t component_i;      /* PIZ: 0-based txt component within z_file that this VB belongs to */ \
     \
-    bool drop_curr_line;       /* PIZ: line currently in reconstruction is grepped out due to --grep or --regions and should not be displayed */\
+    const char *drop_curr_line;/* PIZ: line currently in reconstruction is to be dropped due a filter (value is filter name) */\
     uint32_t num_nondrop_lines;/* PIZ: number of lines NOT dropped as a result of drop_curr_line */\
     GrepStages grep_stages;    /* PIZ: tell piz_is_skip_section what to skip in case of --grep */\
     uint8_t num_type1_subfields; \

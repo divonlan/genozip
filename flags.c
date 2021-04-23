@@ -135,7 +135,7 @@ static void flags_show_flags (void)
     iprintf ("show_txt_contigs=%s\n", flag.show_txt_contigs ? "true" : "false");
     iprintf ("show_vblocks=%s\n", flag.show_vblocks ? "true" : "false");
     iprintf ("show_threads=%s\n", flag.show_threads ? "true" : "false");
-    iprintf ("show_kraken=%s\n", flag.show_kraken ? "true" : "false");
+    iprintf ("show_kraken=%d\n", flag.show_kraken);
     iprintf ("show_uncompress=%s\n", flag.show_uncompress ? "true" : "false");
     iprintf ("debug_progress=%s\n", flag.debug_progress ? "true" : "false");
     iprintf ("show_hash=%s\n", flag.show_hash ? "true" : "false");
@@ -172,6 +172,7 @@ static void flags_show_flags (void)
     iprintf ("maybe_vb_dropped_before_read=%s\n", flag.maybe_vb_dropped_before_read ? "true" : "false");
     iprintf ("maybe_vb_dropped_after_read_vb_header=%s\n", flag.maybe_vb_dropped_after_read_vb_header ? "true" : "false");
     iprintf ("maybe_vb_dropped_after_read=%s\n", flag.maybe_vb_dropped_after_read ? "true" : "false");
+    iprintf ("missing_contexts_allowed=%s\n", flag.missing_contexts_allowed ? "true" : "false");
     iprintf ("maybe_vb_modified_by_reconstructor=%s\n", flag.maybe_vb_modified_by_reconstructor ? "true" : "false");
     iprintf ("maybe_vb_modified_by_writer=%s\n", flag.maybe_vb_modified_by_writer ? "true" : "false");
     iprintf ("data_modified=%s\n", flag.data_modified ? "true" : "false");
@@ -351,7 +352,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sT {"show-threads",  no_argument,       &flag.show_threads,     1 }  
         #define _sF {"show-flags",    no_argument,       &flag.show_flags,       1 }  
         #define _su {"show-uncompress",no_argument,      &flag.show_uncompress,  1 }  
-        #define _sK {"show-kraken",   no_argument,       &flag.show_kraken,      1 }  
+        #define _sK {"show-kraken",   optional_argument, 0, 21                     }  
         #define _sv {"show-vblocks",  no_argument,       &flag.show_vblocks,     1 }  
         #define _sH {"show-chain",    no_argument,       &flag.show_chain,       1 }  
         #define _ov {"one-vb",        required_argument, 0, 8                      }  
@@ -445,6 +446,7 @@ verify_command:
             case 18  : sam_set_MAPQ_filter (optarg) ; break; // filter by SAM MAPQ
             case 19  : flag.validate = optarg ? VLD_REPORT_VALID : VLD_REPORT_INVALID ; break;
             case 20  : flag.count = optarg ? COUNT_VBs : CNT_TOTAL; break;
+            case 21  : kraken_set_show_kraken (optarg); break;
             case 'n' : flag_set_lines (optarg)      ; break;
             case 'e' : ref_set_reference (optarg, REF_EXTERNAL,  true); break;
             case 'E' : ref_set_reference (optarg, REF_EXT_STORE, true); break;
@@ -702,6 +704,15 @@ void flags_update (unsigned num_files, const char **filenames)
         else
             iprintf ("\n%s\n%s\n", str_time().s, command_line.data);
     }
+
+    // cases where we don't need to load the reference file, even if the genozip file normally needs it
+    // note: we don't exclude due to collect_coverage here, instead we do it in main_load_reference
+    flag.genocat_no_ref_file = exe_type == EXE_GENOCAT &&
+        (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
+         flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || // all other sections (except CHROM) are blocked from reading in piz_default_skip_section
+         flag.show_index || flag.dump_section || flag.show_one_counts.num ||
+         flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_recon_plan || 
+         flag.count || flag.collect_coverage || (flag.header_only && !flag.luft));
 }
 
 // ZIP: called for each file, after opening txt and z files, but before calling zip_one_file 
@@ -845,15 +856,6 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 
     ASSINP0 (!flag.no_writer || !flag.index_txt, "--index cannot be used with this command line option combination");
 
-    // cases where we don't need to load the reference file, even if the genozip file normally needs it
-    // note: we don't exclude due to collect_coverage here, instead we do it in main_load_reference
-    flag.genocat_no_ref_file = exe_type == EXE_GENOCAT &&
-        (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
-         flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || // all other sections (except CHROM) are blocked from reading in piz_default_skip_section
-         flag.show_index || flag.dump_section || flag.show_one_counts.num ||
-         flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_recon_plan || 
-         flag.count || flag.collect_coverage || (flag.header_only && !flag.luft));
-
     flag.genocat_no_dicts = exe_type == EXE_GENOCAT &&
         (flag.show_stats || flag.show_b250 || flag.dump_one_b250_dict_id.num || 
          flag.show_index || flag.show_one_counts.num ||
@@ -880,7 +882,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 
     // it is not possible to have BAM without a header (except for 2nd+ file if concatenating)
     if (flag.no_header && flag.out_dt == DT_BAM && !flag.no_writer) {
-        ASSINP0 (flag.no_header == 2, "Cannot output a BAM without a header");
+        ASSERTW (flag.no_header == 2, "%s: Ignoring --no-header: cannot output a BAM without a header", global_cmd);
         flag.no_header = false; // if no_header is due to the assigment above (=2), reset it silently
     }
 
@@ -910,7 +912,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          // VCF specific VB modifiers
          (z_file->data_type == DT_VCF   && (flag.samples || flag.drop_genotypes || flag.gt_only)) || 
          // FASTA specific modifiers
-         (z_file->data_type == DT_FASTA && (flag.sequential || flag.header_only_fast || flag.header_one)) || 
+         (z_file->data_type == DT_FASTA && (flag.sequential || flag.header_only_fast || flag.header_one || flag.no_header)) || 
          // FASTQ specific modifiers
          (z_file->data_type == DT_FASTQ && flag.header_only_fast) || 
          // SAM specific modifiers
@@ -940,6 +942,10 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         flag.maybe_txt_header_modified = flag.data_modified = true;
 
     ASSINP0 (exe_type != EXE_GENOUNZIP || !flag.data_modified, "Data modification flags are not allowed in genounzip, use genocat instead");
+
+    // cases where we don't read unnecessary contexts, and should just reconstruct them as an empty
+    // string (in other cases, it would be an error)
+    flag.missing_contexts_allowed = flag.collect_coverage || flag.count || flag.drop_genotypes;
 
     bool is_paired_fastq = fastq_piz_is_paired(); // also updates z_file->z_flags in case of backward compatability issues
 
@@ -1049,7 +1055,7 @@ void flags_store_command_line (int argc, char **argv)
             bufprintf (evb, &command_line, "%s%s", argv[i], (i < argc-1 ? " ": ""));
 
         if (i > 0)
-            bufprintf (evb, &debugger_params, "%s\"%s\"%s", (i==1 ? "\"args\": [" : ""), argv[i], (i < argc-1 ? ", ": "]"));
+            bufprintf (evb, &debugger_params, "%s\"%s\"%s", (i==1 ? "\"args\": [" : ""), argv[i], (i < argc-1 ? ", ": "],"));
     }
 
     if (command == ZIP && !isatty(0))

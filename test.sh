@@ -405,61 +405,57 @@ batch_dual_coordinates()
     done
 }
 
+test_kraken() { # $1 file ; $2 1st genocat arguments ; $3 2nd genocat arguments
+    test_header "$file - kraken test (genozip $1 ; genocat $2 ; genocat $3)"
+
+    local zip_args=$1
+    local cat1_args=$2
+    local cat2_args=$3
+
+    $genozip $1 -fo $output || exit 1
+
+    local lines_plus=`$genocat $output -Hq ${cat1_args[*]} --count`
+    if [ "$lines_plus" == "" ] || [ "$lines_plus" -eq 0 ]; then echo genocat error; exit 1; fi
+
+    local lines_minus=`$genocat $output -Hq $3 --count`
+    if [ "$lines_minus" == "" ] || [ "$lines_minus" -eq 0 ]; then echo genocat error; exit 1; fi
+    
+    local lines=`$genocat -Hq $output --count`
+    if [ "$lines" == "" ] || [ "$lines" -eq 0 ]; then genocat error; exit 1; fi
+    
+    echo "$file : lines_plus=$lines_plus lines_minus=$lines_minus lines=$lines"
+    if [ $(($lines_plus + $lines_minus)) -ne $lines ]; then
+        echo "$file: adding up kraken positive- and negative- filtered data, isn't the size of the original file"
+        exit 1
+    fi        
+}
+
 batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kraken)
 {
     batch_print_header
 
-    local files=(test/basic-test-kraken.fa test/basic-test-kraken.fq test/basic.kraken test/basic.sam) # SAM must be last
+    local files=(test/basic.bam test/basic-test-kraken.fq test/basic-test-kraken.fa test/basic.kraken \
+                 test/basic.sam)
     local file
 
-    $genozip test/basic.kraken -i kraken -fo $kraken
+    $genozip test/basic.kraken -fo $kraken
 
     # testing filtering FASTA, FASTQ, SAM and KRAKEN itself with --taxid 
     for file in ${files[@]}; do
-        test_header "$file - kraken test (genozip $1 ; genocat $2)"
-
-        echo -n genozip $file : 
-        $genozip $1 $file -fo $output || exit 1
-
-        local chars_plus=`($genocat $2 -Hq $output -k570 || exit 1) | wc -c`
-        local chars_minus=`($genocat $2 -Hq $output -k^570 || exit 1) | wc -c`
-        local chars=`($genocat -Hq $output || exit 1) | wc -c`
-        echo "$file : chars_plus=$chars_plus chars_minus=$chars_minus chars=$chars"
-        if [ $(($chars_plus + $chars_minus)) -ne $chars ]; then
-            echo "$file: adding up kraken positive- and negative- filtered data, isn't the size of the original file"
-            exit 1
-        fi        
+        test_kraken "$file $1" "$2 -k570" "$2 -k^570"
     done
 
     # testing filtering SAM translated to FASTQ with --taxid 
-    file=test/basic.sam
-    test_header "$file --fastq - kraken test"
-
-    local chars_plus=`($genocat $2 --fastq -Hq $output -k570 || exit 1) | wc -c`
-    local chars_minus=`($genocat $2 --fastq -Hq $output -k^570 || exit 1) | wc -c`
-    local chars=`($genocat --fastq -Hq $output || exit 1) | wc -c`
-    echo "$file --fastq : chars_plus=$chars_plus chars_minus=$chars_minus chars=$chars"
-    if [ $(($chars_plus + $chars_minus)) -ne $chars ]; then
-        echo "$file: adding up kraken positive- and negative- filtered data, isn't the size of the original file"
-        exit 1
-    fi        
+    test_kraken "test/basic.bam $1" \
+                "--fastq -k570 $2" \
+                "--fastq -k^570 $2"
     
     # testing filtering SAM with a concatenated KRAKEN file (representing slightly different classifications
     # originating from separate kraken2 of R1 and R2 FASTQ files)
-    file=test/basic.sam
-    test_header "$file concatenated kraken filter test"
-
     $genozip test/basic.kraken test/basic-2nd-file.kraken -fo $kraken
-
-    local chars_plus=`($genocat $2 -Hq $output -k570 || exit 1) | wc -c`
-    local chars_minus=`($genocat $2 -Hq $output -k^570 || exit 1) | wc -c`
-    local chars=`($genocat -Hq $output || exit 1) | wc -c`
-    echo "$file : chars_plus=$chars_plus chars_minus=$chars_minus chars=$chars"
-    if [ $(($chars_plus + $chars_minus)) -ne $chars ]; then
-        echo "$file: adding up kraken positive- and negative- filtered data, isn't the size of the original file"
-        exit 1
-    fi        
-    
+    test_kraken "test/basic.bam $1"\
+                "-k570 $2" \
+                "-k^570 $2"
     cleanup
 }
 

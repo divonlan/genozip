@@ -272,7 +272,7 @@ static void chain_piz_initialize_copy_contigs (Buffer *contigs, Buffer *dict, Di
 }
 
 // called after reconstructing the txt header and before compute threads
-void chain_piz_initialize (void)
+bool chain_piz_initialize (void)
 {
     mutex_initialize (chain_mutex);
 
@@ -280,6 +280,8 @@ void chain_piz_initialize (void)
         chain_piz_initialize_copy_contigs (&src_contigs, &src_contig_dict, CHAIN_NAMESRC);
         chain_piz_initialize_copy_contigs (&dst_contigs, &dst_contig_dict, CHAIN_NAMEDST);
     }
+
+    return true; // proceed with PIZ
 }
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
@@ -366,7 +368,7 @@ static inline void chain_piz_filter_ingest_alignmet (VBlock *vb)
     
     mutex_unlock (chain_mutex);
 
-    vb->drop_curr_line = true;
+    vb->drop_curr_line = "chain";
 }
 
 // verify that adding up all alignments and gaps, results in the end position specified in the header

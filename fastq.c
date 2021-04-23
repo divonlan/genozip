@@ -475,10 +475,6 @@ void fastq_zip_qual (VBlock *vb, uint32_t vb_line_i,
 // PIZ stuff
 //-----------------
 
-void fastq_piz_initialize (void)
-{
-}
-
 // returns true if section is to be skipped reading / uncompressing
 bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
@@ -568,8 +564,8 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
             if (flag.grep && item == 2 /* first EOL */) {
                 *AFTERENT (char, vb->txt_data) = 0; // for strstr
                 
-                vb->drop_curr_line = vb->drop_curr_line ||
-                                          !strstr (ENT (char, vb->txt_data, vb->line_start), flag.grep);
+                if (!vb->drop_curr_line && !strstr (ENT (char, vb->txt_data, vb->line_start), flag.grep))
+                    vb->drop_curr_line = "grep";
             }
 
             // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
@@ -644,14 +640,14 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
     if (flag.kraken_taxid && dict_id.num == dict_id_fields[FASTQ_TOPLEVEL]) {
         
         if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, false))
-            vb->drop_curr_line = true;
+            vb->drop_curr_line = "taxid";
         
         else if (kraken_is_loaded && flag.kraken_taxid >= 0) {
             const char *qname = last_txt (vb, FASTQ_DESC) + 1; // +1 to skip the "@"
             unsigned qname_len = strcspn (qname, " \t\n\r");
 
             if (!kraken_is_included_loaded (vb, qname, qname_len)) 
-                vb->drop_curr_line = true;
+                vb->drop_curr_line = "taxid";
         }
     }
 }

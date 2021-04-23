@@ -157,7 +157,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); // note: cannot use NEXTENT as lines.len is set in advance
             vb->line_start = vb->txt_data.len;
 
-            vb->drop_curr_line = false; // initialize for this line
+            vb->drop_curr_line = NULL; // initialize for this line
         }
 
         if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1, NULL))) 
@@ -171,6 +171,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         last_non_filtered_item_i = -1;
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
+            Context *item_ctx = item_ctxs[i];
             bool reconstruct = true;
 
             // an item filter may filter items in two ways:
@@ -185,9 +186,9 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
             last_non_filtered_item_i = i;
 
-            if (flag.show_containers && item_ctxs[i]) // show container reconstruction 
+            if (flag.show_containers && item_ctx) // show container reconstruction 
                 iprintf ("VB=%u Line=%u Repeat=%u %s->%s txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
-                         vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctxs[i]->name, 
+                         vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctx->name, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 
 /*BRKPOINT*/container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len, false, ctx->dict_id, con->items[i].dict_id); // item prefix (we will have one per item or none at all)
@@ -199,19 +200,20 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                                   (  !flag.trans_containers ||   // not translating OR... 
                                      !IS_CI_SET (CI_TRANS_NOR)); // no prohibition on reconstructing when translating
 
-                reconstructed_len = reconstruct_from_ctx (vb, item_ctxs[i]->did_i, 0, reconstruct);
+                reconstructed_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct);
 
                 // sum up items' values if needed
                 if (ctx->flags.store == STORE_INT)
-                    new_value.i += item_ctxs[i]->last_value.i;
+                    new_value.i += item_ctx->last_value.i;
                 
                 else if (ctx->flags.store == STORE_FLOAT)
-                    new_value.f += item_ctxs[i]->last_value.f;
+                    new_value.f += item_ctx->last_value.f;
 
                 // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item
                 // using the designated "translator" function, if one is available
-                if (flag.trans_containers && item->translator) 
-                    DT_FUNC(vb, translator)[item->translator](vb, item_ctxs[i], reconstruction_start, reconstructed_len);  
+                if (flag.trans_containers && item->translator &&
+                    !(flag.missing_contexts_allowed && !item_ctx->dict.len && !item_ctx->local.len)) // skip if missing contexts are allowed, and this context it missing 
+                    DT_FUNC(vb, translator)[item->translator](vb, item_ctx, reconstruction_start, reconstructed_len);  
             }            
 
             // case: WORD_INDEX_MISSING_SF - delete previous item's separator if it has one (used by SAM_OPTIONAL - sam_seg_optional_all)
@@ -261,18 +263,18 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                 SAFE_NUL (&rep_reconstruction_start[AFTERENT (char, vb->txt_data) - rep_reconstruction_start]);
 
                 if (!strstr (rep_reconstruction_start, flag.grep))
-                    vb->drop_curr_line = true;
+                    vb->drop_curr_line = "grep";
 
                 SAFE_RESTORE;
             }
 
             if (flag.lines_first >= 0) {
-                int64_t abs_line_i = (int64_t)vb->line_i - 1LL; // 0-based 
+                int64_t abs_line_i = (int64_t)vb->first_line + (int64_t)rep_i - 1LL; // 0-based (note: can't use vb->line_i as it is textual lines rather than reps)
                 if (abs_line_i < flag.lines_first) 
-                    vb->drop_curr_line = true;
+                    vb->drop_curr_line = "lines";
 
                 else if (abs_line_i > flag.lines_last) {
-                    vb->drop_curr_line = true;
+                    vb->drop_curr_line = "lines";
                     vb->txt_data.len = vb->line_start;
                     
                      // skip to the end - no need to reconstruct any further lines

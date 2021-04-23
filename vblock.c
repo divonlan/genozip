@@ -74,16 +74,16 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
 
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
     vb->vb_data_size = vb->vb_data_size_0 = vb->luft_reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
-    vb->ready_to_dispatch = vb->is_processed = vb->is_unsorted[0] = vb->is_unsorted[1] = vb->drop_curr_line = false;
+    vb->ready_to_dispatch = vb->is_processed = vb->is_unsorted[0] = vb->is_unsorted[1] = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = vb->line_start = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = vb->num_nondrop_lines = 0;
-    vb->drop_curr_line = vb->has_non_agct = false;    
+    vb->has_non_agct = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
-    vb->chrom_name = vb->fragment_start = NULL;
+    vb->drop_curr_line = vb->chrom_name = vb->fragment_start = NULL;
     vb->prev_range = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->digest_so_far = DIGEST_NONE;

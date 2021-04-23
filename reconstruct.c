@@ -335,7 +335,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         // test for exclusion of the line due to --regions
         if (flag.regions && did_i == DTF(test_regions) && vb->chrom_node_index != WORD_INDEX_NONE &&
             !regions_is_site_included (vb->chrom_node_index, DTF(pos)!=-1 ? vb->contexts[DTF(pos)].last_value.i : 1))
-            vb->drop_curr_line = true;
+            vb->drop_curr_line = "regions";
     }
     
     // case: all data is only in local
@@ -380,7 +380,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         if (reconstruct) { RECONSTRUCT1('\n'); }
     }
 
-    else ASSERT (flag.collect_coverage || flag.count || flag.drop_genotypes, // in collect_coverage and count, we filtered out most contexts in sam_piz_is_skip_section, so this is expected
+    else ASSERT (flag.missing_contexts_allowed,
                  "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
                  ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 

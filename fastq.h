@@ -26,7 +26,6 @@ extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern const char *fastq_seg_txt_line();
 
 // PIZ Stuff
-extern void fastq_piz_initialize (void);
 extern bool fastq_piz_is_paired (void);
 extern bool fastq_piz_read_one_vb (VBlockP vb, ConstSecLiEntP sl);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);

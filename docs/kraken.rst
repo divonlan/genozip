@@ -79,6 +79,12 @@ You can see the breakdown of Taxonomy IDs in the file with:
 
 Finally, you can see the line-by-line taxid assignments with:
 
+==========================  ===================
+``--show-kraken``           all lines 
+``--show-kraken=included``  only included lines
+``--show-kraken=excluded``  only excluded lines
+==========================  ===================
+
 ::
 
     genocat myfile.bam.genozip --show-kraken
@@ -95,9 +101,23 @@ To handle this, we prepare a concatenated kraken.genozip file, from the output o
 
     genozip myfile-R1.kraken myfile-R2.kraken --output myfile.kraken
 
-| The following logic applies with filtering file with a kraken.genozip consisting of multiple components:
+| The following logic applies with filtering a file with a kraken.genozip consisting of multiple components:
 |
-| • Filtering with --taxid *taxid* will include the line if *any* of the components classifies this line as *taxid*.
+| • Filtering with ``--taxid taxid`` will include the line if *any* of the components classifies this line as *taxid*.
 |
-| • Filtering with --taxid \^taxid will include the line if *none* of the components classifies this line as *taxid*.
+| • Filtering with ``--taxid ^taxid`` will include the line if *none* of the components classifies this line as *taxid*.
+
+|
+
+**Kraken data containing reads with /1 and /2**
+
+| ``genozip --kraken`` and ``genocat --kraken`` and can handle kraken data containing reads with a /1 or /2. This can happen, for example, when feeding kraken2 with an interleaved FASTQ file rather than two separate FASTQ files. In this case, Genozip applies the following logic:
+|
+| • An assumption is made, that every read (QNAME) in the file being compressed or displayed, is included in the kraken data - either as a single normal read (without /1 /2) or as a pair of reads - one with each of /1 and /2. It is ok if different reads in the kraken data are of different types (single or paired)
+|
+| For paired reads:
+|
+| • Filtering with ``--taxid taxid`` will include the line if *either* reads of the pair classifies this line as *taxid*.
+|
+| • Filtering with ``--taxid ^taxid`` will include the line if *neither* reads of the pair classifies this line as *taxid*.
 

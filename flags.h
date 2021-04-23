@@ -75,13 +75,14 @@ typedef struct {
     int list_chroms, show_sex, idxstats;
     enum { CNT_NONE, CNT_TOTAL, COUNT_VBs } count; 
     enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage;
-
+    enum { KRK_NONE, KRK_ALL, KRK_INCLUDED, KRK_EXCLUDED } show_kraken;
+    
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
-        show_vblocks, show_threads, show_kraken, show_uncompress,
+        show_vblocks, show_threads, show_uncompress,
         debug_progress, show_hash, debug_memory, debug_threads,
         seg_only, xthreads, show_flags,
         echo,    // show the command line in case of an error
@@ -113,6 +114,7 @@ typedef struct {
          maybe_vb_dropped_before_read,
          maybe_vb_dropped_after_read_vb_header,
          maybe_vb_dropped_after_read,
+         missing_contexts_allowed, // PIZ: its not an error if contexts are missing - just reconstruct as an empty string
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
          explicit_ref,       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)

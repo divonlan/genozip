@@ -381,9 +381,11 @@ const char *fasta_seg_txt_line (VBlockFASTA *vb, const char *line_start, uint32_
 //-------------------------
 
 // Called by thread I/O to initialize for a new genozip file
-void fasta_piz_initialize (void)
+bool fasta_piz_initialize (void)
 {
     fasta_piz_initialize_contig_grepped_out (0,0,0); // initialize 
+
+    return true; // proceed with PIZ
 }
 
 // returns true if section is to be skipped reading / uncompressing
@@ -439,7 +441,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
     bool is_first_seq_line_in_this_contig = snip[0] - '0';
 
     // skip showing line if this contig is grepped - but consume it anyway
-    if (fasta_vb->contig_grepped_out) vb->drop_curr_line = true;
+    if (fasta_vb->contig_grepped_out) vb->drop_curr_line = "grep";
 
     // --sequential - if this is NOT the first seq line in the contig, we delete the previous end-of-line
     else if (flag.sequential && !is_first_seq_line_in_this_contig) 
@@ -447,7 +449,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_SEQ)
 
     // in case of not showing the SEQ in the entire file - we can skip consuming it
     if (flag.header_only_fast) // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
-        vb->drop_curr_line = true;     
+        vb->drop_curr_line = "header_only_fast";     
     else 
         reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, true);    
 
@@ -470,11 +472,11 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_COMMENT)
     // skip showing comment line in case cases - but consume it anyway:
     if (  fasta_vb->contig_grepped_out || // 1. if this contig is grepped out
           flag.out_dt == DT_PHYLIP)       // 2. if we're outputting in Phylis format
-        vb->drop_curr_line = true;
+        vb->drop_curr_line = "grep";
 
     // in case of not showing the COMMENT in the entire file (--header-only or this is a --reference) - we can skip consuming it
     if (flag.header_only_fast)  // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
-        vb->drop_curr_line = true;     
+        vb->drop_curr_line = "header_only_fast";     
     else 
         reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
 
@@ -562,8 +564,11 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
     vb->chrom_node_index = ctx_search_for_word_index (&vb->contexts[CHROM], desc_start + 1, chrom_name_len);
 
     // note: this logic allows the to grep contigs even if --no-header 
-    if (fasta_vb->contig_grepped_out || flag.no_header)
-        fasta_vb->drop_curr_line = true;     
+    if (fasta_vb->contig_grepped_out)
+        fasta_vb->drop_curr_line = "grep";     
+
+    else if (flag.no_header)
+        fasta_vb->drop_curr_line = "no_header";     
 
     if (flag.out_dt == DT_PHYLIP) 
         fasta_piz_translate_desc_to_phylip (vb, desc_start);

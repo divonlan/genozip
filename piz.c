@@ -526,6 +526,30 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
     return false;
 }
 
+static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlock *vb, uint64_t *num_nondrop_lines)
+{
+    ASSERTW (vb->txt_data.len == vb->vb_data_size || flag.data_modified, // files are the same size, unless we intended to modify the data
+            "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
+            vb->vblock_i, (unsigned)vb->lines.len, vb->first_line, str_uint_commas (vb->vb_data_size).s, dt_name (txt_file->data_type), 
+            str_uint_commas (vb->txt_data.len).s, 
+            (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
+
+    *num_nondrop_lines += vb->num_nondrop_lines;
+    if (flag.count == COUNT_VBs)
+        iprintf ("vb_i=%u lines=%u nondropped_lines=%u txt_data.len=%u\n", 
+                  vb->vblock_i, (unsigned)vb->lines.len, vb->num_nondrop_lines, (unsigned)vb->txt_data.len);
+
+    if (flag.collect_coverage)    
+        coverage_add_one_vb (vb);
+    
+    else if (flag.reading_kraken)
+        kraken_piz_handover_data (vb);
+
+    z_file->txt_data_so_far_single += vb->vb_data_size; 
+
+    piz_handover_or_discard_vb (dispatcher, &vb);
+}
+
 Dispatcher piz_z_file_initialize (bool is_last_z_file)
 {
     digest_initialize();
@@ -553,11 +577,13 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
 }
 
 // called once per txt_file created: i.e. if concatenating - a single call, if unbinding there will be multiple calls to this function
-void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
+// returns true if piz completed, false if piz aborted by piz_initialize
+bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
 {
     bool is_last_txt_file = (z_file->num_txt_components_so_far == z_file->txt_file_info.len-1);
  
-    if (DTPZ(piz_initialize)) DTPZ(piz_initialize)();
+    if (DTPZ(piz_initialize) && !DTPZ(piz_initialize)())
+        return false; // abort PIZ if piz_initialize says so
       
     bool header_only_file = true; // initialize - true until we encounter a VB header
     uint32_t first_comp_this_txt, num_comps_this_txt;
@@ -609,31 +635,11 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
             }
         }
 
-        // if the next thread (by sequential order) is ready, hand over the data to the writer thread
+        // if the next thread (by sequential order) is ready, handle the reconstructed VB
         VBlock *recon_vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
-        if (recon_vb) {
-            ASSERTW (recon_vb->txt_data.len == recon_vb->vb_data_size || flag.data_modified, // files are the same size, unless we intended to modify the data
-                    "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-                    recon_vb->vblock_i, (unsigned)recon_vb->lines.len, recon_vb->first_line, str_uint_commas (recon_vb->vb_data_size).s, dt_name (txt_file->data_type), 
-                    str_uint_commas (recon_vb->txt_data.len).s, 
-                    (int32_t)recon_vb->txt_data.len - (int32_t)recon_vb->vb_data_size);
+        if (recon_vb) piz_handle_reconstructed_vb (dispatcher, recon_vb, &num_nondrop_lines);
 
-            num_nondrop_lines += recon_vb->num_nondrop_lines;
-            if (flag.count == COUNT_VBs)
-                iprintf ("vb_i=%u nondropped_lines=%u\n", recon_vb->vblock_i, recon_vb->num_nondrop_lines);
-
-            if (flag.collect_coverage)    
-                coverage_add_one_vb (recon_vb);
-            
-            else if (flag.reading_kraken)
-                kraken_piz_handover_data (recon_vb);
-
-            z_file->txt_data_so_far_single += recon_vb->vb_data_size; 
-
-            piz_handover_or_discard_vb (dispatcher, &recon_vb);
-        }
-
-        if (!achieved_something) usleep (100000); // nothing for us to do right now - wait 100ms
+        if (!achieved_something) usleep (30000); // nothing for us to do right now - wait 30ms
     }
 
     // verifies reconstructed file against MD5 (if compressed with --md5 or --test) or Adler2 and/or codec_args (if bgzf)
@@ -656,4 +662,6 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
     else                  dispatcher_pause (dispatcher); // we're unbinding and still have more txt_files
      
     DT_FUNC (z_file, piz_finalize)();
+
+    return true;
 }

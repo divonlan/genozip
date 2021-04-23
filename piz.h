@@ -15,7 +15,7 @@ extern bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id
 
 extern Dispatcher piz_z_file_initialize (bool is_last_z_file);
 extern DataType piz_read_global_area (void);
-extern void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file);
+extern bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file);
 extern uint32_t piz_uncompress_all_ctxs (VBlockP vb, uint32_t pair_vb_i);
 extern bool piz_test_grep (VBlockP vb);
 

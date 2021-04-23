@@ -554,16 +554,17 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
     // case SAM to FASTQ translation: drop line if this is not a primary alignment (don't show its secondary or supplamentary alignments)
     if (dict_id.num == dict_id_fields[SAM_TOP2FQ] 
     && ((uint16_t)vb->last_int(SAM_FLAG) & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLEMENTARY)))
-        vb->drop_curr_line = true;
+        vb->drop_curr_line = "not_primary";
 
     // --taxid: filter out by Kraken taxid (SAM, BAM, FASTQ)
-    bool is_fq=false;
     if (flag.kraken_taxid 
-     && (dict_id.num == dict_id_fields[SAM_TOPLEVEL] || dict_id.num == dict_id_fields[SAM_TOP2BAM] || (is_fq = (dict_id.num == dict_id_fields[SAM_TOP2FQ])))
-     && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, reconstructed + is_fq, vb->last_txt_len (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
-         || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, true)))) 
-        vb->drop_curr_line = true;
+     && (dict_id.num == dict_id_fields[SAM_TOPLEVEL] || dict_id.num == dict_id_fields[SAM_TOP2BAM] || dict_id.num == dict_id_fields[SAM_TOP2FQ])
+     && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, last_txt(vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
+         || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, !flag.collect_coverage && !
+         flag.count)))) 
+        vb->drop_curr_line = "taxid";
 
+    // --FLAG
     if (flag.sam_flag_filter && is_top_level) {
 
         uint16_t this_sam_flag = (uint16_t)vb->last_int (SAM_FLAG);
@@ -573,9 +574,10 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
         if ((flag.sam_flag_filter == SAM_FLAG_INCLUDE_IF_ALL  && !all_flags_set)
         ||  (flag.sam_flag_filter == SAM_FLAG_INCLUDE_IF_NONE && !no_flags_set)
         ||  (flag.sam_flag_filter == SAM_FLAG_EXCLUDE_IF_ALL  &&  all_flags_set))
-            vb->drop_curr_line = true;
+            vb->drop_curr_line = "FLAG";
     }
 
+    // --MAPQ
     if (flag.sam_mapq_filter && is_top_level) {
         
         if (dict_id.num == dict_id_fields[SAM_TOP2FQ])
@@ -585,7 +587,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
     
         if ((flag.sam_mapq_filter == SAM_MAPQ_INCLUDE_IF_AT_LEAST && this_mapq < flag.MAPQ) ||
             (flag.sam_mapq_filter == SAM_MAPQ_EXCLUDE_IF_AT_LEAST && this_mapq >= flag.MAPQ))
-            vb->drop_curr_line = true;
+            vb->drop_curr_line = "MAPQ";
     }
 
     // count coverage, if needed    
@@ -615,7 +617,7 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
     
     // case: SEQ is "*" - don't show this fastq record
     if (reconstructed_len==1 && *reconstructed == '*') 
-        vb->drop_curr_line = true;
+        vb->drop_curr_line = "no_seq";
 
     // case: this sequence is reverse complemented - reverse-complement it
     else if (sam_flag & SAM_FLAG_REV_COMP) {
@@ -643,7 +645,7 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
     
     // case: QUAL is "*" - don't show this fastq record
     if (reconstructed_len==1 && *reconstructed == '*') 
-        vb->drop_curr_line = true;
+        vb->drop_curr_line = "no_qual";
 
     // case: this sequence is reverse complemented - reverse the QUAL string
     else if (sam_flag & SAM_FLAG_REV_COMP) {
