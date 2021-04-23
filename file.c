@@ -24,6 +24,7 @@
 #include "mutex.h"
 #include "bgzf.h"
 #include "flags.h"
+#include "progress.h"
 
 // globals
 File *z_file   = NULL;
@@ -892,26 +893,40 @@ static void file_index_txt (const File *file)
 {
     RETURNW (file->name,, "%s: cannot create an index file when output goes to stdout", global_cmd);
 
+    StreamP indexing = NULL;
+
     switch (file->data_type) {
         case DT_SAM:
         case DT_BAM: 
             RETURNW (file->codec == CODEC_BGZF,, "%s: output file needs to be a .sam.gz or .bam to be indexed", global_cmd); 
-            stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "index", file->name, NULL); 
+            indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "index", file->name, NULL); 
             break;
             
         case DT_VCF: 
             RETURNW (file->codec == CODEC_BGZF,, "%s: output file needs to be a .vcf.gz or .bcf to be indexed", global_cmd); 
-            stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "bcftools", "index", file->name, NULL); 
+            indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "bcftools", "index", file->name, NULL); 
             break;
 
         case DT_FASTQ:
         case DT_FASTA:
             RETURNW (file->codec == CODEC_BGZF || file->codec == CODEC_NONE,, 
                      "%s: To be indexed, the output file cannot be compressed with %s", global_cmd, codec_name (file->codec)); 
-            stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "faidx", file->name, NULL); 
+            indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "faidx", file->name, NULL); 
             break;
 
         default: break; // we don't know how to create an index for other data types
+    }
+
+    if (indexing) {
+        progress_new_component (file->name, "Indexing", false);
+
+        ref_destroy_reference();
+        kraken_destroy();
+        chain_destroy();
+        vb_destroy_pool_vbs();
+        stream_wait_for_exit (indexing);
+
+        progress_finalize_component_time ("Done indexing", DIGEST_NONE);
     }
 }
 
@@ -959,7 +974,7 @@ void file_close (File **file_p,
 
     // in case the unlinking didn't work (eg NTFS) - remove the rejects file now that its closed
     if (chain_is_loaded && file->supertype == TXT_FILE && flag.processing_rejects) 
-      {}//  remove (z_file->rejects_file_name); // ignore errors
+        remove (z_file->rejects_file_name); // ignore errors
 
     // create an index file using samtools, bcftools etc, if applicable
     if (index_txt) file_index_txt (file);

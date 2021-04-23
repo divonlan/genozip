@@ -542,6 +542,19 @@ void chain_load (void)
     flag.reading_chain = NULL;
 }
 
+// reset to factory defaults
+void chain_destroy (void)
+{
+    buf_destroy (&chain);
+    buf_destroy (&src_contig_dict);
+    buf_destroy (&src_contigs);
+    buf_destroy (&dst_contig_dict);
+    buf_destroy (&dst_contigs);
+    mutex_destroy (chain_mutex);
+    next_dst_0pos = next_src_0pos=0;
+    chain_filename = NULL; 
+}
+
 // get dst_contig, src_pos from src_contig, dst_pos (binary search on chain)
 static LiftOverStatus chain_get_liftover_coords_do (WordIndex src_contig_index, PosType src_1pos, 
                                                     int32_t start, int32_t end,

@@ -381,6 +381,8 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     // if ZIP consumed more than 2GB, free memory before PIZ. Note: on Windows, freeing memory takes considerable time.
     if (buf_get_memory_usage () > (1ULL<<31)) {
         ref_destroy_reference();
+        kraken_destroy();
+        chain_destroy();
         vb_destroy_pool_vbs();
     }
 

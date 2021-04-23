@@ -24,6 +24,7 @@ extern CONTAINER_FILTER_FUNC (chain_piz_filter);
 
 // using the chain data in genozip --chain
 extern void chain_load (void);
+extern void chain_destroy (void);
 extern const char *chain_get_dst_contig (uint32_t contig_i, PosType *length);
 extern void chain_copy_dst_contigs_to_z_file (DidIType dst_contig_did_i);
 extern WordIndex chain_get_src_contig_index (const char *contig, unsigned contig_len);

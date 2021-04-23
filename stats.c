@@ -92,10 +92,15 @@ static void stats_output_file_metadata (Buffer *buf)
                        str_uint_commas (dominant_taxid_count).s, 100.0 * (double)dominant_taxid_count / (double)z_file->num_lines); 
         else
             bufprint0 (evb, buf, "Dominant TaxID: No dominant species\n"); 
-    }           
+    }  
+    
+    else if (kraken_is_loaded) 
+        bufprintf (evb, buf, "Features: Per-line taxonomy ID data\n%s", "");
+
 
     if (chain_is_loaded || txt_file->dual_coords) 
         bufprintf (evb, buf, "Features: Dual-coordinates\n%s", "");
+
 
     bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);

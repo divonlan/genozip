@@ -29,6 +29,7 @@ extern void kraken_set_taxid (const char *optarg);
 extern void kraken_load (void);
 extern bool kraken_is_included_loaded (VBlockP vb, const char *qname, unsigned qname_len);
 extern bool kraken_is_included_stored (VBlockP vb, DidIType did_i_taxid, bool already_reconstructed);
+extern void kraken_destroy (void);
 
 // using the kraken data in genozip --kraken
 extern unsigned kraken_seg_taxid_do (VBlockP vb, DidIType did_i_taxid, const char *qname, unsigned qname_len, char *snip, bool fail_if_missing);

@@ -431,6 +431,17 @@ void kraken_load (void)
     flag.reading_kraken = NULL;
 }
 
+// reset to factory defaults
+void kraken_destroy (void)
+{
+    buf_destroy (&qname_dict);
+    buf_destroy (&qname_nodes);
+    buf_destroy (&qname_hashtab);
+    kraken_filename = NULL;
+    taxid_negative = taxid_also_0 = has_paired_qnames = false;
+    one_qname_length = 0;
+}
+
 // -------------------------------------------
 // using the kraken data in genocat --kraken
 // -------------------------------------------
