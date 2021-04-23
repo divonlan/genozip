@@ -22,7 +22,7 @@ Supported input file types, as recognized by their listed filename extension(s):
    GVF      gvf (possibly .gz .bgz .bz2 .xz)
    PHYLIP   phy (possibly .gz .bgz .bz2 .xz)
    Chain    chain (possibly .gz .bgz .bz2 .xz)
-   Kraken  kraken (possibly .gz .bgz .bz2 .xz)
+   Kraken   kraken (possibly .gz .bgz .bz2 .xz)
    23andMe  genome\*Full\*.txt (possibly zip)
    Generic  any other file (possibly .gz .bgz .bz2 .xz)
    ======== ==========================================================
@@ -93,7 +93,11 @@ Examples:
 .. option:: -E, --REFERENCE filename.  Similar to --reference except genozip copies the reference (or part of it) to the output file so there is no need to specify --reference in genounzip and genocat. Note on using with --password: the copy of the reference file stored in the compressed file is never encrypted.
 
                      |
-                     
+
+.. option:: -K, --kraken filename. Incorporate the Taxonomy ID of each line into the file. For use with genocat --taxid. For SAM/BAM it also adds a TX:i field. 
+
+| See: :ref:`kraken`
+                        
 .. include:: opt-stats.rst
 
 .. option:: --register  Register (or re-register) a non-commericial license to use genozip.

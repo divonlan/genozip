@@ -1,3 +1,5 @@
+.. _kraken:
+
 Filtering by species using kraken2
 ==================================
 
@@ -48,6 +50,12 @@ This will display all the lines of the BAM file that DO NOT contain human data:
 ::
 
     genocat myfile.bam.genozip --kraken myfile.kraken.genozip --taxid ^9606
+    
+A +0 extension can be used include or exclude, in addition, also unclassified reads:
+
+::
+
+    genocat myfile.bam.genozip --kraken myfile.kraken.genozip --taxid 9606+0
 
 The --kraken and --taxid options work the same for SAM/BAM, FASTQ and FASTA files.
 
@@ -120,4 +128,17 @@ To handle this, we prepare a concatenated kraken.genozip file, from the output o
 | • Filtering with ``--taxid taxid`` will include the line if *either* reads of the pair classifies this line as *taxid*.
 |
 | • Filtering with ``--taxid ^taxid`` will include the line if *neither* reads of the pair classifies this line as *taxid*.
+
+
+|
+
+**Note on memory consumption**
+
+| Loading kraken data consumes (21 bytes + strlen(qname)) per line loaded.
+|
+| Two cases:
+|
+| - ``genocat --kraken taxid`` : only lines that have the requested taxid are loaded to memory.
+|
+| -  ``genozip --kraken`` and ``genocat --kraken ^taxid`` (negative filter) - all lines are loaded. The number of lines in the kraken file can be observed by running ``genocat --stats mydata.kraken.genozip``.
 

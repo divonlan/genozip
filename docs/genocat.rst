@@ -20,7 +20,7 @@ One or more file names must be given.
 
           |
 
-**Subsetting options (options resulting in modified display of the data)**
+**Subsetting (aka filtering) options (options resulting in modified display of the data)**
 
 .. option:: --downsample rate[,shard].  Show only one in every <rate> lines (or reads in the case of FASTQ), optional <shard> parameter indicates which of the shards is shown. Other subsetting options (if any) will be applied to the surviving lines only.
 
@@ -108,6 +108,14 @@ One or more file names must be given.
 | *Note*: The entire file header is included if any part of it is.
 | *Note*: Line numbers are taken before any additional filters are applied.
 
+.. option:: -K, --kraken filename. Load a .kraken.genozip file for use with --taxid. 
+
+| See: :ref:`kraken`
+
+.. option:: -k, --taxid [^]taxid[+0].  Show only lines than match the Taxonomy ID <taxid>. ^ for a negative search. +0 means <taxid> AND unclassified. Requires either using in combination with --kraken or for the file to have been compressed with genozip --kraken.
+
+| See: :ref:`kraken`
+
 .. option:: -G, --drop-genotypes.  (VCF) Output the data without the samples and FORMAT column.
    
           |
@@ -174,6 +182,11 @@ One or more file names must be given.
 
 .. include:: opt-threads.rst
 .. include:: opt-stats.rst
+
+.. option:: --show-kraken[=INCLUDED|EXCLUDED]. In combination with --taxid reports whether each line is included or excluded. =INCLUDED or =EXCLUDED reports only a subset of lines accordingly. Combine with --count for a fast report without display the file itself. 
+
+| See: :ref:`kraken`
+                        
 
 .. option:: --validate[=valid]  Validates that the file(s) are valid genozip files. By default reports files that are invalid. With --validate=valid reports files that are valid.
     

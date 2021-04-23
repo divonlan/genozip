@@ -411,7 +411,7 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
-    if (flag.kraken_taxid==-1 && dict_id.num == dict_id_fields[FASTA_TAXID])
+    if (flag.kraken_taxid==TAXID_NONE && dict_id.num == dict_id_fields[FASTA_TAXID])
         return true;
 
     return false;

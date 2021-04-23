@@ -29,7 +29,7 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != dict_id_fields[SAM_FLAG] && 
               dict_id.num != dict_id_fields[SAM_CIGAR] && 
               (dict_id.num != dict_id_fields[SAM_MAPQ]  || !flag.sam_mapq_filter) && 
-              (dict_id.num != dict_id_fields[SAM_TAXID] || flag.kraken_taxid==-1) && 
+              (dict_id.num != dict_id_fields[SAM_TAXID] || flag.kraken_taxid == TAXID_NONE) && 
               (dict_id.num != dict_id_fields[SAM_QNAME] || !kraken_is_loaded) && 
               (!dict_id_is_sam_qname_sf(dict_id)        || !kraken_is_loaded) && 
               (dict_id.num != dict_id_fields[SAM_POS]   || !flag.regions))) return true;
@@ -42,7 +42,7 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != dict_id_fields[SAM_RNAME]    && // easier to always have RNAME
              (dict_id.num != dict_id_fields[SAM_FLAG]  || !flag.sam_flag_filter) &&
              (dict_id.num != dict_id_fields[SAM_MAPQ]  || !flag.sam_mapq_filter) && 
-             (dict_id.num != dict_id_fields[SAM_TAXID] || flag.kraken_taxid==-1) && 
+             (dict_id.num != dict_id_fields[SAM_TAXID] || flag.kraken_taxid == TAXID_NONE) && 
              (dict_id.num != dict_id_fields[SAM_QNAME] || !kraken_is_loaded) && 
              (!dict_id_is_sam_qname_sf(dict_id)        || !kraken_is_loaded) && 
              (dict_id.num != dict_id_fields[SAM_POS]   || !flag.regions))) return true;

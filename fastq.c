@@ -509,13 +509,13 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
-    if (flag.kraken_taxid==-1 && dict_id.num == dict_id_fields[FASTQ_TAXID])
+    if (flag.kraken_taxid==TAXID_NONE && dict_id.num == dict_id_fields[FASTQ_TAXID])
         return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep)
     if (flag.count && sections_has_dict_id (st) &&
         (dict_id.num != dict_id_fields[FASTQ_TOPLEVEL] && 
-         (dict_id.num != dict_id_fields[FASTQ_TAXID] || flag.kraken_taxid==-1) && 
+         (dict_id.num != dict_id_fields[FASTQ_TAXID] || flag.kraken_taxid == TAXID_NONE) && 
          (dict_id.num != dict_id_fields[FASTQ_DESC]  || (!kraken_is_loaded && !flag.grep)) && 
          (!dict_id_is_fastq_desc_sf(dict_id)         || (!kraken_is_loaded && !flag.grep)))) 
         return true;

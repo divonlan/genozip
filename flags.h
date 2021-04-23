@@ -42,7 +42,7 @@ typedef struct {
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted,
-        kraken_taxid, kraken_taxid_negative;
+        kraken_taxid;
     int64_t lines_first, lines_last; // set by --lines 
     char *grep;
     uint32_t one_vb, one_component, downsample, shard ;
@@ -76,7 +76,7 @@ typedef struct {
     enum { CNT_NONE, CNT_TOTAL, COUNT_VBs } count; 
     enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage;
     enum { KRK_NONE, KRK_ALL, KRK_INCLUDED, KRK_EXCLUDED } show_kraken;
-    
+
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq,

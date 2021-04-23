@@ -450,12 +450,22 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
                 "--fastq -k570 $2" \
                 "--fastq -k^570 $2"
     
+    # testing filtering SAM translated to FASTQ with --taxid and +0 
+    test_kraken "test/basic.bam $1" \
+                "--fastq -k570+0 $2" \
+                "--fastq -k^570+0 $2"
+    
     # testing filtering SAM with a concatenated KRAKEN file (representing slightly different classifications
     # originating from separate kraken2 of R1 and R2 FASTQ files)
     $genozip test/basic.kraken test/basic-2nd-file.kraken -fo $kraken
+
     test_kraken "test/basic.bam $1"\
                 "-k570 $2" \
                 "-k^570 $2"
+
+    test_kraken "test/basic.bam $1"\
+                "-k570+0 $2" \
+                "-k^570+0 $2"
     cleanup
 }
 

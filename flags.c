@@ -20,6 +20,7 @@
 #include "fastq.h"
 #include "stream.h"
 #include "bgzf.h"
+#include "kraken.h"
 
 // flags - factory default values (all others are 0)
 Flags flag = { 
@@ -28,7 +29,7 @@ Flags flag = {
 #endif
     .out_dt       = DT_NONE, 
     .bgzf         = FLAG_BGZF_BY_ZFILE,
-    .kraken_taxid = -1,
+    .kraken_taxid = TAXID_NONE,
     .lines_first  = -1, 
     .lines_last   = -1,
 };
@@ -80,7 +81,6 @@ static void flags_show_flags (void)
     iprintf ("sort=%s\n", flag.sort ? "true" : "false");
     iprintf ("unsorted=%s\n", flag.unsorted ? "true" : "false");
     iprintf ("kraken_taxid=%d\n", flag.kraken_taxid);
-    iprintf ("kraken_taxid_negative=%s\n", flag.kraken_taxid_negative ? "true" : "false");
     iprintf ("grep=%s\n", flag.grep ? flag.grep : "(none)");
     iprintf ("lines_first=%"PRId64"\n", flag.lines_first);
     iprintf ("lines_last=%"PRId64"\n", flag.lines_last);
