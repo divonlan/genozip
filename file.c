@@ -873,8 +873,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         file->type = txt_out_ft_by_dt[data_type][flag.bgzf >= 1]; // plain file or .gz file
     }
 
-    if (mode==READ)
-        file->basename = file_basename (file->name, false, FILENAME_STDIN, NULL, 0);
+    file->basename = file_basename (file->name, false, mode==READ ? FILENAME_STDIN : FILENAME_STDOUT, NULL, 0);
 
     bool success=false;
     switch (supertype) {
@@ -918,7 +917,7 @@ static void file_index_txt (const File *file)
     }
 
     if (indexing) {
-        progress_new_component (file->name, "Indexing", false);
+        progress_new_component (file->basename, "Indexing", false);
 
         ref_destroy_reference();
         kraken_destroy();
