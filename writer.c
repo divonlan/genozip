@@ -150,7 +150,7 @@ static uint32_t writer_init_comp_info (void)
 
         CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
 
-        ASSERT (sections_next_sec1 (&sl, SEC_TXT_HEADER, 0, 0),
+        ASSERT (sections_next_sec (&sl, SEC_TXT_HEADER, 0, 0),
                 "Expecting %s to have %u components, but found only %u", z_name, z_file->num_components, comp_i);
 
         *comp = (CompInfo){ 
@@ -200,10 +200,41 @@ static uint32_t writer_init_comp_info (void)
     return num_vbs;
 }
 
+// PIZ main thread - called from writer_init_vb_info
+static void write_set_first_vb_for_tail (void)
+{
+    const SecLiEnt *sl = NULL;
+    int64_t count_lines = flag.tail;
+
+    while (sections_prev_sec (&sl, SEC_VB_HEADER)) {
+        zfile_read_section_header (evb, sl->offset, sl->vblock_i, SEC_VB_HEADER); // reads into evb->compressed
+
+        SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)evb->compressed.data;
+        uint32_t vb_num_lines = BGEN32 (header->num_lines); 
+
+        // case: this is the first VB (from the file end) we need
+        if (vb_num_lines > count_lines) { 
+            txt_file->tail_1st_vb = sl->vblock_i;
+            txt_file->tail_1st_line_1st_vb = vb_num_lines - (uint32_t)count_lines;
+            if (flag.out_dt != DT_BAM) flag.no_header = true;
+            return;
+        }
+
+        count_lines -= vb_num_lines;
+    }
+
+    // all lines are included - we cancel --tail for this txt_file
+    flag.tail = 0;
+}
+
 // PIZ main thread - initialize vb, component, txt_file info. this is run once per z_file
 static void writer_init_vb_info (void)
 {
     if (comp_info.len) return; // already initialized
+
+    // if we have --tail - find the first VB (near the end) that is needed
+    if (flag.tail)
+        write_set_first_vb_for_tail(); // sets txt_file->tail_1st_vb,tail_1st_line_1st_vb which are hereinafter immutable
 
     vb_info.len = writer_init_comp_info() + 1; // +1 as first vb_i=1 (entry 0 will be unused) so we have num_vb+1 entries
 
@@ -219,7 +250,7 @@ static void writer_init_vb_info (void)
 
         for (uint32_t v_comp_i=0; v_comp_i < comp->num_vbs; v_comp_i++) {
 
-            ASSERT0 (sections_next_sec1 (&sl, SEC_VB_HEADER, 0, 0), "Unexpected end of section list");
+            ASSERT0 (sections_next_sec (&sl, SEC_VB_HEADER, 0, 0), "Unexpected end of section list");
             
             VbInfo *v = ENT (VbInfo, vb_info, sl->vblock_i); // note: VBs are out of order in --luft bc writer_move_liftover_rejects_to_front()
             v->comp_i = comp_i;
@@ -231,6 +262,7 @@ static void writer_init_vb_info (void)
             // conditions this VB should not be read or reconstructed 
             v->no_read = 
                 comp->info.no_read                            // entire component is skipped
+            ||  (flag.tail && sl->vblock_i < txt_file->tail_1st_vb) // --tail: this VB is too early, not needed
             ||  (flag.one_vb && flag.one_vb != sl->vblock_i)  // --one-vb: user only wants to see a single VB, and this is not it
             ||  (flag.no_header && comp->liftover_rejects)    // --no-header: this a rejects VB which is displayed as a header
             ||  (flag.header_only && !comp->liftover_rejects) // --header-only (except rejects VB)

@@ -347,7 +347,7 @@ uint32_t linesorter_get_max_conc_writing_vbs (void)
     const SecLiEnt *sl = NULL;
     uint32_t max_conc_writing_vbs=0;
 
-    while (sections_next_sec1 (&sl, SEC_RECON_PLAN, false, false)) {
+    while (sections_next_sec (&sl, SEC_RECON_PLAN, false, false)) {
         uint32_t conc_writing_vbs = ((SectionHeaderReconPlan *)zfile_read_section_header (evb, sl->offset, 0, SEC_RECON_PLAN))->conc_writing_vbs;
         max_conc_writing_vbs = MAX (max_conc_writing_vbs, BGEN32 (conc_writing_vbs));
         buf_free (&evb->compressed); // zfile_read_section_header used this for the header

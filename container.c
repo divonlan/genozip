@@ -258,16 +258,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
         if (con->is_toplevel) {
 
-            // filter by --grep (but not for FASTQ or FASTA - they implement their own logic)
-            if (flag.grep && txt_file->data_type != DT_FASTA && txt_file->data_type != DT_FASTQ) {
-                SAFE_NUL (&rep_reconstruction_start[AFTERENT (char, vb->txt_data) - rep_reconstruction_start]);
-
-                if (!strstr (rep_reconstruction_start, flag.grep))
-                    vb->drop_curr_line = "grep";
-
-                SAFE_RESTORE;
-            }
-
+            // filter by --lines
             if (flag.lines_first >= 0) {
                 int64_t abs_line_i = (int64_t)vb->first_line + (int64_t)rep_i - 1LL; // 0-based (note: can't use vb->line_i as it is textual lines rather than reps)
                 if (abs_line_i < flag.lines_first) 
@@ -282,6 +273,21 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                         *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); 
                 }
             }
+
+            // filter by --grep (but not for FASTQ or FASTA - they implement their own logic)
+            if (!vb->drop_curr_line && flag.grep && txt_file->data_type != DT_FASTA && txt_file->data_type != DT_FASTQ) {
+                SAFE_NUL (&rep_reconstruction_start[AFTERENT (char, vb->txt_data) - rep_reconstruction_start]);
+
+                if (!strstr (rep_reconstruction_start, flag.grep))
+                    vb->drop_curr_line = "grep";
+
+                SAFE_RESTORE;
+            }
+
+            // filter by --tail
+            if (!vb->drop_curr_line && flag.tail && vb->vblock_i == txt_file->tail_1st_vb &&
+                rep_i < txt_file->tail_1st_line_1st_vb)
+                vb->drop_curr_line = "tail";
 
             if (vb->drop_curr_line) {
                 ASSERT0 (flag.maybe_vb_modified_by_reconstructor, "Lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code.");

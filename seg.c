@@ -1023,7 +1023,7 @@ void seg_all_data_lines (VBlock *vb)
 
         //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
         bool has_13 = false;
-        vb->line_start = field_start - vb->txt_data.data;
+        vb->line_start = ENTNUM (vb->txt_data, field_start);
         const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
 
         vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));

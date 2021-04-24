@@ -128,6 +128,17 @@ static LiftOverStatus liftover_get_liftover_coords (VBlockP vb, Buffer *liftover
 // Segging a NON-dual-coordinates file called when genozip --chain
 // --------------------------------------------------------------
 
+static char liftover_seg_get_oREF (VBlockP vb, WordIndex ochrom, PosType opos)
+{
+    Range *range = ref_seg_get_locked_range (vb, ochrom, opos, 1, ENT (char, vb->txt_data, vb->line_start), NULL);
+    uint32_t index_within_range = opos - range->first_pos;
+
+    ref_assert_nucleotide_available (range, opos);
+    char ref = ref_get_nucleotide (range, index_within_range);
+
+    return ref;
+}
+
 // Create either (LIFTOVER and LIFTBACK) or LIFTREJT records when aligning a NON-dual-coordinates file (using --chain)
 LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_did_i, char orefalt_special_snip_id,
                                                   DictId liftover_dict_id, DictId liftback_dict_id, DictId liftrejt_dict_id,
@@ -150,10 +161,16 @@ LiftOverStatus liftover_seg_add_INFO_LIFT_fields (VBlockP vb, DidIType ochrom_di
         vb->contexts[ochrom_did_i].txt_len += ochrom_len;
 
 // TODO - check with reference if REF changed
-        bool oref_is_ref = true;
-        unsigned ref_len = vb->last_txt_len(VCF_oREF);
+        char oref = liftover_seg_get_oREF (vb, dl->chrom_index[1], dl->pos[1]);
+
+// TO DO handle orientation change
+        unsigned ref_len = vb->last_txt_len(VCF_oREF); // vcf_seg_txt_line uses this location to store ref_len (not oREF!)
         unsigned alt_len = vb->last_txt_len(VCF_REFALT) - ref_len - 1;
+
+        bool oref_is_ref = (ref_len == 1 && *last_txt (vb, VCF_REFALT) == oref);
         unsigned oref_len = oref_is_ref ? ref_len : alt_len; 
+if (!oref_is_ref) fprintf (stderr, "xxx changed ref: before: %.*s after: %c\n", ref_len, last_txt (vb, VCF_REFALT), oref);   
+
 // TODO - get strand - change of strand withour change in REF is no change
 
         char oref_special[3] = { SNIP_SPECIAL, orefalt_special_snip_id, '0' + oref_is_ref };

@@ -170,15 +170,15 @@ bool str_get_int (const char *str, unsigned str_len,
 }
 
 #define str_get_int_range_type(func_num,type) \
-bool str_get_int_range##func_num (const char *str, unsigned str_len, type min_val, type max_val, type *value) \
+bool str_get_int_range##func_num (const char *str, unsigned str_len, type min_val, type max_val, type *value /* optional */) \
 {                                                                                     \
     if (!str) return false;                                                           \
                                                                                       \
     int64_t value64;                                                                  \
     if (!str_get_int (str, str_len ? str_len : strlen (str), &value64)) return false; \
-    *value = (type)value64;                                                           \
+    if (value) *value = (type)value64;                                                \
                                                                                       \
-    return *value >= min_val && *value <= max_val;                                    \
+    return (type)value64 >= min_val && (type)value64 <= max_val;                      \
 }
 str_get_int_range_type(8,uint8_t)   // unsigned
 str_get_int_range_type(16,uint16_t) // unsigned

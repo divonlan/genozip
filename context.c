@@ -1134,7 +1134,7 @@ static Context *dict_ctx;
 
 static void ctx_dict_read_one_vb (VBlockP vb)
 {
-    if (!sections_next_sec1 (&dict_sl, SEC_DICT, false, false))
+    if (!sections_next_sec (&dict_sl, SEC_DICT, false, false))
         return; // we're done - no more SEC_DICT sections
 
     // create context if if section is skipped, for containters to work (skipping a section should be mirror in 
@@ -1387,7 +1387,7 @@ void ctx_read_all_counts (void)
 {
     const SecLiEnt *sl = NULL;
     bool counts_shown=false;
-    while (sections_next_sec1 (&sl, SEC_COUNTS, false, false))  {
+    while (sections_next_sec (&sl, SEC_COUNTS, false, false))  {
 
         if (piz_is_skip_sectionz (SEC_COUNTS, sl->dict_id)) continue;
 

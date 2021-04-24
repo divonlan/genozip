@@ -103,10 +103,19 @@ One or more file names must be given.
 ``genocat -n 1000``              displays 10 lines starting from line 1000
 ================================ ========================================================
 
+
 | *Note on outputting as BAM*: The numbering excludes the BAM header. 
 | *Note on FASTQ*: The numbering is of reads rather than lines. 
 | *Note*: The entire file header is included if any part of it is.
 | *Note*: Line numbers are taken before any additional filters are applied.
+
+.. option:: --head [num_lines].  Show a certain number of lines from the start of the file.
+
+|
+
+.. option:: --tail [num_lines].  Show a certain number of lines from the end of the file.
+
+|
 
 .. option:: -K, --kraken filename. Load a .kraken.genozip file for use with --taxid. 
 
@@ -188,7 +197,7 @@ One or more file names must be given.
 | See: :ref:`kraken`
                         
 
-.. option:: --validate[=valid]  Validates that the file(s) are valid genozip files. By default reports files that are invalid. With --validate=valid reports files that are valid.
+.. option:: --validate[=valid]  Validates that the file(s) are valid genozip files. By default reports files that are invalid. With --validate=valid reports files that are valid, and if run on a single exit code indicates validity.
     
           |
 

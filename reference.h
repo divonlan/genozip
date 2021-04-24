@@ -69,7 +69,7 @@ extern void ref_destroy_reference (void);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed);
 extern void ref_consume_ref_fasta_global_area (void);
-extern Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, RefLock *lock);
+extern Range *ref_seg_get_locked_range (VBlockP vb, WordIndex chrom, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, RefLock *lock);
 extern const char *ref_get_cram_ref (void);
 extern void ref_make_ref_init (void);
 extern void ref_generate_reverse_complement_genome (void);

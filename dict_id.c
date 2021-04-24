@@ -283,7 +283,7 @@ Buffer *dict_id_create_aliases_buf (void)
 // PIZ main thread: read all dict_id aliaeses, if there are any
 void dict_id_read_aliases (void) 
 { 
-    if (!sections_next_sec1 (NULL, SEC_DICT_ID_ALIASES, false, true)) return; // no aliases section
+    if (!sections_next_sec (NULL, SEC_DICT_ID_ALIASES, false, true)) return; // no aliases section
 
     buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
 

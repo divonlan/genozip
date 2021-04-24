@@ -692,12 +692,12 @@ static inline uint32_t ref_range_id_by_hash (VBlockP vb, uint32_t range_i)
     return value; 
 }
 
-static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, const char *field /* used for ASSSEG */, RefLock *lock)  
+static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, WordIndex chrom, const char *field /* used for ASSSEG */, RefLock *lock)  
 {
     uint32_t range_i = pos2range_i (pos); // range within contig 
 
     // case: we're asking for the same range as the previous one (for example, subsequent line in a sorted SAM)
-    if (vb && vb->prev_range && vb->prev_range_chrom_node_index == vb->chrom_node_index && vb->prev_range_range_i == range_i) {
+    if (vb && vb->prev_range && vb->prev_range_chrom_node_index == chrom && vb->prev_range_range_i == range_i) {
         *lock = ref_lock_range (vb->prev_range - FIRSTENT (Range, ranges));
         return vb->prev_range;
     }
@@ -740,19 +740,20 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, const ch
 
     if (vb) {
         vb->prev_range = range;
-        vb->prev_range_chrom_node_index = vb->chrom_node_index;
+        vb->prev_range_chrom_node_index = chrom;
         vb->prev_range_range_i = range_i;
     }
 
     return range; // returning locked range
 }
 
-static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, RefLock *lock)  
+static Range *ref_seg_get_locked_range_loaded (VBlockP vb, WordIndex chrom, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, 
+                                               RefLock *lock) // optional - range locked if provided
 {
     // case: we're asking for the same range as the previous one (for example, subsequent line in a sorted SAM)
-    if (vb && vb->prev_range && vb->prev_range_chrom_node_index == vb->chrom_node_index) {
+    if (vb && vb->prev_range && vb->prev_range_chrom_node_index == chrom) {
         PosType gpos = vb->prev_range->gpos + (pos - vb->prev_range->first_pos);
-        *lock = ref_lock (gpos, seq_len);
+        if (lock) *lock = ref_lock (gpos, seq_len);
         return vb->prev_range;
     }
 
@@ -760,12 +761,12 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
     WordIndex ref_index=WORD_INDEX_NONE;
     if (!flag.reading_reference) { // segging VCF or SAM with external reference
 
-        // case: we have a header - we lookup the reference contig matching vb->chrom_node_index in header_contigs
+        // case: we have a header - we lookup the reference contig matching chrom in header_contigs
         // as the header chroms occupy the begining of context[CHROM] which might not be the same as the reference chroms
         const Buffer *header_contigs = txtheader_get_contigs();
         if (header_contigs) {
             ref_index = 
-            ENT (RefContig, *header_contigs, vb->chrom_node_index)->chrom_index;
+            ENT (RefContig, *header_contigs, chrom)->chrom_index;
             if (ref_index == WORD_INDEX_NONE) 
                 return NULL; // not in reference
         }
@@ -775,12 +776,12 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
             uint32_t num_contigs = ref_contigs_num_contigs();
 
             // case: chrom is part of the reference (same index)
-            if (vb->chrom_node_index < num_contigs) 
-                ref_index = vb->chrom_node_index; 
+            if (chrom < num_contigs) 
+                ref_index = chrom; 
             
             // case: chrom is not in the reference as is, test if it is in the reference using an alternative name (eg "22"->"chr22")
             else {
-                ref_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, vb->chrom_node_index); // change temporarily just for ref_range_id_by_word_index()
+                ref_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, chrom); // change temporarily just for ref_range_id_by_word_index()
 
                 // case: the contig is not in the reference - we will just consider it an unaligned line 
                 // (we already gave a warning for this in ref_contigs_get_ref_chrom, so no need for another one)
@@ -795,7 +796,7 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
     Range *range = ENT (Range, ranges, ref_index);
     PosType gpos = range->gpos + (pos - range->first_pos);
 
-    *lock = ref_lock (gpos, seq_len);
+    if (lock) *lock = ref_lock (gpos, seq_len);
 
     // when using an external refernce, pos has to be within the reference range
     // note: in SAM, if a read starts within the valid range, it is allowed to overflow beyond it - and we will circle
@@ -811,15 +812,16 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
 // case 1: ZIP: in SAM with REF_INTERNAL, when segging a SEQ field ahead of committing it to the reference
 // case 2: ZIP: SAM and VCF with REF_EXTERNAL: when segging a SAM_SEQ or VCF_REFALT field
 // if range is found, returns a locked range, and its the responsibility of the caller to unlock it. otherwise, returns NULL
-Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, RefLock *lock)  
+Range *ref_seg_get_locked_range (VBlockP vb, WordIndex chrom, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, 
+                                 RefLock *lock) // optional if RT_LOADED/RT_CACHED
 {
     // sanity checks
     ASSERT0 (vb->chrom_name, "vb->chrom_name=NULL");
 
     switch (ranges_type) {
-        case RT_DENOVO : return ref_seg_get_locked_range_denovo (vb, pos, field, lock);
+        case RT_DENOVO : return ref_seg_get_locked_range_denovo (vb, chrom, pos, field, lock);
         case RT_CACHED :
-        case RT_LOADED : return ref_seg_get_locked_range_loaded (vb, pos, seq_len, field, lock);
+        case RT_LOADED : return ref_seg_get_locked_range_loaded (vb, chrom, pos, seq_len, field, lock);
         default        : ABORT ("Error in ref_seg_get_locked_range: invalid ranges_type=%"PRId64, ranges_type); return 0;
     }
 }

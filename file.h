@@ -392,7 +392,9 @@ typedef struct File {
     Buffer comp_info;                  // Z_FILE   PIZ: array of PizCompInfo - component information (param=1 if locks initialized)
     Buffer txt_file_info;              // Z_FILE   PIZ: array of PizTxtFileInfo - txt_file information
     uint64_t lines_written_so_far;     // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downsampling, and is to be written to txt_file, or downsampled-out
-
+    uint32_t tail_1st_vb;              // TXT_FILE PIZ: in case of --tail: first vblock_i needed
+    uint32_t tail_1st_line_1st_vb;     // TXT_FILE PIZ: in case of --tail: first line (0-based) in tail_1st_vb needed
+    
     // Z_FILE: stats data
     Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)
     Buffer bound_txt_names;            // ZIP: a concatenation of all bound txt_names that contributed to this genozip file

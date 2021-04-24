@@ -154,7 +154,7 @@ static void vcf_seg_ref_alt_snp (VBlockP vb, const char *start_line /* used for 
         PosType pos = vb->last_int(VCF_POS);
 
         RefLock lock;
-        Range *range = ref_seg_get_locked_range (vb, pos, 1, start_line, &lock);
+        Range *range = ref_seg_get_locked_range (vb, vb->chrom_node_index, pos, 1, start_line, &lock);
         uint32_t index_within_range = pos - range->first_pos;
 
         ref_assert_nucleotide_available (range, pos);
@@ -1264,7 +1264,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
                            :                                         DC_LUFT;   // LUFT dual coordinates file - this line is a luft-over line in luft coordinates
 
     // if --chain and this VB is not the rejects data OR 
-    // if this is a dual-coordinates file in primary coordintes (i.e. might have INFO/LIFTREFD) 
+    // if this is a dual-coordinates file in primary coordinates (i.e. might have INFO/LIFTREFD) 
     // Note: when compressing a DC_LUFT file, we already copied the rejects in vcf_seg_initialize
     // copy line to liftover_rejects now, because we are going to destroy it. We remove it later if its not a reject.
     uint64_t save_liftover_rejects_len = vb->liftover_rejects.len;

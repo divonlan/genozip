@@ -116,7 +116,7 @@ void ref_alt_chroms_load (void)
         }
     }
 
-    if (flag.show_ref_alts && exe_type == EXE_GENOCAT) exit(0); // in genocat this, not the data
+    if (flag.show_ref_alts && exe_type == EXE_GENOCAT) exit (EXIT_OK); // in genocat this, not the data
 
     buf_free (&evb->compressed);
 }

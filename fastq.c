@@ -536,9 +536,9 @@ bool fastq_piz_is_paired (void)
 
     // dts_paired is not set, and this is v8 for v9. We proceed to inspect GPOS.local of the 2nd component to see if it is paired
     ConstSecLiEntP sl = NULL;
-    sections_next_sec1 (&sl, SEC_TXT_HEADER, false, false); // first component txt header
-    sections_next_sec1 (&sl, SEC_TXT_HEADER, false, false); // second component txt header
-    sections_next_sec1 (&sl, SEC_VB_HEADER,  false, false); // first VB of second component txt header
+    sections_next_sec (&sl, SEC_TXT_HEADER, false, false); // first component txt header
+    sections_next_sec (&sl, SEC_TXT_HEADER, false, false); // second component txt header
+    sections_next_sec (&sl, SEC_VB_HEADER,  false, false); // first VB of second component txt header
 
     // scan all B250 and Local looking for evidence of pairing
     while (sections_next_sec2 (&sl, SEC_B250, SEC_LOCAL, true, false)) {            

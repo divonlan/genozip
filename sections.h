@@ -357,14 +357,16 @@ extern void sections_list_concat (VBlockP vb);
 
 extern const SecLiEnt *sections_get_first_section_of_type (SectionType st, bool soft_fail);
 extern bool sections_next_sec2 (const SecLiEnt **sl_ent, SectionType st1, SectionType st2, bool must_be_next_section, bool seek);
-#define sections_next_sec1(sl_ent,st,must_be_next_section,seek) sections_next_sec2(sl_ent,st,SEC_NONE,must_be_next_section,seek)
+#define sections_next_sec(sl_ent,st,must_be_next_section,seek) sections_next_sec2((sl_ent),(st),SEC_NONE,(must_be_next_section),(seek))
+extern bool sections_prev_sec2 (const SecLiEnt **sl_ent, SectionType st1, SectionType st2);
+#define sections_prev_sec(sl_ent,st) sections_prev_sec2((sl_ent),(st),SEC_NONE)
 
 extern const SecLiEnt *sections_last_sec4 (const SecLiEnt *sl, SectionType st1, SectionType st2, SectionType st3, SectionType st4);
-#define sections_component_last(any_sl_in_component) sections_last_sec4 (any_sl_in_component, SEC_B250, SEC_LOCAL, SEC_VB_HEADER, SEC_RECON_PLAN)
+#define sections_component_last(any_sl_in_component) sections_last_sec4 ((any_sl_in_component), SEC_B250, SEC_LOCAL, SEC_VB_HEADER, SEC_RECON_PLAN)
 
 extern uint32_t sections_count_sections (SectionType st);
 extern const SecLiEnt *sections_vb_first (uint32_t vb_i, bool soft_fail);
-#define sections_vb_last(any_sl_in_vb) sections_last_sec4 (any_sl_in_vb, SEC_B250, SEC_LOCAL, SEC_NONE, SEC_NONE)
+#define sections_vb_last(any_sl_in_vb) sections_last_sec4 ((any_sl_in_vb), SEC_B250, SEC_LOCAL, SEC_NONE, SEC_NONE)
 
 extern void sections_count_component_vbs (const SecLiEnt *sl, uint32_t *num_vbs, uint32_t *first_vb);
 extern const SecLiEnt *sections_pull_vb_up (uint32_t vb_i, const SecLiEnt *sl);

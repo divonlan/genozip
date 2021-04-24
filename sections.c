@@ -102,6 +102,25 @@ bool sections_next_sec2 (const SecLiEnt **sl_ent,   // optional in/out. if NULL 
     return found;
 }
 
+// section iterator. returns true if a section of this type was found.
+bool sections_prev_sec2 (const SecLiEnt **sl_ent,   // optional in/out. if NULL - search entire list
+                         SectionType st1, SectionType st2)
+{
+    const SecLiEnt *sl = sl_ent ? *sl_ent : NULL; 
+
+    while (!sl || sl >= FIRSTENT (const SecLiEnt, z_file->section_list_buf)) {
+
+        sl = sl ? (sl - 1) : LASTENT (const SecLiEnt, z_file->section_list_buf); 
+
+        if (sl->st == st1 || sl->st == st2) {
+            if (sl_ent) *sl_ent = sl;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // section iterator. skips to the last consecutive section from after sl, that is type st1, st2 or st3.
 const SecLiEnt *sections_last_sec4 (const SecLiEnt *sl, SectionType st1, SectionType st2, SectionType st3, SectionType st4)
 {

@@ -438,7 +438,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     if (seq[0] == '*') goto done; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
 
     RefLock lock;
-    Range *range = ref_seg_get_locked_range ((VBlockP)vb, pos, vb->ref_consumed, seq, &lock);
+    Range *range = ref_seg_get_locked_range ((VBlockP)vb, vb->chrom_node_index, pos, vb->ref_consumed, seq, &lock);
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range || // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
