@@ -59,7 +59,7 @@ typedef enum { RT_NONE,      // value of ranges.param if ranges is unallocated
               
 extern void ref_initialize_ranges (RangesType type);
 extern void ref_compress_ref (void);
-extern void ref_load_external_reference (bool display, bool is_last_z_file);
+extern void ref_load_external_reference (bool display);
 extern void ref_load_stored_reference (void);
 extern bool ref_is_reference_loaded (void);
 extern void ref_set_reference (const char *filename, ReferenceType ref_type, bool is_explicit);

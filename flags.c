@@ -562,6 +562,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.quiet,       option_noisy,        OT("quiet", "q"),     OT("noisy", "Q"));
     CONFLICT (flag.test,        flag.optimize,       OT("test", "t"),      OT("optimize", "9"));
     CONFLICT (flag.md5,         flag.optimize,       OT("md5", "m"),       OT("optimize", "9"));
+    CONFLICT (flag.make_reference, flag.reading_chain, "--make-reference", OT("chain", "C"));
     CONFLICT (flag.test,        flag.reading_chain,  OT("test", "t"),      OT("chain", "C"));
     CONFLICT (flag.md5,         flag.reading_chain,  OT("md5", "m"),       OT("chain", "C"));
     CONFLICT (flag.samples,     flag.drop_genotypes, OT("samples", "s"),   OT("drop-genotypes", "G"));
@@ -587,7 +588,8 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.multifasta,  flag.make_reference, "--make-reference",   "multifasta");
     CONFLICT (flag.reference == REF_EXTERNAL, flag.make_reference, "--make-reference", OT("reference", "e"));
     CONFLICT (flag.reference == REF_EXT_STORE, flag.make_reference, "--make-reference", OT("REFERENCE", "E"));
-    CONFLICT (flag.reference == REF_EXTERNAL, flag.show_ref_seq, "--make-reference", OT("reference", "e"));
+    CONFLICT (flag.reference == REF_EXTERNAL, flag.show_ref_seq, "--show_ref_seq", OT("reference", "e"));
+    CONFLICT (flag.reference == REF_LIFTOVER, flag.show_ref_seq, "--show_ref_seq", OT("liftover", "v"));
     CONFLICT (flag.dump_one_b250_dict_id.num, flag.dump_one_local_dict_id.num, "--dump-one-b250", "--dump-one-local");
     if (command == PIZ) {
         CONFLICT (flag.test, flag.out_filename,      OT("output", "o"),    OT("test", "t"));
@@ -704,6 +706,9 @@ void flags_update (unsigned num_files, const char **filenames)
         else
             iprintf ("\n%s\n%s\n", str_time().s, command_line.data);
     }
+
+    ASSINP0 (!flag.reading_chain || flag.reference == REF_LIFTOVER, 
+             "when using --chain, the liftover (target) reference must be specified with --liftover");
 
     // cases where we don't need to load the reference file, even if the genozip file normally needs it
     // note: we don't exclude due to collect_coverage here, instead we do it in main_load_reference

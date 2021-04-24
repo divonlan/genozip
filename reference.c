@@ -104,8 +104,9 @@ void ref_unload_reference (void)
     if (ranges_type == RT_DENOVO) 
         ref_free_denovo_ranges();
     
-    // in case of REF_EXTERNAL - the reference has not been modified and we can reuse it for the next file
+    // in case of REF_EXTERNAL or REF_LIFTOVER - the reference has not been modified and we can reuse it for the next file
     if (flag.reference != REF_EXTERNAL && 
+        flag.reference != REF_LIFTOVER && 
         flag.reference != REF_NONE) { // possibly, we have data from a previous REF_EXTERNAL file, and we hold on to it, if REF_NONE
         buf_free (&genome_buf);
         buf_free (&emoneg_buf);
@@ -113,8 +114,11 @@ void ref_unload_reference (void)
         buf_free (&ranges);
     }
 
-    // in case of REF_EXTERNAL and REF_EXT_STORE - these buffers are immutable so the next file can use them
-    if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE && flag.reference != REF_NONE) {
+    // in case of REF_EXTERNAL, REF_EXT_STORE and REF_LIFTOVER - these buffers are immutable so the next file can use them
+    if (flag.reference != REF_EXTERNAL && 
+        flag.reference != REF_EXT_STORE && 
+        flag.reference != REF_LIFTOVER && 
+        flag.reference != REF_NONE) {
         buf_free (&ref_external_ra);
         buf_free (&ref_file_section_list);
         buf_free (&genome_is_set_buf);
@@ -533,7 +537,7 @@ void ref_load_stored_reference (void)
     }
     
     // decompress reference using Dispatcher
-    bool external = flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE;
+    bool external = flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER;
     dispatcher_fan_out_task ("load_ref", external ? ref_filename     : z_file->basename, 
                              external ? PROGRESS_MESSAGE : PROGRESS_NONE, 
                              external ? "Reading and caching reference file..." : NULL, 
@@ -1294,14 +1298,14 @@ bool ref_is_reference_loaded (void)
 }
 
 // ZIP & PIZ: import external reference
-void ref_load_external_reference (bool display, bool is_last_z_file)
+void ref_load_external_reference (bool display)
 {
     ASSERTNOTNULL (ref_filename);
     SAVE_FLAGS_AUX;
 
     flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
     flag.no_writer = true;
-    
+
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
 

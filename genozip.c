@@ -328,7 +328,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
         if (!flag.genocat_no_reconstruct || 
             (flag.collect_coverage && z_file->data_type == DT_FASTQ)) { // in collect_coverage with FASTQ we read the non-data sections of the reference
             SAVE_VALUE (z_file); // actually, read the reference first
-            ref_load_external_reference (false, false /* argument ignored for REF_EXTERNAL */);
+            ref_load_external_reference (false);
             RESTORE_VALUE (z_file);
         }
     }
@@ -588,14 +588,12 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 {
     if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE) return;
 
-    if (flag.genocat_no_ref_file) return; // we don't need the reference in these cases
-    
     int old_ref_use_aligner = flag.ref_use_aligner;
     DataType dt = main_get_file_dt (filename);
     flag.ref_use_aligner = (old_ref_use_aligner || dt == DT_FASTQ || dt == DT_FASTA) && primary_command == ZIP;
 
-    // no need to load the reference if genocat just wants to see some sections (unless its genocat of the refernece file itself)
-    if (flag.genocat_no_reconstruct && dt != DT_REF) return;
+    // no need to load the reference if not needed (unless its genocat of the refernece file itself)
+    if (flag.genocat_no_ref_file && dt != DT_REF) return;
 
     // no need to load the reference if just collecting coverage except FASTQ for which we need the contigs
     if (flag.collect_coverage && dt != DT_FASTQ) return;
@@ -613,7 +611,7 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
     if (!ref_is_reference_loaded())
-        ref_load_external_reference (false, is_last_z_file); // also loads refhash if needed
+        ref_load_external_reference (false); // also loads refhash if needed
 
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
     if (!old_ref_use_aligner && flag.ref_use_aligner) 
@@ -666,7 +664,7 @@ int main (int argc, char **argv)
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
             if (exe_type == EXE_GENOCAT && flag.reference) 
-                ref_load_external_reference (true, true);
+                ref_load_external_reference (true);
 
             // otherwise: show help
             else
@@ -711,7 +709,11 @@ int main (int argc, char **argv)
     // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
     if (command == ZIP) license_get(); 
 
-    if (flag.reading_chain) chain_load();
+    if (flag.reading_chain) {
+        ref_load_external_reference (false); // chain requires reference
+        chain_load();
+    }
+
     if (flag.reading_kraken) kraken_load();
 
     for (unsigned file_i=0, z_file_i=0; file_i < MAX (num_files, 1); file_i++) {
