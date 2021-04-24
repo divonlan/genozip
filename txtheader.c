@@ -207,8 +207,6 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
 {
     bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
 
-    if (DTPZ(piz_header_init)) DTPZ(piz_header_init)();
-
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
     VBlock *comp_vb = vb_get_vb ("piz", 0);
@@ -230,15 +228,17 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
         FREE (filename); // file_open copies the names
     }
 
+    // initialize if needed - but only once per outputted txt file 
+    //i.e. if we have rejects+normal, or concatenated, we will only init in the first)
+    if (!txt_file->piz_header_init_has_run && DTPZ(piz_header_init))
+        txt_file->piz_header_init_has_run = true;
+
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
     
     if (txt_file->codec == CODEC_BGZF)
         memcpy (txt_file->bgzf_signature, header->codec_info, 3);
-    
-//    if (is_first_txt || flag.unbind) 
-//        z_file->num_lines = BGEN64 (header->num_lines);
-    
+        
     // note: in case of txt files containing two components - --luft and --interleave - this will be nonsense, 
     // but we don't test digest anyway as they are both flag.data_modified 
     txt_file->digest = header->digest_single; 

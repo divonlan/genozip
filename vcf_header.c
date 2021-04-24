@@ -17,7 +17,7 @@
 #include "strings.h"
 
 // Globals
-uint32_t vcf_num_samples           = 0; // number of samples in the file
+uint32_t vcf_num_samples = 0; // number of samples in the file
 static uint32_t vcf_num_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that vcf_num_samples if --samples is used
 static Buffer vcf_field_name_line = EMPTY_BUFFER;  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during bound
 

@@ -1024,6 +1024,8 @@ void BGEN_u64_buf (Buffer *buf, LocalType *lt)
     }
 }
 
+// number of columns is trasmitted in the param, except if this is a matrix of VCF samples, in which case param=0 and we take 
+// the number of columns to be the number of samples in the VCF header
 static inline uint32_t BGEN_transpose_num_cols (const Buffer *buf)
 {
     uint32_t cols = buf->param; // cols and rows in terms of the target non-transposed matrix (0 if VCF)
