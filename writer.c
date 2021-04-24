@@ -610,11 +610,10 @@ static void writer_load_vb (VbInfo *v)
 // Thread entry point for writer thread - at this point, the reconstruction plan is ready and unmutable
 static void writer_main_loop (VBlockP wvb)
 {
-    ASSERTNOTEMPTY (txt_file->recon_plan);
     ASSERTNOTNULL (wvb);
 
     // execute reconstruction plan
-    for (uint64_t i=0; i < txt_file->recon_plan.len; i++) {
+    for (uint64_t i=0; i < txt_file->recon_plan.len; i++) { // note: recon_plan.len maybe 0 if everything is filtered out
 
         ReconPlanItem *p = ENT (ReconPlanItem, txt_file->recon_plan, i);
 
