@@ -60,15 +60,17 @@ void threads_print_call_stack (void)
 
 static void threads_sigsegv_handler (void) 
 {
+    iprint0 ("Segmentation fault, exiting.");
     threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
     threads_cancel_other_threads();
-    abort(); // dumps core
+    exit (EXIT_SIGSEGV); // dumps core
 }
 
 static void threads_sighup_handler (void) 
 {
+    iprint0 ("Received SIGHUP, exiting.");
     threads_cancel_other_threads();
-    exit(1);
+    exit (EXIT_SIGHUP);
 }
 
 // explicitly catch signals, that we otherwise blocked

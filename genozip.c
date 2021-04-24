@@ -91,7 +91,7 @@ void main_exit (bool show_stack, bool is_error)
         fclose (info_stream);
     } 
 
-    exit (is_error);
+    exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
 
 static void main_print_help (bool explicit)
@@ -634,8 +634,6 @@ int main (int argc, char **argv)
     random_access_initialize();
     codec_initialize();
 
-    //TEST();exit(0);
-
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
     else if (strstr (argv[0], "genocat"))   exe_type = EXE_GENOCAT;
     else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
@@ -659,7 +657,7 @@ int main (int argc, char **argv)
             // case: --register
             if (flag.do_register) {
                 license_get();
-                exit (0);
+                exit (EXIT_OK);
             }
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions

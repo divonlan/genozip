@@ -43,7 +43,7 @@ bool crypt_prompt_for_password()
 
     if (!strlen (password)) { // exit if user clicked Enter only
         printf ("Goodbye!\n"); 
-        exit (0); // not an error
+        exit (EXIT_OK); // not an error
     }
 
     return true;

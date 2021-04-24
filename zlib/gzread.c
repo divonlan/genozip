@@ -3,6 +3,7 @@
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
+#include "genozip.h"
 #include "gzguts.h"
 
 /* Local functions */
@@ -421,10 +422,7 @@ ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection, uI
 {
     gz_statep state = (gz_statep)file;
 
-    if (injection_size > INJECTION_SIZE) {
-        fprintf (stderr, "Error in gzinject: injection_size=%u too big", injection_size);
-        exit(1);
-    }
+    ASSERT (injection_size <= INJECTION_SIZE, "Error in gzinject: injection_size=%u too big", injection_size);
 
     memcpy (state->injection, injection, injection_size);  
     state->injection_size = injection_size;

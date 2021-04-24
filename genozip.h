@@ -247,4 +247,12 @@ extern bool is_info_stream_terminal; // is info_stream going to a terminal
 
 #define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} while(0)
 
+// exit codes
+#define EXIT_OK                   0
+#define EXIT_GENERAL_ERROR        1
+#define EXIT_INVALID_GENOZIP_FILE 2
+#define EXIT_DOWNSTREAM_LOST      3
+#define EXIT_STREAM               4
+#define EXIT_SIGHUP               5
+#define EXIT_SIGSEGV              6
 #endif

@@ -92,7 +92,7 @@ static void stream_abort_cannot_exec (const char *exec_name, const char *reason)
     if (!strstr (exec_name, "genozip")) // this is NOT genozip run from main_test_after_genozip
         fprintf (stderr, "Note that %s is a separate software package that is not affiliated with genozip in any way.\n", exec_name);  
 
-    exit (99); // special code - if we are a child existing, the parent will catch this error code
+    exit (EXIT_STREAM); // special code - if we are a child existing, the parent will catch this error code
 }
 
 #ifdef _WIN32
@@ -350,8 +350,9 @@ int stream_wait_for_exit (Stream *stream)
     waitpid (stream->pid, &stream->exit_status, 0); 
 
     // in Windows, the main process fails to CreateProcess it exits. In Unix, it is the child process that 
-    // fails to execv, and exits and code 99. The main process catches it here, and exits silently.
-    if (WEXITSTATUS (stream->exit_status) == 99) exit(1); // child process failed to exec and displayed error message, we can exit silently
+    // fails to execv, and exits and code EXIT_STREAM. The main process catches it here, and exits silently.
+    if (WEXITSTATUS (stream->exit_status) == EXIT_STREAM) 
+        exit(EXIT_GENERAL_ERROR); // child process failed to exec and displayed error message, we can exit silently
 
 #endif
     stream->pid = 0;
@@ -368,9 +369,9 @@ void stream_abort_if_cannot_run (const char *exec_name, const char *reason)
     StreamP stream = stream_create (0, 1024, 1024, 0, 0, 0, 0, reason, exec_name, NULL); // will abort if cannot run
 
 // in Windows, the main process fails to CreateProcess and exits. In Unix, it is the child process that 
-// fails to execv, and exits and code 99. The main process catches it in stream_wait_for_exit, and exits.
+// fails to execv, and exits and code EXIT_STREAM. The main process catches it in stream_wait_for_exit, and exits.
 #ifndef _WIN32
-    stream_wait_for_exit (stream); // exits if child process exited with code 99
+    stream_wait_for_exit (stream); // exits if child process exited with code EXIT_STREAM
 #endif
 
     // if we reach here, everything's good - the exec can run.

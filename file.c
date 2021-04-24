@@ -260,7 +260,7 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
 
     if (read_buf[0] == 'N') {
         fprintf (stderr, "No worries, I'm stopping here - no damage done!\n");
-        exit(0);
+        exit (EXIT_OK);
     }
 
     fprintf (stderr, "\n");
@@ -761,7 +761,7 @@ static bool file_open_z (File *file)
                 }
                 else { // single file
                     if (flag.validate == VLD_REPORT_VALID)
-                        exit (1); // exit quietly - with a return code indicating invalidity
+                        exit (EXIT_INVALID_GENOZIP_FILE); // exit quietly - with a return code indicating invalidity
                     else
                         ABORTINP ("%s is not a valid genozip file: %s", file_printname (file), causes[cause-1]);
                 }
@@ -1025,12 +1025,12 @@ void file_write (File *file, const void *data, unsigned len)
     size_t bytes_written = fwrite (data, 1, len, (FILE *)file->file); // use fwrite - let libc manage write buffers for us
 
     // if we're streaming our genounzip/genocat/genols output to another process and that process has 
-    // ended prematurely then exit quietly. in genozip we display an error because this means the resulting
+    // ended prematurely then exit quietly. In genozip we display an error because this means the resulting
     // .genozip file will be corrupted
-    if (!file->name && command != ZIP && errno == EINVAL) exit(0);
+    if (!file->name && command != ZIP && errno == EINVAL) exit (EXIT_DOWNSTREAM_LOST);
 
     // exit quietly if failed to write to stdout - likely downstream consumer (piped executable or terminal) was closed
-    if (bytes_written < len && !file->name) exit (0);
+    if (bytes_written < len && !file->name) exit (EXIT_DOWNSTREAM_LOST);
 
     // error if failed to write to file
     ASSERT (bytes_written == len, "failed to write %u bytes to %s: %s", len, file->name, strerror(errno));

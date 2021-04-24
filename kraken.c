@@ -43,7 +43,7 @@ static bool taxid_also_0   = false; // user specified +0
 #define MAX_QNAME_NODES 0xfffffffe
 static Buffer qname_dict    = EMPTY_BUFFER;
 static Buffer qname_nodes   = EMPTY_BUFFER; // array of QnameNode
-static bool has_paired_qnames = false; // Load: loaded kraken file contains at least 1 qname that ends with "/1" or "/2"
+static bool has_paired_qnames = false; // Load: qnames in loaded kraken data may appear twice (a result of two components or /1 /2)
 
 static Buffer qname_hashtab = EMPTY_BUFFER; // array of uint32_t - index into qname_nodes
 static unsigned one_qname_length = 0; // average length of one QNAME

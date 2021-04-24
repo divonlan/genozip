@@ -512,7 +512,7 @@ verify_command:
             case '?' : // unrecognized option - error message already displayed by libc
             default  :
                 fprintf (stderr, "Usage: %s [OPTIONS] filename1 filename2...\nTry %s --help for more information.\n", global_cmd, global_cmd);
-                exit(1);  
+                exit (EXIT_GENERAL_ERROR);  
         }
     }
 }

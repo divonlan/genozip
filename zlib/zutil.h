@@ -20,6 +20,7 @@
 #endif
 
 #include "zlib.h"
+#include "genozip.h"
 
 #if defined(STDC) && !defined(Z_SOLO)
 #  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
@@ -237,8 +238,7 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #ifdef ZLIB_DEBUG
 #  include <stdio.h>
    extern int ZLIB_INTERNAL z_verbose;
-   extern void ZLIB_INTERNAL z_error OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
+#  define Assert(cond,msg) ASSERT0 (cond, msg)
 #  define Trace(x) {if (z_verbose>=0) fprintf x ;}
 #  define Tracev(x) {if (z_verbose>0) fprintf x ;}
 #  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
