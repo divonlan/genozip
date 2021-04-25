@@ -9,7 +9,8 @@
 #include "genozip.h"
 
 typedef int32_t TaxonomyId;
-#define TAXID_NONE ((TaxonomyId)-1)
+#define TAXID_NONE         ((TaxonomyId)-1)
+#define TAXID_UNCLASSIFIED ((TaxonomyId)-0)
 
 // seg of a kraken file
 extern void kraken_zip_initialize (void);

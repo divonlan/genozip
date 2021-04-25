@@ -117,6 +117,8 @@ To handle this, we prepare a concatenated kraken.genozip file, from the output o
 |
 | • For the purposes of ``+0``, a line is considered *unclassified* if *both* components list it as unclassified. 
 |
+| Note: The R1 and R2 files *must* contain exactly the same reads (QNAMEs) - its ok if they are in a different order
+|
 
 **Kraken data containing reads with /1 and /2**
 
@@ -124,14 +126,11 @@ To handle this, we prepare a concatenated kraken.genozip file, from the output o
 |
 | This can happen, for example, when feeding kraken2 with an interleaved FASTQ file rather than two separate FASTQ files.  
 |
+| Note: If the kraken file has a read with /1, there *must* also be a read with /2 and vice versa - their order is not important and they needn't be consecutive.
+|
 
-**Note on memory consumption**
+**Assumptions**
 
-| Loading kraken data consumes (21 bytes + strlen(qname)) per line loaded.
+| ``genocat --taxid`` makes the assumption that all lines in the viewed file must have a corresponding line in the kraken data.
 |
-| Two cases:
-|
-| - ``genocat --kraken taxid`` : only lines that have the requested taxid are loaded to memory.
-|
-| -  ``genozip --kraken`` and ``genocat --kraken ^taxid`` (negative filter) - all lines are loaded. The number of lines in the kraken file can be observed by running ``genocat --stats mydata.kraken.genozip``.
 

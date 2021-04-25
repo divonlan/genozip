@@ -24,12 +24,6 @@
 #include "hash.h"
 #include "progress.h"
 
-// Data structures used during Kraken PIZ 
-
-char *kraken_filename = NULL; // global - kraken filename
-static bool taxid_negative = false; // user specified ^
-static bool taxid_also_0   = false; // user specified +0
-
 // Search algorithm:
 // A. During kraken loading:
 //    1. qname_dict is reconstructed directly from TOP2TAXID - concatenation of txt_data from all VBs
@@ -40,24 +34,41 @@ static bool taxid_also_0   = false; // user specified +0
 // B. At toplevel callback of SAM/BAM, FASTQ, FASTA and Kraken:
 //    Call kraken_is_included_loaded - this will check if the qname is in qname_dict by using the hash table and sorted list
 
-#define MAX_QNAME_NODES 0xfffffffe
-static Buffer qname_dict    = EMPTY_BUFFER;
-static Buffer qname_nodes   = EMPTY_BUFFER; // array of QnameNode
-static bool has_paired_qnames = false; // Load: qnames in loaded kraken data may appear twice (a result of two components or /1 /2)
-
-static Buffer qname_hashtab = EMPTY_BUFFER; // array of uint32_t - index into qname_nodes
-static unsigned one_qname_length = 0; // average length of one QNAME
-
-// 16 bytes
-typedef struct __attribute__((packed, aligned(4))) {
-    uint32_t hash;            // hash of the QNAME - qname_nodes is sorted by hash, and it also the index into qname_hashtab
-    uint32_t taxid;
-    uint64_t char_index : 48; // index into qname_dict of the qname
-    uint64_t snip_len   : 16;
-} QnameNode;
+// Used by Load
 
 #define QNAME_NODE_NONE 0xffffffff // entry in qname_hashtab indicating this qname is not in dict
+#define MAX_QNAME_NODES 0xfffffffe
 
+#define BITS_CHAR_INDEX 40
+#define BITS_SNIP_LEN   7
+#define BITS_TAXID      24
+#define BITS_TAXID_LO   16
+
+#define MAX_SNIP_LEN   ((1 << BITS_SNIP_LEN) - 1)
+#define MAX_TAXID      ((1 << BITS_TAXID) - 1)
+#define MAX_CHAR_INDEX ((1ULL << BITS_CHAR_INDEX) -1)
+
+// 13 bytes
+typedef struct __attribute__((packed, aligned(1))) {
+    uint32_t hash;                          // hash of the QNAME - qname_nodes is sorted by hash, and it also the index into qname_hashtab
+    uint64_t char_index : BITS_CHAR_INDEX;  // index into qname_dict of the qname
+    uint64_t snip_len   : BITS_SNIP_LEN;
+    uint64_t is_paired  : 1;
+    uint64_t taxid_lo   : BITS_TAXID_LO;
+    uint8_t  taxid_hi;
+} QnameNode;
+
+char *kraken_filename = NULL;               // global - kraken filename. Non-NULL indicates kraken is loaded.
+static bool taxid_negative = false;         // user specified ^
+static bool taxid_also_0   = false;         // user specified +0
+
+static Buffer qname_dict    = EMPTY_BUFFER;
+static Buffer qname_nodes   = EMPTY_BUFFER; // array of QnameNode
+static Buffer qname_hashtab = EMPTY_BUFFER; // array of uint32_t - index into qname_nodes
+static unsigned one_qname_length = 0;       // average length of one QNAME
+static TaxonomyId dom_taxid = TAXID_NONE;   // most common taxid in kraken file - eliminated from qname_nodes
+
+// Used by Seg
 static char copy_taxid_snip[30];
 static unsigned copy_taxid_snip_len;
 
@@ -281,30 +292,36 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
 
         uint32_t this_taxid = vb->last_int (KRAKEN_TAXID);
 
-        // we store everything in genozip, or if its a negative search, and only "our" taxid if its a
-        // positive search.
-        // reason for storing everything if negative - we COULD store only ours, but it really complicates
-        // the code. TO DO.
-        if (exe_type == EXE_GENOZIP || taxid_negative || 
-            this_taxid == flag.kraken_taxid || (taxid_also_0 && !this_taxid)) {
+        // we store everything EXCEPT the lines with the most dominant taxid. Missing qnode for a line would indicate
+        // it has the dominant taxid (under the assumption that all lines in the filtered file are covered by lines in the kraken file)
+        if (this_taxid != dom_taxid) {
 
             // if this is a paired read - ending with /1 or /2 - remove the suffix
-            // if kraken file has reads ending with /1 or /2 we note this, for special handling when filtering
-            if (reconstructed_len > 3 && reconstructed[reconstructed_len-3] == '/' &&
-                (reconstructed[reconstructed_len-2] == '1' || reconstructed[reconstructed_len-2] == '2')) {
-                has_paired_qnames = true; // we don't care about thread safety as its immutable once set
-                reconstructed_len -= 2;
+            bool is_paired = false;
+            unsigned snip_len = reconstructed_len - 1; // excluding the \0 seperator
+            
+            if (reconstructed_len > 3 && reconstructed[snip_len-2] == '/' &&
+                (reconstructed[reconstructed_len-2] == '1' || reconstructed[snip_len-1] == '2')) {
+                is_paired = true;
+                snip_len -= 2;
             }
 
             buf_alloc (vb, &vb->contexts[KRAKEN_QNAME].nodes, 1, vb->lines.len, QnameNode, 1.5, "contexts->nodes");
             
+            ASSERT (this_taxid <= MAX_TAXID, "taxid=%u exceeds maximum of %u", this_taxid, MAX_TAXID);
+            ASSERT (snip_len <= MAX_SNIP_LEN, "Length of QNAME \"%.*s\" exceeds maximum of %u", snip_len, reconstructed, MAX_SNIP_LEN);
+
             NEXTENT (QnameNode, vb->contexts[KRAKEN_QNAME].nodes) = (QnameNode){ 
-                .char_index = reconstructed - vb->txt_data.data, // will be updated at merge
-                .snip_len   = reconstructed_len - 1,             // excluding the \0 seperator
-                .hash       = hash_do (qname_hashtab.len, reconstructed, reconstructed_len-1),
-                .taxid      = this_taxid
+                .char_index = reconstructed - vb->txt_data.data, // will be updated in kraken_piz_handover_data
+                .snip_len   = snip_len,
+                .hash       = hash_do (qname_hashtab.len, reconstructed, snip_len),
+                .is_paired  = z_file->num_components == 2 || is_paired,
+                .taxid_lo   = this_taxid & ((1<<BITS_TAXID_LO)-1),
+                .taxid_hi   = this_taxid >> BITS_TAXID_LO
             };
         }
+        else
+            vb->drop_curr_line = "dom_taxid"; // txt_data will turn into qname_dict - so we eliminate unused qnames
     } 
 
     // when pizzing a kraken to be filtered by itself (loaded or stored) (useful only for testing) - apply :kraken_is_included_loaded" filter 
@@ -328,31 +345,14 @@ bool kraken_piz_initialize (void)
     ASSERT (z_file->num_components <= 2, "--kraken requires a .kraken.genozip file with up to 2 components, but %s has %u components",
             z_name, z_file->num_components);
 
-    if (z_file->num_components == 2)
-        has_paired_qnames = true;
-
     Context *ctx = &z_file->contexts[KRAKEN_TAXID];
     ARRAY (int64_t, counts, ctx->counts);
 
-    // calculate the total number of sequences in the kraken file (and the FASTQ file(s) from which it was generated)
-    int64_t total_sequences_in_file=0; 
-    for (uint64_t i=0; i < counts_len; i++)
-        total_sequences_in_file += counts[i];
-
-    ASSERT0 (total_sequences_in_file, "unexpectedly, total_sequences_in_file=0");
-
-    // calculate the average length of a QNAME string in the file
-    int64_t total_qname_length = ctx->nodes.param; // sent ZIP->PIZ via SectionHeaderCounts.node_param
-    one_qname_length = (unsigned)(1 + total_qname_length / total_sequences_in_file); // average (rounded up) QNAME length in the file
-    
-    // get info of the user selected taxonomy ID 
+    // verify that the user selected taxonomy ID is in the kraken data
     if (exe_type == EXE_GENOCAT) {
-
         ASSINP0 (flag.kraken_taxid != TAXID_NONE, "--taxid must be provided if --kraken is used");
 
         WordIndex taxid_word_i = ctx_get_word_index_by_snip (ctx, str_int_s (flag.kraken_taxid).s);
-        
-        // abort PIZ of the kraken file is it does not contain any reads with kraken_taxid
         if (taxid_word_i == WORD_INDEX_NONE) {
             progress_finalize_component ("Skipped");
             WARN ("FYI: %s has no sequences with a Taxanomic ID of \"%d\"", z_name, flag.kraken_taxid);
@@ -360,18 +360,40 @@ bool kraken_piz_initialize (void)
         }
     }
 
+    // calculate the total number of sequences in the kraken file (and the FASTQ file(s) from which it was generated)
+    int64_t total_sequences_in_file=0; 
+    int64_t max_count = 0;
+    WordIndex max_count_word_index = WORD_INDEX_NONE;
+
+    for (uint64_t i=0; i < counts_len; i++) {
+        total_sequences_in_file += counts[i];
+        if (counts[i] > max_count) {
+            max_count = counts[i];
+            max_count_word_index = i;
+        }
+    }
+    int64_t num_non_dom_seqs = total_sequences_in_file - max_count;
+
+    dom_taxid = atoi (ctx_get_words_snip (ctx, max_count_word_index));
+
+    ASSERT0 (total_sequences_in_file, "unexpectedly, total_sequences_in_file=0");
+
+    // calculate the average length of a QNAME string in the file
+    int64_t total_qname_length = ctx->nodes.param; // sent ZIP->PIZ via SectionHeaderCounts.node_param
+    one_qname_length = (unsigned)(1 + total_qname_length / total_sequences_in_file); // average (rounded up) QNAME length in the file
+  
     // allocate
-    TEMP_FLAG (quiet, true); // we're allocating a huge amount of memory (~30GB for a 40x BAM) - temporarily suppress buf_alloc warning
-    buf_alloc (evb, &qname_nodes, 0, total_sequences_in_file, QnameNode, 0, "qname_nodes"); 
-    buf_alloc (evb, &qname_dict,  0, total_sequences_in_file, char[one_qname_length+2],  0, "qname_dict"); // approximate (+2), might grow if needed in kraken_piz_handover_data
+    TEMP_FLAG (quiet, true); // we're might be allocating a huge amount of memory - temporarily suppress buf_alloc warning
+    buf_alloc (evb, &qname_nodes, 0, num_non_dom_seqs, QnameNode, 0, "qname_nodes"); 
+    buf_alloc (evb, &qname_dict,  0, num_non_dom_seqs, char[one_qname_length+2],  0, "qname_dict"); // approximate (+2), might grow if needed in kraken_piz_handover_data
     RESTORE_FLAG (quiet);
 
-    qname_hashtab.len = hash_next_size_up (3 * total_sequences_in_file, true);
-
-    //printf ("total_sequences_in_file=%u total_sequences_in_file=%u qname_hashtab.len=%u one_qname_length=%u\n", (int)total_sequences_in_file, (int)sequences_in_list, (int)qname_hashtab.len, (int)one_qname_length);    
+    qname_hashtab.len = hash_next_size_up (3 * num_non_dom_seqs, true);
 
     buf_alloc (evb, &qname_hashtab, 0, qname_hashtab.len, uint32_t, 1, "qname_hashtab");
     buf_set (&qname_hashtab, 0xff); // empty
+
+//printf ("total_sequences_in_file=%u num_non_dom_seqs=%u max_count=%u qname_hashtab.size=%"PRIu64" one_qname_length=%u qname_nodes.size=%"PRIu64" qname_dict.size=%"PRIu64"\n", (int)total_sequences_in_file, (int)num_non_dom_seqs, (int)max_count, qname_hashtab.size, (int)one_qname_length, qname_nodes.size, qname_dict.size);    
 
     return true; // proceed with PIZ of kraken file
 }
@@ -438,7 +460,7 @@ void kraken_destroy (void)
     buf_destroy (&qname_nodes);
     buf_destroy (&qname_hashtab);
     kraken_filename = NULL;
-    taxid_negative = taxid_also_0 = has_paired_qnames = false;
+    taxid_negative = taxid_also_0 = false;
     one_qname_length = 0;
 }
 
@@ -455,6 +477,11 @@ void kraken_set_taxid (const char *optarg)
 
     str_get_int_range32 (optarg + taxid_negative, len - taxid_negative - 2 * taxid_also_0, 
                          0, 9999999, &flag.kraken_taxid); // NCBI Taxonomic ID is a 7 digit positive integer (and "0" means unclassified in kraken)
+}
+
+static inline TaxonomyId get_taxid (const QnameNode *l)
+{
+    return (l->taxid_hi << BITS_TAXID_LO) | l->taxid_lo;
 }
 
 static inline const QnameNode *kraken_search_up_and_down (const QnameNode *listent, uint32_t hash, 
@@ -477,27 +504,29 @@ static inline const QnameNode *kraken_search_up_and_down (const QnameNode *liste
 // 2 components, or reads with /1 /2
 static TaxonomyId kraken_get_taxid_with_pair (const QnameNode *l1, uint32_t hash, const char *qname, unsigned qname_len)
 {
-    if (exe_type == EXE_GENOCAT && l1->taxid == flag.kraken_taxid) 
-        return l1->taxid; // we found the taxid in l1, no need to check l2
+    TaxonomyId l1_taxid = get_taxid (l1);
+
+    if (exe_type == EXE_GENOCAT &&  l1_taxid == flag.kraken_taxid) 
+        return l1_taxid; // we found the taxid in l1, no need to check l2
 
     const QnameNode *l2 = kraken_search_up_and_down (l1, hash, qname, qname_len);
+    TaxonomyId l2_taxid = l2 ? get_taxid (l2) : dom_taxid; // if paired qnode is missing - it is the dominant tax id;
 
-    return !l2             ? l1->taxid  // we didn't find an additional one - so just use the first one
-          : l2->taxid >= 1 ? l2->taxid  // if t2 is classified (in genocat, possibly kraken_taxid), we return it
-          : l1->taxid >= 1 ? l1->taxid  // or, if t1 is classified (definitely not kraken_taxid), we return it
-          :                  0;         // both are "unclassified" - result is unclassified
+    return l2_taxid != TAXID_UNCLASSIFIED ? l2_taxid  // if t2 is classified (in genocat, possibly kraken_taxid), we return it
+         : l1_taxid != TAXID_UNCLASSIFIED ? l1_taxid  // or, if t1 is classified (definitely not kraken_taxid), we return it
+         :                                  TAXID_UNCLASSIFIED; // both are unclassified - result is unclassified
 }
 
-// genozip --kraken: returns the taxid of the read. in case of /1 /2 - returns the read which is classified.
-//                   if both are classified, returns r1.
-// genocat --kraken: returns the taxid
+// genozip --kraken: returns the taxid of the read. in case of paired - returns the read which is classified.
+//                   if both are classified, returns r2.
+// genocat --kraken: same, except that if both reads are classified, returns flag.kraken_taxid if one of the reads equals it
 static TaxonomyId kraken_get_taxid (const char *qname, unsigned qname_len)
 {
     uint32_t hash = hash_do (qname_hashtab.len, qname, qname_len);
 
     uint32_t list_index = *ENT (uint32_t, qname_hashtab, hash);
     if (list_index == QNAME_NODE_NONE) 
-        return TAXID_NONE;
+        return dom_taxid; // taxid not found at all - it is dom_taxid
 
     ASSERT (list_index < qname_nodes.len, "expecting list_index=%u < qname_nodes.len=%"PRIu64, list_index, qname_nodes.len);
 
@@ -506,15 +535,15 @@ static TaxonomyId kraken_get_taxid (const char *qname, unsigned qname_len)
     const char *snip = ENT (char, qname_dict, listent->char_index);
 
     if (listent->snip_len == qname_len && !memcmp (qname, snip, qname_len))
-        return has_paired_qnames ? kraken_get_taxid_with_pair (listent, hash, qname, qname_len) : listent->taxid;
+        return listent->is_paired ? kraken_get_taxid_with_pair (listent, hash, qname, qname_len) : get_taxid (listent);
 
     // we have a hash table contention - the hash file points to a different QNAME with the same hash. 
     // we look for all other entries with the same hash. these are adajent to listent as qname_nodes is sorted by hash
 
     const QnameNode *l = kraken_search_up_and_down (listent, hash, qname, qname_len);
-    if (!l) return TAXID_NONE;
+    if (!l) return dom_taxid; // taxid not found at all - it is dom_taxid
 
-    return has_paired_qnames ? kraken_get_taxid_with_pair (l, hash, qname, qname_len) : l->taxid;
+    return l->is_paired ? kraken_get_taxid_with_pair (l, hash, qname, qname_len) : get_taxid (l);
 }
 
 // Find whether QNAME is included in the taxid filter in O(1) (using the loaded kraken file)
@@ -529,10 +558,10 @@ bool kraken_is_included_loaded (VBlockP vb, const char *qname, unsigned qname_le
         return taxid_negative;
 
     TaxonomyId qname_taxid = kraken_get_taxid (qname, qname_len);
-    bool is_request_taxid = (qname_taxid == flag.kraken_taxid)
-                         || (taxid_also_0 && !qname_taxid);
+    bool is_requested_taxid = (qname_taxid == flag.kraken_taxid)
+                           || (taxid_also_0 && !qname_taxid);
 
-    bool res = (taxid_negative == !is_request_taxid);
+    bool res = (taxid_negative == !is_requested_taxid);
 
     if (flag.show_kraken) {
         if (res && flag.show_kraken != KRK_EXCLUDED)
