@@ -233,7 +233,7 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
         .nitems_lo           = 4,
         .keep_empty_item_sep = true, // avoid double-deleting the space - only chain_piz_special_BACKSPACE should delete it, not container_reconstruct_do
         .filter_items        = true,
-        .items               = { { .dict_id = (DictId)dict_id_fields[CHAIN_SIZE],  .seperator = {' '} },
+        .items               = { { .dict_id = (DictId)dict_id_fields[CHAIN_SIZE], .seperator = {' '} },
                                  { .dict_id = (DictId)dict_id_fields[CHAIN_GAPS], .seperator = {' '} }, // src_gap
                                  { .dict_id = (DictId)dict_id_fields[CHAIN_GAPS]                     }, // dst_gap
                                  { .dict_id = (DictId)dict_id_fields[CHAIN_EOL] }                     }

@@ -209,7 +209,7 @@ extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vb_ctx, bool is_lco
 extern Context *ctx_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType map_did_i, DidIType *num_contexts, DictId dict_id);
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id))
+#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (dict_id))
 static inline Context *ctx_get_ctx_do (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id)
 {
     DidIType did_i = dict_id_to_did_i_map[dict_id.map_key];
@@ -220,7 +220,7 @@ static inline Context *ctx_get_ctx_do (Context *contexts, DataType dt, DidIType 
 }
 
 extern DidIType ctx_get_existing_did_i_if_not_found_by_inline (VBlockP vb, DictId dict_id);
-#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (vb, (DictId)dict_id, vb->contexts, vb->dict_id_to_did_i_map)
+#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (vb, dict_id, vb->contexts, vb->dict_id_to_did_i_map)
 static inline DidIType ctx_get_existing_did_i_do (VBlockP vb, DictId dict_id, Context *contexts, DidIType *dict_id_to_did_i_map)
 {
     DidIType did_i = dict_id_to_did_i_map[dict_id.map_key];
@@ -228,7 +228,7 @@ static inline DidIType ctx_get_existing_did_i_do (VBlockP vb, DictId dict_id, Co
     return ctx_get_existing_did_i_if_not_found_by_inline (vb, dict_id);
 }    
 extern ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id); // returns NULL if context doesn't exist
-#define ctx_get_existing_ctx(vb,dict_id) ctx_get_existing_ctx_do ((VBlockP)vb, (DictId)dict_id)
+#define ctx_get_existing_ctx(vb,dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (dict_id))
 
 extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
 extern void ctx_sort_dictionaries_vb_1(VBlockP vb);

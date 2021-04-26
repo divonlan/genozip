@@ -667,7 +667,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
             char *alt        = ref + ref_len + 1; 
             unsigned alt_len = vb->contexts[VCF_REFALT].last_txt_len - ref_len - 1;
             
-            liftover_seg_LIFTOVER (vb_, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
+            liftover_seg_LIFTOVER (vb_, dict_id_INFO_LIFTOVER, dict_id_INFO_LIFTBACK, 
                                    VCF_oCHROM, VCF_SPECIAL_OREF, ref, ref_len, alt, alt_len, 
                                    (char *)*this_value, *this_value_len, (ZipDataLineP)DATA_LINE (vb->line_i));
 
@@ -688,7 +688,7 @@ static bool vcf_seg_special_info_subfields (VBlockP vb_, DictId dict_id,
             char *oalt        = oref + oref_len + 1; 
             unsigned oalt_len = vb->contexts[VCF_REFALT].last_txt_len - oref_len - 1;
             
-            liftover_seg_LIFTBACK (vb_, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
+            liftover_seg_LIFTBACK (vb_, dict_id_INFO_LIFTOVER, dict_id_INFO_LIFTBACK, 
                                    VCF_oCHROM, VCF_POS, VCF_SPECIAL_OREF, oref, oref_len, oalt, oalt_len, 
                                    vcf_seg_ref_alt, (char*)*this_value, *this_value_len, (ZipDataLineP)DATA_LINE (vb->line_i));
 
@@ -1293,7 +1293,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         dl->pos[1] = seg_pos_field ((VBlockP)vb, VCF_oPOS, VCF_oPOS, false, true, field_start, field_len, 0, field_len);
 
     GET_NEXT_ITEM ("ID");
-    seg_id_field (vb_, (DictId)dict_id_fields[VCF_ID], field_start, field_len, true);
+    seg_id_field (vb_, dict_id_fields[VCF_ID], field_start, field_len, true);
 
     // REF + ALT 
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
@@ -1318,8 +1318,8 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     
     // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to luft coordinates
     if (chain_is_loaded)
-        liftover_seg_add_INFO_LIFT_fields (vb_, VCF_oCHROM, VCF_SPECIAL_OREF, (DictId)dict_id_INFO_LIFTOVER, (DictId)dict_id_INFO_LIFTBACK, 
-                                           (DictId)dict_id_INFO_LIFTREJT, (ZipDataLineP)dl);
+        liftover_seg_add_INFO_LIFT_fields (vb_, VCF_oCHROM, VCF_SPECIAL_OREF, dict_id_INFO_LIFTOVER, dict_id_INFO_LIFTBACK, 
+                                           dict_id_INFO_LIFTREJT, (ZipDataLineP)dl);
 
     // INFO
     if (vcf_num_samples)

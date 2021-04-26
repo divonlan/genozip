@@ -345,7 +345,7 @@ void liftover_seg_LIFTREJT (VBlockP vb, DictId dict_id, DidIType ochrom_did_i, c
 
             unsigned status_len = strlen (value);
             seg_by_did_i (vb, value, status_len, ochrom_did_i + OSTATUS_OFFSET, status_len);
-            seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJT }), 2, (DictId)dict_id_INFO_LIFTREJT, 0); // 0 bc no comma and name is accounted for by INFO
+            seg_by_dict_id (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFTREJT }), 2, dict_id_INFO_LIFTREJT, 0); // 0 bc no comma and name is accounted for by INFO
 
             SAFE_RESTORE;
 

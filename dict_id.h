@@ -98,6 +98,6 @@ extern const char *dict_id_display_type (DataType dt, DictId dict_id);
 
 typedef struct { char s[20]; } DisplayPrintId;
 extern DisplayPrintId dis_dict_id_ex (DictId dict_id, bool with_type_if_vcf);
-#define dis_dict_id(dict_id) dis_dict_id_ex ((DictId)(dict_id), false)
-#define dis_dict_id_name(dict_id) dis_dict_id_ex ((DictId)(dict_id), true) // display with FORMAT/ or INFO/ if VCF/BCF
+#define dis_dict_id(dict_id) dis_dict_id_ex ((dict_id), false)
+#define dis_dict_id_name(dict_id) dis_dict_id_ex ((dict_id), true) // display with FORMAT/ or INFO/ if VCF/BCF
 #endif

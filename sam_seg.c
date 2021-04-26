@@ -135,7 +135,7 @@ bool sam_zip_dts_flag (void)
 void sam_zip_initialize (void)
 {
     taxid_redirection_snip_len = sizeof (taxid_redirection_snip);
-    seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_fields[SAM_TAXID], false, 0, 
+    seg_prepare_snip_other (SNIP_REDIRECTION, dict_id_fields[SAM_TAXID], false, 0, 
                             taxid_redirection_snip, &taxid_redirection_snip_len);
 }
 

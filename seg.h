@@ -26,7 +26,7 @@ extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, 
 
 extern WordIndex seg_by_ctx_do (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
 #define seg_by_ctx(vb,snip,snip_len,ctx,add_bytes)               seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), (ctx), (add_bytes), NULL)
-#define seg_by_dict_id(vb,snip,snip_len,dict_id,add_bytes)       seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), ctx_get_ctx ((vb), (DictId)(dict_id)), (add_bytes), NULL)
+#define seg_by_dict_id(vb,snip,snip_len,dict_id,add_bytes)       seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), ctx_get_ctx ((vb), (dict_id)), (add_bytes), NULL)
 #define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), &vb->contexts[did_i], (add_bytes), (is_new))
 #define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), &vb->contexts[did_i], (add_bytes), NULL)
 
@@ -134,8 +134,8 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 
 // create extendent field contexts in the correct order of the fields
 #define EXTENDED_FIELD_CTX(extended_field, dict_id_num) do { \
-    Context *ctx = ctx_get_ctx (vb, (DictId)dict_id_num); \
-    ASSERT (ctx->did_i == extended_field, "EXTENDED_FIELD_CTX: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
+    Context *ctx = ctx_get_ctx ((vb), (dict_id_num)); \
+    ASSERT (ctx->did_i == (extended_field), "EXTENDED_FIELD_CTX: expecting ctx->did_i=%u to be %u", ctx->did_i, (extended_field)); \
     dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
 } while(0)
 

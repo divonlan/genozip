@@ -73,7 +73,7 @@ typedef union DictId {
     uint64_t num;            // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
     uint8_t id[DICT_ID_LEN]; // \0-padded IDs 
     uint16_t map_key;        // we use the first two bytes as they key into vb/z_file->dict_id_mapper
-} DictId;
+} DictId __attribute__ ((__transparent_union__));
 #pragma pack()
 
 typedef uint16_t DidIType;   // index of a context in vb->contexts or z_file->contexts / a counter of contexts

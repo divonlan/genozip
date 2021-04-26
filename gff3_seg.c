@@ -119,7 +119,7 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
                 seg_by_dict_id (vb, snip, item_len, ctxs[item_i]->dict_id, item_len);
             else {
                 is_last_entry = (snip_len - item_len == 0);
-                seg_id_field ((VBlockP)vb, (DictId)dict_id_ENSTid, snip, item_len, false);
+                seg_id_field ((VBlockP)vb, dict_id_ENSTid, snip, item_len, false);
             }
     
             snip     += item_len + 1 - is_last_entry; // 1 for either the , or the ' ' (except in the last item of the last entry)
