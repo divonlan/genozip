@@ -5,3 +5,7 @@
 .. option:: -W, --SHOW-STATS   Show more detailed statistics.
 
                      |
+
+.. option:: --show-filename   Show the file name for each file.
+
+                     |

@@ -718,6 +718,9 @@ int main (int argc, char **argv)
 
         // get file name
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
+
+        if (flag.show_filename) iprintf ("%s:\n", next_input_file ? next_input_file : "(standard input)");
+        
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
         ASSINP0 (next_input_file || command != PIZ, "filename(s) required (redirecting from stdin is not possible)");

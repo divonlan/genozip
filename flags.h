@@ -55,7 +55,7 @@ typedef struct {
     int bytes;
 
     // options affecting the software interaction (but not the file contents)
-    int force, quiet, 
+    int force, quiet, show_filename,
         to_stdout,   // redirect txt output upon decompression to stdout 
         replace, 
         do_register,
