@@ -178,11 +178,11 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     const unsigned FILENAME_WIDTH = 40;
 
     const char *head_format = "\n%-7.7s %11s %10s %10s %6s %s  %*s %s\n";
-    const char *foot_format = "\nTotal:              %10s %10s %5.*fX\n";
+    const char *foot_format = "\nTotal: %3u files    %10s %10s %5.*fX\n";
     const char *item_format = "%-7.7s %11s %10s %10s %5.*fX  %s  %s%s%*.*s %s\n";
 
     const char *head_format_bytes = "\n%-7.7s %11s %15s %15s %6s  %*s\n";
-    const char *foot_format_bytes = "\nTotal:              %15s %15s %5.*fX\n";
+    const char *foot_format_bytes = "\nTotal: %3u files    %15s %15s %5.*fX\n";
     const char *item_format_bytes = "%-7.7s %11s %15s %15s %5.*fX  %s%s%*.*s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
@@ -194,14 +194,14 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             double ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
             if (flag.bytes) 
-                bufprintf (evb, &str_buf, foot_format_bytes, str_int_s (total_compressed_len).s, 
+                bufprintf (evb, &str_buf, foot_format_bytes, files_listed, str_int_s (total_compressed_len).s, 
                            str_int_s (total_uncompressed_len).s, ratio < 100, ratio);
             else 
-                bufprintf (evb, &str_buf, foot_format, str_size(total_compressed_len).s, 
+                bufprintf (evb, &str_buf, foot_format, files_listed, str_size(total_compressed_len).s, 
                            str_size(total_uncompressed_len).s, ratio < 100, ratio);
         }
         
-        ASSERTW (!files_ignored, "Ignored %u file%s that %s not have a " GENOZIP_EXT " extension", 
+        ASSERTW (!files_ignored, "Ignored %u file%s that %s not have a " GENOZIP_EXT " extension, or are invalid.", 
                  files_ignored, files_ignored==1 ? "" : "s", files_ignored==1 ? "does" : "do");
         
         goto finish;
@@ -720,7 +720,7 @@ int main (int argc, char **argv)
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
 
         if (flag.show_filename) iprintf ("%s:\n", next_input_file ? next_input_file : "(standard input)");
-        
+
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
         ASSINP0 (next_input_file || command != PIZ, "filename(s) required (redirecting from stdin is not possible)");
