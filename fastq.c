@@ -24,6 +24,7 @@
 #include "coverage.h"
 #include "writer.h"
 #include "kraken.h"
+#include "iupac.h"
 
 #define dict_id_is_fastq_desc_sf dict_id_is_type_1
 #define dict_id_fastq_desc_sf dict_id_type_1
@@ -514,10 +515,15 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep)
     if (flag.count && sections_has_dict_id (st) &&
-        (dict_id.num != dict_id_fields[FASTQ_TOPLEVEL] && 
-         (dict_id.num != dict_id_fields[FASTQ_TAXID] || flag.kraken_taxid == TAXID_NONE) && 
-         (dict_id.num != dict_id_fields[FASTQ_DESC]  || (!kraken_is_loaded && !flag.grep)) && 
-         (!dict_id_is_fastq_desc_sf(dict_id)         || (!kraken_is_loaded && !flag.grep)))) 
+         (dict_id.num != dict_id_fields[FASTQ_TOPLEVEL] && 
+         (dict_id.num != dict_id_fields[FASTQ_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
+         (dict_id.num != dict_id_fields[FASTQ_DESC]     || (!kraken_is_loaded && !flag.grep)) && 
+         (dict_id.num != dict_id_fields[FASTQ_SQBITMAP] || !flag.iupac) && 
+         (dict_id.num != dict_id_fields[FASTQ_NONREF]   || !flag.iupac) && 
+         (dict_id.num != dict_id_fields[FASTQ_NONREF_X] || !flag.iupac) && 
+         (dict_id.num != dict_id_fields[FASTQ_GPOS]     || !flag.iupac) && 
+         (dict_id.num != dict_id_fields[FASTQ_STRAND]   || !flag.iupac) && 
+         (!dict_id_is_fastq_desc_sf(dict_id)            || (!kraken_is_loaded && !flag.grep)))) 
         return true;
 
     return false;
@@ -637,7 +643,7 @@ void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_le
 CONTAINER_CALLBACK (fastq_piz_container_cb)
 {
     // --taxid: filter out by Kraken taxid 
-    if (flag.kraken_taxid && dict_id.num == dict_id_fields[FASTQ_TOPLEVEL]) {
+    if (flag.kraken_taxid && is_top_level) {
         
         if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, false))
             vb->drop_curr_line = "taxid";
@@ -650,5 +656,10 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
                 vb->drop_curr_line = "taxid";
         }
     }
+
+    // --iupac
+    if (flag.iupac && is_top_level && !vb->drop_curr_line &&
+        !iupac_is_included (last_txt (vb, FASTQ_SQBITMAP), vb->last_txt_len (FASTQ_SQBITMAP)))
+        vb->drop_curr_line = "iupac";
 }
 

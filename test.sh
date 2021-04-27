@@ -469,6 +469,23 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
     cleanup
 }
 
+batch_iupac() 
+{
+    batch_print_header
+
+    # SAM
+    test_count_genocat_lines test/basic.sam "-H --iupac=AGCTN" 7
+    test_count_genocat_lines test/basic.sam "-H --iupac=^AGCTN" 1
+
+    # BAM
+    test_count_genocat_lines test/basic.bam "-H --sam --iupac AGCTN" 7 
+    test_count_genocat_lines test/basic.bam "-H --sam --iupac ^AGCTN" 1
+
+    # FASTQ
+    test_count_genocat_lines test/basic.fq "-H --IUPAC=AGCTN" 20
+    test_count_genocat_lines test/basic.fq "-H --IUPAC=^AGCTN" 4
+}
+
 # Test SAM/BAM translations
 batch_sam_translations()
 {
@@ -832,16 +849,17 @@ if (( $1 <= 11 )) ; then  batch_grep_count_lines       ; fi
 if (( $1 <= 12 )) ; then  batch_backward_compatability ; fi
 if (( $1 <= 13 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
 if (( $1 <= 14 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 15 )) ; then  batch_real_world_subsets     ; fi ; # natural VB size
-if (( $1 <= 16 )) ; then  batch_real_world_subsets -B1 ; fi ; # many VBs
-if (( $1 <= 17 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 18 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 19 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 20 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 21 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 22 )) ; then  batch_reference              ; fi
-if (( $1 <= 23 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 24 )) ; then  batch_genols                 ; fi
+if (( $1 <= 15 )) ; then  batch_iupac                  ; fi 
+if (( $1 <= 16 )) ; then  batch_real_world_subsets     ; fi ; # natural VB size
+if (( $1 <= 17 )) ; then  batch_real_world_subsets -B1 ; fi ; # many VBs
+if (( $1 <= 18 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 19 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 20 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 21 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 22 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 23 )) ; then  batch_reference              ; fi
+if (( $1 <= 24 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 25 )) ; then  batch_genols                 ; fi
 
 printf "\nALL GOOD!\n"
 

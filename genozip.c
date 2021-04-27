@@ -37,6 +37,8 @@
 #include "threads.h"
 #include "dispatcher.h"
 #include "linesorter.h"
+#include "iupac.h"
+
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
 ExeType exe_type;
@@ -209,9 +211,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     if (first_file) {
         if (flag.bytes) 
-            bufprintf (evb, &str_buf, head_format_bytes, "Type", "Records", "Compressed", "Original", "Factor", -(int)FILENAME_WIDTH, "Name");
+            bufprintf (evb, &str_buf, head_format_bytes, "Type", "Lines", "Compressed", "Original", "Factor", -(int)FILENAME_WIDTH, "Name");
         else
-            bufprintf (evb, &str_buf, head_format, "Type", "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
+            bufprintf (evb, &str_buf, head_format, "Type", "Lines", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
         
         first_file = false;
     }

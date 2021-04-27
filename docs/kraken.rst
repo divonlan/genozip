@@ -131,6 +131,6 @@ To handle this, we prepare a concatenated kraken.genozip file, from the output o
 
 **Assumptions**
 
-| ``genocat --taxid`` makes the assumption that all lines in the viewed file must have a corresponding line in the kraken data.
+| ``genocat --taxid`` makes the assumption that all lines in the viewed file must have a corresponding line in the kraken data. It is ok if the kraken data contains additional lines not in the viewed file.
 |
 

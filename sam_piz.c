@@ -18,6 +18,7 @@
 #include "file.h"
 #include "container.h"
 #include "coverage.h"
+#include "iupac.h"
 
 // returns true if section is to be skipped reading / uncompressing
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
@@ -28,11 +29,12 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != dict_id_fields[SAM_RNAME] && 
               dict_id.num != dict_id_fields[SAM_FLAG] && 
               dict_id.num != dict_id_fields[SAM_CIGAR] && 
-              (dict_id.num != dict_id_fields[SAM_MAPQ]  || !flag.sam_mapq_filter) && 
-              (dict_id.num != dict_id_fields[SAM_TAXID] || flag.kraken_taxid == TAXID_NONE) && 
-              (dict_id.num != dict_id_fields[SAM_QNAME] || !kraken_is_loaded) && 
-              (!dict_id_is_sam_qname_sf(dict_id)        || !kraken_is_loaded) && 
-              (dict_id.num != dict_id_fields[SAM_POS]   || !flag.regions))) return true;
+              (dict_id.num != dict_id_fields[SAM_MAPQ]     || !flag.sam_mapq_filter) && 
+              (dict_id.num != dict_id_fields[SAM_SQBITMAP] || !flag.iupac) && 
+              (dict_id.num != dict_id_fields[SAM_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
+              (dict_id.num != dict_id_fields[SAM_QNAME]    || !kraken_is_loaded) && 
+              (!dict_id_is_sam_qname_sf(dict_id)           || !kraken_is_loaded) && 
+              (dict_id.num != dict_id_fields[SAM_POS]      || !flag.regions))) return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--regions, --FLAG, --MAPQ, --kraken, --taxid)
     if (flag.count && sections_has_dict_id (st) && 
@@ -40,12 +42,17 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != dict_id_fields[SAM_TOP2BAM]  && 
               dict_id.num != dict_id_fields[SAM_TOP2FQ]   && 
               dict_id.num != dict_id_fields[SAM_RNAME]    && // easier to always have RNAME
-             (dict_id.num != dict_id_fields[SAM_FLAG]  || !flag.sam_flag_filter) &&
-             (dict_id.num != dict_id_fields[SAM_MAPQ]  || !flag.sam_mapq_filter) && 
-             (dict_id.num != dict_id_fields[SAM_TAXID] || flag.kraken_taxid == TAXID_NONE) && 
-             (dict_id.num != dict_id_fields[SAM_QNAME] || !kraken_is_loaded) && 
-             (!dict_id_is_sam_qname_sf(dict_id)        || !kraken_is_loaded) && 
-             (dict_id.num != dict_id_fields[SAM_POS]   || !flag.regions))) return true;
+             (dict_id.num != dict_id_fields[SAM_FLAG]     || !flag.sam_flag_filter) &&
+             (dict_id.num != dict_id_fields[SAM_MAPQ]     || !flag.sam_mapq_filter) && 
+             (dict_id.num != dict_id_fields[SAM_SQBITMAP] || !flag.iupac) && 
+             (dict_id.num != dict_id_fields[SAM_NONREF]   || !flag.iupac) && 
+             (dict_id.num != dict_id_fields[SAM_NONREF_X] || !flag.iupac) && 
+             (dict_id.num != dict_id_fields[SAM_GPOS]     || !flag.iupac) && 
+             (dict_id.num != dict_id_fields[SAM_STRAND]   || !flag.iupac) && 
+             (dict_id.num != dict_id_fields[SAM_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
+             (dict_id.num != dict_id_fields[SAM_QNAME]    || !kraken_is_loaded) && 
+             (!dict_id_is_sam_qname_sf(dict_id)           || !kraken_is_loaded) && 
+             (dict_id.num != dict_id_fields[SAM_POS]      || !flag.regions))) return true;
 
     return false;
 }
@@ -557,7 +564,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
         vb->drop_curr_line = "not_primary";
 
     // --taxid: filter out by Kraken taxid (SAM, BAM, FASTQ)
-    if (flag.kraken_taxid 
+    if (flag.kraken_taxid && !vb->drop_curr_line 
      && (dict_id.num == dict_id_fields[SAM_TOPLEVEL] || dict_id.num == dict_id_fields[SAM_TOP2BAM] || dict_id.num == dict_id_fields[SAM_TOP2FQ])
      && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, last_txt(vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
          || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, !flag.collect_coverage && !
@@ -565,7 +572,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
         vb->drop_curr_line = "taxid";
 
     // --FLAG
-    if (flag.sam_flag_filter && is_top_level) {
+    if (flag.sam_flag_filter && is_top_level && !vb->drop_curr_line ) {
 
         uint16_t this_sam_flag = (uint16_t)vb->last_int (SAM_FLAG);
     
@@ -578,7 +585,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
     }
 
     // --MAPQ
-    if (flag.sam_mapq_filter && is_top_level) {
+    if (flag.sam_mapq_filter && is_top_level && !vb->drop_curr_line) {
         
         if (dict_id.num == dict_id_fields[SAM_TOP2FQ])
             reconstruct_from_ctx (vb, SAM_MAPQ, 0, false); // when translating to FASTQ, MAPQ is normally not reconstructed
@@ -590,6 +597,11 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             vb->drop_curr_line = "MAPQ";
     }
 
+    // --iupac
+    if (flag.iupac && is_top_level && !vb->drop_curr_line &&
+        !iupac_is_included (last_txt (vb, SAM_SQBITMAP), vb->last_txt_len (SAM_SQBITMAP)))
+        vb->drop_curr_line = "iupac";
+    
     // count coverage, if needed    
     if ((flag.show_sex || flag.show_coverage) && is_top_level && !vb->drop_curr_line)
         sam_piz_update_coverage (vb, vb->last_int(SAM_FLAG), ((VBlockSAMP)vb)->soft_clip);

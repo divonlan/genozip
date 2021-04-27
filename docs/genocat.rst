@@ -111,11 +111,24 @@ One or more file names must be given.
 
 .. option:: --head [num_lines].  Show a certain number of lines from the start of the file.
 
-|
+          |
 
 .. option:: --tail [num_lines].  Show a certain number of lines from the end of the file.
 
-|
+          |
+
+.. option:: --iupac [^]value.  (SAM BAM FASTQ) Filter lines based on the IUPAC characters of the sequence data. Examples:
+   
+| *Examples*: 
+
+========================== ===============================================================================
+``genocat --iupac ACGTN``  displays only lines in which all characters of the SEQ are one of A,C,G,T,N
+``genocat --iupac ^ACGTN`` displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
+========================== ===============================================================================
+
+| Note: In SAM/BAM, all lines missing a sequence (i.e. SEQ=*) are included in positive iupac filters (the first example above) and excluded in negative ones.
+| Note: The full list of IUPAC chacacters is here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
+
 
 .. option:: -K, --kraken filename. Load a .kraken.genozip file for use with --taxid. 
 

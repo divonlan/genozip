@@ -692,7 +692,7 @@ static inline uint32_t ref_range_id_by_hash (VBlockP vb, uint32_t range_i)
     return value; 
 }
 
-static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, WordIndex chrom, const char *field /* used for ASSSEG */, RefLock *lock)  
+static Range *ref_seg_get_locked_range_denovo (VBlockP vb, WordIndex chrom, PosType pos, const char *field /* used for ASSSEG */, RefLock *lock)  
 {
     uint32_t range_i = pos2range_i (pos); // range within contig 
 

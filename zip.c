@@ -108,7 +108,7 @@ static void zip_dynamically_set_max_memory (void)
 {
     static uint64_t test_vb_sizes[] = { 70000, 250000, 1000000 }; // must be at least BGZF_MAX_BLOCK_SIZE
 
-    if (flag.out_dt == DT_GENERIC || (txt_file->disk_size && txt_file->disk_size <= VBLOCK_MEMORY_GENERIC)) {
+    if (txt_file->data_type == DT_GENERIC || (txt_file->disk_size && txt_file->disk_size <= VBLOCK_MEMORY_GENERIC)) {
         flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
         return;
     }
@@ -679,7 +679,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
     else {
         // error if stdin is empty - can happen only when redirecting eg "cat empty-file|./genozip -" (we test for empty regular files in main_genozip)
         ASSINP0 (vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, 
-                    "Error: Cannot compress stdin data because its size is 0");
+                 "Error: Cannot compress stdin data because its size is 0");
     }
 }
 
