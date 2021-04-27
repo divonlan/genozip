@@ -60,7 +60,7 @@ typedef struct {
     PosType first_bit, len;
 } RegionToSet;
 
-static const SecLiEnt *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
+static Section sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
 static char *ref_fasta_name = NULL;
 
@@ -469,7 +469,7 @@ finish:
 
 static void ref_read_one_range (VBlockP vb)
 {
-    if (!sections_next_sec2 (&sl_ent, SEC_REFERENCE, SEC_REF_IS_SET, true, false) || // no more reference sections
+    if (!sections_next_sec2 (&sl_ent, SEC_REFERENCE, SEC_REF_IS_SET) || // no more reference sections
         ((sl_ent+1)->offset - sl_ent->offset) == sizeof (SectionHeaderReference)) // final, header-only section sometimes exists (see ref_compress_ref)
         return; // we're done
     
@@ -831,14 +831,14 @@ Range *ref_seg_get_locked_range (VBlockP vb, WordIndex chrom, PosType pos, uint3
 // ----------------------------------------------
 
 // ZIP main thread
-static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, SecLiEnt **sl)
+static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, Section *sl)
 {
     // get section list entry from ref_file_section_list - which will be used by zfile_read_section to seek to the correct offset
-    while (*sl < AFTERENT (SecLiEnt, ref_file_section_list) && 
+    while (*sl < AFTERENT (SectionEnt, ref_file_section_list) && 
            !((*sl)->vblock_i == ra->vblock_i && (*sl)->st == SEC_REFERENCE)) 
         (*sl)++;
 
-    ASSERT (*sl < AFTERENT (SecLiEnt, ref_file_section_list), "cannot find FASTA_NONREF of vb_i=%u in section list of reference file", ra->vblock_i);
+    ASSERT (*sl < AFTERENT (SectionEnt, ref_file_section_list), "cannot find FASTA_NONREF of vb_i=%u in section list of reference file", ra->vblock_i);
 
     static Buffer ref_seq_section = EMPTY_BUFFER;
 
@@ -893,7 +893,7 @@ static void ref_copy_compressed_sections_from_reference_file (void)
     // and, since this is ZIP with EXT_STORE, also exactly one range per contig. We loop one RA at a time and:
     // 1. If 95% of the ref file RA is set in the zfile contig range - we copy the compressed reference section directly from the ref FASTA
     // 2. If we copied from the FASTA, we mark those region covered by the RA as "is_set=0", so that we don't compress it later
-    SecLiEnt *sl = FIRSTENT (SecLiEnt, ref_file_section_list);
+    Section sl = FIRSTENT (SectionEnt, ref_file_section_list);
     ARRAY (RAEntry, fasta_sec, ref_external_ra);
 
     for (uint32_t i=0; i < ref_external_ra.len; i++) {
@@ -1334,7 +1334,7 @@ static void ref_initialize_loaded_ranges (RangesType type)
     
     if (flag.reading_reference) {
         buf_copy (evb, &ref_external_ra, &z_file->ra_buf, RAEntry, 0, 0, "ref_external_ra");
-        buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, SecLiEnt, 0, 0, "ref_file_section_list");
+        buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, SectionEnt, 0, 0, "ref_file_section_list");
     }
 
     // notes on ranges.len:

@@ -286,7 +286,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 
     vb->pair_vb_i = pair_vb_i;
 
-    const SecLiEnt *sl = sections_vb_first (vb->pair_vb_i, true);
+    Section sl = sections_vb_first (vb->pair_vb_i, true);
     ASSERT (!must_have || sl, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
     if (!sl) return false;
 
@@ -321,7 +321,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 }
 
 // main thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
-bool fastq_piz_read_one_vb (VBlockP vb_, ConstSecLiEntP sl)
+bool fastq_piz_read_one_vb (VBlockP vb_, Section sl)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint32_t pair_vb_i=0;
@@ -504,16 +504,16 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (dict_id.num == dict_id_fields[FASTQ_DESC]     || 
          dict_id.num == dict_id_fields[FASTQ_QUAL]     || 
          dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] || 
-         dict_id.num == dict_id_fields[FASTQ_STRAND]   ||
-         dict_id.num == dict_id_fields[FASTQ_NONREF]   || 
-         dict_id.num == dict_id_fields[FASTQ_NONREF_X])) 
+         (dict_id.num == dict_id_fields[FASTQ_STRAND]   && !flag.iupac)  ||
+         (dict_id.num == dict_id_fields[FASTQ_NONREF]   && !flag.iupac)   || 
+         (dict_id.num == dict_id_fields[FASTQ_NONREF_X] && !flag.iupac))) 
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
     if (flag.kraken_taxid==TAXID_NONE && dict_id.num == dict_id_fields[FASTQ_TAXID])
         return true;
 
-    // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep)
+    // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep, --iupac)
     if (flag.count && sections_has_dict_id (st) &&
          (dict_id.num != dict_id_fields[FASTQ_TOPLEVEL] && 
          (dict_id.num != dict_id_fields[FASTQ_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
@@ -541,13 +541,14 @@ bool fastq_piz_is_paired (void)
     if (z_file->genozip_version >= 10) return false;
 
     // dts_paired is not set, and this is v8 for v9. We proceed to inspect GPOS.local of the 2nd component to see if it is paired
-    ConstSecLiEntP sl = NULL;
-    sections_next_sec (&sl, SEC_TXT_HEADER, false, false); // first component txt header
-    sections_next_sec (&sl, SEC_TXT_HEADER, false, false); // second component txt header
-    sections_next_sec (&sl, SEC_VB_HEADER,  false, false); // first VB of second component txt header
+    Section sl = NULL;
+    sections_next_sec (&sl, SEC_TXT_HEADER); // first component txt header
+    sections_next_sec (&sl, SEC_TXT_HEADER); // second component txt header
+    sections_next_sec (&sl, SEC_VB_HEADER);  // first VB of second component txt header
 
     // scan all B250 and Local looking for evidence of pairing
-    while (sections_next_sec2 (&sl, SEC_B250, SEC_LOCAL, true, false)) {            
+//    while (sections_next_sec2 (&sl, SEC_B250, SEC_LOCAL, true)) {            
+    while ((++sl)->st == SEC_B250 || sl->st == SEC_LOCAL) {            
         bool is_paired = zfile_read_section_header (evb, sl->offset, sl->vblock_i, sl->st)->flags.ctx.paired;
         buf_free (&evb->compressed); // zfile_read_section_header used this for the header
 

@@ -203,7 +203,7 @@ void txtheader_zip_prepopulate_contig_ctxs (void)
 //----------
 
 // PIZ: reads the txt header from the genozip file and outputs it to the reconstructed txt file
-void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *sl)
+void txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
 {
     bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
 

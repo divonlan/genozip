@@ -283,11 +283,12 @@ Buffer *dict_id_create_aliases_buf (void)
 // PIZ main thread: read all dict_id aliaeses, if there are any
 void dict_id_read_aliases (void) 
 { 
-    if (!sections_next_sec (NULL, SEC_DICT_ID_ALIASES, false, true)) return; // no aliases section
+    Section sl = sections_last_sec (SEC_DICT_ID_ALIASES, true);
+    if (!sl) return; // no aliases section
 
     buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
 
-    zfile_get_global_section (SectionHeader, SEC_DICT_ID_ALIASES, NULL, &dict_id_aliases_buf, "dict_id_aliases_buf");
+    zfile_get_global_section (SectionHeader, SEC_DICT_ID_ALIASES, sl, &dict_id_aliases_buf, "dict_id_aliases_buf");
 
     dict_id_aliases = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     dict_id_num_aliases = dict_id_aliases_buf.len / sizeof (DictIdAlias);

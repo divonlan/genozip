@@ -259,9 +259,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     // if --list, OR if the user did genols on one file (not a directory), show bound components, if there are any
     if (flag.list || (!flag.multiple_files && !recursive && z_file->num_components >= 2)) {
         buf_add_string (evb, &str_buf, "Components:\n");
-        const SecLiEnt *sl_ent = NULL;
+        Section sl_ent = NULL;
         uint64_t num_lines_count=0;
-        while (sections_next_sec (&sl_ent, SEC_TXT_HEADER, false, false)) {
+        while (sections_next_sec (&sl_ent, SEC_TXT_HEADER)) {
             zfile_read_section_header (evb, sl_ent->offset, sl_ent->vblock_i, SEC_TXT_HEADER);
 
             SectionHeaderTxtHeader *header = FIRSTENT (SectionHeaderTxtHeader, evb->compressed);

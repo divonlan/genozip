@@ -45,8 +45,7 @@ typedef const struct Context *ConstContextP;
 typedef struct CtxNode *CtxNodeP;
 typedef const struct CtxNode *ConstMtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
-typedef struct SectionListEntry *SecLiEntP;
-typedef const struct SectionListEntry *ConstSecLiEntP;
+typedef const struct SectionEnt *Section;
 typedef struct Range *RangeP;
 typedef struct BitArray *BitArrayP;
 typedef const struct BitArray *ConstBitArrayP;
@@ -54,7 +53,6 @@ typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
 typedef union LastValueType *LastValueTypeP;
 typedef struct Mutex *MutexP;
-typedef struct Semaphore *SemaphoreP;
 
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);

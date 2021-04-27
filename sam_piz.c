@@ -29,12 +29,16 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != dict_id_fields[SAM_RNAME] && 
               dict_id.num != dict_id_fields[SAM_FLAG] && 
               dict_id.num != dict_id_fields[SAM_CIGAR] && 
-              (dict_id.num != dict_id_fields[SAM_MAPQ]     || !flag.sam_mapq_filter) && 
-              (dict_id.num != dict_id_fields[SAM_SQBITMAP] || !flag.iupac) && 
-              (dict_id.num != dict_id_fields[SAM_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
-              (dict_id.num != dict_id_fields[SAM_QNAME]    || !kraken_is_loaded) && 
-              (!dict_id_is_sam_qname_sf(dict_id)           || !kraken_is_loaded) && 
-              (dict_id.num != dict_id_fields[SAM_POS]      || !flag.regions))) return true;
+            !(dict_id.num == dict_id_fields[SAM_MAPQ]     && flag.sam_mapq_filter) && 
+            !(dict_id.num == dict_id_fields[SAM_SQBITMAP] && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_NONREF]   && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_NONREF_X] && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_GPOS]     && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_STRAND]   && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_TAXID]    && flag.kraken_taxid != TAXID_NONE) && 
+            !(dict_id.num != dict_id_fields[SAM_QNAME]    && kraken_is_loaded) && 
+            !(dict_id_is_sam_qname_sf(dict_id)            && kraken_is_loaded) && 
+            !(dict_id.num == dict_id_fields[SAM_POS]      && flag.regions))) return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--regions, --FLAG, --MAPQ, --kraken, --taxid)
     if (flag.count && sections_has_dict_id (st) && 
@@ -565,11 +569,9 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
         vb->drop_curr_line = "not_primary";
 
     // --taxid: filter out by Kraken taxid (SAM, BAM, FASTQ)
-    if (flag.kraken_taxid && !vb->drop_curr_line 
-     && (dict_id.num == dict_id_fields[SAM_TOPLEVEL] || dict_id.num == dict_id_fields[SAM_TOP2BAM] || dict_id.num == dict_id_fields[SAM_TOP2FQ])
+    if (flag.kraken_taxid && is_top_level && !vb->drop_curr_line 
      && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, last_txt(vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
-         || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, !flag.collect_coverage && !
-         flag.count)))) 
+         || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, !flag.collect_coverage && !flag.count)))) 
         vb->drop_curr_line = "taxid";
 
     // --FLAG

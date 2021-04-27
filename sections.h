@@ -71,7 +71,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
 typedef enum __attribute__ ((__packed__)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX } StoreType; // values for SectionFlags.ctx.store
 
-// goes into SectionHeader.flags and also SecLiEnt.flags
+// goes into SectionHeader.flags and also SectionEnt.flags
 typedef union SectionFlags {  
     uint8_t flags;
 
@@ -305,14 +305,14 @@ typedef struct {
 } ReconPlanItem;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
-typedef struct SectionListEntry {
+typedef const struct SectionEnt {
     uint64_t offset;            // offset of this section in the file
     DictId dict_id;             // used if this section is a DICT, LOCAL or a B250 section
     uint32_t vblock_i;
     SectionType st;             // 1 byte
     SectionFlags flags;         // same flags as in section header, since v12 (before was "unused")
     uint8_t unused[2];         
-} SectionListEntry, SecLiEnt;
+} SectionEnt;
 
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
@@ -355,22 +355,23 @@ extern void sections_list_concat (VBlockP vb);
 // PIZ stuff
 // ---------
 
-extern const SecLiEnt *sections_get_first_section_of_type (SectionType st, bool soft_fail);
-extern bool sections_next_sec2 (const SecLiEnt **sl_ent, SectionType st1, SectionType st2, bool must_be_next_section, bool seek);
-#define sections_next_sec(sl_ent,st,must_be_next_section,seek) sections_next_sec2((sl_ent),(st),SEC_NONE,(must_be_next_section),(seek))
-extern bool sections_prev_sec2 (const SecLiEnt **sl_ent, SectionType st1, SectionType st2);
+extern Section sections_first_sec (SectionType st, bool soft_fail);
+extern Section sections_last_sec (SectionType st, bool soft_fail);
+extern bool sections_next_sec2 (Section*sl_ent, SectionType st1, SectionType st2);
+#define sections_next_sec(sl_ent,st) sections_next_sec2((sl_ent),(st),SEC_NONE)
+extern bool sections_prev_sec2 (Section*sl_ent, SectionType st1, SectionType st2);
 #define sections_prev_sec(sl_ent,st) sections_prev_sec2((sl_ent),(st),SEC_NONE)
 
-extern const SecLiEnt *sections_last_sec4 (const SecLiEnt *sl, SectionType st1, SectionType st2, SectionType st3, SectionType st4);
+extern Section sections_last_sec4 (Section sl, SectionType st1, SectionType st2, SectionType st3, SectionType st4);
 #define sections_component_last(any_sl_in_component) sections_last_sec4 ((any_sl_in_component), SEC_B250, SEC_LOCAL, SEC_VB_HEADER, SEC_RECON_PLAN)
 
 extern uint32_t sections_count_sections (SectionType st);
-extern const SecLiEnt *sections_vb_first (uint32_t vb_i, bool soft_fail);
+extern Section sections_vb_first (uint32_t vb_i, bool soft_fail);
 #define sections_vb_last(any_sl_in_vb) sections_last_sec4 ((any_sl_in_vb), SEC_B250, SEC_LOCAL, SEC_NONE, SEC_NONE)
 
-extern void sections_count_component_vbs (const SecLiEnt *sl, uint32_t *num_vbs, uint32_t *first_vb);
-extern const SecLiEnt *sections_pull_vb_up (uint32_t vb_i, const SecLiEnt *sl);
-extern void sections_pull_component_up (const SecLiEnt *txtfile_sl_after_me, const SecLiEnt *txtfile_sl_move_me);
+extern void sections_count_component_vbs (Section sl, uint32_t *num_vbs, uint32_t *first_vb);
+extern Section sections_pull_vb_up (uint32_t vb_i, Section sl);
+extern void sections_pull_component_up (Section txtfile_sl_after_me, Section txtfile_sl_move_me);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);
@@ -383,9 +384,9 @@ extern void sections_show_gheader (const SectionHeaderGenozipHeader *header /* o
 extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
 
 // z_file sizes
-extern int64_t sections_get_section_size (const SecLiEnt *sl);
-extern int64_t sections_get_vb_size (const SecLiEnt *sl);
-extern int64_t sections_get_vb_skipped_sections_size (const SecLiEnt *vb_header_sl);
+extern int64_t sections_get_section_size (Section sl);
+extern int64_t sections_get_vb_size (Section sl);
+extern int64_t sections_get_vb_skipped_sections_size (Section vb_header_sl);
 extern int64_t sections_get_ref_size (void);
 
 extern const char *lt_name (LocalType lt);

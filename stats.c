@@ -27,7 +27,7 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_
 
     for (uint64_t i=0; i < z_file->section_list_buf.len; i++) {
 
-        SecLiEnt *section = ENT (SecLiEnt, z_file->section_list_buf, i);
+        Section section = ENT (SectionEnt, z_file->section_list_buf, i);
         int64_t after_sec = (i == z_file->section_list_buf.len - 1) ? z_file->disk_so_far : (section+1)->offset;
         int64_t sec_size = after_sec - section->offset;
 
@@ -51,7 +51,7 @@ static void stats_check_count (uint64_t all_z_size, const int *count_per_section
 {
     if (all_z_size == z_file->disk_so_far) return; // all good
 
-    ARRAY (SecLiEnt, sections, z_file->section_list_buf);
+    ARRAY (SectionEnt, sections, z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) 
         if (!count_per_section[i]) 
@@ -390,7 +390,7 @@ void stats_display (void)
 
     buf_print (buf , false);
 
-    const SecLiEnt *sl = sections_get_first_section_of_type (SEC_STATS, false);
+    Section sl = sections_last_sec (SEC_STATS, false);
 
     if (z_file->disk_size < (1<<20))  // no need to print this note if total size > 1MB, as the ~2K of overhead is rounded off anyway
         // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 2 sections in the file - since stats text is generated before these sections are compressed
@@ -401,7 +401,7 @@ void stats_display (void)
 
 void stats_read_and_display (void)
 {
-    const SecLiEnt *sl = sections_get_first_section_of_type (SEC_STATS, true);
+    Section sl = sections_last_sec (SEC_STATS, true);
     if (!sl) return; // genozip file does not contain stats sections (SEC_STATS was introduced in v 7.0.5)
 
     // read and uncompress the requested stats section

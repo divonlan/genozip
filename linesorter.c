@@ -344,10 +344,10 @@ void linesorter_compress_recon_plan (void)
 // PIZ: get the maximum value of conc_writing_vbs across all SEC_RECON_PLAN sections in the z_file
 uint32_t linesorter_get_max_conc_writing_vbs (void)
 {
-    const SecLiEnt *sl = NULL;
+    Section sl = NULL;
     uint32_t max_conc_writing_vbs=0;
 
-    while (sections_next_sec (&sl, SEC_RECON_PLAN, false, false)) {
+    while (sections_next_sec (&sl, SEC_RECON_PLAN)) {
         uint32_t conc_writing_vbs = ((SectionHeaderReconPlan *)zfile_read_section_header (evb, sl->offset, 0, SEC_RECON_PLAN))->conc_writing_vbs;
         max_conc_writing_vbs = MAX (max_conc_writing_vbs, BGEN32 (conc_writing_vbs));
         buf_free (&evb->compressed); // zfile_read_section_header used this for the header

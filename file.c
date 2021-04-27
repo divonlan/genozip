@@ -1135,9 +1135,9 @@ bool file_seek (File *file, int64_t offset,
                     file_printname (file),  errno == EINVAL ? "" : strerror (errno));
         }
     } 
-    else {
-        ASSERT (!ret, "fseeko failed on file %s: %s", file_printname (file), strerror (errno));
-    }
+    else
+        ASSERT (!ret, "fseeko(offset=%"PRId64" whence=%d) failed on file %s: %s", 
+                       offset, whence, file_printname (file), strerror (errno));
 
     return !ret;
 }

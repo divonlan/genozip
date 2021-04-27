@@ -1129,12 +1129,12 @@ void ctx_compress_dictionaries (void)
 // -------------------------------------
 // PIZ: Read and decompress dictionaries
 // -------------------------------------
-static const SecLiEnt *dict_sl = NULL; 
+static Section dict_sl = NULL; 
 static Context *dict_ctx;
 
 static void ctx_dict_read_one_vb (VBlockP vb)
 {
-    if (!sections_next_sec (&dict_sl, SEC_DICT, false, false))
+    if (!sections_next_sec (&dict_sl, SEC_DICT))
         return; // we're done - no more SEC_DICT sections
 
     // create context if if section is skipped, for containters to work (skipping a section should be mirror in 
@@ -1158,7 +1158,7 @@ static void ctx_dict_read_one_vb (VBlockP vb)
     // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are FRAGMENT_SIZE or a bit less, allowing pre-allocation
     if (header && new_ctx && z_file->genozip_version >= 9) {
         unsigned num_fragments=0; 
-        for (const SecLiEnt *sl=dict_sl; sl->dict_id.num == dict_ctx->dict_id.num; sl++) num_fragments++;
+        for (Section sl=dict_sl; sl->dict_id.num == dict_ctx->dict_id.num; sl++) num_fragments++;
 
         // get size: for multi-fragment dictionaries, first fragment will be at or slightly less than FRAGMENT_SIZE, which is a power of 2.
         // this allows us to calculate the FRAGMENT_SIZE with which this file was compressed and hence an upper bound on the size
@@ -1385,9 +1385,9 @@ void ctx_compress_counts (void)
 // PIZ: called by the main threads from piz_read_global_area
 void ctx_read_all_counts (void)
 {
-    const SecLiEnt *sl = NULL;
+    Section sl = NULL;
     bool counts_shown=false;
-    while (sections_next_sec (&sl, SEC_COUNTS, false, false))  {
+    while (sections_next_sec (&sl, SEC_COUNTS))  {
 
         if (piz_is_skip_sectionz (SEC_COUNTS, sl->dict_id)) continue;
 

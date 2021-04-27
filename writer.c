@@ -38,7 +38,7 @@ typedef struct {
 
 typedef struct {
     VbInfo info;                  // data in here (in_plan, no_read etc) refers to entire component, vb is txt_header
-    const SecLiEnt *txt_header_sl;
+    Section txt_header_sl;
     uint32_t first_vb_i;
     uint32_t num_vbs;
     bool liftover_rejects;        // this component is the "liftover rejects" component
@@ -98,7 +98,7 @@ bool writer_is_vb_no_read (uint32_t vb_i)
     return no_read;
 }
 
-void writer_get_txt_file_info (uint32_t *first_comp_i, uint32_t *num_comps, ConstSecLiEntP *start_sl) // out
+void writer_get_txt_file_info (uint32_t *first_comp_i, uint32_t *num_comps, Section *start_sl) // out
 {
     const TxtFileInfo *tf = ENT (TxtFileInfo, txt_file_info, z_file->num_txt_components_so_far);
     const CompInfo *first_comp = ENT (CompInfo, comp_info, tf->first_comp_i);
@@ -144,13 +144,13 @@ static uint32_t writer_init_comp_info (void)
     comp_info.len = z_file->num_components;
 
     uint32_t num_vbs = 0;
-    const SecLiEnt *sl = NULL;
+    Section sl = NULL;
 
     for (unsigned comp_i=0; comp_i < z_file->num_components; comp_i++) {
 
         CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
 
-        ASSERT (sections_next_sec (&sl, SEC_TXT_HEADER, 0, 0),
+        ASSERT (sections_next_sec (&sl, SEC_TXT_HEADER),
                 "Expecting %s to have %u components, but found only %u", z_name, z_file->num_components, comp_i);
 
         *comp = (CompInfo){ 
@@ -203,7 +203,7 @@ static uint32_t writer_init_comp_info (void)
 // PIZ main thread - called from writer_init_vb_info
 static void write_set_first_vb_for_tail (void)
 {
-    const SecLiEnt *sl = NULL;
+    Section sl = NULL;
     int64_t count_lines = flag.tail;
 
     while (sections_prev_sec (&sl, SEC_VB_HEADER)) {
@@ -242,7 +242,7 @@ static void writer_init_vb_info (void)
 
     buf_alloc_zero (evb, &vb_info, 0, vb_info.len, VbInfo, 1, "z_file->vb_info");
 
-    const SecLiEnt *sl = NULL;
+    Section sl = NULL;
 
     for (unsigned comp_i=0; comp_i < comp_info.len; comp_i++) {
 
@@ -250,7 +250,7 @@ static void writer_init_vb_info (void)
 
         for (uint32_t v_comp_i=0; v_comp_i < comp->num_vbs; v_comp_i++) {
 
-            ASSERT0 (sections_next_sec (&sl, SEC_VB_HEADER, 0, 0), "Unexpected end of section list");
+            ASSERT0 (sections_next_sec (&sl, SEC_VB_HEADER), "Unexpected end of section list");
             
             VbInfo *v = ENT (VbInfo, vb_info, sl->vblock_i); // note: VBs are out of order in --luft bc writer_move_liftover_rejects_to_front()
             v->comp_i = comp_i;
@@ -297,8 +297,8 @@ void writer_move_liftover_rejects_to_front (void)
 {
     ASSERT0 (flag.luft, "Expecting flag.luft=true");
 
-    const SecLiEnt *primary = (SecLiEnt *)sections_get_first_section_of_type (SEC_TXT_HEADER, false);
-    const SecLiEnt *rejects = sections_component_last (primary) + 1;
+    Section primary = sections_first_sec (SEC_TXT_HEADER, false);
+    Section rejects = sections_component_last (primary) + 1;
 
     sections_pull_component_up (NULL, rejects);
 }
@@ -339,15 +339,15 @@ static void writer_add_trival_plan (const CompInfo *comp)
 // also interleaves VBs of the two components and eliminates the second TXT_HEADER entry
 static void writer_add_interleave_plan (const CompInfo *comp)
 {
-    const SecLiEnt *sl1 = comp->txt_header_sl;
-    const SecLiEnt *sl2 = (comp+1)->txt_header_sl;
+    Section sl1 = comp->txt_header_sl;
+    Section sl2 = (comp+1)->txt_header_sl;
 
     unsigned num_vbs_per_component=0;
 
-    while (sections_next_sec2 (&sl1, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) && 
+    while (sections_next_sec2 (&sl1, SEC_VB_HEADER, SEC_TXT_HEADER) && 
            sl1->st == SEC_VB_HEADER) {
 
-        ASSERT0 (sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) &&
+        ASSERT0 (sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER) &&
                   sl2->st == SEC_VB_HEADER, "Failed to find matching VB in second component, when --interleave");
 
         VbInfo *v1 = ENT (VbInfo, vb_info, sl1->vblock_i);
@@ -365,8 +365,8 @@ static void writer_add_interleave_plan (const CompInfo *comp)
             v1->in_plan = v2->in_plan = false;
 
         // get last section index, before pull up
-        const SecLiEnt *last_1 = sections_vb_last (sl1);
-        const SecLiEnt *last_2 = sections_vb_last (sl2);
+        Section last_1 = sections_vb_last (sl1);
+        Section last_2 = sections_vb_last (sl2);
 
         sl1 = sections_pull_vb_up (sl2->vblock_i, last_1); // move the 2nd component VB to be after the corresponding 1st component VB
         sl2 = last_2; 
@@ -376,14 +376,14 @@ static void writer_add_interleave_plan (const CompInfo *comp)
     ASSERT0 (num_vbs_per_component, "Component has no VBs");
     
     // we've iterated to the end of component1 VBs, make sure component2 doesn't have any additional VB
-    ASSERT (!sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER, false, false) ||
+    ASSERT (!sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER) ||
             sl2->st == SEC_TXT_HEADER, // either no more VB/TXT headers, or the next header is TXT
             "First component has %u num_vbs_per_component VBs, but second component has more, when --interleave", num_vbs_per_component);
 }
 
 // PIZ main thread: for each VB in the component pointed by sl, sort VBs according to first appearance in recon plan
-static void writer_add_plan_from_recon_section (const CompInfo *comp, const SecLiEnt *recon_plan_sl,
-                                                    uint32_t *conc_writing_vbs, uint32_t *vblock_mb) // out
+static void writer_add_plan_from_recon_section (const CompInfo *comp, Section recon_plan_sl,
+                                                uint32_t *conc_writing_vbs, uint32_t *vblock_mb) // out
 {
     zfile_get_global_section (SectionHeaderReconPlan, SEC_RECON_PLAN, recon_plan_sl, 
                               &evb->compressed, "compressed");
@@ -404,7 +404,7 @@ static void writer_add_plan_from_recon_section (const CompInfo *comp, const SecL
 
     ARRAY (const ReconPlanItem, plan, evb->compressed);
     
-    const SecLiEnt *sl = comp->txt_header_sl;
+    Section sl = comp->txt_header_sl;
     for (uint64_t i=0; i < plan_len; i++)
         if (!vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i]) { // first encounter with this VB in the plan
             // move all sections of vb_i to be immediately after sl ; returns last section of vb_i after move
@@ -417,11 +417,11 @@ static void writer_add_plan_from_recon_section (const CompInfo *comp, const SecL
 }
 
 // returns SL if this component has a SEC_RECON_PLAN section which matchs flag.luft
-static const SecLiEnt *writer_get_recon_plan_sl (const CompInfo *comp)
+static Section writer_get_recon_plan_sl (const CompInfo *comp)
 {
-    const SecLiEnt *sl = comp->txt_header_sl;
+    Section sl = comp->txt_header_sl;
 
-    if (sections_next_sec2 (&sl, SEC_RECON_PLAN, SEC_TXT_HEADER, 0, 0) && sl->st == SEC_RECON_PLAN) {
+    if (sections_next_sec2 (&sl, SEC_RECON_PLAN, SEC_TXT_HEADER) && sl->st == SEC_RECON_PLAN) {
 
         if (sl->flags.recon_plan.luft == flag.luft) 
             return sl;  // first recon plan matches flag.luft
@@ -455,7 +455,7 @@ void writer_create_plan (void)
     for (unsigned comp_i = 0; comp_i < z_file->num_components; comp_i += 1 + flag.interleave) {
 
         CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
-        const SecLiEnt *recon_plan_sl;
+        Section recon_plan_sl;
 
         // start plan for this txt_file (unless already started in previous comp)
         if (!tf_ent->plan_len) 

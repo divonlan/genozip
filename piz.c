@@ -262,7 +262,7 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     COPY_TIMER (compute);
 }
 
-static void piz_read_all_ctxs (VBlock *vb, ConstSecLiEntP *next_sl)
+static void piz_read_all_ctxs (VBlock *vb, Section *next_sl)
 {
     // ctxs that have dictionaries are already initialized, but others (eg local data only) are not
     ctx_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts);
@@ -292,7 +292,7 @@ DataType piz_read_global_area (void)
     dict_id_initialize (z_file->data_type); // must run after zfile_read_genozip_header that sets z_file->data_type
     
     // check if the genozip file includes a reference
-    bool has_ref_sections = !!sections_get_first_section_of_type (SEC_REFERENCE, true);
+    bool has_ref_sections = !!sections_last_sec (SEC_REFERENCE, true);
 
     ASSERTW (!has_ref_sections || flag.reference != REF_EXTERNAL || flag.reading_reference, 
              "%s: ignoring reference file %s because it was not compressed with --reference", z_name, ref_filename);
@@ -401,7 +401,7 @@ static bool piz_read_one_vb (VBlock *vb)
     if (flag.lines_last >= 0 && txt_file->num_lines > flag.lines_last)
         return false; // we don't need this VB as we have read all the data needed according to --lines
 
-    ConstSecLiEntP sl = sections_vb_first (vb->vblock_i, false); 
+    Section sl = sections_vb_first (vb->vblock_i, false); 
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
     
@@ -501,7 +501,7 @@ static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
 }
 
 // returns false if VB was dispatched, and true if vb was skipped
-static bool piz_dispatch_one_vb (Dispatcher dispatcher, ConstSecLiEntP sl_ent)
+static bool piz_dispatch_one_vb (Dispatcher dispatcher, Section sl_ent)
 {
     if (writer_is_vb_no_read (sl_ent->vblock_i)) 
         return true; // skip this VB - we don't need it
@@ -587,7 +587,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
       
     bool header_only_file = true; // initialize - true until we encounter a VB header
     uint32_t first_comp_this_txt, num_comps_this_txt;
-    const SecLiEnt *sl;
+    Section sl;
     uint64_t num_nondrop_lines = 0;
 
     writer_get_txt_file_info (&first_comp_this_txt, &num_comps_this_txt, &sl);
@@ -600,7 +600,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
             achieved_something = true;
 
-            bool found_header = sections_next_sec2 (&sl, SEC_TXT_HEADER, SEC_VB_HEADER, false, true);
+            bool found_header = sections_next_sec2 (&sl, SEC_TXT_HEADER, SEC_VB_HEADER);
 
             // case SEC_TXT_HEADER
             if (found_header && sl->st == SEC_TXT_HEADER && z_file->num_txt_components_so_far < first_comp_this_txt + num_comps_this_txt) { 
