@@ -3,7 +3,6 @@
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
-#include "genozip.h"
 #include "gzguts.h"
 
 /* Local functions */
@@ -417,12 +416,18 @@ int ZEXPORT gzread(file, buf, len)
     return (int)len;
 }
 
+// note: we can't include genozip.h as it conflicts
+extern void main_exit (_Bool show_stack, _Bool is_error);
+
 // added by Divon - stores 18 bytes ("injection") to later be consumed by gz_load
 ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection, uInt injection_size))
 {
     gz_statep state = (gz_statep)file;
 
-    ASSERT (injection_size <= INJECTION_SIZE, "Error in gzinject: injection_size=%u too big", injection_size);
+    if (injection_size > INJECTION_SIZE) {
+        fprintf (stderr, "Error in gzinject: injection_size=%u too big", injection_size);
+        main_exit (0, 1);
+    }
 
     memcpy (state->injection, injection, injection_size);  
     state->injection_size = injection_size;
