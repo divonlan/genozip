@@ -12,7 +12,6 @@
 #include "dispatcher.h"
 #include "context.h"
 #include "file.h"
-#include "endianness.h"
 #include "piz.h"
 #include "sections.h"
 #include "random_access.h"
@@ -31,6 +30,7 @@
 #include "writer.h"
 #include "strings.h"
 #include "threads.h"
+#include "endianness.h"
 
 // called by main thread in fastq, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 

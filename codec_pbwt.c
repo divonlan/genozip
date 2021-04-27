@@ -17,6 +17,7 @@
 #include "compressor.h"
 #include "profiler.h"
 #include "context.h"
+#include "endianness.h"
 
 typedef struct {
     Allele allele;      // copied from line on which permutation is applied

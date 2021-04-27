@@ -13,6 +13,7 @@
 #include "dict_id.h"
 #include "zfile.h"
 #include "piz.h"
+#include "endianness.h"
 
 typedef struct SectionEnt SectionEntModifiable;
 

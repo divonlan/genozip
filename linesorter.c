@@ -16,6 +16,7 @@
 #include "linesorter.h"
 #include "sections.h"
 #include "profiler.h"
+#include "endianness.h"
 
 // an entry per VB
 typedef struct {

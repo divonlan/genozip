@@ -19,6 +19,7 @@
 #include "zfile.h"
 #include "version.h"
 #include "txtheader.h"
+#include "endianness.h"
 
 // call a callback for each SQ line (contig). Note: callback function is the same as ref_contigs_iterate
 void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string

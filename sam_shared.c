@@ -6,6 +6,7 @@
 #include "sam_private.h"
 #include "strings.h"
 #include "file.h"
+#include "endianness.h"
 
 // table of valid cigar_op as defined in https://samtools.github.io/hts-specs/SAMv1.pdf
 const uint8_t cigar_lookup_sam[256] = { // note: bit 4 (0x10) is set for all valid values

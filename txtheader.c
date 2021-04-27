@@ -17,6 +17,7 @@
 #include "bgzf.h"
 #include "writer.h"
 #include "strings.h"
+#include "endianness.h"
 
 // contigs loaded from the txt header (eg SAM or BAM, VCF header)
 static bool has_contigs     = false;        // for BAM, this will be true even for contig-less header, indicting the file has no contigs (as opposed to contigs just not defined in the header)

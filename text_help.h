@@ -3,9 +3,6 @@
 //   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include "genozip.h"
-#include "vcf.h"
-
 static const char *help_genozip[] = {
     "",
     "Please see the genozip manual here: http://genozip.com/genozip.html"

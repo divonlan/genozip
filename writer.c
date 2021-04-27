@@ -20,6 +20,7 @@
 #include "bgzf.h"
 #include "mutex.h"
 #include "codec.h" 
+#include "endianness.h"
 
 // ---------------
 // Data structures

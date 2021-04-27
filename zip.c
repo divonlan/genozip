@@ -17,7 +17,6 @@
 #include "zip.h"
 #include "seg.h"
 #include "base250.h"
-#include "endianness.h"
 #include "random_access.h"
 #include "dict_id.h"
 #include "reference.h"
@@ -33,6 +32,7 @@
 #include "linesorter.h"
 #include "txtheader.h"
 #include "threads.h"
+#include "endianness.h"
 
 static Mutex wait_for_vb_1_mutex = {};
 

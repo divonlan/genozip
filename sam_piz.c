@@ -19,6 +19,7 @@
 #include "container.h"
 #include "coverage.h"
 #include "iupac.h"
+#include "endianness.h"
 
 // returns true if section is to be skipped reading / uncompressing
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)

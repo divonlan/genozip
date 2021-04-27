@@ -16,21 +16,14 @@
 #include "piz.h"
 #include "vblock.h"
 #include "context.h"
-#include "hash.h"
 #include "mutex.h"
 #include "sections.h"
-#include "profiler.h"
-#include "bit_array.h"
 #include "file.h"
 #include "regions.h"
 #include "refhash.h"
 #include "ref_private.h"
-#include "bit_array.h"
-#include "codec.h"
 #include "compressor.h"
-#include "fastq.h"
 #include "threads.h"
-#include "txtheader.h"
 
 // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_DENOVO_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
 Buffer ranges = EMPTY_BUFFER; 

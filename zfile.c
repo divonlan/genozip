@@ -8,7 +8,6 @@
 #include <math.h>
 #include <limits.h>
 #include "genozip.h"
-#include "profiler.h"
 #include "zfile.h"
 #include "crypt.h"
 #include "vblock.h"
@@ -20,13 +19,11 @@
 #include "compressor.h"
 #include "codec.h"
 #include "piz.h"
-#include "zip.h"
 #include "license.h"
 #include "mutex.h"
 #include "strings.h"
 #include "dict_id.h"
 #include "reference.h"
-#include "dispatcher.h"
 #include "bgzf.h"
 #include "digest.h"
 #include "md5.h"

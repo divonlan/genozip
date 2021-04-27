@@ -29,7 +29,8 @@ endif
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
-MY_SRCS = genozip.c base250.c context.c container.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
+MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
+		  data_types.c bit_array.c progress.c \
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c liftover.c linesorter.c threads.c \
 		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c writer.c \
 		  vcf_piz.c vcf_seg.c vcf_shared.c vcf_header.c \
@@ -63,7 +64,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              buffer.h file.h context.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h liftover.h  \
 			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
-			 arch.h license.h data_types.h base64.h txtheader.h writer.h iupac.h \
+			 arch.h license.h data_types.h base64.h txtheader.h writer.h iupac.h genols.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \

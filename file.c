@@ -25,6 +25,7 @@
 #include "bgzf.h"
 #include "flags.h"
 #include "progress.h"
+#include "endianness.h"
 
 // globals
 File *z_file   = NULL;

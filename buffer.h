@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "genozip.h"
-#include "endianness.h"
 
 struct variant_block_; 
 

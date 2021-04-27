@@ -14,6 +14,7 @@
 #include "codec.h"
 #include "txtfile.h"
 #include "strings.h"
+#include "endianness.h"
 
 static Mutex vb_digest_mutex = {};   // ZIP: used for serializing MD5ing of VBs
 static uint32_t vb_digest_last=0; // last vb to be MD5ed 

@@ -26,6 +26,7 @@
 #include "bit_array.h"
 #include "mutex.h"
 #include "file.h"
+#include "endianness.h"
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed
 
