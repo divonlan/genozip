@@ -750,13 +750,16 @@ static bool file_open_z (File *file)
 
                 if (flag.multiple_files) {
 
-                    if (flag.validate == VLD_INVALID_FOUND)
+                    if (flag.validate == VLD_INVALID_FOUND) // outputs even if --quiet
                         iprintf ("%s is not a valid genozip file: %s%s\n", file_printname (file), 
                                 causes[cause-1], cause==5 ? strerror (stat_errno) : "");
-                    else if (flag.validate == VLD_NONE)
-                        iprintf ("Skipping %s - it is not a valid genozip file: %s%s\n", file_printname (file), 
-                                 causes[cause-1], cause==5 ? strerror (stat_errno) : "");
-
+                    else if (flag.validate == VLD_NONE) {    // silenced by --quiet
+                        static int once=0;
+                        WARN ("Skipping %s - it is not a valid genozip file: %s%s%s", file_printname (file), 
+                              causes[cause-1], cause==5 ? strerror (stat_errno) : "",
+                              !(once++) ? " (--quiet to silence this message)" : "");
+                    }
+                    
                     return true;
                 }
                 else { // single file

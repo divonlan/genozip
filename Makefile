@@ -221,7 +221,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
 	   docs/downsampling.rst docs/dual-coordinates-vcf.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst\
-	   docs/sam2fq.rst
+	   docs/sam2fq.rst docs/gatk-unexpected-base.rst
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 

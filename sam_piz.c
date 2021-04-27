@@ -42,17 +42,18 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != dict_id_fields[SAM_TOP2BAM]  && 
               dict_id.num != dict_id_fields[SAM_TOP2FQ]   && 
               dict_id.num != dict_id_fields[SAM_RNAME]    && // easier to always have RNAME
-             (dict_id.num != dict_id_fields[SAM_FLAG]     || !flag.sam_flag_filter) &&
-             (dict_id.num != dict_id_fields[SAM_MAPQ]     || !flag.sam_mapq_filter) && 
-             (dict_id.num != dict_id_fields[SAM_SQBITMAP] || !flag.iupac) && 
-             (dict_id.num != dict_id_fields[SAM_NONREF]   || !flag.iupac) && 
-             (dict_id.num != dict_id_fields[SAM_NONREF_X] || !flag.iupac) && 
-             (dict_id.num != dict_id_fields[SAM_GPOS]     || !flag.iupac) && 
-             (dict_id.num != dict_id_fields[SAM_STRAND]   || !flag.iupac) && 
-             (dict_id.num != dict_id_fields[SAM_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
-             (dict_id.num != dict_id_fields[SAM_QNAME]    || !kraken_is_loaded) && 
-             (!dict_id_is_sam_qname_sf(dict_id)           || !kraken_is_loaded) && 
-             (dict_id.num != dict_id_fields[SAM_POS]      || !flag.regions))) return true;
+            !(flag.out_dt == DT_BAM && flag.iupac) &&        // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
+            !(dict_id.num == dict_id_fields[SAM_FLAG]     && flag.sam_flag_filter) &&
+            !(dict_id.num == dict_id_fields[SAM_MAPQ]     && flag.sam_mapq_filter) && 
+            !(dict_id.num == dict_id_fields[SAM_SQBITMAP] && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_NONREF]   && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_NONREF_X] && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_GPOS]     && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_STRAND]   && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_TAXID]    && flag.kraken_taxid != TAXID_NONE) && 
+            !(dict_id.num == dict_id_fields[SAM_QNAME]    && kraken_is_loaded) && 
+            !(dict_id_is_sam_qname_sf(dict_id)            && kraken_is_loaded) && 
+            !(dict_id.num == dict_id_fields[SAM_POS]      && flag.regions))) return true;
 
     return false;
 }
@@ -434,7 +435,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
         // check for invalid characters - issue warning (only once per execution), and make then into an 'N'
         for (unsigned b=0; b < 2; b++)
             if (!base[b] && !(b==1 && (i+1)*2 > l_seq)) {
-                WARN_ONCE ("Warning when converting SAM sequence data to BAM: invalid character encodered, it will be converted as 'N': '%c' (ASCII %u)", base[b], base[b]);
+                WARN_ONCE ("Warning: when converting SAM sequence data to BAM: invalid character encodered, it will be converted as 'N': '%c' (ASCII %u) (this warning will appear only once)", base[b], base[b]);
                 base[b] = 0x0f;
             }
 
@@ -598,8 +599,9 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
     }
 
     // --iupac
-    if (flag.iupac && is_top_level && !vb->drop_curr_line &&
-        !iupac_is_included (last_txt (vb, SAM_SQBITMAP), vb->last_txt_len (SAM_SQBITMAP)))
+    if (flag.iupac && is_top_level && !vb->drop_curr_line && 
+        !(txt_file->data_type == DT_BAM ? iupac_is_included_bam   (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)reconstructed)->l_seq)
+                                        : iupac_is_included_ascii (last_txt (vb, SAM_SQBITMAP), vb->last_txt_len (SAM_SQBITMAP))))
         vb->drop_curr_line = "iupac";
     
     // count coverage, if needed    

@@ -188,7 +188,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
 
     // add final lines - the command line length is unbound, careful not to put it in a bufprintf
     bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p1, GENOZIP_CODE_VERSION, GENOZIP_URL);
-    buf_add_string (comp_vb, txtheader_buf, flags_command_line()->data);
+    buf_add_string (comp_vb, txtheader_buf, flags_command_line());
     bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p2, sample_name_len, sample_name);
 
     buf_free (&comp_vb->compressed);

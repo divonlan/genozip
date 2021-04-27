@@ -80,7 +80,7 @@ static void vcf_header_add_genozip_command (VBlockP txt_header_vb, Buffer *txt_h
 {
     // the command line length is unbound, careful not to put it in a bufprintf
     buf_add_string (txt_header_vb, txt_header, HK_GENOZIP_CMD"\"");
-    buf_add_string (txt_header_vb, txt_header, flags_command_line()->data);
+    buf_add_string (txt_header_vb, txt_header, flags_command_line());
     bufprintf (txt_header_vb, txt_header, "\" %s\n", str_time().s);
 }
 

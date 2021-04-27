@@ -659,7 +659,7 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
 
     // --iupac
     if (flag.iupac && is_top_level && !vb->drop_curr_line &&
-        !iupac_is_included (last_txt (vb, FASTQ_SQBITMAP), vb->last_txt_len (FASTQ_SQBITMAP)))
+        !iupac_is_included_ascii (last_txt (vb, FASTQ_SQBITMAP), vb->last_txt_len (FASTQ_SQBITMAP)))
         vb->drop_curr_line = "iupac";
 }
 

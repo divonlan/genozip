@@ -224,7 +224,7 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, const SecLiEnt *s
     if (!txt_file) { 
         const char *filename = flag.unbind ? txtfile_piz_get_filename (header->txt_filename, flag.unbind, false) 
                                            : flag.out_filename;
-        txt_file = file_open (filename, WRITE, TXT_FILE, z_file->data_type);
+        txt_file = file_open (filename, WRITE, TXT_FILE, flag.out_dt != DT_NONE ? flag.out_dt : z_file->data_type);
         FREE (filename); // file_open copies the names
     }
 

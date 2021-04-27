@@ -416,10 +416,11 @@ bug fixes, including major bug with mc:i optional field in SAM
 - new option: genocat --head [num_lines] - show lines from the start of the file.
 - new option: genocat --tail [num_lines] - show lines from the end of the file.
 - new option: genocat --count - displays the number of lines (or reads in the case of FASTQ), that
+  survived any filters applied (--regions, --grep, --taxid, --FLAGS, --MAPQ, --component, --one-vb etc)
 - new option: --show-filename - Show the file name for each file
 - new option: genocat --FLAG - filters a SAM or BAM file by the value of the FLAG field
 - new option: genocat --MAPQ - filters a SAM or BAM file by the value of the MAPQ field
-  survived any filters applied (--regions, --grep, --taxid, --FLAGS, --MAPQ, --component, --one-vb etc)
+- new option: genocat --iupac - filters a SAM/BAM/FASTQ for SEQ base values
 - new option: --echo displays the command line and a timestamp upon completion of execution (successful or failed)
 - discontinued support for GTShark codec - use genozip v11 to decompress old VCF files compressed with --gtshark
 

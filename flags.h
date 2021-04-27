@@ -50,7 +50,6 @@ typedef struct {
     enum { SAM_MAPQ_INCLUDE_IF_AT_LEAST=1, SAM_MAPQ_EXCLUDE_IF_AT_LEAST } sam_mapq_filter;
     uint16_t FLAG; // the value for sam_flag_filter
     uint8_t MAPQ;  // the value for sam_mapq_filter
-    uint8_t iupac_mask[256]; // for --iupac filter - '1' for every ASCII included in a positive or negative iupac
     enum { IUP_NONE, IUP_POSITIVE, IUP_NEGATIVE } iupac;
 
     // genols options
@@ -176,7 +175,7 @@ extern void flags_update_zip_one_file (void);
 extern void flags_update_piz_one_file (int z_file_i);
 
 extern void flags_store_command_line (int argc, char **argv);
-extern const BufferP flags_command_line (void);
+extern const char *flags_command_line (void);
 extern void flags_display_debugger_params (void);
 extern const char *flags_pipe_in_process_name (void);
 extern unsigned flags_pipe_in_pid (void);

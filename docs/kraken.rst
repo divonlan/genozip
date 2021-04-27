@@ -126,11 +126,13 @@ To handle this, we prepare a concatenated kraken.genozip file, from the output o
 |
 | This can happen, for example, when feeding kraken2 with an interleaved FASTQ file rather than two separate FASTQ files.  
 |
-| Note: If the kraken file has a read with /1, there *must* also be a read with /2 and vice versa - their order is not important and they needn't be consecutive.
+| Note: If the kraken file has a read name with /1, there *must* also be a read name with /2 and vice versa - their order is not important and they needn't be consecutive.
 |
 
 **Assumptions**
 
-| ``genocat --taxid`` makes the assumption that all lines in the viewed file must have a corresponding line in the kraken data. It is ok if the kraken data contains additional lines not in the viewed file.
+| ``genocat --taxid`` makes the assumption that all read names (QNAMEs in SAM terminology) that appear in the viewed file also appear (possibly with a /1 or /2 suffix) in the kraken data. If a read name appears in the viewed file, but is absent from the kraken data, its line will be silently assigned the most common *taxid* according to the kraken data. 
+|
+| It is ok if the kraken data contains additional read names not present in the viewed file.
 |
 

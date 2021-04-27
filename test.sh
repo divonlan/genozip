@@ -478,8 +478,15 @@ batch_iupac()
     test_count_genocat_lines test/basic.sam "-H --iupac=^AGCTN" 1
 
     # BAM
-    test_count_genocat_lines test/basic.bam "-H --sam --iupac AGCTN" 7 
-    test_count_genocat_lines test/basic.bam "-H --sam --iupac ^AGCTN" 1
+    test_header "genocat --iupac AGCTN --count --bam"
+    local count=`$genocat $output --echo -H --bam --iupac AGCTN --count -q`
+    if [ "$count" == "" ]; then echo genocat error; exit 1; fi
+
+    if [ "$count" -ne 7 ]; then echo "bad count = $count"; exit 1; fi
+
+    test_header "genocat --iupac ^AGCTN --count --bam"
+    local count=`$genocat $output --echo -H --bam --iupac ^AGCTN --count -q`
+    if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 
     # FASTQ
     test_count_genocat_lines test/basic.fq "-H --IUPAC=AGCTN" 20
@@ -603,7 +610,8 @@ batch_grep_count_lines()
         # count
         $genozip $TESTDIR/$file -fo $output
         local count=`$genocat --quiet --count $output || exit`
-echo count = $count
+        if [ "$count" == "" ]; then echo genocat error; exit 1; fi
+
         # lines
         test_count_genocat_lines $TESTDIR/$file "--no-header --lines=${count}-${count}" $lines
         test_count_genocat_lines $TESTDIR/$file "--no-header --lines=100000-" 0

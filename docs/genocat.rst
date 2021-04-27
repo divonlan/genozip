@@ -33,7 +33,10 @@ One or more file names must be given.
 
           |
 
-.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (FASTA SAM/BAM GVF 23andMe Chain) Show one or more regions of the file. Examples:
+.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (FASTA SAM/BAM GVF 23andMe Chain) Show one or more regions of the file. 
+
+   |
+   | *Examples*: 
 
    ============================================== ======================================
    ``genocat myfile.vcf.genozip -r 22:1000-2000`` Positions 1000 to 2000 on contig 22
@@ -56,7 +59,10 @@ One or more file names must be given.
    | *Note*: For Chain files this applies to the source contig (qName).
    |
 
-.. option:: -s, --samples [^]sample[,...].  (VCF) Show a subset of samples (individuals). Examples:
+.. option:: -s, --samples [^]sample[,...].  (VCF) Show a subset of samples (individuals). 
+
+   |
+   | *Examples*:
 
    ================================================== ======================================
    ``genocat myfile.vcf.genozip -s HG00255,HG00256``  show two samples
@@ -72,17 +78,17 @@ One or more file names must be given.
 
 .. option:: --FLAG {+-^}value.  (SAM BAM) Filter lines based on the FLAG value: <value> is a decimal or hexadecimal value and should be prefixed by + - or ^: 
 
-==  =======================================================================
-\+  INCLUDES lines in which ALL flags in *value* are set in the line's FLAG
-\-  INCLUDES lines in which NO flags in *value* are set in the line's FLAG
-^   EXCLUDES lines in which ALL flags in *value* are set in the line's FLAG
-==  =======================================================================
+   ==  =======================================================================
+   \+  INCLUDES lines in which ALL flags in *value* are set in the line's FLAG
+   \-  INCLUDES lines in which NO flags in *value* are set in the line's FLAG
+   ^   EXCLUDES lines in which ALL flags in *value* are set in the line's FLAG
+   ==  =======================================================================
 
-| *Example*: --FLAG -192 includes only lines in which neither FLAG 64 nor 128 are set. This can also be expressed as --FLAG -0xC0 
-|
-| More information of FLAGs can be found in section 1.4 of the `SAM spec <https://samtools.github.io/hts-specs/SAMv1.pdf>`_.
-
+   | *Example*: --FLAG -192 includes only lines in which neither FLAG 64 nor 128 are set. This can also be expressed as --FLAG -0xC0 
    |
+   | More information of FLAGs can be found in section 1.4 of the `SAM spec <https://samtools.github.io/hts-specs/SAMv1.pdf>`_.
+
+          |
 
 .. option:: --MAPQ [^]value.  (SAM BAM) Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
    
@@ -94,49 +100,53 @@ One or more file names must be given.
 
 .. option:: -n, --lines [first]-[last] or [first].  Show a certain range of lines. <first> and <last> are numbers of lines in the file (starting from 1). 
 
-| *Examples*: 
+   |
+   | *Examples*: 
 
-================================ ========================================================
-``genocat --lines 1000-2000``    displays the 1001 lines between 1000 and 2000
-``genocat --lines=1000-``        displays all lines starting from 1000 (*optional* =)
-``genocat -n -2000``             displays lines 1 to 2000 (``-n`` *instead of* ``--lines``)
-``genocat -n 1000``              displays 10 lines starting from line 1000
-================================ ========================================================
+   ================================ ========================================================
+   ``genocat --lines 1000-2000``    displays the 1001 lines between 1000 and 2000
+   ``genocat --lines=1000-``        displays all lines starting from 1000 (*optional* =)
+   ``genocat -n -2000``             displays lines 1 to 2000 (``-n`` *instead of* ``--lines``)
+   ``genocat -n 1000``              displays 10 lines starting from line 1000
+   ================================ ========================================================
 
 
-| *Note on outputting as BAM*: The numbering excludes the BAM header. 
-| *Note on FASTQ*: The numbering is of reads rather than lines. 
-| *Note*: The entire file header is included if any part of it is.
-| *Note*: Line numbers are taken before any additional filters are applied.
+   | *Note on outputting as BAM*: The numbering excludes the BAM header. 
+   | *Note on FASTQ*: The numbering is of reads rather than lines. 
+   | *Note*: The entire file header is included if any part of it is.
+   | *Note*: Line numbers are taken before any additional filters are applied.
 
-.. option:: --head [num_lines].  Show a certain number of lines from the start of the file.
-
-          |
-
-.. option:: --tail [num_lines].  Show a certain number of lines from the end of the file.
+.. option:: --head [num_lines].  Show <num_lines> lines from the start of the file.
 
           |
 
-.. option:: --iupac [^]value.  (SAM BAM FASTQ) Filter lines based on the IUPAC characters of the sequence data. Examples:
+.. option:: --tail [num_lines].  Show <num_lines> lines from the end of the file.
+
+          |
+
+.. option:: --iupac [^]value.  (SAM BAM FASTQ) Filter lines based on the IUPAC characters of the sequence data. 
    
-| *Examples*: 
+   |
+   | *Examples*: 
 
-========================== ===============================================================================
-``genocat --iupac ACGTN``  displays only lines in which all characters of the SEQ are one of A,C,G,T,N
-``genocat --iupac ^ACGTN`` displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
-========================== ===============================================================================
+   ========================== ===============================================================================
+   ``genocat --iupac ACGTN``  displays only lines in which all characters of the SEQ are one of A,C,G,T,N
+   ``genocat --iupac ^ACGTN`` displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
+   ========================== ===============================================================================
 
-| Note: In SAM/BAM, all lines missing a sequence (i.e. SEQ=*) are included in positive iupac filters (the first example above) and excluded in negative ones.
-| Note: The full list of IUPAC chacacters is here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
-
+   | Note: In SAM/BAM, all lines missing a sequence (i.e. SEQ=*) are included in positive iupac filters (the first example above) and excluded in negative ones.
+   | Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
+   |
 
 .. option:: -K, --kraken filename. Load a .kraken.genozip file for use with --taxid. 
 
-| See: :ref:`kraken`
+   | See: :ref:`kraken`
+   |
 
 .. option:: -k, --taxid [^]taxid[+0].  Show only lines than match the Taxonomy ID <taxid>. ^ for a negative search. +0 means <taxid> AND unclassified. Requires either using in combination with --kraken or for the file to have been compressed with genozip --kraken.
 
-| See: :ref:`kraken`
+   | See: :ref:`kraken`
+   |
 
 .. option:: -G, --drop-genotypes.  (VCF) Output the data without the samples and FORMAT column.
    
@@ -200,7 +210,7 @@ One or more file names must be given.
 
 .. option:: --no-PG.  (VCF SAM BAM) When modifying the data in a file using genocat Genozip normally adds information about the modification in the file header. With this option it doesn't.
     
-|
+          |
 
 .. include:: opt-threads.rst
 .. include:: opt-stats.rst

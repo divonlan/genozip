@@ -1115,9 +1115,9 @@ void flags_store_command_line (int argc, char **argv)
         fprintf (stderr, "\n%s: %s\n", str_time().s, command_line.data);
 }
 
-const BufferP flags_command_line (void)
+const char *flags_command_line (void)
 {
-    return &command_line;
+    return command_line.data;
 }
 
 void flags_display_debugger_params (void)

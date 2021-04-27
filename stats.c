@@ -230,7 +230,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 
     // add diagnostic info
     bufprintf (evb, &z_file->STATS_buf, "Command line: %s", "");
-    buf_add_string (evb, &z_file->STATS_buf, flags_command_line()->data); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
+    buf_add_string (evb, &z_file->STATS_buf, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
     bufprintf (evb, &z_file->STATS_buf, "\nSystem info: OS=%s cores=%u endianity=%s\n", 
                arch_get_os(), arch_get_num_cores(), arch_get_endianity());
     bufprintf (evb, &z_file->STATS_buf, "\nSections (sorted by %% of genozip file):%s\n", "");

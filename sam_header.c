@@ -205,7 +205,7 @@ static inline void txtheader_sam_add_PG (Buffer *txtheader_buf)
     // the command line length is unbound, careful not to put it in a bufprintf
     bufprintf (txtheader_buf->vb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
                unique_id, GENOZIP_URL, GENOZIP_CODE_VERSION);
-    buf_add_string (txtheader_buf->vb, txtheader_buf, flags_command_line()->data);
+    buf_add_string (txtheader_buf->vb, txtheader_buf, flags_command_line());
     buf_add_string (txtheader_buf->vb, txtheader_buf, "\n");
 }
 
@@ -283,7 +283,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     if (!from_SQ) n_ref = ref_num_loaded_contigs();
 
     // grow buffer to accommodate estimated reference size (we will more in txtheader_sam2bam_ref_info if not enough)
-    buf_alloc (comp_vb, txtheader_buf, n_ref * 100 + (50 + flags_command_line()->len) , 0, char, 1, 0);
+    buf_alloc (comp_vb, txtheader_buf, n_ref * 100 + (50 + strlen (flags_command_line())), 0, char, 1, 0);
 
     // add PG
     txtheader_sam_add_PG (txtheader_buf);

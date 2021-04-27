@@ -6,17 +6,33 @@
 #include "genozip.h"
 #include "flags.h"
 #include "iupac.h"
+#include "flags.h"
+
+uint8_t iupac_ascii_mask[256] = {}; // for --iupac filter - '1' for every ASCII included in a positive or negative iupac
+uint8_t iupac_bam_mask[16]    = {}; // each entry corresponds to: =ACMGRSVTWYHKDBN (defined page 16: https://samtools.github.io/hts-specs/SAMv1.pdf)
 
 void iupac_set (const char *optarg)
 {
     bool neg = optarg[0] == '^';
     flag.iupac = neg ? IUP_NEGATIVE : IUP_POSITIVE;
 
+    // ascii mask
     for (const char *c = &optarg[neg]; *c; c++)
-        flag.iupac_mask[(int)*c] = true;
+        iupac_ascii_mask[(int)*c] = true;
         
     // missing sequences (SEQ=*) (appear only in SAM/BAM) - always included in positive --iupac and excluded in negative
-    flag.iupac_mask[(int)'*'] = true; 
+    iupac_ascii_mask[(int)'*'] = true; 
+
+    // bam mask
+    for (const char *c = &optarg[neg]; *c; c++) {
+        // the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
+        static const uint8_t sam2bam_seq_map[256] = { ['=']=0x80, ['A']=0x81, ['C']=0x82, ['M']=0x83, ['G']=0x84, ['R']=0x85, ['S']=0x86, ['V']=0x87, 
+                                                      ['T']=0x88, ['W']=0x89, ['Y']=0x8a, ['H']=0x8b, ['K']=0x8c, ['D']=0x8d, ['B']=0x8e, ['N']=0x8f };
+        uint8_t bam_value = sam2bam_seq_map[(int)*c]; 
+        ASSINP (bam_value & 0x80, "Invalid --iupac argument \"%s\": each charcters should be a valid IUPAC character, one of \"=ACMGRSVTWYHKDBN\". See: https://www.bioinformatics.org/sms/iupac.html",
+                optarg);
+        iupac_bam_mask[(int)(bam_value & 0xf)] = 1;
+    }
 }
 
 void iupac_show (void)
@@ -24,21 +40,40 @@ void iupac_show (void)
     if (flag.iupac) {
         iprintf ("iupac=%d: ", flag.iupac);
         for (unsigned i=0; i < 256; i++)
-            if (flag.iupac_mask[i]) iprintf ("%c", i);
+            if (iupac_ascii_mask[i]) iprintf ("%c", i);
         iprint0 ("\n");
     }
     else
         iprint0 ("iupac=false\n");
 }
 
-bool iupac_is_included (const char *seq, unsigned seq_len)
+bool iupac_is_included_ascii (const char *seq, unsigned seq_len)
 {    
     bool caught=false;
     for (unsigned i=0; i < seq_len; i++)
-        if (!flag.iupac_mask[(int)seq[i]]) {
+        if (!iupac_ascii_mask[(int)seq[i]]) {
             caught=true;
             break;
         }
+
+    if (flag.iupac == IUP_POSITIVE) return !caught;
+    else                            return  caught;
+}
+
+bool iupac_is_included_bam (const char *seq, unsigned seq_len)
+{    
+    if (!seq_len) 
+        return (flag.iupac == IUP_POSITIVE) ? true : false;
+
+    bool caught=false;
+    for (unsigned i=0; i < seq_len; i++) {
+        uint8_t value = (!(i%2)) ? ((seq[i/2] & 0xf0) >> 4)
+                                 : seq[i/2] & 0x0f;
+        if (!iupac_bam_mask[value]) {
+            caught=true;
+            break;
+        }
+    }
 
     if (flag.iupac == IUP_POSITIVE) return !caught;
     else                            return  caught;

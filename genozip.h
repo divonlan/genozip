@@ -211,29 +211,29 @@ extern bool is_info_stream_terminal; // is info_stream going to a terminal
 #define iprint0(str)                         do { fprintf (info_stream, (str)); fflush (info_stream); } while(0)
 
 // check for a user error
-#define ASSINP(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); if (flags_command_line()->data) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()->data); else fprintf (stderr, "\n"); exit_on_error(false); }} while(0)
-#define ASSINP0(condition, string)           do { if (!(condition)) { fprintf (stderr, "\n%s: %s\n", global_cmd, string); if (flags_command_line()->data) fprintf (stderr, "\ncommand: %s\n", flags_command_line()->data); exit_on_error(false); }} while(0)
-#define ABORTINP(format, ...)                do { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);} while(0)
+#define ASSINP(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); exit_on_error(false); }} while(0)
+#define ASSINP0(condition, string)           do { if (!(condition)) { fprintf (stderr, "\n%s: %s\n", global_cmd, string); if (flags_command_line()) fprintf (stderr, "\ncommand: %s\n", flags_command_line()); exit_on_error(false); }} while(0)
+#define ABORTINP(format, ...)                do { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);} while(0)
 #define ABORTINP0(string)                    do { fprintf (stderr, "\n%s: %s\n", global_cmd, string); exit_on_error(false);} while(0)
 
 // check for a bug - prints stack
-#define ASSERT(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\nError in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
+#define ASSERT(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\nError in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
 #define ASSERT0(condition, string)           do { if (!(condition)) { fprintf (stderr, "\nError in %s:%u: %s\n", __FUNCTION__, __LINE__, string); exit_on_error(true); }} while(0)
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
-#define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)
+#define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)
 #define ASSERTW0(condition, string)          do { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n%s\n", string); } } while(0)
-#define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} while(0)
+#define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} while(0)
 #define RETURNW0(condition, ret, string)     do { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n%s\n", string); } return ret; } } while(0)
-#define ABORT(format, ...)                   do { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);} while(0)
-#define ABORT_R(format, ...) /*w/ return 0*/ do { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); return 0;} while(0)
+#define ABORT(format, ...)                   do { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);} while(0)
+#define ABORT_R(format, ...) /*w/ return 0*/ do { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); return 0;} while(0)
 #define ABORT0(string)                       do { fprintf (stderr, "\n%s\n", string); exit_on_error(true);} while(0)
 #define ABORT0_R(string)                     do { fprintf (stderr, "\n%s\n", string); exit_on_error(true); return 0; } while(0)
-#define WARN(format, ...)                    do { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
+#define WARN(format, ...)                    do { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
 #define WARN0(string)                        do { if (!flag.quiet) fprintf (stderr, "\n%s\n", string); } while(0)
 
 #define WARN_ONCE(format, ...)               do { static bool warning_shown = false; \
                                                   if (!flag.quiet && !warning_shown) { \
-                                                      fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); \
+                                                      fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); \
                                                       warning_shown = true; \
                                                   } \
                                              } while(0) 
@@ -245,7 +245,7 @@ extern bool is_info_stream_terminal; // is info_stream going to a terminal
                                                   } \
                                              } while(0) 
 
-#define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} while(0)
+#define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} while(0)
 
 // exit codes
 #define EXIT_OK                   0
