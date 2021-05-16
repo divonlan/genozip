@@ -163,11 +163,9 @@ void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bi
         Section sl = ENT (SectionEnt, z_file->section_list_buf, i);
         if (sl->st == SEC_REF_HASH) {
 
-            SectionHeaderRefHash *header = (SectionHeaderRefHash *)zfile_read_section_header (evb, sl->offset, 0, SEC_REF_HASH);
-            if (num_layers) *num_layers = header->num_layers;
-            if (base_layer_bits) *base_layer_bits = header->layer_bits + header->layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
-
-            buf_free (&evb->compressed); // allocated by zfile_read_section_header
+            SectionHeaderRefHash header = zfile_read_section_header (evb, sl->offset, 0, SEC_REF_HASH).ref_hash;
+            if (num_layers) *num_layers = header.num_layers;
+            if (base_layer_bits) *base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
             return;
         }
         else if (sl->st == SEC_REFERENCE)
@@ -332,7 +330,7 @@ Section sections_pull_vb_up (uint32_t vb_i, Section sl)
     return new_vb_sl + vb_sections_len - 1; // last section of the VB
 }
 
-// move all sections of component txtfile_sl_move_me to be immediately txtfile_sl_after_me
+// move all sections of component txtfile_sl_move_me to be immediately after txtfile_sl_after_me, or txtfile_sl_after_me=NULL to move to the top of the section list
 void sections_pull_component_up (Section txtfile_sl_after_me, // destination - after this component (NULL means move to beginning)
                                  Section txtfile_sl_move_me)  // this is the component to move
 {    

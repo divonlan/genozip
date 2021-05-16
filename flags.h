@@ -9,12 +9,13 @@
 #include "genozip.h"
 
 typedef enum { 
-    REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference
-    REF_INTERNAL,  // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
-    REF_EXTERNAL,  // ZIP & PIZ: user specified --reference
-    REF_EXT_STORE, // ZIP: user specified --REFERENCE
-    REF_STORED,    // PIZ: file contains REFERENCE sections (user cannot specify --reference)
-    REF_LIFTOVER,  // ZIP: user specified --liftover
+    REF_NONE,       // ZIP (except SAM) and PIZ when user didn't specify an external reference
+    REF_INTERNAL,   // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
+    REF_EXTERNAL,   // ZIP & PIZ: user specified --reference
+    REF_EXT_STORE,  // ZIP: user specified --REFERENCE
+    REF_STORED,     // PIZ: file contains REFERENCE sections (user cannot specify --reference)
+    REF_MAKE_CHAIN, // ZIP of a chain file
+    REF_LIFTOVER,   // ZIP: user specified --chain which uses a reference
 } ReferenceType;
 
 typedef struct {
@@ -43,6 +44,7 @@ typedef struct {
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted,
         kraken_taxid;
+        
     int64_t lines_first, lines_last, tail; // set by --lines 
     char *grep;
     uint32_t one_vb, one_component, downsample, shard ;
@@ -50,7 +52,7 @@ typedef struct {
     enum { SAM_MAPQ_INCLUDE_IF_AT_LEAST=1, SAM_MAPQ_EXCLUDE_IF_AT_LEAST } sam_mapq_filter;
     uint16_t FLAG; // the value for sam_flag_filter
     uint8_t MAPQ;  // the value for sam_mapq_filter
-    enum { IUP_NONE, IUP_POSITIVE, IUP_NEGATIVE } iupac;
+    enum { IUP_NONE, IUP_POSITIVE, IUP_NEGATIVE } bases;
 
     // genols options
     int bytes;
@@ -69,7 +71,7 @@ typedef struct {
     ReferenceType reference;
 
     // stats / metadata flags for end users
-    int show_stats; 
+    int show_stats, show_liftover; 
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     
     // analysis
@@ -94,17 +96,17 @@ typedef struct {
            show_one_counts,
            dump_one_b250_dict_id,   // argument of --dump-b250-one
            dump_one_local_dict_id;  // argument of --dump-local-one
-    char *show_one_dict;    // argument of --show-dict-one
+    char *show_one_dict;     // argument of --show-dict-one
 
     // internal flags set by the system, not the command line
+    Coords rejects_coord;    // ZIP only: currently zipping liftover rejects file / component containing only PRIMARY or LUFT variants
     bool debug,              // set if DEBUG is defined
          ref_use_aligner,    // ZIP: compression requires using the aligner
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
          reading_reference,  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
-         trans_containers,   // PIZ: decompression invokes container translators
-         processing_rejects, // ZIP & PIZ: currently zipping liftover rejects file / component
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_dicts,   // PIZ (genocat): we don't need to read the dicts
+         genocat_global_area_only, // PIZ (genocat): we quit after processing the global area
          genocat_no_reconstruct,  // PIZ: User requested to genocat with only metadata to be shown, not file contents
          no_writer,          // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          multiple_files,     // Command line includes multiple files
@@ -151,11 +153,12 @@ extern Flags flag;
 
 // save and reset flags that are intended to operate on the compressed file rather than the reference file
 #define SAVE_FLAGS_AUX Flags save_flag = flag; \
-    flag.test = flag.md5 = flag.show_memory = flag.show_stats= flag.no_header = flag.show_bgzf =\
+    flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf =\
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =  \
     flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.interleave = flag.count = \
-    flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads= \
+    flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads = \
     flag.show_sex = flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */ \
+    flag.bases = IUP_NONE; \
     flag.grep = flag.show_time = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */ \
     flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE; /* DictId */ 
     

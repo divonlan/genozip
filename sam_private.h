@@ -103,6 +103,6 @@ extern void sam_foreach_SQ_line (const char *txt_header, RefContigsIteratorCallb
 extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, const char **value, unsigned *value_len);
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void bam_seg_bin (VBlockSAM *vb, uint16_t bin, uint16_t flag, PosType this_pos);
-extern void sam_seg_verify_pos (VBlockP vb, PosType this_pos);
+extern void sam_seg_verify_rname_pos (VBlockP vb, const char *p_into_txt, PosType this_pos);
 
 #endif

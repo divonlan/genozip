@@ -382,13 +382,14 @@ static bool file_open_txt_read (File *file)
         case CODEC_GZ:   // we test the first few bytes of the file to differentiate between NONE, GZ and BGZIP
         case CODEC_BGZF: 
         case CODEC_NONE: {
-            file->file = file->is_remote         ? url_open (NULL, file->name)  
-                       : file->redirected        ? fdopen (STDIN_FILENO,  "rb") 
-                       : flag.processing_rejects ? z_file->rejects_file  // already open
-                       :                           fopen (file->name, READ);
+            file->file = file->is_remote                  ? url_open (NULL, file->name)  
+                       : file->redirected                 ? fdopen (STDIN_FILENO,  "rb") 
+                       : flag.rejects_coord == DC_PRIMARY ? z_file->rejects_file[0]  // already open
+                       : flag.rejects_coord == DC_LUFT    ? z_file->rejects_file[1]  // already open
+                       :                                    fopen (file->name, READ);
             ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
 
-            if (flag.processing_rejects)
+            if (flag.rejects_coord)
                 file_seek (file, 0, SEEK_SET, false); // we finished writing the reject file - now we will read it
 
             // read the first potential BGZF block to test if this is GZ or BGZF
@@ -674,13 +675,18 @@ static void file_initialize_z_file_data (File *file)
                   buf_add_to_buffer_list (evb, &file->buf);
     
     INIT (ra_buf);
-    INIT (ra_min_max_by_chrom);
+    INIT (ra_buf_luft);
     INIT (chroms_sorted_index);
     INIT (alt_chrom_map);
     INIT (section_list_buf);
     INIT (stats_buf);
     INIT (STATS_buf);
     INIT (bound_txt_names);
+    INIT (recon_plan);
+    INIT (comp_info);
+    INIT (txt_file_info);
+    INIT (vb_info[0]);
+    INIT (vb_info[1]);
 }
 
 static void file_initialize_txt_file_data (File *file)
@@ -688,6 +694,9 @@ static void file_initialize_txt_file_data (File *file)
     INIT (unconsumed_txt);
     INIT (bgzf_isizes);
     INIT (coverage);
+    INIT (read_count);
+    INIT (unmapped_read_count);
+    INIT (recon_plan);
     INIT (line_info[0]);
     INIT (line_info[1]);
     INIT (vb_info[0]);
@@ -825,12 +834,12 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         is_file_exists = file_exists (filename);
         error = strerror (errno);
 
-        if (!flag.processing_rejects) {
+        if (!flag.rejects_coord) {
             if (is_file_exists && mode == READ) 
                 file->disk_size = file_get_size (filename);
         }
         else 
-            file->disk_size = z_file->rejects_disk_size;
+            file->disk_size = z_file->rejects_disk_size[flag.rejects_coord-1];
     }
 
     // return null if genozip input file size is known to be 0, so we can skip it. note: file size of url might be unknown
@@ -943,8 +952,8 @@ void file_close (File **file_p,
     if (!file) return; // nothing to do
 
     // if this is the rejects file, unlink it first to prevent unnecessary flushing when closing
-    if (chain_is_loaded && file->supertype == TXT_FILE && flag.processing_rejects) 
-        unlink (z_file->rejects_file_name); // ignore errors (this doesn't work on NTFS)
+    if (file->supertype == TXT_FILE && flag.rejects_coord) 
+        unlink (z_file->rejects_file_name[flag.rejects_coord-1]); // ignore errors (this doesn't work on NTFS)
 
     if (file->file && file->supertype == TXT_FILE) {
 
@@ -976,8 +985,8 @@ void file_close (File **file_p,
         FCLOSE (file->file, file_printname (file));
 
     // in case the unlinking didn't work (eg NTFS) - remove the rejects file now that its closed
-    if (chain_is_loaded && file->supertype == TXT_FILE && flag.processing_rejects) 
-        remove (z_file->rejects_file_name); // ignore errors
+    if (file->supertype == TXT_FILE && flag.rejects_coord) 
+        remove (z_file->rejects_file_name[flag.rejects_coord-1]); // ignore errors
 
     // create an index file using samtools, bcftools etc, if applicable
     if (index_txt) file_index_txt (file);
@@ -995,7 +1004,7 @@ void file_close (File **file_p,
             ctx_destroy_context (&file->contexts[i]);
 
         buf_destroy (&file->ra_buf);
-        buf_destroy (&file->ra_min_max_by_chrom);
+        buf_destroy (&file->ra_buf_luft);
         buf_destroy (&file->chroms_sorted_index);
         buf_destroy (&file->alt_chrom_map);
         buf_destroy (&file->section_list_buf);
@@ -1017,7 +1026,8 @@ void file_close (File **file_p,
 
         FREE (file->name);
         FREE (file->basename);
-        FREE (file->rejects_file_name);
+        FREE (file->rejects_file_name[0]);
+        FREE (file->rejects_file_name[1]);
         FREE (file);
     }
 }

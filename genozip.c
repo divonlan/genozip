@@ -25,7 +25,7 @@
 #include "codec.h"
 #include "threads.h"
 #include "linesorter.h"
-#include "iupac.h"
+#include "bases_filter.h"
 #include "genols.h"
 
 // globals - set it main() and never change
@@ -41,19 +41,23 @@ uint32_t global_max_threads = DEFAULT_MAX_THREADS;
 void main_exit (bool show_stack, bool is_error) 
 {
     if (is_error && flag.debug_threads)
-        threads_display_log();
+        threads_write_log (true);
         
     if (is_error && flag.echo)
         flags_display_debugger_params();
-
-    // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
-    if (is_error) { close (1); close (2); }
 
     if (show_stack) threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
 
     buf_test_overflows_all_vbs("exit_on_error");
 
+    if (flag.log_filename) {
+        iprintf ("%s - execution ended %s\n", str_time().s, is_error ? "with an error" : "normally");
+        fclose (info_stream);
+    } 
+
     if (is_error) {
+        close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
+        close (2);
         url_kill_curl();  /* <--- BREAKPOINT */
         file_kill_external_compressors(); 
     }
@@ -76,11 +80,6 @@ void main_exit (bool show_stack, bool is_error)
         // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
         if (save_name) file_remove (save_name, true);
     }
-
-    if (flag.log_filename) {
-        iprintf ("%s - execution ended %s\n", str_time().s, is_error ? "with an error" : "normally");
-        fclose (info_stream);
-    } 
 
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
@@ -162,9 +161,12 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
     // 3) identify skip cases (DT_NONE returned) - empty file, unzip of a reference
     // 4) reset flag.unbind if file contains only one component
+    
+    TEMP_FLAG (genocat_no_reconstruct, true); // so zfile_read_genozip_header doesn't fail on a reference file before flags_update_piz_one_file is run
     if (!z_file->file || !zfile_read_genozip_header (0)) goto done; 
+    RESTORE_FLAG(genocat_no_reconstruct);
 
-    if (z_file->z_flags.dual_coords)
+    if (z_dual_coords)
         z_file->max_conc_writing_vbs = linesorter_get_max_conc_writing_vbs(); // get data by reading all SEC_RECON_PLAN headers
 
     if (z_file->max_conc_writing_vbs < 3) z_file->max_conc_writing_vbs = 3;
@@ -202,10 +204,11 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     Dispatcher dispatcher = piz_z_file_initialize (is_last_z_file);  
 
     // a loop for decompressing all txt_files (1 if concatenating, possibly more if unbinding)
-    while (z_file->num_txt_components_so_far < z_file->num_components) {
-        piz_one_txt_file (dispatcher, is_first_z_file);
-        file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
-    }
+    if (dispatcher)
+        while (z_file->num_txt_components_so_far < z_file->num_components) {
+            piz_one_txt_file (dispatcher, is_first_z_file);
+            file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
+        }
 
     file_close (&z_file, false, false);
     is_first_z_file = false;
@@ -301,6 +304,9 @@ static void main_genozip (const char *txt_filename,
     ASSINP (!z_filename || !url_is_url (z_filename), 
             "output files must be regular files, they cannot be a URL: %s", z_filename);
 
+    ASSINP0 (!z_file || !z_dual_coords || flag.rejects_coord, 
+             "it is not possible to concatenate dual-coordinate files");
+
     // get input file
     if (!txt_file) // open the file - possibly already open from main_load_reference
         txt_file = file_open (txt_filename, READ, TXT_FILE, DT_NONE); 
@@ -323,10 +329,10 @@ static void main_genozip (const char *txt_filename,
         main_genozip_open_z_file_write (&z_filename);
     }
 
-    if (!flag.processing_rejects)
+    if (!flag.rejects_coord)
         stats_add_txt_name (txt_name); // add txt file name to stats data stored in z_file
 
-    TEMP_FLAG (quiet, flag.processing_rejects ? true : flag.quiet); // no warnings when (re) processing rejects
+    TEMP_FLAG (quiet, flag.rejects_coord ? true : flag.quiet); // no warnings when (re) processing rejects
 
     flags_update_zip_one_file();
 
@@ -335,7 +341,7 @@ static void main_genozip (const char *txt_filename,
     zip_one_file (txt_file->basename, &is_last_txt_file, z_closes_after_me);
 
     if (flag.show_stats && z_closes_after_me && 
-        (!z_file->z_flags.dual_coords || flag.processing_rejects)) {
+        (!z_dual_coords || flag.rejects_coord)) {
         stats_display();
     }
 
@@ -347,18 +353,16 @@ static void main_genozip (const char *txt_filename,
     if (!flag.to_stdout && z_file && z_closes_after_me) {
 
         // if this is a dual coords file, recursively call to add the rejects file, and close z_file there.
-        if (z_file->z_flags.dual_coords && !flag.processing_rejects) {
-            flag.processing_rejects = true;
+        if (z_dual_coords && !flag.rejects_coord) {
             flag.sort = false;
-            z_closes_after_me = false;
-            TEMP_FLAG (bind, BIND_REJECTS);            
+            z_closes_after_me = false;                
             stats_freeze_txt_len(); // don't count txt_len of rejects
             
-            main_genozip (z_file->rejects_file_name, 0, z_file->name, txt_file_i, true, exec_name);
-            
-            RESTORE_FLAG (bind);
+            for (flag.rejects_coord = DC_PRIMARY ; flag.rejects_coord <= DC_LUFT ; flag.rejects_coord++)
+                main_genozip (z_file->rejects_file_name[flag.rejects_coord-1], 0, z_file->name, txt_file_i, flag.rejects_coord==DC_LUFT, exec_name);
         }
-        else {
+        
+        else if (!z_dual_coords || flag.rejects_coord == DC_LUFT) {
             if (!z_filename) { z_filename = z_file->name ; z_file->name = 0; } // take over the name if we don't have it (eg 2nd file in a pair)
             file_close (&z_file, false, !is_last_txt_file); 
         }
@@ -373,13 +377,15 @@ static void main_genozip (const char *txt_filename,
     if (remove_txt_file) file_remove (txt_filename, true); 
 
 done: {
+    // propogate up some flags
     SAVE_FLAG(vblock_memory);  
     SAVE_FLAG(data_modified);
-    
+
     RESTORE_FLAGS;
     
     if (flag.pair) RESTORE_FLAG (vblock_memory); // FASTQ R2 must have the same vblock_memory as R1, so it should not re-calculate in zip_dynamically_set_max_memory - otherwise txtfile_read_vblock will fail
     if (flag.bind) RESTORE_FLAG (data_modified); // When binding, if any of the compressed files is a Luft, we don't store digests
+    
 }}
 
 static inline DataType main_get_file_dt (const char *filename)
@@ -449,7 +455,7 @@ void TEST() {
 }
 
 int main (int argc, char **argv)
-{
+{    
     info_stream = stdout; // may be changed during intialization
     profiler_initialize();
     buf_initialize(); 
@@ -532,10 +538,8 @@ int main (int argc, char **argv)
     // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
     if (command == ZIP) license_get(); 
 
-    if (flag.reading_chain) {
-        ref_load_external_reference (false); // chain requires reference
+    if (flag.reading_chain) 
         chain_load();
-    }
 
     if (flag.reading_kraken) kraken_load();
 

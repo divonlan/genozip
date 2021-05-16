@@ -32,7 +32,7 @@
 #include "threads.h"
 #include "endianness.h"
 
-// called by main thread in fastq, in case of --grep, to decompress and reconstruct the desc line, to 
+// called by main thread in FASTA and FASTQ, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
 bool piz_test_grep (VBlock *vb)
 {
@@ -116,16 +116,22 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     if (!vb) return false; // we don't skip reading any SEC_DICT / SEC_COUNTS sections
 
-    bool skip = exe_type == EXE_GENOCAT && dict_id.num != dict_id_fields[CHROM] && (
+    // B250, LOCAL, COUNT sections
+    bool skip = exe_type == EXE_GENOCAT && dict_id.num && dict_id.num != dict_id_fields[CHROM] && (
     
-    // if dump_local/dump_b250/show_counts - we only need the requested section and CHROM.
-        (flag.dump_one_local_dict_id.num && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num)
-    ||  (flag.dump_one_b250_dict_id.num  && dict_id_typeless (dict_id).num != flag.dump_one_local_dict_id.num)
+    // sometimes we don't need dictionaries. but we always load CHROM.
+        flag.genocat_no_dicts
+
+    // if show_counts - we only need the requested section and CHROM (note: not true for dump_one_b250_dict_id,
+    // as we need to reconstruct to dump it)
     ||  (flag.show_one_counts.num        && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
 
     // if --counts, we filter here - TOPLEVEL only - unless there's a skip_section function which will do the filtering
     ||  (flag.count && !DTPZ(is_skip_section) && dict_id.num != dict_id_fields[DTFZ(toplevel)]) 
     );
+
+    skip |= flag.genocat_no_ref_file && (st == SEC_REFERENCE || st == SEC_REF_HASH || st == SEC_REF_IS_SET);
+
     return skip;
 }
 
@@ -238,16 +244,15 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     ASSERT (!flag.reference || (genome && genome->nbits) || flag.genocat_no_ref_file,
             "reference is not loaded correctly (vb=%u)", vb->vblock_i);
 
-    DtTranslation trans = dt_get_translation(); // in case we're translating from one data type to another
-
     // note: txt_data is fully allocated in advance and cannot be extended mid-reconstruction (container_reconstruct_do and possibly others rely on this)
-    buf_alloc (vb, &vb->txt_data, 0, vb->vb_data_size * trans.factor + 10000, char, 1.1, "txt_data"); // +10000 as sometimes we pre-read control data (eg container templates) and then roll back
+    #define OVERFLOW_SIZE 65536 // allow some overflow space as sometimes we reconstruct unaccounted for data: 1. container templates 2. reconstruct_peek and others
+    buf_alloc (vb, &vb->txt_data, 0, vb->vb_data_size * vb->translation.factor + OVERFLOW_SIZE, char, 1.1, "txt_data"); 
     buf_alloc (vb, &vb->lines, 0, vb->lines.len+1, char *, 1.1, "lines");
     
     piz_uncompress_all_ctxs (vb, 0);
 
     // reconstruct from top level snip
-    reconstruct_from_ctx (vb, trans.toplevel, 0, true);
+    reconstruct_from_ctx (vb, vb->translation.toplevel, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
     if (txt_file && txt_file->codec == CODEC_BGZF && !flag.no_writer &&
@@ -302,8 +307,20 @@ DataType piz_read_global_area (void)
         flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
     }
 
-    if (!flag.genocat_no_dicts)    
-        ctx_read_all_dictionaries(); // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs()
+    // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs(). 
+    // Note: some dictionaries are skipped based on skip() and all flag logic should implemented there
+    ctx_read_all_dictionaries(); 
+
+    if (!flag.header_only && !z_dual_coords) { // dual coordinates need this stuff of for the rejects part of the header
+
+        // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
+        ref_alt_chroms_load(); 
+
+        ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
+
+        // read dict_id aliases, if there are any
+        dict_id_read_aliases();
+    }
 
     // if the user wants to see only the header, we can skip regions and random access
     if (!flag.header_only) {
@@ -331,13 +348,6 @@ DataType piz_read_global_area (void)
         if ((flag.reference == REF_STORED || flag.reference == REF_EXTERNAL) && 
             !flag.reading_reference && !flag.genocat_no_reconstruct)
             ref_contigs_sort_chroms(); // create alphabetically sorted index for user file chrom word list
-
-        if (!flag.genocat_no_ref_file)
-            ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
-
-        // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
-        if (!flag.genocat_no_ref_file)
-            ref_alt_chroms_load();
 
         // case: reading reference file
         if (flag.reading_reference) {
@@ -383,9 +393,6 @@ DataType piz_read_global_area (void)
             else
                 z_file->disk_size_minus_skips -= sections_get_ref_size();    
         }
-
-        // read dict_id aliases, if there are any
-        dict_id_read_aliases();
     }
     
 done:
@@ -409,14 +416,24 @@ static bool piz_read_one_vb (VBlock *vb)
 
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)ENT (char, vb->z_data, vb_header_offset);
     vb->vb_data_size     = BGEN32 (header->vb_data_size); 
-    vb->first_line       = 1 + txt_file->num_lines; // 1-based (inc. txt header) // BGEN32 (header->first_line);      
+    vb->first_line       = BGEN32 (header->first_line);   // this option show the line number as in the source file
+//    vb->first_line       = 1 + txt_file->num_lines; // this option shows line number in resulting file (but useless for debug if reconstruction crashed)
     vb->lines.len        = BGEN32 (header->num_lines);       
     vb->longest_line_len = BGEN32 (header->longest_line_len);
     vb->digest_so_far    = header->digest_so_far;
     vb->chrom_node_index = WORD_INDEX_NONE;
-    vb->vb_header_flags  = header->h.flags.vb_header;
-    vb->is_rejects_vb    = flag.processing_rejects; // note: flag.processing_rejects is valid in the main thread only - it may change before the compute thread completes
-    
+
+    // calculate the coordinates in which this VB will be rendered - PRIMARY or LUFT
+    vb->vb_coords        = !z_dual_coords ? DC_PRIMARY // non dual-coordinate file - always PRIMARY
+                         : header->h.flags.vb_header.coords == DC_PRIMARY ? DC_PRIMARY // reject component ##primary_only
+                         : header->h.flags.vb_header.coords == DC_LUFT    ? DC_LUFT    // reject component ##luft_only
+                         : flag.luft ? DC_LUFT // dual component - render as LUFT
+                         : DC_PRIMARY;         // dual component - render as PRIMARY
+
+    vb->is_rejects_vb    = z_dual_coords && (header->h.flags.vb_header.coords != DC_BOTH);
+
+    vb->translation      = dt_get_translation (vb); // vb->vb_chords needs to be set first
+
     txt_file->num_lines += vb->lines.len;
 
     // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
@@ -559,13 +576,15 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
     if (data_type == DT_NONE || flag.reading_reference) 
         return NULL; // no components in this file (as is always the case with reference files) 
 
+    if (flag.genocat_global_area_only) return NULL;
+
     writer_create_plan();
 
     ASSINP (!flag.test || !digest_is_zero (z_file->digest), 
-            "Error testing %s: --test cannot be used with this file, as it was not compressed (in genozip v8) with --md5 or --test", z_name);
+            "Error testing %s: --test cannot be used with this file, as it was not compressed with digest information. See https://genozip.com/digest.html", z_name);
 
     if (flag.test || flag.md5) 
-        ASSINP0 (dt_get_translation().is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
+        ASSINP0 (dt_get_translation(NULL).is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
 
     Dispatcher dispatcher = dispatcher_init (flag.reading_chain     ? "piz-chain"
                                             :flag.reading_reference ? "piz-ref"
@@ -597,7 +616,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
         bool achieved_something = false;
         
         // In input is not exhausted, and a compute thread is available - read a vblock and dispatch it
-        if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
+        if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher) && vb_has_free_vb()) {
             achieved_something = true;
 
             bool found_header = sections_next_sec2 (&sl, SEC_TXT_HEADER, SEC_VB_HEADER);
@@ -611,12 +630,12 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
 
                 else {
                     // note: also starts writer, and if unbinding, also opens the txt file and hands data over to the writer
-                    txtheader_piz_read_and_reconstruct (z_file->num_txt_components_so_far, sl); 
+                    Coords rejects_coord = txtheader_piz_read_and_reconstruct (z_file->num_txt_components_so_far, sl); 
 
                     // case --unbind: unpausing after previous txt_file pause (requires txt file to be open)
                     if (flag.unbind) dispatcher_resume (dispatcher);  
 
-                    if (flag.header_only)
+                    if (flag.header_only && !rejects_coord)
                         sl = sections_component_last (sl); // skip all VBs
                 }
                 z_file->num_txt_components_so_far++;

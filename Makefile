@@ -31,16 +31,16 @@ SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
 MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
 		  data_types.c bit_array.c progress.c \
-          zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c liftover.c linesorter.c threads.c \
+          zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
 		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c writer.c \
-		  vcf_piz.c vcf_seg.c vcf_shared.c vcf_header.c \
+		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_format.c vcf_liftover.c vcf_refalt.c\
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
 		  fasta.c fastq.c gff3_seg.c me23.c phylip.c chain.c kraken.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_pbwt.c codec_none.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
-		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c iupac.c
+		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
 
@@ -61,10 +61,10 @@ CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
 CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
-             buffer.h file.h context.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h liftover.h  \
+             buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h  \
 			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
-			 arch.h license.h data_types.h base64.h txtheader.h writer.h iupac.h genols.h \
+			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
@@ -216,13 +216,14 @@ LICENSE.non-commercial.txt: text_license.h # not dependent on genozip.exe, so we
 	@./genozip$(EXE) --license=100 > $@
 
 SPHINX = /home/divon/miniconda3/bin/sphinx-build
-DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/developer.rst docs/index.rst docs/license.rst \
+DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/advanced.rst docs/index.rst docs/license.rst \
        docs/publications.rst docs/installing.rst docs/contact.rst docs/examples.rst docs/source.rst docs/logo.png \
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-translation.rst \
 	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
 	   docs/downsampling.rst docs/dual-coordinates-vcf.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst\
-	   docs/sam2fq.rst docs/gatk-unexpected-base.rst
+	   docs/sam2fq.rst docs/gatk-unexpected-base.rst docs/digest.rst \
+	   docs/liftover-vcf.rst docs/dc-vcf-spec.rst docs/dual-coordinates-vcf.rst
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 

@@ -13,7 +13,7 @@ extern const char *me23_seg_txt_line (VBlockP vb_, const char *field_start_line,
 extern void me23_seg_initialize (VBlockP vb);
 extern void me23_seg_finalize (VBlockP vb);
 extern bool me23_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header);
+extern bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 
 #define ME23_DICT_ID_ALIASES
 

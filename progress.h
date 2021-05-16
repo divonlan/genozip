@@ -9,9 +9,9 @@
 #include "genozip.h"
 #include "digest.h"
 
-extern void progress_new_component (const char *component_name, const char *status, int test_mode);
-extern void progress_update (uint64_t sofar, uint64_t total, bool done);
-extern void progress_update_status (const char *status);
+extern char *progress_new_component (const char *component_name, const char *message, int test_mode);
+extern void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done);
+extern void progress_update_status (char **prefix, const char *status);
 extern void progress_finalize_component (const char *status);
 extern void progress_finalize_component_time (const char *status, Digest md5);
 extern void progress_finalize_component_time_ratio (const char *me, double ratio, Digest md5);

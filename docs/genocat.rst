@@ -10,7 +10,8 @@ One or more file names must be given.
 
 .. option:: -e, --reference filename.  Load a reference file prior to decompressing. Required only for files compressed with --reference. When no non-reference file is specified display the reference data itself (typically used in combination with --regions).
 
-          |
+   | Note: this is equivalent of setting the environment variable GENOZIP_REFERENCE with the reference filename.
+   |
 
 .. option:: -E, --REFERENCE filename.  With no non-reference file specified. Display the reverse complement of the reference data itself. Typically used in combination with --regions.
 
@@ -22,7 +23,7 @@ One or more file names must be given.
 
 **Subsetting (aka filtering) options (options resulting in modified display of the data)**
 
-.. option:: --downsample rate[,shard].  Show only one in every <rate> lines (or reads in the case of FASTQ), optional <shard> parameter indicates which of the shards is shown. Other subsetting options (if any) will be applied to the surviving lines only.
+.. option:: --downsample rate[,shard].  Show only one in every <rate> lines (or reads in the case of FASTQ). The optional <shard> parameter indicates which of the shards is shown. Other subsetting options (if any) will be applied to the surviving lines only.
 
           |
 
@@ -33,7 +34,7 @@ One or more file names must be given.
 
           |
 
-.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (FASTA SAM/BAM GVF 23andMe Chain) Show one or more regions of the file. 
+.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (VCF SAM/BAM GVF FASTA 23andMe Chain) Show one or more regions of the file. 
 
    |
    | *Examples*: 
@@ -124,18 +125,18 @@ One or more file names must be given.
 
           |
 
-.. option:: --iupac [^]value.  (SAM BAM FASTQ) Filter lines based on the IUPAC characters of the sequence data. 
+.. option:: --bases [^]value.  (SAM BAM FASTQ) Filter lines based on the IUPAC characters (bases) of the sequence data. 
    
    |
    | *Examples*: 
 
    ========================== ===============================================================================
-   ``genocat --iupac ACGTN``  displays only lines in which all characters of the SEQ are one of A,C,G,T,N
-   ``genocat --iupac ^ACGTN`` displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
+   ``genocat --bases ACGTN``  displays only lines in which all characters of the SEQ are one of A,C,G,T,N
+   ``genocat --bases ^ACGTN`` displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
    ========================== ===============================================================================
 
-   | Note: In SAM/BAM, all lines missing a sequence (i.e. SEQ=*) are included in positive iupac filters (the first example above) and excluded in negative ones.
-   | Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
+   | Note: In SAM/BAM, all lines missing a sequence (i.e. SEQ=*) are included in positive --bases filters (the first example above) and excluded in negative ones.
+   | Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/bases.html>`_
    |
 
 .. option:: -K, --kraken filename. Load a .kraken.genozip file for use with --taxid. 

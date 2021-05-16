@@ -13,6 +13,8 @@
 #include "compatibility/mac_gettime.h"
 #endif
 
+bool progress_newline_since_update = false; // global: might be not 100% with threads, but that's ok
+
 static bool ever_start_time_initialized = false, test_mode, show_progress;
 static TimeSpecType ever_start_time, component_start_time;
 static double last_percent=0;
@@ -49,10 +51,12 @@ static const char *progress_ellapsed_time (bool ever)
     return time_str;
 }
 
-void progress_new_component (const char *new_component_name, 
-                             const char *status,
-                             int new_test_mode) // true, false or -1 for unchanged
+char *progress_new_component (const char *new_component_name, 
+                              const char *message, // can be NULL
+                              int new_test_mode)   // true, false or -1 for unchanged
 {
+    char *prefix = NULL;
+
     // (re) initialize if new component
     if (!component_name || strcmp (new_component_name, component_name)) {
         clock_gettime(CLOCK_REALTIME, &component_start_time); 
@@ -70,17 +74,31 @@ void progress_new_component (const char *new_component_name,
         component_name = new_component_name; 
 
         if (!flag.quiet) {
-            if (test_mode) 
-                iprintf ("testing: %s%s --test %s : ", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", new_component_name);
+            prefix = MALLOC (100 + strlen (global_cmd) + strlen (component_name));
+            if (test_mode) { 
+                char genounzip_str[strlen(global_cmd)+3];
+                if (strstr (global_cmd, "genozip")) {
+                    char *zip = strstr (global_cmd, "zip");
+                    sprintf (genounzip_str, "%.*sun%s", (int)(zip-global_cmd), global_cmd, zip);
+                }
+                else 
+                    strcpy (genounzip_str, global_cmd);
+
+                sprintf (prefix, "testing: %s %s : ", genounzip_str, component_name);
+            }
             else
-                iprintf ("%s %s : ", global_cmd, new_component_name); 
+                sprintf (prefix, "%s %s : ", global_cmd, component_name); 
         }
     }
 
-    progress_update_status (status); 
+//    if (message) 
+    if (!flag.reading_chain) 
+        progress_update_status (&prefix, message ? message : "");
+
+    return prefix;
 }
 
-void progress_update (uint64_t sofar, uint64_t total, bool done)
+void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
 {
     char time_str[70], progress[200];
     if (!show_progress && !flag.debug_progress) return; 
@@ -101,10 +119,10 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
     // case: we've reached 99% prematurely... we under-estimated the time
     if (!done && percent > 99 && (last_seconds_so_far < seconds_so_far)) {
         if (!flag.debug_progress)
-            progress_update_status ("Finalizing...");
+            progress_update_status (prefix, "Finalizing...");
         else {
             sprintf (progress, "Finalizing... %u%% sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, sofar, total);            
-            progress_update_status (progress);
+            progress_update_status (prefix, progress);
         }
     }
     
@@ -122,7 +140,7 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
             else
                 sprintf (progress, "%u%% (%s) sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", (unsigned)percent, time_str, sofar, total, seconds_so_far);            
 
-            progress_update_status (progress);
+            progress_update_status (prefix, progress);
         }
     }
 
@@ -133,12 +151,17 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
     last_seconds_so_far = seconds_so_far;
 }
 
-void progress_update_status (const char *status)
+void progress_update_status (char **prefix, const char *status)
 {
     if (flag.quiet) return;
 
     static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
     static const char *spaces = "                                                                                ";
+
+    if (prefix && *prefix) {
+        iprint0 (*prefix);
+        FREE (*prefix);
+    }
 
     if (is_info_stream_terminal && !flag.debug_progress) 
         iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
@@ -146,12 +169,14 @@ void progress_update_status (const char *status)
         iprintf ("%s\n", status); // if we're outputting to a log file or debugging progress, show every status on its own line
 
     last_len = strlen (status);
+
+    progress_newline_since_update = false;
 }
 
 void progress_finalize_component (const char *status)
 {
     if (!flag.quiet) {
-        progress_update_status (status);
+        progress_update_status (NULL, status);
         iprint0 ("\n");
     }
 

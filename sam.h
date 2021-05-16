@@ -18,7 +18,7 @@ extern bool sam_zip_is_unaligned_line (const char *line, int len);
 extern bool sam_zip_dts_flag (void);
 
 // HEADER stuff
-extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header);
+extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 
 // SEG Stuff
 extern void sam_zip_initialize (void);
@@ -110,7 +110,7 @@ TRANSLATOR (SAM, BAM,   10, POS,        sam_piz_sam2bam_POS)        // reconstru
 TRANSLATOR (SAM, BAM,   11, SEQ,        sam_piz_sam2bam_SEQ)        // textual SEQ to BAM-format SEQ 
 TRANSLATOR (SAM, BAM,   12, QUAL,       sam_piz_sam2bam_QUAL)       // textual QUAL to BAM-format QUAL 
 TRANSLATOR (SAM, BAM,   13, TLEN,       sam_piz_sam2bam_TLEN)       // place TLEN last_value in BAM alignment 
-TRANSLATOR (SAM, BAM,   14, OPTIONAL,   sam_piz_sam2bam_OPTIONAL)   // set block_size after Optional reconstruction
+TRANSLATOR (SAM, BAM,   14, OPTIONAL,   sam_piz_sam2bam_OPTIONAL)   // used up to v11, kept for for backward compatability as old files expect it
 TRANSLATOR (SAM, BAM,   15, OPTIONAL_SELF, sam_piz_sam2bam_OPTIONAL_SELF) // transform prefixes in Optional Container from SAM to BAM format 
 TRANSLATOR (SAM, FASTQ, 16, SEQ,        sam_piz_sam2fastq_SEQ)      // reverse-complement the sequence if needed, and drop if "*"
 TRANSLATOR (SAM, FASTQ, 17, QUAL,       sam_piz_sam2fastq_QUAL)     // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
@@ -127,6 +127,6 @@ TXTHEADER_TRANSLATOR (txtheader_bam2sam);
 TXTHEADER_TRANSLATOR (txtheader_sam2bam);
 TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
-#define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:"PRId64
+#define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:%"PRId64
 
 #endif

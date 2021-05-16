@@ -17,7 +17,7 @@ COMPRESSOR_CALLBACK(phy_zip_seq)
 
 extern unsigned phy_vb_zip_dl_size (void);
 extern int32_t phy_is_header_done (bool is_eof);
-extern bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header);
+extern bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern void phy_seg_initialize (VBlockP vb);
 extern void phy_seg_finalize (VBlockP vb);
 extern bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id);

@@ -22,7 +22,7 @@
 // Header functions for 23andMe files
 //-----------------------------------------
 
-bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header)
+bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {
     SAFE_NUL (AFTERENT (char, *txt_header));
 
@@ -41,6 +41,8 @@ void me23_seg_initialize (VBlock *vb)
 {
     vb->contexts[ME23_CHROM].no_stons    = true;
     vb->contexts[ME23_CHROM].no_vb1_sort = true;
+    vb->contexts[ME23_CHROM].flags.store = STORE_INDEX; // since v12
+    vb->contexts[ME23_POS].flags.store   = STORE_INT;   // since v12
     vb->contexts[ME23_GENOTYPE].ltype    = LT_SEQUENCE;
     vb->contexts[ME23_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
     vb->contexts[ME23_TOP2VCF].no_stons  = true;
@@ -91,18 +93,18 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
 
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
-    GET_NEXT_ITEM ("RSID");
+    GET_NEXT_ITEM (ME23_ID);
     seg_id_field (vb, dict_id_fields[ME23_ID], field_start, field_len, true);
 
-    GET_NEXT_ITEM ("CHROM");
+    GET_NEXT_ITEM (ME2_CHROM);
     seg_chrom_field (vb, field_start, field_len);
 
-    GET_NEXT_ITEM ("POS");
-    seg_pos_field (vb, ME23_POS, ME23_POS, false, false, field_start, field_len, 0, field_len+1);
-    random_access_update_pos (vb, ME23_POS);
+    GET_NEXT_ITEM (ME23_POS);
+    seg_pos_field (vb, ME23_POS, ME23_POS, false, false, 0, field_start, field_len, 0, field_len+1);
+    random_access_update_pos (vb, DC_PRIMARY, ME23_POS);
 
     // Genotype (a combination of one or two bases or "--")
-    GET_LAST_ITEM ("GENOTYPE");
+    GET_LAST_ITEM (ME23_GENOTYPE);
     
     ASSSEG (field_len == 1 || field_len == 2, field_start, "expecting all genotype data to be 1 or 2 characters, but found one with %u: %.*s",
             field_len, field_len, field_start);
@@ -154,7 +156,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
         // get contig length from loaded reference
         uint32_t chrom_name_len;
         const char *chrom_name = ctx_get_snip_by_word_index (ctx, chrom_i, 0, &chrom_name_len);
-        PosType contig_len = ref_contigs_get_contig_length (chrom_name, chrom_name_len);
+        PosType contig_len = ref_contigs_get_contig_length (WORD_INDEX_NONE, chrom_name, chrom_name_len, true);
 
         bufprintf (comp_vb, txtheader_buf, VCF_HEAD_2, chrom_name, contig_len);
     }
@@ -198,7 +200,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
 TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
 {
     // Genotype length expected to be 2 or 1 (for MT, Y)
-    ASSERT (reconstructed_len==1 || reconstructed_len==2, "bad reconstructed_len=%u", reconstructed_len);
+    ASSERT (recon_len==1 || recon_len==2, "bad recon_len=%u", recon_len);
 
     PosType pos = vb->last_int(ME23_POS);
 
@@ -220,9 +222,9 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     char ref_b = ref_get_nucleotide (range, idx);
 
     // get GENOTYPE from txt_data
-    char b1 = reconstructed[0];
-    char b2 = (reconstructed_len==2) ? reconstructed[1] : 0;
-    vb->txt_data.len -= reconstructed_len; // rollback - we will reconstruct it differently
+    char b1 = recon[0];
+    char b2 = (recon_len==2) ? recon[1] : 0;
+    vb->txt_data.len -= recon_len; // rollback - we will reconstruct it differently
 
     
     if (b1 == '-' || b2 == '-' || // filter out variants if the genotype is not fully called
@@ -237,7 +239,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
 
     // ALT
     bool is_alt_1 = (b1 != ref_b) ;
-    bool is_alt_2 = (b2 != ref_b) && (reconstructed_len==2);
+    bool is_alt_2 = (b2 != ref_b) && (recon_len==2);
     int num_uniq_alts = is_alt_1 + is_alt_2 - (is_alt_1 && (b1==b2));
 
     switch (num_uniq_alts) {
@@ -254,7 +256,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     // Sample data
     RECONSTRUCT1 (is_alt_1 ? '1' : '0');
     
-    if (reconstructed_len==2) {
+    if (recon_len==2) {
         RECONSTRUCT1 ('/');
         RECONSTRUCT1 (is_alt_2 ? '0'+num_uniq_alts : '0');
     }

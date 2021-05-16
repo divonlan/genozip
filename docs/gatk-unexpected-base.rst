@@ -11,27 +11,27 @@ This was observed both in GATK 3.5 and 4.1.
 
 Genozip can directly filter the offending lines out of a BAM file:
 
-- Keep only lines that in which SEQ consists of only A,C,T,G,N:
+- Keep only lines in which SEQ consists of only A,C,T,G,N:
 
 ::
 
-    genocat myfile.bam.genozip --iupac ACGTN
+    genocat myfile.bam.genozip --bases ACGTN
 
 - See the offending lines:
 
 ::
 
-    genocat myfile.bam.genozip --iupac ^ACGTN
+    genocat myfile.bam.genozip --bases ^ACGTN
 
 - Count the number of offending lines:
 
 ::
 
-    genocat myfile.bam.genozip --iupac ^ACGTN --count
+    genocat myfile.bam.genozip --bases ^ACGTN --count
 
 | This also works for SAM and FASTQ files.
 |
-| The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
+| The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/bases.html>`_
 
 
 

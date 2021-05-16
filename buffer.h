@@ -60,7 +60,7 @@ static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *
     return index;
 }
 #define NEXTENT(type, buf)    (*(type *)(&(buf).data[NEXTENT_get_index (&(buf), sizeof(type), __FUNCTION__, __LINE__)]))
-#define ENTNUM(buf, ent)      ((uint32_t)((((char*)(ent)) - ((buf).data)) / sizeof (*ent)))
+#define ENTNUM(buf, ent)      ((uint32_t)((((char*)(ent)) - ((buf).data)) / sizeof (*(ent))))
 #define ISLASTENT(buf,ent)    (ENTNUM((buf),(ent)) == (buf).len - 1)
 
 extern void buf_initialize(void);
@@ -84,11 +84,11 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                                                     : (buf)->size); \
 } while(0)
 
-#define buf_alloc(vb, buf, more, at_least, type, grow_at_least_factor,name) \
-    buf_alloc_old ((VBlockP)(vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
+#define buf_alloc(alloc_vb, buf, more, at_least, type, grow_at_least_factor,name) \
+    buf_alloc_old (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf)->vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
 
 #define buf_alloc_zero(vb, buf, more, at_least, element_type, grow_at_least_factor,name) do { \
-    uint64_t size_before = (buf)->data ? (buf)->size : 0; \
+    uint64_t size_before = (buf)->data ? (buf)->size : 0; /* always zero the whole buffer in an initial allocation */ \
     buf_alloc((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
     if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 } while(0)
@@ -195,11 +195,13 @@ extern void buf_display_memory_usage_handler (void);
 #define buf_set(buf_p,value) do { if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); } while(0)
 #define buf_zero(buf_p) buf_set(buf_p, 0)
 
-extern void buf_add_to_buffer_list (VBlockP vb, Buffer *buf);
+extern void buf_add_to_buffer_list_do (VBlockP vb, Buffer *buf, const char *func);
+#define buf_add_to_buffer_list(vb,buf) buf_add_to_buffer_list_do ((vb), (buf), __FUNCTION__)
+
 extern void buf_remove_from_buffer_list (Buffer *buf);
 
 extern void buf_low_level_free (void *p, const char *func, uint32_t code_line);
-#define FREE(p) do { if (p) { buf_low_level_free (((void*)p), __FUNCTION__, __LINE__); p=NULL; } } while(0)
+#define FREE(p) do { if (p) { buf_low_level_free (((void*)(p)), __FUNCTION__, __LINE__); p=NULL; } } while(0)
 
 extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t code_line);
 #define MALLOC(size) buf_low_level_malloc (size, false, __FUNCTION__, __LINE__)

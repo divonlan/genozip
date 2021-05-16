@@ -121,7 +121,7 @@ static void zip_dynamically_set_max_memory (void)
 
         // If this is a Luft file (with LIFTREJT lines passed down from the header) - if possible, test lines beyond the 
         // the rejected lines, as they have more contexts.
-        if (flag.vblock_memory < txt_file->luft_reject_bytes && test_i != num_tests-1) 
+        if (flag.vblock_memory < txt_file->reject_bytes && test_i != num_tests-1) 
             continue;
 
         VBlock *vb = vb_get_vb ("dynamically_set_memory", 1);
@@ -137,7 +137,7 @@ static void zip_dynamically_set_max_memory (void)
             // segment this VB
             ctx_clone (vb);
 
-            int32_t save_luft_reject_bytes = vb->luft_reject_bytes;
+            int32_t save_luft_reject_bytes = vb->reject_bytes;
 
             SAVE_FLAGS;
             flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
@@ -183,8 +183,8 @@ static void zip_dynamically_set_max_memory (void)
             buf_destroy (&txt_data_copy);
 
             // in case of Luft file - undo
-            vb->liftover_rejects.len = 0;
-            txt_file->luft_reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
+            vb->lo_rejects[0].len = vb->lo_rejects[1].len = 0;
+            txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
             done = true;
         }
@@ -506,7 +506,7 @@ static void zip_update_txt_counters (VBlock *vb)
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
 
     // note: the liftover reject txt data is of course not counted as part of the file txt data for stats...
-    if (!flag.processing_rejects) {        
+    if (!flag.rejects_coord) {        
         z_file->num_lines                += (int64_t)vb->lines.len; // lines in all bound files in this z_file
         z_file->txt_data_so_far_single   += (int64_t)vb->vb_data_size;   // length of data as it would be reconstructed (as modified by --optimize or --chain or compressing a Luft file)
         z_file->txt_data_so_far_bind     += (int64_t)vb->vb_data_size;
@@ -522,12 +522,15 @@ static void zip_write_global_area (Digest single_component_digest)
     if (DTPZ(has_random_access)) 
         random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
+    if (DTPZ(has_random_access) && z_dual_coords)
+        random_access_finalize_entries (&z_file->ra_buf_luft); // sort RA, update entries that don't yet have a chrom_index
+
     ctx_compress_dictionaries(); 
 
     ctx_compress_counts();
         
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
-    if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL) 
+    if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL || flag.reference == REF_MAKE_CHAIN) 
         ref_alt_chroms_compress();
 
     // output reference, if needed
@@ -544,10 +547,13 @@ static void zip_write_global_area (Digest single_component_digest)
 
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
     if (DTPZ(has_random_access)) 
-        random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, flag.show_index ? "Random-access index contents (result of --show-index)" : NULL);
+        random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, DC_PRIMARY, flag.show_index ? "Random-access index contents (result of --show-index)" : NULL);
+
+    if (DTPZ(has_random_access) && z_dual_coords)
+        random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, DC_LUFT, flag.show_index ? "Luft random-access index contents (result of --show-index)" : NULL);
 
     if (store_ref) 
-        random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, flag.show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
+        random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, 0, flag.show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
 
     stats_compress();
 
@@ -565,7 +571,7 @@ static void zip_compress_one_vb (VBlock *vb)
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
-    if (!flag.make_reference && !flag.data_modified) 
+    if (!flag.make_reference && !flag.data_modified && !flag.rejects_coord) 
         digest_one_vb (vb); 
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
@@ -612,7 +618,10 @@ static void zip_compress_one_vb (VBlock *vb)
 
     // merge in random access - IF it is used
     if (DTP(has_random_access)) 
-        random_access_merge_in_vb (vb);
+        random_access_merge_in_vb (vb, DC_PRIMARY);
+     
+    if (DTP(has_random_access) && z_dual_coords)
+        random_access_merge_in_vb (vb, DC_LUFT);
 
     // compress b250 and local data for all ctxs (for reference files we don't output VBs)
     if (!flag.make_reference && !flag.seg_only)
@@ -666,11 +675,14 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         // initializations after reading the first vb and before running any compute thread
         if (vb->vblock_i == 1) { 
             // we lock, so vb>=2 will block on merge, until vb=1 has completed its merge and unlocked it in zip_compress_one_vb()
+            mutex_destroy (wait_for_vb_1_mutex); // destroy mutex of previous file (it will still be locked if that file had no VBs)
             mutex_initialize (wait_for_vb_1_mutex);
             mutex_lock (wait_for_vb_1_mutex); 
         }
 
-        vb->is_rejects_vb = flag.processing_rejects;
+        vb->vb_coords = !z_dual_coords ? DC_PRIMARY
+                      : flag.rejects_coord == DC_NONE ? DC_BOTH
+                      : flag.rejects_coord;
     }
 
     if (vb->txt_data.len)   // we found some data 
@@ -696,7 +708,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
     if (!flag.make_reference && !flag.seg_only)
         zfile_output_processed_vb (vb);
     
-    if (!flag.processing_rejects)
+    if (!flag.rejects_coord)
         zip_update_txt_counters (vb);
 
     z_file->num_vbs++;
@@ -714,6 +726,11 @@ void zip_one_file (const char *txt_basename,
     static DataType last_data_type = DT_NONE;
     Dispatcher dispatcher = 0;
 
+    z_file->txt_data_so_far_single = 0;
+    evb->z_data.len                = 0;
+    evb->z_next_header_i           = 0;
+    memset (&z_file->digest_ctx_single, 0, sizeof (z_file->digest_ctx_single));
+
     if (!flag.bind) prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
 
     // we cannot bind files of different type
@@ -726,14 +743,17 @@ void zip_one_file (const char *txt_basename,
 
     dict_id_initialize (z_file->data_type);
 
+    if (!z_file->num_txt_components_so_far)  // first component of this z_file 
+        ctx_initialize_primary_field_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+
     txt_line_i = 1; // the next line to be read (first line = 1)
     
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
-    bool success = txtheader_zip_read_and_compress (&txt_line_i);
+    bool success = txtheader_zip_read_and_compress (&txt_line_i); // also increments z_file->num_txt_components_so_far
     if (!success) goto finish; // 2nd+ VCF file cannot bind, because of different sample names
 
-    if (z_file->z_flags.dual_coords && !flag.processing_rejects) {
+    if (z_dual_coords && !flag.rejects_coord) { 
         *is_last_file = false; // we're not the last file - at leasts, the liftover rejects file is after us
         z_closes_after_me = false;
     }
@@ -741,12 +761,16 @@ void zip_one_file (const char *txt_basename,
     DT_FUNC (txt_file, zip_initialize)();
 
     // copy contigs from reference or txtheader to CHROM (and RNEXT too, for SAM/BAM)
-    txtheader_zip_prepopulate_contig_ctxs();
+    if (z_file->num_txt_components_so_far == 1) // first component of this z_file
+        txtheader_zip_prepopulate_contig_ctxs();
 
     max_lines_per_vb=0;
 
     dispatcher = 
-        dispatcher_fan_out_task ("zip", txt_basename, PROGRESS_PERCENT, 0, false, *is_last_file, z_closes_after_me, 
+        dispatcher_fan_out_task ("zip", txt_basename, 
+                                 txt_file->redirected ? PROGRESS_MESSAGE : PROGRESS_PERCENT,
+                                 txt_file->redirected ? "Compressing..." : NULL, 
+                                 false, *is_last_file, z_closes_after_me, 
                                  flag.xthreads, prev_file_last_vb_i, 100000,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
@@ -766,7 +790,7 @@ void zip_one_file (const char *txt_basename,
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:
-    if (!flag.processing_rejects)
+    if (!flag.rejects_coord)
         z_file->txt_disk_so_far_bind += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
     // reconstruction plan for sorting the data (per txt file)
@@ -782,10 +806,6 @@ finish:
         progress_concatenated_md5 (dt_name (z_file->data_type), digest_finalize (&z_file->digest_ctx_bound, "file:digest_ctx_bound"));
 
     z_file->disk_size              = z_file->disk_so_far;
-    z_file->txt_data_so_far_single = 0;
-    evb->z_data.len                = 0;
-    evb->z_next_header_i           = 0;
-    memset (&z_file->digest_ctx_single, 0, sizeof (z_file->digest_ctx_single));
 
     if (z_closes_after_me) 
         prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset statics

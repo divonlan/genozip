@@ -1,0 +1,49 @@
+##fileformat=VCFv4.1
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
+##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
+##FORMAT=<ID=F1R2,Number=R,Type=Integer,Description="Count of reads in F1R2 pair orientation supporting each allele">
+##FORMAT=<ID=F2R1,Number=R,Type=Integer,Description="Count of reads in F2R1 pair orientation supporting each allele">
+##FORMAT=<ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=LOD,Number=1,Type=Float,Description="Per-sample variant LOD score">
+##FORMAT=<ID=MB,Number=4,Type=Integer,Description="Per-sample component statistics to detect mate bias">
+##FORMAT=<ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
+##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">
+##FORMAT=<ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes">
+##FORMAT=<ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
+##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
+##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
+##co=
+##co= this VCF is in h37 coordinates, designed to create a dual-coordinate VCF in conjunction with 
+##co=     GRCh37_to_GRCh38.chain.genozip and GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
+##co=
+##contig=<ID=1,length=249250621>
+##contig=<ID=2>
+##co=
+##co=	missing - liftover failure cases (unsupported and others)
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Person1	Person2
+1	329162	.	G	A	100	REF_CHANGE_NOT_ALT	.	GT:AD:AF:DP:F1R2:F2R1:GQ:PL:GP:PRI:SB:MB	1|0:11,41:0.788:52:6,19:5,22:14:81,17,0:43.186,14.186,0.1691:0,34.77,37.77:8,3,25,16:5,6,21,20	0|0:29,73:0.716:102:11,41:18,32:15:76,18,0:37.91,14.881,0.14423:0,34.77,37.77:12,17,30,43:14,15,34,39
+1	348307	.	c	G	100	xstrand_lower-case-ref	AF=0.9	GT:AF	1|0:4.7	0|0:-0.50
+1	353813	.	C	GA	100	xstrand+long-ALT	.	GT	1|0	0|0
+1	366043	.	CA	A	100	xstrand+long-REF	.	GT	1|0	0|0
+1	385798	.	G	A,T	100	xstrand+2-ALT	.	GT	1|0	0|0
+1	20159588	.	C	a	100	REF_ALT_SWITCH+AC-with-len-diff+lower-alt	AN=1000;AC=999;AF=0.999	GT:AD:AF:DP:F1R2:F2R1:GQ:PL:GP:PRI:SB:MB	1|0:11,41:0.788:52:6,19:5,22:14:81,17,0:43.186,14.186,0.1691:0,34.77,37.77:8,3,25,16:5,6,21,20	0|0:29,73:0.716:102:11,41:18,32:15:76,18,0:37.91,14.881,0.14423:0,34.77,37.77:12,17,30,43:14,15,34,39
+1	20523874	.	C	G	100	REF_ALT_SWITCH+unphased-miscalculated+AF-AN-after-AC	AF=0.1;AC=1;AN=4	GT	0/1	1/1
+1	20539032	.	A	T	100	REF_ALT_SWITCH+no_AN+high_ploidy+SAC+missing_SF	AF=0.1;AC=1	GT:SAC	0/0/1/1/1:25,1,6,2	1|1|0|0|1
+1	20600265	.	a	C	100	OREF_IS_REF+lower_ref+SB-not-in-header	.	GT:AD:AF:DP:F1R2:F2R1:GQ:PL:GP:PRI:SB:MB	1|0:11,41:0.788:52:6,19:5,22:14:81,17,0:43.186,14.186,0.1691:0,34.77,37.77:8,3,25,16:5,6,21,20	0/0:29,73:0.716:102:11,41:18,32:15:76,18,0:37.91,14.881,0.14423:0,34.77,37.77:12,17,30,43:14,15,34,39
+1	20600703	.	A	G	100	OREF_IS_REF+bad-GL+bad-AD	.	GT:GL:AD	0/1:1,2,3,4:1	1/1:2:1,2,3
+1	20600710	.	T	.	100	MISSING_ALT	.	GT	0/1	1/1
+2	100000000	.	G	A	.	END_MAPPING	END=100030000	GT	.	.
+2	150000001	.	G	A	.	END_good+BaseCounts_good	END=150000100;BaseCounts=0,1,45,23	GT	.	.
+2	150000101	.	G	A	.	END_good2+switch	END=150000200	GT	.	.
+2	243152628	.	C	t	100	REF_ALT_SWITCH+xstrand+bad-AF+AC-without-AN+bad-AD-GT-GL	AF=2.5;AC=10	GT:AD:GL	0|1	1/3:1,2,3:1,2
+2	243152629	.	A	G,A	100	OREF_IS_REF+xstrand-2xALT	.	GT	0/1	1/1
+2	243152630	.	G	A	100	OREF_IS_REF+xstrand	.	GT	0/1	1/1
+2	243152700	.	.	.	.	missing-ref	.	GT	.	.
+2	243152701	.	G	A	.	END_XSTRAND	END=243152702	GT	.	.
+2	243152702	.	G	A	.	BaseCounts_XSTRAND	BaseCounts=0,1,45,23	GT	.	.
+bogus-chrom	.	.	.	.	.	no-chrom	.	GT	.	.

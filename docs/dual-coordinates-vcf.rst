@@ -1,5 +1,9 @@
+.. _dual_coordinates:
+
 Dual-coordinates VCF files
 ==========================
+
+At the core of the Dual Coordinate concept, is the fact that both these views are equivalent and contain the exact same information - they may be losslessly converted back and forth, without needing any external information (such as reference file or a chain file). Importantly, they may be converted back and forth even as they are modified - annotations added, changed or removed, variant order changed, variants filtered out etc - so long as the dual-coordinate information described below needed for dual-coordinate conversion is retained.
 
 Working with dual coordinates consists of three processes:
 
@@ -31,13 +35,8 @@ Example: ``LIFTOVER=chr1,24143532,A,+``
 ============ ==================================================================================================
 *OCHROM*     The value of the CHROM field in the *Luft VCF*
 *OPOS*       The value of the POS field in the *Luft VCF*
+*XSTRAND*    "X" if the ALT alleles should be reverse-complemented during lift-over (after any changes in REF and ALT), and "-" if not
 *OREF*       The value of the REF field in the *Luft VCF*
-*OSTRAND*    "-" if the ALT alleles should be reverse-complemented during lift-over (after any changes in REF and ALT), and "+" if not
-*OALTRULE*   One of: Y or N: determines how to calculate OALT
-             Y: if *OREF* equals to REF, then OALT=ALT
-             if *OREF* is equal to one of the alleles in the ALT, then OALT=ALT with that allele replaced by REF
-             if *OREF* is not equal to any REF or ALT allele, then OALT=ALT concatenated with REF
-             N: OALT=ALT
 ============ ==================================================================================================
 
 The corresponding header line is: 
@@ -73,20 +72,15 @@ The corresponding header line is:
 
 4. INFO/LIFTBACK subfield:
 
-LIFTBACK=*CHROM*,*POS*,*STRAND*,*REF*,*ALTRULE* 
+LIFTBACK=*CHROM*,*POS*,*STRAND*,*REF* 
 
-Example: ``LIFTBACK=chr1,24143532,A,+,Y``
+Example: ``LIFTBACK=chr1,24143532,=,Y,A``
 
 =========== ==================================================================================================
 *CHROM*     The value of the CHROM field in the *Primary VCF*
 *POS*       The value of the POS field in the *Primary VCF*
+*XSTRAND*   "X" if Luft's ALT alleles should be reverse-complemented before any changes to REF and ALT, "-" if not
 *REF*       The value of the REF field in the *Primary VCF*
-*STRAND*    "-" if Luft's ALT alleles should be reverse-complemented before any changes to REF and ALT, "+" if not
-*ALTRULE*   One of: Y or N: determines how to calculate ALT
-            Y: if *REF* equals to OREF, then ALT=OALT
-            if *REF* is equal to one of the alleles in the OALT, then ALT=OALT with that allele replaced by OREF
-            if *REF* is not equal to any OREF or OALT allele, then ALT=OALT concatenated with OREF
-            N: ALT=OALT
 =========== ==================================================================================================
 
 The corresponding header line is: 

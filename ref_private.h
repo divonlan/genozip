@@ -29,9 +29,6 @@ extern void ref_contigs_generate_data_if_denovo (void);
 extern WordIndex ref_seg_get_alt_chrom (VBlockP vb);
 extern void ref_contigs_compress (void);
 extern WordIndex ref_contigs_get_by_accession_number (const char *ac, unsigned ac_len);
-extern WordIndex ref_alt_chroms_zip_get_alt_index (const char *chrom, unsigned chrom_len, GetWordIndexType where_is_alt, WordIndex fallback_index);
-
-extern void sam_seg_verify_pos (VBlockP vb, PosType this_pos);
 
 extern Buffer ranges; // param is RangesType
 

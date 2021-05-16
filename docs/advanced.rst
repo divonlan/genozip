@@ -131,6 +131,11 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
+.. option:: --show-liftover  C. Show line-by-line outcome of the liftover of that line. Used with dual-coordinate files and may be combined --luft.
+
+    | See: :ref:`liftover_vcf`
+    |
+
 **Tracking execution**
 
 .. option:: --show-containers  ZUC. Show flow of containers.
@@ -183,15 +188,15 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
 **Controlling execution**
 
-.. option:: --one-vb vb  C. Reconstruct data from a single VB
+.. option:: --one-vb vb  C. Reconstruct data from a single VB.
 
           |
 
-.. option:: --seg-only  Z. Run the segmenter but don't compress and don't write the output
+.. option:: --seg-only  Z. Run the segmenter but don't compress and don't write the output.
 
           |
 
-.. option:: --xthreads  ZUC. Use only one thread for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers,
+.. option:: --xthreads  ZUC. Use only one thread for the main PIZ/ZIP dispatcher. This doesn't affect thread use of other dispatchers.
 
           |
 

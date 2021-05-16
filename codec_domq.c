@@ -31,6 +31,7 @@
 #include "reconstruct.h"
 #include "profiler.h"
 #include "codec.h"
+#include "context.h"
 
 #define NO_DOMS '\x1'
 

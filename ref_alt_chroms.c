@@ -16,7 +16,8 @@
 #include "seg.h"
 #include "txtheader.h"
 
-// ZIP of a file with REF_EXTERNAL/REF_EXT_STORE: When a chrom index in the txt file matches an a different chrom index in the reference file, 
+// ZIP of a file with an external reference: 
+// When a chrom index in the txt file matches an a different chrom index in the reference file, 
 // we create a mapping here pass it to Piz as a SEC_REF_ALT_CHROMS section. It contains at most as many entries 
 // as the number of contigs in the reference file.
 
@@ -97,15 +98,16 @@ void ref_alt_chroms_load (void)
     for (uint32_t i=0; i < ctx->word_list.len; i++)
         map[i] = i;
 
-    // the indices of chroms that are NOT in the reference (they are only in the user file), will be mapped to chroms in
-    // the reference
+    // the indices of chroms that are NOT in the reference (they are only in the user file), will be mapped to ref chroms
+    uint32_t num_ref_contigs = ref_contigs_num_contigs();
     for (uint32_t i=0; i < evb->compressed.len; i++) {
         AltChrom *ent = ENT (AltChrom, evb->compressed, i);
         WordIndex txt_chrom_index = BGEN32 (ent->txt_chrom);
         WordIndex ref_chrom_index = BGEN32 (ent->ref_chrom);
 
         ASSERT (txt_chrom_index >= 0 && txt_chrom_index < ctx->word_list.len, "txt_chrom_index=%d out of range [0,%d]", txt_chrom_index, (int32_t)ctx->word_list.len);
-        ASSERT (ref_chrom_index >= 0 && ref_chrom_index < ref_contigs_num_contigs(), "ref_chrom_index=%d out of range [0,%u]", ref_chrom_index, ref_contigs_num_contigs());
+        ASSERT (!num_ref_contigs /* ref not loaded */ || (ref_chrom_index >= 0 && ref_chrom_index < num_ref_contigs), 
+                "ref_chrom_index=%d out of range [0,%u]", ref_chrom_index, ref_contigs_num_contigs());
 
         map[txt_chrom_index] = ref_chrom_index;
 
@@ -121,34 +123,43 @@ void ref_alt_chroms_load (void)
     buf_free (&evb->compressed);
 }
 
-// ZIP only: in PIZ, we get the maping from SEC_REF_ALT_CHROMS
+// ZIP only: in PIZ, we get the mapping from SEC_REF_ALT_CHROMS
 WordIndex ref_alt_chroms_zip_get_alt_index (const char *chrom, unsigned chrom_len, GetWordIndexType where_is_alt, WordIndex fallback_index)
 {
-    WordIndex alternative_chrom_word_index = WORD_INDEX_NONE;
+    WordIndex alt_chrom_index = WORD_INDEX_NONE;
     
     // 22 -> chr22 (1->22, X, Y, M, MT chromosomes)
-    if ((chrom_len == 1 && (IS_DIGIT (chrom[0]) || chrom[0]=='X' || chrom[0]=='Y' || chrom[0]=='M')) ||
-        (chrom_len == 2 && ((IS_DIGIT (chrom[0]) && IS_DIGIT (chrom[1])) || (chrom[0]=='M' && chrom[1]=='T')))) {
+    if ((chrom_len == 1 && (IS_DIGIT (chrom[0]) || chrom[0]=='X' || chrom[0]=='Y')) ||
+        (chrom_len == 2 && ((IS_DIGIT (chrom[0]) && IS_DIGIT (chrom[1]))))) {
 
         char chr_chrom[5] = "chr";
         chr_chrom[3] = chrom[0];
         chr_chrom[4] = (chrom_len == 2 ? chrom[1] : 0);
 
-        alternative_chrom_word_index = ref_contigs_get_word_index (chr_chrom, chrom_len+3, where_is_alt, true); 
+        alt_chrom_index = ref_contigs_get_word_index (chr_chrom, chrom_len+3, where_is_alt, true); 
     }
 
-    // M, chrM -> chrMT
-    else if ((chrom_len==4 && !memcmp (chrom, "chrM", 4)) || (chrom_len==1 && chrom[0]=='M')) 
-        alternative_chrom_word_index = ref_contigs_get_word_index ("chrMT", 5, where_is_alt, true); 
+    // M, MT, chrM, chrMT 
+    else if ((chrom_len==4 && chrom[0]=='c' && chrom[1]=='h' && chrom[2]=='r' && chrom[3]=='M') || 
+             (chrom_len==5 && chrom[0]=='c' && chrom[1]=='h' && chrom[2]=='r' && chrom[3]=='M' && chrom[4]=='T') || 
+             (chrom_len==1 && chrom[0]=='M') ||
+             (chrom_len==2 && chrom[0]=='M' && chrom[1]=='T')) {
 
+        alt_chrom_index = ref_contigs_get_word_index ("chrMT", 5, where_is_alt, true); 
+        if (alt_chrom_index == WORD_INDEX_NONE) alt_chrom_index = ref_contigs_get_word_index ("chrM", 4, where_is_alt, true); 
+        if (alt_chrom_index == WORD_INDEX_NONE) alt_chrom_index = ref_contigs_get_word_index ("MT", 2, where_is_alt, true); 
+        if (alt_chrom_index == WORD_INDEX_NONE) alt_chrom_index = ref_contigs_get_word_index ("M", 1, where_is_alt, true); 
+    }
+    
     // Chr? or Chr?? -> ? or ??
     else if ((chrom_len == 4 || chrom_len == 5) && !memcmp (chrom, "chr", 3))
-        alternative_chrom_word_index = ref_contigs_get_word_index (&chrom[3], chrom_len-3, where_is_alt, true); 
+        alt_chrom_index = ref_contigs_get_word_index (&chrom[3], chrom_len-3, where_is_alt, true); 
 
     // AC subfield in DESC in reference FASTAs, eg GRCh37/38, eg "GL000207.1" -> "chr18_gl000207_random"
     // https://www.ncbi.nlm.nih.gov/Sequin/acc.html
     else if (where_is_alt == WI_REF_CONTIG && chrom_len >= 6 && IS_CLETTER (chrom[0]) && chrom[chrom_len-2]=='.' && IS_DIGIT(chrom[chrom_len-1])) 
-        alternative_chrom_word_index = ref_contigs_get_by_accession_number (chrom, chrom_len);
+        alt_chrom_index = ref_contigs_get_by_accession_number (chrom, chrom_len);
 
-    return (alternative_chrom_word_index != WORD_INDEX_NONE) ? alternative_chrom_word_index : fallback_index;
+    return (alt_chrom_index != WORD_INDEX_NONE) ? alt_chrom_index : fallback_index;
 }
+

@@ -10,6 +10,7 @@
 #include "strings.h"
 #include "endianness.h"
 #include "piz.h"
+#include "context.h"
 
 // -------------------------------------------------------------------------------------
 // acgt stuff

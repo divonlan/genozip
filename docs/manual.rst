@@ -8,4 +8,4 @@ Manual
     genounzip <genounzip>
     genocat <genocat>
     genols <genols>
-    Developer options <developer>
+    Advanced options <advanced>

@@ -16,7 +16,7 @@ DataTypeProperties dt_props_def             = DATA_TYPE_FUNCTIONS_DEFAULT;
 DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 
 // PIZ: gets the toplevel and factor, and returns true if translating
-const DtTranslation dt_get_translation (void)
+const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the txt header
 {
     static DtTranslation translations[] = TRANSLATIONS;
     #define NUM_TRANSLATIONS (sizeof (translations) / sizeof (translations[0]))
@@ -36,7 +36,7 @@ const DtTranslation dt_get_translation (void)
         if (translations[i].src_z_non_bin_dt == z_file->data_type &&
             translations[i].src_z_is_binary  == i_am_binary &&
             translations[i].dst_txt_dt       == flag.out_dt &&
-            (!translations[i].is_translation || *translations[i].is_translation)) // if non-NULL, this flag determines if it is a translation
+            (!translations[i].is_translation || translations[i].is_translation (vb))) // if non-NULL, this flag determines if it is a translation
             return translations[i];
 }
 

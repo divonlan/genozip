@@ -6,7 +6,6 @@
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
 // it means a block of lines from the text file. 
 
-#include <math.h>
 #include "vcf_private.h"
 #include "strings.h"
 
@@ -18,13 +17,13 @@ bool vcf_vb_has_haplotype_data (VBlockP vb) { return !!((VBlockVCFP)vb)->ht_matr
 void vcf_vb_release_vb (VBlockVCF *vb) 
 {
     vb->ploidy = 0;
-    vb->ac = vb->an = vb->af = vb->end = NULL;
-    vb->ac_len = vb->an_len = vb->af_len = vb->end_len = 0;
-    vb->is_af_before_ac = vb->is_an_before_ac = vb->has_basecounts = false;
     vb->use_special_sf = 0;
     vb->gt_prev_ploidy = 0;
     vb->gt_prev_phase = 0;
     vb->sf_ctx = NULL;
+    vb->main_refalt = NULL;
+    vb->main_ref_len = vb->main_alt_len = 0;
+    vb->last_end_line_i = 0;
     
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);
@@ -33,6 +32,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     buf_free (&vb->hapmat_one_array);
     buf_free (&vb->hapmat_column_of_zeros);
     buf_free (&vb->format_mapper_buf);
+    buf_free (&vb->info_items);
 }
 
 void vcf_vb_destroy_vb (VBlockVCF *vb)
@@ -44,6 +44,7 @@ void vcf_vb_destroy_vb (VBlockVCF *vb)
     buf_destroy (&vb->hapmat_one_array);
     buf_destroy (&vb->hapmat_column_of_zeros);
     buf_destroy (&vb->format_mapper_buf);
+    buf_destroy (&vb->info_items);
 }
 
 // free memory allocations that assume subsequent files will have the same number of samples.

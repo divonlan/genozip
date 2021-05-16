@@ -32,16 +32,19 @@ extern void dict_id_read_aliases (void) ;
 
 extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 
-                dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, dict_id_FORMAT_DP,  // some VCF FORMAT subfields
-                dict_id_FORMAT_PS, dict_id_FORMAT_GT, dict_id_FORMAT_GT_HT, dict_id_FORMAT_GT_HT_INDEX,
+                dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, dict_id_FORMAT_DP, dict_id_FORMAT_AF, // some VCF FORMAT subfields
+                dict_id_FORMAT_PS, dict_id_FORMAT_GT, dict_id_FORMAT_PRI,
+                dict_id_FORMAT_GT_HT, dict_id_FORMAT_GT_HT_INDEX,
                 dict_id_PBWT_RUNS, dict_id_PBWT_FGRC,
-                dict_id_FORMAT_GT_SHARK_DB, dict_id_FORMAT_GT_SHARK_GT, dict_id_FORMAT_GT_SHARK_EX,
                 dict_id_FORMAT_AD, dict_id_FORMAT_ADF, dict_id_FORMAT_ADR, dict_id_FORMAT_ADALL, 
-                dict_id_FORMAT_GQ, dict_id_FORMAT_DS,
+                dict_id_FORMAT_GQ, dict_id_FORMAT_DS, dict_id_FORMAT_SAC,
                 dict_id_INFO_AC,  dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD, // some VCF INFO subfields
                 dict_id_INFO_DP4, dict_id_INFO_SF, dict_id_INFO_SVLEN, dict_id_WindowsEOL,
-                dict_id_INFO_LIFTOVER, dict_id_INFO_LIFTBACK, dict_id_INFO_LIFTREJT, 
+                dict_id_INFO_LIFTOVER, dict_id_INFO_LIFTBACK, dict_id_INFO_REJTOVER, dict_id_INFO_REJTBACK, 
                 dict_id_INFO_BaseCounts,
+
+                // see: https://support.illumina.com/help/BS_App_DRAGEN_Enrichment_OLH_1000000095374/Content/Source/Informatics/Apps/VCFAnnotations_swBS_appDNAA_appDRNA_appDRAGE_appDRAGGP.htm
+                dict_id_FORMAT_F1R2, dict_id_FORMAT_F2R1,
 
                 // tags from HaplotypeCaller: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
                 dict_id_INFO_END, dict_id_INFO_MLEAC, dict_id_INFO_MLEAF, dict_id_INFO_MQ0,

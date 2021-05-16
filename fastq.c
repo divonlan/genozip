@@ -24,7 +24,7 @@
 #include "coverage.h"
 #include "writer.h"
 #include "kraken.h"
-#include "iupac.h"
+#include "bases_filter.h"
 
 #define dict_id_is_fastq_desc_sf dict_id_is_type_1
 #define dict_id_fastq_desc_sf dict_id_type_1
@@ -195,7 +195,8 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 {
     START_TIMER;
 
-    vb->contexts[FASTQ_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    vb->contexts[FASTQ_TOPLEVEL].no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
+    vb->contexts[FASTQ_CONTIG].flags.store = STORE_INDEX; // since v12
 
     Context *gpos_ctx     = &vb->contexts[FASTQ_GPOS];
     Context *strand_ctx   = &vb->contexts[FASTQ_STRAND];
@@ -291,10 +292,8 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
     if (!sl) return false;
 
     // get num_lines from vb header
-    SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER);
-    vb->pair_num_lines = BGEN32 (vb_header->num_lines);
-
-    buf_free (&vb_->compressed); // allocated by zfile_read_section_header
+    SectionHeaderVbHeader vb_header = zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER).vb_header;
+    vb->pair_num_lines = BGEN32 (vb_header.num_lines);
 
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
     sl++;
@@ -390,7 +389,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     }
 
     // if flag.optimize_DESC is on, we replace the description with filename:line_i 
-unsigned unoptimized_len = 0; // 0 unless optimized
+    unsigned unoptimized_len = 0; // 0 unless optimized
     if (flag.optimize_DESC) {
         unoptimized_len = field_len;
         field_start = vb->optimized_desc;
@@ -429,7 +428,7 @@ unsigned unoptimized_len = 0; // 0 unless optimized
     SEG_EOL (FASTQ_E2L, true);
 
     // PLUS - next line is expected to be a "+" (note: we don't seg the +, it is recorded a separator in the top level Container)
-    GET_LAST_ITEM ("+");
+    GET_LAST_ITEM (plus);
     ASSSEG (*field_start=='+' && field_len==1, field_start, "Invalid FASTQ file format: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\"",
             field_len, field_start);
 
@@ -437,7 +436,7 @@ unsigned unoptimized_len = 0; // 0 unless optimized
 
     // QUAL - just get the whole line and make sure its length is the same as SEQ
     dl->qual_data_start = next_field - vb->txt_data.data;
-    GET_LAST_ITEM ("QUAL");
+    GET_LAST_ITEM (SAM_QUAL);
     vb->contexts[FASTQ_QUAL].local.len += dl->seq_len;
     vb->contexts[FASTQ_QUAL].txt_len   += dl->seq_len;
 
@@ -504,25 +503,25 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (dict_id.num == dict_id_fields[FASTQ_DESC]     || 
          dict_id.num == dict_id_fields[FASTQ_QUAL]     || 
          dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] || 
-         (dict_id.num == dict_id_fields[FASTQ_STRAND]   && !flag.iupac)  ||
-         (dict_id.num == dict_id_fields[FASTQ_NONREF]   && !flag.iupac)   || 
-         (dict_id.num == dict_id_fields[FASTQ_NONREF_X] && !flag.iupac))) 
+         (dict_id.num == dict_id_fields[FASTQ_STRAND]   && !flag.bases)  ||
+         (dict_id.num == dict_id_fields[FASTQ_NONREF]   && !flag.bases)   || 
+         (dict_id.num == dict_id_fields[FASTQ_NONREF_X] && !flag.bases))) 
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
     if (flag.kraken_taxid==TAXID_NONE && dict_id.num == dict_id_fields[FASTQ_TAXID])
         return true;
 
-    // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep, --iupac)
+    // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep, --bases)
     if (flag.count && sections_has_dict_id (st) &&
          (dict_id.num != dict_id_fields[FASTQ_TOPLEVEL] && 
          (dict_id.num != dict_id_fields[FASTQ_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
          (dict_id.num != dict_id_fields[FASTQ_DESC]     || (!kraken_is_loaded && !flag.grep)) && 
-         (dict_id.num != dict_id_fields[FASTQ_SQBITMAP] || !flag.iupac) && 
-         (dict_id.num != dict_id_fields[FASTQ_NONREF]   || !flag.iupac) && 
-         (dict_id.num != dict_id_fields[FASTQ_NONREF_X] || !flag.iupac) && 
-         (dict_id.num != dict_id_fields[FASTQ_GPOS]     || !flag.iupac) && 
-         (dict_id.num != dict_id_fields[FASTQ_STRAND]   || !flag.iupac) && 
+         (dict_id.num != dict_id_fields[FASTQ_SQBITMAP] || !flag.bases) && 
+         (dict_id.num != dict_id_fields[FASTQ_NONREF]   || !flag.bases) && 
+         (dict_id.num != dict_id_fields[FASTQ_NONREF_X] || !flag.bases) && 
+         (dict_id.num != dict_id_fields[FASTQ_GPOS]     || !flag.bases) && 
+         (dict_id.num != dict_id_fields[FASTQ_STRAND]   || !flag.bases) && 
          (!dict_id_is_fastq_desc_sf(dict_id)            || (!kraken_is_loaded && !flag.grep)))) 
         return true;
 
@@ -549,9 +548,7 @@ bool fastq_piz_is_paired (void)
     // scan all B250 and Local looking for evidence of pairing
 //    while (sections_next_sec2 (&sl, SEC_B250, SEC_LOCAL, true)) {            
     while ((++sl)->st == SEC_B250 || sl->st == SEC_LOCAL) {            
-        bool is_paired = zfile_read_section_header (evb, sl->offset, sl->vblock_i, sl->st)->flags.ctx.paired;
-        buf_free (&evb->compressed); // zfile_read_section_header used this for the header
-
+        bool is_paired = zfile_read_section_header (evb, sl->offset, sl->vblock_i, sl->st).ctx.h.flags.ctx.paired;
         if (is_paired) return (z_file->z_flags.dts_paired = true); // assign and return
     }
    
@@ -597,15 +594,15 @@ static void fastq_update_coverage (VBlockFASTQ *vb)
     // 2nd file of a pair ("pair 2")
     else {
         // gpos: reconstruct, then cancel the reconstruction and just use last_value
-        //int32_t reconstructed_len = reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, true);
-        //vb->txt_data.len -= reconstructed_len; // roll back reconstruction
+        //int32_t recon_len = reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, true);
+        //vb->txt_data.len -= recon_len; // roll back reconstruction
         reconstruct_from_ctx ((VBlockP)vb, FASTQ_GPOS, 0, false);
         gpos = gpos_ctx->last_value.i;
     }
 
     WordIndex chrom_index;
     if (gpos != NO_GPOS && 
-        (chrom_index = ref_chrom_index_get_by_gpos (gpos)) != WORD_INDEX_NONE) {
+        (chrom_index = ref_contig_get_by_gpos (gpos)) != WORD_INDEX_NONE) {
 
         if (flag.show_coverage || flag.show_sex)
             *ENT (uint64_t, vb->coverage, chrom_index) += vb->seq_len;
@@ -658,9 +655,9 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
         }
     }
 
-    // --iupac
-    if (flag.iupac && is_top_level && !vb->drop_curr_line &&
+    // --bases
+    if (flag.bases && is_top_level && !vb->drop_curr_line &&
         !iupac_is_included_ascii (last_txt (vb, FASTQ_SQBITMAP), vb->last_txt_len (FASTQ_SQBITMAP)))
-        vb->drop_curr_line = "iupac";
+        vb->drop_curr_line = "bases";
 }
 

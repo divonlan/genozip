@@ -267,9 +267,16 @@ batch_minimal()
 batch_basic()
 {
     batch_print_header
+
     local file, replace
     for file in ${basics[@]}; do
-        
+
+        if [ $file == basic.chain ]; then
+            export GENOZIP_REFERENCE=$GRCh38
+        else
+            unset GENOZIP_REFERENCE
+        fi
+
         if [ $file != basic.bam ] && [ $file != basic.generic ]; then # binary files have no \n 
             test_unix_style $file
             test_windows_style $file
@@ -278,13 +285,13 @@ batch_basic()
             replace=
         fi
 
-        test_standard "NOPREFIX CONCAT" " " file://${path}${TESTDIR}/$file
-        test_standard "-p123" "--password 123" $file
+        test_standard "NOPREFIX CONCAT $ref" " " file://${path}${TESTDIR}/$file
+        test_standard "-p123 $ref" "--password 123" $file
         if [ $file != basic.bam ] && [ $file != basic.generic ] && [ $file != basic.phy ]; then # issue with redirection on Windows of Phylip files (bug 339)
             test_redirected $file
             test_stdout $file
         fi
-        test_standard "COPY" " " $file
+        test_standard "COPY $ref" " " $file
 
         test_multi_bound $file $replace # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
         test_optimize $file
@@ -372,7 +379,7 @@ batch_dual_coordinates()
 {
     batch_print_header
 
-    local files=(test.human2.filtered.snp.vcf test.NA12878.sorted.vcf test.ExAC.vcf.gz)
+    local files=(basic-dual-coord.vcf test.ExAC.vcf.gz test.human2.filtered.snp.vcf test.NA12878.sorted.vcf)
     local chain=data/GRCh37_to_GRCh38.chain.genozip
     local file
 
@@ -415,13 +422,13 @@ test_kraken() { # $1 file ; $2 1st genocat arguments ; $3 2nd genocat arguments
     $genozip $1 -fo $output || exit 1
 
     local lines_plus=`$genocat $output -Hq ${cat1_args[*]} --count`
-    if [ "$lines_plus" == "" ] || [ "$lines_plus" -eq 0 ]; then echo genocat error; exit 1; fi
+    if [ "$lines_plus" == "" ] || [ "$lines_plus" -eq 0 ]; then echo "genocat error - \$lines_plus=\"$lines_plus\""; exit 1; fi
 
     local lines_minus=`$genocat $output -Hq $3 --count`
-    if [ "$lines_minus" == "" ] || [ "$lines_minus" -eq 0 ]; then echo genocat error; exit 1; fi
+    if [ "$lines_minus" == "" ] || [ "$lines_minus" -eq 0 ]; then echo "genocat error - \$lines_minus=\"$lines_minus\""; exit 1; fi
     
     local lines=`$genocat -Hq $output --count`
-    if [ "$lines" == "" ] || [ "$lines" -eq 0 ]; then genocat error; exit 1; fi
+    if [ "$lines" == "" ] || [ "$lines" -eq 0 ]; then echo "genocat error - \$lines=\"$lines\""; exit 1; fi
     
     echo "$file : lines_plus=$lines_plus lines_minus=$lines_minus lines=$lines"
     if [ $(($lines_plus + $lines_minus)) -ne $lines ]; then
@@ -474,18 +481,18 @@ batch_iupac()
     batch_print_header
 
     # SAM
-    test_count_genocat_lines test/basic.sam "-H --iupac=AGCTN" 7
-    test_count_genocat_lines test/basic.sam "-H --iupac=^AGCTN" 1
+    test_count_genocat_lines test/basic.sam "-H --bases=AGCTN" 7
+    test_count_genocat_lines test/basic.sam "-H --bases=^AGCTN" 1
 
     # BAM
-    test_header "genocat --iupac AGCTN --count --bam"
-    local count=`$genocat $output --echo -H --bam --iupac AGCTN --count -q`
+    test_header "genocat --bases AGCTN --count --bam"
+    local count=`$genocat $output --echo -H --bam --bases AGCTN --count -q`
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
     if [ "$count" -ne 7 ]; then echo "bad count = $count"; exit 1; fi
 
-    test_header "genocat --iupac ^AGCTN --count --bam"
-    local count=`$genocat $output --echo -H --bam --iupac ^AGCTN --count -q`
+    test_header "genocat --bases ^AGCTN --count --bam"
+    local count=`$genocat $output --echo -H --bam --bases ^AGCTN --count -q`
     if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 
     # FASTQ
@@ -598,6 +605,12 @@ batch_grep_count_lines()
     for file in ${basics[@]}; do
         if [ $file == basic.fa ] || [ $file == basic.bam ] || [ $file == basic.generic ]; then continue; fi
 
+        if [ $file == basic.chain ]; then
+            export GENOZIP_REFERENCE=$GRCh38
+        else
+            unset GENOZIP_REFERENCE
+        fi
+
         # number of expected lines
         local lines=1
         if [ $file == basic.fq ];    then lines=4; fi
@@ -639,14 +652,31 @@ batch_real_world_subsets()
         filter_out=.xz
     fi
 
+    # without reference
     local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* \
                    test.*fq* test.*fastq* test.*fa* test.*fasta* \
-                   basic.phy* test.*chain* test.*gvf* \
+                   basic.phy* test.*gvf* \
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v .genozip` )
 
-    echo "subsets (~3 VBs) or real world files"
+    echo "subsets of real world files (without reference)"
     test_standard "-mf $1" " " ${files[*]}
+
+    # with reference
+    local files=( test.GRCh38_to_GRCh37.chain test.HG002_NA24385_SRR1767406_IonXpress_020_rawlib_24028.30k.sam \
+                  test.human.fq.gz test.human2.bam test.human2.sam \
+                  test.human2-R1.100K.fq.bz2 test.m64136_200621_234916.ccs.10k.bam test.m64136_200621_234916.ccs.10k.sam \
+                  test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz )
+
+    echo "subsets of real world files (with reference)"
+    test_standard "-mf $1 -e $hg19" " " ${files[*]}
+
+    # lots of small VBs
+    local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* | \
+                   grep -v "$filter_out" | grep -v .genozip` )
+
+    echo "subsets of real world files (lots of small VBs -B1)"
+    test_standard "-mf $1 -B1" " " ${files[*]}
 }
 
 batch_multifasta()
@@ -781,16 +811,23 @@ hg19=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 
 if (( $# < 1 )); then
-    echo "Usage: test.sh [debug] <batch_id-test> [optional-genozip-arg]"
+    echo "Usage: test.sh [debug|opt] <batch_id-test> [optional-genozip-arg]"
     exit 0
 fi
 
-# debug
+# debug and opt
 is_debug=`echo $1|grep debug`
 if [ -n "$is_debug" ]; then 
     debug=-debug; 
     shift
 fi
+
+is_opt=`echo $1|grep opt`
+if [ -n "$is_opt" ]; then 
+    debug=-opt; 
+    shift
+fi
+
 
 # -----------------
 # platform settings
@@ -814,8 +851,8 @@ genounzip="$genounzip_exe --echo -@5 $2"
 genocat="$genocat_exe --echo -@5 $2"
 genols=$genols_exe 
 
-basics=(basic.bam basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
-        basic.chain basic.kraken basic.phy basic.generic)
+basics=(basic.chain basic.bam basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
+        basic.kraken basic.phy basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
 for exe in ${exes[@]}; do
@@ -834,15 +871,17 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
-# only if doing a full test - delete genome and hash caches
-if (( $1 == 1 )) ; then
+# only if doing a full test (starting from 0) - delete genome and hash caches
+sparkling_clean()
+{
     rm -f ${hg19}.*cache* ${GRCh38}.*cache* 
-fi
+}
 
 # unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
 batch_id=$1
 batch_id=$((batch_id - 1))
 
+if (( $1 <= 0  )) ; then  sparkling_clean              ; fi
 if (( $1 <= 1  )) ; then  batch_minimal                ; fi
 if (( $1 <= 2  )) ; then  batch_basic                  ; fi
 if (( $1 <= 3  )) ; then  batch_precompressed          ; fi
@@ -858,16 +897,15 @@ if (( $1 <= 12 )) ; then  batch_backward_compatability ; fi
 if (( $1 <= 13 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
 if (( $1 <= 14 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
 if (( $1 <= 15 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 16 )) ; then  batch_real_world_subsets     ; fi ; # natural VB size
-if (( $1 <= 17 )) ; then  batch_real_world_subsets -B1 ; fi ; # many VBs
-if (( $1 <= 18 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 19 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 20 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 21 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 22 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 23 )) ; then  batch_reference              ; fi
-if (( $1 <= 24 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 25 )) ; then  batch_genols                 ; fi
+if (( $1 <= 16 )) ; then  batch_real_world_subsets     ; fi 
+if (( $1 <= 17 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 18 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 19 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 20 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 21 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 22 )) ; then  batch_reference              ; fi
+if (( $1 <= 23 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 24 )) ; then  batch_genols                 ; fi
 
 printf "\nALL GOOD!\n"
 

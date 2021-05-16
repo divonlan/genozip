@@ -37,13 +37,43 @@ WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Contex
     
     NEXTENT (uint32_t, ctx->b250) = node_index;
     ctx->txt_len += add_bytes;
-
+    
     // a snip that is stored in its entirety in local, with just a LOOKUP in the dictionary, is counted as a singleton
     if (snip_len==1 && (snip[0] == SNIP_LOOKUP))
         ctx->num_singletons++;
 
     return node_index;
 } 
+
+// called before seg, to store the point to which we might roll back
+void seg_create_rollback_point (Context *ctx)
+{
+    // roll back point
+    ctx->rback_b250_len       = ctx->b250.len;
+    ctx->rback_local_len      = ctx->local.len;
+    ctx->rback_txt_len        = ctx->txt_len;
+    ctx->rback_num_singletons = ctx->num_singletons;
+}
+
+// rolls back b250, local, txt_len and vb->
+void seg_rollback (VBlockP vb, Context *ctx)
+{
+    // if we evaluated this context since the rollback count - undo
+    if (ctx->b250.len > ctx->rback_b250_len) {
+        ASSERT (ctx->b250.len - ctx->rback_b250_len <= 1, "rollback can only happen after zero or one segs: ctx=%s", ctx->name);
+       
+        ctx->b250.len = ctx->rback_b250_len;
+
+        WordIndex node_index = *AFTERENT (WordIndex, ctx->b250);
+        ctx_decrement_count (vb, ctx, node_index);
+    }
+
+    ctx->local.len      = ctx->rback_local_len;
+    ctx->txt_len        = ctx->rback_txt_len;
+    ctx->num_singletons = ctx->rback_num_singletons;
+    ctx->last_line_i    = LAST_LINE_I_INIT; // undo "encountered in line"
+}
+
 
 void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
 {
@@ -118,6 +148,38 @@ const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigne
     return 0; // avoid compiler warning - never reaches here
 }
 
+// returns true is value is of type store_type and stored in last_value
+bool seg_set_last_txt_do (VBlockP vb, ContextP ctx, 
+                          const char *value, unsigned value_len, StoreType store_type)
+{
+    bool is_value_in_txt_data = value >= FIRSTENT (char, vb->txt_data) &&
+                                value <= LASTENT  (char, vb->txt_data);
+
+    ctx->last_txt_index = is_value_in_txt_data ? ENTNUM (vb->txt_data, value) : INVALID_LAST_TXT_INDEX;
+    ctx->last_txt_len = value_len;
+
+    bool stored = false;
+
+    if (store_type == STORE_INT) 
+        stored = str_get_int (value, value_len, &ctx->last_value.i);
+    
+    else if (store_type == STORE_FLOAT) {
+        char *after; 
+        double f = strtod (value, &after); 
+        if ((stored = (after == value + value_len))) 
+            ctx->last_value.f = f;
+    }
+
+    if (stored) {
+        ctx->flags.store = store_type;
+        ctx->last_line_i = vb->line_i;    
+    }
+    else 
+        ctx_set_encountered_in_line (ctx);
+
+    return stored;
+}
+
 void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes)
 {
     char snip[40];
@@ -126,8 +188,8 @@ void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes)
 }
 
 // prepare snips that contain code + dict_id + optional parameter (SNIP_LOOKUP_OTHER, SNIP_OTHER_DELTA, SNIP_REDIRECTION...)
-void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
-                             char *snip, unsigned *snip_len) //  in / out
+void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
+                                char *snip, unsigned *snip_len) //  in / out
 {
     // make sure we have enough memory
     unsigned required_len = 1 + base64_size (DICT_ID_LEN) + 11 /* max length of a int32 -1000000000 */ + 1 /* \0 */ ;
@@ -151,7 +213,7 @@ WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str
     ASSSEG (!is_new || !flag.const_chroms || (chrom_str_len == 1 && chrom_str[0] == '*'), 
             chrom_str, "contig '%.*s' appears in file, but is missing in the %s header", chrom_str_len, chrom_str, dt_name (txt_file->data_type));
             
-    random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_str, chrom_str_len);
+    random_access_update_chrom (vb, DC_PRIMARY, chrom_node_index, chrom_str, chrom_str_len);
 
     return chrom_node_index;
 }
@@ -182,6 +244,7 @@ PosType seg_pos_field (VBlock *vb,
                        DidIType base_did_i,    // mandatory: base for delta
                        bool seg_bad_snips_too, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
                        bool zero_is_bad,       // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
+                       char missing,           // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
                        const char *pos_str, unsigned pos_len, // option 1
                        PosType this_pos,       // option 2
                        unsigned add_bytes)
@@ -196,9 +259,14 @@ PosType seg_pos_field (VBlock *vb,
 
     SegError err = ERR_SEG_NO_ERROR;
     if (pos_str) {
-        this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, zero_is_bad, &err);
-        ASSERT (seg_bad_snips_too || !err, "invalid value %.*s in %s vb=%u line_i=%u", 
-                pos_len, pos_str, vb->contexts[snip_did_i].name, vb->vblock_i, vb->line_i);
+        if (pos_len == 1 && *pos_str == missing) 
+            err = ERR_SEG_NOT_INTEGER; // not an error, just so that we seg this as SNIP_DONT_STORE
+        
+        else {
+            this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, zero_is_bad, &err);
+            ASSERT (seg_bad_snips_too || !err, "invalid value %.*s in %s vb=%u line_i=%u", 
+                    pos_len, pos_str, vb->contexts[snip_did_i].name, vb->vblock_i, vb->line_i);
+        }
 
         // we accept out-of-range integer values for non-self-delta
         if (snip_did_i != base_did_i && err == ERR_SEG_OUT_OF_RANGE) err = ERR_SEG_NO_ERROR;
@@ -226,7 +294,7 @@ PosType seg_pos_field (VBlock *vb,
 
     PosType pos_delta = this_pos - base_ctx->last_value.i;
     
-    snip_ctx->last_value.i = this_pos;
+    ctx_set_last_value (vb, snip_ctx, this_pos);
 
     // if the delta is too big, add this_pos (not delta) to local and put SNIP_LOOKUP in the b250
     // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
@@ -291,7 +359,7 @@ PosType seg_pos_field (VBlock *vb,
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator)
+void seg_id_field_do (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator)
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
@@ -323,16 +391,15 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
 }
 
 // returns true if it was an integer
-bool seg_integer_or_not (VBlockP vb, ContextP ctx, 
-                         const char *this_value, unsigned this_value_len, unsigned add_bytes)
+bool seg_integer_or_not_do (VBlockP vb, ContextP ctx, 
+                            const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
     // case: its an integer
     if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
         str_get_int (this_value, this_value_len, &ctx->last_value.i) &&
         ctx->last_value.i >= 0 && ctx->last_value.i <= 0xffffffffULL) {
 
-        // if this is the first snip in the ctx, 
-        if (!ctx->local.len) { // first number
+        if (!ctx->local.len) { // first number 
             ctx->dynamic_size_local = true;
             ctx->ltype = LT_UINT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
             
@@ -358,210 +425,8 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx,
     }
 }
 
-typedef struct { const char *start; unsigned len; DictId dict_id; } InfoItem;
-
-static int sort_by_subfield_name (const void *a, const void *b)  
-{ 
-    InfoItem *ina = (InfoItem *)a;
-    InfoItem *inb = (InfoItem *)b;
-    
-    return strncmp (ina->start, inb->start, MIN (ina->len, inb->len));
-}
-
-// if ostatus is not known yet (seg of a Primary line), check for LIFTREJT subfield
-static inline LiftOverStatus seg_info_field_get_ostatus_by_con (VBlock *vb, unsigned nitems, InfoItem *info_items)
-{
-    for (unsigned i=0; i < nitems; i++)
-        if (info_items[i].dict_id.num == dict_id_INFO_LIFTREJT) 
-            return LO_UNSUPPORTED;
-
-        else if (info_items[i].dict_id.num == dict_id_INFO_LIFTOVER) 
-            return LO_OK;
-
-    ASSSEG0 (false, ENT (char, vb->txt_data, vb->line_start), 
-             "File is a PRIMARY dual-coordinates file, expecting every line to have an INFO/"INFO_LIFTOVER" or INFO/"INFO_LIFTREJT" subfield, but this line does not");
-    
-    return 0; // never reaches here
-}
-
-static void seg_info_field_correct_for_dual_coordinates (VBlock *vb, Container *con, InfoItem *info_items, LiftOverStatus ostatus)
-{
-    // case: --chain and INFO is '.' - remove the '.' as we are adding INFO/LIFTOVER or LIFTREJT
-    if (ostatus >= 0 && (con_nitems(*con) == 1 && info_items->len == 1 && *info_items->start == '.')) {
-        con_dec_nitems (*con);
-        vb->vb_data_size--;
-    }
-
-    // if ostatus is not known yet (seg of a Primary line), check for LIFTREJT subfield
-    if (ostatus == LO_UNKNOWN) 
-        ostatus = seg_info_field_get_ostatus_by_con (vb, con_nitems(*con), info_items);
-
-    // cases we add INFO_LIFTOVER: liftover is possible (LO_OK), but not if this is a Primary file that already contains LIFTOVER)
-    if (ostatus == LO_OK && txt_file->dual_coords != DC_PRIMARY) {
-
-        info_items[con_nitems(*con)] = (InfoItem){ .start   = INFO_LIFTOVER"=", 
-                                                   .len     = INFO_LIFTOVER_LEN + 1, // +1 for the '='
-                                                   .dict_id = (DictId)dict_id_INFO_LIFTOVER };  
-        
-        // case Luft: we're replacing LIFTBACK with LIFTOVER in the default reconstruction
-        if (txt_file->dual_coords == DC_LUFT)
-            vb->vb_data_size += (INFO_LIFTOVER_LEN - INFO_LIFTBACK_LEN);
-
-        // case: --chain - we're adding this subfield to the default reconstruction
-        else
-            vb->vb_data_size += INFO_LIFTOVER_LEN + 1 + (con_nitems(*con) > 0); // +1 for '=', +1 for ';' if we already have item(s).
-
-        con_inc_nitems (*con);
-        con->filter_items = true; // filter will select which of LIFTOVER and LIFTBACK is reconstructed
-    }
-
-    // cases we add INFO_LIFTBACK: lift is possible (LO_OK), but not if this is a Luft file that already contains LIFTBACK
-    if (ostatus == LO_OK && txt_file->dual_coords != DC_LUFT) {
-
-        if (ostatus == LO_OK) {
-            info_items[con_nitems(*con)] = (InfoItem){ .start   = INFO_LIFTBACK"=", 
-                                                       .len     = INFO_LIFTBACK_LEN + 1, // +1 for the '='
-                                                       .dict_id = (DictId)dict_id_INFO_LIFTBACK };  
-            con_inc_nitems (*con);
-            con->filter_items = true; // filter will select which of LIFTOVER and LIFTBACK is reconstructed
-        }
-        // note: we don't increase vb_data_size for LIFTBACK because its not displayed in the default reconstruction of the file
-    }
-
-    // case we add LIFTREJT: --chain with a liftover error (not Primary or Luft files - they already contain these)
-    if (ostatus >= 1 && chain_is_loaded) {
-        info_items[con_nitems(*con)] = (InfoItem){ .start   = INFO_LIFTREJT"=", 
-                                                   .len     = INFO_LIFTREJT_LEN + 1, 
-                                                   .dict_id = (DictId)dict_id_INFO_LIFTREJT };
-        
-        vb->vb_data_size += INFO_LIFTREJT_LEN + 1 + (con_nitems(*con) > 0); // +1 for '=', +1 for ';' if we already have item(s)
-
-        con_inc_nitems (*con);
-    }
-}
-
-// used to seg INFO fields in VCF and ATTRS in GFF3
-void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, const char *info_str, unsigned info_len,
-                     LiftOverStatus ostatus) // >=0 --chain or dual coordinate file, or -1 if not
-{
-    const int info_field   = DTF(info);
-    const char *field_name = DTF(names)[info_field];
-
-    // max number of Container items consumed by Liftover stuff, reducing the max number of other subfields 
-    unsigned max_liftover_items = ostatus == LO_NONE    ? 0  // not a dual-coordinates frile
-                                : ostatus == LO_OK      ? 2  // INFO_LIFTOVER and INFO_LIFTBACK
-                                : ostatus == LO_UNKNOWN ? 2  // Either INFO_LIFTOVER and INFO_LIFTBACK Or INFO_LIFTREJT
-                                :                         1; // INFO_LIFTREJT
-
-    Container con = { .repeats             = 1, 
-                      .drop_final_item_sep = true };
-
-    const char *this_name = info_str, *this_value = NULL;
-    int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
-
-    InfoItem info_items[MAX_SUBFIELDS];
-
-    // get name / value pairs - and insert values to the "name" dictionary
-    bool reading_name = true;
-    for (unsigned i=0; i < info_len + 1; i++) {
-        char c = (i==info_len) ? ';' : info_str[i]; // add an artificial ; at the end of the INFO data
-
-        if (reading_name) {
-
-            if (c == '=' || c == ';') {  // end of valueful or valueless name
-
-                bool valueful = (c == '=');
-
-                ASSSEG (this_name_len > 0, info_str, "Error: %s field contains a = or ; without a preceding subfield name", field_name);
-
-                if (this_name_len > 0) { 
-                    ASSSEG ((this_name[0] >= 64 && this_name[0] <= 127) || this_name[0] == '.', info_str,
-                            "%s field contains a name %.*s starting with an illegal character '%c' (ASCII %u)", 
-                            field_name, this_name_len, this_name, this_name[0], this_name[0]);
-
-                    InfoItem *ii = &info_items[con_nitems(con)];
-                    ii->start    = this_name; 
-                    ii->len      = this_name_len + valueful; // include the '=' if there is one 
-                    ii->dict_id  = valueful ? dict_id_make (this_name, this_name_len, DTYPE_1) 
-                                            : DICT_ID_NONE;
-
-                    this_value = &info_str[i+1]; 
-                    this_value_len = -valueful; // if there is a '=' to be skipped, start from -1
-                    reading_name = false; 
-                }
-            }
-            else this_name_len++; // don't count the = or ; in the len
-        }
-        
-        if (!reading_name) {
-
-            if (c == ';') { // end of value
-                // If its a valueful item, seg it (either special or regular)
-                DictId dict_id = info_items[con_nitems(con)].dict_id;
-                if (dict_id.num) { 
-                    char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
-                    if (seg_special_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len, optimized_snip))
-                        seg_integer_or_not (vb, ctx_get_ctx (vb, dict_id), this_value, this_value_len, this_value_len);
-
-                    if (txt_file->dual_coords && (dict_id.num == dict_id_INFO_LIFTOVER || dict_id.num == dict_id_INFO_LIFTBACK))
-                        con.filter_items = true; // filter will select which of LIFTOVER and LIFTBACK is reconstructed
-                }
-
-                reading_name = true;  // end of value - move to the next item
-                this_name = &info_str[i+1]; // move to next field in info string
-                this_name_len = 0;
-                con_inc_nitems (con);
-
-                ASSSEG (con_nitems(con) <= MAX_SUBFIELDS - max_liftover_items, info_str, 
-                        "A line has too many subfields (tags) in the %s field - the maximum supported is %u",
-                        field_name, MAX_SUBFIELDS - max_liftover_items);
-            }
-            else this_value_len++;
-        }
-    }
-
-    // handle dual coordinates arising from --chain, as well as compressing DC_PRIMARY and DC_LUFT files
-    seg_info_field_correct_for_dual_coordinates (vb, &con, info_items, ostatus);
-
-    // finalize special handling
-    seg_special_subfields (vb, DICT_ID_NONE, NULL, NULL, NULL);
-
-    // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
-    // thereby both improving compression and improving --regions speed. 
-    if (flag.optimize_sort && con_nitems(con) > 1) 
-        qsort (info_items, con_nitems(con), sizeof(InfoItem), sort_by_subfield_name);
-
-    char prefixes[CONTAINER_MAX_PREFIXES_LEN]; // these are the Container prefixes
-    prefixes[0] = prefixes[1] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix
-    unsigned prefixes_len = 2;
-
-    // Populate the Container 
-    uint32_t total_names_len=0;
-    for (unsigned i=0; i < con_nitems(con); i++) {
-        // Set the Container item and find (or create) a context for this name
-        InfoItem *ii = &info_items[i];
-        con.items[i] = (ContainerItem){ .dict_id   = ii->dict_id,
-                                        .seperator = { ';' } }; 
-        // add to the prefixes
-        ASSSEG (prefixes_len + ii->len + 1 <= CONTAINER_MAX_PREFIXES_LEN, info_str, 
-                "%s contains tag names that, combined (including the '='), exceed the maximum of %u characters", field_name, CONTAINER_MAX_PREFIXES_LEN);
-
-        memcpy (&prefixes[prefixes_len], ii->start, ii->len);
-        prefixes_len += ii->len;
-        prefixes[prefixes_len++] = CON_PREFIX_SEP;
-
-        // don't include LIFTBACK in a dual-coordinates file in add_bytes because its not reconstructed by default
-        if (!(ii->dict_id.num == dict_id_INFO_LIFTBACK && 
-              (txt_file->dual_coords || ostatus == LO_OK /* --chain */)))  
-            total_names_len += ii->len + 1; // +1 for ; \t or \n separator
-    }
-
-    container_seg_by_ctx (vb, &vb->contexts[info_field], &con, prefixes, prefixes_len, 
-                          total_names_len /* names inc. = and separator */);
-}
-
-WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len,
-                              int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
+WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len,
+                                 int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
 {
     if (!other_ctx) goto fallback;
 
@@ -570,8 +435,7 @@ WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, cons
     int64_t delta = ctx->last_value.i - other_ctx->last_value.i; 
     if (max_delta >= 0 && (delta > max_delta || delta < -max_delta)) goto fallback;
 
-    char snip[100]; 
-    unsigned snip_len = sizeof (snip);
+    SNIP(100);
     seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, true, (int32_t)delta, snip, &snip_len);
 
     other_ctx->no_stons = true;
@@ -585,15 +449,14 @@ fallback:
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
-Container seg_initialize_container_array (VBlockP vb, DictId dict_id, bool type_1_items)
+Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items)
 {
     Container con = (Container){ .repeats = 1 };
 
     for (unsigned i=0; i < MAX_COMPOUND_COMPONENTS; i++) {
         const uint8_t *id = dict_id.id;
-        uint8_t char2 = (i < 10) ? ('0' + i) : ('a' + (i-10));
         
-        char dict_id_str[8] = { id[0], char2, id[1], id[2], id[3], id[4], id[5], id[6] };
+        char dict_id_str[8] = { id[0], base36(i), id[1], id[2], id[3], id[4], id[5], id[6] };
         
         con.items[i].dict_id = dict_id_make (dict_id_str, 8, type_1_items ? DTYPE_1 : DTYPE_2);
     }
@@ -623,7 +486,7 @@ void seg_compound_field (VBlock *vb,
     unsigned snip_len = 0;
     unsigned num_double_sep = 0;
 
-    Container con = seg_initialize_container_array ((VBlockP)vb, field_ctx->dict_id, true); 
+    Container con = seg_initialize_container_array (field_ctx->dict_id, true); 
 
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
@@ -667,7 +530,7 @@ void seg_compound_field (VBlock *vb,
                     sf_ctx->not_all_the_same = true;
                 }
 
-                sf_ctx->last_value.i = this_value;
+                ctx_set_last_value (vb, sf_ctx, this_value);
             }
             
             if (flag.pair == PAIR_READ_1)
@@ -675,7 +538,7 @@ void seg_compound_field (VBlock *vb,
             
             // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
             // i.e. its already in the dictionary and hash table - so no resources wasted
-            uint32_t word_index = ctx_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, NULL);
+            WordIndex node_index = ctx_evaluate_snip_seg (vb, sf_ctx, snip, snip_len, NULL);
 
             // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
             // and read 2 might have SNIP_PAIR_LOOKUP
@@ -702,11 +565,17 @@ void seg_compound_field (VBlock *vb,
                     // note: if the pair word is a singleton in pair_1 file, then pair_word_index will be the index of {SNIP_LOOKUP}
                     // rather than the snip (as replaced in ctx_evaluate_snip_merge), therefore this condition will fail. This is quite
                     // rare, so not worth handling this case
-                    if (word_index == pair_word_index) {
+                    if (node_index == pair_word_index) {
+
+                        // discard node_index - decrement its count
+                        ctx_decrement_count (vb, sf_ctx, node_index);
+
+                        // get new node_index instead
                         sf_ctx->pair_b250 = true;
                         static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
-                        word_index = ctx_evaluate_snip_seg ((VBlockP)vb, sf_ctx, lookup_pair_snip, 1, NULL);
-                    } else
+                        node_index = ctx_evaluate_snip_seg (vb, sf_ctx, lookup_pair_snip, 1, NULL);
+                    } 
+                    else
                         // To improve: currently, pairing stops at the first non-match
                         sf_ctx->stop_pairing = true;
                 }
@@ -714,7 +583,7 @@ void seg_compound_field (VBlock *vb,
                     sf_ctx->stop_pairing = true;
             }
 
-            NEXTENT (uint32_t, sf_ctx->b250) = word_index;
+            NEXTENT (uint32_t, sf_ctx->b250) = node_index;
 
             sf_ctx->txt_len += nonoptimized_len ? 0 : original_snip_len;
 
@@ -787,8 +656,8 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
     for (int32_t i=0; i < value_len; i++) 
         if (value[i] == sep) con->repeats++;
 
-    if (container_ctx->flags.store == STORE_INT)
-        container_ctx->last_value.i = 0; // initialize for summing elements
+    if (container_ctx->flags.store == STORE_INT) 
+        ctx_set_last_value (vb, container_ctx, 0LL);
 
     for (uint32_t i=0; i < con->repeats; i++) { // value_len will be -1 after last number
 
@@ -824,7 +693,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
             seg_by_ctx (vb, delta_snip, delta_snip_len, arr_ctx, 0);
 
-            arr_ctx->last_value.i = this_item_value;
+            ctx_set_last_value (vb, arr_ctx, this_item_value);
             arr_ctx->numeric_only = false;
         }
 
@@ -959,7 +828,7 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
     vb->lines.len = vb->lines.size / sizeof_line;
 
     // allocate more to the b250 buffer of the fields, which each have num_lines entries
-    for (int f=0; f < DTF(num_fields); f++) 
+    for (DidIType f=0; f < DTF(num_fields); f++) 
         if (buf_is_alloc (&vb->contexts[f].b250))
             buf_alloc_zero (vb, &vb->contexts[f].b250, vb->lines.len - num_old_lines, 0, uint32_t, 1, "contexts->b250");
 }
@@ -971,18 +840,18 @@ static void seg_verify_file_size (VBlock *vb)
     for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) 
         reconstructed_vb_size += vb->contexts[sf_i].txt_len;
         
-    if (vb->vb_data_size != reconstructed_vb_size/* && !flag.data_modified*/) {
+    if (vb->vb_data_size != reconstructed_vb_size) {
 
         fprintf (stderr, "Txt lengths:\n");
         for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
             Context *ctx = &vb->contexts[sf_i];
-            fprintf (stderr, "%s: %u\n", ctx->name, (uint32_t)ctx->txt_len);
+            fprintf (stderr, "%s: %u\n", dis_dict_id_ex (ctx->dict_id, true).s, (uint32_t)ctx->txt_len);
         }
         
-        ABOSEG (vb->txt_data.data, "Error while verifying reconstructed vblock size: "
-                "reconstructed_vb_size=%s (calculated by adding up ctx.txt_data after segging) but vb->vb_data_size=%s (calculated when reading data from the file) (diff=%d)", 
-                str_uint_commas (reconstructed_vb_size).s, str_uint_commas (vb->vb_data_size).s, 
-                (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
+        ABORT ("Error while verifying reconstructed vb_i=%u size: "
+               "reconstructed_vb_size=%s (calculated by adding up ctx.txt_data after segging) but vb->vb_data_size=%s (calculated when reading data from the file) (diff=%d)", 
+               vb->vblock_i, str_uint_commas (reconstructed_vb_size).s, str_uint_commas (vb->vb_data_size).s, 
+               (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
     }
 }
 
@@ -996,8 +865,8 @@ void seg_all_data_lines (VBlock *vb)
     ctx_verify_field_ctxs (vb);
  
     // allocate the b250 for the fields which each have num_lines entries
-    for (int f=0; f < DTF(num_fields); f++) 
-        buf_alloc_old (vb, &vb->contexts[f].b250, vb->lines.len * sizeof (uint32_t), 1, "contexts->b250");
+    for (DidIType f=0; f < DTF(num_fields); f++) 
+        buf_alloc (vb, &vb->contexts[f].b250, 0, vb->lines.len, WordIndex, 1, "contexts->b250");
     
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
 
@@ -1007,8 +876,7 @@ void seg_all_data_lines (VBlock *vb)
 
     // allocate lines
     uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
-    buf_alloc_old (vb, &vb->lines, vb->lines.len * sizeof_line, 1, "lines");
-    buf_zero (&vb->lines);
+    buf_alloc_zero (vb, &vb->lines, 0, vb->lines.len * sizeof_line, char, 1, "lines");
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;

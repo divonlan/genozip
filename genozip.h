@@ -51,7 +51,6 @@ typedef struct BitArray *BitArrayP;
 typedef const struct BitArray *ConstBitArrayP;
 typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
-typedef union LastValueType *LastValueTypeP;
 typedef struct Mutex *MutexP;
 
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
@@ -68,23 +67,30 @@ typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
 #pragma pack(1) // structures that are part of the genozip format are packed.
 #define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/GFF3 specs don't limit the field name (tag) length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
 typedef union DictId {
-    uint64_t num;            // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
-    uint8_t id[DICT_ID_LEN]; // \0-padded IDs 
-    uint16_t map_key;        // we use the first two bytes as they key into vb/z_file->dict_id_mapper
-} DictId __attribute__ ((__transparent_union__));
+    uint64_t num;             // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
+    uint8_t id[DICT_ID_LEN];  // \0-padded IDs 
+    uint16_t map_key;         // we use the first two bytes as they key into vb/z_file->dict_id_mapper
+} DictId;
 #pragma pack()
 
-typedef uint16_t DidIType;   // index of a context in vb->contexts or z_file->contexts / a counter of contexts
+typedef uint16_t DidIType;    // index of a context in vb->contexts or z_file->contexts / a counter of contexts
 #define DID_I_NONE ((DidIType)-1)
 
 typedef uint64_t CharIndex;   // index within dictionary
 typedef int32_t WordIndex;    // used for word and node indices
 typedef int64_t PosType;      // used for position coordinate within a genome
 
-typedef union LastValueType { // 64 bit
+typedef enum __attribute__ ((__packed__)) { DC_NONE, DC_PRIMARY, DC_LUFT, DC_BOTH } Coords; // 2 bits, part of the file format, goes into FlagsTxtHeader, FlagsVbHeader
+#define NUM_COORDS 4
+#define COORDS_NAMES { "NONE", "PRIM", "LUFT", "BOTH" }
+#define OTHER_COORDS(c) ((c)==DC_PRIMARY ? DC_LUFT : DC_PRIMARY)
+#define SEL(prim,luft) ((vb->line_coords == DC_PRIMARY) ? (prim) : (luft))
+extern const char *coords_names[4];
+
+typedef union { // 64 bit
     int64_t i;
     double f;
-} LastValueType;
+} LastValueType __attribute__((__transparent_union__));
 
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads;
@@ -146,15 +152,19 @@ typedef _Bool bool;
 #define RESTORE_VALUE(flag) flag = save_##flag
 
 // returns true if new_value has been set
-#define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueTypeP new_value, bool reconstruct)
+#define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueType *new_value, bool reconstruct)
+typedef SPECIAL_RECONSTRUCTOR ((*PizSpecialReconstructor));
+
 #define SPECIAL(dt,num,name,func) \
     extern SPECIAL_RECONSTRUCTOR(func); \
     enum { dt##_SPECIAL_##name = (num + 32) }; // define constant - +32 to make it printable ASCII that can go into a snip 
 
 // translations of Container items - when genounzipping one format translated to another
 typedef uint8_t TranslatorId;
-// note on return value: self-translators (translator only item[0] need to return the change in prefixes_len, the return value of other translators is ignored
-#define TRANSLATOR_FUNC(func) int32_t func(VBlockP vb, ContextP ctx, char *reconstructed, int32_t reconstructed_len)
+#define TRANS_ID_NONE    ((TranslatorId)0)
+#define TRANS_ID_UNKNOWN ((TranslatorId)255)
+
+#define TRANSLATOR_FUNC(func) int32_t func(VBlockP vb, ContextP ctx, char *recon, int32_t recon_len, bool validate_only)
 #define TRANSLATOR(src_dt,dst_dt,num,name,func)\
     extern TRANSLATOR_FUNC(func); \
     enum { src_dt##2##dst_dt##_##name = num }; // define constant
@@ -166,7 +176,7 @@ typedef uint8_t TranslatorId;
 // NOTE: for a callback to be called on items of a container, the Container.callback flag needs to be set
 #define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item, bool *reconstruct)
 
-#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, char *reconstructed, int32_t reconstructed_len)
+#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, char *recon, int32_t recon_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 
@@ -205,45 +215,54 @@ extern FILE *info_stream;
 extern bool is_info_stream_terminal; // is info_stream going to a terminal
 
 #define iputc(c)                             fputc ((c), info_stream) // no flushing
+
 #define iprintf(format, ...)                 do { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); } while(0)
 #define iprint0(str)                         do { fprintf (info_stream, (str)); fflush (info_stream); } while(0)
 
+// bring the cursor down to a newline, if needed
+extern bool progress_newline_since_update;
+#define progress_newline \
+    if (!progress_newline_since_update) { \
+        fputc ('\n', stderr);\
+        progress_newline_since_update = true;\
+    }
+
 // check for a user error
-#define ASSINP(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); exit_on_error(false); }} while(0)
-#define ASSINP0(condition, string)           do { if (!(condition)) { fprintf (stderr, "\n%s: %s\n", global_cmd, string); if (flags_command_line()) fprintf (stderr, "\ncommand: %s\n", flags_command_line()); exit_on_error(false); }} while(0)
-#define ABORTINP(format, ...)                do { fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);} while(0)
-#define ABORTINP0(string)                    do { fprintf (stderr, "\n%s: %s\n", global_cmd, string); exit_on_error(false);} while(0)
+#define ASSINP(condition, format, ...)       do { if (!(condition)) { progress_newline; fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); exit_on_error(false); }} while(0)
+#define ASSINP0(condition, string)           do { if (!(condition)) { progress_newline; fprintf (stderr, "%s: %s\n", global_cmd, string); if (flags_command_line()) fprintf (stderr, "\ncommand: %s\n", flags_command_line()); exit_on_error(false); }} while(0)
+#define ABORTINP(format, ...)                do { progress_newline; fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);} while(0)
+#define ABORTINP0(string)                    do { progress_newline; fprintf (stderr, "%s: %s\n", global_cmd, string); exit_on_error(false);} while(0)
 
 // check for a bug - prints stack
-#define ASSERT(condition, format, ...)       do { if (!(condition)) { fprintf (stderr, "\nError in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
-#define ASSERT0(condition, string)           do { if (!(condition)) { fprintf (stderr, "\nError in %s:%u: %s\n", __FUNCTION__, __LINE__, string); exit_on_error(true); }} while(0)
+#define ASSERT(condition, format, ...)       do { if (!(condition)) { progress_newline; fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
+#define ASSERT0(condition, string)           do { if (!(condition)) { progress_newline; fprintf (stderr, "Error in %s:%u: %s\n", __FUNCTION__, __LINE__, string); exit_on_error(true); }} while(0)
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
-#define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)
-#define ASSERTW0(condition, string)          do { if (!(condition) && !flag.quiet) { fprintf (stderr, "\n%s\n", string); } } while(0)
-#define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} while(0)
-#define RETURNW0(condition, ret, string)     do { if (!(condition)) { if (!flag.quiet) { fprintf (stderr, "\n%s\n", string); } return ret; } } while(0)
-#define ABORT(format, ...)                   do { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);} while(0)
-#define ABORT_R(format, ...) /*w/ return 0*/ do { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); return 0;} while(0)
-#define ABORT0(string)                       do { fprintf (stderr, "\n%s\n", string); exit_on_error(true);} while(0)
-#define ABORT0_R(string)                     do { fprintf (stderr, "\n%s\n", string); exit_on_error(true); return 0; } while(0)
-#define WARN(format, ...)                    do { if (!flag.quiet) { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
-#define WARN0(string)                        do { if (!flag.quiet) fprintf (stderr, "\n%s\n", string); } while(0)
+#define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { progress_newline; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)
+#define ASSERTW0(condition, string)          do { if (!(condition) && !flag.quiet) { progress_newline; fprintf (stderr, "%s\n", string); } } while(0)
+#define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { progress_newline; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} while(0)
+#define RETURNW0(condition, ret, string)     do { if (!(condition)) { if (!flag.quiet) { progress_newline; fprintf (stderr, "%s\n", string); } return ret; } } while(0)
+#define ABORT(format, ...)                   do { progress_newline; fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);} while(0)
+#define ABORT_R(format, ...) /*w/ return 0*/ do { progress_newline; fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); return 0;} while(0)
+#define ABORT0(string)                       do { progress_newline; fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s\n", string); exit_on_error(true);} while(0)
+#define ABORT0_R(string)                     do { progress_newline; fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s\n", string); exit_on_error(true); return 0; } while(0)
+#define WARN(format, ...)                    do { if (!flag.quiet) { progress_newline; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
+#define WARN0(string)                        do { if (!flag.quiet) { progress_newline; fprintf (stderr, "%s\n", string); } } while(0)
 
 #define WARN_ONCE(format, ...)               do { static bool warning_shown = false; \
                                                   if (!flag.quiet && !warning_shown) { \
-                                                      fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); \
+                                                      progress_newline; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); \
                                                       warning_shown = true; \
                                                   } \
                                              } while(0) 
 
 #define WARN_ONCE0(string)                   do { static bool warning_shown = false; \
                                                   if (!flag.quiet && !warning_shown) { \
-                                                      fprintf (stderr, "\n%s\n", string); \
+                                                      progress_newline; fprintf (stderr, "%s\n", string); \
                                                       warning_shown = true; \
                                                   } \
                                              } while(0) 
 
-#define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} while(0)
+#define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { progress_newline; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} while(0)
 
 // exit codes
 #define EXIT_OK                   0

@@ -29,4 +29,4 @@ extern void txtheader_zip_prepopulate_contig_ctxs (void);
 // PIZ stuff
 //----------
 
-extern void txtheader_piz_read_and_reconstruct (uint32_t component_i, Section txt_header_sl);
+extern Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section txt_header_sl);

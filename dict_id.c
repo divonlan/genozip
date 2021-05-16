@@ -23,13 +23,13 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 // VCF stuff
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
          dict_id_FORMAT_PS=0, dict_id_FORMAT_GT=0, dict_id_FORMAT_GT_HT=0, dict_id_FORMAT_GT_HT_INDEX=0,
-         dict_id_PBWT_RUNS=0, dict_id_PBWT_FGRC=0,
-         dict_id_FORMAT_GT_SHARK_DB=0, dict_id_FORMAT_GT_SHARK_GT=0, dict_id_FORMAT_GT_SHARK_EX=0,
+         dict_id_PBWT_RUNS=0, dict_id_PBWT_FGRC=0, dict_id_FORMAT_AF=0, dict_id_FORMAT_SAC=0,
          dict_id_FORMAT_AD=0, dict_id_FORMAT_ADF=0, dict_id_FORMAT_ADR=0, dict_id_FORMAT_ADALL=0, 
-         dict_id_FORMAT_GQ=0, dict_id_FORMAT_DS=0,
+         dict_id_FORMAT_F1R2=0, dict_id_FORMAT_F2R1=0,
+         dict_id_FORMAT_GQ=0, dict_id_FORMAT_DS=0, dict_id_FORMAT_PRI=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0, dict_id_INFO_DP4=0, dict_id_INFO_SF=0,
-         dict_id_INFO_LIFTOVER=0, dict_id_INFO_LIFTBACK=0, dict_id_INFO_LIFTREJT=0, 
+         dict_id_INFO_LIFTOVER=0, dict_id_INFO_LIFTBACK=0, dict_id_INFO_REJTOVER=0, dict_id_INFO_REJTBACK=0,
          dict_id_INFO_BaseCounts=0, dict_id_INFO_MLEAC, dict_id_INFO_MLEAF, dict_id_INFO_MQ0,
 
          // tags from VEP (Varient Effect Predictor) and similar tools
@@ -106,51 +106,59 @@ void dict_id_initialize (DataType data_type)
     switch (data_type) { 
     case DT_VCF:
     case DT_BCF:
-        dict_id_FORMAT_DP     = dict_id_make ("DP",       2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_DS     = dict_id_make ("DS",       2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GT     = dict_id_make ("GT",       2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GT_HT  = dict_id_make ("@HT",      3, DTYPE_VCF_FORMAT).num; // different first 2 letters than GT, for lookup table
-        dict_id_FORMAT_GT_HT_INDEX = dict_id_make ("@INDEXHT", 8, DTYPE_VCF_FORMAT).num; // different first 2 letters
-        dict_id_FORMAT_GT_SHARK_DB = dict_id_make ("@1SHRKDB", 8, DTYPE_VCF_FORMAT).num; // different first 2 letters, 
-        dict_id_FORMAT_GT_SHARK_GT = dict_id_make ("@2SHRKGT", 8, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GT_SHARK_EX = dict_id_make ("@3SHRKEX", 8, DTYPE_VCF_FORMAT).num;  
-        dict_id_PBWT_RUNS     = dict_id_make ("@1BWTRUN", 8, DTYPE_VCF_FORMAT).num; // PBWT runs
-        dict_id_PBWT_FGRC     = dict_id_make ("@2BWTFGR", 8, DTYPE_VCF_FORMAT).num; // PBWT foreground run count
-        dict_id_FORMAT_PL     = dict_id_make ("PL",       2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GP     = dict_id_make ("GP",       2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GL     = dict_id_make ("GL",       2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_GQ     = dict_id_make ("GQ",       2, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_AD     = dict_id_make ("AD",       2, DTYPE_VCF_FORMAT).num;
+        // FORMAT fields
+        dict_id_FORMAT_AD     = dict_id_make ("AD",       2, DTYPE_VCF_FORMAT).num; // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
         dict_id_FORMAT_ADF    = dict_id_make ("ADF",      3, DTYPE_VCF_FORMAT).num;
         dict_id_FORMAT_ADR    = dict_id_make ("ADR",      3, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_ADALL  = dict_id_make ("^ADALL",   6, DTYPE_VCF_FORMAT).num; // different 2 letters than AD
-        dict_id_INFO_AC       = dict_id_make ("AC",       2, DTYPE_VCF_INFO).num;
-        dict_id_INFO_AF       = dict_id_make ("AF",       2, DTYPE_VCF_INFO).num;
+        dict_id_FORMAT_ADALL  = dict_id_make ("ADALL",    5, DTYPE_VCF_FORMAT).num; 
+        dict_id_FORMAT_AF     = dict_id_make ("AF",       2, DTYPE_VCF_FORMAT).num; // <ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed">
+        dict_id_FORMAT_DP     = dict_id_make ("DP",       2, DTYPE_VCF_FORMAT).num; // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
+        dict_id_FORMAT_DS     = dict_id_make ("DS",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GL     = dict_id_make ("GL",       2, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_GP     = dict_id_make ("GP",       2, DTYPE_VCF_FORMAT).num; // <ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
+        dict_id_FORMAT_GQ     = dict_id_make ("GQ",       2, DTYPE_VCF_FORMAT).num; // <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
+        dict_id_FORMAT_GT     = dict_id_make ("GT",       2, DTYPE_VCF_FORMAT).num; // <ID=GT,Number=1,Type=String,Description="Genotype">
+        dict_id_FORMAT_PL     = dict_id_make ("PL",       2, DTYPE_VCF_FORMAT).num; // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">
+        dict_id_FORMAT_PRI    = dict_id_make ("PRI",      3, DTYPE_VCF_FORMAT).num; // <ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes">
+        dict_id_FORMAT_F1R2   = dict_id_make ("F1R2",     4, DTYPE_VCF_FORMAT).num; // <ID=F1R2,Number=R,Type=Integer,Description="Count of reads in F1R2 pair orientation supporting each allele">
+        dict_id_FORMAT_F2R1   = dict_id_make ("F2R1",     4, DTYPE_VCF_FORMAT).num; // <ID=F2R1,Number=R,Type=Integer,Description="Count of reads in F2R1 pair orientation supporting each allele">
+        dict_id_FORMAT_SAC    = dict_id_make ("SAC",      3, DTYPE_VCF_FORMAT).num; // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
+        
+        // INFO fields
+        dict_id_INFO_AC       = dict_id_make ("AC",       2, DTYPE_VCF_INFO).num;   // <ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+        dict_id_INFO_AF       = dict_id_make ("AF",       2, DTYPE_VCF_INFO).num;   // <ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
         dict_id_INFO_AGE_HISTOGRAM_HET = dict_id_make ("AGE_HISTOGRAM_HET", 17, DTYPE_VCF_INFO).num; 
         dict_id_INFO_AGE_HISTOGRAM_HOM = dict_id_make ("AGE_HISTOGRAM_HOM", 17, DTYPE_VCF_INFO).num;
-        dict_id_INFO_AN       = dict_id_make ("AN",       2, DTYPE_VCF_INFO).num;
+        dict_id_INFO_AN       = dict_id_make ("AN",       2, DTYPE_VCF_INFO).num;   // <ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
         dict_id_INFO_BaseCounts = dict_id_make ("BaseCounts", 10, DTYPE_VCF_INFO).num;
         dict_id_INFO_CSQ      = dict_id_make ("CSQ",      3, DTYPE_VCF_INFO).num;
-        dict_id_INFO_DP       = dict_id_make ("DP",       2, DTYPE_VCF_INFO).num;
-        dict_id_INFO_DP4      = dict_id_make ("DP4",      3, DTYPE_VCF_INFO).num;
-        dict_id_INFO_DP_HIST  = dict_id_make ("DP_HIST",  7, DTYPE_VCF_INFO).num; // unfortunately there's a 2-letter conflict with DP, but we can't change names of INFO fields 
+        dict_id_INFO_DP       = dict_id_make ("DP",       2, DTYPE_VCF_INFO).num;   // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
+        dict_id_INFO_DP4      = dict_id_make ("DP4",      3, DTYPE_VCF_INFO).num;   
+        dict_id_INFO_DP_HIST  = dict_id_make ("DP_HIST",  7, DTYPE_VCF_INFO).num; 
         dict_id_INFO_GQ_HIST  = dict_id_make ("GQ_HIST",  7, DTYPE_VCF_INFO).num;
         dict_id_INFO_SF       = dict_id_make ("SF",       2, DTYPE_VCF_INFO).num;
         dict_id_INFO_vep      = dict_id_make ("vep",      3, DTYPE_VCF_INFO).num;
-        dict_id_INFO_VQSLOD   = dict_id_make ("VQSLOD",   6, DTYPE_VCF_INFO).num;
-        dict_id_INFO_LIFTOVER = dict_id_make (INFO_LIFTOVER, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
-        dict_id_INFO_LIFTBACK = dict_id_make (INFO_LIFTBACK, INFO_LIFTBACK_LEN, DTYPE_VCF_INFO).num;
-        dict_id_INFO_LIFTREJT = dict_id_make (INFO_LIFTREJT, INFO_LIFTREJT_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_VQSLOD   = dict_id_make ("VQSLOD",   6, DTYPE_VCF_INFO).num;   // <ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained Gaussian mixture model">
 
         // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
-        dict_id_INFO_END      = dict_id_make ("END",      3, DTYPE_VCF_INFO).num;
+        dict_id_INFO_END      = dict_id_make ("END",      3, DTYPE_VCF_INFO).num;   // <ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
         dict_id_INFO_MLEAC    = dict_id_make ("MLEAC",    5, DTYPE_VCF_INFO).num;
         dict_id_INFO_MLEAF    = dict_id_make ("MLEAF",    5, DTYPE_VCF_INFO).num;
         dict_id_INFO_MQ0      = dict_id_make ("MQ0",      3, DTYPE_VCF_INFO).num;    
-        dict_id_FORMAT_MIN_DP = dict_id_make ("MIN_DP",   6, DTYPE_VCF_FORMAT).num;
+        dict_id_FORMAT_MIN_DP = dict_id_make ("MIN_DP",   6, DTYPE_VCF_FORMAT).num; // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
 
         // Structural variants (also uses INFO/END): https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
         dict_id_INFO_SVLEN    = dict_id_make ("SVLEN",    5, DTYPE_VCF_INFO).num;
+
+        // genozip fields
+        dict_id_FORMAT_GT_HT  = dict_id_make ("@HT",      3, DTYPE_VCF_FORMAT).num; // different first 2 letters than GT, for lookup table
+        dict_id_FORMAT_GT_HT_INDEX = dict_id_make ("@INDEXHT", 8, DTYPE_VCF_FORMAT).num; // different first 2 letters
+        dict_id_INFO_LIFTOVER = dict_id_make (INFO_LIFTOVER, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_LIFTBACK = dict_id_make (INFO_LIFTBACK, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_REJTOVER = dict_id_make (INFO_REJTOVER, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_REJTBACK = dict_id_make (INFO_REJTBACK, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
+        dict_id_PBWT_RUNS     = dict_id_make ("@1BWTRUN", 8, DTYPE_VCF_FORMAT).num; // PBWT runs
+        dict_id_PBWT_FGRC     = dict_id_make ("@2BWTFGR", 8, DTYPE_VCF_FORMAT).num; // PBWT foreground run count
 
         // This appears if the VCF line has a Windows-style \r\n line ending
         break;

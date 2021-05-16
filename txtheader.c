@@ -20,7 +20,7 @@
 #include "endianness.h"
 
 // contigs loaded from the txt header (eg SAM or BAM, VCF header)
-static bool has_contigs     = false;        // for BAM, this will be true even for contig-less header, indicting the file has no contigs (as opposed to contigs just not defined in the header)
+static bool has_contigs     = false;        // note: for BAM, this will be true even for contig-less header, indicting the file has no contigs (as opposed to contigs just not defined in the header)
 static Buffer contigs       = EMPTY_BUFFER; // array of RefContig
 static Buffer ocontigs      = EMPTY_BUFFER;
 static Buffer contigs_dict  = EMPTY_BUFFER;
@@ -137,7 +137,7 @@ bool txtheader_zip_read_and_compress (uint32_t *txt_line_i)
     //          also: header is modified if --chain or compressing a Luft file
     // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
     uint64_t unmodified_txt_header_len = evb->txt_data.len;
-    if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(evb, &evb->txt_data))) { 
+    if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(evb, &evb->txt_data, (struct FlagsTxtHeader){}))) { 
         // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
         return false;
@@ -146,16 +146,16 @@ bool txtheader_zip_read_and_compress (uint32_t *txt_line_i)
     // in the 2nd+ binding file, we require the dual-components status to be consistent with earlier files
     if (z_file) { 
         if (z_file->num_components) {
-            ASSERT (!(txt_file->dual_coords && !z_file->z_flags.dual_coords), 
+            ASSERT (!(txt_file->coords && !z_dual_coords), 
                     "All binding files must be either dual-coordinates or not. However %s is a dual-coordinates file while previous file(s) are not", txt_name);
 
-            ASSERT (!(!txt_file->dual_coords && z_file->z_flags.dual_coords), 
+            ASSERT (!(!txt_file->coords && z_dual_coords), 
                     "All binding files must be either dual-coordinates or not. However %s is not a dual-coordinates file while previous file(s) are", txt_name);
         }
         else  // first component 
               // note: in case of --chain, z_flags.dual_coords is set in file_open_z
-              // note: z_flags.dual_coords is bool and txt_file->dual_coords is an enum
-            z_file->z_flags.dual_coords = z_file->z_flags.dual_coords || !!txt_file->dual_coords; 
+              // note: z_flags.dual_coords is bool and txt_file->coords is an enum
+            z_dual_coords = z_dual_coords || !!txt_file->coords; 
     }
 
     if (z_file && !flag.seg_only)       
@@ -204,20 +204,16 @@ void txtheader_zip_prepopulate_contig_ctxs (void)
 //----------
 
 // PIZ: reads the txt header from the genozip file and outputs it to the reconstructed txt file
-void txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
+Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
 {
-    bool show_headers_only = (flag.show_headers && exe_type == EXE_GENOCAT);
-
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
     VBlock *comp_vb = vb_get_vb ("piz", 0);
 
     zfile_read_section (z_file, comp_vb, 0, &comp_vb->z_data, "header_section", SEC_TXT_HEADER, sl);
 
-    // handle the GENOZIP header of the txt header section
     SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)comp_vb->z_data.data;
-
-    flag.processing_rejects = flag.luft && header->h.flags.txt_header.liftover_rejects;
+    ASSERT0 (header, "Incorrectly skipped SEC_TXT_HEADER - check skip function");
 
     // 1. if flag.unbind (genounzip) - we open the output txt file of the component
     // 2. if flag.one_component (genocat) - output to stdout or --output
@@ -285,26 +281,25 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
     ASSERT (txt_file->bgzf_flags.library >= 0 && txt_file->bgzf_flags.library < NUM_BGZF_LIBRARIES, "txt_file->bgzf_flags.library=%u out of range [0,%u]", 
             txt_file->bgzf_flags.level, NUM_BGZF_LIBRARIES-1);
 
-    // now get the text of the txt header itself
-    if (!show_headers_only)
-        zfile_uncompress_section (comp_vb, header, &comp_vb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
+    // now get the text of the txt header itself. note: we decompress even if --no-header, bc we need to inspect
+    zfile_uncompress_section (comp_vb, header, &comp_vb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
 
     if (comp_vb->txt_data.len)
-        DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(comp_vb, &comp_vb->txt_data); // ignore return value
+        DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(comp_vb, &comp_vb->txt_data, header->h.flags.txt_header); // ignore return value
 
     // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
     // note: in a header-less SAM, after translating to BAM, we will have a header
-    DtTranslation trans = dt_get_translation();
-    if (trans.txtheader_translator && !show_headers_only) trans.txtheader_translator (comp_vb, &comp_vb->txt_data); 
+    DtTranslation trans = dt_get_translation(NULL);
+    if (trans.txtheader_translator && !flag.no_header) trans.txtheader_translator (comp_vb, &comp_vb->txt_data); 
 
-    // hand-over txt header if it is needed:
+    // hand-over txt header if it is needed (it won't be if flag.no_header)
     if (writer_is_txtheader_in_plan (component_i)) {
 
         if (comp_vb->txt_data.len) {
 
             if (!DTPT (is_binary))
                 txt_file->num_lines += str_count_char (comp_vb->txt_data.data, comp_vb->txt_data.len, '\n');
-                
+
             bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
                                 !flag.data_modified; // no point calculating digest if we know already the file will be different
 
@@ -350,4 +345,6 @@ void txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
     
     if (!flag.reading_chain && !flag.reading_reference)
         is_first_txt = false;
+
+    return header->h.flags.txt_header.rejects_coord;
 }

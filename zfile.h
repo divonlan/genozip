@@ -42,7 +42,7 @@ extern void zfile_output_processed_vb (VBlockP vb);
 
 extern bool zfile_read_genozip_header (char *created);
 
-extern SectionHeader *zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, SectionType expected_sec_type);
+extern SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, SectionType expected_sec_type);
 
 #define SECTION_SKIPPED ((int32_t)-1)
 extern int32_t zfile_read_section_do (FileP file, VBlockP vb, uint32_t original_vb_i, 

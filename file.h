@@ -273,8 +273,6 @@ extern const char *file_exts[];
 typedef const char *FileMode;
 extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
-typedef enum { DC_NONE, DC_PRIMARY, DC_LUFT } DualCoordinates;
-
 // ---------------------------
 // tests for compression types
 // ---------------------------
@@ -352,8 +350,8 @@ typedef struct File {
     
     DidIType dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 
     Context contexts[MAX_DICTS];       // a merge of dictionaries of all VBs
-    Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
-    Buffer ra_min_max_by_chrom;        // max_pos of each from according to RA. An array of uint32_t indexed by chrom_word_index.
+    Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records: ZIP: of DC_PRIMARY ; PIZ - PRIMARY or LUFT depending on flag.luft
+    Buffer ra_buf_luft;                // ZIP only: RAEntry records of DC_LUFT
     Buffer chroms_sorted_index;        // PIZ: index into contexts[CHROM]->word_list, sorted alphabetically by snip
     
     Buffer alt_chrom_map;              // ZIP/PIZ: mapping from user file chrom to alternate chrom in reference file
@@ -374,13 +372,13 @@ typedef struct File {
     Buffer unmapped_read_count;
 
     // Z_FILE: Liftover stuff
-    char *rejects_file_name;            // ZIP: allocated and freed by liftover_*
-    FILE *rejects_file;                 // ZIP: rejects txt file
-    uint64_t rejects_disk_size;         // ZIP
+    char *rejects_file_name[2];        // ZIP: allocated and freed by liftover_* - [0]=DC_PRIMARY [1]=DC_LUFT
+    FILE *rejects_file[2];             // ZIP: rejects txt file
+    uint64_t rejects_disk_size[2];     // ZIP
 
     // TXT_FILE: Liftover stuff
-    DualCoordinates dual_coords;       // ZIP: dual coordinate status of the TXT file. Set when reading TXT header, and immutable thereafter
-    uint64_t luft_reject_bytes;        // ZIP of Luft dual coordinate file: number of bytes of that are rejected lines, not yet assigned to a VB
+    Coords coords;                     // TXT FILE ZIP: Set from ##dual_coordinates and immutable thereafter
+    uint64_t reject_bytes;             // ZIP of a dual coordinate file: number of bytes in lines originating from ##primary_only/##luft_only, not yet assigned to a VB
 
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
     Mutex recon_plan_mutex[2];         // TXT_FILE ZIP: protect vb_info and line_info during merging of VB data
@@ -408,6 +406,8 @@ typedef struct File {
     // Used for reading txt files
     Buffer unconsumed_txt;             // ZIP: excess data read from the txt file - moved to the next VB
 } File;
+
+#define z_dual_coords z_file->z_flags.dual_coords
 
 // methods
 extern File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);

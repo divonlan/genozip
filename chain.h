@@ -7,9 +7,9 @@
 #define CHAIN_INCLUDED
 
 #include "genozip.h"
-#include "liftover.h"
 
 // zip of a chain file - txtfile
+extern void chain_zip_initialize (void);
 extern int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */);
 
 // seg of a chain file
@@ -28,9 +28,10 @@ extern void chain_destroy (void);
 extern const char *chain_get_dst_contig (uint32_t contig_i, PosType *length);
 extern void chain_copy_dst_contigs_to_z_file (DidIType dst_contig_did_i);
 extern WordIndex chain_get_src_contig_index (const char *contig, unsigned contig_len);
+extern void chain_append_all_dst_contig_index (const char *src_contig_name, unsigned src_contig_name_len, Buffer *dst_contigs);
 
-extern LiftOverStatus chain_get_liftover_coords (WordIndex src_contig_index,  PosType src_1pos, 
-                                                 WordIndex *dst_contig_index, PosType *dst_1pos);
+extern bool chain_get_liftover_coords (WordIndex src_contig_index,  PosType src_1pos, 
+                                       WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i);
 
 #define CHAIN_SPECIAL { chain_piz_special_BACKSPACE, chain_piz_special_ENDDST, chain_piz_special_SIZE }
 SPECIAL (CHAIN, 0, BACKSPACE, chain_piz_special_BACKSPACE);

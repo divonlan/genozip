@@ -60,7 +60,7 @@ void threads_print_call_stack (void)
 
 static void threads_sigsegv_handler (void) 
 {
-    iprint0 ("Segmentation fault, exiting.");
+    iprintf ("Segmentation fault, exiting. Time: %s\n", str_time().s);
     threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
     threads_cancel_other_threads();
     exit (EXIT_SIGSEGV); // dumps core
@@ -68,9 +68,7 @@ static void threads_sigsegv_handler (void)
 
 static void threads_sighup_handler (void) 
 {
-    iprint0 ("Received SIGHUP, exiting.");
-    threads_cancel_other_threads();
-    exit (EXIT_SIGHUP);
+    iprintf ("Process %u received SIGHUP, ignoring. Use 'kill -9' to kill the process. Time: %s\n", getpid(), str_time().s);
 }
 
 // explicitly catch signals, that we otherwise blocked
@@ -84,10 +82,11 @@ static void *threads_signal_handler (void *sigset)
             case SIGSEGV : threads_sigsegv_handler();            break;
             case SIGHUP  : threads_sighup_handler();             break;
             case SIGUSR1 : buf_display_memory_usage_handler();   break;
+            case SIGUSR2 : threads_write_log (false);            break;
             default      : ABORT ("Unexpected signal %s", strsignal (sig));
         }
     }
-    return 0; // never reaches here`
+    return 0; // never reaches here
 }
 
 #endif
@@ -95,11 +94,10 @@ static void *threads_signal_handler (void *sigset)
 void threads_initialize (void)
 {
     mutex_initialize (threads_mutex);
-
+    mutex_initialize (log_mutex);
     main_thread = pthread_self(); // we can't put it in buffer yet, because evb is not yet initialized
 
-    // note: when this is called, flags are not set yet, so we just allocate regardless of flag.debug_threads
-    mutex_initialize (log_mutex);
+    buf_alloc (evb, &log, 500, 1000000, char, 2, "log");
 
 #ifndef _WIN32
 
@@ -109,6 +107,7 @@ void threads_initialize (void)
     sigaddset (&sigset, SIGSEGV);
     sigaddset (&sigset, SIGHUP);
     sigaddset (&sigset, SIGUSR1);
+    sigaddset (&sigset, SIGUSR2);
     int err = pthread_sigmask(SIG_BLOCK, &sigset, NULL);
     ASSERT (!err, "pthread_sigmask failed: %s", strerror (err));
 
@@ -123,9 +122,17 @@ bool threads_am_i_main_thread (void)
     return pthread_self() == main_thread;
 }
 
-void threads_display_log (void)
+void threads_write_log (bool to_info_stream)
 {
-    iprintf ("\nThread log (activated by --debug-threads):\n%.*s", (int)log.len, log.data);
+    if (!log.len) return;
+
+    if (to_info_stream)
+        iprintf ("\nThread log (activated by --debug-threads):\n%.*s", (int)log.len, log.data);
+    else {
+        char filename[100];
+        sprintf (filename, "genozip.threads-log.%u", getpid());
+        buf_dump_to_file (filename, &log, 1, false, false, true);
+    }
 }
 
 // called by MAIN thread only
@@ -140,6 +147,8 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
     
     if (flag.debug_threads) {
         mutex_lock (log_mutex);
+        buf_alloc (evb, &log, 10000, 1000000, char, 2, "log");
+        
         if (has_vb) bufprintf (evb, &log, "%s: vb_i=%u vb_id=%u %s thread_id=%d pthread=%u\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (unsigned)ent->pthread);
         else        bufprintf (evb, &log, "%s: %s thread_id=%d pthread=%u\n", ent->task_name, event, thread_id, (unsigned)ent->pthread);
         mutex_unlock (log_mutex);
@@ -161,19 +170,20 @@ void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *even
 
     if (flag.debug_threads) {
         mutex_lock (log_mutex);
-        
-        if (threads_am_i_main_thread()) // counting on the first call to be from main thread
-            buf_alloc (evb, &log, 0, 1000000, char, 2, "log");
-        else
-            // if thread other than main allocates evb it could cause corruption. we allocating
-            ASSERT (log.size - log.len > 100, "Thread log is out of space, log.size=%u log.len=%u", (unsigned)log.size, (unsigned)log.len);
-        
+
+        // if thread other than main allocates evb it could cause corruption. we allocating
+        if (log.size - log.len < 500) {
+            WARN ("FYI: Thread log is out of space, log.size=%u log.len=%u", (unsigned)log.size, (unsigned)log.len);
+            threads_write_log (false);
+            return;
+        }
+
         if (time_usec)
             bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
-                       task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self(), str_uint_commas (time_usec).s);
+                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self(), str_uint_commas (time_usec).s);
         else
             bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
-                       task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self());
+                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self());
 
         mutex_unlock (log_mutex);
     }

@@ -356,7 +356,7 @@ Digest txtfile_read_header (bool is_first_txt)
     // md5 header - always digest_ctx_single, digest_ctx_bound only if first component 
     Digest header_digest = DIGEST_NONE;
 
-    if (!flag.data_modified) {
+    if (!flag.data_modified && !flag.rejects_coord) {
         if (flag.bind && is_first_txt) digest_update (&z_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
         digest_update (&z_file->digest_ctx_single, &evb->txt_data, "txt_header:digest_ctx_single");
 
@@ -395,7 +395,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memo
             BgzfBlockZip *bb = ENT (BgzfBlockZip, vb->bgzf_blocks, block_i);
             bgzf_uncompress_one_block (vb, bb);
 
-            passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &i);
+            passed_up_len = (DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &i));
             if (passed_up_len >= 0) goto done; // we have the answer (callback returns -1 if no it needs more data)
         }
 
@@ -405,7 +405,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memo
     }
 
     // test remaining txt_data including passed-down data from previous VB
-    passed_up_len = DT_FUNC(txt_file, unconsumed)(vb, 0, &i);
+    passed_up_len = (DT_FUNC(txt_file, unconsumed)(vb, 0, &i));
 
     // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
     if (testing_memory && passed_up_len < 0) return (uint32_t)-1;
@@ -445,7 +445,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     }
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
-    uint64_t max_memory_per_vb = flag.vblock_memory;
+    uint64_t max_memory_per_vb = flag.vblock_memory - TXTFILE_READ_VB_PADDING;
     uint32_t passed_up_len=0;
 
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
@@ -517,9 +517,9 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     vb->vb_data_size   = vb->txt_data.len; // initial value. it may change if --optimize / --chain are used.
     vb->vb_data_size_0 = vb->txt_data.len; // this copy doesn't change with --optimize / --chain.
 
-    // ZIP of a Luft dual-coordinates file: calculate how much of the VB is rejected liftover lines
-    vb->luft_reject_bytes = MIN (vb->vb_data_size, txt_file->luft_reject_bytes);
-    txt_file->luft_reject_bytes -= vb->luft_reject_bytes;
+    // ZIP of a dual-coordinates file: calculate how much of the VB is rejected lines originating from ##primary_only/##luft_only
+    vb->reject_bytes = MIN (vb->vb_data_size, txt_file->reject_bytes);
+    txt_file->reject_bytes -= vb->reject_bytes;
 
     if (!testing_memory) {
 

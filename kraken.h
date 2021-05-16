@@ -21,7 +21,9 @@ extern bool kraken_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern void kraken_zip_after_compute (VBlockP vb);
 
 // piz of a kraken file
+extern bool kraken_is_translation (VBlockP vb);
 extern bool kraken_piz_initialize (void);
+extern bool kraken_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 extern CONTAINER_CALLBACK (kraken_piz_container_cb);
 extern void kraken_piz_handover_data (VBlockP vb);
 

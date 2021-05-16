@@ -397,13 +397,19 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsig
 
 // get length of contig according to ref_contigs (loaded or stored reference) - used in piz when generating
 // a file header of a translated data type eg SAM->BAM or ME23->VCF
-PosType ref_contigs_get_contig_length (const char *chrom_name, unsigned chrom_name_len)
+PosType ref_contigs_get_contig_length (WordIndex chrom_index, // option 1 
+                                       const char *chrom_name, unsigned chrom_name_len, // option 2
+                                       bool enforce)
 {
-    WordIndex chrom_index = ref_contigs_get_word_index (chrom_name, chrom_name_len, WI_REF_CONTIG, true);
+    if (chrom_index == WORD_INDEX_NONE && chrom_name)
+        chrom_index = ref_contigs_get_word_index (chrom_name, chrom_name_len, WI_REF_CONTIG, true);
 
     // if not found, try common alternative names
-    if (chrom_index == WORD_INDEX_NONE)
+    if ((chrom_index == WORD_INDEX_NONE || chrom_index >= ranges.len) && chrom_name)
         chrom_index = ref_alt_chroms_zip_get_alt_index (chrom_name, chrom_name_len, WI_REF_CONTIG, WORD_INDEX_NONE);
+
+    ASSERT (!enforce || (chrom_index >= 0 && chrom_index < ranges.len), "contig=\"%.*s\" chrom_index=%d not found in reference contigs (range=[0,%d])",
+            chrom_name_len, chrom_name ? chrom_name : "", chrom_index, (int)ranges.len-1);
 
     if (chrom_index == WORD_INDEX_NONE) return -1; // chrom_name not found in ref_contigs
     
@@ -491,7 +497,7 @@ WordIndex ref_contigs_get_by_accession_number (const char *ac, unsigned ac_len)
     return NODE_INDEX_NONE; // not found
 }
 
-WordIndex ref_chrom_index_get_by_gpos (PosType gpos)
+WordIndex ref_contig_get_by_gpos (PosType gpos)
 {
     // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)
     for (WordIndex chrom_index=0 ; chrom_index < loaded_contigs.len; chrom_index++) {
@@ -501,4 +507,16 @@ WordIndex ref_chrom_index_get_by_gpos (PosType gpos)
     }
 
     return WORD_INDEX_NONE; // not found
+}
+
+// returns txt_chrom_index if its in the reference OR an alt chrom index (eg 22->chr22) in the reference OR WORD_INDEX_NONE
+WordIndex ref_contig_get_by_chrom (VBlockP vb, WordIndex txt_chrom_index)
+{
+    // case: chrom is part of the reference (same index)
+    if (txt_chrom_index < loaded_contigs.len) 
+        return txt_chrom_index; 
+
+    // case: chrom is not in the reference as is, test if it is in the reference using an alternative name (eg "22"->"chr22")
+    else
+        return ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, WORD_INDEX_NONE); 
 }

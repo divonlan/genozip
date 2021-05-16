@@ -20,7 +20,8 @@ One or more file names must be given
 
 .. option:: -e, --reference filename.  Load a reference file prior to decompressing. Required only for files compressed with --reference
 
-          |
+     | Note: this is equivalent of setting the environment variable GENOZIP_REFERENCE with the reference filename.
+     |
 
 .. include:: opt-piz.rst
 

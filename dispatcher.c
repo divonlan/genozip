@@ -35,36 +35,12 @@ typedef struct {
     bool cleanup_after_me; // free resources after dispatcher is complete
     ProgressType prog;
     const char *filename;
+    char *progress_prefix;
 } DispatcherData;
 
 // variables that persist across multiple dispatchers run sequentially
 static TimeSpecType profiler_timer; // wallclock
-/*
-void dispatcher_show_time (const char *task, const char *stage, int32_t thread_index, uint32_t vb_i)
-{
-    static bool initialized = false;
-    static const char *prev_stage;
-    static int32_t prev_thread_index;
-    static uint32_t prev_vb_i;
-    static TimeSpecType prev_timer;
 
-    TimeSpecType timer; 
-    clock_gettime(CLOCK_REALTIME, &timer); 
-
-    int diff_micro = 0;
-    if (initialized) {
-        diff_micro = 1000000 *(timer.tv_sec - prev_timer.tv_sec) + (int)((int64_t)timer.tv_nsec - (int64_t)prev_timer.tv_nsec) / 1000;
-        iprintf ("%s: TH=%-2d VB=%-3u Stage='%s' Microsec_in_this_stage=%u z=%s\n",
-                 task, prev_thread_index, prev_vb_i, prev_stage, diff_micro, z_name);
-    }
-
-    initialized = true;
-    prev_stage        = stage;
-    prev_timer        = timer;
-    prev_thread_index = thread_index;
-    prev_vb_i         = vb_i;
-}
-*/
 static void dispatcher_show_progress (Dispatcher dispatcher)
 {
     uint64_t total=0, sofar=0;
@@ -100,7 +76,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     // in unbind mode - dispatcher is not done if there's another component after this one
     bool done = dispatcher_is_done (dispatcher);
 
-    progress_update (sofar, total, done);
+    progress_update (&((DispatcherData *)dispatcher)->progress_prefix, sofar, total, done);
 }
 
 Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigned previous_vb_i,
@@ -129,12 +105,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
                   + z_file->max_conc_writing_vbs); // writer thread VBs 
 
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
-        progress_new_component (filename, 
-                                command == ZIP && txt_file->redirected ? "Compressing..." : "0\%", // we can't show % when compressing from stdin as we don't know the file size
-                                test_mode); 
-
-    if (prog == PROGRESS_MESSAGE)
-        progress_update_status (prog_msg);
+        dd->progress_prefix = progress_new_component (filename, prog_msg, test_mode); 
 
     return dd;
 }
@@ -156,7 +127,7 @@ void dispatcher_resume (Dispatcher dispatcher)
     dd->paused          = false;
     dd->filename        = txt_file->name;
     
-    progress_new_component (dd->filename, "0\%", -1);    
+    dd->progress_prefix = progress_new_component (dd->filename, "0\%", -1);    
 }
 
 uint32_t dispatcher_get_next_vb_i (Dispatcher dispatcher)
@@ -173,7 +144,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     COPY_TIMER_VB (evb, wallclock);
 
     if (flag.show_time && !flag.show_time[0] && // show-time without the optional parameter 
-        !(command == ZIP && z_file->z_flags.dual_coords && !flag.processing_rejects)) // when compressing dual coordinates, show time after the rejects component
+        !(command == ZIP && z_dual_coords && !flag.rejects_coord)) // when compressing dual coordinates, show time after the rejects component
         profiler_print_report (&evb->profile, 
                                dd->max_threads, dd->max_vb_id_so_far+1,
                                dd->filename, dd->next_vb_i + (command != ZIP)); // in ZIP, the last VB is empty
@@ -192,6 +163,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     if (last_vb_i && !dd->cleanup_after_me) 
         *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent bound files
 
+    FREE (dd->progress_prefix);
     FREE (*dispatcher);
 }
 
@@ -266,7 +238,7 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool
 bool dispatcher_has_free_thread (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-    return vb_has_free_vb() && dd->num_running_compute_threads < MAX(1, dd->max_threads);
+    return dd->num_running_compute_threads < MAX(1, dd->max_threads);
 }
 
 bool dispatcher_has_active_threads (Dispatcher dispatcher)

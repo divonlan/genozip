@@ -10,6 +10,7 @@
 #include "vblock.h"
 #include "file.h"
 #include "strings.h"
+#include "vcf.h"
 
 // region as parsed from the --regions option
 typedef struct {
@@ -125,7 +126,7 @@ void regions_add (const char *region_str)
             ASSINP (regions_is_valid_chrom (before_colon), "Error: Invalid CHROM in region string: %s", region_str);
             reg->chrom = before_colon;
             
-            ASSINP (regions_parse_pos (after_colon, reg), "Error: Invalid position range in region string: %s", region_str);
+            ASSINP (regions_parse_pos (after_colon, reg), "Error: Invalid position range in region string: \"%s\"", region_str);
         }
 
         // case: only one substring. we need to determine if the single substring is a pos or a chrom. if it
@@ -169,7 +170,7 @@ void regions_add (const char *region_str)
 void regions_make_chregs (void)
 {
     ARRAY (Region, regions, regions_buf);
-    Context *chrom_ctx = &z_file->contexts[CHROM];
+    Context *chrom_ctx = &z_file->contexts[flag.luft ? ODID(oCHROM) : CHROM];
 
     num_chroms = chrom_ctx->word_list.len;
     chregs = CALLOC (num_chroms * sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom
@@ -317,12 +318,21 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
 
 // PIZ: check if a (chrom,pos) that comes from a specific line, is included in any positive region of
 // a specific ra (i.e. chromosome)
-bool regions_is_site_included (WordIndex chrom_word_index, PosType pos)
+bool regions_is_site_included (VBlockP vb)
 {
-    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
+    DidIType chrom_did_i = flag.luft ? VCF_oCHROM : CHROM;
+    DidIType pos_did_i   = flag.luft ? VCF_oPOS   : DTF(pos);
+
+    WordIndex chrom = vb->last_index (chrom_did_i);
+    PosType pos = (pos_did_i != DID_I_NONE) ? vb->last_int (pos_did_i) : 1;
+    
+    if (chrom == WORD_INDEX_NONE ||  
+        (z_dual_coords && vb->vb_coords != DC_BOTH)) return true; // always include all rejected variants in the vcf header
+
+    ASSERT (chrom >= 0 && chrom < num_chroms, "chrom=%d out of range", chrom);
 
     // it sufficient that the site is included in one (positive) region
-    Buffer *chregs_buf = &chregs[chrom_word_index];
+    Buffer *chregs_buf = &chregs[chrom];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
         Chreg *chreg = ENT (Chreg, *chregs_buf, chreg_i);
         if (pos >= chreg->start_pos && pos <= chreg->end_pos) return true;

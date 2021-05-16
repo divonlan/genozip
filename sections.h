@@ -89,11 +89,13 @@ typedef union SectionFlags {
     } genozip_header;
 
     struct FlagsTxtHeader {
-        uint8_t liftover_rejects : 1;        // this component is the "liftover rejects" component
+        Coords rejects_coord     : 2;        // DC_PRIMARY/DC_LUFT contains "##primary_only"/"##luft_only" variants or DC_NONE if not a rejects component
+        uint8_t unused           : 6;
     } txt_header;
 
     struct FlagsVbHeader {
-        uint8_t unused : 8;
+        Coords coords            : 2;        // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT topleve container, or DC_BOTH if both (DC_NONE prior to v12)
+        uint8_t unused           : 6;
     } vb_header;
 
     struct FlagsBgzf {
@@ -110,12 +112,19 @@ typedef union SectionFlags {
         uint8_t all_the_same     : 1; // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
         #define ctxs_dot_is_0    ctx_specific // used in dict_id_FORMAT_GT_SHARK_GT between 10.0.3 and 10.0.8
         uint8_t ctx_specific     : 1; // flag specific a context (introduced 10.0.3)
+        uint8_t unused           : 1;
     } ctx;
 
-    struct FlagsReconPlan {
-        uint8_t luft             : 1; // this section is for reconstructing the file in the Luft coordinates
-    } recon_plan;
+    struct FlagsRandomAccess {
+        uint8_t luft             : 1; // this section is for reconstructing the file in the Luft coordinates (introduced v12)
+        uint8_t unused           : 7;
+    } random_access;
     
+    struct FlagsReconPlan {
+        uint8_t luft             : 1; // this section is for reconstructing the file in the Luft coordinates (introduced v12)
+        uint8_t unused           : 7;
+    } recon_plan;
+
 } SectionFlags;
 
 #define SECTION_FLAGS_NONE ((SectionFlags){ .flags = 0 })
@@ -342,6 +351,20 @@ typedef struct RefContig {
 // the data of SEC_REF_ALT_CHROMS
 typedef struct { WordIndex txt_chrom, ref_chrom; } AltChrom; 
 
+typedef union {
+    SectionHeader common;
+    SectionHeaderGenozipHeader genozip_header;
+    SectionHeaderTxtHeader txt_header;
+    SectionHeaderVbHeader vb_header;
+    SectionHeaderDictionary dict;
+    SectionHeaderCounts counts;
+    SectionHeaderCtx ctx;
+    SectionHeaderReference reference;
+    SectionHeaderRefHash ref_hash;
+    SectionHeaderReconPlan recon_plan;
+    char padding[sizeof(SectionHeaderGenozipHeader) + 15]; // SectionHeaderGenozipHeader is the largest, 15=crypt_max_padding_len()
+} SectionHeaderUnion;
+
 #pragma pack()
 
 // ---------
@@ -357,9 +380,9 @@ extern void sections_list_concat (VBlockP vb);
 
 extern Section sections_first_sec (SectionType st, bool soft_fail);
 extern Section sections_last_sec (SectionType st, bool soft_fail);
-extern bool sections_next_sec2 (Section*sl_ent, SectionType st1, SectionType st2);
+extern bool sections_next_sec2 (Section *sl_ent, SectionType st1, SectionType st2);
 #define sections_next_sec(sl_ent,st) sections_next_sec2((sl_ent),(st),SEC_NONE)
-extern bool sections_prev_sec2 (Section*sl_ent, SectionType st1, SectionType st2);
+extern bool sections_prev_sec2 (Section *sl_ent, SectionType st1, SectionType st2);
 #define sections_prev_sec(sl_ent,st) sections_prev_sec2((sl_ent),(st),SEC_NONE)
 
 extern Section sections_last_sec4 (Section sl, SectionType st1, SectionType st2, SectionType st3, SectionType st4);

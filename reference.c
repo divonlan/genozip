@@ -65,6 +65,9 @@ static bool external_ref_is_loaded = false;
 const char *ref_filename = NULL; // filename of external reference file
 Digest ref_file_md5 = DIGEST_NONE;
 
+// C<>G A<>T c<>g a<>t ; other ASCII 32->126 preserved ; other = 0
+const char REVCOMP[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`tbgdefchijklmnopqrsauvwxyz{|}~";
+
 #define CHROM_GENOME 0
 #define CHROM_NAME_GENOME "GENOME"
 
@@ -97,21 +100,16 @@ void ref_unload_reference (void)
     if (ranges_type == RT_DENOVO) 
         ref_free_denovo_ranges();
     
-    // in case of REF_EXTERNAL or REF_LIFTOVER - the reference has not been modified and we can reuse it for the next file
-    if (flag.reference != REF_EXTERNAL && 
-        flag.reference != REF_LIFTOVER && 
-        flag.reference != REF_NONE) { // possibly, we have data from a previous REF_EXTERNAL file, and we hold on to it, if REF_NONE
+    // case: the reference has been modified and we can't use it for the next file
+    if (flag.reference == REF_INTERNAL || flag.reference == REF_STORED || flag.reference == REF_EXT_STORE) {
         buf_free (&genome_buf);
         buf_free (&emoneg_buf);
         buf_free (&genome_cache);
         buf_free (&ranges);
     }
 
-    // in case of REF_EXTERNAL, REF_EXT_STORE and REF_LIFTOVER - these buffers are immutable so the next file can use them
-    if (flag.reference != REF_EXTERNAL && 
-        flag.reference != REF_EXT_STORE && 
-        flag.reference != REF_LIFTOVER && 
-        flag.reference != REF_NONE) {
+    // case: these buffers are immutable so the next file can use them
+    if (flag.reference == REF_INTERNAL || flag.reference == REF_STORED) {
         buf_free (&ref_external_ra);
         buf_free (&ref_file_section_list);
         buf_free (&genome_is_set_buf);
@@ -183,9 +181,10 @@ const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t n
 
     // gets the index of the matching chrom in the reference - either its the chrom itself, or one with an alternative name
     // eg 'chr22' instead of '22'
-    uint32_t index = buf_is_alloc (&z_file->alt_chrom_map) ? *ENT (WordIndex, z_file->alt_chrom_map, vb->chrom_node_index)
-                                                           : vb->chrom_node_index;
-    Range *r = ENT (Range, ranges, index);
+//    uint32_t index = buf_is_alloc (&z_file->alt_chrom_map) ? *ENT (WordIndex, z_file->alt_chrom_map, vb->chrom_node_index)
+//                                                            : vb->chrom_node_index;
+    WordIndex chrom_index = ref_alt_get_final_index (vb->chrom_node_index);
+    Range *r = ENT (Range, ranges, chrom_index);
     if (!r->ref.nwords) return NULL; // this can ligitimately happen if entire chromosome is verbatim in SAM, eg. unaligned (pos=4) or SEQ or CIGAR are unavailable
 
     if (first_pos_needed + num_nucleotides_needed - 1 <= r->last_pos) {
@@ -530,10 +529,12 @@ void ref_load_stored_reference (void)
     }
     
     // decompress reference using Dispatcher
-    bool external = flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER;
+    bool external = flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || 
+                    flag.reference == REF_LIFTOVER || flag.reference == REF_MAKE_CHAIN;
+
     dispatcher_fan_out_task ("load_ref", external ? ref_filename     : z_file->basename, 
-                             external ? PROGRESS_MESSAGE : PROGRESS_NONE, 
-                             external ? "Reading and caching reference file..." : NULL, 
+                             external ? PROGRESS_PERCENT : PROGRESS_NONE, 
+                             external ? "Reading reference file" : NULL, 
                              flag.test, true, true, false, 0, 5000,
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
@@ -757,29 +758,19 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, WordIndex chrom, PosT
         // case: we have a header - we lookup the reference contig matching chrom in header_contigs
         // as the header chroms occupy the begining of context[CHROM] which might not be the same as the reference chroms
         const Buffer *header_contigs = txtheader_get_contigs();
-        if (header_contigs) {
-            ref_index = 
-            ENT (RefContig, *header_contigs, chrom)->chrom_index;
+        if (header_contigs && !chain_is_loaded) {
+            ref_index = ENT (RefContig, *header_contigs, chrom)->chrom_index;
             if (ref_index == WORD_INDEX_NONE) 
                 return NULL; // not in reference
         }
 
         // case: we don't have a header - reference contigs occupy the CHROM nodes first, and after any non-reference chroms
         else { 
-            uint32_t num_contigs = ref_contigs_num_contigs();
+            ref_index = ref_contig_get_by_chrom (vb, chrom);
 
-            // case: chrom is part of the reference (same index)
-            if (chrom < num_contigs) 
-                ref_index = chrom; 
-            
-            // case: chrom is not in the reference as is, test if it is in the reference using an alternative name (eg "22"->"chr22")
-            else {
-                ref_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, chrom); // change temporarily just for ref_range_id_by_word_index()
-
-                // case: the contig is not in the reference - we will just consider it an unaligned line 
-                // (we already gave a warning for this in ref_contigs_get_ref_chrom, so no need for another one)
-                if (ref_index >= num_contigs) return NULL;
-            }
+            // case: the contig is not in the reference - we will just consider it an unaligned line 
+            // (we already gave a warning for this in ref_contigs_get_ref_chrom, so no need for another one)
+            if (ref_index == WORD_INDEX_NONE) return NULL;
         }
     }
 
@@ -1194,8 +1185,13 @@ void ref_compress_ref (void)
 
 void ref_set_reference (const char *filename, ReferenceType ref_type, bool is_explicit)
 {
-    ASSERTNOTNULL (filename);
+    if (!filename) {
+        filename = getenv ("GENOZIP_REFERENCE");
+        if (!filename) return; // nothing to set
 
+        WARN ("Note: using the reference file %s set in $GENOZIP_REFERENCE. You can override this with --reference", filename);
+    }
+    
     if (ref_filename) {
         if (!strcmp (filename, ref_filename)) return; // same file - we're done
 
@@ -1244,19 +1240,9 @@ static void ref_display_ref (void)
         else
             for (PosType pos=display_last_pos; pos >= display_first_pos; pos--) {
                 char base = ref_get_nucleotide (r, pos - r->first_pos);
-                switch (base) {
-                    case 'G': fputc ('C', stdout); break;
-                    case 'C': fputc ('G', stdout); break;
-                    case 'A': fputc ('T', stdout); break;
-                    case 'T': fputc ('A', stdout); break;
-                    case 'g': fputc ('c', stdout); break;
-                    case 'c': fputc ('g', stdout); break;
-                    case 'a': fputc ('t', stdout); break;
-                    case 't': fputc ('a', stdout); break;
-                    default : fputc (base, stdout); 
-                }
+                fputc (REVCOMP[(int)base], stdout);
             }        
-        
+
         fputc ('\n', stdout);
     }
 }
@@ -1323,8 +1309,6 @@ void ref_load_external_reference (bool display)
 
 static void ref_initialize_loaded_ranges (RangesType type)
 {
-    random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
-    
     if (flag.reading_reference) {
         buf_copy (evb, &ref_external_ra, &z_file->ra_buf, RAEntry, 0, 0, "ref_external_ra");
         buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, SectionEnt, 0, 0, "ref_file_section_list");

@@ -338,12 +338,13 @@ bool str_case_compare (const char *str1, const char *str2, unsigned len,
     return true; // case-insenstive identical
 }
 
-// splits a string with (num_items-1) separators (doesn't need to be nul-terminated) to exactly num_items
-// returns true is successful
-bool str_split (const char *str, unsigned str_len, uint32_t num_items, char sep,
-                const char **items,  // out - array of char* of length num_items - one more than the number of separators
-                unsigned *item_lens, // optional out - corresponding lengths
-                const char *enforce_msg)   // non-NULL if enforcement of length is requested
+// splits a string with (num_items-1) separators (doesn't need to be nul-terminated) to up to or exactly num_items
+// returns the actual number of items, or 0 is unsuccessful
+unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char sep,
+                    const char **items,  // out - array of char* of length num_items - one more than the number of separators
+                    unsigned *item_lens, // optional out - corresponding lengths
+                    bool exactly,
+                    const char *enforce_msg)   // non-NULL if enforcement of length is requested
 
 {
     items[0] = str;
@@ -352,24 +353,24 @@ bool str_split (const char *str, unsigned str_len, uint32_t num_items, char sep,
     for (uint32_t i=0; i < str_len ; i++) 
         if (str[i] == sep) {
             if (item_i == num_items) {
-                ASSERT (!enforce_msg, "expecting %u %s separators but found more: (100 first) %.*s", 
+                ASSERT (!enforce_msg, "expecting up to %u %s separators but found more: (100 first) %.*s", 
                         num_items-1, enforce_msg, MIN (str_len, 100), str);
-                return false; // too many separators
+                return 0; // too many separators
             }
             items[item_i++] = &str[i+1];
         }
 
     if (item_lens) {
-        for (uint32_t i=0; i < num_items-1; i++)    
+        for (uint32_t i=0; i < item_i-1; i++)    
             item_lens[i] = items[i+1] - items[i] - 1;
             
-        item_lens[num_items-1] = &str[str_len] - items[num_items-1];
+        item_lens[item_i-1] = &str[str_len] - items[item_i-1];
     }
 
-    ASSERT (!enforce_msg || item_i == num_items, "Expecting the number of %s to be %u, but it is %u: (100 first) \"%.*s\"", 
+    ASSERT (!exactly || !enforce_msg || item_i == num_items, "Expecting the number of %s to be %u, but it is %u: (100 first) \"%.*s\"", 
             enforce_msg, num_items, str_len ? item_i : 0, MIN (100, str_len), str);
     
-    return item_i == num_items; // false if too few separators
+    return (!exactly || item_i == num_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
 }
 
 const char *type_name (unsigned item, 

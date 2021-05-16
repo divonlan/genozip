@@ -160,7 +160,8 @@ void fasta_seg_initialize (VBlockFASTA *vb)
 
     if (!flag.make_reference) {
 
-        vb->contexts[FASTA_LINEMETA].no_stons = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
+        vb->contexts[FASTA_CONTIG].flags.store = STORE_INDEX; // since v12
+        vb->contexts[FASTA_LINEMETA].no_stons  = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
 
         // if this FASTA contains unrelated contigs, we're better off with ACGT        
         if (!flag.multifasta)
@@ -242,9 +243,12 @@ static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_
         SEG_EOL (FASTA_EOL, true);
     }
 
+    // add contig to CONTIG dictionary (but not b250) and verify that its unique
     bool is_new;
     WordIndex chrom_node_index = ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[FASTA_CONTIG], chrom_name, chrom_name_len, &is_new);
-    random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_name, chrom_name_len);
+    ctx_decrement_count ((VBlockP)vb, &vb->contexts[FASTA_CONTIG], chrom_node_index);
+    
+    random_access_update_chrom ((VBlockP)vb, DC_PRIMARY, chrom_node_index, chrom_name, chrom_name_len);
 
     ASSINP (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
             flag.bind ? " (possibly in another FASTA being bound)" : 
@@ -330,9 +334,9 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_
     // case: this sequence is continuation from the previous VB - we don't yet know the chrom - we will update it,
     // and increment the min/max_pos relative to the beginning of the seq in the vb later, in random_access_finalize_entries
     if (!vb->chrom_name && vb->line_i == 0)
-        random_access_update_chrom ((VBlockP)vb, WORD_INDEX_NONE, 0, 0);
+        random_access_update_chrom ((VBlockP)vb, DC_PRIMARY, WORD_INDEX_NONE, 0, 0);
 
-    random_access_increment_last_pos ((VBlockP)vb, line_len); 
+    random_access_increment_last_pos ((VBlockP)vb, DC_PRIMARY, line_len); 
 }
 
 // Fasta format(s): https://en.wikipedia.org/wiki/FASTA_format
@@ -517,7 +521,7 @@ bool fasta_piz_initialize_contig_grepped_out (VBlock *vb_, bool does_vb_have_any
 // Phylip format mandates exact 10 space-padded characters: http://scikit-bio.org/docs/0.2.3/generated/skbio.io.phylip.html
 static inline void fasta_piz_translate_desc_to_phylip (VBlock *vb, char *desc_start)
 {
-    uint32_t reconstructed_len = AFTERENT (const char, vb->txt_data) - desc_start;
+    uint32_t recon_len = AFTERENT (const char, vb->txt_data) - desc_start;
     *AFTERENT (char, vb->txt_data) = 0; // nul-terminate
 
     const char *chrom_name = desc_start + 1;
@@ -526,18 +530,18 @@ static inline void fasta_piz_translate_desc_to_phylip (VBlock *vb, char *desc_st
     memcpy (desc_start, chrom_name, MIN (chrom_name_len, 10));
     if (chrom_name_len < 10) memcpy (desc_start + chrom_name_len, "          ", 10-chrom_name_len); // pad with spaces
 
-    if (reconstructed_len > 10) vb->txt_data.len -= reconstructed_len - 10; // we do it this way to avoid signed problems
-    else                        vb->txt_data.len += 10 - reconstructed_len;
+    if (recon_len > 10) vb->txt_data.len -= recon_len - 10; // we do it this way to avoid signed problems
+    else                        vb->txt_data.len += 10 - recon_len;
 }
 
 // shorten DESC to the first white space
 static inline void fasta_piz_desc_header_one (VBlock *vb, char *desc_start)
 {
-    uint32_t reconstructed_len = AFTERENT (const char, vb->txt_data) - desc_start;
+    uint32_t recon_len = AFTERENT (const char, vb->txt_data) - desc_start;
     *AFTERENT (char, vb->txt_data) = 0; // nul-terminate
     unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
     
-    vb->txt_data.len -= reconstructed_len - chrom_name_len -1;
+    vb->txt_data.len -= recon_len - chrom_name_len -1;
 }
 
 SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
@@ -608,10 +612,10 @@ TRANSLATOR_FUNC (fasta_piz_fa2phy_EOL)
     VBlockFASTA *fasta_vb = (VBlockFASTA *)vb;
 
     if (fasta_vb->last_line == FASTA_LINE_DESC // line is a DESC
-    ||  reconstructed == vb->txt_data.data     // initial EOL - not allowed in Phylip)
-    ||  reconstructed[-1] == '\n')             // previous item was an EOL - remove this one then
+    ||  recon == vb->txt_data.data     // initial EOL - not allowed in Phylip)
+    ||  recon[-1] == '\n')             // previous item was an EOL - remove this one then
     
-        vb->txt_data.len -= reconstructed_len;
+        vb->txt_data.len -= recon_len;
     
     return 0;
 }

@@ -87,24 +87,25 @@ extern WordIndex ref_contigs_get_word_index (const char *chrom_name, unsigned ch
 
 extern void ref_contigs_get (ConstBufferP *out_contig_dict, ConstBufferP *out_contigs);
 extern uint32_t ref_num_loaded_contigs (void);
-extern PosType ref_contigs_get_contig_length (const char *chrom_name, unsigned chrom_name_len);
+extern PosType ref_contigs_get_contig_length (WordIndex chrom_index, const char *chrom_name, unsigned chrom_name_len, bool enforce);
 extern WordIndex ref_contigs_ref_chrom_from_header_chrom (const char *chrom_name, unsigned chrom_name_len, PosType *last_pos, WordIndex header_chrom);
 extern void ref_contigs_sort_chroms (void);
 extern void ref_contigs_load_contigs (void);
 
 typedef void (*RefContigsIteratorCallback)(const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param);
 extern void ref_contigs_iterate (RefContigsIteratorCallback callback, void *callback_param);
-extern WordIndex ref_chrom_index_get_by_gpos (PosType gpos);
+extern WordIndex ref_contig_get_by_gpos (PosType gpos);
+extern WordIndex ref_contig_get_by_chrom (VBlockP vb, WordIndex txt_chrom_index);
 
 // alt chroms stuff
 extern void ref_alt_chroms_load (void);
 extern void ref_alt_chroms_compress (void);
+extern WordIndex ref_alt_chroms_zip_get_alt_index (const char *chrom, unsigned chrom_len, GetWordIndexType where_is_alt, WordIndex fallback_index);
 
-#define ref_assert_nucleotide_available(range,pos) \
-    ASSERT (/* piz w stored ref */ (flag.reference == REF_STORED && ref_is_nucleotide_set ((range), pos2range_idx(pos))) ||  \
-            /* zip w ext ref    */ ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && ((pos) >= (range)->first_pos && (pos) <= (range)->last_pos)) || \
-            /* zip internal ref */ flag.reference == REF_INTERNAL, \
-            "reference is not set: chrom=%.*s pos=%"PRId64, (range)->chrom_name_len, (range)->chrom_name, (pos));
+// gets the index of the matching chrom in the reference - either its the chrom itself, or one with an alternative name
+// eg 'chr22' instead of '22'
+#define ref_alt_get_final_index(chrom_index) \
+    (buf_is_alloc (&z_file->alt_chrom_map) ? *ENT (WordIndex, z_file->alt_chrom_map, (chrom_index)) : (chrom_index))
 
 // note that the following work on idx and not pos! (idx is the index within the range)
 #define ref_set_nucleotide(range,idx,value) { bit_array_assign (&(range)->ref, (idx) * 2,      acgt_encode[(uint8_t)value] & 1)       ;  \
@@ -117,6 +118,16 @@ extern void ref_alt_chroms_compress (void);
 #define ref_get_nucleotide(range,idx)  acgt_decode[(bit_array_get (&(range)->ref, (idx) * 2 + 1) << 1) | \
                                                     bit_array_get (&(range)->ref, (idx) * 2)]
 
+static inline void ref_assert_nucleotide_available (const Range *range, PosType pos) {
+    bool available;
+    switch (flag.reference) {
+        case REF_STORED    : available = ref_is_nucleotide_set (range, pos2range_idx (pos)); break;
+        case REF_INTERNAL  : available = true; break;
+        default            : available = (pos >= range->first_pos && pos <= range->last_pos); break;
+    }
+    ASSERT (available, "reference is not set: chrom=%.*s pos=%"PRId64, (range)->chrom_name_len, (range)->chrom_name, (pos));
+}
+
 // display
 typedef struct { char s[300]; } RangeStr;
 extern RangeStr ref_display_range (const Range *r);
@@ -125,6 +136,7 @@ extern void ref_print_subrange (const char *msg, const Range *r, PosType start_p
 extern void ref_print_is_set (const Range *r, PosType around_pos, FILE *file);
 
 // globals
+extern const char REVCOMP[];
 extern const char *ref_filename;
 extern Digest ref_file_md5;
 extern Buffer ref_stored_ra;

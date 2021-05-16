@@ -81,7 +81,7 @@ void kraken_set_show_kraken (const char *optarg)
     else if (str_case_compare (optarg, "excluded", 8, NULL)) 
         flag.show_kraken = KRK_EXCLUDED;
     else
-        ASSINP0 (false, "--show-kraken argument error: see genozip.com/kraken.html for valid options");
+        ASSINP0 (false, "--show-kraken argument error: see "GENOZIP_URL"/kraken.html for valid options");
 }
 
 //-----------------------
@@ -91,7 +91,7 @@ void kraken_set_show_kraken (const char *optarg)
 void kraken_zip_initialize (void)
 {
     copy_taxid_snip_len = sizeof (copy_taxid_snip);
-    seg_prepare_snip_other (SNIP_OTHER_COPY, (DictId)dict_id_fields[KRAKEN_TAXID], 0, 0, copy_taxid_snip, &copy_taxid_snip_len);
+    seg_prepare_snip_other (SNIP_OTHER_COPY, dict_id_fields[KRAKEN_TAXID], 0, 0, copy_taxid_snip, &copy_taxid_snip_len);
 }
 
 void kraken_seg_initialize (VBlock *vb)
@@ -190,13 +190,13 @@ static void kraken_seg_kmers (VBlock *vb, const char *value, int32_t value_len, 
 
     const char *kmers[num_kmers+1];
     unsigned kmer_lens[num_kmers+1];
-    str_split (value, value_len, num_kmers, ' ', kmers, kmer_lens, "kmers");
+    str_split (value, value_len, num_kmers, ' ', kmers, kmer_lens, true, "kmers");
 
     for (unsigned k=0; k < num_kmers; k++) {
         const char *items[3];
         unsigned item_lens[3];
 
-        str_split (kmers[k], kmer_lens[k], 2, ':', items, item_lens, "kmer items");
+        str_split (kmers[k], kmer_lens[k], 2, ':', items, item_lens, true, "kmer items");
 
         // KMER taxid - either copy from TAXID or seg a normal snip
         if (taxid_len == item_lens[0] && !memcmp (taxid, items[0], taxid_len)) 
@@ -225,17 +225,14 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
     // QNAME - We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings. Examples:
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
-    GET_NEXT_ITEM ("QNAME");
+    GET_NEXT_ITEM (KRAKEN_QNAME);
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
     seg_compound_field ((VBlockP)vb, &vb->contexts[KRAKEN_QNAME], field_start, field_len, arg, 0, 1 /* \t */);
 
     vb->last_int(KRAKEN_QNAME) += field_len+1; // count total QNAME lengths in this VB (+1 for separator)
 
     SEG_NEXT_ITEM (KRAKEN_TAXID);
-    const char *taxid = field_start;
-    unsigned taxid_len = field_len;
-
-    GET_NEXT_ITEM ("SEQLEN"); // for paired files we will have eg "150|149", for non-paired eg "150"
+    GET_NEXT_ITEM (KRAKEN_SEQLEN); // for paired files we will have eg "150|149", for non-paired eg "150"
     if (memchr (field_start, '|', field_len)) { 
         SegCompoundArg arg = { .pipe = true };
         // compound and not array, bc pair_2's seq_len is often a lot more random than pair_1's so use different contexts
@@ -244,8 +241,8 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
     else 
         seg_by_did_i (vb, field_start, field_len, KRAKEN_SEQLEN, field_len+1);
     
-    GET_LAST_ITEM ("KMERS");
-    kraken_seg_kmers (vb, field_start, field_len, taxid, taxid_len);
+    GET_LAST_ITEM (KRAKEN_KMERS);
+    kraken_seg_kmers (vb, field_start, field_len, KRAKEN_TAXID_str, KRAKEN_TAXID_len);
     
     SEG_EOL (KRAKEN_EOL, true);
 
@@ -257,10 +254,18 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
 // Note: when just pizzing a kraken normally, it is a plain vanilla piz without any special functions
 //----------------------------------------------------------------------------------------------------
 
+bool kraken_is_translation (VBlockP vb)
+{
+    return flag.reading_kraken;
+    //return flag.kraken_taxid > 0;
+}
+
 // returns true if section is to be skipped reading / uncompressing
 bool kraken_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
-    if (flag.kraken_taxid && // note: we only need some of the fields when ingesting with --taxid
+    if (!dict_id.num) return false; // only attempt to skip B250/LOCAL/COUNT sections
+
+    if (flag.reading_kraken && // note: we only need some of the fields when ingesting loading kraken data
         dict_id.num != dict_id_fields[KRAKEN_QNAME]     &&
         dict_id.num != dict_id_fields[KRAKEN_TAXID]     &&
         dict_id.num != dict_id_fields[KRAKEN_EOL]       &&
@@ -298,10 +303,10 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
 
             // if this is a paired read - ending with /1 or /2 - remove the suffix
             bool is_paired = false;
-            unsigned snip_len = reconstructed_len - 1; // excluding the \0 seperator
+            unsigned snip_len = recon_len - 1; // excluding the \0 seperator
             
-            if (reconstructed_len > 3 && reconstructed[snip_len-2] == '/' &&
-                (reconstructed[reconstructed_len-2] == '1' || reconstructed[snip_len-1] == '2')) {
+            if (recon_len > 3 && recon[snip_len-2] == '/' &&
+                (recon[recon_len-2] == '1' || recon[snip_len-1] == '2')) {
                 is_paired = true;
                 snip_len -= 2;
             }
@@ -309,12 +314,12 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
             buf_alloc (vb, &vb->contexts[KRAKEN_QNAME].nodes, 1, vb->lines.len, QnameNode, 1.5, "contexts->nodes");
             
             ASSERT (this_taxid <= MAX_TAXID, "taxid=%u exceeds maximum of %u", this_taxid, MAX_TAXID);
-            ASSERT (snip_len <= MAX_SNIP_LEN, "Length of QNAME \"%.*s\" exceeds maximum of %u", snip_len, reconstructed, MAX_SNIP_LEN);
+            ASSERT (snip_len <= MAX_SNIP_LEN, "Length of QNAME \"%.*s\" exceeds maximum of %u", snip_len, recon, MAX_SNIP_LEN);
 
             NEXTENT (QnameNode, vb->contexts[KRAKEN_QNAME].nodes) = (QnameNode){ 
-                .char_index = reconstructed - vb->txt_data.data, // will be updated in kraken_piz_handover_data
+                .char_index = recon - vb->txt_data.data, // will be updated in kraken_piz_handover_data
                 .snip_len   = snip_len,
-                .hash       = hash_do (qname_hashtab.len, reconstructed, snip_len),
+                .hash       = hash_do (qname_hashtab.len, recon, snip_len),
                 .is_paired  = z_file->num_components == 2 || is_paired,
                 .taxid_lo   = this_taxid & ((1<<BITS_TAXID_LO)-1),
                 .taxid_hi   = this_taxid >> BITS_TAXID_LO
@@ -328,7 +333,7 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
     else if (flag.kraken_taxid && 
              dict_id.num == dict_id_fields[KRAKEN_TOPLEVEL] && 
              (   ( kraken_is_loaded && !kraken_is_included_loaded (vb, last_txt (vb, KRAKEN_QNAME), vb->last_txt_len (KRAKEN_QNAME)))
-              || (!kraken_is_loaded && !kraken_is_included_stored (vb, KRAKEN_TAXID, true)))) // TAXID was reconstructed in the TOPLEVEL container
+              || (!kraken_is_loaded && !kraken_is_included_stored (vb, KRAKEN_TAXID, true)))) // TAXID was recon in the TOPLEVEL container
         
         vb->drop_curr_line = "taxid";
 }
@@ -410,9 +415,10 @@ void kraken_load (void)
     SAVE_FLAGS_AUX;
 
     flag.maybe_vb_modified_by_reconstructor = true;    // we drop the lines not matching --taxid
-    flag.trans_containers = true;    // execute TOP2TAXID in translate mode
     flag.data_modified    = true;    // the reconstructed kraken file is not the same as the original...
     flag.no_writer        = true;
+    flag.genocat_no_reconstruct = false;
+    flag.genocat_global_area_only = false;
     flag.out_dt           = DT_NONE; // needed for dt_get_translation to find the translation defined in TRANSLATIONS
     flag.reference        = REF_NONE;
     TEMP_VALUE (command, PIZ);

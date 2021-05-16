@@ -25,7 +25,8 @@ VBlock *evb = NULL;
 
 #define FINALIZE_VB_BUFS(func, ctx_func, vb_func) \
     func (&vb->lines);               \
-    func (&vb->ra_buf);              \
+    func (&vb->ra_buf[0]);           \
+    func (&vb->ra_buf[1]);           \
     func (&vb->compressed);          \
     func (&vb->txt_data);            \
     func (&vb->z_data);              \
@@ -39,10 +40,11 @@ VBlock *evb = NULL;
     func (&vb->read_count);          \
     func (&vb->unmapped_read_count); \
     func (&vb->liftover);            \
-    func (&vb->liftover_rejects);    \
+    func (&vb->lo_rejects[0]);       \
+    func (&vb->lo_rejects[1]);       \
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
     for (unsigned i=0; i < MAX_DICTS; i++) if (vb->contexts[i].dict_id.num) ctx_func (&vb->contexts[i]); \
-    if (vb->data_type != DT_NONE) DT_FUNC (vb, vb_func)(vb);    
+    if (vb->data_type != DT_NONE) (DT_FUNC (vb, vb_func)(vb));    
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
 void vb_release_vb_do (VBlock **vb_p, const char *func) 
@@ -72,15 +74,16 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     //                   we have logic in vb_get_vb() to update its vb_i
     // vb->data_type   : type of this vb 
 
-    vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
-    vb->vb_data_size = vb->vb_data_size_0 = vb->luft_reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
+    vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = vb->pos_aln_i = 0;
+    vb->vb_data_size = vb->vb_data_size_0 = vb->reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->is_unsorted[0] = vb->is_unsorted[1] = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
+    vb->line_coords = DC_NONE;
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = vb->line_start = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = vb->num_nondrop_lines = 0;
-    vb->has_non_agct = false;    
+    vb->has_non_agct = vb->is_rejects_vb = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->drop_curr_line = vb->chrom_name = vb->fragment_start = NULL;
@@ -91,11 +94,11 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     vb->fragment_ctx = vb->ht_matrix_ctx = vb->runs_ctx = vb->fgrc_ctx = NULL;
     vb->fragment_codec = vb->codec_using_codec_bufs = 0;
     vb->ht_per_line = 0;
-    vb->is_rejects_vb = 0;
-    vb->vb_header_flags = (struct FlagsVbHeader){};
+    vb->vb_coords = DC_NONE;
     vb->compute_thread_id = 0;
     vb->compute_task = NULL;
     vb->compute_func = NULL;
+    vb->translation = (DtTranslation){};
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
     mutex_destroy (vb->vb_ready_for_compute_thread);

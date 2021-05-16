@@ -140,7 +140,7 @@ static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, i
     WordIndex chrom_index = seg_by_did_i (vb, snip, snip_len, did_i, sizeof (int32_t));
         
     if (did_i==CHROM) 
-        random_access_update_chrom (vb, chrom_index, snip, snip_len);
+        random_access_update_chrom (vb, DC_PRIMARY, chrom_index, snip, snip_len);
 }
 
 static inline void bam_rewrite_cigar (VBlockSAM *vb, uint16_t n_cigar_op, const uint32_t *cigar)
@@ -341,10 +341,10 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     bam_seg_ref_id (vb_, SAM_RNAME, ref_id, -1); // ref_id (RNAME)
 
     // note: pos can have a value even if ref_id=-1 (RNAME="*") - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
-    seg_pos_field (vb_, SAM_POS, SAM_POS, false, false, 0, 0, this_pos, sizeof (uint32_t)); // POS
-    if (ref_id >= 0) sam_seg_verify_pos (vb_, this_pos);
+    seg_pos_field (vb_, SAM_POS, SAM_POS, false, false, 0, 0, 0, this_pos, sizeof (uint32_t)); // POS
+    if (ref_id >= 0) sam_seg_verify_rname_pos (vb_, NULL, this_pos);
 
-    random_access_update_pos (vb_, SAM_POS);
+    random_access_update_pos (vb_, DC_PRIMARY, SAM_POS);
 
     seg_integer (vb, SAM_MAPQ, mapq, true); // MAPQ
 
@@ -352,14 +352,14 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     
     bam_seg_ref_id (vb_, SAM_RNEXT, next_ref_id, ref_id); // RNEXT
 
-    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, false, 0, 0, next_pos, sizeof (uint32_t)); // PNEXT
+    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, false, 0, 0, 0, next_pos, sizeof (uint32_t)); // PNEXT
 
     sam_seg_tlen_field (vb, 0, 0, (int64_t)tlen, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len); // TLEN
 
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
     seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], next_field, // QNAME
                         l_read_name-1, arg, 0, 2 /* account for \0 and l_read_name */); 
-    vb->contexts[SAM_QNAME].last_txt = ENTNUM (vb->txt_data, next_field); // store for kraken
+    vb->contexts[SAM_QNAME].last_txt_index = ENTNUM (vb->txt_data, next_field); // store for kraken
     vb->last_txt_len (SAM_QNAME) = l_read_name-1;
 
     next_field += l_read_name; // inc. \0

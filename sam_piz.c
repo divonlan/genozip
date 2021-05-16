@@ -18,7 +18,7 @@
 #include "file.h"
 #include "container.h"
 #include "coverage.h"
-#include "iupac.h"
+#include "bases_filter.h"
 #include "endianness.h"
 
 // returns true if section is to be skipped reading / uncompressing
@@ -31,11 +31,11 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != dict_id_fields[SAM_FLAG] && 
               dict_id.num != dict_id_fields[SAM_CIGAR] && 
             !(dict_id.num == dict_id_fields[SAM_MAPQ]     && flag.sam_mapq_filter) && 
-            !(dict_id.num == dict_id_fields[SAM_SQBITMAP] && flag.iupac) && 
-            !(dict_id.num == dict_id_fields[SAM_NONREF]   && flag.iupac) && 
-            !(dict_id.num == dict_id_fields[SAM_NONREF_X] && flag.iupac) && 
-            !(dict_id.num == dict_id_fields[SAM_GPOS]     && flag.iupac) && 
-            !(dict_id.num == dict_id_fields[SAM_STRAND]   && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_SQBITMAP] && flag.bases) && 
+            !(dict_id.num == dict_id_fields[SAM_NONREF]   && flag.bases) && 
+            !(dict_id.num == dict_id_fields[SAM_NONREF_X] && flag.bases) && 
+            !(dict_id.num == dict_id_fields[SAM_GPOS]     && flag.bases) && 
+            !(dict_id.num == dict_id_fields[SAM_STRAND]   && flag.bases) && 
             !(dict_id.num == dict_id_fields[SAM_TAXID]    && flag.kraken_taxid != TAXID_NONE) && 
             !(dict_id.num != dict_id_fields[SAM_QNAME]    && kraken_is_loaded) && 
             !(dict_id_is_sam_qname_sf(dict_id)            && kraken_is_loaded) && 
@@ -47,14 +47,14 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != dict_id_fields[SAM_TOP2BAM]  && 
               dict_id.num != dict_id_fields[SAM_TOP2FQ]   && 
               dict_id.num != dict_id_fields[SAM_RNAME]    && // easier to always have RNAME
-            !(flag.out_dt == DT_BAM && flag.iupac) &&        // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
+            !(flag.out_dt == DT_BAM && flag.bases) &&        // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
             !(dict_id.num == dict_id_fields[SAM_FLAG]     && flag.sam_flag_filter) &&
             !(dict_id.num == dict_id_fields[SAM_MAPQ]     && flag.sam_mapq_filter) && 
-            !(dict_id.num == dict_id_fields[SAM_SQBITMAP] && flag.iupac) && 
-            !(dict_id.num == dict_id_fields[SAM_NONREF]   && flag.iupac) && 
-            !(dict_id.num == dict_id_fields[SAM_NONREF_X] && flag.iupac) && 
-            !(dict_id.num == dict_id_fields[SAM_GPOS]     && flag.iupac) && 
-            !(dict_id.num == dict_id_fields[SAM_STRAND]   && flag.iupac) && 
+            !(dict_id.num == dict_id_fields[SAM_SQBITMAP] && flag.bases) && 
+            !(dict_id.num == dict_id_fields[SAM_NONREF]   && flag.bases) && 
+            !(dict_id.num == dict_id_fields[SAM_NONREF_X] && flag.bases) && 
+            !(dict_id.num == dict_id_fields[SAM_GPOS]     && flag.bases) && 
+            !(dict_id.num == dict_id_fields[SAM_STRAND]   && flag.bases) && 
             !(dict_id.num == dict_id_fields[SAM_TAXID]    && flag.kraken_taxid != TAXID_NONE) && 
             !(dict_id.num == dict_id_fields[SAM_QNAME]    && kraken_is_loaded) && 
             !(dict_id_is_sam_qname_sf(dict_id)            && kraken_is_loaded) && 
@@ -392,7 +392,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_XA_POS)
     
     Context *xa_rname_ctx = ctx_get_existing_ctx (vb, dict_id_OPTION_XA_RNAME);
 
-    const char *xa_rname = ENT (char, vb->txt_data, xa_rname_ctx->last_txt);
+    const char *xa_rname = last_txtx (vb, xa_rname_ctx);
 
     ASSERT (xa_rname_ctx->last_txt_len >= 1 && xa_rname_ctx->last_txt_len <= 5, "unexpected length of XA_RNAME=%.*s len=%u",
             xa_rname_ctx->last_txt_len, xa_rname, xa_rname_ctx->last_txt_len);
@@ -433,7 +433,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     // if l_seq is odd, 0 the next byte that will be half of our last result byte
     if (l_seq % 2) *AFTERENT (char, vb->txt_data) = 0; 
 
-    uint8_t *seq_before=(uint8_t *)reconstructed, *seq_after=(uint8_t *)reconstructed; 
+    uint8_t *seq_before=(uint8_t *)recon, *seq_after=(uint8_t *)recon; 
     for (uint32_t i=0; i < (l_seq+1)/2; i++, seq_after++, seq_before += 2) {
         uint8_t base[2] = { sam2bam_seq_map[(uint8_t)seq_before[0]], sam2bam_seq_map[(uint8_t)seq_before[1]] };
         
@@ -458,7 +458,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     // if QUAL is "*" there are two options:
     // 1. If l_seq is 0, the QUAL is empty
     // 2. If not (i.e. we have SEQ data but not QUAL) - it is a string of 0xff, length l_seq
-    if (reconstructed_len==1 && *reconstructed == '*') {
+    if (recon_len==1 && *recon == '*') {
         BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
         uint32_t l_seq = LTEN32 (alignment->l_seq);
 
@@ -471,8 +471,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     }
     
     else // we have QUAL - update Phred values
-        for (uint32_t i=0; i < reconstructed_len; i++)
-            reconstructed[i] -= 33; 
+        for (uint32_t i=0; i < recon_len; i++)
+            recon[i] -= 33; 
 
     return 0;
 }
@@ -518,11 +518,11 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_TLEN)
 // fix prefix eg MX:i: -> MXs
 TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
 {
-    ContainerP con = (ContainerP)reconstructed;
+    ContainerP con = (ContainerP)recon;
 
-    if (reconstructed_len == -1) return 0; // no Optional data in this alignment
+    if (recon_len == -1) return 0; // no Optional data in this alignment
 
-    char *prefixes_before = &reconstructed[con_sizeof (*con)] + 2; // +2 to skip the empty prefixes of container wide, and item[0]
+    char *prefixes_before = &recon[con_sizeof (*con)] + 2; // +2 to skip the empty prefixes of container wide, and item[0]
     char *prefixes_after = prefixes_before;
 
     uint32_t num_items = con_nitems (*con);
@@ -543,12 +543,11 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
 }
 
 // translate OPTIONAL SAM->BAM - called after Optional reconstruction is done
-// sets block_size
 TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL)
 {
-    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
-    alignment->block_size = vb->txt_data.len - vb->line_start - sizeof (uint32_t); // block_size doesn't include the block_size field itself
-    alignment->block_size = LTEN32 (alignment->block_size);
+    /* up to v11 we used this translator to set alignment.block_size. due to container logic change, it
+       has now moved to sam_piz_container_cb. we keep this translator function for backward
+       compatability with old bam.genozip files */
     return 0;
 }
 
@@ -564,8 +563,15 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 // filtering during reconstruction: called by container_reconstruct_do for each sam alignment (repeat)
 CONTAINER_CALLBACK (sam_piz_container_cb)
 {
+    // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_OPTIONAL until v11)
+    if (dict_id.num == dict_id_fields[SAM_TOP2BAM]) { 
+        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
+        alignment->block_size = vb->txt_data.len - vb->line_start - sizeof (uint32_t); // block_size doesn't include the block_size field itself
+        alignment->block_size = LTEN32 (alignment->block_size);
+    }
+    
     // case SAM to FASTQ translation: drop line if this is not a primary alignment (don't show its secondary or supplamentary alignments)
-    if (dict_id.num == dict_id_fields[SAM_TOP2FQ] 
+    else if (dict_id.num == dict_id_fields[SAM_TOP2FQ] 
     && ((uint16_t)vb->last_int(SAM_FLAG) & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLEMENTARY)))
         vb->drop_curr_line = "not_primary";
 
@@ -601,11 +607,11 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             vb->drop_curr_line = "MAPQ";
     }
 
-    // --iupac
-    if (flag.iupac && is_top_level && !vb->drop_curr_line && 
-        !(txt_file->data_type == DT_BAM ? iupac_is_included_bam   (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)reconstructed)->l_seq)
+    // --bases
+    if (flag.bases && is_top_level && !vb->drop_curr_line && 
+        !(txt_file->data_type == DT_BAM ? iupac_is_included_bam   (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)recon)->l_seq)
                                         : iupac_is_included_ascii (last_txt (vb, SAM_SQBITMAP), vb->last_txt_len (SAM_SQBITMAP))))
-        vb->drop_curr_line = "iupac";
+        vb->drop_curr_line = "bases";
     
     // count coverage, if needed    
     if ((flag.show_sex || flag.show_coverage) && is_top_level && !vb->drop_curr_line)
@@ -633,23 +639,23 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
     uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
     
     // case: SEQ is "*" - don't show this fastq record
-    if (reconstructed_len==1 && *reconstructed == '*') 
+    if (recon_len==1 && *recon == '*') 
         vb->drop_curr_line = "no_seq";
 
     // case: this sequence is reverse complemented - reverse-complement it
     else if (sam_flag & SAM_FLAG_REV_COMP) {
 
         // we move from the outside in, switching the left and right bases while also complementing both
-        for (unsigned i=0; i < reconstructed_len / 2; i++) {
-            char l_base = reconstructed[i];
-            char r_base = reconstructed[reconstructed_len-1-i];
+        for (unsigned i=0; i < recon_len / 2; i++) {
+            char l_base = recon[i];
+            char r_base = recon[recon_len-1-i];
 
-            reconstructed[i]                     = complement[(uint8_t)r_base];
-            reconstructed[reconstructed_len-1-i] = complement[(uint8_t)l_base];
+            recon[i]                     = complement[(uint8_t)r_base];
+            recon[recon_len-1-i] = complement[(uint8_t)l_base];
         }
 
-        if (reconstructed_len % 2) // we have an odd number of bases - now complement the middle one
-            reconstructed[reconstructed_len/2] = complement[(uint8_t)reconstructed[reconstructed_len/2]];
+        if (recon_len % 2) // we have an odd number of bases - now complement the middle one
+            recon[recon_len/2] = complement[(uint8_t)recon[recon_len/2]];
     }
 
     return 0;
@@ -661,15 +667,15 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
     uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
     
     // case: QUAL is "*" - don't show this fastq record
-    if (reconstructed_len==1 && *reconstructed == '*') 
+    if (recon_len==1 && *recon == '*') 
         vb->drop_curr_line = "no_qual";
 
     // case: this sequence is reverse complemented - reverse the QUAL string
     else if (sam_flag & SAM_FLAG_REV_COMP) {
 
         // we move from the outside in, switching the left and right bases 
-        for (unsigned i=0; i < reconstructed_len / 2; i++) 
-            SWAP (reconstructed[i], reconstructed[reconstructed_len-1-i]);
+        for (unsigned i=0; i < recon_len / 2; i++) 
+            SWAP (recon[i], recon[recon_len-1-i]);
     }
 
     return 0;
@@ -714,8 +720,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
 // remove the comma from the prefix that contains the type, eg "i,"->"i"
 TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
 {
-    ContainerP con = (ContainerP)reconstructed;
-    char *prefixes = &reconstructed[con_sizeof (*con)];
+    ContainerP con = (ContainerP)recon;
+    char *prefixes = &recon[con_sizeof (*con)];
 
     // remove the ',' from the prefix, and terminate with CON_PREFIX_SEP_SHOW_REPEATS - this will cause
     // the number of repeats (in LTEN32) to be outputed after the prefix

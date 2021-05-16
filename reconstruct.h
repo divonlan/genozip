@@ -13,7 +13,9 @@ extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bo
 
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len, bool reconstruct);
 
-extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char seperator /* 0 if none */, bool reconstruct);
+extern LastValueType reconstruct_peek (VBlockP vb, ContextP ctx, const char **txt, unsigned *txt_len);
+extern LastValueType reconstruct_peek__do (VBlockP vb, DictId dict_id, const char **txt, unsigned *txt_len);
+#define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek__do ((VBlockP)(vb), (DictId)(dict_id), (txt), (txt_len))
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
 

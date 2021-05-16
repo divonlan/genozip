@@ -51,7 +51,7 @@ This will display all the lines of the BAM file that DO NOT contain human data:
 
     genocat myfile.bam.genozip --kraken myfile.kraken.genozip --taxid ^9606
     
-A +0 extension can be used include or exclude, in addition, also unclassified reads:
+A +0 suffix can be used include or exclude, in addition, also unclassified reads:
 
 ::
 

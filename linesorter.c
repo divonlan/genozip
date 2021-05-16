@@ -34,7 +34,7 @@ void linesorter_show_recon_plan (File *file, bool is_luft, uint32_t conc_writing
     ARRAY (ReconPlanItem, plan, file->recon_plan);
 
     iprintf ("\nReconstruction plan%s: entries=%u conc_writing_vbs=%u x %u MB\n", 
-             !z_file->z_flags.dual_coords ? "" : is_luft ? " of LUFT view" : " of PRIMARY view", 
+             !z_dual_coords ? "" : is_luft ? " of LUFT view" : " of PRIMARY view", 
              (unsigned)plan_len, conc_writing_vbs, vblock_mb);
 
     for (uint32_t i=0; i < plan_len; i++)
@@ -72,8 +72,8 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
         WordIndex chrom_word_index = node_word_index (vb, chrom_did_i, dl->chrom_index[is_luft]);
 
         // special case (eg GVCF) - this line is exactly one position after previous line - just add to previous record
-        if (is_luft && chrom_word_index == WORD_INDEX_NONE) {
-            // In Luft, exclude rejected lines (we exclude here if sorted, and in vcf_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header if not sorted)
+        if (chrom_word_index == WORD_INDEX_NONE) {
+            // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header if not sorted)
         }
         else if (last_pos >= 1 && chrom_word_index == last_chrom_word_index && pos == last_pos+1) {
             LineInfo *last = LASTENT (LineInfo, txt_file->line_info[is_luft]);
@@ -115,7 +115,7 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
 void linesorter_merge_vb (VBlock *vb)
 {
     linesorter_merge_vb_do (vb, CHROM);
-    if (z_file->z_flags.dual_coords) // Luft coordinates exist
+    if (z_dual_coords) // Luft coordinates exist
         linesorter_merge_vb_do (vb, DTF(ochrom));
 }
 
@@ -349,9 +349,8 @@ uint32_t linesorter_get_max_conc_writing_vbs (void)
     uint32_t max_conc_writing_vbs=0;
 
     while (sections_next_sec (&sl, SEC_RECON_PLAN)) {
-        uint32_t conc_writing_vbs = ((SectionHeaderReconPlan *)zfile_read_section_header (evb, sl->offset, 0, SEC_RECON_PLAN))->conc_writing_vbs;
+        uint32_t conc_writing_vbs = zfile_read_section_header (evb, sl->offset, 0, SEC_RECON_PLAN).recon_plan.conc_writing_vbs;
         max_conc_writing_vbs = MAX (max_conc_writing_vbs, BGEN32 (conc_writing_vbs));
-        buf_free (&evb->compressed); // zfile_read_section_header used this for the header
     }
 
     return max_conc_writing_vbs;

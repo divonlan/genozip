@@ -10,7 +10,7 @@
 #include "buffer.h"
 #include "profiler.h"
 #include "aes.h"
-#include "context.h"
+#include "context_struct.h"
 #include "data_types.h"
 #include "sections.h"
 
@@ -54,6 +54,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
     Digest digest_so_far;      /* partial calculation of MD5 up to and including this VB */ \
     uint32_t component_i;      /* PIZ: 0-based txt component within z_file that this VB belongs to */ \
+    DtTranslation translation; /* PIZ: translation to be applies to this VB */ \
     \
     const char *drop_curr_line;/* PIZ: line currently in reconstruction is to be dropped due a filter (value is filter name) */\
     uint32_t num_nondrop_lines;/* PIZ: number of lines NOT dropped as a result of drop_curr_line */\
@@ -80,10 +81,10 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer bgzf_blocks;        /* ZIP: an array of BgzfBlockZip tracking the decompression of blocks into txt_data */\
     \
     /* random access, chrom, pos */ \
-    Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
-    WordIndex chrom_node_index;/* ZIP and PIZ: index and name of chrom of the current line */ \
-    const char *chrom_name;    \
-    unsigned chrom_name_len; \
+    Buffer ra_buf[2];          /* ZIP only: array of RAEntry [primary, luft] - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
+    WordIndex chrom_node_index;/* ZIP and PIZ: index and name of chrom of the current line. Note: since v12, this is redundant with last_int (CHROM) */ \
+    const char *chrom_name;    /* since v12, this redundant with last_txtx (CHROM) */ \
+    unsigned chrom_name_len;   /* since v12, this redundant with last_txt_len (CHROM) */\
     uint32_t seq_len;          /* PIZ - last calculated seq_len (as defined by each data_type) */\
     \
     /* regions & filters */ \
@@ -110,8 +111,6 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     Buffer compressed;         /* helper buffer for writing to/from zfile: used by various functions. user must assert that its free before use, and buf_free after use. */\
     \
-    struct FlagsVbHeader vb_header_flags; /* these will go into the VB header */ \
-    \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
     DidIType num_contexts;     /* total number of dictionaries of all types */\
     Context contexts[MAX_DICTS];    \
@@ -123,11 +122,13 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     WordIndex prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
     \
     /* liftover stuff */ \
-    bool is_rejects_vb;        /* ZIP and PIZ. Cannot rely on flag.processing_rejects as it may change while VB is still processing  */ \
+    Coords vb_coords;          /* ZIP and PIZ. DC_PRIMARY, DC_LUFT or DC_BOTH */ \
+    Coords line_coords;        /* Seg: coords of current line - DC_PRIMARY or DC_LUFT */ \
     Buffer liftover;           /* ZIP: map from chrom_node_index (not word index!) to entry in chain_index */ \
-                               /* PIZ VCF: in --luft, the data that will go into INFO/LIFTBACK */ \
-    Buffer liftover_rejects;   /* ZIP generating a dual-coordinates file: txt lines rejected for liftover */ \
-    int32_t luft_reject_bytes; /* ZIP of a Luft file: number of bytes of reject data in this VB */ \
+    uint32_t pos_aln_i;        /* ZIP: chain alignment of POS (used to compare to that of END) */\
+    Buffer lo_rejects[2];      /* ZIP generating a dual-coordinates file: txt lines rejected for liftover */ \
+    int32_t reject_bytes;      /* ZIP of a Luft file: number of bytes of reject data in this VB (data originating from ##primary_only/##luft_only) */ \
+    bool is_rejects_vb;        /* PIZ: this is a VB of rejects variants for header ##primary_only/##luft_only */ \
     bool is_unsorted[2];       /* ZIP: line order of this VB[primary, luft] is unsorted */ \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
@@ -153,7 +154,7 @@ typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
 } VBlock;
 
-// VBLOCK_COMMON_LINES_ZIP needs to be at the begging of *ZipDataLine of data types that support dual-coordinates.
+// VBLOCK_COMMON_LINES_ZIP needs to be at the begining of *ZipDataLine of data types that support dual-coordinates.
 #define VBLOCK_COMMON_LINES_ZIP \
     WordIndex chrom_index[2];   /* Seg: enter as node_index ; Merge: convert to word_index */ \
     PosType pos[2];             /* arrays of [2] - { primary-coord, luft-coord } */ \

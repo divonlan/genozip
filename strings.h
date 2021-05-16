@@ -62,7 +62,7 @@ extern StrText str_time (void);
 extern double str_get_positive_float (const char *float_str, unsigned float_str_len);
 extern unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str /* out */);
 
-extern _Bool str_split (const char *str, unsigned str_len, uint32_t num_items, char sep, const char **items, unsigned *item_lens, const char *enforce_msg);
+extern unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char sep, const char **items, unsigned *item_lens, bool exactly, const char *enforce_msg);
 
 extern const char *type_name (unsigned item, 
                               const char * const *name, // the address in which a pointer to name is found, if item is in range
@@ -83,5 +83,7 @@ extern _Bool str_verify_y_n (char *response, unsigned response_size, const char 
 extern _Bool str_verify_not_empty (char *response, unsigned response_size, const char *unused);
 
 extern const char *str_win_error (void);
+
+static inline char base36(unsigned n) { return (n < 10) ? ('0' + n) : ('a' + (n-10)); };
 
 #endif

@@ -18,6 +18,8 @@
 #error "VCF_MAX_PLOIDY cannot go beyond 65535 VBlockVCF.ploidy are uint16_t"
 #endif
 
+typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to 99, '*' for unused, '%', '-'
+
 // ZIP stuff
 extern void vcf_zip_initialize (void);
 
@@ -27,15 +29,18 @@ extern void vcf_seg_initialize (VBlockP vb_);
 extern void vcf_zip_after_compute (VBlockP vb);
 extern void vcf_seg_finalize (VBlockP vb_);
 extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
+extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
 
 // PIZ stuff
+extern bool vcf_piz_read_one_vb (VBlockP vb, Section sl);
+extern bool vcf_vb_is_luft (VBlockP vb);
 extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 CONTAINER_FILTER_FUNC (vcf_piz_filter);
 CONTAINER_CALLBACK (vcf_piz_container_cb);
 
 // VCF Header stuff
 extern void vcf_header_piz_init (void);
-extern bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header);
+extern bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern uint32_t vcf_header_get_num_samples (void);
 
 // VBlock stuff
@@ -47,70 +52,49 @@ extern unsigned vcf_vb_zip_dl_size (void);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 
 // Liftover - INFO fields
+#define INFO_LIFTOVER_LEN 8 // these 4 must be the same length
 #define INFO_LIFTOVER  "LIFTOVER"
-#define INFO_LIFTOVER_LEN 8
 #define INFO_LIFTBACK  "LIFTBACK"
-#define INFO_LIFTBACK_LEN 8
-#define INFO_LIFTREJT  "LIFTREJT"
-#define INFO_LIFTREJT_LEN 8
-
-// Liftover - header keys
-#define HK_GENOZIP_CMD "##genozip_command="
-#define HK_LO_CONTIG   "##liftover_contig="     
-#define HK_LB_CONTIG   "##liftback_contig="
-#define HK_LO_REF      "##liftover_reference="
-#define HK_LB_REF      "##liftback_reference="
-#define HK_LB_REJECT   "##liftback_reject="
-#define HK_CHAIN       "##chain="
-#define HK_DC          "##dual_coordinates"
-#define HK_DC_PRIMARY  HK_DC"=PRIMARY"
-#define HK_DC_LUFT     HK_DC"=LUFT"
+#define INFO_REJTOVER  "REJTOVER"
+#define INFO_REJTBACK  "REJTBACK"
 
 #define VCF_CONTIG_FMT "##contig=<ID=%.*s,length=%"PRId64">"
-
-#define KH_INFO_LO     "##INFO=<ID=" INFO_LIFTOVER ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for lifting over the variant to luft coordinates\",Source=\"genozip\",Version=\"%s\">"
-#define KH_INFO_LB     "##INFO=<ID=" INFO_LIFTBACK ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for retrieving the variant in the primary coordinates\",Source=\"genozip\",Version=\"%s\">"
-#define KH_INFO_LR     "##INFO=<ID=" INFO_LIFTREJT ",Number=1,Type=String,Description=\"dual-coordinates VCF: Reason variant was rejected for lift over\",Source=\"genozip\",Version=\"%s\">"
-
-extern void vcf_header_get_contigs (ConstBufferP *contigs_dict_p, ConstBufferP *contigs_p,
-                                    ConstBufferP *ocontigs_dict_p, ConstBufferP *ocontigs_p);
-
-extern void vcf_seg_ref_alt (VBlockP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len);
 
 // Samples stuff
 extern void vcf_samples_add  (const char *samples_str);
 
-#define VCF_SPECIAL { vcf_piz_special_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_AC, vcf_piz_special_SVLEN, \
-                      vcf_piz_special_DS, vcf_piz_special_BaseCounts, vcf_piz_special_SF, \
-                      vcf_piz_special_oREF, vcf_piz_special_LIFTREJT, vcf_piz_special_LIFTBACK }
-SPECIAL (VCF, 0, REFALT,     vcf_piz_special_REFALT);
-SPECIAL (VCF, 1, FORMAT,     vcf_piz_special_FORMAT)
-SPECIAL (VCF, 2, AC,         vcf_piz_special_AC);
-SPECIAL (VCF, 3, SVLEN,      vcf_piz_special_SVLEN);
-SPECIAL (VCF, 4, DS,         vcf_piz_special_DS);
-SPECIAL (VCF, 5, BaseCounts, vcf_piz_special_BaseCounts);
-SPECIAL (VCF, 6, SF,         vcf_piz_special_SF);
-SPECIAL (VCF, 7, OREF,       vcf_piz_special_oREF);     // added v12
-SPECIAL (VCF, 8, LIFTREJT,   vcf_piz_special_LIFTREJT); // added v12 - maybe be used by other data types too in the future
-SPECIAL (VCF, 9, LIFTBACK,   vcf_piz_special_LIFTBACK); // added v12 - maybe be used by other data types too in the future
-
-#define NUM_VCF_SPECIAL 10
+#define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_INFO_SVLEN, \
+                      vcf_piz_special_FORMAT_DS, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, vcf_piz_special_FORMAT_F2R1,  \
+                      vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPY_POS }
+SPECIAL (VCF, 0,  main_REFALT,  vcf_piz_special_main_REFALT);
+SPECIAL (VCF, 1,  FORMAT,       vcf_piz_special_FORMAT)
+SPECIAL (VCF, 2,  AC,           vcf_piz_special_INFO_AC);
+SPECIAL (VCF, 3,  SVLEN,        vcf_piz_special_INFO_SVLEN);
+SPECIAL (VCF, 4,  DS,           vcf_piz_special_FORMAT_DS);
+SPECIAL (VCF, 5,  BaseCounts,   vcf_piz_special_INFO_BaseCounts);
+SPECIAL (VCF, 6,  SF,           vcf_piz_special_INFO_SF);
+SPECIAL (VCF, 7,  F2R1,         vcf_piz_special_FORMAT_F2R1);  // added v12
+SPECIAL (VCF, 8,  LIFT_REF,     vcf_piz_special_LIFT_REF);     // added v12
+SPECIAL (VCF, 9,  COPYSTAT,     vcf_piz_special_COPYSTAT);     // added v12
+SPECIAL (VCF, 10, other_REFALT, vcf_piz_special_other_REFALT); // added v12
+SPECIAL (VCF, 11, COPY_POS,     vcf_piz_special_COPY_POS);     // added v12
+#define NUM_VCF_SPECIAL 12
 
 // Translators for Luft (=secondary coordinates)
-TRANSLATOR (VCF, VCF,   1,  CHROM,  vcf_piz_luft_CHROM)
-TRANSLATOR (VCF, VCF,   2,  POS,    vcf_piz_luft_POS)
-TRANSLATOR (VCF, VCF,   3,  REFALT, vcf_piz_luft_REFALT)
-TRANSLATOR (VCF, VCF,   4,  AC,     vcf_piz_luft_AC)
-TRANSLATOR (VCF, VCF,   5,  AF,     vcf_piz_luft_AF)
-TRANSLATOR (VCF, VCF,   6,  AD,     vcf_piz_luft_AD)
-TRANSLATOR (VCF, VCF,   7,  END,    vcf_piz_luft_END)
-TRANSLATOR (VCF, VCF,   8,  GT,     vcf_piz_luft_GT)
-TRANSLATOR (VCF, VCF,   9,  GL,     vcf_piz_luft_GL)
+TRANSLATOR (VCF, VCF,   1, G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G
+TRANSLATOR (VCF, VCF,   2, R,      vcf_piz_luft_R)
+TRANSLATOR (VCF, VCF,   3, R2,     vcf_piz_luft_R2)
+TRANSLATOR (VCF, VCF,   4, A_AN,   vcf_piz_luft_A_AN)
+TRANSLATOR (VCF, VCF,   5, A_1,    vcf_piz_luft_A_1)
+TRANSLATOR (VCF, VCF,   6, GT,     vcf_piz_luft_GT)      
+TRANSLATOR (VCF, VCF,   7, END,    vcf_piz_luft_END)      
 
-#define NUM_VCF_TRANS   10 // including "none"
-#define VCF_TRANSLATORS { NULL /* none */, vcf_piz_luft_CHROM, vcf_piz_luft_POS, vcf_piz_luft_REFALT, \
-                          vcf_piz_luft_AC, vcf_piz_luft_AF, \
-                          vcf_piz_luft_AD, vcf_piz_luft_END, vcf_piz_luft_GT, vcf_piz_luft_GL }
+#define NUM_VCF_TRANS   8 // including "none"
+#define VCF_TRANSLATORS { NULL /* none */, vcf_piz_luft_G, vcf_piz_luft_R, vcf_piz_luft_R2, vcf_piz_luft_A_AN, \
+                          vcf_piz_luft_A_1, vcf_piz_luft_GT, vcf_piz_luft_END }
+
+// names of INFO / FORMAT algorithms, goes into VCF header's ##INFO / ##FORMAT "RenderAlg" attribute
+#define VCF_TRANSLATORS_ALG_NAME {"NONE", "G", "R", "R2", "A_AN", "A_1", "GT", "END"}
 
 #define VCF_DICT_ID_ALIASES \
     /*         alias                           maps to this ctx          */  \
@@ -123,5 +107,8 @@ TRANSLATOR (VCF, VCF,   9,  GL,     vcf_piz_luft_GL)
 
 #define DTYPE_VCF_INFO   DTYPE_1
 #define DTYPE_VCF_FORMAT DTYPE_2
+
+enum { oCHROM, oPOS, oREF, oXSTRAND, oSTATUS }; // order of fields as defined in data_types.h
+#define ODID(offset) (DTFZ(ochrom)+(DidIType)(offset))
 
 #endif

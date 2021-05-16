@@ -15,6 +15,7 @@
 #include "vblock.h"
 #include "context.h"
 #include "file.h"
+#include "reference.h"
 #include "endianness.h"
 #include "strings.h"
 #include "piz.h"
@@ -26,12 +27,16 @@
 #include "reconstruct.h"
 #include "zfile.h"
 
+static WordIndex num_ref_contigs=0; // ZIP of a chain file
+
 typedef struct {
     WordIndex src_chrom; // index in CHAIN_NAMESRC
     PosType src_first_1pos, src_last_1pos;
 
     WordIndex dst_chrom; // index in CHAIN_NAMEDST - the nodes+dicts copied to the genozipped file (eg as VCF_oCHROM)
     PosType dst_first_1pos, dst_last_1pos;
+
+    bool xstrand;
 } ChainAlignment;
 
 static Buffer chain = EMPTY_BUFFER;   // immutable after loaded
@@ -42,7 +47,7 @@ static PosType next_dst_0pos=0, next_src_0pos=0; // used for loading chain
 //    from z_file->contexts of a chain file 
 // 2) Contig lengths are added when pizzing each alignment set, in chain_piz_filter_add_contig_length
 // 3) At the beginning of ZIP of a file with --chain: dst_contig copied to z_file->contexts of the file being compressed
-// 4) liftover_get_liftover_coords src_contig is consulted to get map the index of the primary chrom from the node_index
+// 4) vcf_lo_get_liftover_coords src_contig is consulted to get map the index of the primary chrom from the node_index
 //    of the file being compressed to the word_index of src_contig in the chain data
 static Buffer src_contig_dict = EMPTY_BUFFER;
 static Buffer src_contigs     = EMPTY_BUFFER;
@@ -76,6 +81,21 @@ int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 // Segmentation functions
 //-----------------------
 
+void chain_zip_initialize (void)
+{
+    ASSINP0 (flag.reference == REF_EXTERNAL, "Please specify the destination reference file with --reference");
+    flag.reference = REF_MAKE_CHAIN; // since we're not attempting to use the data from the reference to compress the chain file itself
+
+    if (z_file->num_txt_components_so_far == 1) { // run only for 1st component in a bound file
+
+        ConstBufferP contig_dict, contigs;
+        ref_contigs_get (&contig_dict, &contigs);
+
+        num_ref_contigs = (WordIndex)contigs->len;
+        ctx_build_zf_ctx_from_contigs (CHAIN_NAMEDST, contigs, contig_dict);
+    }
+}
+
 void chain_seg_initialize (VBlock *vb)
 {
     vb->contexts[CHAIN_NAMEDST] .no_stons  =       
@@ -105,22 +125,22 @@ void chain_seg_finalize (VBlockP vb)
         .is_toplevel  = true,
         .filter_items = true,
         .nitems_lo    = 16,
-        .items        = { { .dict_id = (DictId)dict_id_fields[CHAIN_CHAIN],    .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_SCORE],    .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_NAMESRC],  .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_SIZESRC],  .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_STRNDSRC], .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_STARTSRC], .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_ENDSRC],   .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_NAMEDST],  .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_SIZEDST],  .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_STRNDDST], .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_STARTDST], .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_ENDDST],   .seperator = {' '} },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_ID]                           },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_EOL]                          },
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_SET]                          }, 
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_EOL]                          } },
+        .items        = { { .dict_id = (DictId)dict_id_fields[CHAIN_CHAIN],    .seperator = {' '} },  // 0
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_SCORE],    .seperator = {' '} },  // 1
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_NAMESRC],  .seperator = {' '} },  // 2
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_SIZESRC],  .seperator = {' '} },  // 3
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_STRNDSRC], .seperator = {' '} },  // 4
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_STARTSRC], .seperator = {' '} },  // 5
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_ENDSRC],   .seperator = {' '} },  // 6
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_NAMEDST],  .seperator = {' '} },  // 7
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_SIZEDST],  .seperator = {' '} },  // 8
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_STRNDDST], .seperator = {' '} },  // 9
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_STARTDST], .seperator = {' '} },  // 10
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_ENDDST],   .seperator = {' '} },  // 11
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_ID]                           },  // 12
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_EOL]                          },  // 13
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_SET]                          },  // 14
+                          { .dict_id = (DictId)dict_id_fields[CHAIN_EOL]                          } },// 15
     };
 
     container_seg_by_ctx (vb, &vb->contexts[CHAIN_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
@@ -154,13 +174,29 @@ static void chain_seg_dst_end_field (VBlock *vb, const char *field_start, int fi
     ASSSEG (str_get_int (field_start, field_len, &ctx->last_value.i), field_start, "Expecting qEnd to be an integer, but found %*s", field_len, field_start);
 
     if (vb->last_int(CHAIN_ENDSRC) - vb->last_int(CHAIN_STARTSRC) ==
-        ctx->last_value.i        - vb->last_int(CHAIN_STARTDST)) {
+        ctx->last_value.i          - vb->last_int(CHAIN_STARTDST)) {
         seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_ENDDST }), 2, ctx, field_len + 1);        
         ctx->numeric_only = false;
     }
 
     else
-        seg_pos_field (vb, CHAIN_ENDDST, CHAIN_STARTDST, false, false, field_start, field_len, 0, field_len + 1);
+        seg_pos_field (vb, CHAIN_ENDDST, CHAIN_STARTDST, false, false, 0, field_start, field_len, 0, field_len + 1);
+}
+
+static void chain_seg_verify_size_dst (VBlock *vb, WordIndex ref_index, 
+                                       const char *name_dst, unsigned name_dst_len,
+                                       const char *size_dst_start, unsigned size_dst_len)
+{
+    PosType size_according_to_chain, size_according_to_ref;
+
+    ASSSEG (str_get_int_range64 (size_dst_start, size_dst_len, 1, 1000000000000000, &size_according_to_chain),
+            size_dst_start, "Invalid size field of \"%.*s\": %.*s", name_dst_len, name_dst, size_dst_len, size_dst_start);
+
+    size_according_to_ref = ref_contigs_get_contig_length (ref_index, 0, 0, true);
+
+    ASSERT (size_according_to_chain == size_according_to_ref, 
+            "Size of \"%.*s\" in chain file is %"PRId64", but in the reference file it is %"PRId64,
+             name_dst_len, name_dst, size_according_to_chain, size_according_to_ref);
 }
 
 const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
@@ -177,26 +213,50 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     SEG_NEXT_ITEM_SP (CHAIN_SIZESRC);
     SEG_NEXT_ITEM_SP (CHAIN_STRNDSRC);
 
-    GET_NEXT_ITEM_SP ("tSTART");
-    seg_pos_field (vb, CHAIN_STARTSRC, CHAIN_ENDSRC, false, false, field_start, field_len, 0, field_len + 1);
+    GET_NEXT_ITEM_SP (CHAIN_STARTSRC);
+    seg_pos_field (vb, CHAIN_STARTSRC, CHAIN_ENDSRC, false, false, 0, field_start, field_len, 0, field_len + 1);
 
-    GET_NEXT_ITEM_SP ("tEND");
-    seg_pos_field (vb, CHAIN_ENDSRC, CHAIN_STARTSRC, false, false, field_start, field_len, 0,field_len + 1);
+    GET_NEXT_ITEM_SP (CHAIN_ENDSRC);
+    seg_pos_field (vb, CHAIN_ENDSRC, CHAIN_STARTSRC, false, false, 0, field_start, field_len, 0,field_len + 1);
 
-    SEG_NEXT_ITEM_SP (CHAIN_NAMEDST);
+    GET_NEXT_ITEM_SP (CHAIN_NAMEDST);
+
+    bool is_new;
+    WordIndex name_dst_index = seg_by_did_i_ex (vb, CHAIN_NAMEDST_str, CHAIN_NAMEDST_len, CHAIN_NAMEDST, CHAIN_NAMEDST_len+1, &is_new);
+    
+    // case: chrom name doesn't match any ref contig. if it is an alternative name (eg 1->chr1), then we add
+    // it to the CHAIN_NAMEDST dict (in addition to all the ref contigs that were copied in chain_zip_initialize),
+    // and a mapping will be created by ref_alt_chroms_compress. 
+    WordIndex ref_index = name_dst_index;
+    if (name_dst_index >= num_ref_contigs) {
+        static bool once = false;
+        ref_index = ref_alt_chroms_zip_get_alt_index (CHAIN_NAMEDST_str, CHAIN_NAMEDST_len, WI_REF_CONTIG, WORD_INDEX_NONE);
+        if (ref_index == WORD_INDEX_NONE && is_new) {
+            if (!once)
+                WARN ("\"%.*s\": Contig appears in chain file %s but is missing in reference file %s. When %s is used to liftover files, lines with this contig will not be lifted over.", 
+                      CHAIN_NAMEDST_len, CHAIN_NAMEDST_str, txt_name, ref_filename, z_name);
+            else
+                WARN ("\"%.*s\": Contig appears in chain file but is missing in reference file", CHAIN_NAMEDST_len, CHAIN_NAMEDST_str);
+            once = true;
+        }
+    }
+
     SEG_NEXT_ITEM_SP (CHAIN_SIZEDST);
+    if (ref_index != WORD_INDEX_NONE)
+        chain_seg_verify_size_dst (vb, ref_index, CHAIN_NAMEDST_str, CHAIN_NAMEDST_len, CHAIN_SIZEDST_str, CHAIN_SIZEDST_len);
+
     SEG_NEXT_ITEM_SP (CHAIN_STRNDDST);
 
-    GET_NEXT_ITEM_SP ("qSTART");
-    seg_pos_field (vb, CHAIN_STARTDST, CHAIN_ENDDST, false, false, field_start, field_len, 0, field_len + 1);
+    GET_NEXT_ITEM_SP (CHAIN_STARTDST);
+    seg_pos_field (vb, CHAIN_STARTDST, CHAIN_ENDDST, false, false, 0, field_start, field_len, 0, field_len + 1);
 
-    GET_NEXT_ITEM_SP ("qEND");
+    GET_NEXT_ITEM_SP (CHAIN_ENDDST);
     chain_seg_dst_end_field (vb, field_start, field_len);
 
     // if ID is numeric, preferably store as delta, if not - normal snip
-    GET_LAST_ITEM_SP ("ID");
+    GET_LAST_ITEM_SP (CHAIN_ID);
     if (str_is_int (field_start, field_len))
-        seg_pos_field (vb, CHAIN_ID, CHAIN_ID, false, false, field_start, field_len, 0, field_len + 1); // just a numeric delta    
+        seg_pos_field (vb, CHAIN_ID, CHAIN_ID, false, false, 0, field_start, field_len, 0, field_len + 1); // just a numeric delta    
     else
         seg_by_did_i (vb, field_start, field_len, CHAIN_ID, field_len + 1);
 
@@ -206,15 +266,15 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     uint32_t num_alignments=0;
     bool is_last_alignment=false;
     do {
-        GET_MAYBE_LAST_ITEM_SP ("SIZE");
+        GET_MAYBE_LAST_ITEM_SP (CHAIN_SIZE);
         chain_seg_size_field (vb, field_start, field_len);
 
         is_last_alignment = (separator == '\n');
 
         if (!is_last_alignment) {
             // note: we store both DIFFs in the same context as they are correlated (usually one of them is 0)
-            SEG_NEXT_ITEM_SP (CHAIN_GAPS);
-            SEG_LAST_ITEM_SP (CHAIN_GAPS);
+            { SEG_NEXT_ITEM_SP (CHAIN_GAPS); }
+            { SEG_LAST_ITEM_SP (CHAIN_GAPS); }
         }
         // last line doesn't have DDST and DSRC - delete space seperator
         else {
@@ -242,7 +302,7 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     container_seg_by_ctx (vb, &vb->contexts[CHAIN_SET], (ContainerP)&alignment_set, 0, 0, 0);
 
     // Empty line after alignment set
-    GET_LAST_ITEM ("EmptyLine");
+    GET_LAST_ITEM (EmptyLine);
     ASSSEG0 (!field_len, field_start, "Expecting an empty line after alignment set");
     SEG_EOL (CHAIN_EOL, false); 
 
@@ -253,7 +313,7 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
 // PIZ functions
 //--------------
 
-static void chain_piz_initialize_copy_contigs (Buffer *contigs, Buffer *dict, DidIType name_did_i)
+static void chain_piz_initialize_copy_contigs (Buffer *contigs, Buffer *dict, DidIType name_did_i, bool get_LN_from_ref)
 {
     // copy dictionary buffer
     buf_copy (evb, dict, &z_file->contexts[name_did_i].dict, char, 0, 0, "chain_contig_dict");
@@ -265,10 +325,19 @@ static void chain_piz_initialize_copy_contigs (Buffer *contigs, Buffer *dict, Di
     buf_alloc (evb, contigs, 0, contig_words_len, RefContig, 0, "chain_contigs");
     contigs->len = contig_words_len;
     ARRAY (RefContig, ctg, *contigs);
+    
+    for (uint32_t i=0; i < contig_words_len; i++) {
+        PosType LN=0;
 
-    for (uint32_t i=0; i < contig_words_len; i++)
+        if (get_LN_from_ref) {
+            const char *contig = ctx_get_snip_by_word_index (&z_file->contexts[name_did_i], i, 0, 0);
+            LN = ref_contigs_get_contig_length (i, contig, contig_words[i].snip_len, false);
+        }
+        
         ctg[i] = (RefContig) { .char_index = contig_words[i].char_index,
-                               .snip_len   = contig_words[i].snip_len   };
+                               .snip_len   = contig_words[i].snip_len,
+                               .LN         = LN };
+    }
 }
 
 // called after reconstructing the txt header and before compute threads
@@ -277,8 +346,8 @@ bool chain_piz_initialize (void)
     mutex_initialize (chain_mutex);
 
     if (flag.reading_chain) {
-        chain_piz_initialize_copy_contigs (&src_contigs, &src_contig_dict, CHAIN_NAMESRC);
-        chain_piz_initialize_copy_contigs (&dst_contigs, &dst_contig_dict, CHAIN_NAMEDST);
+        chain_piz_initialize_copy_contigs (&src_contigs, &src_contig_dict, CHAIN_NAMESRC, false);
+        chain_piz_initialize_copy_contigs (&dst_contigs, &dst_contig_dict, CHAIN_NAMEDST, true);
     }
 
     return true; // proceed with PIZ
@@ -353,13 +422,16 @@ static inline void chain_piz_filter_ingest_alignmet (VBlock *vb)
     int64_t size = vb->last_int(CHAIN_SIZE);
 
     NEXTENT (ChainAlignment, chain) = (ChainAlignment){ 
-        .src_chrom      = vb->last_int(CHAIN_NAMESRC),
+        .src_chrom      = vb->last_index(CHAIN_NAMESRC),
         .src_first_1pos = 1 + next_src_0pos,  // +1 bc our alignments are 1-based vs the chain file that is 0-based
         .src_last_1pos  = 1 + next_src_0pos + size - 1,
 
-        .dst_chrom      = vb->last_int(CHAIN_NAMEDST),
+        // use alt chroms as they appear in the reference file, rather than their name in the chain file
+        .dst_chrom      = ref_alt_get_final_index (vb->last_index(CHAIN_NAMEDST)), 
         .dst_first_1pos = 1 + next_dst_0pos,
         .dst_last_1pos  = 1 + next_dst_0pos + size - 1,
+
+        .xstrand  = *last_txt(vb, CHAIN_STRNDSRC) != *last_txt(vb, CHAIN_STRNDDST)
     };
 
     Context *gaps_ctx   = &vb->contexts[CHAIN_GAPS];
@@ -468,6 +540,7 @@ WordIndex chain_get_src_contig_index (const char *contig, unsigned contig_len)
     return (ctg_i == src_ctgs_len) ? WORD_INDEX_NONE : ctg_i;
 }
 
+// called by vcf_lo_zip_initialize when zipping with --chain to copy chain->dst_contigs to z_file->ochrom 
 void chain_copy_dst_contigs_to_z_file (DidIType dst_contig_did_i)
 {
     ctx_build_zf_ctx_from_contigs (dst_contig_did_i, &dst_contigs, &dst_contig_dict);
@@ -508,11 +581,22 @@ void chain_load (void)
 
     TEMP_VALUE (command, PIZ);
 
+    if (flag.reference) flag.reference = REF_LIFTOVER;
+
+    flag.no_writer = true;
+    flag.genocat_no_reconstruct = false;
+    flag.genocat_global_area_only = false;
+    
+    Dispatcher dispachter = piz_z_file_initialize (false);
+
+    // load the reference, now that it is set (either explicitly from the command line, or implicitly from the chain GENOZIP_HEADER)
+    SAVE_VALUE (z_file); // actually, read the reference first
+    ref_load_external_reference (false);
+    RESTORE_VALUE (z_file);
+
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines
-    flag.no_writer = true;
 
-    Dispatcher dispachter = piz_z_file_initialize (false);
     piz_one_txt_file (dispachter, false);
 
     // --show-chain-contigs
@@ -528,6 +612,8 @@ void chain_load (void)
     // recover globals
     RESTORE_VALUE (command);
     RESTORE_FLAGS;
+
+    flag.reference = REF_LIFTOVER; // will be needed by the files we are about to compress with --chain
 
     if (flag.show_chain) {
         chain_display_alignments();
@@ -555,42 +641,86 @@ void chain_destroy (void)
     chain_filename = NULL; 
 }
 
+// binary search for the first alignment of a src contig
+static ChainAlignment *chain_get_first_aln (WordIndex src_contig_index, int32_t start, int32_t end) 
+{
+    // We know that this src_contig exists, so its unexpected if it doesn't
+    ASSERT (end >= start, "Unable to find src_contig_index=%d in chain", src_contig_index);
+
+    uint32_t mid = (start + end) / 2;
+    ChainAlignment *aln = ENT (ChainAlignment, chain, mid);
+
+    // case: success - same src_contig, and previous aln has a different src_contig 
+    if (aln->src_chrom == src_contig_index && (!mid || (aln-1)->src_chrom != src_contig_index))
+        return aln;
+
+    // case: src_contig less than aln's, OR is the same, but aln isn't the first with this src_contig - search lower half
+    if (src_contig_index <= aln->src_chrom)
+        return chain_get_first_aln (src_contig_index, start, mid-1);
+    
+    // case: src_contig is more than aln's - search upper half
+    else
+        return chain_get_first_aln (src_contig_index, mid+1, end);
+}
+
+// append dst_contigs buffer with all dst chroms indicies for which there exists alignment with src_chrom
+void chain_append_all_dst_contig_index (const char *src_contig_name, unsigned src_contig_name_len, Buffer *dst_contigs)
+{
+    WordIndex src_contig_index = chain_get_src_contig_index (src_contig_name, src_contig_name_len);
+    WordIndex prev_dst = WORD_INDEX_NONE;
+
+    if (src_contig_index == WORD_INDEX_NONE) return; // this contig is not in the chain file
+
+    for (ChainAlignment *aln = chain_get_first_aln (src_contig_index, 0, chain.len-1);
+         aln < LASTENT (ChainAlignment, chain) && aln->src_chrom == src_contig_index;
+         aln++)
+         
+         if (aln->dst_chrom != prev_dst) { // note: this prevents consecutive duplicates, but not non-consecutive duplicates
+            buf_alloc (NULL, dst_contigs, 100, 1, WordIndex, 2, NULL);
+            NEXTENT (WordIndex, *dst_contigs) = prev_dst = aln->dst_chrom;
+         }
+}
+
 // get dst_contig, src_pos from src_contig, dst_pos (binary search on chain)
-static LiftOverStatus chain_get_liftover_coords_do (WordIndex src_contig_index, PosType src_1pos, 
-                                                    int32_t start, int32_t end,
-                                                    WordIndex *dst_contig_index, PosType *dst_1pos) // out
+// returns true if successful
+static bool chain_get_liftover_coords_do (WordIndex src_contig_index, PosType src_1pos, 
+                                          int32_t start, int32_t end,
+                                          WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
 {
     // case: no mapping
     if (end < start) {
-        *dst_contig_index = WORD_INDEX_NONE;
-        *dst_1pos = 0;
-        return LO_NO_MAPPING;
+        if (dst_contig_index) *dst_contig_index = WORD_INDEX_NONE;
+        if (dst_1pos) *dst_1pos = 0;
+        if (xstrand) *xstrand = false;
+        return false;
     }
 
     uint32_t mid = (start + end) / 2;
     ChainAlignment *aln = ENT (ChainAlignment, chain, mid);
 
     // case: success
-    if (aln->src_chrom     == src_contig_index && 
+    if (aln->src_chrom == src_contig_index && 
         aln->src_first_1pos <= src_1pos && 
         aln->src_last_1pos >= src_1pos) {
-            *dst_contig_index = aln->dst_chrom;
-            *dst_1pos = aln->dst_first_1pos + (src_1pos - aln->src_first_1pos);
-            return LO_OK;
+            if (dst_contig_index) *dst_contig_index = aln->dst_chrom;
+            if (dst_1pos) *dst_1pos = aln->dst_first_1pos + (src_1pos - aln->src_first_1pos);
+            if (xstrand) *xstrand  = aln->xstrand;
+            if (aln_i) *aln_i = mid;
+            return true;
         }
 
     // case: src_contig, dst_pos is less than aln - search lower half
     if (src_contig_index < aln->src_chrom ||
-        (src_contig_index == aln->src_chrom && aln->src_first_1pos > src_1pos))
-        return chain_get_liftover_coords_do (src_contig_index, src_1pos, start, mid-1, dst_contig_index, dst_1pos);
+        (src_contig_index == aln->src_chrom && src_1pos < aln->src_first_1pos))
+        return chain_get_liftover_coords_do (src_contig_index, src_1pos, start, mid-1, dst_contig_index, dst_1pos, xstrand, aln_i);
     
     // case: src_contig,dst_pos is more than aln - search upper half
     else
-        return chain_get_liftover_coords_do (src_contig_index, src_1pos, mid+1, end, dst_contig_index, dst_1pos);
+        return chain_get_liftover_coords_do (src_contig_index, src_1pos, mid+1, end, dst_contig_index, dst_1pos, xstrand, aln_i);
 }
 
-LiftOverStatus chain_get_liftover_coords (WordIndex src_contig_index, PosType src_1pos, 
-                                          WordIndex *dst_contig_index, PosType *dst_1pos) // out
+bool chain_get_liftover_coords (WordIndex src_contig_index, PosType src_1pos, 
+                                          WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
 {
-    return chain_get_liftover_coords_do (src_contig_index, src_1pos, 0, chain.len-1, dst_contig_index, dst_1pos);
+    return chain_get_liftover_coords_do (src_contig_index, src_1pos, 0, chain.len-1, dst_contig_index, dst_1pos, xstrand, aln_i);
 }

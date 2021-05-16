@@ -68,9 +68,10 @@ typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) 
 #define con_dec_nitems(con) con_set_nitems ((con), con_nitems (con) - 1)
 #define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
 
-extern void container_prepare_snip (ContainerP con, const char *prefixes, unsigned prefixes_len, char *snip, unsigned *snip_len);
-extern WordIndex container_seg_by_ctx (VBlockP vb, ContextP ctx, ContainerP con, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
-#define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg_by_ctx ((VBlockP)vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
+extern void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned prefixes_len, char *snip, unsigned *snip_len);
+extern WordIndex container_seg_by_ctx_do (VBlockP vb, ContextP ctx, ConstContainerP con, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
+#define container_seg_by_ctx(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_by_ctx_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), (add_bytes))
+#define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg_by_ctx (vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
 
 extern LastValueType container_reconstruct (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len);
 

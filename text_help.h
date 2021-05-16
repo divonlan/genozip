@@ -5,29 +5,29 @@
 
 static const char *help_genozip[] = {
     "",
-    "Please see the genozip manual here: http://genozip.com/genozip.html"
+    "Please see the genozip manual here: "GENOZIP_URL"/genozip.html"
 };
 
 static const char *help_genozip_developer[] = {
     "",
     "Options useful mostly for developers of genozip:",
     "",
-    "Please see http://genozip.com/developer.html"
+    "Please see "GENOZIP_URL"/advanced.html"
 };
 
 static const char *help_genounzip[] = {
     "",
-    "Please see the genounzip manual here: http://genozip.com/genounzip.html"
+    "Please see the genounzip manual here: "GENOZIP_URL"/genounzip.html"
 };
 
 static const char *help_genocat[] = {
     "",
-    "Please see the genocat manual here: http://genozip.com/genocat.html"
+    "Please see the genocat manual here: "GENOZIP_URL"/genocat.html"
 };
 
 static const char *help_genols[] = {
     "",
-    "Please see the genols manual here: http://genozip.com/genols.html"
+    "Please see the genols manual here: "GENOZIP_URL"/genols.html"
 };
 
 static const char *help_footer[] = {

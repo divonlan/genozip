@@ -16,7 +16,7 @@ extern void threads_print_call_stack (void);
 
 // for debugging thread issues, activated with --debug-threads or --show-threads
 void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *event, int time_usec);
-void threads_display_log (void);
+void threads_write_log (bool to_info_stream);
 
 #define ASSERTMAINTHREAD ASSERT0 (threads_am_i_main_thread(), "expected to be running in main thread")
 #endif

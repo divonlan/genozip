@@ -101,7 +101,7 @@ static void sam_header_get_num_ranges_cb (const char *chrom_name, unsigned chrom
 }
 
 // constructs header_contigs, and in ZIP, also initialzes refererence ranges and random_access
-bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header)
+bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {    
     #define foreach_SQ_line(cb,cb_param) (IS_BAM ? bam_foreach_SQ_line (txt_header->data, txt_header->len, cb, cb_param) : sam_foreach_SQ_line(txt_header->data, cb, cb_param))
 
@@ -115,7 +115,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header)
             ref_initialize_ranges (RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
         // evb buffers must be alloced by main threads, since other threads cannot modify evb's buf_list
-        random_access_alloc_ra_buf (evb, 0);
+        random_access_alloc_ra_buf (evb, DC_PRIMARY, 0);
     }
 
     if (!IS_BAM) *AFTERENT (char, *txt_header) = 0; // nul-terminate as required by sam_foreach_SQ_line

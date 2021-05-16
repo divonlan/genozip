@@ -15,7 +15,7 @@ extern bool regions_get_ra_intersection (WordIndex chrom_node_index, PosType min
 extern bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos, PosType *intersect_min_pos, PosType *intersect_max_pos);
 extern unsigned regions_max_num_chregs(void);
 extern void regions_display(const char *title);
-extern bool regions_is_site_included (WordIndex chrom_word_index, PosType pos);
+extern bool regions_is_site_included (VBlockP vb);
 extern bool regions_is_range_included (WordIndex chrom, PosType start_pos, PosType end_pos, bool completely_included);
 #define regions_is_ra_included(ra) regions_is_range_included(ra->chrom_index, ra->min_pos, ra->max_pos, false)
 

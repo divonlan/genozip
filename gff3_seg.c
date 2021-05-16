@@ -14,13 +14,15 @@
 #include "piz.h"
 #include "dict_id.h"
 #include "codec.h"
-#include "liftover.h"
+#include "vcf.h"
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
 
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlock *vb)
 {
+    vb->contexts[GFF3_SEQID].flags.store = STORE_INDEX; // since v12
+    vb->contexts[GFF3_START].flags.store = STORE_INT;   // since v12
     vb->contexts[GFF3_SEQID].no_stons    = true; // needs b250 node_index for random access
     vb->contexts[GFF3_ATTRS].no_stons    = true;
     vb->contexts[GFF3_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
@@ -119,7 +121,7 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
                 seg_by_dict_id (vb, snip, item_len, ctxs[item_i]->dict_id, item_len);
             else {
                 is_last_entry = (snip_len - item_len == 0);
-                seg_id_field ((VBlockP)vb, dict_id_ENSTid, snip, item_len, false);
+                seg_id_field (vb, dict_id_ENSTid, snip, item_len, false);
             }
     
             snip     += item_len + 1 - is_last_entry; // 1 for either the , or the ' ' (except in the last item of the last entry)
@@ -135,7 +137,7 @@ static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx,
     }
 
     // finally, the Container snip itself
-    container_seg_by_ctx ((VBlockP)vb, subfield_ctx, (ContainerP)&con, NULL, 0, 
+    container_seg_by_ctx (vb, subfield_ctx, (ContainerP)&con, NULL, 0, 
                            con.repeats * (num_items-1) /* space seperators */ + con.repeats-1 /* comma separators */);
 
     return;
@@ -152,12 +154,14 @@ badly_formatted:
     seg_by_dict_id (vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, saved_snip_len); 
 }                           
 
-static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip)
+bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len)
 {
+    char optimized_snip[OPTIMIZE_MAX_SNIP_LEN]; // used for 1. fields that are optimized 2. fields translated luft->primary
+
     // ID - this is a sequential number (at least in GRCh37/38)
     if (dict_id.num == dict_id_ATTR_ID) {
         Context *ctx = ctx_get_ctx (vb, dict_id);
-        seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, true, false, *this_value, *this_value_len, 0, *this_value_len);
+        seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, true, false, 0, *this_value, *this_value_len, 0, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -251,6 +255,113 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     return true; // all other cases -  procedue with adding to dictionary/b250
 }
 
+typedef struct { const char *start; 
+                 unsigned len; 
+                 DictId dict_id;   } InfoItem;
+
+static int sort_by_subfield_name (const void *a, const void *b)  
+{ 
+    InfoItem *ina = (InfoItem *)a;
+    InfoItem *inb = (InfoItem *)b;
+    
+    return strncmp (ina->start, inb->start, MIN (ina->len, inb->len));
+}
+
+static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned info_len)
+{
+    Container con = { .repeats             = 1, 
+                      .drop_final_item_sep = true };
+
+    const char *this_name = info_str, *this_value = NULL;
+    int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
+
+    InfoItem info_items[MAX_SUBFIELDS];
+
+    // get name / value pairs - and insert values to the "name" dictionary
+    bool reading_name = true;
+    for (unsigned i=0; i < info_len + 1; i++) {
+        char c = (i==info_len) ? ';' : info_str[i]; // add an artificial ; at the end of the INFO data
+
+        if (reading_name) {
+
+            if (c == '=' || c == ';') {  // end of valueful or valueless name
+
+                bool valueful = (c == '=');
+
+                ASSSEG0 (this_name_len > 0, info_str, "Error: ATTRS contains a = or ; without a preceding subfield name");
+
+                if (this_name_len > 0) { 
+                    ASSSEG ((this_name[0] >= 64 && this_name[0] <= 127) || this_name[0] == '.', info_str,
+                            "ATTRS contains a name %.*s starting with an illegal character '%c' (ASCII %u)", 
+                            this_name_len, this_name, this_name[0], this_name[0]);
+
+                    info_items[con_nitems(con)] = (InfoItem) {
+                        .start   = this_name,
+                        .len     = this_name_len + valueful, // include the '=' if there is one 
+                        .dict_id = valueful ? dict_id_make (this_name, this_name_len, DTYPE_1) : DICT_ID_NONE
+                    };
+
+                    this_value = &info_str[i+1]; 
+                    this_value_len = -valueful; // if there is a '=' to be skipped, start from -1
+                    reading_name = false; 
+                }
+            }
+            else this_name_len++; // don't count the = or ; in the len
+        }
+        
+        if (!reading_name) {
+
+            if (c == ';') { // end of value
+                // If its a valueful item, seg it (either special or regular)
+                DictId dict_id = info_items[con_nitems(con)].dict_id;
+                if (dict_id.num && gff3_seg_special_info_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len))
+                    seg_integer_or_not (vb, ctx_get_ctx (vb, dict_id), this_value, this_value_len, this_value_len);
+
+                reading_name = true;  // end of value - move to the next item
+                this_name = &info_str[i+1]; // move to next field in info string
+                this_name_len = 0;
+                con_inc_nitems (con);
+
+                ASSSEG (con_nitems(con) <= MAX_SUBFIELDS, info_str, 
+                        "A line has too many subfields (tags) in ATTRS - the maximum supported is %u", MAX_SUBFIELDS);
+            }
+            else this_value_len++;
+        }
+    }
+
+    // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
+    // thereby both improving compression and improving --regions speed. 
+    if (flag.optimize_sort && con_nitems(con) > 1) 
+        qsort (info_items, con_nitems(con), sizeof(InfoItem), sort_by_subfield_name);
+
+    char prefixes[CONTAINER_MAX_PREFIXES_LEN]; // these are the Container prefixes
+    prefixes[0] = prefixes[1] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix
+    unsigned prefixes_len = 2;
+
+    // Populate the Container 
+    uint32_t total_names_len=0;
+    for (unsigned i=0; i < con_nitems(con); i++) {
+        // Set the Container item and find (or create) a context for this name
+        InfoItem *ii = &info_items[i];
+        con.items[i] = (ContainerItem){ .dict_id   = ii->dict_id,
+                                        .seperator = { ';' } }; 
+            
+        // add to the prefixes
+        ASSSEG (prefixes_len + ii->len + 1 <= CONTAINER_MAX_PREFIXES_LEN, info_str, 
+                "ATTRS contains tag names that, combined (including the '='), exceed the maximum of %u characters", CONTAINER_MAX_PREFIXES_LEN);
+
+        memcpy (&prefixes[prefixes_len], ii->start, ii->len);
+        prefixes_len += ii->len;
+        prefixes[prefixes_len++] = CON_PREFIX_SEP;
+
+        // don't include LIFTBACK in a dual-coordinates file in add_bytes because its not reconstructed by default
+        total_names_len += ii->len + 1; // +1 for ; \t or \n separator
+    }
+
+    container_seg_by_ctx (vb, &vb->contexts[GFF3_ATTRS], &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
+}
+
+
 const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     const char *next_field=field_start_line, *field_start;
@@ -259,26 +370,26 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
 
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
-    GET_NEXT_ITEM ("SEQID");
+    GET_NEXT_ITEM (GFF3_SEQID);
     seg_chrom_field (vb, field_start, field_len);
 
     SEG_NEXT_ITEM (GFF3_SOURCE);
     SEG_NEXT_ITEM (GFF3_TYPE);
 
-    GET_NEXT_ITEM ("START");
-    seg_pos_field (vb, GFF3_START, GFF3_START, false, false, field_start, field_len, 0, field_len+1);
-    random_access_update_pos (vb, GFF3_START);
+    GET_NEXT_ITEM (GFF3_START);
+    seg_pos_field (vb, GFF3_START, GFF3_START, false, false, 0, field_start, field_len, 0, field_len+1);
+    random_access_update_pos (vb, DC_PRIMARY, GFF3_START);
 
-    GET_NEXT_ITEM ("END");
-    seg_pos_field (vb, GFF3_END, GFF3_START, false, false, field_start, field_len, 0, field_len+1);
+    GET_NEXT_ITEM (GFF3_END);
+    seg_pos_field (vb, GFF3_END, GFF3_START, false, false, 0, field_start, field_len, 0, field_len+1);
 
     SEG_NEXT_ITEM (GFF3_SCORE);
     SEG_NEXT_ITEM (GFF3_STRAND);
     SEG_NEXT_ITEM (GFF3_PHASE);
 
     if (separator != '\n') {
-        GET_LAST_ITEM (DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
-        seg_info_field (vb, gff3_seg_special_info_subfields, field_start, field_len, LO_NONE);
+        GET_LAST_ITEM (GFF3_ATTRS); 
+        gff3_seg_attrs_field (vb, field_start, field_len); // GFF3 ATTRS has the same format and VCF INFO
     }
     else
         seg_by_did_i (vb, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed

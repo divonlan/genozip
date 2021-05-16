@@ -44,7 +44,7 @@ int32_t phy_is_header_done (bool is_eof)
     return -1;
 }
 
-bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header)
+bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {
     ARRAY (char, header, *txt_header);
 

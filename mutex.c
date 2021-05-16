@@ -21,8 +21,7 @@ void mutex_initialize_do (Mutex *mutex, const char *name, const char *func)
 void mutex_destroy_do (Mutex *mutex, const char *func) 
 {
     if (!mutex->initialized) return;
-    ASSERTW (!mutex->lock_func, "Warning in mutex_destroy_do called from %s: mutex %s is locked", func, mutex->name);
-    
+        
     pthread_mutex_destroy (&mutex->mutex); 
     mutex->initialized = NULL; 
 }

@@ -362,7 +362,7 @@ void buf_display_memory_usage_handler (void)
 // thread safety: only the thread owning the VB of the buffer (main thread of evb) can add a buffer
 // to the buf list OR it may be added by the main thread IF the compute thread of this VB is not 
 // running yet
-void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
+void buf_add_to_buffer_list_do (VBlock *vb, Buffer *buf, const char *func)
 {
     if (buf->vb == vb) return; // already in buf_list - nothing to do
 
@@ -377,8 +377,8 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
     ((Buffer **)bl->data)[bl->len++] = buf;
 
     if (flag.debug_memory==1 && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-        iprintf ("buf_add_to_buffer_list: %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
-                 buf_desc(buf).s, buf->size, str_pointer(buf).s, vb->id, (uint32_t)vb->buffer_list.len-1);
+        iprintf ("buf_add_to_buffer_list (%s): %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
+                 func, buf_desc(buf).s, buf->size, str_pointer(buf).s, vb->id, (uint32_t)vb->buffer_list.len-1);
     
     buf->vb = vb; // successfully added to buf list
 }
@@ -857,7 +857,9 @@ void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
 
 void buf_add_string (VBlockP vb, Buffer *buf, const char *str) 
 { 
-    unsigned len = strlen (str); 
+    uint64_t len = strlen (str); 
+    ASSERT (len < 10000000, "len=%"PRIu64" too long, looks like a bug", len);
+
     buf_add_more (vb, buf, str, len, buf->name ? buf->name : "string_buf");
     buf->data[buf->len] = '\0'; // string terminator without increasing buf->len
 }

@@ -42,7 +42,7 @@ typedef struct {
     Section txt_header_sl;
     uint32_t first_vb_i;
     uint32_t num_vbs;
-    bool liftover_rejects;        // this component is the "liftover rejects" component
+    Coords rejects_coord;         // this component is the "liftover rejects" component (containing "##primary_only" or "##luft_only" variants if rejects_coord==DC_PRIMARY or DC_LUFT)
 } CompInfo;
 
 typedef struct {
@@ -70,13 +70,6 @@ unsigned writer_get_pair (uint32_t vb_i, uint32_t *pair_vb_i)
 
     *pair_vb_i = v->pair_vb_i;
     return *pair_vb_i > vb_i ? 1 : 2;
-}
-
-bool writer_is_liftover_rejects (uint32_t component_i)
-{
-    bool is_liftover_rejects = comp_info.len && // will fail if loading an auxiliary file
-                               ENT (CompInfo, comp_info, component_i)->liftover_rejects;
-    return is_liftover_rejects;
 }
 
 bool writer_is_txtheader_in_plan (uint32_t component_i)
@@ -123,15 +116,19 @@ static void sort_piz_init_txt_file_info (void)
         uint32_t txt_file_i = 0;
         for (uint32_t comp_i=0; comp_i < comp_info.len; comp_i++) {
             
-            bool two_components = flag.interleave || ENT (CompInfo, comp_info, comp_i)->liftover_rejects;
+            int num_components = flag.interleave ? 2 : 1;
+            if (comp_i+1 < comp_info.len && !!ENT (CompInfo, comp_info, comp_i)->rejects_coord && !!ENT (CompInfo, comp_info, comp_i+1)->rejects_coord)
+                num_components = 3; // 2 reject files
+            else
+                num_components += !!ENT (CompInfo, comp_info, comp_i)->rejects_coord; // 1 reject file
 
             NEXTENT (TxtFileInfo, txt_file_info) = (TxtFileInfo){
                 .txt_file_i   = txt_file_i++,
                 .first_comp_i = comp_i,
-                .num_comps    = 1 + two_components
+                .num_comps    = num_components
             };
 
-            if (two_components) comp_i++;
+            comp_i += (num_components-1); // skip the related components
         }
     }
     else // concatenating all components to a single txt file
@@ -155,19 +152,21 @@ static uint32_t writer_init_comp_info (void)
                 "Expecting %s to have %u components, but found only %u", z_name, z_file->num_components, comp_i);
 
         *comp = (CompInfo){ 
-            .info.comp_i      = comp_i, 
-            .txt_header_sl    = sl, 
-            .first_vb_i       = 0xffffffff,
-            .liftover_rejects = sl->flags.txt_header.liftover_rejects,
+            .info.comp_i   = comp_i, 
+            .txt_header_sl = sl, 
+            .first_vb_i    = 0xffffffff,
+            .rejects_coord = sl->flags.txt_header.rejects_coord
         };
 
         // conditions entire component (header and all VBs) should be skipped (i.e. not even read and inspected)
         comp->info.no_read =
-           (!flag.luft && comp->liftover_rejects && !flag.one_component)
+           (!flag.luft && comp->rejects_coord == DC_PRIMARY && !flag.one_component)
         ||
+           (flag.luft && comp->rejects_coord == DC_LUFT && !flag.one_component)
+        ||        
            (flag.one_component && flag.one_component-1 != comp_i); // --component specifies a single component, and this is not it 
 
-        // conditions we write the txt header
+        // conditions we write the txt header (doesn't affect the VBs of this component)
         comp->info.in_plan =
            !flag_loading_auxiliary
         &&
@@ -179,10 +178,11 @@ static uint32_t writer_init_comp_info (void)
            || comp_i % 2 == 0) 
         &&                                          // whether to show this section considering concatenating or unbinding
            (  flag.unbind                           // unbinding: we show all components
-           || (flag.luft && comp->liftover_rejects) // concatenating: if --luft, show all rejects components
+           || ( flag.luft && comp->rejects_coord == DC_PRIMARY)  // concatenating: if --luft, show ##primary_only rejects components (appears in the vcf header)
+           || (!flag.luft && comp->rejects_coord == DC_LUFT)     // concatenating: if primary, show ##luft_only rejects components (appears in the vcf header)
            || flag.one_component-1 == comp_i        // single component: this is it (note: if dual coord, this will pointing a rejects components since we switched their order)
            || (!flag.one_component && comp_i==0)    // concatenating: show first header (0 if no rejects)
-           || (!flag.one_component && (comp-1)->liftover_rejects)); // concatenating: show first header (first after rejects)
+           || (!flag.one_component && (comp-1)->rejects_coord)); // concatenating: show first header (first after rejects)
 
         if (comp->info.in_plan) {
             // mutex: locked:    here (at initialization)
@@ -208,16 +208,14 @@ static void write_set_first_vb_for_tail (void)
     int64_t count_lines = flag.tail;
 
     while (sections_prev_sec (&sl, SEC_VB_HEADER)) {
-        zfile_read_section_header (evb, sl->offset, sl->vblock_i, SEC_VB_HEADER); // reads into evb->compressed
-
-        SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)evb->compressed.data;
-        uint32_t vb_num_lines = BGEN32 (header->num_lines); 
+        SectionHeaderVbHeader header = zfile_read_section_header (evb, sl->offset, sl->vblock_i, SEC_VB_HEADER).vb_header;
+        uint32_t vb_num_lines = BGEN32 (header.num_lines); 
 
         // case: this is the first VB (from the file end) we need
         if (vb_num_lines > count_lines) { 
             txt_file->tail_1st_vb = sl->vblock_i;
             txt_file->tail_1st_line_1st_vb = vb_num_lines - (uint32_t)count_lines;
-            if (flag.out_dt != DT_BAM) flag.no_header = true;
+            if (flag.out_dt != DT_BAM && !flag.no_header) flag.no_header = 2; // implicit no_header
             return;
         }
 
@@ -253,7 +251,7 @@ static void writer_init_vb_info (void)
 
             ASSERT0 (sections_next_sec (&sl, SEC_VB_HEADER), "Unexpected end of section list");
             
-            VbInfo *v = ENT (VbInfo, vb_info, sl->vblock_i); // note: VBs are out of order in --luft bc writer_move_liftover_rejects_to_front()
+            VbInfo *v = ENT (VbInfo, vb_info, sl->vblock_i); // note: VBs are out of order in dual coordinate files bc writer_move_liftover_rejects_to_front()
             v->comp_i = comp_i;
 
             // set pairs (used even if not interleaving)
@@ -262,12 +260,12 @@ static void writer_init_vb_info (void)
 
             // conditions this VB should not be read or reconstructed 
             v->no_read = 
-                comp->info.no_read                            // entire component is skipped
+                comp->info.no_read                                  // entire component is skipped
             ||  (flag.tail && sl->vblock_i < txt_file->tail_1st_vb) // --tail: this VB is too early, not needed
-            ||  (flag.one_vb && flag.one_vb != sl->vblock_i)  // --one-vb: user only wants to see a single VB, and this is not it
-            ||  (flag.no_header && comp->liftover_rejects)    // --no-header: this a rejects VB which is displayed as a header
-            ||  (flag.header_only && !comp->liftover_rejects) // --header-only (except rejects VB)
-            ||  !random_access_is_vb_included (sl->vblock_i); // --regions: this VB is excluded
+            ||  (flag.one_vb && flag.one_vb != sl->vblock_i)        // --one-vb: user only wants to see a single VB, and this is not it
+            ||  (flag.no_header && comp->rejects_coord)             // --no-header: this a rejects VB which is displayed as a header
+            ||  (flag.header_only && !comp->rejects_coord)          // --header-only (except rejects VB)
+            ||  !random_access_is_vb_included (sl->vblock_i);       // --regions: this VB is excluded
 
             // conditions in which VB should be written 
             v->in_plan = 
@@ -290,18 +288,26 @@ static void writer_init_vb_info (void)
     }
 }
 
-// PIZ with --luft: 
-// concatenating - all rejects components move to the front
+// PIZ of dual coordinate files: 
+// concatenating - the relevant rejects component (PRIMARY or LUFT) is moved to the front
 // unbinding - each reject component switches place with its primary component
-// note: currently we support only a single primary+rejects dual component. bug 333.
+// note: currently we support only a single dual+primary+luft triple component. bug 333.
 void writer_move_liftover_rejects_to_front (void)
 {
-    ASSERT0 (flag.luft, "Expecting flag.luft=true");
+    ASSERT (sections_count_sections (SEC_TXT_HEADER) == 3, "Error: %s is a dual coordinates file, expecting 3 TXT_HEADER sections", z_name);
 
-    Section primary = sections_first_sec (SEC_TXT_HEADER, false);
-    Section rejects = sections_component_last (primary) + 1;
+    Section dual = sections_first_sec (SEC_TXT_HEADER, false);
+    Section prim = dual; sections_next_sec (&prim, SEC_TXT_HEADER);
+    Section luft = prim; sections_next_sec (&luft, SEC_TXT_HEADER);
 
-    sections_pull_component_up (NULL, rejects);
+    Coords rejects_coord_dual = zfile_read_section_header (evb, dual->offset, 0, SEC_TXT_HEADER).txt_header.h.flags.txt_header.rejects_coord;
+    Coords rejects_coord_prim = zfile_read_section_header (evb, prim->offset, 0, SEC_TXT_HEADER).txt_header.h.flags.txt_header.rejects_coord;
+    Coords rejects_coord_luft = zfile_read_section_header (evb, luft->offset, 0, SEC_TXT_HEADER).txt_header.h.flags.txt_header.rejects_coord;
+
+    ASSERT (rejects_coord_dual == DC_NONE && rejects_coord_prim == DC_PRIMARY && rejects_coord_luft == DC_LUFT,
+            "File %s is a dual-coordinates file, components have incorrect rejects_coord", z_name);
+
+    sections_pull_component_up (NULL, flag.luft ? prim : luft); // when rendering in LUFT, show the ##primary_only in the header, and vice versa
 }
 
 // PIZ main thread: add txtheader entry for the component
@@ -395,29 +401,33 @@ static void writer_add_plan_from_recon_section (const CompInfo *comp, Section re
 
     evb->compressed.len /= sizeof (uint32_t); // len to units of uint32_t
     BGEN_u32_buf (&evb->compressed, 0);
-    evb->compressed.len /= 3; // len to units of ReconPlanItem
+    evb->compressed.len /= (sizeof (ReconPlanItem) / sizeof (uint32_t)); // len to units of ReconPlanItem
 
-    // concatenate reconstruction plan
-    buf_add_buf (evb, &z_file->recon_plan, &evb->compressed, ReconPlanItem, "recon_plan");
-            
     // track if VB has been pulled up already
     uint8_t *vb_is_pulled_up = CALLOC (comp->num_vbs); // dynamic allocation as number of VBs in a component is unbound
 
     ARRAY (const ReconPlanItem, plan, evb->compressed);
-    
+
+    buf_alloc (evb, &z_file->recon_plan, plan_len, 0, ReconPlanItem, 0, "recon_plan");      
+
     Section sl = comp->txt_header_sl;
-    for (uint64_t i=0; i < plan_len; i++)
+    for (uint64_t i=0; i < plan_len; i++) {
+        if (!ENT (VbInfo, vb_info, plan[i].vb_i)->in_plan) continue; // skip plan items from non-included VBs
+
+        NEXTENT (ReconPlanItem, z_file->recon_plan) = plan[i];
+        
         if (!vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i]) { // first encounter with this VB in the plan
             // move all sections of vb_i to be immediately after sl ; returns last section of vb_i after move
             sl = sections_pull_vb_up (plan[i].vb_i, sl); 
             vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i] = true;
         }
-
+    }
     FREE (vb_is_pulled_up);
     buf_free (&evb->compressed);
 }
 
 // returns SL if this component has a SEC_RECON_PLAN section which matchs flag.luft
+// note: on the main component, not the rejects components, has a recon plan. it will have a plan for primary or luft, if either or both need sorting.
 static Section writer_get_recon_plan_sl (const CompInfo *comp)
 {
     Section sl = comp->txt_header_sl;
@@ -425,10 +435,10 @@ static Section writer_get_recon_plan_sl (const CompInfo *comp)
     if (sections_next_sec2 (&sl, SEC_RECON_PLAN, SEC_TXT_HEADER) && sl->st == SEC_RECON_PLAN) {
 
         if (sl->flags.recon_plan.luft == flag.luft) 
-            return sl;  // first recon plan matches flag.luft
+            return sl;   // 1st recon plan matches flag.luft
                 
         if ((sl+1)->st == SEC_RECON_PLAN && (sl+1)->flags.recon_plan.luft == flag.luft) 
-            return sl+1;  // 2nd recon plan matches flag.luft
+            return sl+1; // 2nd recon plan matches flag.luft
     }
     
     return NULL; // no RECON_PLAN matching flag.luft was found in this component
@@ -439,7 +449,7 @@ static Section writer_get_recon_plan_sl (const CompInfo *comp)
 void writer_create_plan (void)
 {  
     // when showing in liftover coordinates, bring the rejects component(s) forward before the primary component(s)
-    if (z_file->z_flags.dual_coords && flag.luft) 
+    if (z_dual_coords) 
         writer_move_liftover_rejects_to_front(); // must be before writer_init_vb_info as components order changes
 
     writer_init_vb_info();
@@ -462,7 +472,7 @@ void writer_create_plan (void)
         if (!tf_ent->plan_len) 
             tf_ent->first_plan_i = (uint32_t)z_file->recon_plan.len;
 
-        // add this txt_header to the plan if needed
+        // add this txt_header to the plan
         if (comp->info.in_plan)
             writer_add_txtheader_plan (comp);
                     
@@ -480,7 +490,7 @@ void writer_create_plan (void)
 
         tf_ent->plan_len = (uint32_t)z_file->recon_plan.len - tf_ent->first_plan_i;
         
-        if (flag.unbind && !comp->liftover_rejects) tf_ent++; // note: if this is a rejects component, we stay on the same txt file one more component 
+        if (flag.unbind && !comp->rejects_coord) tf_ent++; // note: if this is a rejects component, we stay on the same txt file one more component 
     }
 
     // actual number of buffers - compute threads: conc_writing_vbs ; writer thread: conc_writing_vbs (at least 3) ; but no more than num_vbs
@@ -721,7 +731,8 @@ static void writer_start_writing (uint32_t txt_file_i)
     TxtFileInfo *tf = ENT (TxtFileInfo, txt_file_info, txt_file_i);
 
     // copy the portion of the reconstruction plan related to this txt file 
-    buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, tf->first_plan_i, tf->plan_len, 0);
+    if (tf->plan_len)
+        buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, tf->first_plan_i, tf->plan_len, 0);
 
     VBlockP wvb = vb_get_vb ("writer", 0);
     writer_thread = threads_create (writer_main_loop, wvb);

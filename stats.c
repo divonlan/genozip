@@ -98,7 +98,7 @@ static void stats_output_file_metadata (Buffer *buf)
         bufprintf (evb, buf, "Features: Per-line taxonomy ID data\n%s", "");
 
 
-    if (chain_is_loaded || txt_file->dual_coords) 
+    if (chain_is_loaded || txt_file->coords) 
         bufprintf (evb, buf, "Features: Dual-coordinates\n%s", "");
 
 
@@ -352,7 +352,7 @@ void stats_compress (void)
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS));
 
     stats_consolidate_non_ctx (sbl, num_stats, "Other", 16, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
-                               TOPLEVEL, "TOP2BAM", "TOP2FQ", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG",
+                               TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
 
@@ -405,7 +405,7 @@ void stats_read_and_display (void)
     if (!sl) return; // genozip file does not contain stats sections (SEC_STATS was introduced in v 7.0.5)
 
     // read and uncompress the requested stats section
-    zfile_get_global_section (SectionHeader, SEC_STATS, sl + (flag.show_stats==2),
+    zfile_get_global_section (SectionHeader, SEC_STATS, sl - (flag.show_stats==1),
                               flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf, "z_file->stats_buf");
     
     stats_display();

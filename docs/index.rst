@@ -9,10 +9,11 @@ Genozip
    Installing <installing> 
    Capabilities <capabilities>
    Applications <applications> 
-   Manual <manual>
-   Publications & Citing <publications>
    Algorithms <algorithms>
+   Manual <manual>
+   Specifications <specs>
    Source code <source>
+   Publications & Citing <publications>
    License <license>
    Contact <contact>
   

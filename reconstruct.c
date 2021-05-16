@@ -27,8 +27,8 @@ static int64_t reconstruct_from_delta (VBlock *vb,
                                        bool reconstruct) 
 {
     ASSERT (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    ASSERT (base_ctx->flags.store == STORE_INT, "attempting calculate delta from a base of \"%s\", but this context doesn't have STORE_INT",
-            base_ctx->name);
+    ASSERT (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. line_in_vb=%u",
+            my_ctx->name, delta_snip_len, delta_snip, base_ctx->name, base_ctx->name, vb->line_i - vb->first_line);
 
     if (delta_snip_len == 1 && delta_snip[0] == '-')
         my_ctx->last_delta = -2 * base_ctx->last_value.i; // negated previous value
@@ -60,14 +60,14 @@ static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reco
 
     char *snip = &data[start];
     uint32_t snip_len = ctx->next_local - start; 
-    ctx->next_local++; /* skip the tab */ 
+    ctx->next_local++; /* skip the separator */ 
 
     reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len, reconstruct);
 
     return snip_len;
 }
 
-int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char seperator /* 0 if none */, bool reconstruct)
+static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char seperator /* 0 if none */, bool reconstruct)
 {
 #   define GETNUMBER(signedtype) { \
         u ## signedtype unum = NEXTLOCAL (u ## signedtype, ctx); \
@@ -227,7 +227,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 
     case SNIP_OTHER_COPY: 
         base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
-        RECONSTRUCT (ENT (char, vb->txt_data, base_ctx->last_txt), base_ctx->last_txt_len);
+        RECONSTRUCT (last_txtx (vb, base_ctx), base_ctx->last_txt_len);
         new_value = base_ctx->last_value; 
         have_new_value = true;
         break;
@@ -238,7 +238,9 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
 
     case SNIP_SPECIAL:
-        ASSERT (snip_len >= 2, "SNIP_SPECIAL expects snip_len >= 2. ctx=%s", snip_ctx->name);
+        ASSERT (snip_len >= 2, "SNIP_SPECIAL expects snip_len=%u >= 2. ctx=%s vb_i=%u line_i=%u", 
+                snip_len, snip_ctx->name, vb->vblock_i, vb->line_i);
+                
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
 
         ASSERT (special < DTP (num_special), "file requires special handler %u which doesn't exist in this version of genozip - please upgrade to the latest version", special);
@@ -255,6 +257,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     case SNIP_DONT_STORE:
         store_type = STORE_NONE; // override store and fall through
         snip++; snip_len--;
+        // fall through
         
     default: {
         if (reconstruct) RECONSTRUCT (snip, snip_len); // simple reconstruction
@@ -288,9 +291,9 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 
     // update last_value if needed
     if (have_new_value && store_type) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
-        snip_ctx->last_value = new_value;
-
-    snip_ctx->last_line_i = vb->line_i;
+        ctx_set_last_value (vb, snip_ctx, new_value);
+    else
+        ctx_set_encountered_in_line (snip_ctx);
 }
 
 // returns reconstructed length or -1 if snip is missing and item's operator should not be emitted
@@ -310,13 +313,13 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     if (!ctx->dict_id.num) 
         ctx = &vb->contexts[ctx->did_i]; // ctx->did_i is different than did_i if its an alias
 
-    ctx->last_txt = (uint32_t)vb->txt_data.len;
+    ctx->last_txt_index = (uint32_t)vb->txt_data.len;
 
     // case: we have b250 data
     if (ctx->b250.len ||
         (!ctx->b250.len && !ctx->local.len && ctx->dict.len)) {          
         DECLARE_SNIP;
-        uint32_t word_index = LOAD_SNIP(ctx->did_i); // if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
+        WordIndex word_index = LOAD_SNIP(ctx->did_i); // if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
 
         if (!snip) {
             ctx->last_txt_len = 0;
@@ -325,17 +328,12 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 
         reconstruct_one_snip (vb, ctx, word_index, snip, snip_len, reconstruct);        
 
-        // handle chrom and pos to determine whether this line should be grepped-out in case of --regions
+        // for backward compatability with v8-11 that didn't yet have flags.store = STORE_INDEX for CHROM
         if (did_i == CHROM) { // NOTE: CHROM cannot have aliases, because looking up the did_i by dict_id will lead to CHROM, and this code will be executed for a non-CHROM field
-            vb->chrom_node_index = word_index;
+            vb->chrom_node_index = vb->last_index (CHROM) = word_index;
             vb->chrom_name       = snip; // used for reconstruction from external reference
             vb->chrom_name_len   = snip_len;
         }
-
-        // test for exclusion of the line due to --regions
-        if (flag.regions && did_i == DTF(test_regions) && vb->chrom_node_index != WORD_INDEX_NONE &&
-            !regions_is_site_included (vb->chrom_node_index, DTF(pos)!=-1 ? vb->contexts[DTF(pos)].last_value.i : 1))
-            vb->drop_curr_line = "regions";
     }
     
     // case: all data is only in local
@@ -386,7 +384,51 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 
-    ctx->last_txt_len = (uint32_t)vb->txt_data.len - ctx->last_txt;
+    ctx->last_txt_len = (uint32_t)vb->txt_data.len - ctx->last_txt_index;
+    ctx->last_line_i  = vb->line_i; // reconstructed on this line
 
     return (int32_t)ctx->last_txt_len;
 } 
+
+// get reconstructed text without advancing the iterator or changing last_*. context may be already reconstructed or not.
+// Note: txt points into txt_data (past reconstructed or AFTERENT) - caller should copy it elsewhere
+LastValueType reconstruct_peek (VBlock *vb, Context *ctx, 
+                                const char **txt, unsigned *txt_len) // optional in / out
+{
+    // case: already reconstructed 
+    if (ctx->last_line_i == vb->line_i) {
+        if (txt) *txt = last_txtx (vb, ctx);
+        if (txt_len) *txt_len = ctx->last_txt_len;
+        return ctx->last_value;
+    }
+
+    // case: ctx is not reconstructed yet in this last - we reconstruct, but then roll back state
+    char reconstruct_state[reconstruct_state_size(ctx)];
+    memcpy (reconstruct_state, reconstruct_state_start(ctx), reconstruct_state_size(ctx)); // save
+    uint64_t save_txt_data_len = vb->txt_data.len;
+
+    reconstruct_from_ctx (vb, ctx->did_i, 0, true);
+
+    // since we are reconstructing unaccounted for data, make sure we didn't go beyond the end of txt_data (this can happen if we are close to the end
+    // of the VB, and reconstructed more than OVERFLOW_SIZE allocated in piz_reconstruct_one_vb)
+    ASSERT (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow while peeking %s in vb_i=%u: len=%"PRIu64" size=%"PRIu64" last_txt_len=%u", 
+            ctx->name, vb->vblock_i, vb->txt_data.len, vb->txt_data.size, ctx->last_txt_len);
+
+    if (txt) *txt = last_txtx (vb, ctx);
+    if (txt_len) *txt_len = ctx->last_txt_len;
+
+    LastValueType last_value = ctx->last_value;
+
+    memcpy (reconstruct_state_start(ctx), reconstruct_state, reconstruct_state_size(ctx)); // restore
+    vb->txt_data.len = save_txt_data_len;
+
+    return last_value;
+}
+
+LastValueType reconstruct_peek__do (VBlockP vb, DictId dict_id, const char **txt, unsigned *txt_len) 
+{
+    Context *ctx = ctx_get_existing_ctx (vb, dict_id); 
+    ASSPIZ (ctx, "context doesn't exist for dict_id=%s", dis_dict_id (dict_id).s);
+
+    return reconstruct_peek (vb, ctx, txt, txt_len);
+}
