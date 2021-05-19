@@ -4,7 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #if defined __APPLE__ 
-#include "compatibility/mac_gettime.h"
+//#include "compatibility/mac_gettime.h"
 #endif
 
 #include "genozip.h"
@@ -222,7 +222,7 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool
 
     if (dd->max_threads > 1) 
         // wait for thread to complete (possibly it completed already)
-        if (!threads_join (&dd->vbs[dd->next_joined]->compute_thread_id, blocking))
+        if (!threads_join (&dd->vbs[dd->next_joined]->compute_thread_id, blocking ? NULL : dd->vbs[dd->next_joined]))
             return NULL; // only happens if non-blocking
 
     // move VB from "vbs" array to processed_vb
@@ -267,7 +267,7 @@ void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb)
 
         if (release_vb) { 
             // WORKAROUND to bug 343: there is a race condition of unknown cause is flag.no_writer=true (eg --coverage, --count) crashes
-            if (flag.no_writer) usleep (10000); 
+            if (flag.no_writer && !flag_loading_auxiliary) usleep (1000); 
             
             vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
         }
@@ -323,7 +323,7 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
                                     DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
     Dispatcher dispatcher = dispatcher_init (task_name, force_single_thread ? 1 : global_max_threads, 
-                                             previous_vb_i, test_mode, is_last_file, cleanup_after_me, filename, prog, prog_msg);
+                                             previous_vb_i, test_mode, is_last_file, cleanup_after_me, filename, prog, prog_msg ? prog_msg : "0%");
     do {
         VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;

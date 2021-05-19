@@ -297,6 +297,7 @@ static void main_genozip (const char *txt_filename,
                           const char *next_txt_filename, // ignored unless we are of pair_1 in a --pair
                           char *z_filename,
                           unsigned txt_file_i, bool is_last_txt_file,
+                          Coords txt_file_coords,
                           char *exec_name)
 {
     SAVE_FLAGS;
@@ -308,8 +309,10 @@ static void main_genozip (const char *txt_filename,
              "it is not possible to concatenate dual-coordinate files");
 
     // get input file
-    if (!txt_file) // open the file - possibly already open from main_load_reference
+    if (!txt_file) { // open the file - possibly already open from main_load_reference
         txt_file = file_open (txt_filename, READ, TXT_FILE, DT_NONE); 
+        if (txt_file) txt_file->coords = txt_file_coords; // maybe overridden by ##dual_coordinates in the header.
+    }
 
     // skip this file if its size is 0
     RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
@@ -359,7 +362,8 @@ static void main_genozip (const char *txt_filename,
             stats_freeze_txt_len(); // don't count txt_len of rejects
             
             for (flag.rejects_coord = DC_PRIMARY ; flag.rejects_coord <= DC_LUFT ; flag.rejects_coord++)
-                main_genozip (z_file->rejects_file_name[flag.rejects_coord-1], 0, z_file->name, txt_file_i, flag.rejects_coord==DC_LUFT, exec_name);
+                main_genozip (z_file->rejects_file_name[flag.rejects_coord-1], 0, z_file->name, txt_file_i, flag.rejects_coord==DC_LUFT, 
+                              flag.rejects_coord, exec_name);
         }
         
         else if (!z_dual_coords || flag.rejects_coord == DC_LUFT) {
@@ -526,8 +530,13 @@ int main (int argc, char **argv)
         ASSINP (str_get_int_range32 (flag.threads_str, 0, 1, 10000, (int32_t *)&global_max_threads),
                 "invalid argument of --threads: \"%s\". Expecting an integer between 1 and 10000.", flag.threads_str);
 
-    else global_max_threads = (double)arch_get_num_cores() * 1.2; // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
-    
+    else global_max_threads = 
+#if defined _WIN32 || defined __APPLE__
+        (double)arch_get_num_cores() * 0.75; // under-subscribe on Windows / Mac to maintain UI interactivity
+#else
+        (double)arch_get_num_cores() * 1.1;  // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
+#endif
+
     // handle all commands except for ZIP, PIZ or LIST
     if (command == VERSION) { main_print_version();   return 0; }
     if (command == LICENSE) { license_display();      return 0; }
@@ -564,7 +573,7 @@ int main (int argc, char **argv)
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
                                       optind < argc ? argv[optind] : NULL, // file name of next file, if there is one
-                                      flag.out_filename, file_i, !next_input_file || is_last_txt_file, argv[0]); 
+                                      flag.out_filename, file_i, !next_input_file || is_last_txt_file, DC_NONE, argv[0]); 
                         break;
 
             case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); break;           

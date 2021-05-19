@@ -84,7 +84,7 @@ static inline uint32_t txtfile_read_block_plain (VBlock *vb, uint32_t max_bytes)
 
         // Bomb the BOM
         bytes_read -= 3;
-        memcpy (data, data + 3, bytes_read);
+        memmove (data, data + 3, bytes_read);
         txt_file->disk_so_far -= 3;
     }
 #endif

@@ -4,7 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <getopt.h>
-#ifdef __linux__
+#ifndef _WIN32
 #include <sys/types.h>
 #include <signal.h>
 #include <errno.h>
@@ -497,15 +497,17 @@ verify_command:
             case 5   : flag.dump_one_b250_dict_id  = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 6   : flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 7   : flag.dump_section  = optarg  ; break;
-            case 8   : flag.one_vb = atoi (optarg);  break;
+            case 8   : ASSINP0 (str_get_int_range32 (optarg, 0, 1, 10000000, (int32_t*)&flag.one_vb), 
+                                "--one-vb expects a VB number, the first VB being 1"); break;
             case 9   : flags_set_downsample (optarg); break;
             case 10  : flag.show_headers = 1 + sections_st_by_name (optarg); break; // +1 so SEC_NONE maps to 0
             case 12  : flag.debug_memory  = optarg ? atoi (optarg) : 1; break;
             case 13  : flag.show_coverage = !optarg                 ? COV_CHROM 
-                                          : !strcmp (optarg,"all")  ? COV_ALL 
+                                          : !strcmp (optarg, "all") ? COV_ALL 
                                           : !strcmp (optarg, "one") ? COV_ONE 
                                           :                           COV_ALL; break;
-            case 14  : flag.one_component = atoi (optarg);  break;
+            case 14  : ASSINP0 (str_get_int_range32 (optarg, 0, 1, 1000000, (int32_t*)&flag.one_component), 
+                                "--component expects a component number, the first component being 1"); break;
             case 15  : flag.log_filename  = optarg;  break;
             case 16  : flag.show_one_counts = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 17  : sam_set_FLAG_filter (optarg) ; break; // filter by SAM FLAG
@@ -897,7 +899,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     if (flag.to_stdout && !flag.validate && !option_noisy && !flag.no_writer) flag.quiet=true; 
 
     // genocat of dual coords implies sorting unless overridden with --unsorted
-    if (exe_type == EXE_GENOCAT && z_dual_coords && !flag.unsorted && !flag.no_writer) 
+    if (exe_type == EXE_GENOCAT && z_dual_coords && !flag.unsorted && (!flag.no_writer || flag.show_recon_plan)) 
         flag.sort = true;
 
     // cases we skip displaying the txt header (we still read the section for inspection)
@@ -940,7 +942,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          // SAM specific modifiers
          (z_file->data_type == DT_SAM   && (flag.sam_flag_filter || flag.sam_mapq_filter || flag.bases)) || 
          // Dual-coordinate-file modifiers
-         (z_dual_coords   && (flag.show_liftover || flag.no_header || flag.header_one)) || // no_header/header_one will cause us to drop ##primary_only/##luft_only which are actually reconstructed from a VB
+         z_dual_coords || // vcf_lo_piz_TOPLEVEL_cb_filter_line will drop lines of the wrong coordinate
          // general filters 
          flag.kraken_taxid != TAXID_NONE || flag.grep || flag.regions || flag.luft || flag.lines_first >= 0 || flag.tail ||
          // no-writer, but nevertheless modify the txt_data

@@ -731,7 +731,7 @@ static bool file_open_z (File *file)
 
             // make sure file is a regular file (not FIFO, directory etc)
             struct stat sb;
-            int cause=0, stat_errno;
+            int cause=0, stat_errno=0;
             if (stat (file->name, &sb)) {
                 cause = 5; // stat failed
                 stat_errno = errno;
@@ -755,18 +755,22 @@ static bool file_open_z (File *file)
 
                 if (flag.validate == VLD_REPORT_INVALID) flag.validate = VLD_INVALID_FOUND; 
 
-                static char *causes[] = { "file->file is NULL", "file_seek failed", "fread failed", 
-                                          "bad magic", "stat() failed: ", "not a regular file" };
+                const char *cause_str = cause==1 ? strerror (errno)
+                                      : cause==2 ? "file_seek failed"
+                                      : cause==3 ? "fread failed"
+                                      : cause==4 ? "Not a valid genozip file (bad magic)"
+                                      : cause==5 ? strerror (stat_errno)
+                                      : cause==6 ? "Not a regular file"
+                                      :            "no error";
 
                 if (flag.multiple_files) {
 
                     if (flag.validate == VLD_INVALID_FOUND) // outputs even if --quiet
-                        iprintf ("%s is not a valid genozip file: %s%s\n", file_printname (file), 
-                                causes[cause-1], cause==5 ? strerror (stat_errno) : "");
+                        iprintf ("Cannot open %s: %s\n", file_printname (file), cause_str);
+
                     else if (flag.validate == VLD_NONE) {    // silenced by --quiet
                         static int once=0;
-                        WARN ("Skipping %s - it is not a valid genozip file: %s%s%s", file_printname (file), 
-                              causes[cause-1], cause==5 ? strerror (stat_errno) : "",
+                        WARN ("Skipping %s: %s%s", file_printname (file), cause_str,
                               !(once++) ? " (--quiet to silence this message)" : "");
                     }
                     
@@ -776,7 +780,7 @@ static bool file_open_z (File *file)
                     if (flag.validate == VLD_REPORT_VALID)
                         exit (EXIT_INVALID_GENOZIP_FILE); // exit quietly - with a return code indicating invalidity
                     else
-                        ABORTINP ("%s is not a valid genozip file: %s", file_printname (file), causes[cause-1]);
+                        ABORTINP ("Cannot open %s: %s", file_printname (file), cause_str);
                 }
             }
             

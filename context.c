@@ -195,7 +195,7 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool i
         ASSERT (word_index < ctx->word_list.len, 
                 "while parsing vb=%u line=%u: word_index=%u is out of bounds - %s %sdictionary (did=%u) has only %u entries. b250.len=%"PRId64" iterator(after)=%"PRId64,
                 vb->vblock_i, vb->line_i, word_index, ctx->name, is_pair ? "(PAIR) ": " ", 
-                ctx->did_i, (uint32_t)ctx->word_list.len, b250->len, (char*)iterator->next_b250 - (char*)b250->data);
+                ctx->did_i, (uint32_t)ctx->word_list.len, b250->len, (uint64_t)((char*)iterator->next_b250 - (char*)b250->data));
 
         CtxWord *dict_word = ENT (CtxWord, ctx->word_list, word_index);
 
@@ -1011,7 +1011,7 @@ void ctx_free_context (Context *ctx)
     ctx->pair_b250_iter = (SnipIterator){};
     ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
 
-    ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->keep_snip =
+    ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->keep_snip = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_all_the_same =
     ctx->dynamic_size_local = ctx->numeric_only = 0;
     ctx->local_hash_prime = 0;
@@ -1022,8 +1022,10 @@ void ctx_free_context (Context *ctx)
     ctx->merge_num = 0;
     ctx->txt_len = ctx->num_singletons = ctx->num_failed_singletons = 0;
     ctx->rback_b250_len = ctx->rback_local_len = ctx->rback_txt_len = 0;    
-    ctx->rback_num_singletons = 0;
-    
+    ctx->rback_last_txt_index = ctx->rback_last_txt_len = ctx->rback_num_singletons = 0;
+    ctx->rback_last_value.i = 0;
+    ctx->rback_last_delta = 0;
+
     mutex_destroy (ctx->mutex);
 
     ctx->iterator = (SnipIterator){};
@@ -1291,7 +1293,8 @@ void ctx_read_all_dictionaries (void)
                              NULL, PROGRESS_NONE, "Reading dictionaries...", 
                              flag.test, true, true, 
                              z_file->genozip_version == 8, // For v8 files, we read all fragments in the main thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
-                             0, 20000,
+                             0, 
+                             10, // must be short - many dictionaries are just a few bytes
                              ctx_dict_read_one_vb, 
                              ctx_dict_uncompress_one_vb, 
                              NULL);

@@ -268,7 +268,7 @@ batch_basic()
 {
     batch_print_header
 
-    local file, replace
+    local file replace
     for file in ${basics[@]}; do
 
         if [ $file == basic.chain ]; then
@@ -336,7 +336,7 @@ batch_bgzf()
     local sam_gz=${OUTDIR}/bgzf_test.sam.gz
     $genozip ${TESTDIR}/basic.sam -fo $output || exit 1
     $genocat --no-pg $output -fo $sam_gz || exit 1
-    if [ "$(head -c4 $sam_gz | od -x | head -1)" != "0000000 8b1f 0408" ] ; then 
+    if [ "$(head -c4 $sam_gz | od -x | head -1 | awk '{$2=$2};1')" != "0000000 8b1f 0408" ] ; then  # the awk converts the Mac output to be the same as Linux (removing redundant spaces)
         echo $sam_gz is not BGZF-compressed
         exit 1
     fi
@@ -344,7 +344,7 @@ batch_bgzf()
     test_header "sam-> sam.genozip -> bam - see that it is BGZF"
     local bam=${OUTDIR}/bgzf_test.bam
     $genocat --no-pg $output -fo $bam || exit 1
-    if [ "$(head -c4 $bam | od -x | head -1)" != "0000000 8b1f 0408" ] ; then 
+    if [ "$(head -c4 $bam | od -x | head -1 | awk '{$2=$2};1')" != "0000000 8b1f 0408" ] ; then 
         echo $bam is not BGZF-compressed
         exit 1
     fi
@@ -353,7 +353,7 @@ batch_bgzf()
     local sam=${OUTDIR}/bgzf_test.sam
     $genozip $sam_gz -fo $output || exit 1
     $genocat --no-pg $output -fo $sam || exit 1
-    if [ "$(head -c4 $sam | od -x | head -1)" == "0000000 8b1f 0408" ] ; then 
+    if [ "$(head -c4 $sam | od -x | head -1 | awk '{$2=$2};1')" == "0000000 8b1f 0408" ] ; then 
         echo $sam is unexpectedly BGZF-compressed
         exit 1
     fi
@@ -379,7 +379,7 @@ batch_dual_coordinates()
 {
     batch_print_header
 
-    local files=(basic-dual-coord.vcf test.ExAC.vcf.gz test.human2.filtered.snp.vcf test.NA12878.sorted.vcf)
+    local files=(basic-dual-coord.vcf basic-luft.vcf test.ExAC.vcf.gz test.human2.filtered.snp.vcf test.NA12878.sorted.vcf)
     local chain=data/GRCh37_to_GRCh38.chain.genozip
     local file
 
@@ -393,7 +393,12 @@ batch_dual_coordinates()
 
         # compare src to primary (ignoring header and INFO fields)
         echo -n "Step 1: make ${primary}.genozip from $file : " 
-        $genozip -C $chain test/$file -fo ${primary}.genozip || exit 1
+        if [ "$file" == basic-luft.vcf ]; then # this file is already an LVCF
+            $genozip test/$file -fo ${primary}.genozip || exit 1
+        else
+            $genozip -C $chain test/$file -fo ${primary}.genozip || exit 1
+        fi
+
         echo -n "Step 2: make ${primary} from ${primary}.genozip : " 
         $genocat ${primary}.genozip --no-pg -fo ${primary}
 
@@ -641,15 +646,15 @@ batch_backward_compatability()
     done
 }
 
-batch_real_world_subsets()
+batch_real_world_1()
 {
     batch_print_header
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
-    filter_out=nothing
+    local filter_out=nothing
     if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
-        filter_out=.xz
+        local filter_out=.xz
     fi
 
     # without reference
@@ -659,8 +664,19 @@ batch_real_world_subsets()
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v .genozip` )
 
+    for f in $files; do rm -f ${f}.genozip; done
+
     echo "subsets of real world files (without reference)"
     test_standard "-mf $1" " " ${files[*]}
+
+    for f in $files; do rm -f ${f}.genozip; done
+}
+
+batch_real_world_with_ref()
+{
+    batch_print_header
+
+    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
     # with reference
     local files=( test.GRCh38_to_GRCh37.chain test.HG002_NA24385_SRR1767406_IonXpress_020_rawlib_24028.30k.sam \
@@ -671,12 +687,28 @@ batch_real_world_subsets()
     echo "subsets of real world files (with reference)"
     test_standard "-mf $1 -e $hg19" " " ${files[*]}
 
+    for f in $files; do rm -f ${f}.genozip; done
+}
+
+batch_real_world_small_vbs()
+{
+    batch_print_header
+
+    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
+
+    local filter_out=nothing
+    if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
+        local filter_out=.xz
+    fi
+
     # lots of small VBs
     local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* | \
                    grep -v "$filter_out" | grep -v .genozip` )
 
     echo "subsets of real world files (lots of small VBs -B1)"
     test_standard "-mf $1 -B1" " " ${files[*]}
+
+    for f in $files; do rm -f ${f}.genozip; done
 }
 
 batch_multifasta()
@@ -699,7 +731,6 @@ batch_external_cram()
 {
     batch_print_header
     if `command -v samtools >& /dev/null`; then
-        batch_print_header
         test_standard "-E$hg19" " " test.human2.cram   
     fi
 }
@@ -837,6 +868,8 @@ if [ -n "$is_windows" ]; then
     genounzip_exe=./genounzip${debug}.exe
     genocat_exe=./genocat${debug}.exe
     genols_exe=./genols${debug}.exe 
+#    zip_threads="-@3"
+#    piz_threads="-@5"
     path=`pwd| cut -c3-|tr / '\\\\'`\\
 else
     genozip_exe=./genozip${debug}
@@ -846,9 +879,9 @@ else
     path=$PWD/
 fi
 
-genozip="$genozip_exe -@3 --echo $2"
-genounzip="$genounzip_exe --echo -@5 $2"
-genocat="$genocat_exe --echo -@5 $2"
+genozip="$genozip_exe --echo $2 $zip_threads"
+genounzip="$genounzip_exe --echo $2 $piz_threads"
+genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
 basics=(basic.chain basic.bam basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
@@ -874,7 +907,7 @@ cleanup
 # only if doing a full test (starting from 0) - delete genome and hash caches
 sparkling_clean()
 {
-    rm -f ${hg19}.*cache* ${GRCh38}.*cache* 
+    rm -f ${hg19}.*cache* ${GRCh38}.*cache* test/*.genozip test/*rejects*
 }
 
 # unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
@@ -897,15 +930,17 @@ if (( $1 <= 12 )) ; then  batch_backward_compatability ; fi
 if (( $1 <= 13 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
 if (( $1 <= 14 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
 if (( $1 <= 15 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 16 )) ; then  batch_real_world_subsets     ; fi 
-if (( $1 <= 17 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 18 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 19 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 20 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 21 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 22 )) ; then  batch_reference              ; fi
-if (( $1 <= 23 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 24 )) ; then  batch_genols                 ; fi
+if (( $1 <= 16 )) ; then  batch_real_world_1           ; fi 
+if (( $1 <= 17 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 18 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 19 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 20 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 21 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 22 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 23 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 24 )) ; then  batch_reference              ; fi
+if (( $1 <= 25 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 26 )) ; then  batch_genols                 ; fi
 
 printf "\nALL GOOD!\n"
 

@@ -38,7 +38,9 @@ typedef struct Context {
     Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if inst.pair_b250 or inst.pair_local is set)
     
     uint64_t rback_b250_len, rback_local_len, rback_txt_len; // ZIP: data to roll back the last seg
-    uint32_t rback_num_singletons;
+    uint32_t rback_num_singletons, rback_last_txt_index, rback_last_txt_len;
+    LastValueType rback_last_value;
+    int64_t rback_last_delta;
     
     // ----------------------------
     // ZIP only fields
@@ -77,7 +79,9 @@ typedef struct Context {
     bool is_stats_parent;      // other contexts have this context in st_did_i
     bool counts_section;       // output a SEC_COUNTS section for this context
     bool keep_snip;            // it true, ctx_evaluate_snip_seg populates last_snip and last_snip_len
-    TranslatorId luft_trans;   // when this context is an item in a container, this is the translator (used for VCF INFO and FORMAT subfields)
+    bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
+                               //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
+    TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
     
     // ZIP only: hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)

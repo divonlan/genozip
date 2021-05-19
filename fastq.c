@@ -544,13 +544,12 @@ bool fastq_piz_is_paired (void)
     sections_next_sec (&sl, SEC_TXT_HEADER); // first component txt header
     sections_next_sec (&sl, SEC_TXT_HEADER); // second component txt header
     sections_next_sec (&sl, SEC_VB_HEADER);  // first VB of second component txt header
-
+    // edge cases not handled well here ^ 1. VB header not found 2. 2nd component has no VBs, and VB header actually belongs to the 3rd component
+    
     // scan all B250 and Local looking for evidence of pairing
-//    while (sections_next_sec2 (&sl, SEC_B250, SEC_LOCAL, true)) {            
-    while ((++sl)->st == SEC_B250 || sl->st == SEC_LOCAL) {            
-        bool is_paired = zfile_read_section_header (evb, sl->offset, sl->vblock_i, sl->st).ctx.h.flags.ctx.paired;
-        if (is_paired) return (z_file->z_flags.dts_paired = true); // assign and return
-    }
+    while ((++sl)->st == SEC_B250 || sl->st == SEC_LOCAL) 
+        if (sl->flags.ctx.paired) 
+            return (z_file->z_flags.dts_paired = true); // assign and return
    
     return false; // no evidence of pairing
 }

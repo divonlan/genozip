@@ -296,7 +296,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         ctx_set_encountered_in_line (snip_ctx);
 }
 
-// returns reconstructed length or -1 if snip is missing and item's operator should not be emitted
+// returns reconstructed length or -1 if snip is missing and previous separator should be deleted
 int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, 
                                  char sep, // if non-zero, outputs after the reconstruction
                                  bool reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
@@ -323,7 +323,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 
         if (!snip) {
             ctx->last_txt_len = 0;
-            return -1; // WORD_INDEX_MISSING_SF - remove preceding separator
+            return reconstruct ? -1 : 0; // -1 if WORD_INDEX_MISSING_SF - remove preceding separator
         }
 
         reconstruct_one_snip (vb, ctx, word_index, snip, snip_len, reconstruct);        

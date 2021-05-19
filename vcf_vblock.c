@@ -24,7 +24,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->main_refalt = NULL;
     vb->main_ref_len = vb->main_alt_len = 0;
     vb->last_end_line_i = 0;
-    
+
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);
     buf_free (&vb->hapmat_helper_index_buf);
@@ -32,6 +32,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     buf_free (&vb->hapmat_one_array);
     buf_free (&vb->hapmat_column_of_zeros);
     buf_free (&vb->format_mapper_buf);
+    buf_free (&vb->format_contexts);
     buf_free (&vb->info_items);
 }
 
@@ -44,6 +45,7 @@ void vcf_vb_destroy_vb (VBlockVCF *vb)
     buf_destroy (&vb->hapmat_one_array);
     buf_destroy (&vb->hapmat_column_of_zeros);
     buf_destroy (&vb->format_mapper_buf);
+    buf_destroy (&vb->format_contexts);
     buf_destroy (&vb->info_items);
 }
 

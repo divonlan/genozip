@@ -119,7 +119,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 #define GET_NEXT_ITEM_SP(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, GN_FORBIDEN, GN_FORBIDEN, GN_SEP, &field_len, &separator, NULL, #f); \
+    next_field = seg_get_next_item (vb, field_start, &len, GN_FORBIDEN, GN_SEP, GN_SEP, &field_len, &separator, NULL, #f); \
     FIELD (f)
 
 #define SEG_NEXT_ITEM_SP(f)  \
@@ -137,7 +137,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 #define GET_MAYBE_LAST_ITEM_SP(f)  \
     field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_FORBIDEN, GN_SEP, &field_len, &separator, has_13, #f); \
+    next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_SEP, GN_SEP, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
 #define SEG_MAYBE_LAST_ITEM_SP(f)  \

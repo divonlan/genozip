@@ -38,6 +38,7 @@ typedef struct VBlockVCF {
     
     // used for segging INFO
     Buffer info_items;              // Seg: INFO items of the line being segged
+
     const char *main_refalt;        // used by vcf_refalt_check_oref and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
     unsigned main_ref_len, main_alt_len;
 
@@ -51,6 +52,7 @@ typedef struct VBlockVCF {
     
     // dictionaries stuff 
     Buffer format_mapper_buf;       // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
+    Buffer format_contexts;         // ZIP only: an array of MAX_SUBFIELDS * format_mapper_buf.len of ContextP
 
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Context *hapmat_index_ctx; 
@@ -90,10 +92,11 @@ typedef enum {
     LO_ALT_LONG_XSTRAND = 15, // Genozip can only reverse complement an ALT of length 1 
     LO_ALT_LONG_SWITCH  = 16, // Genozip can only switch REF<>ALT for an ALT of length 1
     LO_REF_CHNG_NOT_ALT = 17, // Genozip can only liftover a changed REF if its switched with the ALT
+    LO_ADDED_VARIANT    = 18, // Variant was added to file after it was already lifted over
 
     // these must be in the same order as VCF_TRANSLATORS, starting from VCF2VCF_G
-    LO_INFO             = 18,
-    LO_FORMAT           = 19,
+    LO_INFO             = 19,
+    LO_FORMAT           = 20,
     
     NUM_LO_STATUSES
 } LiftOverStatus;
@@ -114,7 +117,7 @@ extern const char *liftover_status_names[];
     "OK", "OKRefSame", "OkRefAltSwitch", "OKffu4", "OKffu5", "OKffu6", "OKffu7", "OKffu8", \
     "Rejected", "NoChrom", "NoMapping", \
     "RefTooLong", "RefLongChange", "RefLongXstrand", "AltLongXstrand", "AltLongSwitch", "RefChngeNotAlt", \
-    "INFO", "FORMAT" \
+    "AddedVariant", "INFO", "FORMAT" \
 }
 
 // Liftover - header keys
@@ -147,9 +150,10 @@ extern char *vcf_samples_is_included;
 #define MAX_VCF_ID_LEN 100 // including terminating nul
 extern const char *vcf_header_get_VCF_ID_by_dict_id (DictId dict_id, bool must_exist);
 
-// FORMAT stuff
+// Samples stuff
 extern void vcf_format_zip_initialize (void);
-extern void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP samples, uint32_t sample_i, char *cell, unsigned sample_len, bool is_vcf_string, bool needs_luft_validation, bool needs_lift_back_to_primary, unsigned *num_colons, bool *has_13);
+extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
+extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
 
 // INFO/SF stuff
 extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
@@ -178,7 +182,7 @@ extern bool vcf_lo_seg_lift_back_to_primary (VBlockVCFP vb, ContextP ctx, const 
 #define vcf_set_ostatus(ostatus) ctx_set_last_value ((VBlockP)(vb), &(vb)->contexts[VCF_oSTATUS], (int64_t)(ostatus))
 
 // Liftover Piz
-extern void vcf_lo_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (VBlockP vb);
+extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockP vb);
 
 #define ASSVCF(condition, format, ...) do { if (!(condition)) { progress_newline; fprintf (stderr, "Error %s:%u in variant CHROM=%.*s POS=%"PRId64": ",  __FUNCTION__, __LINE__, vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS)); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
 #define ASSVCF0(condition, msg)        do { if (!(condition)) { progress_newline; fprintf (stderr, "Error %s:%u in variant CHROM=%.*s POS=%"PRId64": %s\n",  __FUNCTION__, __LINE__, vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS), (msg)); exit_on_error(true); }} while(0)

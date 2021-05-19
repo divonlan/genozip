@@ -33,7 +33,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
 		  data_types.c bit_array.c progress.c \
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
 		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c writer.c \
-		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_format.c vcf_liftover.c vcf_refalt.c\
+		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c\
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
 		  fasta.c fastq.c gff3_seg.c me23.c phylip.c chain.c kraken.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c \
@@ -461,9 +461,6 @@ endif # Darwin
 test:
 	@cat test.sh | tr -d "\r" | bash -
 
-clean-test.sh-files: 
-	@rm -f test/tmp/* test/*.rejects.*
-
 clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o
@@ -473,11 +470,11 @@ clean-optimized:
 	@echo Cleaning up optimized
 	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
 
-clean: clean-test.sh-files
+clean:
 	@echo Cleaning up
 	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES)
-	@rm -f *.good *.bad *.local *.b250 test/*.good test/*.bad test/*.local test/*.b250
+	@rm -f *.good *.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized clean-test.sh-files git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles
+.PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles
 

@@ -10,7 +10,7 @@
 #include "profiler.h" // for TimeSpecType
 #include "flags.h"
 #if defined __APPLE__ 
-#include "compatibility/mac_gettime.h"
+//#include "compatibility/mac_gettime.h"
 #endif
 
 bool progress_newline_since_update = false; // global: might be not 100% with threads, but that's ok
@@ -59,7 +59,7 @@ char *progress_new_component (const char *new_component_name,
 
     // (re) initialize if new component
     if (!component_name || strcmp (new_component_name, component_name)) {
-        clock_gettime(CLOCK_REALTIME, &component_start_time); 
+        clock_gettime (CLOCK_REALTIME, &component_start_time); 
 
         if (!ever_start_time_initialized) {
             ever_start_time = component_start_time;
@@ -159,7 +159,7 @@ void progress_update_status (char **prefix, const char *status)
     static const char *spaces = "                                                                                ";
 
     if (prefix && *prefix) {
-        iprint0 (*prefix);
+        iprintf ("%s", *prefix);
         FREE (*prefix);
     }
 

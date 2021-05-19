@@ -10,7 +10,7 @@
 #include "libdeflate/libdeflate.h"
 #include <time.h>
 #if defined __APPLE__ 
-#include "compatibility/mac_gettime.h"
+//#include "compatibility/mac_gettime.h"
 #endif
 #include "sam_private.h"
 #include "file.h"
@@ -221,7 +221,7 @@ TXTHEADER_TRANSLATOR (txtheader_bam2sam)
     ASSERT0 (buf_is_alloc (txtheader_buf), "txtheader_buf not allocated");
 
     uint32_t l_text = GET_UINT32 (ENT (char, *txtheader_buf, 4));
-    memcpy (txtheader_buf->data, ENT (char, *txtheader_buf, 8), l_text);
+    memmove (txtheader_buf->data, ENT (char, *txtheader_buf, 8), l_text);
     txtheader_buf->len = l_text;
     
     txtheader_sam_add_PG (txtheader_buf);

@@ -438,10 +438,11 @@ int32_t zfile_read_section_do (File *file,
                                Buffer *data, const char *buf_name, // buffer to append 
                                SectionType expected_sec_type,
                                Section sl,
-                               uint32_t header_size)   // NULL for no seeking
+                               uint32_t header_size,   // NULL for no seeking
+                               const char *func, uint32_t code_line)
 {
-    ASSERT (!sl || expected_sec_type == sl->st, "expected_sec_type=%s but encountered sl->st=%s. vb_i=%u",
-            st_name (expected_sec_type), st_name(sl->st), vb->vblock_i);
+    ASSERT (!sl || expected_sec_type == sl->st, "called from %s:%u: expected_sec_type=%s but encountered sl->st=%s. vb_i=%u",
+            func, code_line, st_name (expected_sec_type), st_name(sl->st), vb->vblock_i);
 
     // skip if this section is not needed according to flags
     if (sl && file == z_file && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) 
@@ -465,8 +466,8 @@ int32_t zfile_read_section_do (File *file,
     SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size, expected_sec_type); // note: header in file can be shorter than header_size if its an earlier version
     uint32_t bytes_read = header_size;
 
-    ASSERT (header, "Failed to read data from file %s while expecting section type %s: %s", 
-            z_name, st_name(expected_sec_type), strerror (errno));
+    ASSERT (header, "called from %s:%u: Failed to read data from file %s while expecting section type %s: %s", 
+            func, code_line, z_name, st_name(expected_sec_type), strerror (errno));
     
     bool is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
 
@@ -494,11 +495,11 @@ int32_t zfile_read_section_do (File *file,
              return header_offset; // in genocat --show-header - we only show headers, nothing else
     }
 
-    ASSERT (is_magical, "corrupt data (magic is wrong) when attempting to read section=%s dict_id=%s of vblock_i=%u component=%u in file %s", 
-            st_name (expected_sec_type), sl ? dis_dict_id (sl->dict_id).s : "(no sl)", vb->vblock_i, z_file->num_txt_components_so_far, z_name);
+    ASSERT (is_magical, "called from %s:%u: corrupt data (magic is wrong) when attempting to read section=%s dict_id=%s of vblock_i=%u component=%u in file %s", 
+            func, code_line, st_name (expected_sec_type), sl ? dis_dict_id (sl->dict_id).s : "(no sl)", vb->vblock_i, z_file->num_txt_components_so_far, z_name);
 
     uint32_t compressed_offset   = BGEN32 (header->compressed_offset);
-    ASSERT (compressed_offset, "header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
+    ASSERT (compressed_offset, "called from %s:%u: header.compressed_offset is 0 when reading section_type=%s", func, code_line, st_name(expected_sec_type));
 
     uint32_t data_compressed_len = BGEN32 (header->data_compressed_len);
     uint32_t data_encrypted_len  = BGEN32 (header->data_encrypted_len);
@@ -511,13 +512,13 @@ int32_t zfile_read_section_do (File *file,
     // check that we received the section type we expect, 
     ASSERT (expected_sec_type == header->section_type || 
             (expected_sec_type == SEC_GENOZIP_HEADER && (SectionType)header->sub_codec == SEC_GENOZIP_HEADER), // in v2-5, the section_type field was located where sub_codec is now
-            "Unexpected section type when reading %s: expecting %s, found %s sl(expecting)=(offset=%s, dict_id=%s)",
-            z_name, st_name(expected_sec_type), st_name(header->section_type), 
+            "called from %s:%u: Unexpected section type when reading %s: expecting %s, found %s sl(expecting)=(offset=%s, dict_id=%s)",
+            func, code_line, z_name, st_name(expected_sec_type), st_name(header->section_type), 
             sl ? str_uint_commas (sl->offset).s : "N/A", sl ? dis_dict_id (sl->dict_id).s : "N/A");
 
     ASSERT (compressed_offset == header_size || expected_sec_type == SEC_GENOZIP_HEADER, // we allow SEC_GENOZIP_HEADER of other sizes, for older versions
-            "invalid header when reading %s - expecting compressed_offset to be %u but found %u. section_type=%s", 
-            z_name, header_size, compressed_offset, st_name(header->section_type));
+            "called from %s:%u: invalid header when reading %s - expecting compressed_offset to be %u but found %u. section_type=%s", 
+            func, code_line, z_name, header_size, compressed_offset, st_name(header->section_type));
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
     buf_alloc_old (vb, data, header_offset + compressed_offset + data_len, 2, "zfile_read_section");
@@ -640,7 +641,7 @@ bool zfile_read_genozip_header (char *created) // optional outs
     uint32_t sizeof_genozip_header = MIN (sizeof (SectionHeaderGenozipHeader),
                                           (uint32_t)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));
 
-    zfile_read_section_do (z_file, evb, 0, &evb->z_data, "genozip_header", SEC_GENOZIP_HEADER, &dummy_sl, sizeof_genozip_header);
+    zfile_read_section_do (z_file, evb, 0, &evb->z_data, "genozip_header", SEC_GENOZIP_HEADER, &dummy_sl, sizeof_genozip_header, __FUNCTION__, __LINE__);
 
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
@@ -977,7 +978,7 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
     vb_header->first_line   = BGEN32 (txt_first_line_i);
 
     if (flag.show_vblocks) 
-        iprintf ("UPDATE_VB_HEADER(id=%u) vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
+        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, z_file->num_txt_components_so_far, txt_first_line_i, BGEN32 (vb_header->num_lines), 
                  BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
                  BGEN32 (vb_header->longest_line_len));

@@ -149,7 +149,7 @@ static bool vcf_header_extract_contigs (const char *line, unsigned line_len, voi
     unsigned key_len = is_contig ? 9 : strlen (HK_LUFT_CONTIG);
     DECLARE_SNIP;
 
-    // parse eg "##contig=<ID=NKLS02001838.1,length=29167>" and "##liftover_contig=<ID=22>"
+    // parse eg "##contig=<ID=NKLS02001838.1,length=29167>" and "##luft_contig=<ID=22>"
     SAFE_NUL (&line[line_len]);
     vcf_header_get_attribute (line, line_len, key_len, "ID=", 3, true, &contig_name, &contig_name_len);
     vcf_header_get_attribute (line, line_len, key_len, "length=", 7, false, &snip, &snip_len);
@@ -174,22 +174,27 @@ done:
 static bool vcf_header_get_dual_coords (const char *line, unsigned line_len, void *unused1, void *unused2, unsigned unused3)
 {
     if (LINEIS (HK_DC_PRIMARY)) {
+        ASSERT (!chain_is_loaded, "--chain cannot be used with %s - it is already a dual-coordinates VCF file - it contains \""HK_DC_PRIMARY"\" in its header", txt_name);
         txt_file->coords = DC_PRIMARY;
         flag.bind = BIND_REJECTS;
         z_file->digest_ctx_bound = z_file->digest_ctx_single; // we already calculated the digest for the header
     }
 
     else if (LINEIS (HK_DC_LUFT)) {
+        ASSERT (!chain_is_loaded, "--chain cannot be used with %s - it is already a dual-coordinates VCF file - it contains \""HK_DC_LUFT"\" in its header", txt_name);
         txt_file->coords = DC_LUFT;
         flag.bind = BIND_REJECTS;
         flag.data_modified = true; // we will be zipping this as a dual-coordinates VCF with default reconstruction as PRIMARY - this turns off digest
-        z_file->digest_ctx_bound = z_file->digest_ctx_single = (DigestContext){};
+        z_file->digest_ctx_bound  = (DigestContext){};
+        z_file->digest_ctx_single = (DigestContext){};
     }
 
     else return false; // continue iterating
 
     // genozip of a dual coordinates file implies --sort, unless overridden with --unsorted
     if (!flag.unsorted) flag.sort = true;
+
+    ASSINP0 (!flag.test, "--test is not supported for dual-coordinates files");
 
     return true; // found - no more iterating
 }
@@ -226,16 +231,34 @@ static void vcf_header_piz_liftover_header (VBlockP txt_header_vb, Buffer *txt_h
     #undef new_txt_header
 }
 
+// squeeze in the liftover rejects from the header, with their label removed, before the existing unconsumed text
+// (data that was read beyond the header) 
+static void vcf_header_move_rejects_to_unconsumed_text (Buffer *rejects)
+{
+    if (rejects->len) {
+        buf_alloc (evb, &txt_file->unconsumed_txt, rejects->len, 0, char, 0, "txt_file->unconsumed_txt");
+        ARRAY (char, unconsumed_txt, txt_file->unconsumed_txt);
+        
+        memmove (&unconsumed_txt[rejects->len], unconsumed_txt, unconsumed_txt_len);
+        memcpy (unconsumed_txt, rejects->data, rejects->len);
+        
+        txt_file->unconsumed_txt.len += rejects->len;
+        txt_file->reject_bytes = rejects->len;
+    }
+
+    buf_free (rejects);
+}
+
 // ZIP of Luft line: update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
 static bool vcf_header_zip_liftback_header_one_line (const char *line, unsigned line_len, 
                                                      void *new_txt_header_, void *rejects_, unsigned unused)
 {
     Buffer *new_txt_header = (Buffer *)new_txt_header_;
     
-    if      (LINEIS (HK_PRIM_ONLY))   buf_add_more (evb, (Buffer *)rejects_, line + strlen (HK_PRIM_ONLY), line_len - strlen (HK_PRIM_ONLY), NULL); // // add rejects to "rejects" buffer
-    else if (LINEIS (HK_PRIM_CONTIG))   SUBST_LABEL (HK_PRIM_CONTIG, "##contig=");
+    if      (LINEIS (HK_PRIM_ONLY))   buf_add_more (evb, (Buffer *)rejects_, line + strlen (HK_PRIM_ONLY), line_len - strlen (HK_PRIM_ONLY), NULL); // add ##primary_only variants to "rejects" buffer
+    else if (LINEIS (HK_PRIM_CONTIG)) SUBST_LABEL (HK_PRIM_CONTIG, "##contig=");
     else if (LINEIS ("##contig="))    SUBST_LABEL ("##contig=", HK_LUFT_CONTIG);
-    else if (LINEIS (HK_PRIM_REF))      SUBST_LABEL (HK_PRIM_REF, "##reference=");
+    else if (LINEIS (HK_PRIM_REF))    SUBST_LABEL (HK_PRIM_REF, "##reference=");
     else if (LINEIS ("##reference=")) SUBST_LABEL ("##reference=", HK_LUFT_REF);
     else if (LINEIS (HK_DC_LUFT))     SUBST_LABEL (HK_DC_LUFT, HK_DC_PRIMARY);
     else                              buf_add_more (evb, new_txt_header, line, line_len, NULL);
@@ -243,8 +266,7 @@ static bool vcf_header_zip_liftback_header_one_line (const char *line, unsigned 
     return false; // continue iterating
 }
 
-// ZIP of Luft file: update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
-// bug 357
+// ZIP of LUFT-coords file: update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
 static void vcf_header_zip_liftback_header (Buffer *txt_header)
 {
     #define new_txt_header evb->codec_bufs[0]
@@ -261,23 +283,34 @@ static void vcf_header_zip_liftback_header (Buffer *txt_header)
     buf_free (txt_header);
     buf_copy (evb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
 
-    // squeeze in the liftover rejects from the header, with their label removed, before the existing unconsumed text
-    // (data that was read beyond the header) 
-    if (rejects.len) {
-        buf_alloc (evb, &txt_file->unconsumed_txt, rejects.len, 0, char, 0, "txt_file->unconsumed_txt");
-        ARRAY (char, unconsumed_txt, txt_file->unconsumed_txt);
-        
-        memmove (&unconsumed_txt[rejects.len], unconsumed_txt, unconsumed_txt_len);
-        memcpy (unconsumed_txt, rejects.data, rejects.len);
-        
-        txt_file->unconsumed_txt.len += rejects.len;
-        txt_file->reject_bytes = rejects.len;
-    } 
+    // add rejects to the beginning of unconsumed_txt
+    vcf_header_move_rejects_to_unconsumed_text (&rejects);
 
     buf_free (&new_txt_header); 
-    buf_free (&rejects);
 
     #undef new_txt_header
+    #undef rejects
+}
+
+static bool vcf_header_zip_get_luft_only_lines_do (const char *line, unsigned line_len, void *rejects_, void *unused1, unsigned unused2)
+{
+    // add ##luft_only variants to "rejects" buffer
+    if (LINEIS (HK_LUFT_ONLY)) buf_add_more (evb, (Buffer *)rejects_, line + strlen (HK_LUFT_ONLY), line_len - strlen (HK_LUFT_ONLY), NULL); 
+    return false; // continue iterating
+}
+
+// ZIP of PRIMARY-coords file: update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
+static void vcf_header_zip_get_luft_only_lines (Buffer *txt_header)
+{
+    #define rejects evb->codec_bufs[1]
+
+    buf_alloc (evb, &rejects, 0, 65536, char, 0, "evb->codec_bufs[1]"); // initial allocation
+
+    txtfile_foreach_line (txt_header, false, vcf_header_zip_get_luft_only_lines_do, &rejects, 0, 0, 0);
+
+    // add rejects to the beginning of unconsumed_txt
+    vcf_header_move_rejects_to_unconsumed_text (&rejects);
+
     #undef rejects
 }
 
@@ -349,9 +382,6 @@ static TranslatorId vcf_header_set_luft_trans (const char *id, unsigned id_len, 
 // If it does exist - verifies that it is recognized by Genozip, and sets ctx->trans_luft accordingly
 static void vcf_header_update_INFO_FORMAT (const char *line, unsigned line_len, bool is_info, Buffer *new_header)
 {
-    static const char *alg_name_by_trans_id[] = VCF_TRANSLATORS_ALG_NAME;
-    static unsigned num_algs = sizeof (alg_name_by_trans_id) / sizeof (alg_name_by_trans_id[0]);
-
     const char *number, *id, *alg;
     unsigned number_len=0, id_len=0, alg_len=0;
     TranslatorId luft_trans;
@@ -363,8 +393,8 @@ static void vcf_header_update_INFO_FORMAT (const char *line, unsigned line_len, 
     // case: liftover algorithm is specified in header, see that Genozip supports it and set context, or error if not 
     if (alg) {
         SAFE_NUL (&alg[alg_len]);
-        for (luft_trans=0; luft_trans < num_algs; luft_trans++)
-            if (!strcmp (alg, alg_name_by_trans_id[luft_trans])) 
+        for (luft_trans=0; luft_trans < NUM_VCF_TRANS; luft_trans++)
+            if (!strcmp (alg, ltrans_props[luft_trans].alg_name)) 
                 goto found;
 
         ABORT ("Unrecongized Liftover value \"%s\". Offending line:\n%.*s", alg, line_len, line);
@@ -380,7 +410,7 @@ static void vcf_header_update_INFO_FORMAT (const char *line, unsigned line_len, 
     else {
         luft_trans = vcf_header_set_luft_trans (id, id_len, is_info, TRANS_ID_UNKNOWN, number, number_len);
 
-        vcf_header_add_line_add_key (new_header, line, line_len, HK_RENDERED_ATTR, alg_name_by_trans_id[luft_trans]);
+        vcf_header_add_line_add_key (new_header, line, line_len, HK_RENDERED_ATTR, ltrans_props[luft_trans].alg_name);
     }
 }
 
@@ -487,9 +517,6 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     // if --chain: scan header for ##FORMAT and ##INFO - for translatable subfields - create contexts, and populate Context.luft_trans
     if (chain_is_loaded) flag.bind = BIND_REJECTS;
 
-    ASSERT (!chain_is_loaded || !txt_file->coords, 
-            "--chain cannot be used with %s - it is already a dual-coordinates VCF file - it contains \""HK_DC"\" in its header", txt_name);
-
     // if we're compressing a txt file with liftover, we prepare the two rejects headers: it consists of two lines:
     // 1. the first "##fileformat" line if one exists in our file 
     // 2. the last "#CHROM" line - needing for zipping the rejects file, but will be removed in reconstruction
@@ -511,6 +538,8 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     // case: Luft file - update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
     if (txt_file->coords == DC_LUFT)
         vcf_header_zip_liftback_header (txt_header);
+    else if (txt_file->coords == DC_PRIMARY) 
+        vcf_header_zip_get_luft_only_lines (txt_header);
 
     // case: --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
     if ((chain_is_loaded || txt_file->coords) && !flag.rejects_coord)

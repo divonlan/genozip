@@ -535,7 +535,7 @@ void ref_load_stored_reference (void)
     dispatcher_fan_out_task ("load_ref", external ? ref_filename     : z_file->basename, 
                              external ? PROGRESS_PERCENT : PROGRESS_NONE, 
                              external ? "Reading reference file" : NULL, 
-                             flag.test, true, true, false, 0, 5000,
+                             flag.test, true, true, false, 0, 100,
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NULL);
@@ -575,8 +575,6 @@ void ref_remove_cache (void)
 bool ref_mmap_cached_reference (void)
 {  
     if (!buf_is_alloc (&ranges)) {  // possibly already loaded from previous file
-        //ASSERT0 (!buf_is_alloc (&ranges), "expecting ranges to be unallocated (this can happen when specifying --reference for a file that doesn't need it)");
-        
         if (!file_exists (ref_get_cache_fn())) return false; // file doesn't exist
 
         ref_initialize_ranges (RT_CACHED); // also does the actual buf_mmap
@@ -615,7 +613,7 @@ void ref_create_cache_join (void)
 {
     if (!ref_creating_cache) return;
 
-    threads_join (&ref_cache_creation_thread_id, true);
+    threads_join (&ref_cache_creation_thread_id, NULL);
     ref_creating_cache = false;
 }
 
@@ -1266,7 +1264,7 @@ static void ref_reverse_compliment_genome_do (VBlock *vb)
 void ref_generate_reverse_complement_genome (void)
 {
     START_TIMER;
-    dispatcher_fan_out_task ("generate_rev_comp_genome", NULL, PROGRESS_NONE, 0, false, true, true, false, 0, 1000,
+    dispatcher_fan_out_task ("generate_rev_comp_genome", NULL, PROGRESS_NONE, 0, false, true, true, false, 0, 10,
                              ref_reverse_compliment_genome_prepare, 
                              ref_reverse_compliment_genome_do, 
                              NULL);

@@ -355,9 +355,9 @@ void stats_compress (void)
                                TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
-
-    ASSERTW (all_txt_size == z_file->txt_data_so_far_bind, "Expecting all_txt_size=%"PRId64" == z_file->txt_data_so_far_bind=%"PRId64,
-             all_txt_size, z_file->txt_data_so_far_bind);
+    
+    ASSERTW (all_txt_size == z_file->txt_data_so_far_bind || flag.make_reference, // all_txt_size=0 in make-ref as there are no contexts
+             "Expecting all_txt_size=%"PRId64" == z_file->txt_data_so_far_bind=%"PRId64, all_txt_size, z_file->txt_data_so_far_bind);
 
     // short form stats from --show-stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation

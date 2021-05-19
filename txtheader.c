@@ -222,7 +222,7 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
         const char *filename = flag.unbind ? txtfile_piz_get_filename (header->txt_filename, flag.unbind, false) 
                                            : flag.out_filename;
         txt_file = file_open (filename, WRITE, TXT_FILE, flag.out_dt != DT_NONE ? flag.out_dt : z_file->data_type);
-        FREE (filename); // file_open copies the names
+        if (flag.unbind) FREE (filename); // file_open copies the names
     }
 
     // initialize if needed - but only once per outputted txt file 
@@ -284,6 +284,14 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
     // now get the text of the txt header itself. note: we decompress even if --no-header, bc we need to inspect
     zfile_uncompress_section (comp_vb, header, &comp_vb->txt_data, "txt_data", 0, SEC_TXT_HEADER);
 
+    // count header-lines (for --lines etc): before data-modifying inspect_txt_header
+    if (writer_is_txtheader_in_plan (component_i)) {
+        if (flag.header_one && z_file->data_type == DT_VCF)
+            txt_file->num_lines += 1;
+        else if (!DTPT (is_binary))
+            txt_file->num_lines += str_count_char (comp_vb->txt_data.data, comp_vb->txt_data.len, '\n'); // number of source-file lines
+    }
+
     if (comp_vb->txt_data.len)
         DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(comp_vb, &comp_vb->txt_data, header->h.flags.txt_header); // ignore return value
 
@@ -297,11 +305,8 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
 
         if (comp_vb->txt_data.len) {
 
-            if (!DTPT (is_binary))
-                txt_file->num_lines += str_count_char (comp_vb->txt_data.data, comp_vb->txt_data.len, '\n');
-
             bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
-                                !flag.data_modified; // no point calculating digest if we know already the file will be different
+                               !flag.data_modified; // no point calculating digest if we know already the file will be different
 
             if (test_digest) digest_update (&txt_file->digest_ctx_bound, &comp_vb->txt_data, "txt_header:digest_ctx_bound");
 

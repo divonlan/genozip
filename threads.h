@@ -9,7 +9,7 @@
 extern void threads_initialize (void);
 
 extern ThreadId threads_create (void (*func)(VBlockP), VBlockP vb);
-extern bool threads_join (ThreadId *thread_id, bool blocking);
+extern bool threads_join (ThreadId *thread_id, VBlockP vb);
 extern void threads_cancel_other_threads (void);
 extern bool threads_am_i_main_thread (void);
 extern void threads_print_call_stack (void);

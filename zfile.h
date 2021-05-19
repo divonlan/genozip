@@ -48,9 +48,9 @@ extern SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset
 extern int32_t zfile_read_section_do (FileP file, VBlockP vb, uint32_t original_vb_i, 
                                       BufferP data /* buffer to append */, const char *buf_name,
                                       SectionType expected_sec_type, 
-                                      Section sl, uint32_t header_size); 
+                                      Section sl, uint32_t header_size, const char *func, uint32_t code_line); 
 #define zfile_read_section(file,vb,original_vb_i,data,buf_name,expected_sec_type,sl) \
-    zfile_read_section_do ((file),(VBlockP)(vb),(original_vb_i),(data),(buf_name),(expected_sec_type),(sl), st_header_size (expected_sec_type))
+    zfile_read_section_do ((file),(VBlockP)(vb),(original_vb_i),(data),(buf_name),(expected_sec_type),(sl), st_header_size (expected_sec_type), __FUNCTION__, __LINE__)
 
 extern void zfile_uncompress_section (VBlockP vb, void *section_header, 
                                       BufferP uncompressed_data, 

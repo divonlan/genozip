@@ -21,12 +21,12 @@ bool vcf_piz_read_one_vb (VBlock *vb, Section sl)
     return true;
 }
 
-// determine whether we should reconstruct this VB in LUFT coordinates
+// determine whether we should reconstruct this VB in LUFT coordinates. this is the is_translation callback defined in TRANSLATIONS
 bool vcf_vb_is_luft (VBlockP vb)
 {
     if (!vb) return false; // txt header translation is handled by vcf_inspect_txt_header_piz, not a header translator
 
-    return flag.luft && (vb->vb_coords & DC_LUFT); // if --luft, translate except if its primary-only
+    return vb->vb_coords == DC_LUFT;
 }
 
 // returns true if section is to be skipped reading / uncompressing
@@ -142,7 +142,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
 
         // case: we are reconstructing with --luft and we reconstructed one VCF line
         if (z_dual_coords) 
-            vcf_lo_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header (vb);
+            vcf_lo_piz_TOPLEVEL_cb_filter_line (vb);
     }
 
     else if (dict_id.num == dict_id_fields[VCF_SAMPLES] && flag.samples) 

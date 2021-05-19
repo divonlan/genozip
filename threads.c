@@ -4,9 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <errno.h>
-#define __USE_GNU // needed for pthread_tryjoin_np on Linux
 #include <pthread.h>
-#undef __USE_GNU
 #include <string.h>
 #include <sys/types.h>
 #ifdef _WIN32
@@ -162,10 +160,10 @@ void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *even
     if (flag.show_threads) {
         if (time_usec)
             iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
-                     task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self(), str_uint_commas (time_usec).s);
+                     task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self(), str_uint_commas (time_usec).s);
         else
             iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
-                     task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self());
+                     task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self());
     }
 
     if (flag.debug_threads) {
@@ -180,10 +178,10 @@ void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *even
 
         if (time_usec)
             bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
-                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self(), str_uint_commas (time_usec).s);
+                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self(), str_uint_commas (time_usec).s);
         else
             bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
-                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread_self());
+                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self());
 
         mutex_unlock (log_mutex);
     }
@@ -262,7 +260,8 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 }
 
 // returns success if joined (which is always the case if blocking)
-bool threads_join (ThreadId *thread_id, bool blocking)
+bool threads_join (ThreadId *thread_id, 
+                   VBlockP vb) // optional: if given, will return false if VB is not ready, if NULL, join will block
 {
     ASSERTMAINTHREAD;
 
@@ -278,19 +277,11 @@ bool threads_join (ThreadId *thread_id, bool blocking)
         last_joining = *thread_id;
     }
 
-    // case: wait for thread to complete (possibly it completed already)
-    if (blocking)
-        pthread_join (ent.pthread, NULL);
-    else {
-#ifdef _WIN32
-        int err = _pthread_tryjoin (ent.pthread, NULL);
-#else
-        int err = pthread_tryjoin_np (ent.pthread, NULL);
-#endif
-        if (err == EBUSY) return false;
-        ASSERT (!err, "Error in pthread_tryjoin_np: pthread=%u thread_id=%u task=%s vb_i=%u: %s", 
-                (unsigned)ent.pthread, *thread_id, ent.task_name, ent.vb_i, strerror (err));
-    }
+    // non-blocking - return false if the VB is not ready yet
+    if (vb && !vb->is_processed) return false;
+
+    // wait for thread to complete (possibly it completed already)
+    pthread_join (ent.pthread, NULL);
     
     threads_log_by_thread_id (*thread_id, &ent, "JOINED");
 

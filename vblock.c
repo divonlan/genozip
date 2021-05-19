@@ -59,7 +59,7 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     threads_log_by_vb (vb, vb->compute_task ? vb->compute_task : func, "RELEASING VB", 0);
 
     if (flag.show_vblocks) 
-        iprintf ("VB_RELEASE(id=%u) vb_i=%d caller=%s\n", vb->id, vb->vblock_i, func);
+        iprintf ("VB_RELEASE(id=%d) vb_i=%d caller=%s\n", vb->id, vb->vblock_i, func);
 
     if (flag.show_time) 
         profiler_add (vb);

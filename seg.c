@@ -53,24 +53,29 @@ void seg_create_rollback_point (Context *ctx)
     ctx->rback_local_len      = ctx->local.len;
     ctx->rback_txt_len        = ctx->txt_len;
     ctx->rback_num_singletons = ctx->num_singletons;
+    ctx->rback_last_value     = ctx->last_value;
+    ctx->rback_last_delta     = ctx->last_delta;
+    ctx->rback_last_txt_index = ctx->last_txt_index;
+    ctx->rback_last_txt_len   = ctx->last_txt_len;
 }
 
-// rolls back b250, local, txt_len and vb->
+// rolls back a context to the rollback point registered in seg_create_rollback_point
 void seg_rollback (VBlockP vb, Context *ctx)
 {
     // if we evaluated this context since the rollback count - undo
-    if (ctx->b250.len > ctx->rback_b250_len) {
-        ASSERT (ctx->b250.len - ctx->rback_b250_len <= 1, "rollback can only happen after zero or one segs: ctx=%s", ctx->name);
-       
-        ctx->b250.len = ctx->rback_b250_len;
-
-        WordIndex node_index = *AFTERENT (WordIndex, ctx->b250);
+    while (ctx->b250.len > ctx->rback_b250_len) {
+        WordIndex node_index = *LASTENT (WordIndex, ctx->b250);
         ctx_decrement_count (vb, ctx, node_index);
+        ctx->b250.len--;
     }
 
     ctx->local.len      = ctx->rback_local_len;
     ctx->txt_len        = ctx->rback_txt_len;
     ctx->num_singletons = ctx->rback_num_singletons;
+    ctx->last_value     = ctx->rback_last_value;
+    ctx->last_delta     = ctx->rback_last_delta;
+    ctx->last_txt_index = ctx->rback_last_txt_index;
+    ctx->last_txt_len   = ctx->rback_last_txt_len;
     ctx->last_line_i    = LAST_LINE_I_INIT; // undo "encountered in line"
 }
 
@@ -258,7 +263,7 @@ PosType seg_pos_field (VBlock *vb,
     base_ctx->no_stons = true;
 
     SegError err = ERR_SEG_NO_ERROR;
-    if (pos_str) {
+    if (pos_str) { // option 1
         if (pos_len == 1 && *pos_str == missing) 
             err = ERR_SEG_NOT_INTEGER; // not an error, just so that we seg this as SNIP_DONT_STORE
         
@@ -280,7 +285,7 @@ PosType seg_pos_field (VBlock *vb,
         }
     }
 
-    else {
+    else { // option 2 
         // check out-of-range for self-delta
         if (snip_did_i == base_did_i && (this_pos < 0 || this_pos > MAX_POS)) {
             err = ERR_SEG_OUT_OF_RANGE;
@@ -301,8 +306,8 @@ PosType seg_pos_field (VBlock *vb,
     // section in every VB just for a single entry in case of a nicely sorted file
     if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value.i) {
 
-        // store the value in store it in local - uint32
-        buf_alloc_old (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, "contexts->local");
+        // store the value in in 32b local
+        buf_alloc (vb, &snip_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
         NEXTENT (uint32_t, snip_ctx->local) = BGEN32 (this_pos);
         snip_ctx->txt_len += add_bytes;
 
@@ -657,7 +662,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
         if (value[i] == sep) con->repeats++;
 
     if (container_ctx->flags.store == STORE_INT) 
-        ctx_set_last_value (vb, container_ctx, 0LL);
+        ctx_set_last_value (vb, container_ctx, (int64_t)0);
 
     for (uint32_t i=0; i < con->repeats; i++) { // value_len will be -1 after last number
 
@@ -849,7 +854,7 @@ static void seg_verify_file_size (VBlock *vb)
         }
         
         ABORT ("Error while verifying reconstructed vb_i=%u size: "
-               "reconstructed_vb_size=%s (calculated by adding up ctx.txt_data after segging) but vb->vb_data_size=%s (calculated when reading data from the file) (diff=%d)", 
+               "reconstructed_vb_size=%s (calculated by adding up ctx.txt_data after segging) but vb->vb_data_size=%s (initialized when reading the file and adjusted for modifications) (diff=%d)", 
                vb->vblock_i, str_uint_commas (reconstructed_vb_size).s, str_uint_commas (vb->vb_data_size).s, 
                (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
     }

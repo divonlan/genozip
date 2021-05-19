@@ -300,11 +300,9 @@ void writer_move_liftover_rejects_to_front (void)
     Section prim = dual; sections_next_sec (&prim, SEC_TXT_HEADER);
     Section luft = prim; sections_next_sec (&luft, SEC_TXT_HEADER);
 
-    Coords rejects_coord_dual = zfile_read_section_header (evb, dual->offset, 0, SEC_TXT_HEADER).txt_header.h.flags.txt_header.rejects_coord;
-    Coords rejects_coord_prim = zfile_read_section_header (evb, prim->offset, 0, SEC_TXT_HEADER).txt_header.h.flags.txt_header.rejects_coord;
-    Coords rejects_coord_luft = zfile_read_section_header (evb, luft->offset, 0, SEC_TXT_HEADER).txt_header.h.flags.txt_header.rejects_coord;
-
-    ASSERT (rejects_coord_dual == DC_NONE && rejects_coord_prim == DC_PRIMARY && rejects_coord_luft == DC_LUFT,
+    ASSERT (dual->flags.txt_header.rejects_coord == DC_NONE && 
+            prim->flags.txt_header.rejects_coord == DC_PRIMARY && 
+            luft->flags.txt_header.rejects_coord == DC_LUFT,
             "File %s is a dual-coordinates file, components have incorrect rejects_coord", z_name);
 
     sections_pull_component_up (NULL, flag.luft ? prim : luft); // when rendering in LUFT, show the ##primary_only in the header, and vice versa
@@ -744,7 +742,7 @@ void writer_finish_writing (bool is_last_txt_file)
     if (flag.no_writer || !txt_file || writer_thread == THREAD_ID_NONE) return;
 
     // wait for thread to complete (possibly it completed already)
-    threads_join (&writer_thread, true); // also sets writer_thread=THREAD_ID_NONE
+    threads_join (&writer_thread, NULL); // also sets writer_thread=THREAD_ID_NONE
     
     // all mutexes destroyed by main thread, that created them (not sure its important)    
     if (is_last_txt_file) {

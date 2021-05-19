@@ -102,7 +102,8 @@ void chain_seg_initialize (VBlock *vb)
     vb->contexts[CHAIN_NAMESRC] .no_stons  =       // (these 2 ^) need b250 node_index for reference
     vb->contexts[CHAIN_TOPLEVEL].no_stons  = 
     vb->contexts[CHAIN_CHAIN]   .no_stons  = 
-    vb->contexts[CHAIN_STRNDSRC].no_stons  = true; // (these 3 ^) keep in b250 so it can be eliminated as all_the_same
+    vb->contexts[CHAIN_SEP]     .no_stons  = 
+    vb->contexts[CHAIN_STRNDSRC].no_stons  = true; // (these 4 ^) keep in b250 so it can be eliminated as all_the_same
 
     vb->contexts[CHAIN_STARTSRC].flags.store = 
     vb->contexts[CHAIN_ENDSRC]  .flags.store = 
@@ -265,6 +266,7 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     // set containing 1 or more alignments of SIZE, DDST, SRC, last alignment in set is only SIZE
     uint32_t num_alignments=0;
     bool is_last_alignment=false;
+    char last_gap_sep = ' ';
     do {
         GET_MAYBE_LAST_ITEM_SP (CHAIN_SIZE);
         chain_seg_size_field (vb, field_start, field_len);
@@ -272,13 +274,23 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
         is_last_alignment = (separator == '\n');
 
         if (!is_last_alignment) {
+            last_gap_sep = separator;
+
             // note: we store both DIFFs in the same context as they are correlated (usually one of them is 0)
+            seg_by_did_i (vb, &separator, 1, CHAIN_SEP, 0); // Chain format may have space or tab as a separator
             { SEG_NEXT_ITEM_SP (CHAIN_GAPS); }
+
+            seg_by_did_i (vb, &separator, 1, CHAIN_SEP, 0); // space or tab
             { SEG_LAST_ITEM_SP (CHAIN_GAPS); }
+        
         }
-        // last line doesn't have DDST and DSRC - delete space seperator
+        // last line doesn't have DDST and DSRC - seg the "standard" separator and then delete it 
+        // (this way we don't ruin the all_the_same of CHAIN_SEP)
         else {
+            seg_by_did_i (vb, &last_gap_sep, 1, CHAIN_SEP, 0); 
             seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_BACKSPACE }), 2, CHAIN_GAPS, 0); // src_gap
+
+            seg_by_did_i (vb, &last_gap_sep, 1, CHAIN_SEP, 0); 
             seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_BACKSPACE }), 2, CHAIN_GAPS, 0); // dst_gap
         }
         SEG_EOL (CHAIN_EOL, false);
@@ -290,13 +302,15 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     // alignment set - IMPORTNAT - if changing fields, update chain_piz_filter
     SmallContainer alignment_set = { 
         .repeats             = num_alignments,
-        .nitems_lo           = 4,
+        .nitems_lo           = 6,
         .keep_empty_item_sep = true, // avoid double-deleting the space - only chain_piz_special_BACKSPACE should delete it, not container_reconstruct_do
         .filter_items        = true,
-        .items               = { { .dict_id = (DictId)dict_id_fields[CHAIN_SIZE], .seperator = {' '} },
-                                 { .dict_id = (DictId)dict_id_fields[CHAIN_GAPS], .seperator = {' '} }, // src_gap
-                                 { .dict_id = (DictId)dict_id_fields[CHAIN_GAPS]                     }, // dst_gap
-                                 { .dict_id = (DictId)dict_id_fields[CHAIN_EOL] }                     }
+        .items               = { { .dict_id = (DictId)dict_id_fields[CHAIN_SIZE] },
+                                 { .dict_id = (DictId)dict_id_fields[CHAIN_SEP]  }, 
+                                 { .dict_id = (DictId)dict_id_fields[CHAIN_GAPS] }, // src_gap
+                                 { .dict_id = (DictId)dict_id_fields[CHAIN_SEP]  }, 
+                                 { .dict_id = (DictId)dict_id_fields[CHAIN_GAPS] }, // dst_gap
+                                 { .dict_id = (DictId)dict_id_fields[CHAIN_EOL]  } }
     };
 
     container_seg_by_ctx (vb, &vb->contexts[CHAIN_SET], (ContainerP)&alignment_set, 0, 0, 0);
@@ -485,11 +499,11 @@ CONTAINER_FILTER_FUNC (chain_piz_filter)
         chain_piz_filter_init_alignment_set (vb);
 
     // save src_gap before reconstructing dst_gap (src_gap was just processed)
-    else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 2) 
+    else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 4) 
         chain_piz_filter_save_src_gap (vb);
 
     // before EOF of each alignment, ingest alignment
-    else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 3) 
+    else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 5) 
         chain_piz_filter_ingest_alignmet (vb);
 
     // before alignment-set second EOL and after alignments - verify that numbers add up, and also set contigs
@@ -720,7 +734,7 @@ static bool chain_get_liftover_coords_do (WordIndex src_contig_index, PosType sr
 }
 
 bool chain_get_liftover_coords (WordIndex src_contig_index, PosType src_1pos, 
-                                          WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
+                                WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
 {
     return chain_get_liftover_coords_do (src_contig_index, src_1pos, 0, chain.len-1, dst_contig_index, dst_1pos, xstrand, aln_i);
 }

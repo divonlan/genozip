@@ -318,7 +318,7 @@ typedef struct File {
     int64_t txt_data_so_far_bind_0;    //      modifications due to --chain/--optimize/Luft                                   
     int64_t txt_disk_so_far_bind;      // z_file & ZIP only: compressed (with txt_file.codec - eg bgzf) txt data represented in the GENOZIP data written so far for all bound files
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
-                                       // txt_file: number of lines (read so far) in single txt file
+                                       // txt_file: number of lines, in source file terms, (read so far) in single txt file
 
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
     DigestContext digest_ctx_bound;    // md5 context of txt file. in bound mode - of the resulting bound txt file

@@ -92,6 +92,7 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
 // ZIP and PIZ: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
 void digest_one_vb (VBlock *vb)
 {
+    #define WAIT_TIME_USEC 1000
     #define DIGEST_TIMEOUT (30*60) // 30 min
 
     // wait for our turn
@@ -102,12 +103,12 @@ void digest_one_vb (VBlock *vb)
         
         if (vb_digest_last == vb->vblock_i - 1) break; // its our turn now
 
-        // not our turn, wait 10ms and try again
+        // not our turn, wait 1ms and try again
         mutex_unlock (vb_digest_mutex);
-        usleep (10000);
+        usleep (WAIT_TIME_USEC);
 
         // timeout after approx 30 seconds
-        ASSERT (i < DIGEST_TIMEOUT*100, "Timeout (%u sec) while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", 
+        ASSERT (i < DIGEST_TIMEOUT*(1000000/WAIT_TIME_USEC), "Timeout (%u sec) while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", 
                 DIGEST_TIMEOUT, vb->vblock_i, vb_digest_last);
     }
 
@@ -160,7 +161,7 @@ void digest_one_vb (VBlock *vb)
 
 DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode)
 {
-    DigestDisplay dis;
+    DigestDisplay dis = {};
 
     const uint8_t *b = digest.bytes; 
     

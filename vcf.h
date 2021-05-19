@@ -65,7 +65,7 @@ extern void vcf_samples_add  (const char *samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_INFO_SVLEN, \
                       vcf_piz_special_FORMAT_DS, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, vcf_piz_special_FORMAT_F2R1,  \
-                      vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPY_POS }
+                      vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS }
 SPECIAL (VCF, 0,  main_REFALT,  vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,       vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2,  AC,           vcf_piz_special_INFO_AC);
@@ -77,7 +77,7 @@ SPECIAL (VCF, 7,  F2R1,         vcf_piz_special_FORMAT_F2R1);  // added v12
 SPECIAL (VCF, 8,  LIFT_REF,     vcf_piz_special_LIFT_REF);     // added v12
 SPECIAL (VCF, 9,  COPYSTAT,     vcf_piz_special_COPYSTAT);     // added v12
 SPECIAL (VCF, 10, other_REFALT, vcf_piz_special_other_REFALT); // added v12
-SPECIAL (VCF, 11, COPY_POS,     vcf_piz_special_COPY_POS);     // added v12
+SPECIAL (VCF, 11, COPYPOS,     vcf_piz_special_COPYPOS);     // added v12
 #define NUM_VCF_SPECIAL 12
 
 // Translators for Luft (=secondary coordinates)
@@ -88,13 +88,35 @@ TRANSLATOR (VCF, VCF,   4, A_AN,   vcf_piz_luft_A_AN)
 TRANSLATOR (VCF, VCF,   5, A_1,    vcf_piz_luft_A_1)
 TRANSLATOR (VCF, VCF,   6, GT,     vcf_piz_luft_GT)      
 TRANSLATOR (VCF, VCF,   7, END,    vcf_piz_luft_END)      
+TRANSLATOR (VCF, VCF,   8, XREV,   vcf_piz_luft_XREV)      
 
-#define NUM_VCF_TRANS   8 // including "none"
+#define NUM_VCF_TRANS   9 // including "none"
 #define VCF_TRANSLATORS { NULL /* none */, vcf_piz_luft_G, vcf_piz_luft_R, vcf_piz_luft_R2, vcf_piz_luft_A_AN, \
-                          vcf_piz_luft_A_1, vcf_piz_luft_GT, vcf_piz_luft_END }
+                          vcf_piz_luft_A_1, vcf_piz_luft_GT, vcf_piz_luft_END, vcf_piz_luft_XREV }
+
+typedef struct {
+    const char *alg_name;
+    enum { TW_NEVER, TW_ALWAYS, TW_REF_ALT_SWITCH, TW_XSTRAND } upon;
+} LuftTransLateProp;
 
 // names of INFO / FORMAT algorithms, goes into VCF header's ##INFO / ##FORMAT "RenderAlg" attribute
-#define VCF_TRANSLATORS_ALG_NAME {"NONE", "G", "R", "R2", "A_AN", "A_1", "GT", "END"}
+                             /* Algorithm   When-triggered */
+#define LUFT_TRANS_PROPS { { "NONE",      TW_NEVER          },   /* never translate */\
+                           { "G",         TW_REF_ALT_SWITCH },   /* reshuffle a  'G' vector (one element per genotype) if REF<>ALT changed */\
+                           { "R",         TW_REF_ALT_SWITCH },   /* reshuffle an 'R' vector (one element per ref/alt allele) if REF<>ALT changed */\
+                           { "R2",        TW_REF_ALT_SWITCH },   /* reshuffle a vector with 2 elements per ref/alt allele, if REF<>ALT changed */\
+                           { "A_AN",      TW_REF_ALT_SWITCH },   /* recalculate an 'A' vector (one element per ALT allele) if REF<>ALT changed, who's elements, including a missing element for REF, add up to AN (example: AC). */ \
+                           { "A_1",       TW_REF_ALT_SWITCH },   /* recalculate an 'A' vector (one element per ALT allele) if REF<>ALT changed, who's elements, including a missing element for REF, add up to 1 (example: AF). */ \
+                           { "GT",        TW_REF_ALT_SWITCH },   /* recalculate the allele numbers FORMAT/GT if REF<>ALT changed */ \
+                           { "END",       TW_ALWAYS         },   /* recalculate INFO/END */\
+                           { "XREV",      TW_XSTRAND        } }  /* reverse the elements of a vector if XSTRAND. Example: INFO/BaseCounts */ 
+                           
+extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
+
+#define needs_translation(ctx)  (z_dual_coords && (ctx)->luft_trans && \
+    ((ltrans_props[(ctx)->luft_trans].upon == TW_REF_ALT_SWITCH && last_ostatus == LO_OK_REF_ALT_SWTCH) || \
+     (ltrans_props[(ctx)->luft_trans].upon == TW_ALWAYS         && LO_IS_OK (last_ostatus))             || \
+     (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *vb->contexts[VCF_oXSTRAND].last_snip == 'X')))
 
 #define VCF_DICT_ID_ALIASES \
     /*         alias                           maps to this ctx          */  \

@@ -150,6 +150,10 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
     // for containers, new_value is the some of all its items, all repeats last_value (either int or float)
     LastValueType new_value = {};
 
+    if (flag.show_containers) // show container reconstruction 
+        iprintf ("VB=%u Container: %s repeats=%u items=%u\n", 
+                 vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con));
+
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip
@@ -279,11 +283,11 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
             // filter by --lines
             if (flag.lines_first >= 0) {
-                int64_t abs_line_i = (int64_t)vb->first_line + (int64_t)rep_i - 1LL; // 0-based (note: can't use vb->line_i as it is textual lines rather than reps)
-                if (abs_line_i < flag.lines_first) 
+                int64_t recon_line_i = vb->first_line + (int64_t)rep_i - 1LL; // 0-based (note: can't use vb->line_i as it is textual lines rather than reps)
+                if (recon_line_i < flag.lines_first) 
                     vb->drop_curr_line = "lines";
 
-                else if (abs_line_i > flag.lines_last) {
+                else if (recon_line_i > flag.lines_last) {
                     vb->drop_curr_line = "lines";
                     vb->txt_data.len = vb->line_start;
                     
@@ -309,7 +313,8 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             }
 
             if (vb->drop_curr_line) {
-                ASSERT0 (flag.maybe_vb_modified_by_reconstructor, "Lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code.");
+                ASSERT (flag.maybe_vb_modified_by_reconstructor, "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code. vb_i=%u line_i=%u", 
+                        vb->drop_curr_line, vb->vblock_i, vb->line_i);
 
                 vb->txt_data.len = vb->line_start;
             }

@@ -69,7 +69,7 @@ void sections_list_concat (VBlock *vb)
 }
 
 // section iterator. returns true if a section of this type was found.
-bool sections_next_sec2 (Section*sl_ent,   // optional in/out. if NULL - search entire list
+bool sections_next_sec2 (Section *sl_ent,   // optional in/out. if NULL - search entire list
                          SectionType st1, SectionType st2) // check only next section, not entire remaining list
 {
     Section sl = sl_ent ? *sl_ent : NULL; 
@@ -90,7 +90,7 @@ bool sections_next_sec2 (Section*sl_ent,   // optional in/out. if NULL - search 
 }
 
 // section iterator. returns true if a section of this type was found.
-bool sections_prev_sec2 (Section*sl_ent,   // optional in/out. if NULL - search entire list
+bool sections_prev_sec2 (Section *sl_ent,   // optional in/out. if NULL - search entire list
                          SectionType st1, SectionType st2)
 {
     Section sl = sl_ent ? *sl_ent : NULL; 
@@ -322,7 +322,7 @@ Section sections_pull_vb_up (uint32_t vb_i, Section sl)
     memcpy (temp, vb_header_sl, vb_sections_size);
 
     // push down all sections after sl and before vb_header_sl
-    memcpy ((SectionEntModifiable *)new_vb_sl + vb_sections_len, new_vb_sl, (vb_header_sl - new_vb_sl) * sizeof (SectionEnt));
+    memmove ((SectionEntModifiable *)new_vb_sl + vb_sections_len, new_vb_sl, (vb_header_sl - new_vb_sl) * sizeof (SectionEnt));
 
     // copy our vb to its requested place at sl+1
     memcpy ((SectionEntModifiable *)new_vb_sl, temp, vb_sections_size);
@@ -349,7 +349,7 @@ void sections_pull_component_up (Section txtfile_sl_after_me, // destination - a
     
     // swap
     memcpy (temp, txtfile_sl_move_me, vb_sections_size); // moving component moves to temp
-    memcpy ((SectionEntModifiable *)dst_sl + vb_sections_len, dst_sl, (txtfile_sl_move_me - dst_sl) * sizeof (SectionEnt)); // push down all sections after dst_sl, making room for moving component
+    memmove ((SectionEntModifiable *)dst_sl + vb_sections_len, dst_sl, (txtfile_sl_move_me - dst_sl) * sizeof (SectionEnt)); // push down all sections after dst_sl, making room for moving component
     memcpy ((SectionEntModifiable *)dst_sl, temp, vb_sections_size); // moving component moves to dst
 
     FREE (temp);

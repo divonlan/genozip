@@ -42,7 +42,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     /* tracking lines */\
     Buffer lines;              /* ZIP: An array of *DataLine* - the lines in this VB */\
                                /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is AFTERENT(txt_data). */\
-    uint32_t first_line;       /* PIZ: line number in txt file (counting from 1), of this variant block */\
+    uint16_t first_line;       /* PIZ: line number in source txt file (counting from 1), of this variant block */\
+                               /* ZIP: used for optimize_DESC in FASTQ */ \
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
     \
     /* tracking execution */\

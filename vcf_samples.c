@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   vcf_format.c
+//   vcf_samples.c
 //   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
@@ -188,8 +188,26 @@ done:
 // FORMAT/GT
 // ---------
 
+// complete haplotypes of lines that don't have GT, if any line in the vblock does have GT.
+// In this case, the haplotype matrix must include the lines without GT too
+void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb)
+{
+    for (vb->line_i=0; vb->line_i < (uint32_t)vb->lines.len; vb->line_i++) {
+
+        if (vb->ht_matrix_ctx && !DATA_LINE (vb->line_i)->has_haplotype_data) {
+            char *ht_data = ENT (char, vb->ht_matrix_ctx->local, vb->line_i * vb->ht_per_line);
+            memset (ht_data, '*', vb->ht_per_line);
+
+            // NOTE: we DONT set dl->has_haplotype_data to true bc downstream we still
+            // count this row as having no GT field when analyzing gt data
+        }
+    }
+
+    vb->ht_matrix_ctx->local.len = vb->lines.len * vb->ht_per_line;
+}
+
 // increase ploidy of the previous lines, if higher ploidy was encountered
-static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigned sample_i, uint32_t max_new_size)
+static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigned sample_i, uint32_t max_new_size)
 {
     // protect against highly unlikely case that we don't have enough consumed txt data to store increased-ploidy ht data 
     ASSVCF (new_ploidy * vb->line_i * vcf_num_samples <= max_new_size, 
@@ -240,7 +258,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     // we have to increase ploidy of all the haplotypes read in in this VB so far. This can happen for example in 
     // the X chromosome if initial samples are male with ploidy=1 and then a female sample with ploidy=2
     if (vb->ploidy && gt.repeats > vb->ploidy) 
-        vcf_seg_increase_ploidy (vb, gt.repeats, sample_i, ENTNUM (vb->txt_data, cell));
+        vcf_seg_FORMAT_GT_increase_ploidy (vb, gt.repeats, sample_i, ENTNUM (vb->txt_data, cell));
 
     if (!vb->ploidy) {
         vb->ploidy = gt.repeats; // very first sample in the vb
@@ -487,7 +505,65 @@ TRANSLATOR_FUNC (vcf_piz_luft_R)  { return vcf_piz_luft_switch_first_last (vb, c
 TRANSLATOR_FUNC (vcf_piz_luft_R2) { return vcf_piz_luft_switch_first_last (vb, ctx, recon, recon_len, 4, '.', validate_only); }
 TRANSLATOR_FUNC (vcf_piz_luft_G)  { return vcf_piz_luft_switch_first_last (vb, ctx, recon, recon_len, 3, 'G', validate_only); }
 
-//-----------
+//------------------------------------------------------------------------
+// Validate that ALL subfields in ALL samples can luft-translate as needed
+//------------------------------------------------------------------------
+
+// if any context fails luft-translation, returns that context, or if all is good, returns NULL
+static inline Context *vcf_seg_validate_luft_trans_one_sample (VBlockVCF *vb, ContextP *ctxs, uint32_t num_items, uint32_t sample_i,
+                                                               char *sample, unsigned sample_len)
+{
+    char *items[num_items]; unsigned item_lens[num_items];
+    ASSVCF ((num_items = str_split (sample, sample_len, num_items, ':', (const char **)items, item_lens, false, NULL)), // possibly less than declared
+            "Invalid sample_i=%u: \"%.*s\"", sample_i, sample_len, sample);
+
+    for (unsigned i=0; i < num_items; i++) 
+        if (needs_translation (ctxs[i]) && item_lens[i]) {
+            if ((vb->line_coords == DC_LUFT && !vcf_lo_seg_lift_back_to_primary (vb, ctxs[i], items[i], item_lens[i], NULL, NULL)) ||
+                (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans]((VBlockP)vb, ctxs[i], items[i], item_lens[i], true))))
+                return ctxs[i];  // failed translation
+        }
+
+    return NULL; // all good
+}
+
+// If ALL subfields in ALL samples can luft-translate as required: 1.sets ctx->line_is_luft_trans for all contexts 2.lifted-back if this is a LUFT lne
+// if NOT: ctx->line_is_luft_trans=false for all contexts, line is rejects (LO_FORMAT), and keeps samples in their original LUFT or PRIMARY coordinates.
+static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCF *vb, uint32_t num_items, ContextP *ctxs, 
+                                                            int32_t len, char *samples_start,
+                                                            const char *backup_luft_samples, uint32_t backup_luft_samples_len)
+{
+    const char *field_start, *next_field = samples_start;
+    unsigned field_len=0;
+
+    // initialize optimistically. we will roll back and set to false if ANY subfield in ANY sample fails to translate, and re-seg all samples
+    for (unsigned sf_i=0; sf_i < num_items; sf_i++)
+        ctxs[sf_i]->line_is_luft_trans = needs_translation (ctxs[sf_i]); 
+
+    // 0 or more samples
+    unsigned sample_i=1;
+    for (char separator=0 ; separator != '\n'; sample_i++) {
+
+        field_start = next_field;
+        next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, NULL, "sample-subfield");
+        ASSVCF (field_len, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", sample_i);
+
+        Context *failed_ctx = vcf_seg_validate_luft_trans_one_sample (vb, ctxs, num_items, sample_i, (char *)field_start, field_len);
+        if (failed_ctx) { // some context doesn't luft-translate as required
+            vcf_lo_seg_rollback_and_reject (vb, LO_FORMAT, failed_ctx); // rollback liftover
+
+            // make all contexts untranslateable in this line
+            for (unsigned i=0; i < num_items; i++)  // iterate on the order as in the line
+                ctxs[i]->line_is_luft_trans = false;
+
+            // if this is an untranslatable LUFT-only line, recover the original LUFT-coordinates samples
+            if (vb->line_coords == DC_LUFT) 
+                memcpy (samples_start, backup_luft_samples, backup_luft_samples_len);
+        }
+    }
+}
+
+// ----------
 // One sample
 // ----------
 
@@ -501,25 +577,23 @@ static inline unsigned seg_snip_len_tnc (const char *snip, bool *has_13)
     return s - snip - *has_13;
 }
 
-void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP samples, uint32_t sample_i,
-                         char *cell,           // beginning of sample, also beginning of first "cell" (subfield)
-                         unsigned sample_len,  // not including the \t or \n 
-                         bool is_vcf_string,
-                         bool needs_luft_validation,
-                         bool needs_lift_back_to_primary, 
-                         unsigned *num_colons,
-                         bool *has_13)
+// if any context fails luft-translation, returns that context, or if all is good, returns NULL
+static inline void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContextP *ctxs, ContainerP samples, uint32_t sample_i,
+                                       char *cell,           // beginning of sample, also beginning of first "cell" (subfield)
+                                       unsigned sample_len,  // not including the \t or \n 
+                                       unsigned *num_colons,
+                                       bool *has_13)
 {
     Context *other_ctx;
     bool end_of_sample = !sample_len;
-
     uint32_t num_items = con_nitems (*samples);
+
     for (unsigned sf=0; sf < num_items; sf++) { // iterate on the order as in the line
 
         // move next to the beginning of the subfield data, if there is any
         unsigned cell_len = end_of_sample ? 0 : seg_snip_len_tnc (cell, has_13);
         DictId dict_id = samples->items[sf].dict_id;
-        Context *ctx = ctx_get_ctx (vb, dict_id);
+        Context *ctx = ctxs[sf];
 
         WordIndex node_index;
         unsigned opt_snip_len = 0;
@@ -529,25 +603,7 @@ void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP samples, 
             node_index = seg_by_ctx (vb, opt_snip, opt_snip_len, ctx, opt_snip_len); \
             vb->vb_data_size -= (int)cell_len - (int)opt_snip_len; \
         } while (0)
-
-        // lift-back the value, if we're segging a Luft file. Translate in place - length MUST NOT be changed by FORMAT translators
-        if (needs_lift_back_to_primary && ctx->luft_trans && cell_len) 
-            if (!vcf_lo_seg_lift_back_to_primary (vb, ctx, cell, cell_len, NULL, NULL)) {
-                bool luft_only_line = true;
-                needs_lift_back_to_primary = false; // luft-only line - affects this and subsequent subfields
-            }
-            
-        // validate that primary value (as received or lifted-back) can be luft-translated and assign the luft-translator 
-        // note: looks at snips before optimization, we're counting on the optimization not changing the validation outcome
-        if (needs_luft_validation && ctx->luft_trans && cell_len) {
-            if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (opt_snip_len ? opt_snip : cell), (opt_snip_len ? opt_snip_len : cell_len), true))
-                samples->items[sf].translator = ctx->luft_trans;
-            else {
-                vcf_lo_seg_rollback_and_reject (vb, LO_FORMAT, ctx);
-                needs_luft_validation = false; // primary-only line - affects subsequent subfields
-            }
-        }
-
+        
         // two cases of cell_len=2:  
         // node_index is WORD_INDEX_MISSING_SF if its a premature end of sample ; WORD_INDEX_EMPTY_SF if an empty subfield
         if (!cell || !cell_len)
@@ -639,3 +695,70 @@ void vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContainerP samples, 
 
     ASSVCF (end_of_sample, "Sample %u has more subfields than specified in the FORMAT field (%u)", sample_i+1, num_items);
 }
+
+//------------
+// All samples
+//------------
+
+const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13,
+                             const char *backup_luft_samples, uint32_t backup_luft_samples_len)
+{
+    // Container for samples - we have:
+    // - repeats as the number of samples in the line (<= vcf_num_samples)
+    // - num_items as the number of FORMAT subfields (inc. GT)
+
+    Container samples = *ENT (Container, vb->format_mapper_buf, dl->format_node_i); // make a copy of the template
+    ContextP *ctxs = ENT (ContextP, vb->format_contexts, dl->format_node_i * MAX_SUBFIELDS);
+    uint32_t num_items = con_nitems (samples);
+
+    // check that all subfields in all samples can be luft-translated as required, or make this a LUFT-only / PRIMARY-only line.
+    // Also, if the data is in LUFT coordinates and is indeed translatable, then this lifts-back the samples to PRIMARY coordinates
+    if (z_dual_coords && LO_IS_OK (last_ostatus))
+        vcf_seg_validate_luft_trans_all_samples (vb, num_items, ctxs, *len, next_field, backup_luft_samples, backup_luft_samples_len);
+
+    const char *field_start;
+    unsigned field_len=0, num_colons=0;
+
+    // 0 or more samples
+    for (char separator=0 ; separator != '\n'; samples.repeats++) {
+
+        field_start = next_field;
+        next_field = (char *)seg_get_next_item (vb, field_start, len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, "sample-subfield");
+
+        ASSVCF (field_len, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", 
+                samples.repeats+1);
+
+        vcf_seg_one_sample (vb, dl, ctxs, &samples, samples.repeats, (char *)field_start, field_len, &num_colons, has_13);
+
+        ASSVCF (samples.repeats < vcf_num_samples || separator == '\n',
+                "invalid VCF file - expecting a newline after the last sample (sample #%u)", vcf_num_samples);
+    }
+
+    ASSVCF (samples.repeats <= vcf_num_samples, "according the VCF header, there should be %u sample%s per line, but this line has %u samples - that's too many",
+            vcf_num_samples, vcf_num_samples==1 ? "" : "s", samples.repeats);
+
+    // in some real-world files I encountered have too-short lines due to human errors. we pad them
+    if (samples.repeats < vcf_num_samples) {
+        WARN_ONCE ("FYI: the number of samples in variant CHROM=%.*s POS=%"PRId64" is %u, different than the VCF column header line which has %u samples",
+                   vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS), samples.repeats, vcf_num_samples);
+
+        if (dl->has_haplotype_data) {
+            char *ht_data = ENT (char, vb->ht_matrix_ctx->local, vb->line_i * vb->ploidy * vcf_num_samples + vb->ploidy * samples.repeats);
+            unsigned num_missing = vb->ploidy * (vcf_num_samples - samples.repeats); 
+            memset (ht_data, '*', num_missing);
+        }
+    }
+    
+    // assign all translators. note: we either have translators for all translatable items, or none at all.
+    for (uint32_t i=0; i < num_items; i++)
+        if (ctxs[i]->line_is_luft_trans)
+            samples.items[i].translator = ctxs[i]->luft_trans;
+
+    container_seg_by_ctx (vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
+
+    if (vb->ht_matrix_ctx)
+        vb->ht_matrix_ctx->local.len = (vb->line_i+1) * vb->ht_per_line;
+ 
+    return next_field;
+}
+

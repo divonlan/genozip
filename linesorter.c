@@ -71,15 +71,17 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
         PosType pos = dl->pos[is_luft];
         WordIndex chrom_word_index = node_word_index (vb, chrom_did_i, dl->chrom_index[is_luft]);
 
-        // special case (eg GVCF) - this line is exactly one position after previous line - just add to previous record
         if (chrom_word_index == WORD_INDEX_NONE) {
-            // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_drop_line_if_bad_oSTATUS_or_no_header if not sorted)
+            // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_filter_line if not sorted)
         }
+
+        // special case (eg GVCF) - this line is exactly one position after previous line - just add to previous record
         else if (last_pos >= 1 && chrom_word_index == last_chrom_word_index && pos == last_pos+1) {
             LineInfo *last = LASTENT (LineInfo, txt_file->line_info[is_luft]);
             last->end_pos  = pos;
             last->num_lines++; 
         }
+
         else
             NEXTENT (LineInfo, txt_file->line_info[is_luft]) = (LineInfo){
                 .vblock_i   = vb->vblock_i,

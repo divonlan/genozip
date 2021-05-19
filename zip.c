@@ -162,19 +162,22 @@ static void zip_dynamically_set_max_memory (void)
                          (unsigned)(flag.vblock_memory >> 20), vb->num_contexts, vcf_header_get_num_samples());
 
             // on Windows and Mac - which tend to have less memory in typical configurations, warn if we need a lot
-#if defined _WIN32 || defined APPLE
-            uint64_t concurrent_vbs = 1 + txt_file->disk_size ? MIN (1+ txt_file->disk_size / flag.vblock_memory, global_max_threads)
-                                                              : global_max_threads;
+            #if defined _WIN32 || defined APPLE
+                flag.vblock_memory = MIN (flag.vblock_memory, 32 << 20); // limit to 32MB per VB unless users says otherwise to protect interactivity 
 
-            ASSERTW (flag.vblock_memory * concurrent_vbs < MEMORY_WARNING_THREASHOLD,
-                     "\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
-                     "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
-                     "To reduce RAM consumption, you may use:\n"
-                     "   --threads to set the number of threads (affects speed)\n"
-                     "   --vblock to set the amount of input data (in MB) a thread processes (affects compression ratio)\n"
-                     "   --quiet to silence this warning",
-                     global_max_threads, (uint32_t)(flag.vblock_memory >> 20));
-#endif
+                uint64_t concurrent_vbs = 1 + txt_file->disk_size ? MIN (1+ txt_file->disk_size / flag.vblock_memory, global_max_threads)
+                                                                  : global_max_threads;
+
+                ASSERTW (flag.vblock_memory * concurrent_vbs < MEMORY_WARNING_THREASHOLD,
+                        "\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
+                        "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
+                        "To reduce RAM consumption, you may use:\n"
+                        "   --threads to set the number of threads (affects speed)\n"
+                        "   --vblock to set the amount of input data (in MB) a thread processes (affects compression ratio)\n"
+                        "   --quiet to silence this warning",
+                        global_max_threads, (uint32_t)(flag.vblock_memory >> 20));
+            #endif
+            
             // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
             buf_alloc (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
             memcpy (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
@@ -771,7 +774,7 @@ void zip_one_file (const char *txt_basename,
                                  txt_file->redirected ? PROGRESS_MESSAGE : PROGRESS_PERCENT,
                                  txt_file->redirected ? "Compressing..." : NULL, 
                                  false, *is_last_file, z_closes_after_me, 
-                                 flag.xthreads, prev_file_last_vb_i, 100000,
+                                 flag.xthreads, prev_file_last_vb_i, 100,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);

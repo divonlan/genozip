@@ -278,7 +278,6 @@ static void piz_read_all_ctxs (VBlock *vb, Section *next_sl)
 
         // create a context even if section is skipped, for containters to work (skipping a section should be mirrored in a container filter)
         ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, (*next_sl)->dict_id);
-
         int32_t offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", (*next_sl)->st, *next_sl); // returns 0 if section is skipped
         if (offset != SECTION_SKIPPED) vb->z_section_headers.len++;
         (*next_sl)++;                             
@@ -307,7 +306,7 @@ DataType piz_read_global_area (void)
         flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
     }
 
-    // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs(). 
+// read all dictionaries - CHROM/RNAME is needed for regions_make_chregs(). 
     // Note: some dictionaries are skipped based on skip() and all flag logic should implemented there
     ctx_read_all_dictionaries(); 
 
@@ -405,7 +404,7 @@ static bool piz_read_one_vb (VBlock *vb)
 {
     START_TIMER; 
 
-    if (flag.lines_last >= 0 && txt_file->num_lines > flag.lines_last)
+    if (flag.lines_last >= 0 && txt_file->num_lines > flag.lines_last) // lines_last is 0-based
         return false; // we don't need this VB as we have read all the data needed according to --lines
 
     Section sl = sections_vb_first (vb->vblock_i, false); 
@@ -416,8 +415,8 @@ static bool piz_read_one_vb (VBlock *vb)
 
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)ENT (char, vb->z_data, vb_header_offset);
     vb->vb_data_size     = BGEN32 (header->vb_data_size); 
-    vb->first_line       = BGEN32 (header->first_line);   // this option show the line number as in the source file
-//    vb->first_line       = 1 + txt_file->num_lines; // this option shows line number in resulting file (but useless for debug if reconstruction crashed)
+    //vb->first_line       = BGEN32 (header->first_line);   // 32bit (a historical mistake): line number as in the source file (used mostly for error messages)
+    vb->first_line = 1 + txt_file->num_lines; // doesn't count a dropped txtheader
     vb->lines.len        = BGEN32 (header->num_lines);       
     vb->longest_line_len = BGEN32 (header->longest_line_len);
     vb->digest_so_far    = header->digest_so_far;
@@ -434,14 +433,14 @@ static bool piz_read_one_vb (VBlock *vb)
 
     vb->translation      = dt_get_translation (vb); // vb->vb_chords needs to be set first
 
-    txt_file->num_lines += vb->lines.len;
+    txt_file->num_lines += vb->lines.len; // source file lines
 
     // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every txt component
     if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
 
     if (flag.show_vblocks) 
-        iprintf ("READING(id=%u) vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
+        iprintf ("READING(id=%d) vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 

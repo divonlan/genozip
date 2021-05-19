@@ -16,7 +16,8 @@
 #include "reconstruct.h"
 #include "gff3.h"
 
-typedef struct { const char *name, *value; 
+typedef struct { char name[64];
+                 const char *value; 
                  unsigned name_len, value_len; 
                  DictId dict_id;   } InfoItem;
 
@@ -261,14 +262,10 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
 // INFO/BaseCounts
 // ---------------
 
-// ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
+// ##INFO=<ID=genozip BugP.vcf -ft ,Number=4,Type=Integer,Description="Counts of each base">
 // Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
 static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, const char *value, int value_len) // returns true if caller still needs to seg 
 {
-    // if XSTRAND, bases have changed and Genozip doesn't currently liftover BaseCounts - reject liftover
-    if (chain_is_loaded && *vb->contexts[VCF_oXSTRAND].last_snip == 'X')
-        vcf_lo_seg_rollback_and_reject (vb, LO_INFO, ctx_basecounts);
-
     if (vb->contexts[VCF_REFALT].last_snip_len != 3) return true; // not simple two bases - caller should seg
 
     char *str = (char *)value;
@@ -351,6 +348,28 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 
 done:
     return true; // has new value
+}
+
+// currently used only for CountBases - reverses the vector in case of XSTRAND
+TRANSLATOR_FUNC (vcf_piz_luft_XREV)
+{
+    if (validate_only) return true; // always possible
+
+    char recon_copy[recon_len];
+    memcpy (recon_copy, recon, recon_len);
+
+    unsigned num_items = str_count_char (recon, recon_len, ',') + 1;
+    const char *items[num_items]; unsigned item_lens[num_items];
+    str_split (recon_copy, recon_len, num_items, ',', items, item_lens, true, "vcf_piz_luft_XREV");
+
+    // re-reconstruct in reverse order
+    vb->txt_data.len -= recon_len;
+    for (int i=num_items-1; i >= 1; i--)
+        RECONSTRUCT_SEP (items[i], item_lens[i], ',');
+        
+    RECONSTRUCT (items[0], item_lens[0]);
+
+    return true;
 }
 
 // --------
@@ -450,7 +469,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
     // Backward compatability note: In files v6->11, snip has 2 bytes for AN, AF which mean: '0'=appears after AC, '1'=appears before AC. We ignore them.
 
     // note: update last_value too, so its available to vcf_piz_luft_A_AN, which is called becore last_value is updated
-    ctx->last_value.i = new_value->i = reconstruct_peek_(vb, dict_id_INFO_AN, 0, 0).i * reconstruct_peek_(vb, dict_id_INFO_AF, 0, 0).f;
+    ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek_(vb, dict_id_INFO_AN, 0, 0).i * reconstruct_peek_(vb, dict_id_INFO_AF, 0, 0).f);
     RECONSTRUCT_INT (new_value->i); 
 
     return true;
@@ -562,13 +581,9 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
 
     // PIZ liftover: we have already reconstructed oPOS and POS (as an item in VCF_TOPLUFT)
     else {
-        int64_t end   = ctx->last_value.i;
-        int64_t delta = ctx->last_delta;
-        int64_t pos   = end - delta;
-
         translated_end = vb->last_int (VCF_oPOS) + vb->last_delta (VCF_POS); // delta for generated this END value (END - POS)
 
-        ((VBlockVCFP)vb)->last_end_line_i = vb->line_i; // so vcf_piz_special_COPY_POS knows that END was reconstructed
+        ((VBlockVCFP)vb)->last_end_line_i = vb->line_i; // so vcf_piz_special_COPYPOS knows that END was reconstructed
     }
 
     // re-reconstruct END
@@ -579,8 +594,10 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
 }
 
 // Called to reconstruct the POS subfield of INFO/LIFTBACK, handling the possibility of INFO/END
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPY_POS)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
 {
+    if (!reconstruct) return false; // no new value
+    
     bool has_end = ((VBlockVCFP)vb)->last_end_line_i == vb->line_i; // true if INFO/END was encountered
 
     Context *pos_ctx = &vb->contexts[VCF_POS];
@@ -592,7 +609,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPY_POS)
         pos = end - delta;
     }
     else
-        pos = pos_ctx->last_value.i;;
+        pos = pos_ctx->last_value.i;
 
     RECONSTRUCT_INT (pos); // vcf_piz_luft_END makes sure it always contains the value of POS, not END
     return false; // no new value
@@ -633,14 +650,22 @@ done:
 // all INFO and FORMAT fields, so ostatus is final)
 static void vcf_seg_info_add_LIFTXXXX_items (VBlockVCF *vb)
 {
-    // case: line originally had LIFTOVER or LIFTBACK, but was rejected in the Seg process (perhaps new or modified
-    // fields after created by --chain)
+    // case: Dual coordinates file line has no XXXXOVER or XXXXREJT - this can happen if variants were added to the file,
+    // for example, as a result of a "bcftools merge" with a non-DC file
+    bool added_primary_variant = false;
+    if (!ctx_encountered_in_line (vb, dict_id_INFO_LIFTOVER, NULL) && 
+        !ctx_encountered_in_line (vb, dict_id_INFO_REJTOVER, NULL)) {
+        vcf_lo_seg_rollback_and_reject (vb, LO_ADDED_VARIANT, NULL);
+        added_primary_variant = (vb->line_coords == DC_PRIMARY); // we added a REJTOVER field in a variant that is rendered by default
+    }
+
+    // case: line originally had LIFTOVER or LIFTBACK. These can be fields from the txt files, or created by --chain
     bool has_lo      = ctx_encountered_in_line (vb, dict_id_INFO_LIFTOVER, NULL);
     bool has_lb      = ctx_encountered_in_line (vb, dict_id_INFO_LIFTBACK, NULL);
     bool has_ro      = ctx_encountered_in_line (vb, dict_id_INFO_REJTOVER, NULL);
     bool has_rb      = ctx_encountered_in_line (vb, dict_id_INFO_REJTBACK, NULL);
-    bool rolled_back = LO_IS_REJECTED (last_ostatus) && (has_lo || has_lb);
-   
+    bool rolled_back = LO_IS_REJECTED (last_ostatus) && (has_lo || has_lb); // rejected in the Seg process
+           
     // make sure we have either both XXXXOVER or both XXXXREJT subfields in Primary and Luft
     ASSVCF0 ((has_lo && has_lb) || (has_ro && has_rb), "Missing INFO/LIFTXXXX or INFO/REJTXXXX subfield(s)");
 
@@ -684,7 +709,7 @@ static void vcf_seg_info_add_LIFTXXXX_items (VBlockVCF *vb)
         };
 
         // case: --chain or rolled back (see vcf_lo_seg_rollback_and_reject) - we're adding REJTOVER subfield to the default (genounzip) reconstruction
-        if (chain_is_loaded || rolled_back) 
+        if (chain_is_loaded || rolled_back || added_primary_variant) 
             vb->vb_data_size += INFO_LIFTOVER_LEN + 1 + (vb->info_items.len > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the two LIFTXXXX or the two REJTXXXX
     }
 }
@@ -708,23 +733,33 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
         value_len = modified_snip_len; \
     } while(0)
 
-    // lift-back the value, if we're segging a Luft file
-    if (vb->line_coords == DC_LUFT && ctx->luft_trans &&
-        (last_ostatus == LO_OK_REF_ALT_SWTCH || (dict_id.num == dict_id_INFO_END && LO_IS_OK (last_ostatus)))) {
+    ctx->line_is_luft_trans = false; // initialize
+    
+    // Translatable item on a Luft line: attempt to lift-back the value, so we can seg it as primary
+    if (vb->line_coords == DC_LUFT && needs_translation (ctx)) {
+
+        // Lift back successful - proceed to Seg this value in primary coords, and assign a translator for reconstructing if --luft
         if (vcf_lo_seg_lift_back_to_primary (vb, ctx, value, value_len, modified_snip, &modified_snip_len)) {
             value = modified_snip; 
             value_len = modified_snip_len; 
+            ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
         } 
-        else {
-            bool luft_only_line = true;
-        }
+
+        // This item in Luft coordinates is not translatable to primary. It is therefore a luft-only line, and we seg the remainder of it items in
+        // luft coords, and only ever reconstruct it in luft (as the line with have Coord=LUFT). Since this item is already in LUFT coords
+        else 
+            vcf_lo_seg_rollback_and_reject (vb, LO_INFO, ctx);
     }
 
     // validate that the primary value (as received from caller or lifted back) can be luft-translated 
     // note: looks at snips before optimization, we're counting on the optimization not changing the validation outcome
-    if (vb->line_coords == DC_PRIMARY && z_dual_coords && ctx->luft_trans && last_ostatus == LO_OK_REF_ALT_SWTCH &&
-        !(DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, true)))
-        vcf_lo_seg_rollback_and_reject (vb, LO_INFO, ctx);
+    if (vb->line_coords == DC_PRIMARY && needs_translation (ctx)) {
+
+        if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, true))
+            ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
+        else
+            vcf_lo_seg_rollback_and_reject (vb, LO_INFO, ctx);
+    }
 
     // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
     // Optimize VQSLOD
@@ -809,37 +844,56 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
     unsigned num_items = str_split (info_str, info_len, MAX_SUBFIELDS-2, ';', pairs, pair_lens, false, 0); // -2 - leave room for LIFTXXXX
     ASSVCF (num_items, "Too many INFO subfields, Genozip supports up to %u", MAX_SUBFIELDS-2);
 
-    buf_alloc (vb, &vb->info_items, 0, num_items + 2, InfoItem, 2, "info_items");
+    buf_alloc (vb, &vb->info_items, 0, num_items + 2, InfoItem, CTX_GROWTH, "info_items");
     vb->info_items.len = 0; // reset from previous line
 
-    int ac_i = -1;
+    int ac_i = -1; 
+    InfoItem lift_ii = {}, rejt_ii = {};
 
-    // pass 1: initialize info items + set ac_i + seg LIFTXXXX (but don't add to info_items yet) 
+    // pass 1: initialize info items + get indices of AC, LIFTXXXX and REJTXXXX
     for (unsigned i=0; i < num_items; i++) {
         const char *equal_sign = memchr (pairs[i], '=', pair_lens[i]);
         unsigned name_len = (unsigned)(equal_sign - pairs[i]); // nonsense if no equal sign
 
-        InfoItem ii = { .name      = pairs[i],
-                        .name_len  = equal_sign ? name_len + 1 : pair_lens[i], // including the '=' if there is one
+        InfoItem ii = { .name_len  = equal_sign ? name_len + 1 : pair_lens[i], // including the '=' if there is one
                         .value     = equal_sign ? equal_sign + 1 : NULL,
                         .value_len = equal_sign ? pair_lens[i] - name_len - 1 : 0,
                         .dict_id   = equal_sign ? dict_id_make (pairs[i], name_len, DTYPE_1) : DICT_ID_NONE };
+        
+        // we make a copy the name, because vcf_seg_FORMAT_GT might overwrite the INFO field
+        ASSVCF (ii.name_len <= sizeof (ii.name)-1, "INFO tag \"%s\" exceeds the maximum tag length supported by Genozip = %u", pairs[i], (int)sizeof (ii.name)-1);
+        memcpy (ii.name, pairs[i], ii.name_len);
+
+        ASSVCF (!z_dual_coords || 
+                  (((ii.dict_id.num != dict_id_INFO_LIFTOVER && ii.dict_id.num != dict_id_INFO_REJTOVER) || vb->line_coords == DC_PRIMARY) && 
+                   ((ii.dict_id.num != dict_id_INFO_LIFTBACK && ii.dict_id.num != dict_id_INFO_REJTBACK) || vb->line_coords == DC_LUFT)),
+                "Not expecting %s in a %s-coordinate line", dis_dict_id_ex (ii.dict_id, true).s, coords_names[vb->line_coords]);
 
         if (ii.dict_id.num == dict_id_INFO_AC) 
             ac_i = vb->info_items.len;
-        
-        else if (ii.dict_id.num == dict_id_INFO_LIFTOVER || ii.dict_id.num == dict_id_INFO_LIFTBACK) { 
-            vcf_lo_seg_INFO_LIFTXXXX (vb, ii.dict_id, ii.value, ii.value_len); 
-            continue; 
-        }
-        
-        else if (ii.dict_id.num == dict_id_INFO_REJTOVER || ii.dict_id.num == dict_id_INFO_REJTBACK) { 
-            vcf_lo_seg_INFO_REJTXXXX (vb, ii.dict_id, ii.value, ii.value_len); 
-            continue; 
-        }
+
+        else if (ii.dict_id.num == dict_id_INFO_LIFTOVER || ii.dict_id.num == dict_id_INFO_LIFTBACK) 
+            { lift_ii = ii; continue; } // dont add LIFTXXXX to Items yet
+
+        else if (ii.dict_id.num == dict_id_INFO_REJTOVER || ii.dict_id.num == dict_id_INFO_REJTBACK) 
+            { rejt_ii = ii; continue; } // dont add REJTXXXX to Items yet
 
         NEXTENT (InfoItem, vb->info_items) = ii;
     }
+
+    // case: we have a LIFTXXXX item - Seg it now, but don't add it yet to InfoItems
+    if (lift_ii.dict_id.num) { 
+        vcf_lo_seg_INFO_LIFTXXXX (vb, lift_ii.dict_id, lift_ii.value, lift_ii.value_len); 
+
+        // case: we have both LIFT and REJT - could happen as a result of bcftools merge - discard the REJT for now, and let our Seg
+        // decide if to reject it
+        if (rejt_ii.dict_id.num)
+            vb->vb_data_size -= rejt_ii.name_len + rejt_ii.value_len + 1; // unaccount for name, value and ;
+    }
+        
+    // case: we have a REJTXXXX item - Seg it now, but don't add it yet to InfoItems
+    else if (rejt_ii.dict_id.num)
+        vcf_lo_seg_INFO_REJTXXXX (vb, rejt_ii.dict_id, rejt_ii.value, rejt_ii.value_len); 
 
     // pass 2: seg all subfields except AC (and LIFTXXXX that weren't added)
     for (unsigned i=0; i < vb->info_items.len; i++) {
@@ -891,9 +945,8 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
 
         // if we're preparing a dual-coordinate VCF and this line as a REF-ALT switch - assign the liftover-translator for this item,
         // which was calculated in vcf_header_set_translators
-        Context *ii_ctx;
-        if ((last_ostatus == LO_OK_REF_ALT_SWTCH || (ii->dict_id.num == dict_id_INFO_END && LO_IS_OK (last_ostatus))) && 
-            (ii_ctx = ctx_get_existing_ctx (vb, ii->dict_id))) // translator exists and validated for this line
+        Context *ii_ctx = ctx_get_existing_ctx (vb, ii->dict_id);
+        if (ii_ctx && ii_ctx->line_is_luft_trans) // item was segged in Primary coords and needs a luft translator to be reconstruced in --luft
             con.items[i].translator = ii_ctx->luft_trans;
             
         // add to the prefixes
