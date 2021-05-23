@@ -8,6 +8,7 @@
 
 #include "vblock.h"
 #include "vcf.h"
+#include "website.h"
 
 #define VCF_FIELD_NAMES "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
 #define VCF_FIELD_NAMES_LONG VCF_FIELD_NAMES "\tFORMAT"
@@ -50,6 +51,10 @@ typedef struct VBlockVCF {
     // INFO/END
     uint32_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
     
+    // FORMAT/AD
+    #define MAX_ARG_ARRAY_ITEMS 36 // same as MAX_COMPOUND_COMPONENTS
+    int64_t ad_values[MAX_ARG_ARRAY_ITEMS];
+
     // dictionaries stuff 
     Buffer format_mapper_buf;       // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
     Buffer format_contexts;         // ZIP only: an array of MAX_SUBFIELDS * format_mapper_buf.len of ContextP
@@ -110,9 +115,9 @@ typedef enum {
 // fields and their order of INFO/LIFTOVER and INFO/LIFTBACK containers (part of the file format, see vcf_lo_zip_initialize)
 typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFields; 
 
-// NOTE: The rejection strings should not change or vcf_lo_seg_INFO_REJTXXXX won't identify oStatus in rejected lines when parsing old dual coordinate files (it will fallback to LO_REJECTED)
-extern const char *liftover_status_names[];
-#define LIFTOVER_STATUS_NAMES { /* for display esthetics - max 14 characters - note: these strings are defined in the dual-coordinate specification */\
+// NOTE: The rejection strings should not change or vcf_lo_seg_INFO_REJX won't identify oStatus in rejected lines when parsing old dual coordinate files (it will fallback to LO_REJECTED)
+extern const char *dvcf_status_names[];
+#define DVCF_STATUS_NAMES { /* for display esthetics - max 14 characters - note: these strings are defined in the dual-coordinate specification */\
     "UNKNOWN", \
     "OK", "OKRefSame", "OkRefAltSwitch", "OKffu4", "OKffu5", "OKffu6", "OKffu7", "OKffu8", \
     "Rejected", "NoChrom", "NoMapping", \
@@ -126,11 +131,11 @@ extern const char *liftover_status_names[];
 #define HK_DC          "##dual_coordinates"
 #define HK_DC_PRIMARY  HK_DC"=PRIMARY"
 #define HK_DC_LUFT     HK_DC"=LUFT"
-#define HK_RENDERED_ATTR "RenderAlg"
-#define KH_INFO_LO     "##INFO=<ID=" INFO_LIFTOVER ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for lifting over the variant to luft coordinates\",Source=\"genozip\",Version=\"%s\"," HK_RENDERED_ATTR "=NONE>"
-#define KH_INFO_LB     "##INFO=<ID=" INFO_LIFTBACK ",Number=5,Type=String,Description=\"dual-coordinates VCF: Information for retrieving the variant in the primary coordinates\",Source=\"genozip\",Version=\"%s\"," HK_RENDERED_ATTR "=NONE>"
-#define KH_INFO_RO     "##INFO=<ID=" INFO_REJTOVER ",Number=1,Type=String,Description=\"dual-coordinates VCF: Reason variant was rejected for lift over\",Source=\"genozip\",Version=\"%s\"," HK_RENDERED_ATTR "=NONE>"
-#define KH_INFO_RB     "##INFO=<ID=" INFO_REJTBACK ",Number=1,Type=String,Description=\"dual-coordinates VCF: Reason variant was rejected for lift back\",Source=\"genozip\",Version=\"%s\"," HK_RENDERED_ATTR "=NONE>"
+#define HK_RENDERALG_ATTR "RenderAlg"
+#define KH_INFO_LUFT   "##INFO=<ID=" INFO_LUFT ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_COORDS "\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
+#define KH_INFO_PRIM   "##INFO=<ID=" INFO_PRIM ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
+#define KH_INFO_LREJ   "##INFO=<ID=" INFO_LREJ ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
+#define KH_INFO_PREJ   "##INFO=<ID=" INFO_PREJ ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
 
 // header keys that appear only in a Primary VCF file
 #define HK_LUFT_CONTIG "##luft_contig="     
@@ -171,13 +176,13 @@ RefAltEquals vcf_refalt_ref_equals_ref2_or_alt (char ref, char ref2, const char 
 // Liftover Zip
 extern void vcf_lo_zip_initialize (void);
 extern void vcf_lo_append_rejects_file (VBlockP vb, Coords coord);
-extern void vcf_lo_seg_generate_INFO_LIFTXXXX (VBlockVCFP vb, ZipDataLineVCF *dl);
+extern void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl);
 extern void vcf_lo_set_rollback_point (VBlockVCFP vb);
 extern void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Context *ctx);
 extern LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i); // out
-extern void vcf_lo_seg_INFO_LIFTXXXX (VBlockVCFP vb, DictId dict_id, const char *value, int value_len);
-extern void vcf_lo_seg_INFO_REJTXXXX (VBlockVCFP vb, DictId dict_id, const char *value, int value_len);
-extern bool vcf_lo_seg_lift_back_to_primary (VBlockVCFP vb, ContextP ctx, const char *this_value, unsigned this_value_len, char *modified_snip, unsigned *modified_snip_len);
+extern void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *value, int value_len);
+extern void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, DictId dict_id, const char *value, int value_len);
+extern bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, const char *this_value, unsigned this_value_len, char *modified_snip, unsigned *modified_snip_len);
 
 #define vcf_set_ostatus(ostatus) ctx_set_last_value ((VBlockP)(vb), &(vb)->contexts[VCF_oSTATUS], (int64_t)(ostatus))
 

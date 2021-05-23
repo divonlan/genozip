@@ -646,71 +646,81 @@ done:
 // INFO container
 // --------------
 
-// for dual coordinate files (Primary, Luft and --chain) - add LIFTXXXX depending on ostatus (run after
+// for dual coordinate files (Primary, Luft and --chain) - add DVCF depending on ostatus (run after
 // all INFO and FORMAT fields, so ostatus is final)
-static void vcf_seg_info_add_LIFTXXXX_items (VBlockVCF *vb)
+static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
 {
     // case: Dual coordinates file line has no XXXXOVER or XXXXREJT - this can happen if variants were added to the file,
     // for example, as a result of a "bcftools merge" with a non-DC file
-    bool added_primary_variant = false;
-    if (!ctx_encountered_in_line (vb, dict_id_INFO_LIFTOVER, NULL) && 
-        !ctx_encountered_in_line (vb, dict_id_INFO_REJTOVER, NULL)) {
+    bool added_variant = false;
+    if (!ctx_encountered_in_line (vb, dict_id_INFO_LUFT, NULL) && 
+        !ctx_encountered_in_line (vb, dict_id_INFO_LREJ, NULL)) {
         vcf_lo_seg_rollback_and_reject (vb, LO_ADDED_VARIANT, NULL);
-        added_primary_variant = (vb->line_coords == DC_PRIMARY); // we added a REJTOVER field in a variant that is rendered by default
+        added_variant = true; // we added a REJX field in a variant that will be reconstructed in the current coordintes
     }
 
     // case: line originally had LIFTOVER or LIFTBACK. These can be fields from the txt files, or created by --chain
-    bool has_lo      = ctx_encountered_in_line (vb, dict_id_INFO_LIFTOVER, NULL);
-    bool has_lb      = ctx_encountered_in_line (vb, dict_id_INFO_LIFTBACK, NULL);
-    bool has_ro      = ctx_encountered_in_line (vb, dict_id_INFO_REJTOVER, NULL);
-    bool has_rb      = ctx_encountered_in_line (vb, dict_id_INFO_REJTBACK, NULL);
-    bool rolled_back = LO_IS_REJECTED (last_ostatus) && (has_lo || has_lb); // rejected in the Seg process
+    bool has_luft    = ctx_encountered_in_line (vb, dict_id_INFO_LUFT, NULL);
+    bool has_prim    = ctx_encountered_in_line (vb, dict_id_INFO_PRIM, NULL);
+    bool has_lrej    = ctx_encountered_in_line (vb, dict_id_INFO_LREJ, NULL);
+    bool has_prej    = ctx_encountered_in_line (vb, dict_id_INFO_PREJ, NULL);
+    bool rolled_back = LO_IS_REJECTED (last_ostatus) && (has_luft || has_prim); // rejected in the Seg process
            
-    // make sure we have either both XXXXOVER or both XXXXREJT subfields in Primary and Luft
-    ASSVCF0 ((has_lo && has_lb) || (has_ro && has_rb), "Missing INFO/LIFTXXXX or INFO/REJTXXXX subfield(s)");
+    // make sure we have either both LIFT/PRIM or both Lrej/Prej subfields in Primary and Luft
+    ASSVCF ((has_luft && has_prim) || (has_lrej && has_prej), "%s", 
+            vb->line_coords==DC_PRIMARY ? "Missing INFO/LUFT or INFO/Lrej subfield" : "Missing INFO/PRIM or INFO/Prej subfield");
 
-    // case: --chain and INFO is '.' - remove the '.' as we are adding INFO/LIFTXXXX
+    // case: --chain and INFO is '.' - remove the '.' as we are adding a DVCF field
     if (vb->info_items.len == 1 && FIRSTENT (InfoItem, vb->info_items)->name_len == 1 && *FIRSTENT (InfoItem, vb->info_items)->name == '.') {
         vb->info_items.len = 0;
-        vb->vb_data_size--;
+        vb->recon_size--;
+        vb->recon_size_luft--;
     }
 
     // dual coordinate line - we seg both options and vcf_piz_filter will decide which to render
     if (LO_IS_OK (last_ostatus)) {
 
         NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
-            .name     = INFO_LIFTOVER"=", 
-            .name_len = INFO_LIFTOVER_LEN + 1, // +1 for the '='
-            .dict_id  = (DictId)dict_id_INFO_LIFTOVER 
+            .name     = INFO_LUFT"=", 
+            .name_len = INFO_DVCF_LEN + 1, // +1 for the '='
+            .dict_id  = (DictId)dict_id_INFO_LUFT 
         };  
         
-        if (chain_is_loaded) // --chain - we're adding this subfield to the default reconstruction
-            vb->vb_data_size += INFO_LIFTOVER_LEN + 1 + (vb->info_items.len > 1); // +1 for '=', +1 for ';' if we already have item(s).
-
         NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
-            .name     = INFO_LIFTBACK"=", 
-            .name_len = INFO_LIFTOVER_LEN + 1, // +1 for the '='
-            .dict_id  = (DictId)dict_id_INFO_LIFTBACK 
+            .name     = INFO_PRIM"=", 
+            .name_len = INFO_DVCF_LEN + 1, // +1 for the '='
+            .dict_id  = (DictId)dict_id_INFO_PRIM 
         };  
-        // note: we don't increase vb_data_size for LIFTBACK because its not displayed in the default reconstruction of the file
+
+
+        // case: --chain - we're adding ONE of these subfields to each of Primary and Luft reconstructions
+        if (chain_is_loaded) {
+            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len > 2); // +1 for '=', +1 for ';' if we already have item(s)
+            vb->recon_size += growth;
+            vb->recon_size_luft += growth;
+        }
     }
 
     else { 
         NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
-            .name     = INFO_REJTOVER"=", 
-            .name_len = INFO_LIFTOVER_LEN + 1, 
-            .dict_id  = (DictId)dict_id_INFO_REJTOVER
+            .name     = INFO_LREJ"=", 
+            .name_len = INFO_DVCF_LEN + 1, 
+            .dict_id  = (DictId)dict_id_INFO_LREJ
         };
 
         NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
-            .name     = INFO_REJTBACK"=", 
-            .name_len = INFO_LIFTOVER_LEN + 1, 
-            .dict_id  = (DictId)dict_id_INFO_REJTBACK
+            .name     = INFO_PREJ"=", 
+            .name_len = INFO_DVCF_LEN + 1, 
+            .dict_id  = (DictId)dict_id_INFO_PREJ
         };
 
-        // case: --chain or rolled back (see vcf_lo_seg_rollback_and_reject) - we're adding REJTOVER subfield to the default (genounzip) reconstruction
-        if (chain_is_loaded || rolled_back || added_primary_variant) 
-            vb->vb_data_size += INFO_LIFTOVER_LEN + 1 + (vb->info_items.len > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the two LIFTXXXX or the two REJTXXXX
+        // case: we added a REJX INFO field that wasn't in the TXT data: --chain or rolled back (see vcf_lo_seg_rollback_and_reject) or an added variant
+        if (chain_is_loaded || rolled_back || added_variant) {
+            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the two LIFTXXXX or the two REJTXXXX
+
+            if (vb->line_coords == DC_PRIMARY) vb->recon_size += growth;
+            else vb->recon_size_luft += growth;
+        }
     }
 }
 
@@ -727,8 +737,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     
     // note: since we use modified_snip for both optimization and luft_back - we currently don't support
     // subfields having both translators and optimization. This can be fixed if needed.
-    #define ADJUST_FOR_MODIFIED do { \
-        vb->vb_data_size -= (int)value_len - (int)modified_snip_len; \
+    #define ADJUST_FOR_OPTIMIZED do { \
+        int32_t shrinkage = (int32_t)value_len - (int32_t)modified_snip_len;\
+        vb->recon_size -= shrinkage; \
+        vb->recon_size_luft -= shrinkage; \
         value = modified_snip; \
         value_len = modified_snip_len; \
     } while(0)
@@ -739,7 +751,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     if (vb->line_coords == DC_LUFT && needs_translation (ctx)) {
 
         // Lift back successful - proceed to Seg this value in primary coords, and assign a translator for reconstructing if --luft
-        if (vcf_lo_seg_lift_back_to_primary (vb, ctx, value, value_len, modified_snip, &modified_snip_len)) {
+        if (vcf_lo_seg_cross_render_to_primary (vb, ctx, value, value_len, modified_snip, &modified_snip_len)) {
             value = modified_snip; 
             value_len = modified_snip_len; 
             ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
@@ -765,7 +777,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     // Optimize VQSLOD
     if (flag.optimize_VQSLOD && (dict_id.num == dict_id_INFO_VQSLOD) &&
         optimize_float_2_sig_dig (value, value_len, 0, modified_snip, &modified_snip_len)) 
-        ADJUST_FOR_MODIFIED;
+        ADJUST_FOR_OPTIMIZED;
 
     // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
     // END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
@@ -865,35 +877,38 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
         memcpy (ii.name, pairs[i], ii.name_len);
 
         ASSVCF (!z_dual_coords || 
-                  (((ii.dict_id.num != dict_id_INFO_LIFTOVER && ii.dict_id.num != dict_id_INFO_REJTOVER) || vb->line_coords == DC_PRIMARY) && 
-                   ((ii.dict_id.num != dict_id_INFO_LIFTBACK && ii.dict_id.num != dict_id_INFO_REJTBACK) || vb->line_coords == DC_LUFT)),
+                  (((ii.dict_id.num != dict_id_INFO_LUFT && ii.dict_id.num != dict_id_INFO_LREJ) || vb->line_coords == DC_PRIMARY) && 
+                   ((ii.dict_id.num != dict_id_INFO_PRIM && ii.dict_id.num != dict_id_INFO_PREJ) || vb->line_coords == DC_LUFT)),
                 "Not expecting %s in a %s-coordinate line", dis_dict_id_ex (ii.dict_id, true).s, coords_names[vb->line_coords]);
 
         if (ii.dict_id.num == dict_id_INFO_AC) 
             ac_i = vb->info_items.len;
 
-        else if (ii.dict_id.num == dict_id_INFO_LIFTOVER || ii.dict_id.num == dict_id_INFO_LIFTBACK) 
+        else if (ii.dict_id.num == dict_id_INFO_LUFT || ii.dict_id.num == dict_id_INFO_PRIM) 
             { lift_ii = ii; continue; } // dont add LIFTXXXX to Items yet
 
-        else if (ii.dict_id.num == dict_id_INFO_REJTOVER || ii.dict_id.num == dict_id_INFO_REJTBACK) 
+        else if (ii.dict_id.num == dict_id_INFO_LREJ || ii.dict_id.num == dict_id_INFO_PREJ) 
             { rejt_ii = ii; continue; } // dont add REJTXXXX to Items yet
 
         NEXTENT (InfoItem, vb->info_items) = ii;
     }
 
-    // case: we have a LIFTXXXX item - Seg it now, but don't add it yet to InfoItems
+    // case: we have a LUFT or PRIM item - Seg it now, but don't add it yet to InfoItems
     if (lift_ii.dict_id.num) { 
-        vcf_lo_seg_INFO_LIFTXXXX (vb, lift_ii.dict_id, lift_ii.value, lift_ii.value_len); 
+        vcf_lo_seg_INFO_LUFT_and_PRIM (vb, lift_ii.dict_id, lift_ii.value, lift_ii.value_len); 
 
         // case: we have both LIFT and REJT - could happen as a result of bcftools merge - discard the REJT for now, and let our Seg
         // decide if to reject it
-        if (rejt_ii.dict_id.num)
-            vb->vb_data_size -= rejt_ii.name_len + rejt_ii.value_len + 1; // unaccount for name, value and ;
+        if (rejt_ii.dict_id.num) {
+            uint32_t shrinkage = rejt_ii.name_len + rejt_ii.value_len + 1; // unaccount for name, value and  
+            vb->recon_size -= shrinkage;
+            vb->recon_size_luft -= shrinkage; // since its read from TXT, it is accounted for initialially in both recon_size and recon_size_luft
+        }
     }
         
     // case: we have a REJTXXXX item - Seg it now, but don't add it yet to InfoItems
     else if (rejt_ii.dict_id.num)
-        vcf_lo_seg_INFO_REJTXXXX (vb, rejt_ii.dict_id, rejt_ii.value, rejt_ii.value_len); 
+        vcf_lo_seg_INFO_REJX (vb, rejt_ii.dict_id, rejt_ii.value, rejt_ii.value_len); 
 
     // pass 2: seg all subfields except AC (and LIFTXXXX that weren't added)
     for (unsigned i=0; i < vb->info_items.len; i++) {
@@ -922,7 +937,7 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
 
     // now that we segged all INFO and FORMAT subfields, we have the final ostatus and can add INFOXXXX
     if (z_dual_coords)
-        vcf_seg_info_add_LIFTXXXX_items (vb);
+        vcf_seg_info_add_DVCF_to_InfoItems (vb);
 
     con_set_nitems (con, vb->info_items.len);
 
@@ -958,8 +973,8 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
         prefixes[prefixes_len++] = CON_PREFIX_SEP;
 
         // don't include LIFTBACK or LIFTREJT because they are not reconstructed by default (genounzip) 
-        // note: vcf_lo_seg_INFO_REJTXXXX / vcf_lo_seg_INFO_LIFTXXXX already verified that this is a dual-coord file
-        if (ii->dict_id.num != dict_id_INFO_LIFTBACK && ii->dict_id.num != dict_id_INFO_REJTBACK)
+        // note: vcf_lo_seg_INFO_REJX / vcf_lo_seg_INFO_LUFT_and_PRIM already verified that this is a dual-coord file
+        if (ii->dict_id.num != dict_id_INFO_PRIM && ii->dict_id.num != dict_id_INFO_PREJ)
             total_names_len += ii->name_len + 1; // +1 for ; \t or \n separator
     }
 

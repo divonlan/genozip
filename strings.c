@@ -506,13 +506,3 @@ StrText str_time (void)
     return s;
 }
 
-uint64_t str_count_char (const char *str, uint64_t len, char c)
-{
-    if (!str) return 0;
-    
-    uint64_t count=0;
-    for (uint64_t i=0; i < len; i++)
-        if (str[i] == c) count++;
-
-    return count;
-}

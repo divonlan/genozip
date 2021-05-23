@@ -479,6 +479,7 @@ void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf
     ASSERTNOTINUSE (zf_ctx->dict); // make sure we only build it once... 
     
     zf_ctx->no_stons = true;
+    zf_ctx->st_did_i = DID_I_NONE;
 
     // copy dict
     ARRAY (RefContig, contigs, *contigs_buf);
@@ -576,6 +577,7 @@ void ctx_add_new_zf_ctx_from_txtheader (DictId dict_id, const char *name, unsign
     mutex_initialize (zf_ctx->mutex);
 
     zf_ctx->did_i      = z_file->num_contexts; 
+    zf_ctx->st_did_i   = DID_I_NONE;
     zf_ctx->dict_id    = dict_id;
     zf_ctx->luft_trans = luft_translator;
     memcpy ((char*)zf_ctx->name, name, MIN (sizeof(zf_ctx->name)-1, name_len));
@@ -634,9 +636,11 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     if (!flag.rejects_coord)
         zf_ctx->txt_len += vb_ctx->txt_len; // for stats
 
-    if (vb_ctx->st_did_i != DID_I_NONE) 
-        zf_ctx->st_did_i = vb_ctx->st_did_i; // we assign stats consolidation, but never revert back to DID_I_NONE
-
+    if (vb_ctx->st_did_i != DID_I_NONE && zf_ctx->st_did_i != DID_I_NONE) {
+        Context *st_ctx = ctx_get_zf_ctx (merging_vb->contexts[vb_ctx->st_did_i].dict_id);
+        if (st_ctx) zf_ctx->st_did_i = st_ctx->did_i; // st_did_i is not necessarily the same for vb and zf
+    }
+    
     if (vb_ctx->is_stats_parent)
         zf_ctx->is_stats_parent = true; // we set, but we never revert back
 
@@ -892,7 +896,7 @@ WordIndex ctx_get_word_index_by_snip (const Context *ctx, const char *snip)
 
 // ZIP
 const char *ctx_get_snip_by_zf_node_index (const Buffer *nodes, const Buffer *dict, WordIndex node_index, 
-                                        const char **snip, uint32_t *snip_len)
+                                           const char **snip, uint32_t *snip_len)
 {
     CtxNode *node = ENT (CtxNode, *nodes, node_index);
     const char *my_snip = ENT (const char, *dict, node->char_index);

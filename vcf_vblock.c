@@ -24,6 +24,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->main_refalt = NULL;
     vb->main_ref_len = vb->main_alt_len = 0;
     vb->last_end_line_i = 0;
+    memset(vb->ad_values, 0, sizeof (vb->ad_values));
 
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);

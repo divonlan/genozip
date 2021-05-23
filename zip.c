@@ -508,14 +508,19 @@ static void zip_update_txt_counters (VBlock *vb)
     if (!(flag.optimize_DESC && vb->data_type == DT_FASTQ)) 
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
 
-    // note: the liftover reject txt data is of course not counted as part of the file txt data for stats...
-    if (!flag.rejects_coord) {        
-        z_file->num_lines                += (int64_t)vb->lines.len; // lines in all bound files in this z_file
-        z_file->txt_data_so_far_single   += (int64_t)vb->vb_data_size;   // length of data as it would be reconstructed (as modified by --optimize or --chain or compressing a Luft file)
-        z_file->txt_data_so_far_bind     += (int64_t)vb->vb_data_size;
-        z_file->txt_data_so_far_single_0 += (int64_t)vb->vb_data_size_0; // length of data before any modifications
-        z_file->txt_data_so_far_bind_0   += (int64_t)vb->vb_data_size_0;
+    // counters of data AS IT APPEARS IN THE TEXT FILE
+    if (!flag.rejects_coord) {      
+        z_file->num_lines                += (int64_t)vb->lines.len;      // lines in all bound files in this z_file
+        z_file->txt_data_so_far_single_0 += (int64_t)vb->txt_size; // length of data before any modifications
+        z_file->txt_data_so_far_bind_0   += (int64_t)vb->txt_size;
     }
+
+    // counter of data FOR PROGRESS DISPLAY
+    z_file->txt_data_so_far_single += (int64_t)vb->txt_size;   
+
+    // counter of data in DEFAULT PRIMARY RECONSTRUCTION
+    if (flag.rejects_coord == DC_NONE) z_file->txt_data_so_far_bind += vb->recon_size;
+    if (flag.rejects_coord == DC_LUFT) z_file->txt_data_so_far_bind += vb->recon_size_luft; // luft reject VB shows in primary reconstruction
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
@@ -550,13 +555,13 @@ static void zip_write_global_area (Digest single_component_digest)
 
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
     if (DTPZ(has_random_access)) 
-        random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, DC_PRIMARY, flag.show_index ? "Random-access index contents (result of --show-index)" : NULL);
+        random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, DC_PRIMARY, flag.show_index ? RA_MSG_PRIM : NULL);
 
     if (DTPZ(has_random_access) && z_dual_coords)
-        random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, DC_LUFT, flag.show_index ? "Luft random-access index contents (result of --show-index)" : NULL);
+        random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, DC_LUFT, flag.show_index ? RA_MSG_LUFT : NULL);
 
     if (store_ref) 
-        random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, 0, flag.show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
+        random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
 
     stats_compress();
 
@@ -579,7 +584,7 @@ static void zip_compress_one_vb (VBlock *vb)
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
-    buf_alloc_old (vb, &vb->z_data, vb->vb_data_size / 3, 1.2, "z_data");
+    buf_alloc (vb, &vb->z_data, 0, vb->txt_size / 3, char, CTX_GROWTH, "z_data");
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
     if (flag.pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
@@ -643,7 +648,6 @@ static void zip_compress_one_vb (VBlock *vb)
 
 // data sent through dispatcher fan out functions - to do: make this an opaque struct
 static uint32_t prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
-static uint32_t txt_line_i; // the next line to be read (first line = 1) (resets in every file)
 static uint32_t max_lines_per_vb; // (resets in every file)
 
 // returns true if successfully prepared a vb 
@@ -703,16 +707,14 @@ static void zip_complete_processing_one_vb (VBlockP vb)
     if (DTP(zip_after_compute)) DTP(zip_after_compute)(vb);
 
     // update z_data in memory (its not written to disk yet)
-    zfile_update_compressed_vb_header (vb, txt_line_i); 
+    zfile_update_compressed_vb_header (vb); 
 
     max_lines_per_vb = MAX (max_lines_per_vb, vb->lines.len);
-    txt_line_i += (uint32_t)vb->lines.len;
 
     if (!flag.make_reference && !flag.seg_only)
         zfile_output_processed_vb (vb);
     
-    if (!flag.rejects_coord)
-        zip_update_txt_counters (vb);
+    zip_update_txt_counters (vb);
 
     z_file->num_vbs++;
     txt_file->num_vbs++;
@@ -749,12 +751,10 @@ void zip_one_file (const char *txt_basename,
     if (!z_file->num_txt_components_so_far)  // first component of this z_file 
         ctx_initialize_primary_field_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
 
-    txt_line_i = 1; // the next line to be read (first line = 1)
-    
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
-    bool success = txtheader_zip_read_and_compress (&txt_line_i); // also increments z_file->num_txt_components_so_far
-    if (!success) goto finish; // 2nd+ VCF file cannot bind, because of different sample names
+    bool success = txtheader_zip_read_and_compress(); // also increments z_file->num_txt_components_so_far
+    if (!success) goto finish; // eg 2nd+ VCF file cannot bind, because of different sample names
 
     if (z_dual_coords && !flag.rejects_coord) { 
         *is_last_file = false; // we're not the last file - at leasts, the liftover rejects file is after us

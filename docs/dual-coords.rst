@@ -1,4 +1,4 @@
-.. _dual_coordinates:
+.. _dual-coords:
 
 Dual-coordinates VCF files
 ==========================

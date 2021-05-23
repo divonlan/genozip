@@ -23,13 +23,13 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 // VCF stuff
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
          dict_id_FORMAT_PS=0, dict_id_FORMAT_GT=0, dict_id_FORMAT_GT_HT=0, dict_id_FORMAT_GT_HT_INDEX=0,
-         dict_id_PBWT_RUNS=0, dict_id_PBWT_FGRC=0, dict_id_FORMAT_AF=0, dict_id_FORMAT_SAC=0,
+         dict_id_PBWT_RUNS=0, dict_id_PBWT_FGRC=0, dict_id_FORMAT_AF=0, dict_id_FORMAT_SAC=0, dict_id_FORMAT_SB=0, dict_id_FORMAT_MB=0,
          dict_id_FORMAT_AD=0, dict_id_FORMAT_ADF=0, dict_id_FORMAT_ADR=0, dict_id_FORMAT_ADALL=0, 
          dict_id_FORMAT_F1R2=0, dict_id_FORMAT_F2R1=0,
          dict_id_FORMAT_GQ=0, dict_id_FORMAT_DS=0, dict_id_FORMAT_PRI=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0, dict_id_INFO_DP4=0, dict_id_INFO_SF=0,
-         dict_id_INFO_LIFTOVER=0, dict_id_INFO_LIFTBACK=0, dict_id_INFO_REJTOVER=0, dict_id_INFO_REJTBACK=0,
+         dict_id_INFO_LUFT=0, dict_id_INFO_PRIM=0, dict_id_INFO_LREJ=0, dict_id_INFO_PREJ=0,
          dict_id_INFO_BaseCounts=0, dict_id_INFO_MLEAC, dict_id_INFO_MLEAF, dict_id_INFO_MQ0,
 
          // tags from VEP (Varient Effect Predictor) and similar tools
@@ -123,7 +123,9 @@ void dict_id_initialize (DataType data_type)
         dict_id_FORMAT_F1R2   = dict_id_make ("F1R2",     4, DTYPE_VCF_FORMAT).num; // <ID=F1R2,Number=R,Type=Integer,Description="Count of reads in F1R2 pair orientation supporting each allele">
         dict_id_FORMAT_F2R1   = dict_id_make ("F2R1",     4, DTYPE_VCF_FORMAT).num; // <ID=F2R1,Number=R,Type=Integer,Description="Count of reads in F2R1 pair orientation supporting each allele">
         dict_id_FORMAT_SAC    = dict_id_make ("SAC",      3, DTYPE_VCF_FORMAT).num; // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
-        
+        dict_id_FORMAT_SB     = dict_id_make ("SB",       2, DTYPE_VCF_FORMAT).num; // <ID=SAC,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
+        dict_id_FORMAT_MB     = dict_id_make ("MB",       2, DTYPE_VCF_FORMAT).num; // <ID=SAC,Number=4,Type=Integer,Description="Per-sample component statistics to detect mate bias">
+
         // INFO fields
         dict_id_INFO_AC       = dict_id_make ("AC",       2, DTYPE_VCF_INFO).num;   // <ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
         dict_id_INFO_AF       = dict_id_make ("AF",       2, DTYPE_VCF_INFO).num;   // <ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
@@ -153,10 +155,10 @@ void dict_id_initialize (DataType data_type)
         // genozip fields
         dict_id_FORMAT_GT_HT  = dict_id_make ("@HT",      3, DTYPE_VCF_FORMAT).num; // different first 2 letters than GT, for lookup table
         dict_id_FORMAT_GT_HT_INDEX = dict_id_make ("@INDEXHT", 8, DTYPE_VCF_FORMAT).num; // different first 2 letters
-        dict_id_INFO_LIFTOVER = dict_id_make (INFO_LIFTOVER, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
-        dict_id_INFO_LIFTBACK = dict_id_make (INFO_LIFTBACK, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
-        dict_id_INFO_REJTOVER = dict_id_make (INFO_REJTOVER, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
-        dict_id_INFO_REJTBACK = dict_id_make (INFO_REJTBACK, INFO_LIFTOVER_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_LUFT     = dict_id_make (INFO_LUFT, INFO_DVCF_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_PRIM     = dict_id_make (INFO_PRIM, INFO_DVCF_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_LREJ     = dict_id_make (INFO_LREJ, INFO_DVCF_LEN, DTYPE_VCF_INFO).num;
+        dict_id_INFO_PREJ     = dict_id_make (INFO_PREJ, INFO_DVCF_LEN, DTYPE_VCF_INFO).num;
         dict_id_PBWT_RUNS     = dict_id_make ("@1BWTRUN", 8, DTYPE_VCF_FORMAT).num; // PBWT runs
         dict_id_PBWT_FGRC     = dict_id_make ("@2BWTFGR", 8, DTYPE_VCF_FORMAT).num; // PBWT foreground run count
 

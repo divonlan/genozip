@@ -153,8 +153,8 @@ const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file
     } 
         
     const char *len_start = NULL;
-    if      ((len_start = strstr (response, "content-length:"))) len_start += strlen ("content-length:");
-    else if ((len_start = strstr (response, "Content-Length:"))) len_start += strlen ("Content-Length:");
+    if      ((len_start = strstr (response, "content-length:"))) len_start += sizeof "content-length:" -1;
+    else if ((len_start = strstr (response, "Content-Length:"))) len_start += sizeof "Content-Length:" -1;
 
     // Case: we got the file length - file exists even if we didn't get an HTTP status (eg because URL is not http)
     if (len_start) {

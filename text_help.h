@@ -3,31 +3,33 @@
 //   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include "website.h"
+
 static const char *help_genozip[] = {
     "",
-    "Please see the genozip manual here: "GENOZIP_URL"/genozip.html"
+    "Please see the genozip manual here: "WEBSITE_GENOZIP
 };
 
 static const char *help_genozip_developer[] = {
     "",
     "Options useful mostly for developers of genozip:",
     "",
-    "Please see "GENOZIP_URL"/advanced.html"
+    "Please see "WEBSITE_ADVANCED
 };
 
 static const char *help_genounzip[] = {
     "",
-    "Please see the genounzip manual here: "GENOZIP_URL"/genounzip.html"
+    "Please see the genounzip manual here: "WEBSITE_GENOUNZIP
 };
 
 static const char *help_genocat[] = {
     "",
-    "Please see the genocat manual here: "GENOZIP_URL"/genocat.html"
+    "Please see the genocat manual here: "WEBSITE_GENOCAT
 };
 
 static const char *help_genols[] = {
     "",
-    "Please see the genols manual here: "GENOZIP_URL"/genols.html"
+    "Please see the genols manual here: "WEBSITE_GENOLS
 };
 
 static const char *help_footer[] = {

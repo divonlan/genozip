@@ -17,6 +17,7 @@
 #include "reference.h"
 #include "codec.h"
 #include "version.h"
+#include "website.h"
 
 //-----------------------------------------
 // Header functions for 23andMe files
@@ -145,8 +146,8 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     Context *ctx = &z_file->contexts[ME23_CHROM];
     uint32_t num_chroms = (uint32_t)ctx->word_list.len;
     
-    buf_alloc_old (comp_vb, txtheader_buf, 1.3*comp_vb->compressed.len + strlen (VCF_HEAD_1) + strlen (VCF_HEAD_3p1)+strlen (VCF_HEAD_3p2)+80 +
-               num_chroms * (strlen (VCF_HEAD_2) + 100), 1, "txt_data");
+    buf_alloc_old (comp_vb, txtheader_buf, 1.3*comp_vb->compressed.len + (sizeof VCF_HEAD_1 - 1) + (sizeof VCF_HEAD_3p1 - 1) + (sizeof VCF_HEAD_3p2 - 1)+80 +
+               num_chroms * (sizeof VCF_HEAD_2 + 100), 1, "txt_data");
     
     bufprintf (comp_vb, txtheader_buf, VCF_HEAD_1, ref_filename);
     
@@ -183,7 +184,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     char *start, *after;
     if ((start = strstr (z_name, ME23_FILENAME_BEFORE_SAMPLE)) && 
         (after = strstr (start,  ME23_FILENAME_AFTER_SAMPLE ))) {
-        start += strlen (ME23_FILENAME_BEFORE_SAMPLE);
+        start += sizeof ME23_FILENAME_BEFORE_SAMPLE -1;
         sample_name = start;;
         sample_name_len = after - start;
     }
@@ -251,7 +252,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     }
 
     #define FIXED_VCF_VARDATA "\t.\tPASS\t.\tGT\t"
-    RECONSTRUCT (FIXED_VCF_VARDATA, strlen (FIXED_VCF_VARDATA));
+    RECONSTRUCT (FIXED_VCF_VARDATA, sizeof FIXED_VCF_VARDATA - 1);
 
     // Sample data
     RECONSTRUCT1 (is_alt_1 ? '1' : '0');

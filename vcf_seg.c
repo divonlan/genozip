@@ -43,10 +43,11 @@ void vcf_seg_initialize (VBlock *vb_)
     vb->contexts[VCF_TOPLEVEL].no_stons    = true; 
     vb->contexts[VCF_TOPLUFT] .no_stons    = true; 
     vb->contexts[VCF_LIFT_REF].no_stons    = true; 
-    vb->contexts[VCF_COPYPOS].no_stons    = true; 
+    vb->contexts[VCF_COPYPOS] .no_stons    = true; 
     vb->contexts[VCF_oXSTRAND].no_stons    = true; // keep in b250 so it can be eliminated as all_the_same
     vb->contexts[VCF_oCHROM]  .no_vb1_sort = true; // indices need to remain as in the Chain file
     vb->contexts[VCF_oSTATUS] .no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
+    vb->contexts[VCF_COORDS]  .no_vb1_sort = true; // indices need to remaining matching to Coords
     vb->contexts[VCF_REFALT]  .keep_snip   = true; // set ctx->last_snip after evaluating
     vb->contexts[VCF_oXSTRAND].keep_snip   = true;
 
@@ -81,7 +82,7 @@ void vcf_seg_initialize (VBlock *vb_)
 
     // evaluate oSTATUS and COORDS, XSTRAND snips in order, as we rely on their indices being identical to the order of these arrays
     for (int i=0; i < NUM_LO_STATUSES; i++) {
-        WordIndex node_index = ctx_evaluate_snip_seg (vb_, &vb->contexts[VCF_oSTATUS], liftover_status_names[i], strlen (liftover_status_names[i]), NULL);
+        WordIndex node_index = ctx_evaluate_snip_seg (vb_, &vb->contexts[VCF_oSTATUS], dvcf_status_names[i], strlen (dvcf_status_names[i]), NULL);
         ctx_decrement_count (vb_, &vb->contexts[VCF_oSTATUS], node_index);
     }
 
@@ -138,14 +139,18 @@ void vcf_seg_finalize (VBlockP vb_)
                           { .dict_id = (DictId)dict_id_fields[VCF_EOL],     .seperator = ""   } },
     };
 
+    Context *ctx = &vb->contexts[VCF_TOPLEVEL];
+
     if (vb->vb_coords == DC_BOTH || !z_dual_coords)
-        container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0); 
+        container_seg_by_ctx (vb_, ctx, (ContainerP)&top_level, 0, 0, 0); 
 
     // when processing the rejects file containing variants that are primary-only, we add a "##primary_only=" prefix to 
     // first item of each line, so that it reconstructs as part of the VCF header 
     else if (vb->vb_coords == DC_PRIMARY) { // primary-only variants 
         static const char primary_only_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HK_PRIM_ONLY CON_PREFIX_SEP_;
-        container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], (ContainerP)&top_level, primary_only_prefix, strlen (primary_only_prefix), 0);
+        container_seg_by_ctx (vb_, ctx, (ContainerP)&top_level, primary_only_prefix, strlen (primary_only_prefix), 0);
+        vb->recon_size += (sizeof HK_PRIM_ONLY - 1) * vb->lines.len; // when reconstructing primary-only rejects, we also reconstruct a prefix for each line
+        ctx->txt_len += (sizeof HK_PRIM_ONLY - 1) * vb->lines.len;
     }
     
     // Toplevel snip for reconstructing this VB a LUFT
@@ -177,6 +182,8 @@ void vcf_seg_finalize (VBlockP vb_)
     else if (vb->vb_coords == DC_LUFT) { // luft-only variants 
         static const char luft_only_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HK_LUFT_ONLY CON_PREFIX_SEP_;
         container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLUFT], (ContainerP)&top_luft, luft_only_prefix, strlen (luft_only_prefix), 0);
+        vb->recon_size_luft += (sizeof HK_LUFT_ONLY - 1) * vb->lines.len; // when reconstructing luft-only rejects, we also reconstruct a prefix for each line
+        // note: there is no equivalent of ctx->txt_len for Luft coordinates
     }
 }
 
@@ -206,10 +213,10 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == dict_id_INFO_MLEAC           ||
         dict_id.num == dict_id_INFO_MLEAF           ||
         dict_id.num == dict_id_INFO_MQ0             ||
-        dict_id.num == dict_id_INFO_LIFTOVER        ||
-        dict_id.num == dict_id_INFO_LIFTBACK        ||
-        dict_id.num == dict_id_INFO_REJTOVER        ||
-        dict_id.num == dict_id_INFO_REJTBACK        ||
+        dict_id.num == dict_id_INFO_LUFT        ||
+        dict_id.num == dict_id_INFO_PRIM        ||
+        dict_id.num == dict_id_INFO_LREJ        ||
+        dict_id.num == dict_id_INFO_PREJ        ||
 
         // INFO/ AC_* AN_* AF_* and ???_AF are small
         ((dict_id.id[0] == ('A' | 0xc0)) && (dict_id.id[1] == 'C' || dict_id.id[1] == 'F' || dict_id.id[1] == 'N') && dict_id.id[2] == '_') ||
@@ -375,7 +382,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         vb->line_coords = OTHER_COORDS (vb->line_coords); // dual coordinates file - this line originates from ##primary_only/##luft_only as is in the opposite coordinates
 
     // allow un-segging of o* and LIFTXXXX in case due to INFO or FORMAT ostatus changes from OK to REJECT
-    int32_t save_vb_data_size=0; uint32_t line_len=0, save_lo_rejects_len=0; 
+    int32_t save_recon_size=0; uint32_t line_len=0, save_lo_rejects_len=0; 
     unsigned save_txt_len_len = vb->num_contexts;
     uint64_t save_txt_len[save_txt_len_len];
     if (z_dual_coords) {
@@ -386,10 +393,14 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         // LUFT-only lines are not reconstructed by default. Save the txt_len of all contexts to be able to undo their increment if it turns
         // out this LUFT-coordinate line is in fact LUFT-only.
         if (vb->line_coords == DC_LUFT) {
-            save_vb_data_size = vb->vb_data_size;
+            save_recon_size = vb->recon_size;
             for (unsigned i=0; i < save_txt_len_len; i++)
-                save_txt_len[i] = vb->contexts[i].txt_len;
+                save_txt_len[i] = vb->contexts[i].txt_len; // txt_len is for PRIMARY reconstruction ; we don't calculate txt_len for LUFT
         }
+        
+        // make sure we don't change recon_size_luft if segging a primary-only line
+        else if (vb->line_coords == DC_PRIMARY) 
+            save_recon_size = vb->recon_size_luft;
     }
 
     GET_NEXT_ITEM (VCF_CHROM);
@@ -403,21 +414,21 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     }
 
     GET_NEXT_ITEM (VCF_POS);
+    vb->last_txt_len (VCF_POS) = VCF_POS_len;
 
     if (vb->line_coords == DC_PRIMARY) {
         PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, false, false, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len+1);
 
-        // POS <= 0 not expected in a VCF file
-        if (pos <= 0 && !(*VCF_POS_str == '.' && VCF_POS_len == 1))
+        if (pos == 0 && !(*VCF_POS_str == '.' && VCF_POS_len == 1)) // POS == 0 - invalid value return from seg_pos_field
             WARN_ONCE ("FYI: invalid POS=%"PRId64" value in chrom=%.*s vb_i=%u vb_line_i=%u: line will be compressed, but not indexed", 
                        pos, vb->chrom_name_len, vb->chrom_name, vb->vblock_i, vb->line_i);
                 
-        random_access_update_pos (vb_, DC_PRIMARY, VCF_POS);
+        if (pos) random_access_update_pos (vb_, DC_PRIMARY, VCF_POS);
     }
 
     else { // LUFT
         dl->pos[1] = seg_pos_field (vb_, VCF_oPOS, VCF_oPOS, false, false, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len);
-        random_access_update_pos (vb_, DC_LUFT, VCF_oPOS);
+        if (dl->pos[1]) random_access_update_pos (vb_, DC_LUFT, VCF_oPOS);
         vb->contexts[VCF_POS].txt_len++; // account for the tab
     }
 
@@ -442,7 +453,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     
     // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to luft coordinates
     if (chain_is_loaded)
-        vcf_lo_seg_generate_INFO_LIFTXXXX (vb, dl);
+        vcf_lo_seg_generate_INFO_DVCF (vb, dl);
 
     // INFO
     if (vcf_num_samples) {
@@ -511,21 +522,29 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         // as "all_the_same" and have word_index=0 == NONE for all lines
         bool lo_ok = LO_IS_OK (last_ostatus);
 
-        const char *name = coords_names[lo_ok ? DC_BOTH : vb->line_coords]; 
+        Coords reconstructable_coords = lo_ok ? DC_BOTH : vb->line_coords;
+        const char *name = coords_names[reconstructable_coords]; 
         seg_by_did_i (vb, name, strlen (name), VCF_COORDS, 0); // 0 as its not in the txt data
+        
+        if (reconstructable_coords & DC_PRIMARY) vb->recon_num_lines++;   // PRIMARY or BOTH
+        if (reconstructable_coords & DC_LUFT) vb->recon_num_lines_luft++; // LUFT or BOTH
         
         // if line was NOT rejected (the default, if not dual coordinates), we can delete the text from lo_rejects
         if (lo_ok)
             vb->lo_rejects[vb->line_coords-1].len = save_lo_rejects_len;
 
-        // if this line is a LUFT-only line, it won't be reconstructed by default - restore all accounting
+        // if this line is a LUFT-only line, it won't be reconstructed in primary coordinates
         if (!lo_ok && vb->line_coords == DC_LUFT) {
-            vb->vb_data_size = save_vb_data_size - line_len; 
+            vb->recon_size = save_recon_size - line_len; 
             
             // restore txt_len of all contexts to their values before this line was segged
             for (unsigned i=0; i < vb->num_contexts; i++) 
                 vb->contexts[i].txt_len = (i < save_txt_len_len ? save_txt_len[i] : 0);
         }
+
+        // if this line is a PRIMARY-only line, it won't be reconstructed in luft coordinates - update recon_size_luft
+        if (!lo_ok && vb->line_coords == DC_PRIMARY) 
+            vb->recon_size_luft = save_recon_size - line_len;
 
         // in case of a reject line - update reject_bytes to indicate its consumption
         if (txt_file->coords && txt_file->coords != vb->line_coords)

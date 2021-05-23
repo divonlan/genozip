@@ -293,7 +293,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 
     // get num_lines from vb header
     SectionHeaderVbHeader vb_header = zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER).vb_header;
-    vb->pair_num_lines = BGEN32 (vb_header.num_lines);
+    vb->pair_num_lines = BGEN32 (vb_header.num_lines_prim);
 
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
     sl++;
@@ -395,7 +395,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
         field_start = vb->optimized_desc;
         field_len = vb->optimized_desc_len + str_int (vb->first_line + vb->line_i, &vb->optimized_desc[vb->optimized_desc_len]);   
 
-        vb->vb_data_size -= unoptimized_len - field_len;
+        vb->recon_size -= unoptimized_len - field_len;
     }
 
     // we segment it using / | : and " " as separators. 

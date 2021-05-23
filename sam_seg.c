@@ -1151,7 +1151,7 @@ static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bo
     *value_len  = kraken_seg_taxid_do ((VBlockP)vb, SAM_TAXID, last_txt (vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME),
                                        taxid_str, true);
 
-    vb->vb_data_size += is_bam ? 7 : (*value_len + 6); // txt modified
+    vb->recon_size += is_bam ? 7 : (*value_len + 6); // txt modified
 
     return next_field; // unmodified
 }

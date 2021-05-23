@@ -39,9 +39,9 @@ bool piz_test_grep (VBlock *vb)
     ARRAY (const unsigned, section_index, vb->z_section_headers);
 
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
-    vb->first_line       = BGEN32 (header->first_line);
-    vb->lines.len        = BGEN32 (header->num_lines);
-    vb->vb_data_size     = BGEN32 (header->vb_data_size);
+    vb->first_line       = 1 + txt_file->num_lines; // doesn't count a dropped txtheader
+    vb->recon_num_lines  = BGEN32 (header->num_lines_prim);
+    vb->recon_size       = BGEN32 (header->recon_size_prim);
     vb->longest_line_len = BGEN32 (header->longest_line_len);
 
     // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
@@ -117,7 +117,7 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     if (!vb) return false; // we don't skip reading any SEC_DICT / SEC_COUNTS sections
 
     // B250, LOCAL, COUNT sections
-    bool skip = exe_type == EXE_GENOCAT && dict_id.num && dict_id.num != dict_id_fields[CHROM] && (
+    bool skip = exe_type == EXE_GENOCAT && dict_id.num && dict_id.num != dict_id_fields[CHROM] && (!flag.luft || dict_id.num != dict_id_fields[ODID(oCHROM)]) && (
     
     // sometimes we don't need dictionaries. but we always load CHROM.
         flag.genocat_no_dicts
@@ -246,8 +246,7 @@ static void piz_reconstruct_one_vb (VBlock *vb)
 
     // note: txt_data is fully allocated in advance and cannot be extended mid-reconstruction (container_reconstruct_do and possibly others rely on this)
     #define OVERFLOW_SIZE 65536 // allow some overflow space as sometimes we reconstruct unaccounted for data: 1. container templates 2. reconstruct_peek and others
-    buf_alloc (vb, &vb->txt_data, 0, vb->vb_data_size * vb->translation.factor + OVERFLOW_SIZE, char, 1.1, "txt_data"); 
-    buf_alloc (vb, &vb->lines, 0, vb->lines.len+1, char *, 1.1, "lines");
+    buf_alloc (vb, &vb->txt_data, 0, vb->recon_size * vb->translation.factor + OVERFLOW_SIZE, char, 1.1, "txt_data"); 
     
     piz_uncompress_all_ctxs (vb, 0);
 
@@ -306,7 +305,7 @@ DataType piz_read_global_area (void)
         flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
     }
 
-// read all dictionaries - CHROM/RNAME is needed for regions_make_chregs(). 
+    // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs(). 
     // Note: some dictionaries are skipped based on skip() and all flag logic should implemented there
     ctx_read_all_dictionaries(); 
 
@@ -327,7 +326,7 @@ DataType piz_read_global_area (void)
         ctx_read_all_counts(); // read all counts section
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-        if (flag.regions && z_file->contexts[CHROM].word_list.len) // FASTQ compressed without reference, has no CHROMs 
+        if (flag.regions && z_file->contexts[flag.luft ? ODID(oCHROM) : CHROM].word_list.len) // FASTQ compressed without reference, has no CHROMs 
             regions_make_chregs();
 
         // if the regions are negative, transform them to the positive complement instead
@@ -338,11 +337,11 @@ DataType piz_read_global_area (void)
         // note: in case of a data file with stored reference - SEC_REF_RAND_ACC will contain the random access of the reference
         // and SEC_RANDOM_ACCESS will contain the random access of the data. In case of a .ref.genozip file, both sections exist 
         // and are identical. It made the coding easier and their size is negligible.
-        random_access_load_ra_section (SEC_RANDOM_ACCESS, &z_file->ra_buf, "z_file->ra_buf", 
-                                       flag.show_index ? "Random-access index contents (result of --show-index)" : NULL);
+        random_access_load_ra_section (SEC_RANDOM_ACCESS, flag.luft ? ODID(oCHROM) : CHROM, &z_file->ra_buf, "z_file->ra_buf", 
+                                       !flag.show_index ? NULL : flag.luft ? RA_MSG_LUFT : RA_MSG_PRIM);
 
-        random_access_load_ra_section (SEC_REF_RAND_ACC, &ref_stored_ra, "ref_stored_ra", 
-                                       flag.show_ref_index && !flag.reading_reference ? "Reference random-access index contents (result of --show-index)" : NULL);
+        random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, &ref_stored_ra, "ref_stored_ra", 
+                                       flag.show_ref_index && !flag.reading_reference ? RA_MSG_REF : NULL);
 
         if ((flag.reference == REF_STORED || flag.reference == REF_EXTERNAL) && 
             !flag.reading_reference && !flag.genocat_no_reconstruct)
@@ -414,13 +413,6 @@ static bool piz_read_one_vb (VBlock *vb)
     int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sl++); 
 
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)ENT (char, vb->z_data, vb_header_offset);
-    vb->vb_data_size     = BGEN32 (header->vb_data_size); 
-    //vb->first_line       = BGEN32 (header->first_line);   // 32bit (a historical mistake): line number as in the source file (used mostly for error messages)
-    vb->first_line = 1 + txt_file->num_lines; // doesn't count a dropped txtheader
-    vb->lines.len        = BGEN32 (header->num_lines);       
-    vb->longest_line_len = BGEN32 (header->longest_line_len);
-    vb->digest_so_far    = header->digest_so_far;
-    vb->chrom_node_index = WORD_INDEX_NONE;
 
     // calculate the coordinates in which this VB will be rendered - PRIMARY or LUFT
     vb->vb_coords        = !z_dual_coords ? DC_PRIMARY // non dual-coordinate file - always PRIMARY
@@ -428,6 +420,14 @@ static bool piz_read_one_vb (VBlock *vb)
                          : header->h.flags.vb_header.coords == DC_LUFT    ? DC_LUFT    // reject component ##luft_only
                          : flag.luft ? DC_LUFT // dual component - render as LUFT
                          : DC_PRIMARY;         // dual component - render as PRIMARY
+
+    vb->recon_size       = BGEN32 (vb->vb_coords==DC_PRIMARY ? header->recon_size_prim : header->recon_size_luft); 
+    vb->first_line       = 1 + txt_file->num_lines; // doesn't count a dropped txtheader
+    vb->lines.len        = BGEN32 (header->top_level_repeats);   
+    vb->recon_num_lines  = z_file->genozip_version >= 12 ? BGEN32 (vb->vb_coords==DC_PRIMARY ? header->num_lines_prim : header->num_lines_luft) : vb->lines.len;
+    vb->longest_line_len = BGEN32 (header->longest_line_len);
+    vb->digest_so_far    = header->digest_so_far;
+    vb->chrom_node_index = WORD_INDEX_NONE;
 
     vb->is_rejects_vb    = z_dual_coords && (header->h.flags.vb_header.coords != DC_BOTH);
 
@@ -440,8 +440,8 @@ static bool piz_read_one_vb (VBlock *vb)
     if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
 
     if (flag.show_vblocks) 
-        iprintf ("READING(id=%d) vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
-                 vb->id, vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
+        iprintf ("READING(id=%d) vb_i=%u first_line=%u num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
+                 vb->id, vb->vblock_i, vb->first_line, vb->recon_num_lines, vb->recon_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
@@ -460,7 +460,7 @@ static bool piz_read_one_vb (VBlock *vb)
     // calculate the BGZF blocks from SEC_BGZF that the compute thread is expected to re-create,
     // unless isizes was not loaded (bc flag.data_modified).
     if (flag.bgzf == FLAG_BGZF_BY_ZFILE && txt_file->codec == CODEC_BGZF)     
-        bgzf_calculate_blocks_one_vb (vb, vb->vb_data_size); // does nothing if isizes is not loaded
+        bgzf_calculate_blocks_one_vb (vb, vb->recon_size); // does nothing if isizes is not loaded
 
     // initialize coverage counters
     if (flag.collect_coverage)
@@ -544,11 +544,11 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, Section sl_ent)
 
 static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlock *vb, uint64_t *num_nondrop_lines)
 {
-    ASSERTW (vb->txt_data.len == vb->vb_data_size || flag.data_modified, // files are the same size, unless we intended to modify the data
+    ASSERTW (vb->txt_data.len == vb->recon_size || flag.data_modified, // files are the same size, unless we intended to modify the data
             "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-            vb->vblock_i, (unsigned)vb->lines.len, vb->first_line, str_uint_commas (vb->vb_data_size).s, dt_name (txt_file->data_type), 
+            vb->vblock_i, (unsigned)vb->lines.len, vb->first_line, str_uint_commas (vb->recon_size).s, dt_name (txt_file->data_type), 
             str_uint_commas (vb->txt_data.len).s, 
-            (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
+            (int32_t)vb->txt_data.len - (int32_t)vb->recon_size);
 
     *num_nondrop_lines += vb->num_nondrop_lines;
     if (flag.count == COUNT_VBs)
@@ -561,7 +561,7 @@ static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlock *vb, uint
     else if (flag.reading_kraken)
         kraken_piz_handover_data (vb);
 
-    z_file->txt_data_so_far_single += vb->vb_data_size; 
+    z_file->txt_data_so_far_single += vb->recon_size; 
 
     piz_handover_or_discard_vb (dispatcher, &vb);
 }

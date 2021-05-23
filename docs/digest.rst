@@ -30,7 +30,7 @@ There are some cases in which you may request ``genozip`` to change the source d
 
 **Cases in which genocat doesn't verify the digest**
 
-When using any ``genocat`` option which results in intentional modification of the output data, the digest is not verified. These options include (partial list): ``--regions`` ``--grep`` ``--downsample`` ``--taxid`` ``--drop-genotypes`` ``--gt-only`` ``--no-header``, ``--header-only``, ``header-one``, ``--MAPQ``, ``--FLAG``, ``--bases``, ``--samples``, ``--sequential``, ``--luft``, ``--show-liftover``, ``--head``, ``--tail``, ``--lines``, ``--one-vb``, ``--one-component``
+When using any ``genocat`` option which results in intentional modification of the output data, the digest is not verified. These options include (partial list): ``--regions`` ``--grep`` ``--downsample`` ``--taxid`` ``--drop-genotypes`` ``--gt-only`` ``--no-header``, ``--header-only``, ``header-one``, ``--MAPQ``, ``--FLAG``, ``--bases``, ``--samples``, ``--sequential``, ``--luft``, ``--show-dvcf``, ``--head``, ``--tail``, ``--lines``, ``--one-vb``, ``--one-component``
 
 **Concatenated files**
 

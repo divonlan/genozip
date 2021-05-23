@@ -425,7 +425,7 @@ c. Many other improvements:
 - new option: genocat --bases - filters a SAM/BAM/FASTQ for SEQ base values
 - new option: --echo displays the command line and a timestamp upon completion of execution (successful or failed)
 - discontinued support for GTShark codec - use genozip v11 to decompress old VCF files compressed with --gtshark
-- VCF: better compression of FORMAT/F2R1, INFO/MLEAC
+- VCF: better compression of FORMAT/F2R1, INFO/MLEAC, FORMAT/MB, FORMAT/SB
 Option changes:
 - genounzip now always unbinds files, and the --unbind is canceled. the --prefix can now used to set a prefix.
 - genocat --fastq will NOT add /1 or /2 to R1 and R2 reads in the case that --FLAG is specified as well
@@ -438,7 +438,7 @@ Option changes:
 - Default number of threads is now 75% of cores for Windows and Mac and 110% of cores for Linux (modifiable with --threads)
 
 New advanced options:
-- new option: genocat --show-liftover - shows line-by-line result of the liftover (applied to a dual coordinate VCF file)
+- new option: genocat --show-dvcf - shows line-by-line result of the liftover (applied to a dual coordinate VCF file)
 - new option: genozip --show-chain-contigs - used in combination with --chain
 - new option: genozip --show-kraken - used in combination with --taxid
 - new option: --show-uncompress. Shows uncompressing of section data.

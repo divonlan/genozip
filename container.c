@@ -154,13 +154,16 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         iprintf ("VB=%u Container: %s repeats=%u items=%u\n", 
                  vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con));
 
+    if (con->is_toplevel) 
+        buf_alloc (vb, &vb->lines, 0, con->repeats+1, char *, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
+    
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip
         if (con->is_toplevel) {
             vb->line_i = vb->first_line + rep_i; // 1-based line from the begginging for the file, including the header
             
-            *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); // note: cannot use NEXTENT as lines.len is set in advance
+            *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); 
             vb->line_start = vb->txt_data.len;
 
             vb->drop_curr_line = NULL; // initialize for this line
@@ -327,11 +330,13 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
     } // repeats loop
 
     if (con->is_toplevel) {
-        ASSERT (vb->lines.len == con->repeats, "Reconstructed vb=%u has %"PRIu64" lines, but toplevel container has %u repeats",
-                vb->vblock_i, vb->lines.len, con->repeats); 
-
         // final line_start entry (it has a total of num_lines+1 entires) - done last, after possibly dropping line
         *AFTERENT (char *, vb->lines) = AFTERENT (char, vb->txt_data); // we allocated vb->lines.len+1 entries in lines
+
+        // sanity checks
+        ASSERT (vb->lines.len == con->repeats, "Expected vb->lines.len=%"PRIu64" == con->repeats=%u", vb->lines.len, con->repeats);
+        ASSERT (flag.data_modified || flag_loading_auxiliary || vb->num_nondrop_lines == vb->recon_num_lines, 
+                "Expected vb->num_nondrop_lines=%u == vb->recon_num_lines=%u", vb->num_nondrop_lines, vb->recon_num_lines);
     }
 
     // remove final seperator, only of final item (since v12, only remained used (by mistake) by SAM arrays - TODO: obsolete this. see sam_seg_array_field)

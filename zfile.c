@@ -7,10 +7,9 @@
 #include <time.h>
 #include <math.h>
 #include <limits.h>
-#include "genozip.h"
+#include "vblock.h"
 #include "zfile.h"
 #include "crypt.h"
-#include "vblock.h"
 #include "context.h"
 #include "file.h"
 #include "endianness.h"
@@ -69,7 +68,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
                       SEC_TAB "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u dual_coords=%u ref=\"%.*s\" md5ref=%s\n"
                       SEC_TAB "created=\"%.*s\"\n",
                  h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
-                 BGEN64 (h->uncompressed_data_size), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
+                 BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
                  digest_display (h->digest_bound).s, 
                  (dt==DT_FASTQ ? "dts_paired" : "dts_ref_internal"), f.dt_specific, 
                  f.aligner, f.txt_is_bin, f.bgzf, f.adler, f.dual_coords,
@@ -82,7 +81,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
         sprintf (str, SEC_TAB "txt_data_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u md5_single=%s digest_header=%s\n" 
                       SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) rejects_coord=%s txt_filename=\"%.*s\"\n",
-                 BGEN64 (h->txt_data_size), BGEN64 (h->num_lines), BGEN32 (h->max_lines_per_vb), 
+                 BGEN64 (h->txt_data_size), BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                  digest_display (h->digest_single).s, digest_display (h->digest_header).s, 
                  codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
                  coords_names[h->h.flags.txt_header.rejects_coord], TXT_FILENAME_LEN, h->txt_filename);
@@ -90,9 +89,12 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     }
 
     case SEC_VB_HEADER: {
+        bool v12 = (command == ZIP || z_file->genozip_version >= 12);
         SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
-        sprintf (str, SEC_TAB "first_line=%u lines=%u longest_line=%u vb_data_size=%u z_data_bytes=%u digest_so_far=%s coords=%s\n",
-                 BGEN32 (h->first_line), BGEN32 (h->num_lines), BGEN32 (h->longest_line_len), BGEN32 (h->vb_data_size), 
+        sprintf (str, SEC_TAB "lines=(PRIM:%u, LUFT:%u) recon_size=(P:%u, L:%u) longest_line=%u z_data_bytes=%u digest_so_far=%s coords=%s\n",
+                 BGEN32 (h->num_lines_prim),  v12 ? BGEN32 (h->num_lines_luft)  : 0, 
+                 BGEN32 (h->recon_size_prim), v12 ? BGEN32 (h->recon_size_luft) : 0, 
+                 BGEN32 (h->longest_line_len), 
                  BGEN32 (h->z_data_bytes), digest_display (h->digest_so_far).s, coords_names[h->h.flags.vb_header.coords]);
         break;
     }
@@ -704,7 +706,7 @@ bool zfile_read_genozip_header (char *created) // optional outs
     z_file->z_flags.dt_specific |= dts; 
     z_file->digest = header->digest_bound;
     z_file->num_lines = BGEN64 (header->num_lines_bound);
-    z_file->txt_data_so_far_bind = BGEN64 (header->uncompressed_data_size);
+    z_file->txt_data_so_far_bind = BGEN64 (header->recon_size_prim);
     
     ASSINP (!flag.test || !digest_is_zero(header->digest_bound), 
             "--test cannot be used wih %s, as it was compressed without a digest. See https://genozip.com/digest.html", z_name);
@@ -777,13 +779,13 @@ void zfile_compress_genozip_header (Digest single_component_digest)
         .dual_coords  = z_dual_coords,
         .has_taxid    = kraken_is_loaded
     };
-    header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
-    header.data_type               = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
-    header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
-    header.uncompressed_data_size  = BGEN64 (z_file->txt_data_so_far_bind);
-    header.num_lines_bound         = BGEN64 (z_file->num_lines);
-    header.num_sections            = BGEN32 (num_sections); 
-    header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
+    header.genozip_version = GENOZIP_FILE_FORMAT_VERSION;
+    header.data_type       = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
+    header.encryption_type = is_encrypted ? ENC_AES256 : ENC_NONE;
+    header.recon_size_prim = BGEN64 (z_file->txt_data_so_far_bind);
+    header.num_lines_bound = BGEN64 (z_file->num_lines);
+    header.num_sections    = BGEN32 (num_sections); 
+    header.num_components  = BGEN32 (z_file->num_txt_components_so_far);
     
     // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_MAKE_CHAIN) {   
@@ -921,7 +923,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     // update the header of the single (current) vcf. 
     SectionHeaderTxtHeader *curr_header = &z_file->txt_header_single;
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
-    curr_header->num_lines        = BGEN64 (txt_file->num_lines);
+    curr_header->txt_num_lines    = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
     curr_header->digest_single    = flag.data_modified || flag.rejects_coord ? DIGEST_NONE 
                                                                              : digest_finalize (&z_file->digest_ctx_single, "component:digest_ctx_single");
@@ -958,10 +960,14 @@ void zfile_compress_vb_header (VBlock *vb)
         .h.vblock_i          = BGEN32 (vb->vblock_i),
         .h.codec             = CODEC_NONE,
         .h.flags.vb_header   = { .coords = vb->vb_coords },
-        .num_lines           = BGEN32 ((uint32_t)vb->lines.len),
-        .vb_data_size        = BGEN32 (vb->vb_data_size),
+        .top_level_repeats   = BGEN32 ((uint32_t)vb->lines.len),
+        .num_lines_prim      = BGEN32 (z_dual_coords ? vb->recon_num_lines : vb->lines.len),
+        .num_lines_luft      = z_dual_coords ? BGEN32 (vb->recon_num_lines_luft) : 0,
+        .recon_size_prim     = BGEN32 (vb->recon_size),
+        .recon_size_luft     = BGEN32 (vb->recon_size_luft),
         .longest_line_len    = BGEN32 (vb->longest_line_len),
-        .digest_so_far       = flag.data_modified ? DIGEST_NONE : vb->digest_so_far
+        .digest_so_far       = flag.data_modified ? DIGEST_NONE : vb->digest_so_far,
+        .unused              = 0,
     };
 
     // copy section header into z_data - to be eventually written to disk by the main thread. this section doesn't have data.
@@ -971,17 +977,17 @@ void zfile_compress_vb_header (VBlock *vb)
 // ZIP only: called by the main thread in the sequential order of VBs: updating of the already compressed
 // variant data section (compressed by the compute thread in zfile_compress_vb_header) just before writing it to disk
 // note: this updates the z_data in memory (not on disk)
-void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
+void zfile_update_compressed_vb_header (VBlock *vb)
 {
     SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)vb->z_data.data;
-    vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
-    vb_header->first_line   = BGEN32 (txt_first_line_i);
+    vb_header->z_data_bytes    = BGEN32 ((uint32_t)vb->z_data.len);
 
     if (flag.show_vblocks) 
-        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u component=%u first_line=%u num_lines=%u txt_file=%u genozip_size=%u longest_line_len=%u\n",
-                 vb->id, vb->vblock_i, z_file->num_txt_components_so_far, txt_first_line_i, BGEN32 (vb_header->num_lines), 
-                 BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
-                 BGEN32 (vb_header->longest_line_len));
+        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u component=%u num_lines_prim=%u num_lines_luft=%u recon_size_prim=%u recon_size_luft=%u genozip_size=%u longest_line_len=%u\n",
+                 vb->id, vb->vblock_i, z_file->num_txt_components_so_far, 
+                 BGEN32 (vb_header->num_lines_prim), BGEN32 (vb_header->num_lines_luft), 
+                 BGEN32 (vb_header->recon_size_prim), BGEN32 (vb_header->recon_size_luft), 
+                 BGEN32 (vb_header->z_data_bytes), BGEN32 (vb_header->longest_line_len));
 
     // now we can finally encrypt the header - if needed
     if (crypt_have_password())  

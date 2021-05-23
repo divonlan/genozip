@@ -29,7 +29,7 @@ extern uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sa
 extern LocalGetLineCB *zfile_get_local_data_callback (DataType dt, ContextP ctx);
 
 extern void zfile_compress_vb_header (VBlockP vb);
-extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
+extern void zfile_update_compressed_vb_header (VBlockP vb);
 
 extern void zfile_write_txt_header (BufferP vcf_header_text, uint64_t unmodified_txt_header_len, Digest header_md5, bool is_first_vcf);
 extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Digest *md5);

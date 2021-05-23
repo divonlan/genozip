@@ -246,7 +246,7 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **t
     if (flag.optimize_Vf && (dict_id.num == dict_id_ATTR_Variant_freq) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
         
-        vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;
+        vb->recon_size -= (int)(*this_value_len) - (int)optimized_snip_len;
         *this_value = optimized_snip;
         *this_value_len = optimized_snip_len;
         return true; // proceed with adding to dictionary/b250

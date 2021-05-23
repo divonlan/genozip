@@ -134,6 +134,11 @@ static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
                     sbl[parent].pc_of_txt += sbl[child].pc_of_txt;
                     sbl[parent].pc_of_z   += sbl[child].pc_of_z;  
 
+                    if (flag.debug_stats)
+                        iprintf ("Consolidated %s (did=%u) (txt_size=%"PRIu64" z_size=%"PRIu64") into %s (did=%u) (AFTER: txt_size=%"PRIu64" z_size=%"PRIu64")\n",
+                                 sbl[child].name, sbl[child].my_did_i, sbl[child].txt_size, sbl[child].z_size, 
+                                 sbl[parent].name, sbl[parent].my_did_i, sbl[parent].txt_size, sbl[parent].z_size);
+
                     sbl[child] = (StatsByLine){ .my_did_i = DID_I_NONE, .st_did_i = DID_I_NONE };
                 }
             }
@@ -182,6 +187,10 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
                     survivor->pc_of_txt += sbl[i].pc_of_txt;
                     survivor->pc_of_z   += sbl[i].pc_of_z; 
                     survivor->name       = consolidated_name; // rename only if at least one was consolidated
+
+                    if (flag.debug_stats)
+                        iprintf ("Consolidated %s (txt_size=%"PRIu64" z_size=%"PRIu64") into %s (AFTER: txt_size=%"PRIu64" z_size=%"PRIu64")\n",
+                                 sbl[i].name, sbl[i].txt_size, sbl[i].z_size, survivor->name, survivor->txt_size, survivor->z_size);
 
                     sbl[i] = (StatsByLine){}; 
                 }
@@ -301,21 +310,21 @@ void stats_compress (void)
         all_z_size      += s->z_size;
         all_txt_size    += s->txt_size;
 
-        /* Name           */ s->name = ctx ? ctx->name : ST_NAME (SEC(i)); 
-        /* Type           */ strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
+        s->name = ctx ? ctx->name : ST_NAME (SEC(i)); 
+        strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
 
         if (ctx) {
-                             s->my_did_i = ctx->did_i;
-                             s->st_did_i = ctx->st_did_i;
-        /* did_i          */ s->did_i = str_uint_commas ((uint64_t)ctx->did_i); 
-        /* #Words in file */ s->words = str_uint_commas (ctx->b250.num_b250_words);
-        /* % dict         */ s->pc_dict              = !ctx->b250.num_b250_words         ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->b250.num_b250_words;
-        /* % singletons   */ s->pc_singletons        = !ctx->b250.num_b250_words         ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->b250.num_b250_words;
-        /* % failed singl.*/ s->pc_failed_singletons = !ctx->b250.num_b250_words         ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->b250.num_b250_words;
-        /* % hash occupn. */ s->pc_hash_occupancy    = !ctx->global_hash_prime  ? 0 : 100.0 * (double)(ctx->nodes.len + ctx->ol_nodes.len) / (double)ctx->global_hash_prime;
-        /* Hash           */ s->hash = str_uint_commas (ctx->global_hash_prime);
-        /* uncomp dict    */ s->uncomp_dict = str_size (ctx->dict.len);
-        /* comp dict      */ s->comp_dict   = str_size (dict_compressed_size);
+            s->my_did_i             = ctx->did_i;
+            s->st_did_i             = ctx->st_did_i;
+            s->did_i                = str_uint_commas ((uint64_t)ctx->did_i); 
+            s->words                = str_uint_commas (ctx->b250.num_b250_words);
+            s->pc_dict              = !ctx->b250.num_b250_words ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->b250.num_b250_words;
+            s->pc_singletons        = !ctx->b250.num_b250_words ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->b250.num_b250_words;
+            s->pc_failed_singletons = !ctx->b250.num_b250_words ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->b250.num_b250_words;
+            s->pc_hash_occupancy    = !ctx->global_hash_prime   ? 0 : 100.0 * (double)(ctx->nodes.len + ctx->ol_nodes.len) / (double)ctx->global_hash_prime;
+            s->hash                 = str_uint_commas (ctx->global_hash_prime);
+            s->uncomp_dict          = str_size (ctx->dict.len);
+            s->comp_dict            = str_size (dict_compressed_size);
         }
         else {
             s->my_did_i = s->st_did_i = DID_I_NONE;
@@ -337,7 +346,7 @@ void stats_compress (void)
     unsigned num_stats = s - sbl;
 
     double all_comp_ratio = (double)all_txt_size / (double)all_z_size;
-    double all_pc_of_txt  = 100.0 * (double)all_txt_size        / (double)z_file->txt_data_so_far_bind;
+    double all_pc_of_txt  = 100.0 * (double)all_txt_size / (double)z_file->txt_data_so_far_bind;
     double all_pc_of_z    = 100.0 * (double)all_z_size / (double)z_file->disk_so_far;
 
     // long form stats from --show-STATS    

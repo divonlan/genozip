@@ -94,7 +94,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, const char *ref, unsigned ref_l
     else // in the default reconstruction, oREF is in the INFO/LIFTOVER vector
         vb->contexts[VCF_LIFT_REF].txt_len += ref_len;
 
-    // note: vb_data_size doesn't change if txt_files.coords==LUFT, because currently Genozip only supports dual coords if the size
+    // note: vb->recon_size doesn't change if txt_files.coords==LUFT, because currently Genozip only supports dual coords if the size
     // of REF and oREF are the same, and ALT and oALT.
 }
 

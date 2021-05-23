@@ -234,7 +234,7 @@ typedef struct DtTranslation {
     uint8_t src_z_is_binary;  // same type as z_file.flags
     DataType dst_txt_dt;
     DidIType toplevel;
-    float factor;             // specifies the size of vb.txt_data allocated in PIZ vs the size recorded in SectionHeaderVbHeader.vb_data_size.
+    float factor;             // specifies the size of vb.txt_data allocated in PIZ vs the size recorded in SectionHeaderVbHeader.recon_size.
                               // It is fully allocated in advance and cannot be extended.
     TXTHEADER_TRANSLATOR ((*txtheader_translator));
     bool trans_containers;    // whether to invoke translators in containers
@@ -252,7 +252,7 @@ typedef struct DtTranslation {
     /* 23andMe to VCF       */ { DT_ME23,    false, DT_VCF,    ME23_TOP2VCF,      4,   txtheader_me232vcf,  true,     false, NULL }, \
     /* FASTA to Phylip      */ { DT_FASTA,   false, DT_PHYLIP, FASTA_TOPLEVEL,    1.1, txtheader_fa2phy,    true,     false, NULL }, \
     /* Phylip to FASTA      */ { DT_PHYLIP,  false, DT_FASTA,  PHY_TOP2FASTA,     1.1, txtheader_phy2fa,    true,     false, NULL }, \
-    /* VCF: genocat --luft  */ { DT_VCF,     false, DT_VCF,    VCF_TOPLUFT,       1.3, NULL,                true,     false, vcf_vb_is_luft }, /* Length of --luft is may vary slightly due to different CHROM, POS, AC, END lengths */ \
+    /* VCF: genocat --luft  */ { DT_VCF,     false, DT_VCF,    VCF_TOPLUFT,       1,   NULL,                true,     false, vcf_vb_is_luft }, /* Length of --luft is exactly recon_size_luft*/ \
     /* genocat --taxid      */ { DT_KRAKEN,  false, DT_NONE,   KRAKEN_TOP2TAXID,  1,   NULL,                true,     false, kraken_is_translation }, \
 }
 

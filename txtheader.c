@@ -121,7 +121,7 @@ void txtheader_verify_contig (const char *chrom_name, unsigned chrom_name_len, P
 }
 
 // ZIP: reads txt header and writes its compressed form to the GENOZIP file
-bool txtheader_zip_read_and_compress (uint32_t *txt_line_i)
+bool txtheader_zip_read_and_compress (void)
 {    
     Digest header_digest = DIGEST_NONE;
     digest_initialize(); 
@@ -130,8 +130,6 @@ bool txtheader_zip_read_and_compress (uint32_t *txt_line_i)
 
     if (DTPT(txt_header_required) == HDR_MUST || DTPT (txt_header_required) == HDR_OK)
         header_digest = txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
-    
-    *txt_line_i += (uint32_t)evb->lines.len;
 
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
     //          also: header is modified if --chain or compressing a Luft file

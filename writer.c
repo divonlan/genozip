@@ -209,7 +209,7 @@ static void write_set_first_vb_for_tail (void)
 
     while (sections_prev_sec (&sl, SEC_VB_HEADER)) {
         SectionHeaderVbHeader header = zfile_read_section_header (evb, sl->offset, sl->vblock_i, SEC_VB_HEADER).vb_header;
-        uint32_t vb_num_lines = BGEN32 (header.num_lines); 
+        uint32_t vb_num_lines = BGEN32 (flag.luft ? header.num_lines_luft : header.num_lines_prim); 
 
         // case: this is the first VB (from the file end) we need
         if (vb_num_lines > count_lines) { 

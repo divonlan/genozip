@@ -131,7 +131,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-liftover  C. Show line-by-line outcome of the liftover of that line. Used with dual-coordinate files and may be combined --luft.
+.. option:: --show-dvcf  C. Show line-by-line outcome of the liftover of that line. Used with dual-coordinate files and may be combined --luft.
 
     | See: :ref:`liftover_vcf`
     |

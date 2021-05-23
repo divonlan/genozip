@@ -23,6 +23,7 @@
 #include "zfile.h"
 #include "hash.h"
 #include "progress.h"
+#include "website.h"
 
 // Search algorithm:
 // A. During kraken loading:
@@ -81,7 +82,7 @@ void kraken_set_show_kraken (const char *optarg)
     else if (str_case_compare (optarg, "excluded", 8, NULL)) 
         flag.show_kraken = KRK_EXCLUDED;
     else
-        ASSINP0 (false, "--show-kraken argument error: see "GENOZIP_URL"/kraken.html for valid options");
+        ASSINP0 (false, "--show-kraken argument error: see "WEBSITE_KRAKEN" for valid options");
 }
 
 //-----------------------

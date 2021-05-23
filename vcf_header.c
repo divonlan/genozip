@@ -33,10 +33,10 @@ char *vcf_samples_is_included;         // a bytemap indicating for each sample i
 static char **vcf_sample_names;        // an array of char * to nul-terminated names of samples 
 static char *vcf_sample_names_data;    // vcf_sample_names point into here
 
-#define LINEIS(s) (line_len > strlen(s) && !memcmp (line, (s), strlen(s))) // note: gcc optimizer resolves strlen("CONST") in compilation time
+#define LINEIS(s) (line_len > (sizeof s - 1) && !memcmp (line, (s), sizeof s - 1)) 
 
-#define SUBST_LABEL(old,new) do { buf_add_more (NULL, new_txt_header, (new), strlen (new), NULL); \
-                                  buf_add_more (NULL, new_txt_header, line + strlen (old), line_len - strlen (old), NULL); } while (0)
+#define SUBST_LABEL(old,new) do { buf_add_more (NULL, new_txt_header, (new), (sizeof new - 1), NULL); \
+                                  buf_add_more (NULL, new_txt_header, line + (sizeof old - 1), line_len - (sizeof old - 1), NULL); } while (0)
 
 // use in --chain for generating LIFTREJT strings with full INFO and FORMAT ID names (but just the 8 chars in ctx->name)
 typedef struct { DictId dict_id; char ID[MAX_VCF_ID_LEN]; } DictIdToID;
@@ -146,7 +146,7 @@ static bool vcf_header_extract_contigs (const char *line, unsigned line_len, voi
     const char *contig_name;
     unsigned contig_name_len;
     PosType length = 0;
-    unsigned key_len = is_contig ? 9 : strlen (HK_LUFT_CONTIG);
+    unsigned key_len = is_contig ? 9 : (sizeof HK_LUFT_CONTIG - 1);
     DECLARE_SNIP;
 
     // parse eg "##contig=<ID=NKLS02001838.1,length=29167>" and "##luft_contig=<ID=22>"
@@ -255,7 +255,7 @@ static bool vcf_header_zip_liftback_header_one_line (const char *line, unsigned 
 {
     Buffer *new_txt_header = (Buffer *)new_txt_header_;
     
-    if      (LINEIS (HK_PRIM_ONLY))   buf_add_more (evb, (Buffer *)rejects_, line + strlen (HK_PRIM_ONLY), line_len - strlen (HK_PRIM_ONLY), NULL); // add ##primary_only variants to "rejects" buffer
+    if      (LINEIS (HK_PRIM_ONLY))   buf_add_more (evb, (Buffer *)rejects_, line + (sizeof HK_PRIM_ONLY -1), line_len - (sizeof HK_PRIM_ONLY -1), NULL); // add ##primary_only variants to "rejects" buffer
     else if (LINEIS (HK_PRIM_CONTIG)) SUBST_LABEL (HK_PRIM_CONTIG, "##contig=");
     else if (LINEIS ("##contig="))    SUBST_LABEL ("##contig=", HK_LUFT_CONTIG);
     else if (LINEIS (HK_PRIM_REF))    SUBST_LABEL (HK_PRIM_REF, "##reference=");
@@ -295,7 +295,7 @@ static void vcf_header_zip_liftback_header (Buffer *txt_header)
 static bool vcf_header_zip_get_luft_only_lines_do (const char *line, unsigned line_len, void *rejects_, void *unused1, unsigned unused2)
 {
     // add ##luft_only variants to "rejects" buffer
-    if (LINEIS (HK_LUFT_ONLY)) buf_add_more (evb, (Buffer *)rejects_, line + strlen (HK_LUFT_ONLY), line_len - strlen (HK_LUFT_ONLY), NULL); 
+    if (LINEIS (HK_LUFT_ONLY)) buf_add_more (evb, (Buffer *)rejects_, line + sizeof HK_LUFT_ONLY -1, line_len - sizeof HK_LUFT_ONLY -1, NULL); 
     return false; // continue iterating
 }
 
@@ -340,10 +340,10 @@ static void vcf_header_zip_convert_header_to_dc_add_lines (Buffer *new_header)
     bufprintf (evb, new_header, HK_CHAIN"file://%s\n", chain_filename ? chain_filename : "<null>");
     bufprintf (evb, new_header, HK_LUFT_REF"file://%s\n", ref_filename ? ref_filename : "<null>");
 
-    bufprintf (evb, new_header, KH_INFO_LO"\n", GENOZIP_CODE_VERSION);
-    bufprintf (evb, new_header, KH_INFO_LB"\n", GENOZIP_CODE_VERSION);
-    bufprintf (evb, new_header, KH_INFO_RO"\n", GENOZIP_CODE_VERSION);
-    bufprintf (evb, new_header, KH_INFO_RB"\n", GENOZIP_CODE_VERSION);
+    bufprintf (evb, new_header, KH_INFO_LUFT"\n", GENOZIP_CODE_VERSION);
+    bufprintf (evb, new_header, KH_INFO_PRIM"\n", GENOZIP_CODE_VERSION);
+    bufprintf (evb, new_header, KH_INFO_LREJ"\n", GENOZIP_CODE_VERSION);
+    bufprintf (evb, new_header, KH_INFO_PREJ"\n", GENOZIP_CODE_VERSION);
 
     // add all Luft contigs (note: we get them from liftover directly, as they zip_initialize that adds them to zf_ctx has not been called yet)
     ARRAY (WordIndex, dst_contig, vcf_header_liftover_dst_contigs); // dst_contig is sorted, but might contain duplicate elements
@@ -388,7 +388,7 @@ static void vcf_header_update_INFO_FORMAT (const char *line, unsigned line_len, 
 
     vcf_header_get_attribute (line, line_len, is_info ? 7 : 9, "Number=", 7, false, &number, &number_len);
     vcf_header_get_attribute (line, line_len, is_info ? 7 : 9, "ID=",     3, false, &id, &id_len);
-    vcf_header_get_attribute (line, line_len, is_info ? 7 : 9, HK_RENDERED_ATTR"=", strlen (HK_RENDERED_ATTR)+1, false, &alg, &alg_len);
+    vcf_header_get_attribute (line, line_len, is_info ? 7 : 9, HK_RENDERALG_ATTR"=", sizeof HK_RENDERALG_ATTR-1 +1, false, &alg, &alg_len);
 
     // case: liftover algorithm is specified in header, see that Genozip supports it and set context, or error if not 
     if (alg) {
@@ -410,7 +410,7 @@ static void vcf_header_update_INFO_FORMAT (const char *line, unsigned line_len, 
     else {
         luft_trans = vcf_header_set_luft_trans (id, id_len, is_info, TRANS_ID_UNKNOWN, number, number_len);
 
-        vcf_header_add_line_add_key (new_header, line, line_len, HK_RENDERED_ATTR, ltrans_props[luft_trans].alg_name);
+        vcf_header_add_line_add_key (new_header, line, line_len, HK_RENDERALG_ATTR, ltrans_props[luft_trans].alg_name);
     }
 }
 
@@ -584,13 +584,13 @@ static bool vcf_inspect_txt_header_piz (VBlock *txt_header_vb, Buffer *txt_heade
     if (flag.drop_genotypes) 
         vcf_header_trim_field_name_line (&vcf_field_name_line); // drop FORMAT and sample names
 
-    // if --show_liftover, add two extra fields at beginning for field name line, and remove the # from #CHROM
-    if (flag.show_liftover)
+    // if --show_dvcf, add two extra fields at beginning for field name line, and remove the # from #CHROM
+    if (flag.show_dvcf)
         #define ADDITIONAL_FIELDS "#COORD\tSTATUS\t"
-        buf_add_more (txt_header_vb, txt_header, ADDITIONAL_FIELDS, strlen (ADDITIONAL_FIELDS), "txt_data");
+        buf_add_more (txt_header_vb, txt_header, ADDITIONAL_FIELDS, sizeof ADDITIONAL_FIELDS-1, "txt_data");
 
     // add the (perhaps modified) field name (#CHROM) line
-    buf_add_more (txt_header_vb, txt_header, &vcf_field_name_line.data[!!flag.show_liftover], vcf_field_name_line.len - !!flag.show_liftover, "txt_data");
+    buf_add_more (txt_header_vb, txt_header, &vcf_field_name_line.data[!!flag.show_dvcf], vcf_field_name_line.len - !!flag.show_dvcf, "txt_data");
 
     return true; // all good
 }
@@ -708,7 +708,7 @@ static void vcf_header_subset_samples (Buffer *vcf_field_name_line)
     vcf_samples_is_included = MALLOC (num_samples);
     memset (vcf_samples_is_included, cmd_is_negative_samples, num_samples); // 0 if not included unless list says so (positive) and vice versa
 
-    unsigned vcf_names_start_index = (line + strlen(VCF_FIELD_NAMES_LONG) + 1) - FIRSTENT (char, *vcf_field_name_line);
+    unsigned vcf_names_start_index = (line + sizeof VCF_FIELD_NAMES_LONG-1 + 1) - FIRSTENT (char, *vcf_field_name_line);
     unsigned vcf_names_data_len = vcf_field_name_line->len - vcf_names_start_index;
     vcf_sample_names_data = MALLOC (vcf_names_data_len);
     memcpy (vcf_sample_names_data, &vcf_field_name_line->data[vcf_names_start_index], vcf_names_data_len);

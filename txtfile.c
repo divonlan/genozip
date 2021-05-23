@@ -514,11 +514,11 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
 
-    vb->vb_data_size   = vb->txt_data.len; // initial value. it may change if --optimize / --chain are used.
-    vb->vb_data_size_0 = vb->txt_data.len; // this copy doesn't change with --optimize / --chain.
+    vb->recon_size = vb->recon_size_luft = vb->txt_data.len; // initial value. it may change if --optimize / --chain are used, or if dual coordintes - for the other coordinate
+    vb->txt_size = vb->txt_data.len; // this copy doesn't change with --optimize / --chain.
 
     // ZIP of a dual-coordinates file: calculate how much of the VB is rejected lines originating from ##primary_only/##luft_only
-    vb->reject_bytes = MIN (vb->vb_data_size, txt_file->reject_bytes);
+    vb->reject_bytes = MIN (vb->recon_size, txt_file->reject_bytes);
     txt_file->reject_bytes -= vb->reject_bytes;
 
     if (!testing_memory) {
@@ -606,7 +606,7 @@ int64_t txtfile_estimate_txt_data_size (VBlock *vb)
         case CODEC_BGZF:
         case CODEC_BZ2:  
             if (vb1_txt_data_comp_len) {
-                ratio = (double)vb->vb_data_size / (double)vb1_txt_data_comp_len; 
+                ratio = (double)vb->txt_size / (double)vb1_txt_data_comp_len; 
                 vb1_txt_data_comp_len = 0;
                 break;
             }
@@ -653,13 +653,13 @@ DataType txtfile_get_file_dt (const char *filename)
 const char *txtfile_piz_get_filename (const char *orig_name,const char *prefix, bool is_orig_name_genozip)
 {
     unsigned fn_len = strlen (orig_name);
-    unsigned genozip_ext_len = is_orig_name_genozip ? strlen (GENOZIP_EXT) : 0;
+    unsigned genozip_ext_len = is_orig_name_genozip ? (sizeof GENOZIP_EXT - 1) : 0;
     char *txt_filename = (char *)MALLOC(fn_len + 10);
 
     #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
         ((z_file->data_type==(from) && flag.out_dt==(to) && \
          fn_len >= genozip_ext_len+strlen(ext) && \
-         !strcmp (&txt_filename[fn_len-genozip_ext_len-strlen(ext)], (ext))) ? (int)strlen(ext) : 0) 
+         !strcmp (&txt_filename[fn_len-genozip_ext_len- (sizeof ext - 1)], (ext))) ? (int)(sizeof ext - 1) : 0) 
 
     // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
     int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_BAM,   ".sam") +

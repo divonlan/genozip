@@ -21,10 +21,59 @@ static Mutex ra_mutex[2] = {};
 
 #define DC ((dc)-1)
 
+// --------------------
+// misc stuff
+// --------------------
+
 void random_access_initialize(void)
 {    
     mutex_initialize (ra_mutex[0]);
     mutex_initialize (ra_mutex[1]);
+}
+
+// Called by PIZ main thread (piz_read_global_area) and ZIP main thread (zip_write_global_area)
+static void BGEN_random_access (Buffer *ra_buf)
+{
+    ARRAY (RAEntry, ra, *ra_buf);
+
+    for (unsigned i=0; i < ra_buf->len; i++) {
+        ra[i].vblock_i    = BGEN32 (ra[i].vblock_i);
+        ra[i].chrom_index = BGEN32 (ra[i].chrom_index);
+        ra[i].min_pos     = BGEN64 (ra[i].min_pos);
+        ra[i].max_pos     = BGEN64 (ra[i].max_pos);
+    }
+}
+
+static void random_access_show_index (const Buffer *ra_buf, bool from_zip, DidIType chrom_did_i, const char *msg)
+{
+    iprintf ("\n%s:\n", msg);
+    
+    ARRAY (const RAEntry, ra, *ra_buf);
+
+    Context *ctx = &z_file->contexts[chrom_did_i];
+
+    for (uint32_t i=0; i < ra_buf->len; i++) {
+        
+        const char *chrom_snip; unsigned chrom_snip_len;
+        if (from_zip) {
+            if (ra[i].chrom_index != WORD_INDEX_NONE) {
+                CtxNode *chrom_node = ctx_get_node_by_word_index (ctx, ra[i].chrom_index);
+                chrom_snip     = ENT (char, ctx->dict, chrom_node->char_index);
+                chrom_snip_len = chrom_node->snip_len;
+            }
+            else {
+                chrom_snip     = "CONT_FROM_PREV_VB";
+                chrom_snip_len = strlen (chrom_snip);
+            }
+        }
+        else {
+            CtxWord *chrom_word = ENT (CtxWord, ctx->word_list, ra[i].chrom_index);
+            chrom_snip = ENT (char, ctx->dict, chrom_word->char_index);
+            chrom_snip_len = chrom_word->snip_len;
+        }
+        iprintf ("vb_i=%u chrom='%.*s' (chrom_word_index=%d) min_pos=%"PRId64" max_pos=%"PRId64"\n",
+                 ra[i].vblock_i, chrom_snip_len, chrom_snip, ra[i].chrom_index, ra[i].min_pos, ra[i].max_pos);
+    }
 }
 
 // --------------------
@@ -137,7 +186,7 @@ void random_access_merge_in_vb (VBlock *vb, Coords dc)
 
     buf_alloc (evb, z_buf, 0, z_buf->len + src_ra_len, RAEntry, 2, "z_file->ra_buf"); 
 
-    Context *chrom_ctx = &vb->contexts[CHROM];
+    Context *chrom_ctx = &vb->contexts[dc==DC_PRIMARY ? CHROM : ODID(oCHROM)];
     ASSERT0 (chrom_ctx, "cannot find chrom_ctx");
 
     for (unsigned i=0; i < src_ra_len; i++) {
@@ -226,7 +275,7 @@ void random_access_finalize_entries (Buffer *ra_buf)
 
 void random_access_compress (Buffer *ra_buf, SectionType sec_type, Coords dc, const char *msg)
 {
-    if (msg) random_access_show_index (ra_buf, true, msg);
+    if (msg) random_access_show_index (ra_buf, true, dc==DC_LUFT ? ODID(oCHROM) : CHROM, msg);
     
     BGEN_random_access (ra_buf); // make ra_buf into big endian
 
@@ -349,7 +398,7 @@ uint32_t random_access_verify_all_contigs_same_length (void)
 }
 
 // PIZ: read SEC_RANDOM_ACCESS. If --luft - read the luft section instead.
-void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const char *buf_name, const char *show_index_msg)
+void random_access_load_ra_section (SectionType sec_type, DidIType chrom_did_i, Buffer *ra_buf, const char *buf_name, const char *show_index_msg)
 {
     Section ra_sl = sections_first_sec (sec_type, true);
     if (!ra_sl) return; // section doesn't exist
@@ -363,57 +412,8 @@ void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const 
     BGEN_random_access (ra_buf);
 
     if (show_index_msg) {
-        random_access_show_index (ra_buf, false, show_index_msg);
+        random_access_show_index (ra_buf, false, chrom_did_i, show_index_msg);
         if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-index, we only show the index, not the data
-    }
-}
-
-// --------------------
-// misc stuff
-// --------------------
-
-// Called by PIZ main thread (piz_read_global_area) and ZIP main thread (zip_write_global_area)
-void BGEN_random_access (Buffer *ra_buf)
-{
-    ARRAY (RAEntry, ra, *ra_buf);
-
-    for (unsigned i=0; i < ra_buf->len; i++) {
-        ra[i].vblock_i    = BGEN32 (ra[i].vblock_i);
-        ra[i].chrom_index = BGEN32 (ra[i].chrom_index);
-        ra[i].min_pos     = BGEN64 (ra[i].min_pos);
-        ra[i].max_pos     = BGEN64 (ra[i].max_pos);
-    }
-}
-
-void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *msg)
-{
-    iprintf ("\n%s:\n", msg);
-    
-    ARRAY (const RAEntry, ra, *ra_buf);
-
-    Context *ctx = &z_file->contexts[CHROM];
-
-    for (uint32_t i=0; i < ra_buf->len; i++) {
-        
-        const char *chrom_snip; unsigned chrom_snip_len;
-        if (from_zip) {
-            if (ra[i].chrom_index != WORD_INDEX_NONE) {
-                CtxNode *chrom_node = ctx_get_node_by_word_index (ctx, ra[i].chrom_index);
-                chrom_snip     = ENT (char, ctx->dict, chrom_node->char_index);
-                chrom_snip_len = chrom_node->snip_len;
-            }
-            else {
-                chrom_snip     = "CONT_FROM_PREV_VB";
-                chrom_snip_len = strlen (chrom_snip);
-            }
-        }
-        else {
-            CtxWord *chrom_word = ENT (CtxWord, ctx->word_list, ra[i].chrom_index);
-            chrom_snip = ENT (char, ctx->dict, chrom_word->char_index);
-            chrom_snip_len = chrom_word->snip_len;
-        }
-        iprintf ("vb_i=%u chrom='%.*s' (chrom_word_index=%d) min_pos=%"PRId64" max_pos=%"PRId64"\n",
-                 ra[i].vblock_i, chrom_snip_len, chrom_snip, ra[i].chrom_index, ra[i].min_pos, ra[i].max_pos);
     }
 }
 

@@ -27,7 +27,17 @@ extern char *str_to_single_line_printable (const char *in, unsigned in_len, char
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (const char *in, char *out);
 extern _Bool str_case_compare (const char *str1, const char *str2, unsigned len, _Bool *identical);
-extern uint64_t str_count_char (const char *str, uint64_t len, char c);
+
+static inline uint64_t str_count_char (const char *str, uint64_t len, char c)
+{
+    if (!str) return 0;
+    
+    uint64_t count=0;
+    for (uint64_t i=0; i < len; i++)
+        if (str[i] == c) count++;
+
+    return count;
+}
 
 extern StrText str_size (uint64_t size);
 extern StrText str_bases (uint64_t num_bases);

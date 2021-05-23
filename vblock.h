@@ -48,11 +48,17 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file; /* position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\
-    int32_t vb_data_size;      /* ZIP: actual size of txt read from file, modified if --optimize/--chain ; PIZ: expected size of decompressed txt. */\
-    int32_t vb_data_size_0;    /* ZIP: original size of vb_data_size before modifying due to --optimize/--chain */ \
+    int32_t recon_size;        /* ZIP: actual size of txt read from file, modified if --optimize/--chain as expected to be reconstructed in PRIMARY coordinates */\
+                               /* PIZ: expected reconstruction size in the coordinates of reconstruction */\
+    int32_t recon_size_luft;   /* ZIP only: expected reconstruction size in LUFT coordinates */ \
+    uint32_t recon_num_lines;  /* PIZ: expected number of non-dropped lines in the default reconstruction size in the user coordinates of reconstruction */\
+                               /* ZIP: dual-coordinate files only: DC_PRIMARY + DC_BOTH lines in this VB  */ \
+    uint32_t recon_num_lines_luft; /* ZIP only, dual coordinates files only: DC_LUFT + DC_BOTH lines in this VB */ \
+    int32_t txt_size;          /* ZIP: original size of of text data read from the file */ \
     uint32_t longest_line_len; /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
     uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
+    \
     Digest digest_so_far;      /* partial calculation of MD5 up to and including this VB */ \
     uint32_t component_i;      /* PIZ: 0-based txt component within z_file that this VB belongs to */ \
     DtTranslation translation; /* PIZ: translation to be applies to this VB */ \
@@ -123,7 +129,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     WordIndex prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
     \
     /* liftover stuff */ \
-    Coords vb_coords;          /* ZIP and PIZ. DC_PRIMARY, DC_LUFT or DC_BOTH */ \
+    Coords vb_coords;          /* ZIP: DC_PRIMARY, DC_LUFT or DC_BOTH */ \
+                               /* PIZ: DC_PRIMARY or DC_LUFT - influenced by FlagsVbHeader.coords and flag.luft */ \
     Coords line_coords;        /* Seg: coords of current line - DC_PRIMARY or DC_LUFT */ \
     Buffer liftover;           /* ZIP: map from chrom_node_index (not word index!) to entry in chain_index */ \
     uint32_t pos_aln_i;        /* ZIP: chain alignment of POS (used to compare to that of END) */\

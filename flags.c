@@ -22,6 +22,7 @@
 #include "bgzf.h"
 #include "kraken.h"
 #include "bases_filter.h"
+#include "website.h"
 
 // flags - factory default values (all others are 0)
 Flags flag = { 
@@ -115,7 +116,7 @@ static void flags_show_flags (void)
     iprintf ("idxstats=%s\n", flag.idxstats ? "true" : "false");
     iprintf ("count=%d\n", flag.count);
     iprintf ("show_coverage=%d\n", flag.show_coverage);
-    iprintf ("show_liftover=%s\n", flag.show_liftover ? "true" : "false");
+    iprintf ("show_dvcf=%s\n", flag.show_dvcf ? "true" : "false");
     iprintf ("show_memory=%s\n", flag.show_memory ? "true" : "false");
     iprintf ("show_dict=%s\n", flag.show_dict ? "true" : "false");
     iprintf ("show_b250=%s\n", flag.show_b250 ? "true" : "false");
@@ -145,6 +146,7 @@ static void flags_show_flags (void)
     iprintf ("show_hash=%s\n", flag.show_hash ? "true" : "false");
     iprintf ("debug_memory=%s\n", flag.debug_memory ? "true" : "false");
     iprintf ("debug_threads=%s\n", flag.debug_threads ? "true" : "false");
+    iprintf ("debug_stats=%s\n", flag.debug_stats ? "true" : "false");
     iprintf ("seg_only=%s\n", flag.seg_only ? "true" : "false");
     iprintf ("xthreads=%s\n", flag.xthreads ? "true" : "false");
     iprintf ("show_flags=%s\n", flag.show_flags ? "true" : "false");
@@ -367,7 +369,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sa {"show-alleles",  no_argument,       &flag.show_alleles,     1 }
         #define _st {"show-time",     optional_argument, 0, 1                      } 
         #define _sm {"show-memory",   no_argument,       &flag.show_memory,      1 } 
-        #define _sS {"show-liftover", no_argument,       &flag.show_liftover,    1 } 
+        #define _sS {"show-dvcf", no_argument,       &flag.show_dvcf,    1 } 
         #define _sh {"show-headers",  optional_argument, 0, 10                     } 
         #define _si {"show-index",    no_argument,       &flag.show_index,       1 } 
         #define _Si {"show-ref-index",no_argument,       &flag.show_ref_index,   1 } 
@@ -401,6 +403,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dm {"debug-memory",  optional_argument, 0, 12                     }  
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
         #define _dt {"debug-threads", no_argument,       &flag.debug_threads,    1 }  
+        #define _dw {"debug-stats",   no_argument,       &flag.debug_stats,      1 }  
         #define _oe {"echo",          no_argument,       &flag.echo,             1 }
         #define _dh {"show-hash",     no_argument,       &flag.show_hash,        1 }  
         #define _sx {"sex",           no_argument,       &flag.show_sex,         1 }  
@@ -412,10 +415,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _lg, _i, _I, _c, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                   _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn,          _B, _xt, _dm, _dp, _dt,           _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,                           _rg, _sR,      _sC, _cC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,         _oe, _00 };
-        static Option genounzip_lo[]  = { _lg,         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                            _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                                        _sR,      _sC,      _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,              _oe, _00 };
-        static Option genocat_lo[]    = { _lg,         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _s, _sf, _sq, _G, _1, _H0, _H1, _Gt, _IU, _iu, _GT, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn, _ov, _oc,    _xt, _dm, _dp, _dt, _ds, _sS,                                                                                   _fs, _g, _n, _nt, _nh,     _sR,      _sC,      _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR,    _oe, _00 };
-        static Option genols_lo[]     = { _lg,                 _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                   _sM,                                                                                _b, _oe, _00 };
+        static Option genozip_lo[]    = { _lg, _i, _I, _c, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                   _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn,          _B, _xt, _dm, _dp, _dt, _dw,           _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,                           _rg, _sR,      _sC, _cC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,         _oe, _00 };
+        static Option genounzip_lo[]  = { _lg,         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                            _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                                             _sR,      _sC,      _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,              _oe, _00 };
+        static Option genocat_lo[]    = { _lg,         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _s, _sf, _sq, _G, _1, _H0, _H1, _Gt, _IU, _iu, _GT, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn, _ov, _oc,    _xt, _dm, _dp, _dt,      _ds, _sS,                                                                                   _fs, _g, _n, _nt, _nh,     _sR,      _sC,      _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR,    _oe, _00 };
+        static Option genols_lo[]     = { _lg,                 _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                        _sM,                                                                                _b, _oe, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -892,7 +895,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          flag.show_reference || flag.show_ref_contigs || 
          flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
          flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || 
-         flag.show_recon_plan || (flag.header_only && !flag.luft));
+         flag.show_recon_plan);
 
     // don't show progress or warning when outputing to stdout (note: we are "quiet" even if output doesn't go to the terminal
     // because often it will be piped and ultimately go the terminal - a user can override this with --noisy)
@@ -944,7 +947,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          // Dual-coordinate-file modifiers
          z_dual_coords || // vcf_lo_piz_TOPLEVEL_cb_filter_line will drop lines of the wrong coordinate
          // general filters 
-         flag.kraken_taxid != TAXID_NONE || flag.grep || flag.regions || flag.luft || flag.lines_first >= 0 || flag.tail ||
+         flag.kraken_taxid != TAXID_NONE || flag.grep || flag.regions || flag.lines_first >= 0 || flag.tail ||
          // no-writer, but nevertheless modify the txt_data
          flag.collect_coverage || flag.count);
 

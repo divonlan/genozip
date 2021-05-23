@@ -198,7 +198,7 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
         iprintf ("  genozip_version: %u\n",         header->genozip_version);
         iprintf ("  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
         iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
-        iprintf ("  uncompressed_data_size: %s\n",  str_uint_commas (BGEN64 (header->uncompressed_data_size)).s);
+        iprintf ("  recon_size_prim: %s\n",  str_uint_commas (BGEN64 (header->recon_size_prim)).s);
         iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
         iprintf ("  num_sections: %u\n",            (unsigned)ents_len);
         iprintf ("  num_components: %u\n",          BGEN32 (header->num_components));
@@ -262,7 +262,9 @@ uint32_t st_header_size (SectionType sec_type)
 {
     ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
-    return (sec_type == SEC_NONE) ? 0 : abouts[sec_type].header_size;
+    return sec_type == SEC_NONE                                      ? 0 
+         : sec_type == SEC_VB_HEADER && z_file->genozip_version < 12 ? sizeof (SectionHeaderVbHeader) - 3*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was 12 bytes shorter
+         :                                                             abouts[sec_type].header_size;
 }
 
 // called by PIZ main thread

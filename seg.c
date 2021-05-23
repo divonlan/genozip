@@ -454,9 +454,10 @@ fallback:
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
-Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items)
+Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep)
 {
-    Container con = (Container){ .repeats = 1 };
+    Container con = (Container){ .repeats = 1,
+                                 .drop_final_item_sep = comma_sep };
 
     for (unsigned i=0; i < MAX_COMPOUND_COMPONENTS; i++) {
         const uint8_t *id = dict_id.id;
@@ -464,6 +465,7 @@ Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items)
         char dict_id_str[8] = { id[0], base36(i), id[1], id[2], id[3], id[4], id[5], id[6] };
         
         con.items[i].dict_id = dict_id_make (dict_id_str, 8, type_1_items ? DTYPE_1 : DTYPE_2);
+        if (comma_sep) con.items[i].seperator[0] = ',';
     }
 
     return con;
@@ -491,7 +493,7 @@ void seg_compound_field (VBlock *vb,
     unsigned snip_len = 0;
     unsigned num_double_sep = 0;
 
-    Container con = seg_initialize_container_array (field_ctx->dict_id, true); 
+    Container con = seg_initialize_container_array (field_ctx->dict_id, true, false); 
 
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
@@ -840,12 +842,16 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 
 static void seg_verify_file_size (VBlock *vb)
 {
-    uint32_t reconstructed_vb_size = 0;
+    uint32_t recon_size_prim = 0; // reconstructed size in PRIMARY coordinates
+
+    // sanity checks
+    ASSERT (vb->recon_size >= 0, "recon_size=%d is negative for vb_i=%u, coord=%s", vb->recon_size, vb->vblock_i, coords_names[vb->vb_coords]);
+    ASSERT (vb->recon_size_luft >= 0, "recon_size_luft=%d is negative for vb_i=%u, coord=%s", vb->recon_size_luft, vb->vblock_i, coords_names[vb->vb_coords]);
 
     for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) 
-        reconstructed_vb_size += vb->contexts[sf_i].txt_len;
+        recon_size_prim += vb->contexts[sf_i].txt_len;
         
-    if (vb->vb_data_size != reconstructed_vb_size) {
+    if (vb->recon_size != recon_size_prim) {
 
         fprintf (stderr, "Txt lengths:\n");
         for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
@@ -854,9 +860,9 @@ static void seg_verify_file_size (VBlock *vb)
         }
         
         ABORT ("Error while verifying reconstructed vb_i=%u size: "
-               "reconstructed_vb_size=%s (calculated by adding up ctx.txt_data after segging) but vb->vb_data_size=%s (initialized when reading the file and adjusted for modifications) (diff=%d)", 
-               vb->vblock_i, str_uint_commas (reconstructed_vb_size).s, str_uint_commas (vb->vb_data_size).s, 
-               (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
+               "reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size=%s (initialized when reading the file and adjusted for modifications) (diff=%d)", 
+               vb->vblock_i, str_uint_commas (recon_size_prim).s, str_uint_commas (vb->recon_size).s, 
+               (int32_t)recon_size_prim - (int32_t)vb->recon_size);
     }
 }
 

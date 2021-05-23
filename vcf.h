@@ -52,11 +52,11 @@ extern unsigned vcf_vb_zip_dl_size (void);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 
 // Liftover - INFO fields
-#define INFO_LIFTOVER_LEN 8 // these 4 must be the same length
-#define INFO_LIFTOVER  "LIFTOVER"
-#define INFO_LIFTBACK  "LIFTBACK"
-#define INFO_REJTOVER  "REJTOVER"
-#define INFO_REJTBACK  "REJTBACK"
+#define INFO_LUFT  "LUFT"
+#define INFO_PRIM  "PRIM"
+#define INFO_LREJ  "Lrej"
+#define INFO_PREJ  "Prej" // lower case so Prej doesn't have the same first 2 chars as PRIM (to not conflict in dict_id_to_did_i_map)
+#define INFO_DVCF_LEN (sizeof INFO_LUFT - 1) // these 4 must be the same length
 
 #define VCF_CONTIG_FMT "##contig=<ID=%.*s,length=%"PRId64">"
 
@@ -65,7 +65,8 @@ extern void vcf_samples_add  (const char *samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_INFO_SVLEN, \
                       vcf_piz_special_FORMAT_DS, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, vcf_piz_special_FORMAT_F2R1,  \
-                      vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS }
+                      vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS,\
+                      vcf_piz_special_MINUS }
 SPECIAL (VCF, 0,  main_REFALT,  vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,       vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2,  AC,           vcf_piz_special_INFO_AC);
@@ -77,8 +78,9 @@ SPECIAL (VCF, 7,  F2R1,         vcf_piz_special_FORMAT_F2R1);  // added v12
 SPECIAL (VCF, 8,  LIFT_REF,     vcf_piz_special_LIFT_REF);     // added v12
 SPECIAL (VCF, 9,  COPYSTAT,     vcf_piz_special_COPYSTAT);     // added v12
 SPECIAL (VCF, 10, other_REFALT, vcf_piz_special_other_REFALT); // added v12
-SPECIAL (VCF, 11, COPYPOS,     vcf_piz_special_COPYPOS);     // added v12
-#define NUM_VCF_SPECIAL 12
+SPECIAL (VCF, 11, COPYPOS,      vcf_piz_special_COPYPOS);      // added v12
+SPECIAL (VCF, 12, MINUS,        vcf_piz_special_MINUS);        // added v12
+#define NUM_VCF_SPECIAL 13
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1, G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G
@@ -100,8 +102,8 @@ typedef struct {
 } LuftTransLateProp;
 
 // names of INFO / FORMAT algorithms, goes into VCF header's ##INFO / ##FORMAT "RenderAlg" attribute
-                             /* Algorithm   When-triggered */
-#define LUFT_TRANS_PROPS { { "NONE",      TW_NEVER          },   /* never translate */\
+                           /* Algorithm   When-triggered */
+#define DVCF_TRANS_PROPS { { "NONE",      TW_NEVER          },   /* never translate */\
                            { "G",         TW_REF_ALT_SWITCH },   /* reshuffle a  'G' vector (one element per genotype) if REF<>ALT changed */\
                            { "R",         TW_REF_ALT_SWITCH },   /* reshuffle an 'R' vector (one element per ref/alt allele) if REF<>ALT changed */\
                            { "R2",        TW_REF_ALT_SWITCH },   /* reshuffle a vector with 2 elements per ref/alt allele, if REF<>ALT changed */\

@@ -375,16 +375,16 @@ batch_special_algs()
 }
 
 
-batch_dual_coordinates()
+batch_dvcf()
 {
     batch_print_header
 
-    local files=(basic-dual-coord.vcf basic-luft.vcf test.ExAC.vcf.gz test.human2.filtered.snp.vcf test.NA12878.sorted.vcf)
+    local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.ExAC.vcf.gz test.human2.filtered.snp.vcf test.NA12878.sorted.vcf)
     local chain=data/GRCh37_to_GRCh38.chain.genozip
     local file
 
     for file in ${files[@]}; do
-        test_header "$file - dual-coordintes test"
+        test_header "$file - DVCF test"
 
         local src=$OUTDIR/${file}
         local primary=$OUTDIR/primary.vcf
@@ -393,7 +393,7 @@ batch_dual_coordinates()
 
         # compare src to primary (ignoring header and INFO fields)
         echo -n "Step 1: make ${primary}.genozip from $file : " 
-        if [ "$file" == basic-luft.vcf ]; then # this file is already an LVCF
+        if [ "$file" == basic-dvcf-luft.vcf ]; then # this file is already a Luft rendition
             $genozip test/$file -fo ${primary}.genozip || exit 1
         else
             $genozip -C $chain test/$file -fo ${primary}.genozip || exit 1
@@ -920,7 +920,7 @@ if (( $1 <= 2  )) ; then  batch_basic                  ; fi
 if (( $1 <= 3  )) ; then  batch_precompressed          ; fi
 if (( $1 <= 4  )) ; then  batch_bgzf                   ; fi
 if (( $1 <= 5  )) ; then  batch_special_algs           ; fi
-if (( $1 <= 6  )) ; then  batch_dual_coordinates       ; fi
+if (( $1 <= 6  )) ; then  batch_dvcf       ; fi
 if (( $1 <= 7  )) ; then  batch_sam_translations       ; fi
 if (( $1 <= 8  )) ; then  batch_23andMe_translations   ; fi
 if (( $1 <= 9  )) ; then  batch_phylip_translations    ; fi

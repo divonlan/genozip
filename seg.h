@@ -46,8 +46,8 @@ extern void seg_id_field_do (VBlockP vb, DictId dict_id, const char *id_snip, un
 #define seg_id_field(vb, dict_id,id_snip, id_snip_len, account_for_separator) \
     seg_id_field_do((VBlockP)vb, (DictId)dict_id, (id_snip), (id_snip_len), (account_for_separator))
 
-extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items);
-#define seg_initialize_container_array(dict_id, type_1_items) seg_initialize_container_array_do ((DictId)dict_id, type_1_items)
+extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep);
+#define seg_initialize_container_array(dict_id, type_1_items, comma_sep) seg_initialize_container_array_do ((DictId)dict_id, type_1_items, comma_sep)
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, const void *data, unsigned data_len);

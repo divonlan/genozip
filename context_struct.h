@@ -100,7 +100,7 @@ typedef struct Context {
     uint32_t nodes_len_at_1_3, nodes_len_at_2_3;  // value of nodes->len after an estimated 1/3 + 2/3 of the lines have been segmented
     
     // ZIP: stats
-    uint64_t txt_len;          // How many characters in the txt file are accounted for by snips in this ctx (for stats)
+    uint64_t txt_len;          // How many characters in reconstructed text are accounted for by snips in this ctx (for stats), when reconstrucing in PRIMARY coordinates (note: we don't have txt_len accounting for LUFT coordinates)
     uint32_t num_singletons;   // True singletons that appeared exactly once in the entire file
 
     // PIZ-only

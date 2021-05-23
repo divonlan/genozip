@@ -31,11 +31,11 @@ extern bool random_access_does_last_chrom_continue_in_next_vb (uint32_t vb_i);
 extern uint32_t random_access_num_chroms_start_in_this_vb (uint32_t vb_i);
 extern void random_access_alloc_ra_buf (VBlockP vb, Coords dc, WordIndex chrom_node_index);
 extern void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosType *min_pos, PosType *max_pos);
-extern void random_access_load_ra_section (SectionType section_type, BufferP ra_buf, const char *buf_name, const char *show_index_msg);
+extern void random_access_load_ra_section (SectionType section_type, DidIType chrom_did_i, BufferP ra_buf, const char *buf_name, const char *show_index_msg);
 extern uint32_t random_access_verify_all_contigs_same_length (void);
 
-// misc
-extern void BGEN_random_access (Buffer *ra_buf);
-extern void random_access_show_index (ConstBufferP ra_buf, bool from_zip, const char *msg);
+#define RA_MSG_PRIM "Random-access index contents (result of --show-index)"
+#define RA_MSG_LUFT "Luft random-access index contents (result of --show-index)"
+#define RA_MSG_REF  "Reference random-access index contents (result of --show-ref-index)"
 
 #endif

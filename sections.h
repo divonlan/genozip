@@ -94,7 +94,7 @@ typedef union SectionFlags {
     } txt_header;
 
     struct FlagsVbHeader {
-        Coords coords            : 2;        // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT topleve container, or DC_BOTH if both (DC_NONE prior to v12)
+        Coords coords            : 2;        // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
         uint8_t unused           : 6;
     } vb_header;
 
@@ -147,7 +147,7 @@ typedef struct {
     uint8_t  genozip_version;
     EncryptionType encryption_type;   // one of ENC_TYPE_*
     uint16_t data_type;               // one of DATA_TYPE_*
-    uint64_t uncompressed_data_size;  // data size of uncompressed` file, if uncompressed as a single file
+    uint64_t recon_size_prim;         // data size of reconstructed file, if uncompressing as a single file in primary coordinates
     uint64_t num_lines_bound;         // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;            // number sections in this file (including this one)
     uint32_t num_components;          // number of txt bound components in this file (1 if no binding)
@@ -171,7 +171,7 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint64_t txt_data_size;    // number of bytes in the original txt file. 
-    uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
+    uint64_t txt_num_lines;    // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     Codec    codec;            // codec of original txt file (none, bgzf, gz, bz2...)
     uint8_t  codec_info[3];    // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
@@ -183,13 +183,17 @@ typedef struct {
 
 typedef struct {
     SectionHeader h;            
-    uint32_t first_line;       // line (starting from 1) of this vblock in the single txt file 
-                               // if this value is 0, then this is the terminating section of the file. after it is either the global area or a TXT Header section of the next bound file 
-    uint32_t num_lines;        // number of records in this vblock 
-    uint32_t vb_data_size;     // size of vblock as it appears in the source file 
+    uint32_t unused;           // "unused" since v12 (up to v11 it was "uint32_t first_line; // if 0, this is the terminating section of the components")
+    uint32_t top_level_repeats;// repeats of TOPLEVEL container in this VB (was called num_lines before b12)
+    uint32_t recon_size_prim;  // size of vblock as it appears in the default PRIMARY reconstruction
     uint32_t z_data_bytes;     // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len; // length of the longest line in this vblock 
     Digest   digest_so_far;    // partial calculation of MD5 or Adler32 up to and including this VB 
+
+    // these fields were addedd to SectionHeaderVbHeader in v12 - representing the default LUFT reconstruction
+    uint32_t num_lines_prim;   // number of lines in default reconstruction in PRIMARY coords
+    uint32_t num_lines_luft;   
+    uint32_t recon_size_luft;  
 } SectionHeaderVbHeader; 
 
 typedef struct {

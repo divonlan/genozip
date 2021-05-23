@@ -47,6 +47,7 @@ mac/scripts/*
 *.gff3*
 *.chain*
 !test/*
+test/*_ONLY.vcf
 !test/back-compat/*/*
 test/*.genozip
 test/tmp

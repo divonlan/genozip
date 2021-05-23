@@ -75,7 +75,8 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     // vb->data_type   : type of this vb 
 
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = vb->pos_aln_i = 0;
-    vb->vb_data_size = vb->vb_data_size_0 = vb->reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
+    vb->recon_size = vb->recon_size_luft = vb->txt_size = vb->reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
+    vb->recon_num_lines = vb->recon_num_lines_luft = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->is_unsorted[0] = vb->is_unsorted[1] = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;

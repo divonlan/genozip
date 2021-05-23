@@ -66,7 +66,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
     // in dual-coordinates files - get the COORDS and oSTATUS at the beginning of each line
     else if (con->items[item].dict_id.num == dict_id_fields[VCF_oSTATUS] || 
              con->items[item].dict_id.num == dict_id_fields[VCF_COORDS]) {
-        if (flag.show_liftover)
+        if (flag.show_dvcf)
             return true; // show
         else if (z_dual_coords)
             *reconstruct = false; // set last_index, without reconstructing
@@ -76,10 +76,10 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
 
     // for dual-coordinates genozip files - select with to show the XXXXOVER or the XXXXBACK based on flag.luft
     else if (dict_id.num == dict_id_fields[VCF_INFO]) {
-        if (vb->vb_coords == DC_LUFT && (con->items[item].dict_id.num == dict_id_INFO_LIFTOVER || con->items[item].dict_id.num == dict_id_INFO_REJTOVER))
+        if (vb->vb_coords == DC_LUFT && (con->items[item].dict_id.num == dict_id_INFO_LUFT || con->items[item].dict_id.num == dict_id_INFO_LREJ))
             return false;
             
-        else if (vb->vb_coords == DC_PRIMARY && (con->items[item].dict_id.num == dict_id_INFO_LIFTBACK || con->items[item].dict_id.num == dict_id_INFO_REJTBACK))
+        else if (vb->vb_coords == DC_PRIMARY && (con->items[item].dict_id.num == dict_id_INFO_PRIM || con->items[item].dict_id.num == dict_id_INFO_PREJ))
             return false;
     } 
         
