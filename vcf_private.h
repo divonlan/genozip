@@ -156,7 +156,7 @@ extern char *vcf_samples_is_included;
 extern const char *vcf_header_get_VCF_ID_by_dict_id (DictId dict_id, bool must_exist);
 
 // Samples stuff
-extern void vcf_format_zip_initialize (void);
+extern void vcf_seg_samples_initialize (void);
 extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
 

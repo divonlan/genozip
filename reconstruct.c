@@ -27,8 +27,8 @@ static int64_t reconstruct_from_delta (VBlock *vb,
                                        bool reconstruct) 
 {
     ASSERT (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    ASSERT (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. line_in_vb=%u",
-            my_ctx->name, delta_snip_len, delta_snip, base_ctx->name, base_ctx->name, vb->line_i - vb->first_line);
+    ASSERT (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. vb_i=%u line_in_vb=%u",
+            my_ctx->name, delta_snip_len, delta_snip, base_ctx->name, base_ctx->name, vb->vblock_i, vb->line_i - vb->first_line);
 
     if (delta_snip_len == 1 && delta_snip[0] == '-')
         my_ctx->last_delta = -2 * base_ctx->last_value.i; // negated previous value
@@ -168,16 +168,14 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
             // we are request to reconstruct from another ctx
             base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
 
-        // case: LOCAL is not LT_SEQUENCE/LT_BITMAP - we reconstruct this snip before adding the looked up data
-        if (snip_len && base_ctx->ltype != LT_SEQUENCE && base_ctx->ltype != LT_BITMAP) 
-            if (reconstruct) RECONSTRUCT (snip, snip_len);
-        
         switch (base_ctx->ltype) {
             case LT_TEXT:
+                if (reconstruct && snip_len) RECONSTRUCT (snip, snip_len); // reconstruct this snip before adding the looked up data
                 reconstruct_from_local_text (vb, base_ctx, reconstruct); // this will call us back recursively with the snip retrieved
                 break;
                 
             case LT_INT8 ...LT_UINT64:
+                if (reconstruct && snip_len) RECONSTRUCT (snip, snip_len); // reconstruct this snip before adding the looked up data
                 new_value.i = reconstruct_from_local_int (vb, base_ctx, 0, reconstruct);
                 have_new_value = true;
                 break;
@@ -190,6 +188,12 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
             case LT_BITMAP:
                 ASSERT_DT_FUNC (vb, reconstruct_seq);
                 DT_FUNC (vb, reconstruct_seq) (vb, base_ctx, snip, snip_len);
+                break;
+
+            case LT_FLOAT32:
+                // TO DO - not implemented yet - see seg_float_or_not_do
+                //new_value.f = reconstruct_from_local_float (vb, base_ctx, snip, snip_len, reeconstruct); // snip contains printf format for this float
+                have_new_value = true;
                 break;
 
             default: ABORT ("Error in reconstruct_one_snip: Unsupported lt_type=%u for SNIP_LOOKUP or SNIP_OTHER_LOOKUP", base_ctx->ltype);
@@ -317,9 +321,9 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 
     // case: we have b250 data
     if (ctx->b250.len ||
-        (!ctx->b250.len && !ctx->local.len && ctx->dict.len)) {          
+        (!ctx->b250.len && !ctx->local.len && ctx->dict.len)) {  // all_the_same case - no b250 or local, but have dict      
         DECLARE_SNIP;
-        WordIndex word_index = LOAD_SNIP(ctx->did_i); // if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
+        WordIndex word_index = LOAD_SNIP(ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
 
         if (!snip) {
             ctx->last_txt_len = 0;
@@ -373,7 +377,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     }
 
     // case: the entire VB was just \n - so seg dropped the ctx
-    // note: for backward compatability with 8.0. for files compressed by 8.1+, it will be handled via a dictionary but no b250
+    // note: for backward compatability with 8.0. for files compressed by 8.1+, it will be handled via the all_the_same mechanism
     else if (ctx->did_i == DTF(eol)) {
         if (reconstruct) { RECONSTRUCT1('\n'); }
     }

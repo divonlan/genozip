@@ -18,7 +18,7 @@ const char *coords_names[4] = COORDS_NAMES;
 void vcf_zip_initialize (void)
 {
     vcf_lo_zip_initialize ();
-    vcf_format_zip_initialize ();
+    vcf_seg_samples_initialize ();
 }
 
 void vcf_zip_after_compute (VBlockP vb)

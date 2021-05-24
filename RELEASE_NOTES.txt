@@ -423,7 +423,7 @@ c. Many other improvements:
 - new option: genocat --FLAG - filters a SAM or BAM file by the value of the FLAG field
 - new option: genocat --MAPQ - filters a SAM or BAM file by the value of the MAPQ field
 - new option: genocat --bases - filters a SAM/BAM/FASTQ for SEQ base values
-- new option: --echo displays the command line and a timestamp upon completion of execution (successful or failed)
+- new option: --echo displays the command line and a timestamp upon completion ofq execution (successful or failed)
 - discontinued support for GTShark codec - use genozip v11 to decompress old VCF files compressed with --gtshark
 - VCF: better compression of FORMAT/F2R1, INFO/MLEAC, FORMAT/MB, FORMAT/SB
 Option changes:
@@ -444,3 +444,5 @@ New advanced options:
 - new option: --show-uncompress. Shows uncompressing of section data.
 - new option: --show-flags. Shows internal flags after initialization.
 - new option: --show-plan. Shows reconstruction plan
+- new option: --debug-stats. For debugging development of stats.c
+- new option: --debug-allthesame. For debugging development of the allthesame algorithm

@@ -315,7 +315,7 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned inf
                 // If its a valueful item, seg it (either special or regular)
                 DictId dict_id = info_items[con_nitems(con)].dict_id;
                 if (dict_id.num && gff3_seg_special_info_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len))
-                    seg_integer_or_not (vb, ctx_get_ctx (vb, dict_id), this_value, this_value_len, this_value_len);
+                    seg_by_dict_id (vb, this_value, this_value_len, dict_id, this_value_len);
 
                 reading_name = true;  // end of value - move to the next item
                 this_name = &info_str[i+1]; // move to next field in info string

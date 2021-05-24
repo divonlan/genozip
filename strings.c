@@ -231,8 +231,6 @@ str_get_int_range_allow_hex_bits(16) // unsigned
 str_get_int_range_allow_hex_bits(32) // unsigned
 str_get_int_range_allow_hex_bits(64) // unsigned
 
-
-
 StrText str_uint_commas (int64_t n)
 {
     StrText s;
@@ -258,16 +256,17 @@ StrText str_uint_commas (int64_t n)
     s.s[len] = '\0'; // string terminator
     return s;
 }
-
-// "3.123" -> "%5.3f" ;  returns length of format string
-unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str /* out */)
+/*
+unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str)
 {
-    unsigned decimal_digits=0;
+    int decimal_digits=-1;
     for (int i=(int)float_str_len-1; i >= 0; i--)
-        if (float_str[i] == '.') {
+        if (float_str[i] == '.') {            
+            if (decimal_digits >= 0) return 0; // more than one '.'
             decimal_digits = (float_str_len-1) - i;
-            break;
         }
+        else 
+            if (!IS_DIGIT (float_str[i])) return 0; // not a digit
 
     unsigned next=0;
     str[next++] = '%';
@@ -279,15 +278,19 @@ unsigned str_get_float_format (const char *float_str, unsigned float_str_len, ch
 
     return next;
 }
-
-// returns float value, or -1 if not a positive float of at most 9 digits after the decimal point
-double str_get_positive_float (const char *float_str, unsigned float_str_len)
+*/
+// returns 32 bit float value and/or format: "3.123" -> "%5.3f" ; false if not a simple float
+bool str_get_float (const char *float_str, unsigned float_str_len, 
+                    float *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len) // optional outs (format allocated by caller)
 {
+    // TODO: add support for %e and %E (matinsa/exponent) formats
+
     bool in_decimals=false;
     unsigned num_decimals=0;
-    double val = 0;
+    float val = 0;
+    bool is_negative = (float_str[0] == '-');
 
-    for (unsigned i=0; i < float_str_len; i++) {
+    for (unsigned i=is_negative; i < float_str_len; i++) {
         if (float_str[i] == '.' && !in_decimals)
             in_decimals = true;
     
@@ -296,13 +299,36 @@ double str_get_positive_float (const char *float_str, unsigned float_str_len)
             if (in_decimals) num_decimals++;
         }
     
-        else return -1; // not a positive float
+        else return false; // can't interpret this string as float
     }
 
-    static const double pow10[10] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000 };
-    if (num_decimals >= sizeof (pow10) / sizeof (pow10[0])) return -1; // too many decimals
+    // calculate format if requested
+    if (format) {
 
-    return val / pow10[num_decimals];
+        if (float_str_len > 99) return false; // we support format of float strings up to 99 characters... more than enough
+        unsigned next=0;
+        format[next++] = '%';
+        if (float_str_len >= 10) format[next++] = '0' + (float_str_len / 10);
+        format[next++] = '0' + (float_str_len % 10);
+        format[next++] = '.';
+        if (num_decimals >= 10) format[next++] = '0' + (num_decimals / 10);
+        format[next++] = '0' + (num_decimals % 10);
+        format[next++] = 'f';
+        format[next] = 0;
+
+        if (format_len) *format_len = next;
+    }
+
+    if (value) {
+        static const float pow10[13] = { 1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0, 10000000.0, 100000000.0, 1000000000.0, 
+                                         10000000000.0, 100000000000.0, 1000000000000.0 };
+                                        
+        if (num_decimals >= sizeof (pow10) / sizeof (pow10[0])) return false; // too many decimals
+
+        *value = (is_negative ? -1 : 1) * (val / pow10[num_decimals]);
+    }
+
+    return true;
 }
 
 StrText str_pointer (const void *p)

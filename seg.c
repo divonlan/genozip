@@ -185,11 +185,11 @@ bool seg_set_last_txt_do (VBlockP vb, ContextP ctx,
     return stored;
 }
 
-void seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes)
+WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes)
 {
     char snip[40];
     unsigned snip_len = str_int (n, snip);
-    seg_by_did_i (vb, snip, snip_len, did_i, add_bytes);
+    return seg_by_did_i (vb, snip, snip_len, did_i, add_bytes);
 }
 
 // prepare snips that contain code + dict_id + optional parameter (SNIP_LOOKUP_OTHER, SNIP_OTHER_DELTA, SNIP_REDIRECTION...)
@@ -430,12 +430,46 @@ bool seg_integer_or_not_do (VBlockP vb, ContextP ctx,
     }
 }
 
-WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len,
+// if its a float, stores the float in local, and a LOOKUP in b250, and returns true. if not - normal seg, and returns false.
+bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
+{
+    // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
+    float value;
+    char snip[1 + FLOAT_FORMAT_LEN];
+    unsigned format_len;
+
+    // case: its an float
+    if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
+        str_get_float (this_value, this_value_len, &value, &snip[2], &format_len)) {
+
+        ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
+        ctx->last_value.f = (double)value;
+
+        // add to local
+        buf_alloc (vb, &ctx->local, 1, vb->lines.len, float, CTX_GROWTH, "contexts->local");
+        NEXTENT (float, ctx->local) = value;
+        
+        // add to b250
+        snip[0] = SNIP_LOOKUP;
+        seg_by_ctx (vb, snip, 1 + format_len, ctx, add_bytes);
+
+        return true;
+    }
+
+    // case: non-float snip
+    else { 
+        seg_by_ctx (vb, this_value, this_value_len, ctx, add_bytes);
+        return false;
+    }
+}
+
+WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx, 
+                                 const char *value, unsigned value_len, // if value==NULL, we use last_value.i (note: value_len must always be given)
                                  int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
 {
     if (!other_ctx) goto fallback;
 
-    if (!str_get_int (value, value_len, &ctx->last_value.i)) goto fallback;
+    if (value && !str_get_int (value, value_len, &ctx->last_value.i)) goto fallback;
 
     int64_t delta = ctx->last_value.i - other_ctx->last_value.i; 
     if (max_delta >= 0 && (delta > max_delta || delta < -max_delta)) goto fallback;
@@ -450,7 +484,7 @@ WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx, c
     return seg_by_ctx (vb, snip, snip_len, ctx, value_len);
 
 fallback:
-    return seg_by_ctx (vb, value, value_len, ctx, value_len);
+    return value ? seg_by_ctx (vb, value, value_len, ctx, value_len) : seg_integer_do (vb, ctx->did_i, ctx->last_value.i, value_len);
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
@@ -623,7 +657,8 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
                      const char *value, int32_t value_len, // must be signed
                      char sep, 
                      char subarray_sep,         // if non-zero, will attempt to find internal arrays
-                     bool use_integer_delta)    // first item stored as is, subsequent items stored as deltas
+                     bool use_integer_delta,    // first item stored as is, subsequent items stored as deltas
+                     bool store_int_in_local)   // if its an integer, store in local instead of a snip
 {
     MiniContainer *con;
     DictId arr_dict_id;
@@ -680,7 +715,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         // case: it has a sub-array
         if (is_subarray) {
-            seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0, use_integer_delta);
+            seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0, use_integer_delta, store_int_in_local);
             add_bytes -= this_item_len; // sub-array will account for itself
             arr_ctx->numeric_only = false;
             this_item_value = arr_ctx->last_value.i;
@@ -688,8 +723,14 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         // case: its an scalar (we don't delta arrays that have sub-arrays and we don't delta the first item)
         else if (!use_integer_delta || subarray_sep || i==0) {
-            bool is_int = seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, 0);
-            if (is_int) this_item_value = arr_ctx->last_value.i;
+            if (store_int_in_local) {
+                bool is_int = seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, 0);
+                if (is_int) this_item_value = arr_ctx->last_value.i;
+            }
+            else {
+                seg_by_ctx (vb, this_item, this_item_len, arr_ctx, 0);
+                str_get_int (this_item, this_item_len, &arr_ctx->last_value.i); // sets last_value only if it is indeed an integer
+            }
         }
 
         // case: delta of 2nd+ item

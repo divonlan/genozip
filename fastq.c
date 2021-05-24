@@ -296,10 +296,9 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
     vb->pair_num_lines = BGEN32 (vb_header.num_lines_prim);
 
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
-    sl++;
     buf_alloc (vb, &vb->z_section_headers, MAX_SUBFIELDS + 10, MAX_DICTS * 2 + 50, uint32_t, 0, "z_section_headers"); // room for section headers  
 
-    while (sl->st == SEC_B250 || sl->st == SEC_LOCAL) {
+    for (sl++; sl->st == SEC_B250 || sl->st == SEC_LOCAL; sl++) {
         
         if (dict_id_is_fastq_desc_sf (sl->dict_id) || sl->dict_id.num == dict_id_fields[FASTQ_DESC] ||
             sl->dict_id.num == dict_id_fields[FASTQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_STRAND]) { 
@@ -309,8 +308,6 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 
             if (offset == SECTION_SKIPPED) vb->z_section_headers.len--; // section skipped
         }
-        
-        sl++;
     }
 
     file_seek (z_file, save_offset, SEEK_SET, false); // restore

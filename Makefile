@@ -473,7 +473,7 @@ clean-optimized:
 clean:
 	@echo Cleaning up
 	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES)
-	@rm -f *.good *.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
+	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
 	@rm -Rf $(OBJDIR)
 
 .PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles

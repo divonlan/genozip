@@ -315,6 +315,7 @@ typedef struct File {
     int64_t txt_data_so_far_bind;      // z_file only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
                                        // note: txt_data_so_far_single/bind accounts for txt modifications due to --optimize or --chain or compressing a Luft file
     int64_t txt_data_so_far_single_0;  // z_file & ZIP only: same as txt_data_so_far_single/bind, but original sizes without 
+                                       // txt_file PIZ: accounting for data as it was in the original source file, as reading TxtHeader and VbHeader sections from the genozip file
     int64_t txt_data_so_far_bind_0;    //      modifications due to --chain/--optimize/Luft                                   
     int64_t txt_disk_so_far_bind;      // z_file & ZIP only: compressed (with txt_file.codec - eg bgzf) txt data represented in the GENOZIP data written so far for all bound files
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
@@ -331,7 +332,9 @@ typedef struct File {
     // Used for READING GENOZIP files
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
 
-    struct FlagsGenozipHeader z_flags; // genozip file flags as read from SectionHeaderGenozipHeader.h.flags
+    struct FlagsGenozipHeader z_flags; // z_file: genozip file flags as read from SectionHeaderGenozipHeader.h.flags
+    struct FlagsTxtHeader txt_flags;   // txt_file: genozip file flags as read from SectionHeaderTxtHeader.h.flags
+
     uint32_t num_components;           // set from genozip header
     uint32_t num_copied_ref_sections;  // number of SEC_REFERENCE sections with vblock_i==0 (a result of being created with ref_copy_one_compressed_section)
      

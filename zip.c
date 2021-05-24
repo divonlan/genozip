@@ -260,7 +260,6 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
 static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
 {
     bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
-    
     if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
 
     // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
@@ -285,16 +284,25 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
 
         // if the entire section is word_index = 0 we can drop it, unless:
         // 1) it has local (bc if no-b250/dict-from-prev-vb/no-local piz can't distiguish between seg_id-with-b250-all-the-same-word-index-0 vs all-singleton-pushed-to-local)
-        // 2) it has flags that need to be passed to piz (we can get rid of this limitation - bug 224), or
+        // 2) it has flags that need to be passed to piz (unless its vb_i>1 and flags are same as vb_i=1)
         // 3) the one snip is SELF_DELTA
-        if (base250_decode ((const uint8_t **)&ctx->b250.data, false, ctx->name) == 0 && 
-            !ctx->local.len &&
-            ! (*(uint8_t *)&ctx->flags) &&
-            *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) // word_index=0 is the first word in the dictionary
+        uint8_t flags = ((SectionFlags)ctx->flags).flags;
+        if (base250_decode ((const uint8_t **)&ctx->b250.data, false, ctx->name) == 0  
+        &&  !ctx->local.len 
+        &&  ((vb->vblock_i==1 && !flags) || (vb->vblock_i > 1 && flags == ((SectionFlags)ctx_get_zf_ctx_flags (ctx->dict_id)).flags)) // vb_i=1 with flags / vb_i>1 with flags different than vb_i=1 will fail this condition
+        &&  !ctx->pair_b250 && !ctx->pair_local // pair_b250/local will causes zfile_compress_b250/local_data to set flags.paired, which will be different than vb_i=1 flags
+        &&  *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) { // word_index=0 is the first word in the dictionary
+         
+            if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - dropped b250 section\n", ctx->name, vb->vblock_i);
+        
             return true; 
+        }
 
+        // all word_index in this b250 are the same, but section cannot be completely eliminated. as a second best, shorten the b250 to a single entry.
         ctx->b250.len = base250_len (ctx->b250.data);
-        ctx->flags.all_the_same = true;
+        ctx->flags.all_the_same = true; 
+
+        if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - shortened b250 section to 1 element\n", ctx->name, vb->vblock_i);
     }
     else
         ctx->flags.all_the_same = false;
@@ -463,6 +471,12 @@ static void zip_generate_ctxs (VBlock *vb)
             else if (ctx->dynamic_size_local) 
                 zip_resize_local (vb, ctx);
 
+            else if (ctx->ltype == LT_FLOAT32)
+                BGEN_u32_buf (&ctx->local, NULL);
+                
+            else if (ctx->ltype == LT_FLOAT64)
+                BGEN_u64_buf (&ctx->local, NULL);
+                
             codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
         }
     }

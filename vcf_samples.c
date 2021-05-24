@@ -15,15 +15,25 @@
 #include "base64.h"
 
 static Container con_FORMAT_AD={}, con_FORMAT_ADALL={}, con_FORMAT_ADF={}, con_FORMAT_ADR={}, 
-                 con_FORMAT_F1R2={}, con_FORMAT_F2R1={}, con_FORMAT_MB={}, con_FORMAT_SB={};
-static char sb_snips[MAX_ARG_ARRAY_ITEMS/2][32], mb_snips[MAX_ARG_ARRAY_ITEMS/2][32];
-static unsigned sb_snip_lens[MAX_ARG_ARRAY_ITEMS/2], mb_snip_lens[MAX_ARG_ARRAY_ITEMS/2];
+                 con_FORMAT_F1R2={}, con_FORMAT_F2R1={}, con_FORMAT_MB={}, con_FORMAT_SB={}, con_FORMAT_AF={};
+static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[MAX_ARG_ARRAY_ITEMS][32];
+static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[MAX_ARG_ARRAY_ITEMS];
 
+// prepare snip of A - B
+static void vcf_seg_prepare_minus_snip (DictId dict_id_a, DictId dict_id_b, char *snip, unsigned *snip_len)
+{
+    snip[0] = SNIP_SPECIAL;
+    snip[1] = VCF_SPECIAL_MINUS;
+    
+    DictId two_dicts[2] = { dict_id_a, dict_id_b };
+    *snip_len = 2 + base64_encode ((uint8_t *)two_dicts, sizeof (two_dicts), &snip[2]);
+}
 
-void vcf_format_zip_initialize (void) 
+void vcf_seg_samples_initialize (void) 
 {
     if (con_FORMAT_AD.repeats) return; // already initialized (in previous files)
 
+    con_FORMAT_AF    = seg_initialize_container_array (dict_id_FORMAT_AF,    false, true);    
     con_FORMAT_AD    = seg_initialize_container_array (dict_id_FORMAT_AD,    false, true);    
     con_FORMAT_ADALL = seg_initialize_container_array (dict_id_FORMAT_ADALL, false, true);    
     con_FORMAT_ADF   = seg_initialize_container_array (dict_id_FORMAT_ADF,   false, true);    
@@ -33,17 +43,14 @@ void vcf_format_zip_initialize (void)
     con_FORMAT_MB    = seg_initialize_container_array (dict_id_FORMAT_MB,    false, true);    
     con_FORMAT_SB    = seg_initialize_container_array (dict_id_FORMAT_SB,    false, true);    
 
-    // prepare special snips for the odd elements of SB and MB - (AD minus even element)
-    for (unsigned i=0; i < MAX_ARG_ARRAY_ITEMS/2; i++) {
-        sb_snips[i][0] = mb_snips[i][0] = SNIP_SPECIAL;
-        sb_snips[i][1] = mb_snips[i][1] = VCF_SPECIAL_MINUS;
-        
-        DictId two_dicts[2] = { con_FORMAT_AD.items[i].dict_id, con_FORMAT_SB.items[i*2].dict_id };
-        sb_snip_lens[i] = base64_encode ((uint8_t *)two_dicts, sizeof (two_dicts), &sb_snips[i][2]);
-
-        two_dicts[1] = con_FORMAT_MB.items[i*2].dict_id;
-        mb_snip_lens[i] = base64_encode ((uint8_t *)two_dicts, sizeof (two_dicts), &mb_snips[i][2]);
+    // prepare special snips for the odd elements of SB and MB - (AD minus even item 0) 
+    for (unsigned i=0; i < 2; i++) {
+        vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_SB.items[i*2].dict_id, sb_snips[i], &sb_snip_lens[i]);
+        vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_MB.items[i*2].dict_id, mb_snips[i], &mb_snip_lens[i]);
     }
+
+    for (unsigned i=0; i < MAX_ARG_ARRAY_ITEMS; i++) 
+        vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_F1R2.items[i].dict_id, f2r1_snips[i], &f2r1_snip_lens[i]);
 }
 
 // used for DP, GQ, A0D and otheres - store in transposed matrix in local 
@@ -73,110 +80,164 @@ static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, 
 
 // a comma-separated array - each element goes into its own item context, single repeat (somewhat similar to compound, but 
 // intended for simple arrays - just comma separators, no delta between lines or optimizations)
-static WordIndex vcf_seg_FORMAT_A_R_G (VBlockVCF *vb, Context *ctx, Container con /* by value */, const char *value, int value_len,
-                                       void (*seg_item_cb)(VBlockVCFP, DictId, unsigned num_items, ContextP *ctxs, 
-                                                           const char**, const unsigned*, const int64_t*, const unsigned*))
+static WordIndex vcf_seg_FORMAT_A_R_G (VBlockVCF *vb, Context *ctx, Container con /* by value */, const char *value, int value_len, StoreType item_store_type,
+                                       void (*seg_item_cb)(VBlockVCFP, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
+                                                           const char**, const unsigned*, const int64_t*))
 {   
-    int64_t sum = 0; // initialize
-    ctx->flags.store  = STORE_INT; // tell container_reconstruct_do to set last_value of container to the sum of its items
-    
     const char *items[MAX_ARG_ARRAY_ITEMS]; unsigned item_lens[MAX_ARG_ARRAY_ITEMS];
     con.nitems_lo = str_split (value, value_len, MAX_ARG_ARRAY_ITEMS, ',', items, item_lens, false, NULL);
     if (!con.nitems_lo) 
         return seg_by_ctx (vb, value, value_len, ctx, value_len); // too many items - normal seg
 
     Context *item_ctxs[con.nitems_lo];
-    unsigned add_bytes[con.nitems_lo];
     int64_t values[con.nitems_lo];
 
-    bool all_ints = true; 
     for (unsigned i=0; i < con.nitems_lo; i++) {
 
         item_ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id);
-        item_ctxs[i]->flags.store = STORE_INT;
+        item_ctxs[i]->flags.store = item_store_type;
         item_ctxs[i]->st_did_i = ctx->did_i;
 
-        all_ints &= str_get_int_range64 (items[i], item_lens[i], 0, 1000000000LL, &values[i]); // must be non-negative ints
-        item_ctxs[i]->last_value.i = values[i];
-
-        if (all_ints) 
-            sum += values[i];
-        
-        // seg item with provided call, or if (no callback provided or callback failed to seg), seg ourselves.
-        add_bytes[i] = item_lens[i] + (i < con.nitems_lo-1 /* has comma */);
-        if (!seg_item_cb)
-            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], add_bytes[i]);
+        if (seg_item_cb) {
+            if (str_get_int (items[i], item_lens[i], &values[i])) 
+                item_ctxs[i]->last_value.i = values[i];
+            else
+                seg_item_cb = NULL; // can't use callback if not all items or int
+        }
     }
 
-    // seg via callback
-    if (all_ints && seg_item_cb)
-        seg_item_cb (vb, ctx->dict_id, con.nitems_lo, item_ctxs, items, item_lens, values, add_bytes);
+    // case: seg items via callback
+    if (seg_item_cb)
+        seg_item_cb (vb, ctx, con.nitems_lo, item_ctxs, items, item_lens, values);
 
-    if (all_ints) // a valid value for downstream fields to use
-        ctx_set_last_value (vb, ctx, sum);
+    // case: seg items as normal snips
+    else 
+        for (unsigned i=0; i < con.nitems_lo; i++) 
+            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
 
-    ctx->last_txt_len = con.nitems_lo; // Seg only: for use by other fields, eg vcf_seg_FORMAT_F2R1
+    ctx->last_txt_len = con.nitems_lo; // seg only: for use by vcf_seg_*_items callbacks
 
-    return container_seg_by_ctx (vb, ctx, (ContainerP)&con, 0, 0, 0);
+    return container_seg_by_ctx (vb, ctx, (ContainerP)&con, 0, 0, con.nitems_lo-1); // account for the commas
 }
 
 //-------------------------
 // FORMAT/AD and FORMAT/AD*
 // ------------------------
 
-// callback from vcf_seg_FORMAT_A_R_G to handle item 0 - it is usually somewhat related to the overall sample depth, 
-// therefore values within a sample are expected to be correlated - so we store it transposed
-
-static void vcf_seg_AD_items (VBlockVCFP vb, DictId dict_id, unsigned num_items, ContextP *item_ctxs, 
-                              const char **items, const unsigned *item_lens, const int64_t *values, const unsigned *add_bytes)
+// Sepcial treatment for item 0
+static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
+                              const char **items, const unsigned *item_lens, const int64_t *values)
 {
-    // item 0
-    vcf_seg_FORMAT_transposed (vb, item_ctxs[0], items[0], item_lens[0], add_bytes[0]);
+    // item 0, the depth of REF, is usually somewhat related to the overall sample depth,
+    // therefore values within a sample are expected to be correlated - so we store it transposed
+    vcf_seg_FORMAT_transposed (vb, item_ctxs[0], items[0], item_lens[0], item_lens[0]);
 
     for (unsigned i=1; i < num_items; i++) 
-        seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], add_bytes[i]);
+        seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
 
-    if (dict_id.num == dict_id_FORMAT_AD)
+    if (ctx->dict_id.num == dict_id_FORMAT_AD) {
+        
+        // set sum of items for AD
+        int64_t sum = 0; 
+        for (unsigned i=0; i < num_items; i++) 
+            sum +=  values[i];
+
+        ctx_set_last_value (vb, ctx, sum);
+        ctx->flags.store = STORE_INT; // tell container_reconstruct_do to set last_value of container to the sum of its items
+
         memcpy (vb->ad_values, values, num_items * sizeof (values[0]));
+    }
 }
 
-//------------------------
-// FORMAT/MB and FORMAT/SB
-// -----------------------
+//------------
+// FORMAT/F2R1
+//------------
 
-// sum every of two values is expected to equal the corresponding value in AD. Example: AD=59,28 SB=34,25,17,11 MB=28,31,11,17
-// strategy: eliminate one of the two numbers
-static void vcf_seg_SB_MB_items (VBlockVCFP vb, DictId dict_id,  unsigned num_items, ContextP *item_ctxs, 
-                                 const char **items, const unsigned *item_lens, const int64_t *values, const unsigned *add_bytes)
+// F2R1 is expected to be (AD-F1R2) - if it indeed is, we use a special snip
+static void vcf_seg_F2R1_items (VBlockVCFP vb, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
+                                const char **items, const unsigned *item_lens, const int64_t *values)
+{
+    // we can use the formula only if AD,F1R1 were encountered in this line, and that they have the number of items as us
+    ContextP ad_ctx, f1r2_ctx;
+    bool use_formula = ctx_encountered_in_line (vb, dict_id_FORMAT_AD, &ad_ctx) &&
+                       ctx_encountered_in_line (vb, dict_id_FORMAT_AD, &f1r2_ctx) &&
+                       ad_ctx->last_txt_len   == num_items &&  // last_txt_len is # of items stored by vcf_seg_FORMAT_A_R_G 
+                       f1r2_ctx->last_txt_len == num_items;
+
+    for (unsigned i=0; i < num_items; i++) {
+
+        // case: as expected, F1R2 + F2R1 = AD - seg as a F2R1 as a MINUS snip
+        if (use_formula && vb->ad_values[i] == values[i] + ctx_get_existing_ctx (vb, con_FORMAT_F1R2.items[i].dict_id)->last_value.i) {
+            seg_by_ctx (vb, f2r1_snips[i], f2r1_snip_lens[i], item_ctxs[i], item_lens[i]); 
+            item_ctxs[i]->no_stons = true; // enable "all_the_same"
+        }
+
+        // case: the formula doesn't work for this item - seg a normal snip
+        else
+            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+    }
+}
+
+//----------
+// FORMAT/SB
+//----------
+
+// For bi-allelic SNPs, sum every of two values is expected to equal the corresponding value in AD. Example: AD=59,28 SB=34,25,17,11. 
+// seg the second of every pair as a MINUS snip
+static void vcf_seg_SB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
+                              const char **items, const unsigned *item_lens, const int64_t *values)
 {
     // verify that AD was encountered in this line, and that it has exactly half the number of items as us
     ContextP ad_ctx;
-    if (!ctx_encountered_in_line (vb, dict_id_FORMAT_AD, &ad_ctx) ||
-        2 * ad_ctx->last_txt_len /* # of items stored by vcf_seg_FORMAT_A_R_G */ != num_items) goto fallback;
+    bool use_formula = ctx_encountered_in_line (vb, dict_id_FORMAT_AD, &ad_ctx) && ad_ctx->last_txt_len == 2 && num_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R_G
 
-    // verify that the sum of ever two of our items, equals the corresponding AD item
-    for (unsigned i=0; i < num_items / 2; i++)
-        if (vb->ad_values[i] != values[i*2] + values[i*2 + 1]) goto fallback;
+    for (unsigned i=0; i < num_items; i++) {
 
-    for (unsigned i=0; i < num_items / 2; i++) {
-        // seg even-numbered elemenet as-is
-        seg_by_ctx (vb, items[i*2], item_lens[i*2], item_ctxs[i*2], add_bytes[i*2]); 
-        
-        // seg odd-numbered element as AD minus (even element)
-        if (dict_id.num == dict_id_FORMAT_SB)
-            seg_by_ctx (vb, sb_snips[i], sb_snip_lens[i], item_ctxs[i*2 + 1], add_bytes[i*2 + 1]); 
-
-        else // MB
-            seg_by_ctx (vb, mb_snips[i], mb_snip_lens[i], item_ctxs[i*2 + 1], add_bytes[i*2 + 1]); 
-
-        item_ctxs[i*2 + 1]->no_stons = true; // to enable "all_the_same"
+        // seg odd-numbered element as AD - (even element), if the sum is correct
+        if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) {
+            seg_by_ctx (vb, sb_snips[i/2], sb_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
+            item_ctxs[i]->no_stons = true; // to enable "all_the_same"
+        }
+        else {
+            item_ctxs[i]->flags.store = STORE_INT; // consumed by the odd items ^
+            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+        }
     }
-    return;
+}
 
-fallback:
-    // seg elements normally if not possible to apply the algorithm
-    for (unsigned i=0; i < num_items; i++)
-        seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], add_bytes[i]);
+//----------
+// FORMAT/MB
+//----------
+
+// For bi-allelic SNPs: sum every of two items is expected to equal the corresponding value in AD. Example: AD=7,49 F2R1=3,28 MB=4,3,26,23 
+// In addition, the even-numbered item is quite similar to the corresponding value in F2R1.
+// Seg the even items as delta from F2R1 and odd items as delta as as a MINUS snip
+static void vcf_seg_MB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
+                              const char **items, const unsigned *item_lens, const int64_t *values)
+{
+    ContextP ad_ctx, f2r1_ctx;
+    bool use_formula_even = ctx_encountered_in_line (vb, dict_id_FORMAT_F2R1, &f2r1_ctx) && f2r1_ctx->last_txt_len == 2 && num_items == 4;
+    bool use_formula_odd  = ctx_encountered_in_line (vb, dict_id_FORMAT_AD, &ad_ctx) && ad_ctx->last_txt_len == 2 &&  num_items == 4; // last_txt_len is # of items set by vcf_seg_FORMAT_A_R_G
+
+    for (unsigned i=0; i < num_items; i++) {
+
+        // if possible, seg even-numbered element delta vs the corresponding element in F2R1
+        if (use_formula_even && !(i%2)) { 
+            seg_delta_vs_other (vb, item_ctxs[i], ctx_get_existing_ctx (vb, con_FORMAT_F2R1.items[i/2].dict_id), NULL, item_lens[i], -1);
+            item_ctxs[i]->flags.store = STORE_INT; // consumed by the odd items (below)
+        }
+
+        // if possible, seg odd-numbered element as AD minus (even element), if the sum is correct
+        else if (use_formula_odd && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) {
+            seg_by_ctx (vb, mb_snips[i/2], mb_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
+            item_ctxs[i]->no_stons = true; // to enable "all_the_same"
+        }
+        
+        else { // fallback if formulas don't work
+            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+            item_ctxs[i]->flags.store = STORE_INT; // possibly consumed by the odd items (^)
+        }
+    }
 }
 
 // parameter is two dict_id's (in base64). reconstructs dict1.last_value - dict2.last_value
@@ -240,13 +301,14 @@ static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const ch
 static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
 {
     int64_t dosage = vb->gt_ctx->last_value.i; // dosage store here by vcf_seg_FORMAT_GT
-    double ds_val;
+    float ds_val;
+    unsigned format_len;
+    char snip[FLOAT_FORMAT_LEN + 20] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
 
-    if (dosage < 0 || (ds_val = str_get_positive_float (cell, cell_len)) < 0) 
+    if (dosage < 0 || !str_get_float (cell, cell_len, &ds_val, &snip[2], &format_len)) 
         return seg_by_ctx (vb, cell, cell_len, ctx, cell_len);
 
-    char snip[30] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
-    unsigned snip_len = 2 + str_get_float_format (cell, cell_len, &snip[2]);
+    unsigned snip_len = 2 + format_len;
     snip[snip_len++] = ' ';
     snip_len += str_int ((int64_t)((ds_val - dosage) * 1000000), &snip[snip_len]);
 
@@ -478,75 +540,6 @@ TRANSLATOR_FUNC (vcf_piz_luft_GT)
     return true;    
 }
 
-//------------
-// FORMAT/F2R1
-//------------
-
-// F2R1 is expected to be (AD-F1R2) - if it indeed is, we use a special snip
-static WordIndex vcf_seg_FORMAT_F2R1 (VBlockVCF *vb, Context *f2r1_ctx, const char *value, int value_len)
-{
-    Context *ad_ctx, *f1r2_ctx;
-
-    if (!ctx_has_value_in_line (vb, dict_id_FORMAT_AD, &ad_ctx) ||
-        !ctx_has_value_in_line (vb, dict_id_FORMAT_F1R2, &f1r2_ctx))
-        return vcf_seg_FORMAT_A_R_G (vb, f2r1_ctx, con_FORMAT_F2R1, value, value_len, NULL); //can't "goto" into scope of variable length arrays
-
-    unsigned num_items = ad_ctx->last_txt_len;
-    const char *f2r1_items[num_items];
-    unsigned f2r1_item_lens[num_items];
-
-    if (!num_items || num_items != f1r2_ctx->last_txt_len)  // not the same positive number of items
-        goto fallback; 
-
-    if (!str_split (value, value_len, num_items, ',', f2r1_items, f2r1_item_lens, true, NULL))
-        goto fallback; // F2R1 doesn't have the correct number of items;
-
-    int64_t f2r1_item_value;
-    for (unsigned i=0; i < num_items; i++) {
-        if (!str_get_int (f2r1_items[i], f2r1_item_lens[i], &f2r1_item_value)) 
-            goto fallback; // not an integer
-            
-        Context *ad_item_ctx   = ctx_get_ctx (vb, con_FORMAT_AD.items[i].dict_id);
-        Context *f1r2_item_ctx = ctx_get_ctx (vb, con_FORMAT_F1R2.items[i].dict_id);
-        
-        if (f2r1_item_value != ad_item_ctx->last_value.i - f1r2_item_ctx->last_value.i)
-            goto fallback; // not expected value
-    }
-
-    char special[2] = { SNIP_SPECIAL, VCF_SPECIAL_F2R1 };
-    return seg_by_ctx (vb, special, sizeof(special), f2r1_ctx, value_len);
-
-fallback:
-    return vcf_seg_FORMAT_A_R_G (vb, f2r1_ctx, con_FORMAT_F2R1, value, value_len, NULL);
-}
-
-// F2R1 = AD - F1R2
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_F2R1)
-{
-    if (!reconstruct) goto done;
-
-    // number of items in F2R1 is the same as AD - count AD's commas 
-    Context *ad_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_AD);
-    unsigned num_items = str_count_char (last_txt (vb, ad_ctx->did_i), ad_ctx->last_txt_len, ',') + 1;
-
-    for (unsigned i=0; i < num_items; i++) {
-        DictId ad_item_dict_id   = { .id = {'A', base36(i), 'D'} }; // see seg_initialize_container_array
-        DictId f1r2_item_dict_id = { .id = {'F', base36(i), '1', 'R', '2'} };
-        
-        Context *ad_item_ctx   = ctx_get_existing_ctx (vb, ad_item_dict_id); 
-        Context *f1r2_item_ctx = ctx_get_existing_ctx (vb, f1r2_item_dict_id); 
-
-        char f2r1_item[30];
-        unsigned f2r1_item_len = str_int (ad_item_ctx->last_value.i - f1r2_item_ctx->last_value.i, f2r1_item);
-        
-        RECONSTRUCT (f2r1_item, f2r1_item_len);
-        if (i < num_items-1) RECONSTRUCT1 (',');
-    }
-
-done:
-    return false; // no new value
-}
-
 //------------------------------------------------
 // FORMAT and INFO - subfields with G, R, R2 types
 //------------------------------------------------
@@ -708,13 +701,11 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
             optimize_vector_2_sig_dig (sf[i], sf_len[i], opt_snip, &opt_snip_len))
             SEG_OPTIMIZED;
     
-        else if (flag.optimize_GP && dict_id.num == dict_id_FORMAT_GP && 
+        else if (flag.optimize_GP && dict_id.num == dict_id_FORMAT_GP &&  
             optimize_vector_2_sig_dig (sf[i], sf_len[i], opt_snip, &opt_snip_len))
             SEG_OPTIMIZED;
 
-        // ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
-        else if (dict_id.num == dict_id_FORMAT_PL) // not optimized
-            seg_array ((VBlockP)vb, ctx, ctx->did_i, sf[i], sf_len[i], ',', 0, false);
+        // note: GP and PL - for non-optimized, I tested segging as A_R_G and seg_array - they are worse or not better than the default. likely because the values are correlated.
 
         // case: PS ("Phase Set") - might be the same as POS (for example, if set by Whatshap: https://whatshap.readthedocs.io/en/latest/guide.html#features-and-limitations)
         // or might be the same as the previous line
@@ -735,34 +726,37 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         else if (dict_id.num == dict_id_FORMAT_MIN_DP && ctx_has_value_in_line (vb, dict_id_FORMAT_DP, &other_ctx)) 
             seg_delta_vs_other (vb, ctx, other_ctx, sf[i], sf_len[i], -1);
 
+        else if (dict_id.num == dict_id_FORMAT_AF) 
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_AF, sf[i], sf_len[i], STORE_NONE, NULL);
+
         // ##FORMAT=<ID=AD,Number=.,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">  
         else if (dict_id.num == dict_id_FORMAT_AD) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_AD, sf[i], sf_len[i], vcf_seg_AD_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_AD, sf[i], sf_len[i], STORE_INT, vcf_seg_AD_items);
 
         else if (dict_id.num == dict_id_FORMAT_ADALL) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADALL, sf[i], sf_len[i], vcf_seg_AD_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADALL, sf[i], sf_len[i], STORE_NONE, vcf_seg_AD_items);
 
         else if (dict_id.num == dict_id_FORMAT_ADF) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADF, sf[i], sf_len[i], vcf_seg_AD_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADF, sf[i], sf_len[i], STORE_NONE, vcf_seg_AD_items);
 
         else if (dict_id.num == dict_id_FORMAT_ADR) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADR, sf[i], sf_len[i], vcf_seg_AD_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADR, sf[i], sf_len[i], STORE_NONE, vcf_seg_AD_items);
 
         // ##FORMAT=<ID=F1R2,Number=R,Type=Integer,Description="Count of reads in F1R2 pair orientation supporting each allele">
         else if (dict_id.num == dict_id_FORMAT_F1R2) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_F1R2, sf[i], sf_len[i], NULL);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_F1R2, sf[i], sf_len[i], STORE_INT, NULL);
 
         // ##FORMAT=<ID=F2R1,Number=R,Type=Integer,Description="Count of reads in F2R1 pair orientation supporting each allele">
         else if (dict_id.num == dict_id_FORMAT_F2R1) 
-            vcf_seg_FORMAT_F2R1 (vb, ctx, sf[i], sf_len[i]);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_F2R1, sf[i], sf_len[i], STORE_INT, vcf_seg_F2R1_items);
 
         // ##FORMAT=<ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
         else if (dict_id.num == dict_id_FORMAT_SB) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_SB, sf[i], sf_len[i], vcf_seg_SB_MB_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_SB, sf[i], sf_len[i], STORE_NONE, vcf_seg_SB_items);
 
         // ##FORMAT=<ID=MB,Number=4,Type=Integer,Description="Per-sample component statistics to detect mate bias">
         else if (dict_id.num == dict_id_FORMAT_MB) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_MB, sf[i], sf_len[i], vcf_seg_SB_MB_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_MB, sf[i], sf_len[i], STORE_NONE, vcf_seg_MB_items);
 
         else // default
             seg_by_ctx (vb, sf[i], sf_len[i], ctx, sf_len[i]);

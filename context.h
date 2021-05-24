@@ -131,6 +131,8 @@ static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // 
 }
 #define ctx_get_existing_ctx(vb,dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id))
 
+extern struct FlagsCtx ctx_get_zf_ctx_flags (DictId dict_id);
+
 extern void ctx_add_new_zf_ctx_from_txtheader (DictId dict_id, const char *name, unsigned name_len, TranslatorId luft_translator);
 
 extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);

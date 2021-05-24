@@ -770,7 +770,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
             seg_by_ctx (vb, ((char []){ SNIP_SPECIAL, (char)SAM_SPECIAL_XA_POS }), 2, pos_ctx, 0); 
             pos_ctx->no_stons = true;
         }
-        else // we will add this ^ back in the next release */  
+        else // we will add this ^ back in a future release */  
             seg_integer_or_not ((VBlockP)vb, pos_ctx, pos, pos_len, 1+pos_len);
     }
 

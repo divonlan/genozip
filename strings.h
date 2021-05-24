@@ -69,8 +69,8 @@ extern _Bool str_is_in_range (const char *str, uint32_t str_len, char first_c, c
 extern StrText str_pointer (const void *p);
 extern StrText str_time (void);
 
-extern double str_get_positive_float (const char *float_str, unsigned float_str_len);
-extern unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str /* out */);
+#define FLOAT_FORMAT_LEN 12
+extern bool str_get_float (const char *float_str, unsigned float_str_len, float *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len);
 
 extern unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char sep, const char **items, unsigned *item_lens, bool exactly, const char *enforce_msg);
 

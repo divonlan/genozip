@@ -39,9 +39,11 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         return;
 
     bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
+    bool v12 = (command == ZIP || z_file->genozip_version >= 12);
 
     char str[1000];
     #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 
+    #define SEC_TAB "            ++  "
 
     sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x\n",
              rw, 
@@ -56,8 +58,6 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
              BGEN32 (header->magic));
     PRINT;
 
-#define SEC_TAB "            ++  "
-    
     switch (header->section_type) {
     case SEC_GENOZIP_HEADER: {
         SectionHeaderGenozipHeader *h = (SectionHeaderGenozipHeader *)header;
@@ -79,17 +79,16 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     case SEC_TXT_HEADER: {
         SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
-        sprintf (str, SEC_TAB "txt_data_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u md5_single=%s digest_header=%s\n" 
-                      SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) rejects_coord=%s txt_filename=\"%.*s\"\n",
-                 BGEN64 (h->txt_data_size), BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
+        sprintf (str, SEC_TAB "txt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u md5_single=%s digest_header=%s\n" 
+                      SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) rejects_coord=%s is_txt_luft=%u txt_filename=\"%.*s\"\n",
+                 BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                  digest_display (h->digest_single).s, digest_display (h->digest_header).s, 
                  codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
-                 coords_names[h->h.flags.txt_header.rejects_coord], TXT_FILENAME_LEN, h->txt_filename);
+                 coords_names[h->h.flags.txt_header.rejects_coord], h->h.flags.txt_header.is_txt_luft, TXT_FILENAME_LEN, h->txt_filename);
         break;
     }
 
     case SEC_VB_HEADER: {
-        bool v12 = (command == ZIP || z_file->genozip_version >= 12);
         SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
         sprintf (str, SEC_TAB "lines=(PRIM:%u, LUFT:%u) recon_size=(P:%u, L:%u) longest_line=%u z_data_bytes=%u digest_so_far=%s coords=%s\n",
                  BGEN32 (h->num_lines_prim),  v12 ? BGEN32 (h->num_lines_luft)  : 0, 
@@ -675,7 +674,7 @@ bool zfile_read_genozip_header (char *created) // optional outs
         ASSINP (z_file->data_type == data_type, "%s - file extension indicates this is a %s file, but according to its contents it is a %s", 
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
-    if (txt_file && header->h.flags.genozip_header.txt_is_bin)// txt_file is still NULL when called from main_genozip
+    if (txt_file && header->h.flags.genozip_header.txt_is_bin) // txt_file is still NULL when called from main_genozip
         txt_file->data_type = DTPZ (bin_type);
 
     ASSINP (header->encryption_type != ENC_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
@@ -862,9 +861,11 @@ void zfile_write_txt_header (Buffer *txt_header,
         .h.data_uncompressed_len   = BGEN32 (txt_header->len),
         .h.compressed_offset       = BGEN32 (sizeof (SectionHeaderTxtHeader)),
         .h.codec                   = CODEC_BZ2,
-        .h.flags.txt_header        = { .rejects_coord = flag.rejects_coord },
+        .h.flags.txt_header        = { .rejects_coord = flag.rejects_coord,
+                                       .is_txt_luft   = (txt_file->coords == DC_LUFT) },
         .codec                     = txt_file->codec, 
         .digest_header             = flag.data_modified ? DIGEST_NONE : header_md5,
+        .txt_header_size           = BGEN64 (unmodified_txt_header_len),
     };
 
     // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same

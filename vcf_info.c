@@ -512,15 +512,14 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
 // returns true if successful (return value used only if validate_only)
 TRANSLATOR_FUNC (vcf_piz_luft_A_1)
 {
+    char format[20];
+    float af;
+
     // if item format is inconsistent with AF being a probability value - we won't translate it
-    double af = str_get_positive_float (recon, recon_len);
-    
-    if (af < 0 || af > 1) return false;
+    if (!str_get_float (recon, recon_len, &af, format, NULL) || af < 0 || af > 1) 
+        return false;
     
     if (validate_only) return true; 
-
-    char format[20];
-    str_get_float_format (recon, recon_len, format);
 
     vb->txt_data.len -= recon_len;
     char af_str[30];
@@ -727,7 +726,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
 static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char *value, unsigned value_len)
 {
     #define CALL(f) do { (f); not_yet_segged = false; } while(0) 
-    #define CALL_WITH_FALLBACK(f) do { if (f) seg_integer_or_not ((VBlockP)vb, ctx, value, value_len, value_len); \
+    #define CALL_WITH_FALLBACK(f) do { if (f) seg_by_ctx ((VBlockP)vb, value, value_len, ctx, value_len); \
                                        not_yet_segged = false; } while(0) 
 
     char modified_snip[OPTIMIZE_MAX_SNIP_LEN]; // used for 1. fields that are optimized 2. fields translated luft->primary
@@ -775,10 +774,9 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
 
     // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
     // Optimize VQSLOD
-    if (flag.optimize_VQSLOD && (dict_id.num == dict_id_INFO_VQSLOD) &&
-        optimize_float_2_sig_dig (value, value_len, 0, modified_snip, &modified_snip_len)) 
+    if (dict_id.num == dict_id_INFO_VQSLOD && flag.optimize_VQSLOD && optimize_float_2_sig_dig (value, value_len, 0, modified_snip, &modified_snip_len)) 
         ADJUST_FOR_OPTIMIZED;
-
+    
     // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
     // END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
     else if (dict_id.num == dict_id_INFO_END)
@@ -828,13 +826,13 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
              dict_id.num == dict_id_INFO_GQ_HIST ||
              dict_id.num == dict_id_INFO_AGE_HISTOGRAM_HET ||
              dict_id.num == dict_id_INFO_AGE_HISTOGRAM_HOM) 
-        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', '|', false));
+        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', '|', false, true));
 
     else if (dict_id.num == dict_id_INFO_DP4) 
-        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', 0, false));
+        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', 0, false, true));
 
     if (not_yet_segged) 
-        seg_integer_or_not ((VBlockP)vb, ctx, value, value_len, value_len);
+        seg_by_ctx (vb, value, value_len, ctx, value_len);
     
     #undef CALL
 }

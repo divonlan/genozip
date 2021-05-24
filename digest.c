@@ -146,7 +146,9 @@ void digest_one_vb (VBlock *vb)
                       DIGEST_NAME,
                       txtfile_dump_vb (vb, z_name),
                       codec_args[txt_file->codec].viewer, file_guess_original_filename (txt_file),
-                      vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len, txtfile_dump_filename (vb, z_name, "good"));
+                      vb->vb_position_txt_file + vb->txt_data.len, // head argument
+                      (uint32_t)vb->txt_data.len,                  // tail argument
+                      txtfile_dump_filename (vb, z_name, "good")); // redirection filename
 
                 RESTORE_FLAG (quiet);
 

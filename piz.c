@@ -151,32 +151,32 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         bool is_b250  = header->h.section_type == SEC_B250;
         if (!is_b250 && !is_local) break;
 
-        Context *ctx = ctx_get_ctx (vb, header->dict_id); // creates the context
+        Context *ctx = ctx_get_ctx (vb, header->dict_id); // gets the context (creating it if it doesn't already exist)
 
         // case: in ZIP & we are PAIR_2, reading PAIR_1 info - save flags, ltype, lcodec to restore later
-        struct FlagsCtx save_flags={}; LocalType save_ltype=0; Codec save_lcodec=0;
-        if (pair_vb_i && command == ZIP) { save_flags=ctx->flags; save_ltype=ctx->ltype; save_lcodec=ctx->lcodec; }
+        //struct FlagsCtx save_flags={}; LocalType save_ltype=0; Codec save_lcodec=0;
+        //if (pair_vb_i && command == ZIP) { save_flags=ctx->flags; save_ltype=ctx->ltype; save_lcodec=ctx->lcodec; }
         
-        *(uint8_t*)&ctx->flags |= header->h.flags.flags; // ??? is |= really needed? or is assignment sufficient?
-
-        ctx->ltype  = header->ltype;
-        if (is_local) ctx->lcodec = header->h.codec;
-
-        // case: in PIZ: flags.paired appears on the sections the "pair 2" VB (that come first in section_index)
-        if (ctx->flags.paired && !pair_vb_i) 
-            pair_vb_i = fastq_get_pair_vb_i (vb);
-
         bool is_pair_section = (BGEN32 (header->h.vblock_i) == pair_vb_i); // is this a section of "pair 1" 
 
-        if (is_pair_section) {
+        if (!is_pair_section) {
+            ctx->flags = header->h.flags.ctx; // overrides default inherited from vb_i=1 (assigned in piz_read_all_ctxs)
+            ctx->ltype = header->ltype;
+            if (is_local) ctx->lcodec = header->h.codec;
+        }
+        else {
             // overcome bug in ZIP --pair - local sections with junk data created in addition to the expected b250.
             // we ignore these local sections (or allow b250 to overwrite them)
-            if (is_local && ctx->pair_b250) goto skip_uncompress_due_to_old_bug;
+            if (is_local && ctx->pair_b250) continue;
 
             ctx->pair_flags = header->h.flags.ctx;            
             ctx->pair_b250  = is_b250;                
             ctx->pair_local = is_local;
         }
+
+        // case: in PIZ: flags.paired appears on the sections the "pair 2" VB (that come first in section_index)
+        if (ctx->flags.paired && !pair_vb_i) 
+            pair_vb_i = fastq_get_pair_vb_i (vb);
 
         // initialize b250 iterator
         if (is_b250) {
@@ -214,9 +214,9 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         if (header->h.flags.ctx.copy_param)
             target_buf->param = header->param;
 
-skip_uncompress_due_to_old_bug:
+//skip_uncompress_due_to_old_bug:
         // restore
-        if (pair_vb_i && command == ZIP) { ctx->flags=save_flags; ctx->ltype=save_ltype; ctx->lcodec=save_lcodec; }
+//        if (pair_vb_i && command == ZIP) { ctx->flags=save_flags; ctx->ltype=save_ltype; ctx->lcodec=save_lcodec; }
     }
 
     // initialize pair iterators (pairs only exist in fastq)
@@ -271,14 +271,21 @@ static void piz_read_all_ctxs (VBlock *vb, Section *next_sl)
     // ctxs that have dictionaries are already initialized, but others (eg local data only) are not
     ctx_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts);
 
+    // ctx.flags defaults to vb_i=1 flags, overridden if a b250 or local section is read. this will not be overridden if all_the_same, i.e. no b250/local sections.
+    for (Section sec = sections_vb_first (1, false) + 1; sec->st == SEC_B250 || sec->st == SEC_LOCAL; sec++) {
+        ContextP ctx = ctx_get_existing_ctx (vb, sec->dict_id); // will exist if it has a dict (all_the_same sections always have a dict)
+        if (ctx) ctx->flags = sec->flags.ctx;
+    }
+
     while ((*next_sl)->st == SEC_B250 || (*next_sl)->st == SEC_LOCAL) {
         uint32_t section_start = vb->z_data.len;
         *ENT (uint32_t, vb->z_section_headers, vb->z_section_headers.len) = section_start; 
 
-        // create a context even if section is skipped, for containters to work (skipping a section should be mirrored in a container filter)
+        // create a context even if section is skipped, for containers to work (skipping a section should be mirrored in a container filter)
         ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, (*next_sl)->dict_id);
         int32_t offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", (*next_sl)->st, *next_sl); // returns 0 if section is skipped
         if (offset != SECTION_SKIPPED) vb->z_section_headers.len++;
+        
         (*next_sl)++;                             
     }
 }
@@ -408,7 +415,7 @@ static bool piz_read_one_vb (VBlock *vb)
 
     Section sl = sections_vb_first (vb->vblock_i, false); 
 
-    vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
+    vb->vb_position_txt_file = txt_file->txt_data_so_far_single_0; // position in original txt file (before any ZIP or PIZ modifications)
     
     int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sl++); 
 
@@ -434,6 +441,9 @@ static bool piz_read_one_vb (VBlock *vb)
     vb->translation      = dt_get_translation (vb); // vb->vb_chords needs to be set first
 
     txt_file->num_lines += vb->lines.len; // source file lines
+
+    // accounting for data as in the original source file 
+    txt_file->txt_data_so_far_single_0 += BGEN32 (txt_file->txt_flags.is_txt_luft ? header->recon_size_luft : header->recon_size_prim); 
 
     // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every txt component

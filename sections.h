@@ -79,22 +79,24 @@ typedef union SectionFlags {
         // note: if updating dts_* flags, update in zfile_compress_genozip_header, zfile_show_header too
         #define dts_ref_internal dt_specific // SAM, BAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference)
         #define dts_paired       dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13)
-        uint8_t dt_specific      : 1;        // this flag has a different meaning depending on the data_type, may be one of the above ^ 
-        uint8_t aligner          : 1;        // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
-        uint8_t txt_is_bin       : 1;        // Source file is binary (BAM)
-        uint8_t bgzf             : 1;        // Reconstruct as BGZF (user may override) (determined by the last component)
-        uint8_t adler            : 1;        // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
-        uint8_t dual_coords      : 1;        // file supports dual coordinates - last TXT section is the "liftover rejects" data
-        uint8_t has_taxid        : 1;        // each line in the file has Taxonomic ID information
+        uint8_t dt_specific      : 1; // this flag has a different meaning depending on the data_type, may be one of the above ^ 
+        uint8_t aligner          : 1; // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
+        uint8_t txt_is_bin       : 1; // Source file is binary (BAM)
+        uint8_t bgzf             : 1; // Reconstruct as BGZF (user may override) (determined by the last component)
+        uint8_t adler            : 1; // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
+        uint8_t dual_coords      : 1; // file supports dual coordinates - last two TXT sections are the "liftover rejects" data (v12)
+        uint8_t has_taxid        : 1; // each line in the file has Taxonomic ID information (v12)
+        uint8_t unused           : 1;
     } genozip_header;
 
     struct FlagsTxtHeader {
-        Coords rejects_coord     : 2;        // DC_PRIMARY/DC_LUFT contains "##primary_only"/"##luft_only" variants or DC_NONE if not a rejects component
-        uint8_t unused           : 6;
+        uint8_t rejects_coord    : 2; // DC_PRIMARY/DC_LUFT contains "##primary_only"/"##luft_only" variants or DC_NONE if not a rejects component (added v12)
+        uint8_t is_txt_luft      : 1; // true if original source file was a dual-coordinate file in Luft rendition (v12)
+        uint8_t unused           : 5;
     } txt_header;
 
     struct FlagsVbHeader {
-        Coords coords            : 2;        // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
+        uint8_t coords           : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
         uint8_t unused           : 6;
     } vb_header;
 
@@ -131,14 +133,14 @@ typedef union SectionFlags {
 
 typedef struct SectionHeader {
     uint32_t     magic; 
-    uint32_t     compressed_offset;    // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
-    uint32_t     data_encrypted_len;   // = data_compressed_len + padding if encrypted, 0 if not
+    uint32_t     compressed_offset;   // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
+    uint32_t     data_encrypted_len;  // = data_compressed_len + padding if encrypted, 0 if not
     uint32_t     data_compressed_len;
     uint32_t     data_uncompressed_len;
-    uint32_t     vblock_i;             // VB with in file starting from 1 ; 0 for non-VB sections
-    SectionType  section_type;         // 1 byte
-    Codec        codec;                // 1 byte - primary codec in which this section is compressed
-    Codec        sub_codec;            // 1 byte - sub codec, in case primary codec invokes another codec
+    uint32_t     vblock_i;            // VB with in file starting from 1 ; 0 for non-VB sections
+    SectionType  section_type;        // 1 byte
+    Codec        codec;               // 1 byte - primary codec in which this section is compressed
+    Codec        sub_codec;           // 1 byte - sub codec, in case primary codec invokes another codec
     SectionFlags flags;                
 } SectionHeader; 
 
@@ -170,41 +172,41 @@ typedef struct {
 // The text file header section appears once in the file (or multiple times in case of bound file), and includes the txt file header 
 typedef struct {
     SectionHeader h;
-    uint64_t txt_data_size;    // number of bytes in the original txt file. 
-    uint64_t txt_num_lines;    // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
-    uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
-    Codec    codec;            // codec of original txt file (none, bgzf, gz, bz2...)
-    uint8_t  codec_info[3];    // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
-    Digest   digest_single;    // digest of original single txt file. non-0 only if this genozip file is a result of binding. MD5 if --md5 or Adler32 otherwise. 0 if compressed in v8 without --md5. 
-    Digest   digest_header;    // MD5 or Adler32 of header
+    uint64_t txt_data_size;           // number of bytes in the original txt file. 
+    uint64_t txt_num_lines;           // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
+    uint32_t max_lines_per_vb;        // upper bound on how many data lines a VB can have in this file
+    Codec    codec;                   // codec of original txt file (none, bgzf, gz, bz2...)
+    uint8_t  codec_info[3];           // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
+    Digest   digest_single;           // digest of original single txt file. non-0 only if this genozip file is a result of binding. MD5 if --md5 or Adler32 otherwise. 0 if compressed in v8 without --md5. 
+    Digest   digest_header;           // MD5 or Adler32 of header
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
+    uint64_t txt_header_size;         // size of header in original txt file (likely different than reconstructed size if dual-coordinates)  (v12)
+
 } SectionHeaderTxtHeader; 
 
 typedef struct {
     SectionHeader h;            
-    uint32_t unused;           // "unused" since v12 (up to v11 it was "uint32_t first_line; // if 0, this is the terminating section of the components")
-    uint32_t top_level_repeats;// repeats of TOPLEVEL container in this VB (was called num_lines before b12)
-    uint32_t recon_size_prim;  // size of vblock as it appears in the default PRIMARY reconstruction
-    uint32_t z_data_bytes;     // total bytes of this vblock in the genozip file including all sections and their headers 
-    uint32_t longest_line_len; // length of the longest line in this vblock 
-    Digest   digest_so_far;    // partial calculation of MD5 or Adler32 up to and including this VB 
-
-    // these fields were addedd to SectionHeaderVbHeader in v12 - representing the default LUFT reconstruction
-    uint32_t num_lines_prim;   // number of lines in default reconstruction in PRIMARY coords
-    uint32_t num_lines_luft;   
-    uint32_t recon_size_luft;  
+    uint32_t unused;                  // "unused" since v12 (up to v11 it was "uint32_t first_line; // if 0, this is the terminating section of the components")
+    uint32_t top_level_repeats;       // repeats of TOPLEVEL container in this VB (was called num_lines before b12)
+    uint32_t recon_size_prim;         // size of vblock as it appears in the default PRIMARY reconstruction
+    uint32_t z_data_bytes;            // total bytes of this vblock in the genozip file including all sections and their headers 
+    uint32_t longest_line_len;        // length of the longest line in this vblock 
+    Digest   digest_so_far;           // partial calculation of MD5 or Adler32 up to and including this VB 
+    uint32_t num_lines_prim;          // number of lines in default reconstruction in PRIMARY coords (v12)
+    uint32_t num_lines_luft;          // number of lines in default reconstruction in LUFT coords (v12)
+    uint32_t recon_size_luft;         // size of vblock as it appears in the default LUFT reconstruction (v12)
 } SectionHeaderVbHeader; 
 
 typedef struct {
     SectionHeader h;           
-    uint32_t num_snips;        // number of items in dictionary
+    uint32_t num_snips;               // number of items in dictionary
     DictId   dict_id;           
 } SectionHeaderDictionary;    
 
 typedef struct {
     SectionHeader h;           
-    int64_t  nodes_param;      // an extra piece of data transferred to/from Context.counts_extra
+    int64_t  nodes_param;             // an extra piece of data transferred to/from Context.counts_extra
     DictId   dict_id;           
 } SectionHeaderCounts;     
 
@@ -251,8 +253,8 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "U32", 'I', 4,  0,     BGEN_u32_buf             }, \
    { "I64", 0,   8,  1,     BGEN_deinterlace_d64_buf }, \
    { "U64", 0,   8,  0,     BGEN_u64_buf             }, \
-   { "F32", 'f', 4,  0,     0                        }, \
-   { "F64", 0,   8,  0,     0                        }, \
+   { "F32", 'f', 4,  0,     BGEN_u32_buf             }, \
+   { "F64", 0,   8,  0,     BGEN_u64_buf             }, \
    { "SEQ", 0,   1,  0,     0                        }, \
    { "BMP", 0,   8,  0,     0                        }, \
    { "COD", 0,   1,  0,     0                        }, \

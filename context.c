@@ -521,6 +521,12 @@ static Context *ctx_get_zf_ctx (DictId dict_id)
     return NULL;
 }
 
+struct FlagsCtx ctx_get_zf_ctx_flags (DictId dict_id)
+{
+    ContextP zf_ctx = ctx_get_zf_ctx (dict_id);
+    return zf_ctx ? zf_ctx->flags : (struct FlagsCtx){};
+}
+
 // ZIP only: called by merging VBs to add a new dict to z_file - copying some stuff from vb_ctx
 static Context *ctx_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
 {
@@ -630,6 +636,9 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     zf_ctx->num_singletons += vb_ctx->num_singletons; // add singletons created by seg (i.e. SNIP_LOOKUP_* in b250, and snip in local)
     zf_ctx->counts_section |= vb_ctx->counts_section; // for use of ctx_compress_counts
     
+    if (merging_vb->vblock_i == 1)
+        zf_ctx->flags = vb_ctx->flags; // vb_1 flags will be the default flags for this context, used by piz in case there are no b250 or local sections due to all_the_same. see zip_generate_b250_section and piz_read_all_ctxs
+
     uint64_t ol_len = vb_ctx->ol_nodes.len;
     bool has_count = zf_ctx->counts_section;
 
@@ -640,7 +649,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
         Context *st_ctx = ctx_get_zf_ctx (merging_vb->contexts[vb_ctx->st_did_i].dict_id);
         if (st_ctx) zf_ctx->st_did_i = st_ctx->did_i; // st_did_i is not necessarily the same for vb and zf
     }
-    
+
     if (vb_ctx->is_stats_parent)
         zf_ctx->is_stats_parent = true; // we set, but we never revert back
 

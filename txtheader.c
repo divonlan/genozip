@@ -230,7 +230,8 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
 
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
-    
+    txt_file->txt_flags            = header->h.flags.txt_header;
+
     if (txt_file->codec == CODEC_BGZF)
         memcpy (txt_file->bgzf_signature, header->codec_info, 3);
         
@@ -324,12 +325,12 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
                 TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
                 ASSERTW (digest_is_equal (header->digest_header, DIGEST_NONE) || 
-                        digest_is_equal (reconstructed_header_digest, header->digest_header) ||
-                        flag.data_modified,
-                        "%s of reconstructed %s header (%s) differs from original file (%s)\n"
-                        "Bad reconstructed header has been dumped to: %s\n", digest_name(),
-                        dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
-                        txtfile_dump_vb (comp_vb, z_name));
+                         digest_is_equal (reconstructed_header_digest, header->digest_header) ||
+                         flag.data_modified,
+                         "%s of reconstructed %s header (%s) differs from original file (%s)\n"
+                         "Bad reconstructed header has been dumped to: %s\n", digest_name(),
+                         dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
+                         txtfile_dump_vb (comp_vb, z_name));
 
                 RESTORE_FLAG (quiet);
             }
@@ -340,6 +341,9 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
             comp_vb->txt_data.len = 0;
 
         writer_handover_txtheader (&comp_vb, component_i); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
+
+        // accounting for data as in original source file - affects vb->vb_position_txt_file of next VB
+        txt_file->txt_data_so_far_single_0 = z_file->genozip_version < 12 ? BGEN32 (header->h.data_uncompressed_len) : BGEN64 (header->txt_header_size); 
     }
 
     // case: component is not in plan - discard the VB

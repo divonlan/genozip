@@ -262,9 +262,10 @@ uint32_t st_header_size (SectionType sec_type)
 {
     ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
-    return sec_type == SEC_NONE                                      ? 0 
-         : sec_type == SEC_VB_HEADER && z_file->genozip_version < 12 ? sizeof (SectionHeaderVbHeader) - 3*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was 12 bytes shorter
-         :                                                             abouts[sec_type].header_size;
+    return sec_type == SEC_NONE ? 0 
+         : sec_type == SEC_VB_HEADER  && (command == PIZ && z_file->genozip_version < 12) ? sizeof (SectionHeaderVbHeader) - 3*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was 12 bytes shorter
+         : sec_type == SEC_TXT_HEADER && (command == PIZ && z_file->genozip_version < 12) ? sizeof (SectionHeaderTxtHeader) -  sizeof(uint64_t) // in v8-11, SectionHeaderTxtHeader was 8 bytes shorter
+         : abouts[sec_type].header_size;
 }
 
 // called by PIZ main thread
