@@ -3,6 +3,8 @@
 Sex assignment
 ==============
 
+**EXPERIMENTAL FEATURE**
+
 .. toctree::
    :hidden:
 

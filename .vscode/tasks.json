@@ -215,6 +215,27 @@
         },
         {
             "type": "shell",
+            "label": "Clean Docs",
+            "command": "make.exe",
+            "args": [
+                "clean-docs"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
             "label": "Test",
             "command": "./test.sh",
             "args": [

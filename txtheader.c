@@ -163,7 +163,9 @@ bool txtheader_zip_read_and_compress (void)
 
     // for stats: combined length of txt headers in this bound file, or only one file if not bound
     if (!flag.bind) total_bound_txt_headers_len=0;
-    total_bound_txt_headers_len += evb->txt_data.len; 
+    
+    if (!flag.rejects_coord) // we don't account for rejects files as txt_len - the variant lines are already accounted for in the main file, and the added header lines are duplicates of the main header
+        total_bound_txt_headers_len += evb->txt_data.len; 
 
     z_file->num_txt_components_so_far++; // when compressing
 

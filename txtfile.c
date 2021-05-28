@@ -438,15 +438,16 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     buf_alloc (vb, &vb->txt_data, 0, flag.vblock_memory, char, 1, "txt_data");    
 
-    // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
-    if (buf_is_alloc (&txt_file->unconsumed_txt)) {
-        buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, char ,0 ,0, "txt_data");
-        buf_free (&txt_file->unconsumed_txt);
-    }
-
     // read data from the file until either 1. EOF is reached 2. end of block is reached
     uint64_t max_memory_per_vb = flag.vblock_memory - TXTFILE_READ_VB_PADDING;
     uint32_t passed_up_len=0;
+
+    // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
+    if (txt_file->unconsumed_txt.len) {
+        uint64_t bytes_moved = MIN (txt_file->unconsumed_txt.len, max_memory_per_vb);
+        buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, char, 0, bytes_moved, "txt_data");
+        buf_copy (evb, &txt_file->unconsumed_txt, &txt_file->unconsumed_txt, char, bytes_moved, txt_file->unconsumed_txt.len - bytes_moved, NULL);
+    }
 
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
@@ -498,10 +499,14 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
         }
     }
 
-    // if we have some unconsumed data, pass it up to the next vb
     if (passed_up_len) {
-        buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, char, // evb, because dst buffer belongs to File
-                  vb->txt_data.len - passed_up_len, passed_up_len, "txt_file->unconsumed_txt");
+
+        // note: we might some unconsumed data, pass it up to the next vb. possibly we still have unconsumed data (can happen if DVCF reject
+        // data was passed down from the txt header, greater than max_memory_per_vb)
+        buf_alloc (evb, &txt_file->unconsumed_txt, passed_up_len, 0, char, 1, "txt_file->unconsumed_txt");
+        memmove (ENT (char, txt_file->unconsumed_txt, passed_up_len), FIRSTENT (char, txt_file->unconsumed_txt), txt_file->unconsumed_txt.len);
+        memcpy (FIRSTENT (char, txt_file->unconsumed_txt), ENT (char, vb->txt_data, vb->txt_data.len - passed_up_len), passed_up_len);
+        txt_file->unconsumed_txt.len += passed_up_len;
 
         // now, if our data is bgzf-compressed, txt_data.len becomes shorter than indicated by vb->bgzf_blocks. that's ok - all that data
         // is decompressed and passed-down to the next VB. because it has been decompressed, the compute thread won't try to decompress it again
@@ -542,7 +547,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     if (DTPT(zip_read_one_vb)) DTPT(zip_read_one_vb)(vb);
 
-   COPY_TIMER (txtfile_read_vblock);
+    COPY_TIMER (txtfile_read_vblock);
 }
 
 // read num_lines of the txtfile (after the header), and call test_func for each line. true iff the proportion of lines

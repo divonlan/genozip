@@ -100,7 +100,7 @@ typedef struct Context {
     uint32_t nodes_len_at_1_3, nodes_len_at_2_3;  // value of nodes->len after an estimated 1/3 + 2/3 of the lines have been segmented
     
     // ZIP: stats
-    uint64_t txt_len;          // How many characters in reconstructed text are accounted for by snips in this ctx (for stats), when reconstrucing in PRIMARY coordinates (note: we don't have txt_len accounting for LUFT coordinates)
+    uint64_t txt_len;          // How many characters in reconstructed text are accounted for by snips in this ctx (for stats), when file reconstructed in PRIMARY coordinates (i.e. PRIMARY reconstruction for regular VBs, LUFT reconstruction for ##luft_only VBs, and no reconstruction for ##primary_only VBs)
     uint32_t num_singletons;   // True singletons that appeared exactly once in the entire file
 
     // PIZ-only
@@ -126,8 +126,9 @@ typedef struct Context {
     uint32_t last_txt_len;     // ZIP/PIZ: length (in vb->txt_data) of last seg/reconstruction (always in PIZ, sometimes in Seg)
 
     #define LAST_LINE_I_INIT -0x7fffffff
-    int32_t last_line_i;       // ZIP/PIZ: this line, so far, generated a valid last_value that can be used by downstream fields 
-                               //          (-last_line_i-1) means ctx encountered in this line (so far) but last_value was not set 
+    int32_t last_line_i;       // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
+                               //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
+    int32_t last_sample_i;     // ZIP: like last_line_i, but used for VCF/FORMAT fields (0-based). Only meaningful if last_line_i indicates the line is the same vb->line_i
     uint32_t next_local;       // PIZ: iterator on Context.local
     SnipIterator iterator;     // PIZ: used to iterate on the context, reading one b250 word_index at a time
     SnipIterator pair_b250_iter; // PIZ: Iterator on pair, if it contains b250 data  <--- LAST in RECONSTRUCT START

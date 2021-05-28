@@ -25,6 +25,7 @@
 #define WORD_INDEX_ONE_UP     -2 // the value is the one more than the previous value
 #define WORD_INDEX_EMPTY_SF   -3 // empty string
 #define WORD_INDEX_MISSING_SF -4 // container item missing, remove preceding separator
+#define MIN_WORD_INDEX        -4
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
 // We use characters that cannot appear in a snip - i.e. other than ASCII 32-127, \t (\x9) \n (\xA) \r (\xD)
@@ -178,8 +179,8 @@ static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, Context
 
 static inline void ctx_set_last_value_do (VBlockP vb, ContextP ctx, LastValueType last_value)
 {
-    ctx->last_value = last_value;
-    ctx->last_line_i = vb->line_i;
+    ctx->last_value    = last_value;
+    ctx->last_line_i   = vb->line_i;
 }
 #define ctx_set_last_value(vb, ctx, last_value) ctx_set_last_value_do ((VBlockP)(vb), (ctx), (last_value))
 
@@ -193,9 +194,8 @@ static inline bool ctx_encountered_in_line_do (VBlockP vb, DictId dict_id, Conte
 }
 #define ctx_encountered_in_line(vb, dict_id, p_ctx) ctx_encountered_in_line_do ((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
 
-#define ctx_set_encountered_in_line(ctx) (ctx)->last_line_i = -(int32_t)vb->line_i - 1
-
-
-
+#define ctx_set_encountered_in_line(ctx)  /* set encountered if not already ctx_set_last_value */  \
+    if ((ctx)->last_line_i != vb->line_i) \
+        (ctx)->last_line_i   = -(int32_t)vb->line_i - 1; 
 
 #endif

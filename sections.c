@@ -268,6 +268,14 @@ uint32_t st_header_size (SectionType sec_type)
          : abouts[sec_type].header_size;
 }
 
+Section section_next (Section sec)
+{
+    if (!z_file->section_list_buf.len) return NULL;
+    if (sec == NULL) return FIRSTENT (SectionEnt, z_file->section_list_buf);
+    if (sec < LASTENT (SectionEnt, z_file->section_list_buf)) return sec+1;
+    return NULL;
+}
+
 // called by PIZ main thread
 Section sections_first_sec (SectionType st, bool soft_fail)
 {

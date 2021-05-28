@@ -87,7 +87,7 @@ static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, Context *sf_ctx, const char *va
 }
 
 // verify next number on the list of the SF field is sample_i (called from vcf_seg_FORMAT_GT)
-void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
+void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb)
 {
     // case: no more SF values left to compare - we ignore this sample
     while (vb->sf_txt.next < vb->sf_txt.len) {
@@ -98,7 +98,7 @@ void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i)
         char *after;
         int32_t value = strtol (sf_one_value, &after, 10);
 
-        int32_t adjusted_sample_i = (int32_t)(sample_i + adjustment); // adjustment is the number of values in SF that are not in samples
+        int32_t adjusted_sample_i = (int32_t)(vb->sample_i + adjustment); // adjustment is the number of values in SF that are not in samples
 
         // case: badly formatted SF field
         if (*after != ',' && *after != 0) {
@@ -355,6 +355,8 @@ TRANSLATOR_FUNC (vcf_piz_luft_XREV)
 {
     if (validate_only) return true; // always possible
 
+    if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
+
     char recon_copy[recon_len];
     memcpy (recon_copy, recon, recon_len);
 
@@ -479,17 +481,17 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
 // We change the AC to AN - AC and return true if successful 
 TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
 {
+    if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
+
     int64_t an, ac;
 
     if (command == ZIP) {
         Context *an_ctx;
         if (!ctx_has_value_in_line (vb, dict_id_INFO_AN, &an_ctx) ||
-            !str_get_int (recon, recon_len, &ac))
+            !str_get_int_range64 (recon, recon_len, 0, (an = an_ctx->last_value.i), &ac))
             return false; // in Seg, AC is always segged last, so this means there is no AN in the line for sure
         
         if (validate_only) return true;  // Yay! AC can be lifted - all it needs in AN in the line, which it has 
-
-        an = an_ctx->last_value.i;
     }
     else {
         ac = ctx->last_value.i;
@@ -512,6 +514,8 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
 // returns true if successful (return value used only if validate_only)
 TRANSLATOR_FUNC (vcf_piz_luft_A_1)
 {
+    if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
+
     char format[20];
     float af;
 
@@ -649,11 +653,12 @@ done:
 // all INFO and FORMAT fields, so ostatus is final)
 static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
 {
-    // case: Dual coordinates file line has no XXXXOVER or XXXXREJT - this can happen if variants were added to the file,
-    // for example, as a result of a "bcftools merge" with a non-DC file
+    // case: Dual coordinates file line has no PRIM, Lrej or Prej - this can happen if variants were added to the file,
+    // for example, as a result of a "bcftools merge" with a non-DVCF file
     bool added_variant = false;
-    if (!ctx_encountered_in_line (vb, dict_id_INFO_LUFT, NULL) && 
-        !ctx_encountered_in_line (vb, dict_id_INFO_LREJ, NULL)) {
+    if (!ctx_encountered_in_line (vb, dict_id_INFO_LUFT, NULL) && // note: no need to chech PRIM because LUFT and PRIM always appear together
+        !ctx_encountered_in_line (vb, dict_id_INFO_LREJ, NULL) &&
+        !ctx_encountered_in_line (vb, dict_id_INFO_PREJ, NULL)) {
         vcf_lo_seg_rollback_and_reject (vb, LO_ADDED_VARIANT, NULL);
         added_variant = true; // we added a REJX field in a variant that will be reconstructed in the current coordintes
     }
@@ -715,7 +720,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
 
         // case: we added a REJX INFO field that wasn't in the TXT data: --chain or rolled back (see vcf_lo_seg_rollback_and_reject) or an added variant
         if (chain_is_loaded || rolled_back || added_variant) {
-            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the two LIFTXXXX or the two REJTXXXX
+            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the DVCF items
 
             if (vb->line_coords == DC_PRIMARY) vb->recon_size += growth;
             else vb->recon_size_luft += growth;
@@ -731,7 +736,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
 
     char modified_snip[OPTIMIZE_MAX_SNIP_LEN]; // used for 1. fields that are optimized 2. fields translated luft->primary
     unsigned modified_snip_len;
-    Context *ctx = dict_id.num ? ctx_get_ctx (vb, dict_id) : NULL, *other_ctx = NULL;
+    Context *ctx = ctx_get_ctx (vb, dict_id), *other_ctx = NULL;
     bool not_yet_segged = true;
     
     // note: since we use modified_snip for both optimization and luft_back - we currently don't support
@@ -749,7 +754,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     // Translatable item on a Luft line: attempt to lift-back the value, so we can seg it as primary
     if (vb->line_coords == DC_LUFT && needs_translation (ctx)) {
 
-        // Lift back successful - proceed to Seg this value in primary coords, and assign a translator for reconstructing if --luft
+        // If cross-rendering to Primary is successful - proceed to Seg this value in primary coords, and assign a translator for reconstructing if --luft
         if (vcf_lo_seg_cross_render_to_primary (vb, ctx, value, value_len, modified_snip, &modified_snip_len)) {
             value = modified_snip; 
             value_len = modified_snip_len; 
@@ -766,7 +771,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     // note: looks at snips before optimization, we're counting on the optimization not changing the validation outcome
     if (vb->line_coords == DC_PRIMARY && needs_translation (ctx)) {
 
-        if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, true))
+        if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, true)) 
             ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
         else
             vcf_lo_seg_rollback_and_reject (vb, LO_INFO, ctx);
@@ -803,8 +808,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
         seg_set_last_txt (vb, ctx, value, value_len, STORE_INT);
 
     // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
-    else if (dict_id.num == dict_id_INFO_AF) 
+    else if (dict_id.num == dict_id_INFO_AF) {
         seg_set_last_txt (vb, ctx, value, value_len, STORE_FLOAT);
+        ctx->keep_snip = true; // consumed by vcf_seg_FORMAT_AF
+    }
 
     // ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
     else if (dict_id.num == dict_id_INFO_AC)
@@ -834,6 +841,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     if (not_yet_segged) 
         seg_by_ctx (vb, value, value_len, ctx, value_len);
     
+    ctx_set_encountered_in_line (ctx);
+    
     #undef CALL
 }
 
@@ -851,7 +860,7 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
     unsigned pair_lens[MAX_SUBFIELDS];
 
     // parse the info string
-    unsigned num_items = str_split (info_str, info_len, MAX_SUBFIELDS-2, ';', pairs, pair_lens, false, 0); // -2 - leave room for LIFTXXXX
+    unsigned num_items = str_split (info_str, info_len, MAX_SUBFIELDS-2, ';', pairs, pair_lens, false, 0); // -2 - leave room for LUFT + PRIM
     ASSVCF (num_items, "Too many INFO subfields, Genozip supports up to %u", MAX_SUBFIELDS-2);
 
     buf_alloc (vb, &vb->info_items, 0, num_items + 2, InfoItem, CTX_GROWTH, "info_items");
@@ -860,7 +869,7 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
     int ac_i = -1; 
     InfoItem lift_ii = {}, rejt_ii = {};
 
-    // pass 1: initialize info items + get indices of AC, LIFTXXXX and REJTXXXX
+    // pass 1: initialize info items + get indices of AC, and the DVCF items
     for (unsigned i=0; i < num_items; i++) {
         const char *equal_sign = memchr (pairs[i], '=', pair_lens[i]);
         unsigned name_len = (unsigned)(equal_sign - pairs[i]); // nonsense if no equal sign
@@ -883,10 +892,10 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
             ac_i = vb->info_items.len;
 
         else if (ii.dict_id.num == dict_id_INFO_LUFT || ii.dict_id.num == dict_id_INFO_PRIM) 
-            { lift_ii = ii; continue; } // dont add LIFTXXXX to Items yet
+            { lift_ii = ii; continue; } // dont add LUFT and PRIM to Items yet
 
         else if (ii.dict_id.num == dict_id_INFO_LREJ || ii.dict_id.num == dict_id_INFO_PREJ) 
-            { rejt_ii = ii; continue; } // dont add REJTXXXX to Items yet
+            { rejt_ii = ii; continue; } // dont add Lrej and Prej to Items yet
 
         NEXTENT (InfoItem, vb->info_items) = ii;
     }
@@ -904,11 +913,11 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
         }
     }
         
-    // case: we have a REJTXXXX item - Seg it now, but don't add it yet to InfoItems
+    // case: we have a *rej item - Seg it now, but don't add it yet to InfoItems
     else if (rejt_ii.dict_id.num)
         vcf_lo_seg_INFO_REJX (vb, rejt_ii.dict_id, rejt_ii.value, rejt_ii.value_len); 
 
-    // pass 2: seg all subfields except AC (and LIFTXXXX that weren't added)
+    // pass 2: seg all subfields except AC (and PRIM/LUFT that weren't added)
     for (unsigned i=0; i < vb->info_items.len; i++) {
         InfoItem *ii = ENT (InfoItem, vb->info_items, i);
      
@@ -923,17 +932,17 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
     }
 }
 
-// Adds INFO/LIFTXXXX and INFO/REJTXXXX according to ostatus, finalizes INFO/SF and segs the INFO container
+// Adds the DVCF items according to ostatus, finalizes INFO/SF and segs the INFO container
 void vcf_finalize_seg_info (VBlockVCF *vb)
 {
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true,
-                      .filter_items        = z_dual_coords }; // vcf_piz_filter chooses which LIFTXXXX or REJTXXXX to show based on flag.luft 
+                      .filter_items        = z_dual_coords }; // vcf_piz_filter chooses which DVCF item to show based on flag.luft 
 
     // seg INFO/SF, if there is one
     if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
 
-    // now that we segged all INFO and FORMAT subfields, we have the final ostatus and can add INFOXXXX
+    // now that we segged all INFO and FORMAT subfields, we have the final ostatus and can add the DVCF items
     if (z_dual_coords)
         vcf_seg_info_add_DVCF_to_InfoItems (vb);
 

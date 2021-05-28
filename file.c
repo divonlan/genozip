@@ -724,7 +724,7 @@ static bool file_open_z (File *file)
 
         ASSINP (!flag.reading_chain || file_has_ext (file->name, GENOZIP_EXT), 
                 "You specified file \"%s\", however with --chain, you must specify a genozip chain file (%s extension)\n"
-                "Tip: You can create a genozip chain file from a chain file with eg 'genozip my-chain-file.chain.gz'",
+                "Tip: You can create a genozip chain file from a chain file with eg 'genozip my-chain-file.chain.gz --reference target-coord-ref.ref.genozip'",
                 file->name, GENOZIP_EXT);
 
         if (!flag.seg_only || flag_loading_auxiliary) {

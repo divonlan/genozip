@@ -91,7 +91,7 @@ typedef union SectionFlags {
 
     struct FlagsTxtHeader {
         uint8_t rejects_coord    : 2; // DC_PRIMARY/DC_LUFT contains "##primary_only"/"##luft_only" variants or DC_NONE if not a rejects component (added v12)
-        uint8_t is_txt_luft      : 1; // true if original source file was a dual-coordinate file in Luft rendition (v12)
+        uint8_t is_txt_luft      : 1; // true if original source file was a dual-coordinates file in Luft rendition (v12)
         uint8_t unused           : 5;
     } txt_header;
 
@@ -383,6 +383,8 @@ extern void sections_list_concat (VBlockP vb);
 // ---------
 // PIZ stuff
 // ---------
+
+extern Section section_next (Section sec);
 
 extern Section sections_first_sec (SectionType st, bool soft_fail);
 extern Section sections_last_sec (SectionType st, bool soft_fail);

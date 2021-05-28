@@ -1,13 +1,13 @@
 ##fileformat=VCFv4.1
 ##primary_only=1	329162	.	G	A	100	#3:STILL_BAD:REF_CHANGE_NOT_ALT	Lrej=RefChngeNotAlt	GT:AD:AF:PRI	1|0:11,41:0.788:0,34.77,37.77	0|0:29,73:0.716:0,34.77,37.77
 ##primary_only=1	20539032	.	A	T	100	#4:Bad-AF	Lrej=FORMAT/AF	GT:AF	1|0:0.1	0|0:2.5
-##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed",RenderAlg=R>
-##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RenderAlg=A_1>
-##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RenderAlg=GT>
-##FORMAT=<ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes",RenderAlg=G>
-##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed",RenderAlg=A_AN>
-##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed",RenderAlg=A_1>
-##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RenderAlg=NONE>
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed",RendAlg=R>
+##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg=A_1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg=GT>
+##FORMAT=<ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes",RendAlg=G>
+##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed",RendAlg=A_AN>
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed",RendAlg=A_1>
+##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg=NONE>
 ##co=
 ##co= this LUFT-VCF contains 2 primary-only, 1 luft-only and 1 dual-coord variants
 ##co=
@@ -15,10 +15,10 @@
 ##primary_contig=<ID=2>
 ##dual_coordinates=LUFT
 ##reference=file://data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
-##INFO=<ID=LUFT,Number=5,Type=String,Description="dual-coordinates VCF: Information for lifting over the variant to luft coordinates",Source="genozip",Version="12.0.-1",RenderAlg=NONE>
-##INFO=<ID=PRIM,Number=5,Type=String,Description="dual-coordinates VCF: Information for retrieving the variant in the primary coordinates",Source="genozip",Version="12.0.-1",RenderAlg=NONE>
-##INFO=<ID=Lrej,Number=1,Type=String,Description="dual-coordinates VCF: Reason variant was rejected for lift over",Source="genozip",Version="12.0.-1",RenderAlg=NONE>
-##INFO=<ID=Prej,Number=1,Type=String,Description="dual-coordinates VCF: Reason variant was rejected for lift back",Source="genozip",Version="12.0.-1",RenderAlg=NONE>
+##INFO=<ID=LUFT,Number=5,Type=String,Description="dual-coordinates VCF: Information for lifting over the variant to luft coordinates",Source="genozip",Version="12.0.-1",RendAlg=NONE>
+##INFO=<ID=PRIM,Number=5,Type=String,Description="dual-coordinates VCF: Information for retrieving the variant in the primary coordinates",Source="genozip",Version="12.0.-1",RendAlg=NONE>
+##INFO=<ID=Lrej,Number=1,Type=String,Description="dual-coordinates VCF: Reason variant was rejected for lift over",Source="genozip",Version="12.0.-1",RendAlg=NONE>
+##INFO=<ID=Prej,Number=1,Type=String,Description="dual-coordinates VCF: Reason variant was rejected for lift back",Source="genozip",Version="12.0.-1",RendAlg=NONE>
 ##contig=<ID=chr1,length=248956422>
 ##contig=<ID=chr2,length=242193529>
 ##genozip_command="C:\Users\USER\projects\genozip\genocat-debug.exe -vfo bugL.vcf bug.vcf.genozip" 2021-05-18 09:50:21 Cen. Australia Daylight Time

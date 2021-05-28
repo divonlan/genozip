@@ -99,7 +99,7 @@ typedef struct {
     enum { TW_NEVER, TW_ALWAYS, TW_REF_ALT_SWITCH, TW_XSTRAND } upon;
 } LuftTransLateProp;
 
-// names of INFO / FORMAT algorithms, goes into VCF header's ##INFO / ##FORMAT "RenderAlg" attribute
+// names of INFO / FORMAT algorithms, goes into VCF header's ##INFO / ##FORMAT "RendAlg" attribute
                            /* Algorithm   When-triggered */
 #define DVCF_TRANS_PROPS { { "NONE",      TW_NEVER          },   /* never translate */\
                            { "G",         TW_REF_ALT_SWITCH },   /* reshuffle a  'G' vector (one element per genotype) if REF<>ALT changed */\

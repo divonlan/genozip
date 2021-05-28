@@ -31,7 +31,9 @@ typedef struct VBlockVCF {
 
     // charactaristics of the data
     uint16_t ploidy;           // ZIP only
-            
+
+    uint32_t sample_i;         // ZIP: current sample in line (0-based) being segmented 
+
     // used for segging FORMAT/GT
     Context *gt_ctx;
     uint32_t gt_prev_ploidy;
@@ -52,8 +54,9 @@ typedef struct VBlockVCF {
     uint32_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
     
     // FORMAT/AD
-    #define MAX_ARG_ARRAY_ITEMS 36 // same as MAX_COMPOUND_COMPONENTS
+    #define MAX_ARG_ARRAY_ITEMS 36  // same as MAX_COMPOUND_COMPONENTS
     int64_t ad_values[MAX_ARG_ARRAY_ITEMS];
+    Context *adall_ctx;             // save FORMAT/ADALL context, to avoid searching for ADALL if it does not exist, since it will conflict in the map with AD
 
     // dictionaries stuff 
     Buffer format_mapper_buf;       // ZIP only: an array of type Container - one entry per entry in vb->contexts[VCF_FORMAT].nodes   
@@ -131,7 +134,7 @@ extern const char *dvcf_status_names[];
 #define HK_DC          "##dual_coordinates"
 #define HK_DC_PRIMARY  HK_DC"=PRIMARY"
 #define HK_DC_LUFT     HK_DC"=LUFT"
-#define HK_RENDERALG_ATTR "RenderAlg"
+#define HK_RENDERALG_ATTR "RendAlg"
 #define KH_INFO_LUFT   "##INFO=<ID=" INFO_LUFT ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_COORDS "\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
 #define KH_INFO_PRIM   "##INFO=<ID=" INFO_PRIM ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
 #define KH_INFO_LREJ   "##INFO=<ID=" INFO_LREJ ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
@@ -159,11 +162,12 @@ extern const char *vcf_header_get_VCF_ID_by_dict_id (DictId dict_id, bool must_e
 extern void vcf_seg_samples_initialize (void);
 extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
+#define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
 
 // INFO/SF stuff
 extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
 extern void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb);
-extern void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb, unsigned sample_i);
+extern void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb);
 extern void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_len);
 extern void vcf_finalize_seg_info (VBlockVCF *vb);
 

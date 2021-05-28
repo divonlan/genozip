@@ -221,9 +221,9 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-translation.rst \
 	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
-	   docs/downsampling.rst docs/dual-coordinates-vcf.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst\
+	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst docs/specs.rst\
 	   docs/sam2fq.rst docs/gatk-unexpected-base.rst docs/digest.rst \
-	   docs/liftover-vcf.rst docs/dc-vcf-spec.rst docs/dual-coordinates-vcf.rst
+	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-spec.rst docs/dvcf-chain-files.rst 
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
@@ -461,6 +461,9 @@ endif # Darwin
 test:
 	@cat test.sh | tr -d "\r" | bash -
 
+clean-docs:
+	@rm -fR docs/_build/*
+
 clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o
@@ -472,9 +475,9 @@ clean-optimized:
 
 clean:
 	@echo Cleaning up
-	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES)
+	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) docs/_build/*
 	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles
 

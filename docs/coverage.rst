@@ -3,6 +3,8 @@
 Coverage and Depth
 ==================
 
+**EXPERIMENTAL FEATURE**
+
 Data Types: SAM, BAM and FASTQ
 
 **Usage**

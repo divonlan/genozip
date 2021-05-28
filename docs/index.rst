@@ -4,7 +4,7 @@ Genozip
 *A universal compressor for genomic files*
       
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
    Installing <installing> 
    Capabilities <capabilities>

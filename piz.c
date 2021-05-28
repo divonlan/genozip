@@ -422,7 +422,7 @@ static bool piz_read_one_vb (VBlock *vb)
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)ENT (char, vb->z_data, vb_header_offset);
 
     // calculate the coordinates in which this VB will be rendered - PRIMARY or LUFT
-    vb->vb_coords        = !z_dual_coords ? DC_PRIMARY // non dual-coordinate file - always PRIMARY
+    vb->vb_coords        = !z_dual_coords ? DC_PRIMARY // non dual-coordinates file - always PRIMARY
                          : header->h.flags.vb_header.coords == DC_PRIMARY ? DC_PRIMARY // reject component ##primary_only
                          : header->h.flags.vb_header.coords == DC_LUFT    ? DC_LUFT    // reject component ##luft_only
                          : flag.luft ? DC_LUFT // dual component - render as LUFT

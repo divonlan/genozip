@@ -359,7 +359,6 @@ static void main_genozip (const char *txt_filename,
         if (z_dual_coords && !flag.rejects_coord) {
             flag.sort = false;
             z_closes_after_me = false;                
-            stats_freeze_txt_len(); // don't count txt_len of rejects
             
             for (flag.rejects_coord = DC_PRIMARY ; flag.rejects_coord <= DC_LUFT ; flag.rejects_coord++)
                 main_genozip (z_file->rejects_file_name[flag.rejects_coord-1], 0, z_file->name, txt_file_i, flag.rejects_coord==DC_LUFT, 

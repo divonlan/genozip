@@ -6,7 +6,7 @@ Capabilities
 
    Compression <compression>
    File transfer and archiving <transfer-archiving>
-   Dual-coordinates VCF <dual-coordinates-vcf>
+   Dual-coordinates VCF <dvcf>
    Downsampling <downsampling>
    Viewing SAM/BAM as FASTQ <sam2fq>
    Filtering by species using kraken2 <kraken>

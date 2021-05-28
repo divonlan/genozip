@@ -813,6 +813,7 @@ void buf_grab_do (VBlock *dst_vb, Buffer *dst_buf, const char *dst_name, Buffer 
     memset (src_buf, 0, sizeof (Buffer)); // reset to factory defaults
 }
 
+// copy data - possibly within the same buffer
 void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src, 
                   uint64_t bytes_per_entry, // how many bytes are counted by a unit of .len
                   uint64_t src_start_entry, uint64_t max_entries,  // if 0 copies the entire buffer 
@@ -827,10 +828,15 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
     uint64_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
-    buf_alloc (dst_vb, dst, 0, num_entries * bytes_per_entry, char, 1, dst_name ? dst_name : src->name); // use realloc rather than malloc to allocate exact size
+    if (num_entries) {
+        buf_alloc (dst_vb, dst, 0, num_entries * bytes_per_entry, char, 1, dst_name ? dst_name : src->name); // use realloc rather than malloc to allocate exact size
 
-    memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);
-
+        if (dst != src || src_start_entry >= num_entries)
+            memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);
+        else 
+            memmove (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry); // need memmove for overlapping areas
+    }
+    
     dst->len = num_entries;  
 }   
 

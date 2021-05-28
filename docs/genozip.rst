@@ -12,6 +12,7 @@ Supported input file types, as recognized by their listed filename extension(s):
 
    ======== ==========================================================
    *Type*   *Filename extensions*
+   ======== ==========================================================
    FASTA    fasta, fa, faa, ffn, fnn, fna (possibly .gz .bgz .bz2 .xz)
    FASTQ    fastq, fq (possibly .gz .bgz .bz2 .xz)
    SAM      sam (possibly .gz .bgz .bz2 .xz)
@@ -106,6 +107,10 @@ Examples:
                      |
 
 **VCF-specific options**
+
+.. option:: --chain  chain-file.  Lifts a VCF to be a dual-coordinate VCF (DVCF).
+
+| See: :ref:`dvcf`
 
 .. option:: --sort.  Causes genozip to generate a "reconstruction plan" that will allow genocat to show the file sorted. This is designed for mildly-unsorted files. If the file is highly unsorted this might result in genocat loading a big portion of the uncompressed file to memory (genocat --unsorted can be used to prevent sorting). This option is always set for dual-coordinates files unless overridden with --unsorted.
 

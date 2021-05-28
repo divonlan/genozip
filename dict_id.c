@@ -110,7 +110,7 @@ void dict_id_initialize (DataType data_type)
         dict_id_FORMAT_AD     = dict_id_make ("AD",       2, DTYPE_VCF_FORMAT).num; // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
         dict_id_FORMAT_ADF    = dict_id_make ("ADF",      3, DTYPE_VCF_FORMAT).num;
         dict_id_FORMAT_ADR    = dict_id_make ("ADR",      3, DTYPE_VCF_FORMAT).num;
-        dict_id_FORMAT_ADALL  = dict_id_make ("ADALL",    5, DTYPE_VCF_FORMAT).num; 
+        dict_id_FORMAT_ADALL  = dict_id_make ("ADALL",    5, DTYPE_VCF_FORMAT).num; // from GIAB: <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
         dict_id_FORMAT_AF     = dict_id_make ("AF",       2, DTYPE_VCF_FORMAT).num; // <ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed">
         dict_id_FORMAT_DP     = dict_id_make ("DP",       2, DTYPE_VCF_FORMAT).num; // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
         dict_id_FORMAT_DS     = dict_id_make ("DS",       2, DTYPE_VCF_FORMAT).num;
@@ -123,8 +123,8 @@ void dict_id_initialize (DataType data_type)
         dict_id_FORMAT_F1R2   = dict_id_make ("F1R2",     4, DTYPE_VCF_FORMAT).num; // <ID=F1R2,Number=R,Type=Integer,Description="Count of reads in F1R2 pair orientation supporting each allele">
         dict_id_FORMAT_F2R1   = dict_id_make ("F2R1",     4, DTYPE_VCF_FORMAT).num; // <ID=F2R1,Number=R,Type=Integer,Description="Count of reads in F2R1 pair orientation supporting each allele">
         dict_id_FORMAT_SAC    = dict_id_make ("SAC",      3, DTYPE_VCF_FORMAT).num; // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
-        dict_id_FORMAT_SB     = dict_id_make ("SB",       2, DTYPE_VCF_FORMAT).num; // <ID=SAC,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
-        dict_id_FORMAT_MB     = dict_id_make ("MB",       2, DTYPE_VCF_FORMAT).num; // <ID=SAC,Number=4,Type=Integer,Description="Per-sample component statistics to detect mate bias">
+        dict_id_FORMAT_SB     = dict_id_make ("SB",       2, DTYPE_VCF_FORMAT).num; // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
+        dict_id_FORMAT_MB     = dict_id_make ("MB",       2, DTYPE_VCF_FORMAT).num; // <ID=MB,Number=4,Type=Integer,Description="Per-sample component statistics to detect mate bias">
 
         // INFO fields
         dict_id_INFO_AC       = dict_id_make ("AC",       2, DTYPE_VCF_INFO).num;   // <ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
@@ -136,16 +136,16 @@ void dict_id_initialize (DataType data_type)
         dict_id_INFO_CSQ      = dict_id_make ("CSQ",      3, DTYPE_VCF_INFO).num;
         dict_id_INFO_DP       = dict_id_make ("DP",       2, DTYPE_VCF_INFO).num;   // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
         dict_id_INFO_DP4      = dict_id_make ("DP4",      3, DTYPE_VCF_INFO).num;   
-        dict_id_INFO_DP_HIST  = dict_id_make ("DP_HIST",  7, DTYPE_VCF_INFO).num; 
-        dict_id_INFO_GQ_HIST  = dict_id_make ("GQ_HIST",  7, DTYPE_VCF_INFO).num;
+        dict_id_INFO_DP_HIST  = dict_id_make ("DP_HIST",  7, DTYPE_VCF_INFO).num;   // from ExAC: Depth (DP) histogram in 20 equal intervals between 0-100 : See https://www.biorxiv.org/content/biorxiv/suppl/2015/10/30/030338.DC1/030338-1.pdf
+        dict_id_INFO_GQ_HIST  = dict_id_make ("GQ_HIST",  7, DTYPE_VCF_INFO).num;   // from ExAC: Genotype Quality (GQ) histogram in 20 equal intervals between 0-100
         dict_id_INFO_SF       = dict_id_make ("SF",       2, DTYPE_VCF_INFO).num;
         dict_id_INFO_vep      = dict_id_make ("vep",      3, DTYPE_VCF_INFO).num;
         dict_id_INFO_VQSLOD   = dict_id_make ("VQSLOD",   6, DTYPE_VCF_INFO).num;   // <ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained Gaussian mixture model">
 
         // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
         dict_id_INFO_END      = dict_id_make ("END",      3, DTYPE_VCF_INFO).num;   // <ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
-        dict_id_INFO_MLEAC    = dict_id_make ("MLEAC",    5, DTYPE_VCF_INFO).num;
-        dict_id_INFO_MLEAF    = dict_id_make ("MLEAF",    5, DTYPE_VCF_INFO).num;
+        dict_id_INFO_MLEAC    = dict_id_make ("MLEAC",    5, DTYPE_VCF_INFO).num;   // <ID=MLEAC,Number=A,Type=Integer,Description="Maximum likelihood expectation (MLE) for the allele counts (not necessarily the same as the AC), for each ALT allele, in the same order as listed">
+        dict_id_INFO_MLEAF    = dict_id_make ("MLEAF",    5, DTYPE_VCF_INFO).num;   // <ID=MLEAF,Number=A,Type=Float,Description="Maximum likelihood expectation (MLE) for the allele frequency (not necessarily the same as the AF), for each ALT allele, in the same order as listed">
         dict_id_INFO_MQ0      = dict_id_make ("MQ0",      3, DTYPE_VCF_INFO).num;    
         dict_id_FORMAT_MIN_DP = dict_id_make ("MIN_DP",   6, DTYPE_VCF_FORMAT).num; // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
 

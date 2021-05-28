@@ -8,7 +8,7 @@
 
 #define GENOZIP_URL "https://genozip.com"
 
-#define WEBSITE_COORDS    GENOZIP_URL "/dual-coords.html"
+#define WEBSITE_COORDS    GENOZIP_URL "/dvcf.html"
 #define WEBSITE_KRAKEN    GENOZIP_URL "/kraken.html"
 #define WEBSITE_GENOZIP   GENOZIP_URL "/genozip.html"
 #define WEBSITE_GENOUNZIP GENOZIP_URL "/genounzip.html"

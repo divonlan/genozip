@@ -182,7 +182,7 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
             pool->vb[vb_id] = CALLOC (sizeof_vb); 
             pool->num_allocated_vbs++;
             pool->vb[vb_id]->data_type = command==ZIP ? (txt_file ? txt_file->data_type : DT_NONE)
-                                                     : (z_file   ? z_file->data_type   : DT_NONE);
+                                                      : (z_file   ? z_file->data_type   : DT_NONE);
         }
 
         bool in_use = __atomic_load_n (&pool->vb[vb_id]->in_use, __ATOMIC_RELAXED);
@@ -198,7 +198,7 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
     }
 
     // initialize VB fields that need to be a value other than 0
-    VBlock *vb = pool->vb[vb_id];
+    VBlock *vb            = pool->vb[vb_id];
     vb->id                = vb_id;
     vb->in_use            = true;
     vb->vblock_i          = vblock_i;

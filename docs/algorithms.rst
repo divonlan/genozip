@@ -6,7 +6,7 @@ Algorithms
 
    Losslessness <losslessness>
    Verifying file integrity <digest>
-   Coordinate lift-over <liftover_vcf>
+   Rendering a DVCF <dvcf-rendering>
    Sex assignment (BAM) <sex-assignment-alg-sam>
    Sex assignment (FASTQ) <sex-assignment-alg-fastq>
 

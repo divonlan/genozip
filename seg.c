@@ -883,16 +883,17 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 
 static void seg_verify_file_size (VBlock *vb)
 {
-    uint32_t recon_size_prim = 0; // reconstructed size in PRIMARY coordinates
+    uint32_t recon_size = 0; // reconstructed size, as viewed in reconstruction
 
     // sanity checks
     ASSERT (vb->recon_size >= 0, "recon_size=%d is negative for vb_i=%u, coord=%s", vb->recon_size, vb->vblock_i, coords_names[vb->vb_coords]);
     ASSERT (vb->recon_size_luft >= 0, "recon_size_luft=%d is negative for vb_i=%u, coord=%s", vb->recon_size_luft, vb->vblock_i, coords_names[vb->vb_coords]);
 
     for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) 
-        recon_size_prim += vb->contexts[sf_i].txt_len;
-        
-    if (vb->recon_size != recon_size_prim) {
+        recon_size += vb->contexts[sf_i].txt_len;
+    
+    uint32_t vb_recon_size = vb->vb_coords == DC_LUFT ? vb->recon_size_luft : vb->recon_size; // in primary reconstruction, ##luft_only VB is reconstructed in luft coords
+    if (vb_recon_size != recon_size) { 
 
         fprintf (stderr, "Txt lengths:\n");
         for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
@@ -901,9 +902,9 @@ static void seg_verify_file_size (VBlock *vb)
         }
         
         ABORT ("Error while verifying reconstructed vb_i=%u size: "
-               "reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size=%s (initialized when reading the file and adjusted for modifications) (diff=%d)", 
-               vb->vblock_i, str_uint_commas (recon_size_prim).s, str_uint_commas (vb->recon_size).s, 
-               (int32_t)recon_size_prim - (int32_t)vb->recon_size);
+               "reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)", 
+               vb->vblock_i, str_uint_commas (recon_size).s, vb->vb_coords == DC_LUFT ? "_luft" : "", str_uint_commas (vb_recon_size).s, 
+               (int32_t)recon_size - (int32_t)vb_recon_size, str_size (flag.vblock_memory).s);
     }
 }
 

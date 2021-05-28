@@ -25,22 +25,22 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_
 {
     *dict_compressed_size = *b250_compressed_size = *local_compressed_size = 0;
 
-    for (uint64_t i=0; i < z_file->section_list_buf.len; i++) {
+    unsigned i=0;
+    for (Section sec = section_next(0); sec; sec = section_next (sec), i++) {
 
-        Section section = ENT (SectionEnt, z_file->section_list_buf, i);
-        int64_t after_sec = (i == z_file->section_list_buf.len - 1) ? z_file->disk_so_far : (section+1)->offset;
-        int64_t sec_size = after_sec - section->offset;
+        int64_t after_sec = section_next (sec) ? (sec+1)->offset : z_file->disk_so_far;
+        int64_t sec_size = after_sec - sec->offset;
 
-        count_per_section[i]++; // we're optimistically assuming section will be count_per_section - we will revert if not
+        count_per_section[i]++; // we're optimistically assuming sec will be count_per_section - we will revert if not
 
-        if (section->dict_id.num == dict_id.num && (section->st == SEC_DICT || section->st == SEC_COUNTS))
+        if (sec->dict_id.num == dict_id.num && (sec->st == SEC_DICT || sec->st == SEC_COUNTS))
             *dict_compressed_size += sec_size;
 
-        else if (section->dict_id.num == dict_id.num && section->st == SEC_B250)
+        else if (sec->dict_id.num == dict_id.num && sec->st == SEC_B250)
             *b250_compressed_size += sec_size;
 
-        else if ((section->dict_id.num == dict_id.num && section->st == SEC_LOCAL) ||
-                 (section->st == non_ctx_sec))
+        else if ((sec->dict_id.num == dict_id.num && sec->st == SEC_LOCAL) ||
+                 (sec->st == non_ctx_sec))
             *local_compressed_size += sec_size;
              
         else count_per_section[i]--; // acually... not count_per_section!
@@ -298,9 +298,8 @@ void stats_compress (void)
         if (ctx && !ctx->b250.num_b250_words && !ctx->txt_len && !ctx->b250.len && !ctx->is_stats_parent && !s->z_size) 
             continue;
 
-        s->txt_size = i==-SEC_TXT_HEADER        ? txtheader_get_bound_headers_len()
+        s->txt_size = SEC(i) == SEC_TXT_HEADER  ? txtheader_get_bound_headers_len()
                     : !ctx                      ? 0 
-                    : z_file->is_txt_len_frozen ? z_file->frozen_txt_len[i]
                     :                             ctx->txt_len;
         
         all_comp_dict   += dict_compressed_size;
@@ -363,7 +362,7 @@ void stats_compress (void)
     stats_consolidate_non_ctx (sbl, num_stats, "Other", 16, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
                                TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
-                               ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
+                               ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
     
     ASSERTW (all_txt_size == z_file->txt_data_so_far_bind || flag.make_reference, // all_txt_size=0 in make-ref as there are no contexts
              "Expecting all_txt_size=%"PRId64" == z_file->txt_data_so_far_bind=%"PRId64, all_txt_size, z_file->txt_data_so_far_bind);
@@ -399,10 +398,10 @@ void stats_display (void)
 
     buf_print (buf , false);
 
-    Section sl = sections_last_sec (SEC_STATS, false);
+    Section sl = sections_last_sec (SEC_STATS, false) - 1; // first stats section 
 
     if (z_file->disk_size < (1<<20))  // no need to print this note if total size > 1MB, as the ~2K of overhead is rounded off anyway
-        // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 2 sections in the file - since stats text is generated before these sections are compressed
+        // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 3 sections in the file - since stats text is generated before these sections are compressed
         iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (z_file->disk_size - sl->offset).s);
 
     iprint0 ("\n");
@@ -427,13 +426,4 @@ void stats_add_txt_name (const char *fn)
 {
     bufprintf (evb, &z_file->bound_txt_names, "%s%s", z_file->bound_txt_names.len ? " ": "", fn);
     z_file->bound_txt_names.param++; // we store the number of files in param
-}
-
-// don't count txt_len of rejects. we store the txt_len of all contexts, and that's what we will use for stats_compress
-void stats_freeze_txt_len (void)
-{
-    for (uint32_t i=0; i < z_file->num_contexts; i++)
-        z_file->frozen_txt_len[i] = z_file->contexts[i].txt_len;
-
-    z_file->is_txt_len_frozen = true;
 }

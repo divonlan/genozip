@@ -125,7 +125,8 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
     // note: in VCF 4.1 many files specified A,G and R fields as Number=. ; 'R' was introduced in 4.2. We set some common fields
     // regardless of their "Number" in the header.
     
-    if (number == 'R' || dict_id.num == dict_id_FORMAT_AD || dict_id.num == dict_id_FORMAT_F2R1 || dict_id.num == dict_id_FORMAT_F1R2 ||
+    if (number == 'R' || dict_id.num == dict_id_FORMAT_AD || dict_id.num == dict_id_FORMAT_ADR || dict_id.num == dict_id_FORMAT_ADF || 
+        dict_id.num == dict_id_FORMAT_ADALL || dict_id.num == dict_id_FORMAT_F2R1 || dict_id.num == dict_id_FORMAT_F1R2 ||
         dict_id.num == dict_id_INFO_DP_HIST || dict_id.num == dict_id_INFO_GQ_HIST) 
         return VCF2VCF_R;
 
@@ -135,8 +136,10 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
 
     else if (dict_id.num == dict_id_FORMAT_GT)       return VCF2VCF_GT;
     else if (dict_id.num == dict_id_INFO_END )       return VCF2VCF_END;
-    else if (dict_id.num == dict_id_INFO_AC  )       return VCF2VCF_A_AN;
+    else if (dict_id.num == dict_id_INFO_AC
+    ||       dict_id.num == dict_id_INFO_MLEAC)      return VCF2VCF_A_AN;
     else if (dict_id.num == dict_id_INFO_AF 
+    ||       dict_id.num == dict_id_INFO_MLEAF  
     ||       dict_id.num == dict_id_FORMAT_AF  
     ||       (dict_id.id[0] == ('A' | 0xc0) && dict_id.id[1] == 'F' && dict_id.id[2] == '_') // INFO/AF_*
     ||       (dict_id_is_vcf_info_sf (dict_id) && dict_id.id[3] == '_' && dict_id.id[4] == 'A' && dict_id.id[5] == 'F' && !dict_id.id[6])) // INFO/???_AF
@@ -258,14 +261,14 @@ static void vcf_lo_seg_REJX_do (VBlockVCFP vb, unsigned add_bytes)
     dl->pos[SEL(1,0)] = 0;
 
     // whether user views the file primary or luft coordinates, and whether this line is primary-only or luft-only:
-    // each rejected line consumes all contexts exactly once, either in the main field, or in INFO/REJTXXXX
+    // each rejected line consumes all contexts exactly once, either in the main field, or in INFO/*rej
     // note: rejected lines are still reconstructed in their unsupported coordinates to consume all contexts, and then dropped.
     vcf_lo_seg_lo_snip (vb, info_rejt_luft_snip, info_rejt_luft_snip_len, dict_id_INFO_LREJ, 0); 
     vcf_lo_seg_lo_snip (vb, info_rejt_prim_snip, info_rejt_prim_snip_len, dict_id_INFO_PREJ, 0);
     
     // case: primary-only line: CHROM, POS and REFALT were segged in the main fields, trivial oCHROM, oPOS, oREFLT segged here
     // case: luft-only line: oCHROM, oPOS and oREFALT were segged in the main fields, trivial CHROM, POS, REFLT segged here
-    seg_by_did_i (vb, "", 0, SEL (VCF_oCHROM,  VCF_CHROM),  0);  // 0 for all of these as these fields are not reconstructed (oXXXX never reconstructed by default, CHROM, POS, REFALT not reconstruced when this variant has no primary coords)
+    seg_by_did_i (vb, "", 0, SEL (VCF_oCHROM,  VCF_CHROM),  0);  // 0 for all of these as these fields are not reconstructed 
     seg_by_did_i (vb, "", 0, SEL (VCF_oREFALT, VCF_REFALT), 0);
     seg_by_did_i (vb, "", 0, SEL (VCF_oPOS,    VCF_POS),    0);
 
@@ -363,7 +366,7 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 
     // Add LUFT container - we modified the txt by adding these 4 fields to INFO/LUFT. We account for them now, and we will account for the INFO name etc in vcf_seg_info_field
     Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, dict_id_INFO_LUFT, 3);
-    luft_ctx->last_txt_len = opos_len + ochrom_len + 5; // 5 = 3 commas + oref + xstrand (the "LIFTXXXX=" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
+    luft_ctx->last_txt_len = opos_len + ochrom_len + 5; // 5 = 3 commas + oref + xstrand (the "PRIM="/"LUFT=" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
     vb->recon_size += luft_ctx->last_txt_len; // We added INFO/LUFT to the Primary coordinates reconstruction
 
     // Do the same for PRIM. 
@@ -427,7 +430,7 @@ done:
         return true;
     }
     else {
-        vcf_lo_seg_rollback_and_reject (vb, ostatus, NULL); // segs REJTXXXX and oSTATUS
+        vcf_lo_seg_rollback_and_reject (vb, ostatus, NULL); // segs *rej and oSTATUS
         return false;
     }
 
@@ -448,7 +451,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
 
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
         
-    // parse and verify LIFTXXXX record
+    // parse and verify PRIM or LUFT record
     const char *strs[NUM_IL_FIELDS]; unsigned str_lens[NUM_IL_FIELDS]; 
     ASSVCF (str_split (value, value_len, NUM_IL_FIELDS, ',', strs, str_lens, true, 0), "Invalid %s field: \"%.*s\"", field_name, value_len, value);
     const char *info_chrom  = strs[IL_CHROM]; 
@@ -467,7 +470,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
                                                vb->main_refalt, vb->main_ref_len, 
                                                info_ref, info_ref_len, 
                                                vb->main_refalt + vb->main_ref_len + 1, vb->main_alt_len,
-                                               &info_alt_len)) return; // rolled back and segged REJTXXXX instead, due to rejection
+                                               &info_alt_len)) return; // rolled back and segged *rej instead, due to rejection
 
     // Seg other (than vb->line_coords) coords' CHROM
     dl->chrom_index[SEL(1,0)] = seg_by_did_i (vb, info_chrom, info_chrom_len, SEL(VCF_oCHROM, VCF_CHROM), info_chrom_len);
@@ -481,7 +484,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
     // Seg other coord's REFALT - this will be a SPECIAL that reconstructs from this coords REFALT + INFO_REF + XSTRAND
     seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_other_REFALT }), 2, SEL(VCF_oREFALT, VCF_REFALT), SEL (0, info_ref_len + 2 + info_alt_len)); // account for REFALT + 2 tabs (primary coords) if we are segging it now (but not for oREFALT)
 
-    // "Seg" other coord's REF to appear in the this LIFTXXXX - a SPECIAL that reconstructs the other REFALT, and discards the ALT
+    // "Seg" other coord's REF to appear in the this PRIM/LUFT - a SPECIAL that reconstructs the other REFALT, and discards the ALT
     // note: no need to actually seg here as it is all_the_same handled in vcf_seg_initialize, just account for txt_len
     vb->contexts[VCF_LIFT_REF].txt_len += SEL (info_ref_len, 0); // we account for oREF (to be shown in INFO/LUFT in default reconstruction). 
 

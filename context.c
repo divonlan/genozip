@@ -286,7 +286,8 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
 
     if (!snip_len) {
         if (is_new) *is_new = false;
-        return (!snip || (segging_vb->data_type == DT_VCF && *snip != ':')) ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
+        return (!snip || (segging_vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (vb_ctx->dict_id) && *snip != ':')) 
+                ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
     }
 
     WordIndex node_index_if_new = vb_ctx->ol_nodes.len + vb_ctx->nodes.len;
@@ -349,10 +350,12 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
 // Seg only: if after ctx_evaluate_snip_seg we don't add the snip to b250, we need to reduce its count
 int64_t ctx_decrement_count (VBlock *vb, Context *ctx, WordIndex node_index)
 {
-    ASSERT (node_index < ctx->counts.len, "node_index=%d out of range counts[%s].len=%"PRIu64, node_index, ctx->name, ctx->counts.len);
+    ASSERT (node_index < (WordIndex)ctx->counts.len, "node_index=%d out of range counts[%s].len=%"PRIu64, node_index, ctx->name, ctx->counts.len);
 
     int64_t *count_p = ENT (int64_t, ctx->counts, node_index);
 
+    if (node_index < 0) return 0; // WORD_INDEX_EMPTY_SF or WORD_INDEX_MISSING_SF
+     
     ASSERT (*count_p >= 1, "count[%s]=%"PRId64" too low to be decremented", ctx->name, *count_p);
     (*count_p)--;
 
@@ -642,10 +645,10 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     uint64_t ol_len = vb_ctx->ol_nodes.len;
     bool has_count = zf_ctx->counts_section;
 
-    if (!flag.rejects_coord)
+    if (flag.rejects_coord != DC_PRIMARY) // we don't include ##primary_only VBs as they are not in the primary reconstruction, but we do include ##luft_only
         zf_ctx->txt_len += vb_ctx->txt_len; // for stats
 
-    if (vb_ctx->st_did_i != DID_I_NONE && zf_ctx->st_did_i != DID_I_NONE) {
+    if (vb_ctx->st_did_i != DID_I_NONE && zf_ctx->st_did_i == DID_I_NONE) {
         Context *st_ctx = ctx_get_zf_ctx (merging_vb->contexts[vb_ctx->st_did_i].dict_id);
         if (st_ctx) zf_ctx->st_did_i = st_ctx->did_i; // st_did_i is not necessarily the same for vb and zf
     }
@@ -1044,7 +1047,7 @@ void ctx_free_context (Context *ctx)
     ctx->iterator = (SnipIterator){};
     ctx->next_local = 0;
 
-    ctx->last_line_i = 0; 
+    ctx->last_line_i = ctx->last_sample_i = 0; 
     ctx->last_value.i = 0;
     ctx->last_delta = 0;
     ctx->last_txt_index = ctx->last_txt_len = 0;

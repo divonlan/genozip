@@ -89,10 +89,13 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, const char *ref, unsigned ref_l
     }
 
     if (vb->line_coords == DC_PRIMARY) // in the default reconstruction, this REFALT is in the main fields along with 2 tabs
-        vb->contexts[VCF_REFALT].txt_len += ref_len + alt_len + 2; \
+        vb->contexts[VCF_REFALT].txt_len += ref_len + alt_len + 2;
 
-    else // in the default reconstruction, oREF is in the INFO/LIFTOVER vector
+    else if (vb->vb_coords == DC_BOTH) // LUFT line in dual coord VB - in the default reconstruction of dual-coord line, oREF is in the INFO/LIFTOVER vector
         vb->contexts[VCF_LIFT_REF].txt_len += ref_len;
+
+    else // ##luft-only VB - we account for the main fields and 2 taabs
+        vb->contexts[VCF_oREFALT].txt_len += ref_len + alt_len + 2;
 
     // note: vb->recon_size doesn't change if txt_files.coords==LUFT, because currently Genozip only supports dual coords if the size
     // of REF and oREF are the same, and ALT and oALT.

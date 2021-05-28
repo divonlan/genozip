@@ -90,7 +90,7 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
 }
 
 test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
-    test_header "$1 - redirected from stdin"
+    test_header "$1 - redirecting $file to genozip via stdin"
     local file=$TESTDIR/$1
     local args=( "$@" )
 
@@ -374,14 +374,15 @@ batch_special_algs()
     done
 }
 
-
 batch_dvcf()
 {
     batch_print_header
 
     local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.ExAC.vcf.gz test.human2.filtered.snp.vcf test.NA12878.sorted.vcf)
-    local chain=data/GRCh37_to_GRCh38.chain.genozip
     local file
+
+    # prepare chain file
+    $genozip -e $GRCh38 ${chain%%.genozip} -fq 
 
     for file in ${files[@]}; do
         test_header "$file - DVCF test"
@@ -481,6 +482,25 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
     cleanup
 }
 
+# test -@1 - different code paths
+batch_single_thread()
+{
+    batch_print_header
+
+    # note -@1 will override previous -@
+    test_standard "-@1" "-@1" basic.vcf 
+    
+    # with reference
+    test_standard "-@1 -e$GRCh38" "-@1" basic.chain 
+    
+    # with chain and reference (note: cannot --test dual-coord files)
+    $genozip -@1 -C$chain basic-dvcf-source.vcf -f 
+
+    # with kraken aux file
+    $genozip -@1 test/basic.kraken -fo $kraken
+    test_kraken "-@1 -K$kraken test/basic.bam" "-@1 -k570" "-@1 -k^570" 
+}
+
 batch_iupac() 
 {
     batch_print_header
@@ -539,7 +559,6 @@ batch_23andMe_translations()
 
     local me23=$TESTDIR/$file
     local vcf=$OUTDIR/copy.vcf.gz
-    if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
 
     $genozip -f $me23 -o $output       || exit 1
     $genocat $output -fo $vcf -e $hg19 || exit 1
@@ -840,6 +859,7 @@ is_mac=`uname|grep -i Darwin`
 
 hg19=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
+chain=data/GRCh37_to_GRCh38.chain.genozip
 
 if (( $# < 1 )); then
     echo "Usage: test.sh [debug|opt] <batch_id-test> [optional-genozip-arg]"
@@ -920,7 +940,7 @@ if (( $1 <= 2  )) ; then  batch_basic                  ; fi
 if (( $1 <= 3  )) ; then  batch_precompressed          ; fi
 if (( $1 <= 4  )) ; then  batch_bgzf                   ; fi
 if (( $1 <= 5  )) ; then  batch_special_algs           ; fi
-if (( $1 <= 6  )) ; then  batch_dvcf       ; fi
+if (( $1 <= 6  )) ; then  batch_dvcf                   ; fi
 if (( $1 <= 7  )) ; then  batch_sam_translations       ; fi
 if (( $1 <= 8  )) ; then  batch_23andMe_translations   ; fi
 if (( $1 <= 9  )) ; then  batch_phylip_translations    ; fi
@@ -929,18 +949,19 @@ if (( $1 <= 11 )) ; then  batch_grep_count_lines       ; fi
 if (( $1 <= 12 )) ; then  batch_backward_compatability ; fi
 if (( $1 <= 13 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
 if (( $1 <= 14 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 15 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 16 )) ; then  batch_real_world_1           ; fi 
-if (( $1 <= 17 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 18 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 19 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 20 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 21 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 22 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 23 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 24 )) ; then  batch_reference              ; fi
-if (( $1 <= 25 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 26 )) ; then  batch_genols                 ; fi
+if (( $1 <= 15 )) ; then  batch_single_thread          ; fi 
+if (( $1 <= 16 )) ; then  batch_iupac                  ; fi 
+if (( $1 <= 17 )) ; then  batch_real_world_1           ; fi 
+if (( $1 <= 18 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 19 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 20 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 21 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 22 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 23 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 24 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 25 )) ; then  batch_reference              ; fi
+if (( $1 <= 26 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 27 )) ; then  batch_genols                 ; fi
 
 printf "\nALL GOOD!\n"
 

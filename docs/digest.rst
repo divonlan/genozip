@@ -24,8 +24,8 @@ MD5, unlike Adler32, also has cryptographic usage - an attacker interested in ma
 There are some cases in which you may request ``genozip`` to change the source data before compressing it. In these cases, the digest is not calculated. These cases are:
 
 - Using ``--optimize`` or any of the ``--optimize-*`` options 
-- Generating a dual-coordinate file with ``--chain``
-- Compressing a Luft file (a lifted-over dual-coordinate file)
+- Generating a dual-coordinates file with ``--chain``
+- Compressing a Luft file (a lifted-over dual-coordinates file)
 - Compressing a SAM or BAM file with ``--taxid``
 
 **Cases in which genocat doesn't verify the digest**

@@ -121,8 +121,8 @@ static void zip_dynamically_set_max_memory (void)
 
         // If this is a Luft file (with LIFTREJT lines passed down from the header) - if possible, test lines beyond the 
         // the rejected lines, as they have more contexts.
-        if (flag.vblock_memory < txt_file->reject_bytes && test_i != num_tests-1) 
-            continue;
+        //if (flag.vblock_memory < txt_file->reject_bytes && test_i != num_tests-1) 
+        //    continue;
 
         VBlock *vb = vb_get_vb ("dynamically_set_memory", 1);
         txtfile_read_vblock (vb, true);
@@ -180,7 +180,7 @@ static void zip_dynamically_set_max_memory (void)
             
             // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
             buf_alloc (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
-            memcpy (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
+            memmove (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
             memcpy (txt_file->unconsumed_txt.data, txt_data_copy.data, txt_data_copy.len);
             txt_file->unconsumed_txt.len += txt_data_copy.len;
             buf_destroy (&txt_data_copy);

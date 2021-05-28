@@ -181,10 +181,16 @@ void vcf_seg_finalize (VBlockP vb_)
     // similarly, when processing the rejects file containing variants that are luft-only, we add a "##luft_only=" prefix
     else if (vb->vb_coords == DC_LUFT) { // luft-only variants 
         static const char luft_only_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HK_LUFT_ONLY CON_PREFIX_SEP_;
-        container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLUFT], (ContainerP)&top_luft, luft_only_prefix, strlen (luft_only_prefix), 0);
+        container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLUFT], (ContainerP)&top_luft, luft_only_prefix, strlen (luft_only_prefix), (sizeof HK_LUFT_ONLY - 1) * vb->lines.len);
         vb->recon_size_luft += (sizeof HK_LUFT_ONLY - 1) * vb->lines.len; // when reconstructing luft-only rejects, we also reconstruct a prefix for each line
         // note: there is no equivalent of ctx->txt_len for Luft coordinates
     }
+
+    // consolidate DVCF info fields to VCF_COORDS (just the container, not the values)
+    if ((ctx = ctx_get_existing_ctx (vb, dict_id_INFO_PRIM))) ctx->st_did_i = VCF_COORDS;
+    if ((ctx = ctx_get_existing_ctx (vb, dict_id_INFO_PREJ))) ctx->st_did_i = VCF_COORDS;
+    if ((ctx = ctx_get_existing_ctx (vb, dict_id_INFO_LUFT))) ctx->st_did_i = VCF_COORDS;
+    if ((ctx = ctx_get_existing_ctx (vb, dict_id_INFO_LREJ))) ctx->st_did_i = VCF_COORDS;
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -381,7 +387,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     if (vb->reject_bytes) 
         vb->line_coords = OTHER_COORDS (vb->line_coords); // dual coordinates file - this line originates from ##primary_only/##luft_only as is in the opposite coordinates
 
-    // allow un-segging of o* and LIFTXXXX in case due to INFO or FORMAT ostatus changes from OK to REJECT
+    // allow un-segging of o* and PRIM/LUFT in case due to INFO or FORMAT ostatus changes from OK to REJECT
     int32_t save_recon_size=0; uint32_t line_len=0, save_lo_rejects_len=0; 
     unsigned save_txt_len_len = vb->num_contexts;
     uint64_t save_txt_len[save_txt_len_len];
@@ -410,7 +416,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     else { // LUFT
         dl->chrom_index[1] = seg_by_did_i (vb_, VCF_CHROM_str, VCF_CHROM_len, VCF_oCHROM, VCF_CHROM_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
         random_access_update_chrom (vb_, DC_LUFT, dl->chrom_index[1], VCF_CHROM_str, VCF_CHROM_len);
-        vb->contexts[VCF_CHROM].txt_len++; // account for the tab
+        vb->contexts[vb->vb_coords==DC_LUFT ? VCF_oCHROM : VCF_CHROM].txt_len++; // account for the tab - in oCHROM in the ##luft_only VB and in CHROM (on behalf on the primary CHROM) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
 
     GET_NEXT_ITEM (VCF_POS);
@@ -429,7 +435,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     else { // LUFT
         dl->pos[1] = seg_pos_field (vb_, VCF_oPOS, VCF_oPOS, false, false, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len);
         if (dl->pos[1]) random_access_update_pos (vb_, DC_LUFT, VCF_oPOS);
-        vb->contexts[VCF_POS].txt_len++; // account for the tab
+        vb->contexts[vb->vb_coords==DC_LUFT ? VCF_oPOS : VCF_POS].txt_len++; // account for the tab - in oPOS in the ##luft_only VB and in POS (on behalf on the primary POS) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
 
     GET_NEXT_ITEM (VCF_ID);
@@ -465,7 +471,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // set oSTATUS except --chain (already set)
     if (!chain_is_loaded) 
         vcf_set_ostatus (vb->reject_bytes ? LO_REJECTED : // reject lines in Luft are all rejected (happens only in txt_file->coords==DC_LUFT)
-                         txt_file->coords ? LO_UNKNOWN  : // we don't know yet, we will test for existance of INFO/REJTXXXX in vcf_seg_info_field_correct_for_dual_coordinates
+                         txt_file->coords ? LO_UNKNOWN  : // we don't know yet, we will test for existance of INFO/*rej in vcf_seg_info_field_correct_for_dual_coordinates
                                             LO_NA)      ; // this z_file is not a dual-coordinates file
 
     vcf_seg_info_subfields (vb, field_start, field_len);
@@ -511,7 +517,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         seg_by_did_i (vb, NULL, 0, VCF_SAMPLES, 0);
     }
 
-    // Adds INFO/LIFTXXXX according to ostatus, finalizes INFO/SF and segs the INFO container
+    // Adds DVCF items according to ostatus, finalizes INFO/SF and segs the INFO container
     vcf_finalize_seg_info (vb);
 
     if (!has_samples && vcf_num_samples)
@@ -533,19 +539,17 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         if (lo_ok)
             vb->lo_rejects[vb->line_coords-1].len = save_lo_rejects_len;
 
-        // if this line is a LUFT-only line, it won't be reconstructed in primary coordinates
-        if (!lo_ok && vb->line_coords == DC_LUFT) {
-            vb->recon_size = save_recon_size - line_len; 
-            
-            // restore txt_len of all contexts to their values before this line was segged
-            for (unsigned i=0; i < vb->num_contexts; i++) 
-                vb->contexts[i].txt_len = (i < save_txt_len_len ? save_txt_len[i] : 0);
+        // in a dual-coordinate VB (i.e. the main VCF data lines), single-coordinate lines won't be displayed in the opposite reconstruction
+        else {
+            if (vb->line_coords == DC_PRIMARY) vb->recon_size_luft = save_recon_size - line_len;
+            else  /* DC_LUFT  */               vb->recon_size      = save_recon_size - line_len;
+        
+            // unaccount for this line, if its a Luft-only line in a dual-coordinate variant (i.e. main VCF data line) as it won't appear in the default reconstruction
+            if (vb->vb_coords == DC_BOTH && vb->line_coords == DC_LUFT)
+                for (unsigned i=0; i < vb->num_contexts; i++) 
+                    vb->contexts[i].txt_len = (i < save_txt_len_len ? save_txt_len[i] : 0);
         }
-
-        // if this line is a PRIMARY-only line, it won't be reconstructed in luft coordinates - update recon_size_luft
-        if (!lo_ok && vb->line_coords == DC_PRIMARY) 
-            vb->recon_size_luft = save_recon_size - line_len;
-
+        
         // in case of a reject line - update reject_bytes to indicate its consumption
         if (txt_file->coords && txt_file->coords != vb->line_coords)
             vb->reject_bytes -= next_field - field_start_line;

@@ -201,6 +201,18 @@ One or more file names must be given.
 
 .. include:: opt-translation.rst
 
+**Dual-coordinate VCF options**
+
+| See: :ref:`dvcf`
+
+.. option:: --luft.  Render a DVCF file in Luft coordinates (absent this option, a DVCF will be rendered in Primary coordinates).
+    
+          |
+
+.. option:: --show-dvcf.  For each variant, show its coordinate system (Primary, Luft or Both), and its oStatus. May be used with or without combination of --luft.
+
+          |
+
 **General options**
 
 .. include:: opt-piz.rst

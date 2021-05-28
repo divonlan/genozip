@@ -70,9 +70,9 @@ extern StrText str_pointer (const void *p);
 extern StrText str_time (void);
 
 #define FLOAT_FORMAT_LEN 12
-extern bool str_get_float (const char *float_str, unsigned float_str_len, float *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len);
+extern _Bool str_get_float (const char *float_str, unsigned float_str_len, float *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len);
 
-extern unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char sep, const char **items, unsigned *item_lens, bool exactly, const char *enforce_msg);
+extern unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char sep, const char **items, unsigned *item_lens, _Bool exactly, const char *enforce_msg);
 
 extern const char *type_name (unsigned item, 
                               const char * const *name, // the address in which a pointer to name is found, if item is in range

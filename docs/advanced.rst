@@ -133,7 +133,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
 .. option:: --show-dvcf  C. Show line-by-line outcome of the liftover of that line. Used with dual-coordinate files and may be combined --luft.
 
-    | See: :ref:`liftover_vcf`
+    | See: :ref:`dvcf`
     |
 
 **Tracking execution**
@@ -157,6 +157,13 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 .. option:: --debug-progress  ZUC. See raw numbers that feed into the progress indicator.
 
           |
+.. option:: --debug-stats  Z. See details in the creation process of the --stats report.
+
+          |
+
+.. option:: --debug-allthesame  Z. See contexts that are marked as "all the same" and are removed or shrunk.
+
+          |
 
 .. option:: --show-time=res. ZUCL. Show what functions are consuming the most time. Optional <res> is one of the members of ProfilerRec defined in profiler.h such 'compressor_lzma' or a substring such as 'compressor_'.
 
@@ -175,6 +182,14 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
           |
 
 .. option:: --show-flags.  ZUCL. Shows internal flags after initialization.
+
+          |
+
+.. option:: --show-recon.  UC. Shows the reconstruction plan.
+
+          |
+
+.. option:: --show-dvcf.  C. When used with dual-coordinate VCF file, shows for each variant its Coordinates (Primary, Luft or Both) and its oStatus.
 
           |
 

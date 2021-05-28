@@ -20,12 +20,13 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->use_special_sf = 0;
     vb->gt_prev_ploidy = 0;
     vb->gt_prev_phase = 0;
-    vb->sf_ctx = NULL;
+    vb->sf_ctx = vb->adall_ctx = vb->hapmat_index_ctx = vb->gt_ctx = NULL;
     vb->main_refalt = NULL;
     vb->main_ref_len = vb->main_alt_len = 0;
     vb->last_end_line_i = 0;
-    memset(vb->ad_values, 0, sizeof (vb->ad_values));
-
+    memset (vb->ad_values, 0, sizeof (vb->ad_values));
+    vb->sample_i = 0;
+    
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);
     buf_free (&vb->hapmat_helper_index_buf);

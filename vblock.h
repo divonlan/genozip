@@ -48,9 +48,9 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file; /* position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\
-    int32_t recon_size;        /* ZIP: actual size of txt read from file, modified if --optimize/--chain as expected to be reconstructed in PRIMARY coordinates */\
+    int32_t recon_size;        /* ZIP: actual size of txt if this VB is reconstructed in PRIMARY coordinates (inc. as ##primary_only in --luft) */\
                                /* PIZ: expected reconstruction size in the coordinates of reconstruction */\
-    int32_t recon_size_luft;   /* ZIP only: expected reconstruction size in LUFT coordinates */ \
+    int32_t recon_size_luft;   /* ZIP only: expected reconstruction size if this VB is reconstructed in LUFT coords inc. as ##luft_only in a DC_LUFT rejects VB) */ \
     uint32_t recon_num_lines;  /* PIZ: expected number of non-dropped lines in the default reconstruction size in the user coordinates of reconstruction */\
                                /* ZIP: dual-coordinate files only: DC_PRIMARY + DC_BOTH lines in this VB  */ \
     uint32_t recon_num_lines_luft; /* ZIP only, dual coordinates files only: DC_LUFT + DC_BOTH lines in this VB */ \

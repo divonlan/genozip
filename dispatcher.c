@@ -101,7 +101,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool for all fan-outs throughout the execution
     vb_create_pool (MAX (1, global_max_threads)    // compute thread VBs
-                  + (command == PIZ)               // txt header VB (only applicable to PIZ)
+                  + 1                              // txt header VB (for PIZ) or VB for zip_dynamically_set_max_memory (for ZIP)
                   + z_file->max_conc_writing_vbs); // writer thread VBs 
 
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 

@@ -840,7 +840,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
             "Cannot use --output because %s is a bound file containing multiple components. Use --prefix to set a prefix for output filenames, use genocat to output as a single concatenated file, or use genols to see the components' metadata",
             z_name);
              
-    // phylip implies sequential and header_one
+    // --phylip implies sequential and header_one
     if (z_file->data_type == DT_FASTA && flag.out_dt == DT_PHYLIP) {
         flag.sequential = 1;
         flag.header_one = flag.no_header = flag.header_only = 0;
@@ -1109,8 +1109,10 @@ void flags_store_command_line (int argc, char **argv)
     if (command == ZIP && !isatty(0))
         flags_store_piped_in_details();    
 
-    if (flag.echo)
+    if (flag.echo) {
         fprintf (stderr, "\n%s: %s\n", str_time().s, command_line.data);
+        if (flag.debug) flags_display_debugger_params();
+    }
 }
 
 const char *flags_command_line (void)

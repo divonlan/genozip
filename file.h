@@ -374,12 +374,12 @@ typedef struct File {
     Buffer read_count;
     Buffer unmapped_read_count;
 
-    // Z_FILE: Liftover stuff
-    char *rejects_file_name[2];        // ZIP: allocated and freed by liftover_* - [0]=DC_PRIMARY [1]=DC_LUFT
+    // Z_FILE: DVCF stuff
+    char *rejects_file_name[2];        // ZIP: [0]=DC_PRIMARY [1]=DC_LUFT
     FILE *rejects_file[2];             // ZIP: rejects txt file
     uint64_t rejects_disk_size[2];     // ZIP
 
-    // TXT_FILE: Liftover stuff
+    // TXT_FILE: DVCF stuff
     Coords coords;                     // TXT FILE ZIP: Set from ##dual_coordinates and immutable thereafter
     uint64_t reject_bytes;             // ZIP of a dual coordinate file: number of bytes in lines originating from ##primary_only/##luft_only, not yet assigned to a VB
 
@@ -399,8 +399,6 @@ typedef struct File {
     // Z_FILE: stats data
     Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)
     Buffer bound_txt_names;            // ZIP: a concatenation of all bound txt_names that contributed to this genozip file
-    bool is_txt_len_frozen;            // ZIP: true if frozen_txt_len is assigned
-    uint64_t frozen_txt_len[MAX_DICTS];// ZIP: copy of contexts[].txt_len, from stats_freeze_txt_len
 
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;

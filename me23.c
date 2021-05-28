@@ -207,7 +207,11 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
 
     // chroms don't have the same index in the ME23 z_file and in the reference file - we need to translate chrom_index
     WordIndex save_chrom_node_index = vb->chrom_node_index;
-    vb->chrom_node_index = ref_contigs_get_word_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, false);
+    vb->chrom_node_index = ref_contigs_get_word_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, true);
+
+    // if not found, try common alternative names
+    if (vb->chrom_node_index == WORD_INDEX_NONE)
+        vb->chrom_node_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, WORD_INDEX_NONE);
 
     // get the value of the loaded reference at this position    
     const Range *range = ref_piz_get_range (vb, pos, 1);

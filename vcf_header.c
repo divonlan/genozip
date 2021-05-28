@@ -359,7 +359,7 @@ static void vcf_header_zip_convert_header_to_dc_add_lines (Buffer *new_header)
     buf_free (&vcf_header_liftover_dst_contigs);
 }
 
-// Update zf_ctx and dict_id_to_ID after reading or creating an INFO / FORMAT RenderAlg=vale
+// Update zf_ctx and dict_id_to_ID after reading or creating an INFO / FORMAT RendAlg=vale
 static TranslatorId vcf_header_set_luft_trans (const char *id, unsigned id_len, bool is_info, TranslatorId luft_trans, const char *number, unsigned number_len)
 {
     DictId dict_id = dict_id_make (id, id_len, is_info ? DTYPE_VCF_INFO : DTYPE_VCF_FORMAT);
@@ -559,18 +559,16 @@ static bool vcf_inspect_txt_header_piz (VBlock *txt_header_vb, Buffer *txt_heade
     if (flag.samples) vcf_header_subset_samples (&vcf_field_name_line);
     else              vcf_num_displayed_samples = vcf_num_samples;
 
-    // for the rejects part of the header - we just remove its #CHROM line as it will be taken from the primary component
-    if (txt_header_flags.rejects_coord) {
-        txt_header->len -= vcf_field_name_line.len;
-        return true;
-    }
-
     // remove #CHROM line (it is saved in vcf_field_name_line by vcf_header_set_globals()) - or everything
-    // if we ultimately one want the #CHROM line. We will add back the #CHROM line later.
+    // if we ultimately want the #CHROM line. We will add back the #CHROM line later.
     if (flag.header_one) 
         txt_header->len = 0; 
     else
         txt_header->len -= vcf_field_name_line.len; 
+
+    // for the rejects part of the header - we're done
+    if (txt_header_flags.rejects_coord) 
+        return true;
 
     // if needed, liftover the header
     if (flag.luft && !flag.header_one && !flag.rejects_coord) 
@@ -586,7 +584,7 @@ static bool vcf_inspect_txt_header_piz (VBlock *txt_header_vb, Buffer *txt_heade
 
     // if --show_dvcf, add two extra fields at beginning for field name line, and remove the # from #CHROM
     if (flag.show_dvcf)
-        #define ADDITIONAL_FIELDS "#COORD\tSTATUS\t"
+        #define ADDITIONAL_FIELDS "#COORD\toSTATUS\t"
         buf_add_more (txt_header_vb, txt_header, ADDITIONAL_FIELDS, sizeof ADDITIONAL_FIELDS-1, "txt_data");
 
     // add the (perhaps modified) field name (#CHROM) line

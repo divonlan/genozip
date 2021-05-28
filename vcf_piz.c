@@ -74,7 +74,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
             return false; // filter out entirely without consuming (non-DC files have no oStatus data)
     }
 
-    // for dual-coordinates genozip files - select with to show the XXXXOVER or the XXXXBACK based on flag.luft
+    // for dual-coordinates genozip files - select which DVCF item to show based on flag.luft
     else if (dict_id.num == dict_id_fields[VCF_INFO]) {
         if (vb->vb_coords == DC_LUFT && (con->items[item].dict_id.num == dict_id_INFO_LUFT || con->items[item].dict_id.num == dict_id_INFO_LREJ))
             return false;
