@@ -36,7 +36,7 @@ extern CONTAINER_CALLBACK (fastq_piz_container_cb);
 // VBlock stuff
 extern void fastq_vb_release_vb();
 extern void fastq_vb_destroy_vb();
-extern unsigned fastq_vb_size (void);
+extern unsigned fastq_vb_size (DataType dt);
 extern unsigned fastq_vb_zip_dl_size (void);
 
 // file pairing (--pair) stuff

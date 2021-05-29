@@ -44,7 +44,7 @@ VBlock *evb = NULL;
     func (&vb->lo_rejects[1]);       \
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
     for (unsigned i=0; i < MAX_DICTS; i++) if (vb->contexts[i].dict_id.num) ctx_func (&vb->contexts[i]); \
-    if (vb->data_type != DT_NONE) (DT_FUNC (vb, vb_func)(vb));    
+    if (vb->data_type_alloced != DT_NONE && dt_props[vb->data_type_alloced].vb_func) dt_props[vb->data_type_alloced].vb_func(vb);    
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
 void vb_release_vb_do (VBlock **vb_p, const char *func) 
@@ -72,7 +72,8 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
     // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used/
     //                   we have logic in vb_get_vb() to update its vb_i
-    // vb->data_type   : type of this vb 
+    // vb->data_type   : type of this vb (maybe changed by vb_get_vb)
+    // vb->data_type_alloced (maybe changed by vb_get_vb)
 
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = vb->pos_aln_i = 0;
     vb->recon_size = vb->recon_size_luft = vb->txt_size = vb->reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
@@ -141,7 +142,7 @@ void vb_create_pool (unsigned num_vbs)
 
     // case: old pool is too small - realloc it (the pool contains only pointers to VBs, so the VBs themselves are not realloced)
     else if (pool->num_vbs < num_vbs) {
-        pool = (VBlockPool *)REALLOC (pool, sizeof (VBlockPool) + num_vbs * sizeof (VBlock *), "VBlockPool"); 
+        REALLOC (&pool, sizeof (VBlockPool) + num_vbs * sizeof (VBlock *), "VBlockPool"); 
         memset (&pool->vb[pool->num_vbs], 0, (num_vbs - pool->num_vbs) * sizeof (VBlockP)); // initialize new entries
         pool->num_vbs = num_vbs; 
     }
@@ -166,35 +167,62 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
 {
     ASSERTMAINTHREAD;
 
+    DataType dt = command==ZIP ? (txt_file ? txt_file->data_type : DT_NONE)
+                               : (z_file   ? z_file->data_type   : DT_NONE);
+    
+    uint64_t sizeof_vb = (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock);
+
+    DataType alloc_dt = sizeof_vb == sizeof (VBlock)   ? DT_NONE
+                      : dt == DT_REF && command == PIZ ? DT_NONE
+                      : dt == DT_BAM                   ? DT_SAM
+                      : dt == DT_BCF                   ? DT_VCF 
+                      :                                  dt;
+
     // circle around until a VB becomes available (busy wait)
     unsigned vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
-    
-        // free if this is a VB allocated by a previous file, with a different data type
-        // note: if z_file is DT_NONE, we're performing a generic fan_out task, and  data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozipwe can use what ever VB already exists
-        if (pool->vb[vb_id] && z_file && pool->vb[vb_id]->data_type != z_file->data_type) {
-            vb_destroy_vb (&pool->vb[vb_id]);
-            pool->num_allocated_vbs--; // we will immediately allocate and increase this back
+
+        // case: the VB is allocated to a different data type - change its data type
+        if (pool->vb[vb_id] && z_file && pool->vb[vb_id]->data_type != dt) {
+
+            DataType old_alloced_dt = pool->vb[vb_id]->data_type_alloced;
+
+            // the new data type has a private section in its VB, that is different that the one of alloc_dt - realloc private section
+            if (old_alloced_dt != alloc_dt && alloc_dt != DT_NONE) {
+                
+                // destroy private part of previous data_type
+                if (old_alloced_dt != DT_NONE && dt_props[old_alloced_dt].destroy_vb) 
+                    dt_props[old_alloced_dt].destroy_vb (pool->vb[vb_id]);    
+
+                // calloc private part of new data_type
+                VBlockP old_vb = pool->vb[vb_id];
+                REALLOC (&pool->vb[vb_id], sizeof_vb, "VBlock");
+                VBlockP new_vb = pool->vb[vb_id]; // new address
+
+                memset ((char*)new_vb + sizeof (VBlock), 0, sizeof_vb - sizeof (VBlock));
+
+                // update buf->vb in all buffers of this VB to new VB address
+                buf_update_buf_list_vb_addr_change (new_vb, old_vb);
+                new_vb->data_type_alloced = alloc_dt;
+            }
+
+            pool->vb[vb_id]->data_type = dt;
         }
         
         if (!pool->vb[vb_id]) { // VB is not allocated - allocate it
-            unsigned sizeof_vb = command==ZIP ? (txt_file && DTPT(sizeof_vb) ? DTPT(sizeof_vb)() : sizeof (VBlock))
-                                              : (z_file   && DTPZ(sizeof_vb) ? DTPZ(sizeof_vb)() : sizeof (VBlock));
             pool->vb[vb_id] = CALLOC (sizeof_vb); 
             pool->num_allocated_vbs++;
-            pool->vb[vb_id]->data_type = command==ZIP ? (txt_file ? txt_file->data_type : DT_NONE)
-                                                      : (z_file   ? z_file->data_type   : DT_NONE);
+            pool->vb[vb_id]->data_type = dt;
+            pool->vb[vb_id]->data_type_alloced = alloc_dt;
         }
 
         bool in_use = __atomic_load_n (&pool->vb[vb_id]->in_use, __ATOMIC_RELAXED);
         if (!in_use) break;
 
         // case: we've checked all the VBs and none is available - wait a bit and check again
-        if (vb_id == pool->num_vbs-1) {
-            // this happens when a lot VBs are handed over to the writer thread which has not processed them yet.
-            // for example, if writer is blocking on write(), waiting for a pipe counterpart to read.
-            // it will be released when the writer thread completes one VB.
-            usleep (1000); // 1 ms
-        }
+        // this happens when a lot VBs are handed over to the writer thread which has not processed them yet.
+        // for example, if writer is blocking on write(), waiting for a pipe counterpart to read.
+        // it will be released when the writer thread completes one VB.
+        if (vb_id == pool->num_vbs-1) usleep (1000); // 1 ms
     }
 
     // initialize VB fields that need to be a value other than 0

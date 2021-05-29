@@ -70,8 +70,8 @@ char *buf_display (const Buffer *buf)
 const BufDescType buf_desc (const Buffer *buf)
 {
     BufDescType desc; // use static memory instead of malloc since we could be in the midst of a memory issue when this is called
-    sprintf (desc.s, "\"%s\" param=%"PRId64" len=%"PRIu64" size=%"PRId64" allocated in %s:%u by vb_i=%d", 
-             buf->name ? buf->name : "(no name)", buf->param, buf->len, buf->size, buf->func, buf->code_line, 
+    sprintf (desc.s, "\"%s\" param=%"PRId64" len=%"PRIu64" size=%"PRId64" type=%s allocated in %s:%u by vb_i=%d", 
+             buf->name ? buf->name : "(no name)", buf->param, buf->len, buf->size, buf_display_type (buf), buf->func ? buf->func : "(no func)", buf->code_line, 
              (buf->vb ? buf->vb->vblock_i : -999));
     return desc;
 }
@@ -125,7 +125,7 @@ static void buf_find_underflow_culprit (const char *memory, const char *msg)
         
         ARRAY (Buffer *, buf_list, vb->buffer_list);
 
-        for (unsigned buf_i=0; buf_i < vb->buffer_list.len; buf_i++) {
+        for (unsigned buf_i=0; buf_i < buf_list_len; buf_i++) {
             const Buffer *buf = buf_list[buf_i];
 
             if (buf) {
@@ -186,21 +186,28 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
         static const char *nl[2] = {"", "\n\n"};
         if (buf->memory && buf->memory != BUFFER_BEING_MODIFIED) {
 
-            if (buf->data && buf->vb->vblock_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
+            if (vb && buf->vb != vb) {
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - buf->vb=%s != vb=%s\n", 
+                         nl[primary], msg, vb->id, vb->vblock_i, str_pointer(buf).s, buf_i, str_pointer(buf->vb).s, str_pointer(vb).s);
+                corruption = 0;
+            }
+            else if (buf->data && buf->vb->vblock_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
                         fprintf (stderr, "%s%s: Memory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u\n",
                         nl[primary], msg, vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, buf_display_type(buf), 
                         str_pointer(buf).s, str_pointer(buf->memory).s, str_pointer(buf->memory+buf->size+control_size-1).s,
                         buf_desc (buf).s, buf->vb->vblock_i, buf_i);
                 corruption = 1;
             }
-            if (buf->type < 0 || buf->type > BUF_NUM_TYPES) {
-                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", 
+            else if (buf->type < 0 || buf->type > BUF_NUM_TYPES) {
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type", 
                          nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf).s, buf_i);
+                fprintf (stderr, " Buffer=%s\n", buf_desc(buf).s);  // separate fprintf in case it seg faults
                 corruption = 2;
             }
             else if (!buf->name) {
-                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%s (buf_i=%u): Corrupt Buffer structure - null name\n", 
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%s (buf_i=%u): Corrupt Buffer structure - null name", 
                          nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf).s, buf_i);
+                fprintf (stderr, " Buffer=%s\n", buf_desc(buf).s);  // separate fprintf in case it seg faults
                 corruption = 3;
             }
             else if (buf->data && buf->type != BUF_OVERLAY && (buf->data != buf->memory + sizeof(uint64_t))) {
@@ -260,6 +267,25 @@ static int buf_stats_sort_by_bytes(const void *a, const void *b)
     return ((MemStats*)a)->bytes < ((MemStats*)b)->bytes ? 1 : -1;
 }
 
+void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb)
+{
+    if (old_vb == new_vb) return; // no change in address
+    
+    ARRAY (Buffer *, bl, new_vb->buffer_list);
+    
+    for (uint32_t buf_i=0; buf_i < bl_len; buf_i++) {
+
+        if (!bl[buf_i]) continue;
+
+        // if this buffer is within the moved VB - update its address to the same offset relative to the new vb address
+        if ((char*)bl[buf_i] >= (char*)old_vb && (char*)bl[buf_i] < (char *)(old_vb+1)) 
+            bl[buf_i] = (Buffer *)((char*)new_vb + ((char*)bl[buf_i] - (char*)old_vb)); 
+
+        // update VB address within the buffer
+        bl[buf_i]->vb = new_vb; 
+    }
+}
+
 static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), void *arg)
 {
     VBlockPool *vb_pool = vb_get_pool ();
@@ -289,7 +315,7 @@ uint64_t buf_get_memory_usage (void)
 }
 
 #define MAX_MEMORY_STATS 100
-static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_display_memory_usage is called when malloc fails, so it cannot malloc
+static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_show_memory is called when malloc fails, so it cannot malloc
 static unsigned num_stats=0, num_buffers=0;
 
 static void buf_add_mem_usage_to_stats (const Buffer *buf, void *unused)
@@ -314,7 +340,7 @@ static void buf_add_mem_usage_to_stats (const Buffer *buf, void *unused)
     num_buffers++;
 }
 
-void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads)
+void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_threads)
 {
     // if memory is full - only one thread needs to show this - others threads hang until we exit the process
     if (memory_full) mutex_lock (only_once_mutex);
@@ -338,7 +364,8 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     uint64_t total_bytes=0;
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
-    fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists:\n", str_size (total_bytes).s, num_buffers, vb_get_pool()->num_allocated_vbs);
+    fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists. global_max_threads=%u\n", 
+             str_size (total_bytes).s, num_buffers, vb_get_pool()->num_allocated_vbs, global_max_threads);
     if (command == ZIP) 
         fprintf (memory_full ? stderr : info_stream, "vblock_memory = %u MB\n", (unsigned)(flag.vblock_memory >> 20));
     
@@ -353,9 +380,9 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
 
 #ifndef _WIN32
 // signal handler of SIGUSR1 
-void buf_display_memory_usage_handler (void) 
+void buf_show_memory_handler (void) 
 {
-    buf_display_memory_usage (false, 0, 0);
+    buf_show_memory (false, 0, 0);
 }
 #endif
 
@@ -394,7 +421,7 @@ static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_siz
     ASSERT (buf->name, "buffer has no name. func=%s:%u", buf->func, buf->code_line);
 
     if (!memory) {
-        buf_display_memory_usage (true, 0, 0);
+        buf_show_memory (true, 0, 0);
 
         ABORT ("%s: Out of memory. %sDetails: %s:%u failed to allocate %s bytes. Buffer: %s", 
                global_cmd, 
@@ -438,6 +465,11 @@ uint64_t buf_alloc_do (VBlock *vb,
             func, code_line, buf_display_type (buf), buf_desc (buf).s);
 
     ASSERT (vb, "called from %s:%u: null vb", func, code_line);
+
+    // if this happens: either 1. the wrong VB was given now, or when initially allocating this buffer OR
+    // 2. VB was REALLOCed in vb_get_vb, but for some reason this buf->vb was not updated because it was not on the buffer list
+    ASSERT (!buf->vb || vb == buf->vb, "called from %s:%u: buffer=%p has wrong VB: vb=%p (id=%u vblock_i=%u) but buf->vb=%p", 
+            func, code_line, buf, vb, vb->id, vb->vblock_i, buf->vb);
 
     // case 1: we have enough memory already
     if (requested_size <= buf->size) {
@@ -573,9 +605,9 @@ void buf_overlay_do (VBlock *vb,
     overlaid_buf->type        = BUF_OVERLAY;
     overlaid_buf->memory      = 0;
     overlaid_buf->overlayable = false;
-    overlaid_buf->vb          = vb;
     overlaid_buf->name        = name;
     overlaid_buf->len         = start_in_regular ? 0 : regular_buf->len;
+    // note: we don't add overlaid_buf to buf_list, and because of that we also don't set its overlaid_buf->vb because it won't get updated in buf_update_buf_list_vb_addr_change
 
     // full or partial buffer overlay - if size=0, copy len too and update overlay counter
     mutex_lock (overlay_mutex);
@@ -596,7 +628,9 @@ void buf_overlay_do (VBlock *vb,
 
 // creates a copy-on-write file mapping: data is mapping from a read-only file, any modifications are private
 // to the process and not written back to the file. buf->param is used for mmapping.
-bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, const char *func, uint32_t code_line, const char *name)
+bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, 
+                  bool read_only_buffer, // if false, make a copy-on-write memory mapping, creating private pages upon write
+                  const char *func, uint32_t code_line, const char *name)
 {
     int fd = -1;
 
@@ -622,26 +656,28 @@ bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, const char *fun
 #ifdef _WIN32
     HANDLE file = (HANDLE)_get_osfhandle (fd);
     buf->param = (int64_t)CreateFileMapping (file, NULL, PAGE_WRITECOPY, file_size >> 32, file_size & 0xffffffff, NULL);
-    ASSERTGOTO (buf->param, "Error in buf_mmap, deleting %s: CreateFileMapping failed: %s", filename, str_win_error());
-  
+    ASSERTGOTO (buf->param, "Error in buf_mmap of %s file_size=%"PRIu64": CreateFileMapping failed: %s", filename, file_size, str_win_error());
+    
     // note that mmap'ed buffers include the Buffer 
-    buf->memory = MapViewOfFile ((HANDLE)buf->param, FILE_MAP_COPY, 0, 0, file_size);
-    ASSERTGOTO (buf->memory, "Error in buf_mmap, deleting %s: MapViewOfFile failed: %s", filename, str_win_error());
+    buf->memory = MapViewOfFile ((HANDLE)buf->param, read_only_buffer ? FILE_MAP_READ : FILE_MAP_COPY, 0, 0, file_size);
+    ASSERTGOTO (buf->memory, "Error in buf_mmap of %s file_size=%"PRIu64": MapViewOfFile failed: %s", filename, file_size, str_win_error());
 
 #else
-    buf->memory = mmap (NULL, file_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-    ASSERT (buf->memory != MAP_FAILED, "deleting %s: mmap failed: %s", filename, strerror (errno));
+    buf->memory = mmap (NULL, file_size, PROT_READ | (read_only_buffer ? 0 : PROT_WRITE), MAP_PRIVATE, fd, 0);
+    ASSERT (buf->memory != MAP_FAILED, "Error in buf_mmap of %s file_size=%"PRIu64": mmap failed: %s", filename, file_size, strerror (errno));
 #endif
     close (fd);
     fd=-1;
 
     // verify buffer integrity
     buf->data = buf->memory + sizeof (uint64_t);
-    ASSERTGOTO (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "Error in buf_mmap, deleting %s: mmap'ed buffer has corrupt underflow trap", filename);
-    ASSERTGOTO (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "Error in buf_mmap, deleting %s: mmap'ed buffer has corrupt overflow trap - possibly file is trucated", filename);
+    ASSERTGOTO (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "Error in buf_mmap of %s: mmap'ed buffer has corrupt underflow trap", filename);
+    ASSERTGOTO (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "Error in buf_mmap of %s: mmap'ed buffer has corrupt overflow trap - possibly file is trucated", filename);
 
-    // reset overlay counter
-    *(uint16_t *)(buf->data + buf->size + sizeof (uint64_t)) = 1;
+    // reset overlay counter    
+    if (!read_only_buffer)
+        *(uint16_t *)(buf->data + buf->size + sizeof (uint64_t)) = 1;
+
     return true;
 
 error:
@@ -653,7 +689,6 @@ error:
 #else
     munmap (buf->data, buf->size);
 #endif
-    file_remove (filename, true);
 
     memset (buf, 0, sizeof(Buffer));
     return false;
@@ -743,7 +778,7 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 // remove from buffer_list of this vb
 // thread safety: only the thread owning the VB of the buffer (main thread of evb) can remove a buffer
 // from the buf list, OR the main thread may remove for all VBs, IF no compute thread is running
-void buf_remove_from_buffer_list (Buffer *buf)
+static void buf_remove_from_buffer_list (Buffer *buf)
 {
     if (!buf->vb) return; // this buffer is not on the buf_list - nothing to do
 
@@ -836,7 +871,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
         else 
             memmove (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry); // need memmove for overlapping areas
     }
-    
+
     dst->len = num_entries;  
 }   
 
@@ -903,12 +938,11 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line)
 {
     void *new = realloc (p, size);
-    ASSERT (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", func, code_line, name, (uint64_t)size, 
-            command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
+    ASSERTW (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", func, code_line, name, (uint64_t)size, 
+             command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
     if (flag.debug_memory && size >= flag.debug_memory) 
-        iprintf ("realloc(): old=%s new=%s name=%s size=%"PRIu64" %s:%u\n", 
-                 str_pointer (p).s, str_pointer (new).s, name, (uint64_t)size, func, code_line);
+        iprintf ("realloc(): old=%p new=%p name=%s size=%"PRIu64" %s:%u\n", p, new, name, (uint64_t)size, func, code_line);
 
     return new;
 }

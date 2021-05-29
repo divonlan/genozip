@@ -93,9 +93,9 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 } while(0)
 
-extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, const char *func, uint32_t code_line, const char *name);
-#define buf_mmap(vb, buf, filename, name) \
-    buf_mmap_do((VBlockP)(vb), (buf), (filename), __FUNCTION__, __LINE__, (name))
+extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, bool read_only_buffer, const char *func, uint32_t code_line, const char *name);
+#define buf_mmap(vb, buf, filename, read_only_buffer, name) \
+    buf_mmap_do((VBlockP)(vb), (buf), (filename), (read_only_buffer), __FUNCTION__, __LINE__, (name))
 
 extern BitArrayP buf_alloc_bitarr_do (VBlockP vb, Buffer *buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
 #define buf_alloc_bitarr(vb, buf, nbits, name) \
@@ -189,8 +189,8 @@ typedef struct {
 } MemStats;
 
 uint64_t buf_get_memory_usage (void);
-extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
-extern void buf_display_memory_usage_handler (void);
+extern void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_threads);
+extern void buf_show_memory_handler (void);
 
 #define buf_set(buf_p,value) do { if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); } while(0)
 #define buf_zero(buf_p) buf_set(buf_p, 0)
@@ -198,7 +198,7 @@ extern void buf_display_memory_usage_handler (void);
 extern void buf_add_to_buffer_list_do (VBlockP vb, Buffer *buf, const char *func);
 #define buf_add_to_buffer_list(vb,buf) buf_add_to_buffer_list_do ((vb), (buf), __FUNCTION__)
 
-extern void buf_remove_from_buffer_list (Buffer *buf);
+void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb);
 
 extern void buf_low_level_free (void *p, const char *func, uint32_t code_line);
 #define FREE(p) do { if (p) { buf_low_level_free (((void*)(p)), __FUNCTION__, __LINE__); p=NULL; } } while(0)
@@ -208,7 +208,7 @@ extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uin
 #define CALLOC(size) buf_low_level_malloc (size, true,  __FUNCTION__, __LINE__)
 
 extern void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line);
-#define REALLOC(p,size,name) buf_low_level_realloc ((p), (size), (name), __FUNCTION__, __LINE__)
+#define REALLOC(p,size,name) if (!(*(p) = buf_low_level_realloc (*(p), (size), (name), __FUNCTION__, __LINE__))) ABORT0 ("REALLOC failed")
 
 extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs, bool verbose);
 

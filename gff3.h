@@ -18,7 +18,7 @@ extern bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
 // VBlock stuff
 extern void gff3_vb_release_vb();
 extern void gff3_vb_destroy_vb();
-extern unsigned gff3_vb_size (void);
+extern unsigned gff3_vb_size (DataType dt);
 
 #define GFF3_DICT_ID_ALIASES \
     /*          alias                           maps to this ctx          */  \

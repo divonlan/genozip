@@ -229,13 +229,16 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     ref_create_cache_join();
     refhash_create_cache_join();
     
-    // if ZIP consumed more than 2GB, free memory before PIZ. Note: on Windows, freeing memory takes considerable time.
+    // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
+    // Note: on Windows, freeing memory takes considerable time.
+#if defined _WIN32 || defined __APPLE__
     if (buf_get_memory_usage () > (1ULL<<31)) {
-        ref_destroy_reference();
+        ref_destroy_reference(true); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
         kraken_destroy();
         chain_destroy();
         vb_destroy_pool_vbs();
     }
+#endif
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",

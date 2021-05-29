@@ -48,7 +48,7 @@ typedef struct VBlockFASTQ {
 
 #define DATA_LINE(i) ENT (ZipDataLineFASTQ, vb->lines, i)
 
-unsigned fastq_vb_size (void) { return sizeof (VBlockFASTQ); }
+unsigned fastq_vb_size (DataType dt) { return sizeof (VBlockFASTQ); }
 unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
 
 void fastq_vb_release_vb (VBlockFASTQ *vb)

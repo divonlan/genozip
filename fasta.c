@@ -25,13 +25,13 @@ typedef struct {
     uint32_t seq_data_start, seq_len; // regular fasta and make-reference: start & length within vb->txt_data
 } ZipDataLineFASTA;
 
-// IMPORTANT: if changing fields in VBlockFASTA, also update vb_fast_release_vb 
+// IMPORTANT: if changing fields in VBlockFASTA, also update fasta_vb_release_vb 
 typedef struct VBlockFASTA {    
     VBLOCK_COMMON_FIELDS
 
     bool contig_grepped_out;
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB is interpreted as a description, not a comment
-    enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP & PIZ
+    enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP & PIZ (FASTA only, not REF)
 
     uint32_t lines_this_contig;    // ZIP
 
@@ -43,11 +43,17 @@ typedef struct VBlockFASTA {
 
 #define DATA_LINE(i) ENT (ZipDataLineFASTA, vb->lines, (i))
 
-unsigned fasta_vb_size (void) { return sizeof (VBlockFASTA); }
+unsigned fasta_vb_size (DataType dt) 
+{ 
+    return dt == DT_REF && command == PIZ ? sizeof (VBlock) : sizeof (VBlockFASTA); 
+}
+
 unsigned fasta_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTA); }
 
 void fasta_vb_release_vb (VBlockFASTA *vb)
 {
+    if (vb->data_type == DT_REF && command == PIZ) return; // this is actually a VBlock, not VBlockFASTA
+    
     memset ((char *)vb + sizeof (VBlock), 0, sizeof (VBlockFASTA) - sizeof (VBlock)); // zero all data unique to VBlockFASTA
     vb->contexts[FASTA_NONREF].local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
 }

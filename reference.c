@@ -128,8 +128,10 @@ void ref_unload_reference (void)
     external_ref_is_loaded = false;
 }
 
-void ref_destroy_reference (void)
+void ref_destroy_reference (bool destroy_only_if_not_mmap)
 {
+    if (destroy_only_if_not_mmap && ranges_type == RT_CACHED) return;
+
     if (ranges_type == RT_DENOVO) ref_free_denovo_ranges();
 
     buf_destroy (&ranges);
@@ -1192,7 +1194,7 @@ void ref_set_reference (const char *filename, ReferenceType ref_type, bool is_ex
         if (!strcmp (filename, ref_filename)) return; // same file - we're done
 
         // in case a different reference is loaded - destroy it
-        ref_destroy_reference ();
+        ref_destroy_reference (false);
         FREE (ref_filename);
     }
 
@@ -1388,8 +1390,8 @@ void ref_initialize_ranges (RangesType type)
             buf_alloc_old (evb, &genome_cache, genome_nbases / 4 * 2, 1, "genome_cache"); // contains both forward and rev. compliment
         
         else  // RT_CACHED 
-            ASSERT0 (buf_mmap (evb, &genome_cache, ref_get_cache_fn(), "genome_cache"),  // we map the entire file (forward and revese complement genomes) onto genome_cache
-                      "failed to map cache. Please try again");
+            ASSERT0 (buf_mmap (evb, &genome_cache, ref_get_cache_fn(), false, "genome_cache"),  // we map the entire file (forward and revese complement genomes) onto genome_cache
+                     "failed to map cache. Please try again");
 
         // overlay genome and emoneg. we do it this was so we can use just a single file
         buf_set_overlayable (&genome_cache);

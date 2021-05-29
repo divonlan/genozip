@@ -950,7 +950,7 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
         static Buffer old_dict = EMPTY_BUFFER;
         buf_move (vb, &old_dict, vb, &ctx->dict);
 
-        buf_alloc_old (vb, &ctx->dict, old_dict.len, CTX_GROWTH, "contexts->dict");
+        buf_alloc (vb, &ctx->dict, 0, old_dict.len, char, CTX_GROWTH, "contexts->dict");
         ctx->dict.len = old_dict.len;
 
         char *next = ctx->dict.data;

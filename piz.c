@@ -308,7 +308,7 @@ DataType piz_read_global_area (void)
              "%s: ignoring reference file %s because it was not compressed with --reference", z_name, ref_filename);
 
     if (!flag.reading_reference && has_ref_sections) {
-        ref_destroy_reference();     // destroy an old reference, if one is loaded
+        ref_destroy_reference(false);     // destroy an old reference, if one is loaded
         flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
     }
 

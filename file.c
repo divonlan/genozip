@@ -936,10 +936,6 @@ static void file_index_txt (const File *file)
     if (indexing) {
         progress_new_component (file->basename, "Indexing", false);
 
-        ref_destroy_reference();
-        kraken_destroy();
-        chain_destroy();
-        vb_destroy_pool_vbs();
         stream_wait_for_exit (indexing);
 
         progress_finalize_component_time ("Done indexing", DIGEST_NONE);

@@ -9,7 +9,7 @@
 #include "vcf_private.h"
 #include "strings.h"
 
-unsigned vcf_vb_size (void) { return sizeof (VBlockVCF); }
+unsigned vcf_vb_size (DataType dt) { return sizeof (VBlockVCF); }
 unsigned vcf_vb_zip_dl_size (void) { return sizeof (ZipDataLineVCF); }
 bool vcf_vb_has_haplotype_data (VBlockP vb) { return !!((VBlockVCFP)vb)->ht_matrix_ctx; }
 

@@ -50,7 +50,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb);
 // VB stuff
 extern void sam_vb_release_vb();
 extern void sam_vb_destroy_vb();
-extern unsigned sam_vb_size (void);
+extern unsigned sam_vb_size (DataType dt);
 extern unsigned sam_vb_zip_dl_size (void);
 
 // Special - used for SAM & BAM

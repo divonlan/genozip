@@ -48,7 +48,7 @@ typedef struct DataTypeProperties {
     DataType bin_type;                 // the binary equivalent of this textual file - exists for every data type that might have genozip_header.txt_is_bin=true
     enum {NO_RA, RA} has_random_access;
     unsigned line_height;              // how many actual txt file lines are in one seg line (seg lines are counted in lines.len). drop_lines in container_reconstruct_do needs to match the maximum.
-    unsigned (*sizeof_vb)(void);
+    unsigned (*sizeof_vb)(DataType dt);
     unsigned (*sizeof_zip_dataline)(void);
 
     // TXT HEDEAR stuff

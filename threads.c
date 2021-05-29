@@ -79,7 +79,7 @@ static void *threads_signal_handler (void *sigset)
         switch (sig) {
             case SIGSEGV : threads_sigsegv_handler();            break;
             case SIGHUP  : threads_sighup_handler();             break;
-            case SIGUSR1 : buf_display_memory_usage_handler();   break;
+            case SIGUSR1 : buf_show_memory_handler();   break;
             case SIGUSR2 : threads_write_log (false);            break;
             default      : ABORT ("Unexpected signal %s", strsignal (sig));
         }

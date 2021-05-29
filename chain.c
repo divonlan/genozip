@@ -431,7 +431,7 @@ static inline void chain_piz_filter_ingest_alignmet (VBlock *vb)
 {
     mutex_lock (chain_mutex);
 
-    buf_alloc (vb, &chain, 1, 0, ChainAlignment, 2, "chain"); 
+    buf_alloc (NULL, &chain, 1, 0, ChainAlignment, 2, "chain");  // initial allocation is in chain_load
 
     int64_t size = vb->last_int(CHAIN_SIZE);
 

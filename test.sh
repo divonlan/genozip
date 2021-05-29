@@ -815,6 +815,7 @@ batch_make_reference()
     echo "Making a reference"
     local fa_file=data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
     local ref_file=$OUTDIR/output.ref.genozip
+    test_header "$genozip --make-reference $fa_file"
     $genozip --make-reference $fa_file --force -o $ref_file || exit 1
 
     local ref="--reference $ref_file"

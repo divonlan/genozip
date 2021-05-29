@@ -397,7 +397,7 @@ void refhash_initialize (bool *dispatcher_invoked)
     if (!flag.make_reference) {
 
         // attempt to mmap the cache, but if it doesn't exist read from the reference and create the cache
-        bool mapped_cache = buf_mmap (evb, &refhash_buf, refhash_get_cache_fn(), "refhash_buf");
+        bool mapped_cache = buf_mmap (evb, &refhash_buf, refhash_get_cache_fn(), true, "refhash_buf");
         if (!mapped_cache) { 
             // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
             buf_alloc_old (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 

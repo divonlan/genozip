@@ -100,8 +100,8 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     ASSERT (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
     
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool for all fan-outs throughout the execution
-    vb_create_pool (MAX (1, global_max_threads)    // compute thread VBs
-                  + 1                              // txt header VB (for PIZ) or VB for zip_dynamically_set_max_memory (for ZIP)
+    vb_create_pool (MAX ((command == ZIP ? 2 : 1), global_max_threads)    // compute thread VBs (ZIP needs at least 2, one for zip_dynamically_set_max_memory)
+                  + (command == PIZ)               // txt header VB (for PIZ) or 
                   + z_file->max_conc_writing_vbs); // writer thread VBs 
 
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
@@ -150,7 +150,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
                                dd->filename, dd->next_vb_i + (command != ZIP)); // in ZIP, the last VB is empty
 
     // must be before vb_cleanup_memory() 
-    if (flag.show_memory) buf_display_memory_usage (false, dd->max_threads, dd->max_vb_id_so_far);    
+    if (flag.show_memory) buf_show_memory (false, dd->max_threads, dd->max_vb_id_so_far);    
 
     // free memory allocations between files, when compressing multiple non-bound files or 
     // decompressing multiple files. 

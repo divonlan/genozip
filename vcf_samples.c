@@ -205,7 +205,7 @@ static void vcf_seg_ADALL_items (VBlockVCFP vb, Context *ctx, unsigned num_items
 static void vcf_seg_AD_complement_items (VBlockVCFP vb, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
                                          const char **items, const unsigned *item_lens, const int64_t *values,
                                          DictId other_dict_id, const Container *other_con,
-                                         const char my_snips[][32], const unsigned *my_snip_lens)
+                                         char my_snips[][32], unsigned *my_snip_lens)
 {
     // we can use the formula only if AD,F1R1 were encountered in this line, and that they have the number of items as us
     ContextP ad_ctx, other_ctx;

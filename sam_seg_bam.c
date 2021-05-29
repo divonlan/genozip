@@ -146,7 +146,7 @@ static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, i
 static inline void bam_rewrite_cigar (VBlockSAM *vb, uint16_t n_cigar_op, const uint32_t *cigar)
 {
     if (!n_cigar_op) {
-        buf_alloc_old (vb, &vb->textual_cigar, 2, 2, "textual_cigar");
+        buf_alloc (vb, &vb->textual_cigar, 0, 2, char, 2, "textual_cigar");
         NEXTENT (char, vb->textual_cigar) = '*';
         goto finish;
     }

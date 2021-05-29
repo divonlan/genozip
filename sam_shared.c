@@ -24,7 +24,7 @@ const uint8_t cigar_lookup_bam[16] = {  // note: bit 4 (0x10) is set for all val
     [0/*M*/]=0x16, [7/*=*/]=0x16, [8/*X*/]=0x16  // consume both query and reference
 };
 
-unsigned sam_vb_size (void) { return sizeof (VBlockSAM); }
+unsigned sam_vb_size (DataType dt) { return sizeof (VBlockSAM); }
 unsigned sam_vb_zip_dl_size (void) { return sizeof (ZipDataLineSAM); }
 
 void sam_vb_release_vb (VBlockSAM *vb)

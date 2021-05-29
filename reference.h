@@ -65,7 +65,7 @@ extern bool ref_is_reference_loaded (void);
 extern void ref_set_reference (const char *filename, ReferenceType ref_type, bool is_explicit);
 extern void ref_set_ref_file_info (Digest md5, const char *fasta_name);
 extern void ref_unload_reference (void);
-extern void ref_destroy_reference (void);
+extern void ref_destroy_reference (bool destroy_only_if_not_mmap);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed);
 extern void ref_consume_ref_fasta_global_area (void);

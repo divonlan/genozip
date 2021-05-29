@@ -47,7 +47,7 @@ extern uint32_t vcf_header_get_num_samples (void);
 extern void vcf_vb_release_vb();
 extern void vcf_vb_destroy_vb();
 extern void vcf_vb_cleanup_memory();
-extern unsigned vcf_vb_size (void);
+extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 

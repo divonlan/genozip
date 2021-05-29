@@ -31,6 +31,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Mutex vb_ready_for_compute_thread; /* threads_create finished initializeing this VB */\
     \
     DataType data_type;        /* type of this VB */\
+    DataType data_type_alloced;/* type of this VB was allocated as. could be different that data_type, see vb_get_vb */\
     \
     /* memory management  */\
     Buffer buffer_list;        /* a buffer containing an array of pointers to all buffers allocated for this VB (either by the main thread or its compute thread) */\
