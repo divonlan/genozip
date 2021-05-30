@@ -643,7 +643,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
         zf_ctx->flags = vb_ctx->flags; // vb_1 flags will be the default flags for this context, used by piz in case there are no b250 or local sections due to all_the_same. see zip_generate_b250_section and piz_read_all_ctxs
 
     uint64_t ol_len = vb_ctx->ol_nodes.len;
-    bool has_count = zf_ctx->counts_section;
+    bool has_count = zf_ctx->counts_section && !merging_vb->is_rejects_vb; // don't count rejects VB - these are duplicate lines counted in the normal VBs.
 
     if (flag.rejects_coord != DC_PRIMARY) // we don't include ##primary_only VBs as they are not in the primary reconstruction, but we do include ##luft_only
         zf_ctx->txt_len += vb_ctx->txt_len; // for stats
@@ -1371,6 +1371,8 @@ static void ctx_show_counts (Context *zf_ctx)
     int64_t total=0;
     for (uint32_t i=0; i < zf_ctx->counts.len; i++) {
         int64_t count = *ENT (int64_t, zf_ctx->counts, i);
+        if (!count) continue;
+
         total += count;
         NEXTENT (ShowCountsEnt, show_counts_buf) = (ShowCountsEnt){ 
             .count = count,
@@ -1381,12 +1383,12 @@ static void ctx_show_counts (Context *zf_ctx)
     ARRAY (ShowCountsEnt, counts, show_counts_buf);
     qsort (counts, counts_len, sizeof (ShowCountsEnt), show_counts_cmp);
 
-    iprintf ("Showing counts of %s (did_i=%u). Total sequences=%"PRId64" Number of taxids=%u\n", zf_ctx->name, zf_ctx->did_i, total, (unsigned)counts_len);    
+    iprintf ("Showing counts of %s (did_i=%u). Total items=%"PRId64" Number of categories=%u\n", zf_ctx->name, zf_ctx->did_i, total, (unsigned)counts_len);    
 
     if (total)
         for (uint32_t i=0; i < counts_len; i++) 
             iprintf ("%s\t%"PRId64"\t%-4.2f%%\n", counts[i].snip, counts[i].count, 
-                     100 * (double)counts[i].count / (double)total);
+                        100 * (double)counts[i].count / (double)total);
 
     if (exe_type == EXE_GENOCAT) exit_ok;
 }

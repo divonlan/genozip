@@ -59,6 +59,10 @@ void vcf_seg_initialize (VBlock *vb_)
     vb->contexts[VCF_POS]     .flags.store = STORE_INT;   // since v12
     vb->contexts[VCF_oPOS]    .flags.store = STORE_INT;   // used by vcf_piz_luft_END
 
+    // counts sections
+    vb->contexts[VCF_oSTATUS] .counts_section = true;
+    vb->contexts[VCF_COORDS]  .counts_section = true;
+
     // consolidate stats
     vb->contexts[VCF_oREFALT].st_did_i = vb->contexts[VCF_LIFT_REF].st_did_i = VCF_REFALT;
     vb->contexts[VCF_oPOS].st_did_i = vb->contexts[VCF_COPYPOS].st_did_i = VCF_POS;

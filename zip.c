@@ -704,6 +704,8 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         vb->vb_coords = !z_dual_coords ? DC_PRIMARY
                       : flag.rejects_coord == DC_NONE ? DC_BOTH
                       : flag.rejects_coord;
+
+        vb->is_rejects_vb = (flag.rejects_coord != DC_NONE);
     }
 
     if (vb->txt_data.len)   // we found some data 

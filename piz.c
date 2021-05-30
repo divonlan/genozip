@@ -120,11 +120,11 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     bool skip = exe_type == EXE_GENOCAT && dict_id.num && dict_id.num != dict_id_fields[CHROM] && (!flag.luft || dict_id.num != dict_id_fields[ODID(oCHROM)]) && (
     
     // sometimes we don't need dictionaries. but we always load CHROM.
-        flag.genocat_no_dicts
+        (flag.genocat_no_dicts && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
 
     // if show_counts - we only need the requested section and CHROM (note: not true for dump_one_b250_dict_id,
     // as we need to reconstruct to dump it)
-    ||  (flag.show_one_counts.num        && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
+    ||  (flag.show_one_counts.num && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
 
     // if --counts, we filter here - TOPLEVEL only - unless there's a skip_section function which will do the filtering
     ||  (flag.count && !DTPZ(is_skip_section) && dict_id.num != dict_id_fields[DTFZ(toplevel)]) 

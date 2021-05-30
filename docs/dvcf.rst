@@ -18,11 +18,15 @@ See also:
     Dual-coordinates VCF Specification <dvcf-spec>
     Chain files <dvcf-chain-files>
 
+**At a glance**
+
 Dual coordinates VCF files (or DVCFs), are VCF files that contain coordinates in two coordinate systems concurrently, for example, GRCh37 and GRCh38. A DVCF can be *rendered* in either *Primary* coordinates or *Luft* coordinates (*Luft* being our made-up past particile of *Lift*). 
 
 Both *renditions* are standard-compliant VCF files, and both contain precisely the same information, with the only difference being how the information is presented.
 
 Crucially, since both renditions contain all the information needed for rendering the file in both coordinate systems, the file in either rendition can be processed through any bioinformatics tool or pipeline, and still maintain its dual coordinates. In other words, an analytics pipeline may now have some steps that operate on the file in one coordinate system, and other steps operate in other coordinate system, and the same data can flow through these steps seemlessly.
+
+**An example - (1) using --chain to create a DVCF**
 
 Let's walk through an example:
 
@@ -69,6 +73,8 @@ Note that the first two steps are preparation steps that need to be executed onl
     genozip mydata.vcf.gz --chain GRCh37_to_GRCh38.chain.genozip
 
 Note that as usual with ``genozip``, .vcf .vcf.gz .vcf.bz2 and .vcf.xz are all accepted. Genozip does not require the VCF file to be indexed.
+
+**An example - (2) rendering the DVCF in Primary and Luft coordinates**
 
 Now, we have a dual-coordinate VCF file: ``mydata.vcf.genozip``. We can render it in either coordinate:
 
@@ -138,6 +144,8 @@ Now back to the Primary rendition - take a look the variant with ID=4. It has an
 
 In the Luft rendition, this Primary-only variant, ID=4, is indeed missing in the VCF data lines, which now contain only two variants. However, notice that it still survives as a meta-information line with the key ``##primary_only``.
 
+**An example - (3) applying bioinformatics tools to a DVCF rendition**
+
 Now, let's take our Luft rendition VCF ``mydata.38.vcf`` and merge it (using ``bcftools merge`` in this example) with another VCF file, ``person3.vcf``, which is in GRCh38 coordinates and has a single sample, Person3. Note that ``person3.vcf`` is *not* a DVCF. ``person3.vcf`` contains 2 variants on chr1: ID=3 (also present in ``mydata.38.vcf``), and ID=2 (not present in ``mydata.38.vcf``):
 
 ::
@@ -194,6 +202,8 @@ The merged file will be a DVCF file looking like this:
     chr1    248466248       3       T       A       4.6     PASS    PRIM=1,329162,A,-;AN=6;AC=1     GT:AD:AF:PL:GP  1/0:9,28:0.7:0,0,36:.   0/0:.:.:.:.     0/0:30,3:.:.:37.9,14.9,0.14
 
 The merged file, as expected, is in Luft (i.e. GRCh38) coordinates, and the new variant, ID=2, has no DVCF INFO tag (i.e. no INFO/PRIM).
+
+**An example - (4) the modified file is still a DVCF**
 
 Now let us genozip the merged file and render it first in Luft coordinates:
 
@@ -282,18 +292,20 @@ Also, look at the variant ID=3 - this is the variant with the REF⇆ALT switch. 
 
 This demonstrates how a VCF file can continue to evolve, adding and dropping variants, adding, removing or modifying INFO and FORMAT fields, all while continuing to maintain both coordinates, renderable in either Primary or Luft coordinates as required by any particular step in an analysis process.
 
-Finally, let's look at ``--show-dvcf`` - a useful tool for getting visibility into how Genozip handled each variant. It may also be used in combination with ``--luft``:
+**--show-dvcf - variant by variant info**
+
+Now let's look at a couple of interesting analytics: ``--show-dvcf`` is a useful tool for getting visibility into how Genozip handled each variant. It may also be used in combination with ``--luft``:
 
 ::
 
-    > genocat newdata.38.vcf.genozip --show-dvcf --header-one
+    > genocat merged.38.vcf.genozip --show-dvcf --header-one
 
     #COORD  oSTATUS  CHROM   POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  Person1 Person2 Person3
     BOTH    OKRefSame       1       10285   1       T       C       4.4     PASS    AN=4;AC=3;LUFT=chr1,10285,T,-   GT:AD:AF:PL     0/1:31,18:0.367:37,0,46 1/1:.:.:.       ./.:.:.:.
     BOTH    OkRefAltSwitch  1       329162  3       A       T       4.6     PASS    AN=6;AC=5;LUFT=chr1,248466248,T,-       GT:AD:AF:PL:GP  0/1:28,9:0.3:36,0,0:.   1/1:.:.:.:.       1/1:3,30:.:.:0.14,14.9,37.9
     PRIM    RefTooLong      1       366043  4       CA      A       100     PASS    Lrej=RefTooLong GT      1|0     0|0
 
-    > genocat newdata.38.vcf.genozip --show-dvcf --header-one --luft
+    > genocat merged.38.vcf.genozip --show-dvcf --header-one --luft
 
     #COORD  oSTATUS  CHROM   POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  Person1 Person2 Person3
     BOTH    OKRefSame       chr1    10285   1       T       C       4.4     PASS    AN=4;AC=3;PRIM=1,10285,T,-      GT:AD:AF:PL     0/1:31,18:0.367:37,0,46 1/1:.:.:.       ./.:.:.:.
@@ -303,3 +315,24 @@ Finally, let's look at ``--show-dvcf`` - a useful tool for getting visibility in
 Two columns were added at the start of each variant line - the first states the coordinates of the variant - Primary-only, Luft-only or Both coordinates. The second is the oSTATUS, states how the variant was handled. Dual-coordinate variants ("BOTH") have an oStatus of either ``OKRefSame`` indicating that the REF is the same (or reverse-complemented in XSTRAND=X) in both coordinates, or ``OkRefAltSwitch`` indicating the REF and ALT are switched between the two coordinates. At present, a variant with a REF change other than REF⇆ALT switch, cannot be lifted by Genozip and will be a Primary-only or Luft-only variant.
 
 More inforation about how Genozip *lifts* and *cross-renders* each field can found here: :ref:`Rendering a DVCF <dvcf-rendering>`
+
+**--show-counts - summary statistics**
+
+To see summary statistics of how variants were handled, we can use --show-counts (this works both with genozip and genocat):
+
+::
+
+    > genocat --show-counts=o\$TATUS merged.38.vcf.genozip
+    
+    Showing counts of o$TATUS (did_i=16). Total items=4 Number of categories=4
+    AddedVariant    1       25.00%
+    RefTooLong      1       25.00%
+    OKRefSame       1       25.00%
+    OkRefAltSwitch  1       25.00%
+
+    > genocat --show-counts=COORDS merged.38.vcf.genozip                                                                                                                             
+
+    Showing counts of COORDS (did_i=15). Total items=4 Number of categories=3
+    BOTH    2       50.00%
+    LUFT    1       25.00%
+    PRIM    1       25.00%

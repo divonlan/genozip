@@ -137,7 +137,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint32_t pos_aln_i;        /* ZIP: chain alignment of POS (used to compare to that of END) */\
     Buffer lo_rejects[2];      /* ZIP generating a dual-coordinates file: txt lines rejected for liftover */ \
     int32_t reject_bytes;      /* ZIP of a Luft file: number of bytes of reject data in this VB (data originating from ##primary_only/##luft_only) */ \
-    bool is_rejects_vb;        /* PIZ: this is a VB of rejects variants for header ##primary_only/##luft_only */ \
+    bool is_rejects_vb;        /* PIZ/ZIP: this is a VB of rejects variants for header ##primary_only/##luft_only */ \
     bool is_unsorted[2];       /* ZIP: line order of this VB[primary, luft] is unsorted */ \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\

@@ -519,8 +519,8 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_1)
     char format[20];
     double af;
 
-    // if we're validating a FORMAT field with --chain (in vcf_seg_validate_luft_trans_one_sample) - accept  a valid scientific notation
-    // as it will be converted to normal notation in vcf_seg_one_sample (note: this is 100% as we are more strict)
+    // if we're validating a FORMAT field with --chain (in vcf_seg_validate_luft_trans_one_sample, if REF<>ALT) - accept a valid scientific notation
+    // as it will be converted to normal notation in vcf_seg_one_sample
     if (validate_only && chain_is_loaded && dict_id_is_vcf_format_sf (ctx->dict_id)) {
         double af;
         if (str_scientific_to_decimal (recon, recon_len, NULL, NULL, &af) && af >= 0.0 && af <= 1.0) return true; // scientific notation in the valid range
@@ -759,9 +759,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
 
     ctx->line_is_luft_trans = false; // initialize
     
-    // --chain: if this is RendAlg=A_1 subfield, convert a eg 4.31e-03 to e.g. 0.00431. This is to
+    // --chain: if this is RendAlg=A_1 subfield in a REF<>ALT variant, convert a eg 4.31e-03 to e.g. 0.00431. This is to
     // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
-    if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && str_scientific_to_decimal (value, value_len, modified, &modified_len, NULL))
+    if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && last_ostatus == LO_OK_REF_ALT_SWTCH && 
+        str_scientific_to_decimal (value, value_len, modified, &modified_len, NULL))
         ADJUST_FOR_MODIFIED;
         
     // Translatable item on a Luft line: attempt to lift-back the value, so we can seg it as primary
