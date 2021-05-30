@@ -40,7 +40,7 @@ extern void zfile_output_processed_vb (VBlockP vb);
 // PIZ side
 // --------
 
-extern bool zfile_read_genozip_header (char *created);
+extern bool zfile_read_genozip_header (SectionHeaderGenozipHeader *header);
 
 extern SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, SectionType expected_sec_type);
 

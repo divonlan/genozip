@@ -256,38 +256,16 @@ StrText str_uint_commas (int64_t n)
     s.s[len] = '\0'; // string terminator
     return s;
 }
-/*
-unsigned str_get_float_format (const char *float_str, unsigned float_str_len, char *str)
-{
-    int decimal_digits=-1;
-    for (int i=(int)float_str_len-1; i >= 0; i--)
-        if (float_str[i] == '.') {            
-            if (decimal_digits >= 0) return 0; // more than one '.'
-            decimal_digits = (float_str_len-1) - i;
-        }
-        else 
-            if (!IS_DIGIT (float_str[i])) return 0; // not a digit
 
-    unsigned next=0;
-    str[next++] = '%';
-    next += str_int (float_str_len, &str[next]);    
-    str[next++] = '.';
-    next += str_int (decimal_digits, &str[next]);
-    str[next++] = 'f';
-    str[next] = 0;
-
-    return next;
-}
-*/
 // returns 32 bit float value and/or format: "3.123" -> "%5.3f" ; false if not a simple float
 bool str_get_float (const char *float_str, unsigned float_str_len, 
-                    float *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len) // optional outs (format allocated by caller)
+                    double *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len) // optional outs (format allocated by caller)
 {
     // TODO: add support for %e and %E (matinsa/exponent) formats
 
     bool in_decimals=false;
     unsigned num_decimals=0;
-    float val = 0;
+    double val = 0;
     bool is_negative = (float_str[0] == '-');
 
     for (unsigned i=is_negative; i < float_str_len; i++) {
@@ -320,8 +298,8 @@ bool str_get_float (const char *float_str, unsigned float_str_len,
     }
 
     if (value) {
-        static const float pow10[13] = { 1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0, 10000000.0, 100000000.0, 1000000000.0, 
-                                         10000000000.0, 100000000000.0, 1000000000000.0 };
+        static const double pow10[16] = { 1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0, 10000000.0, 100000000.0, 1000000000.0, 
+                                          10000000000.0, 100000000000.0, 1000000000000.0, 10000000000000.0, 100000000000000.0, 1000000000000000.0 };
                                         
         if (num_decimals >= sizeof (pow10) / sizeof (pow10[0])) return false; // too many decimals
 
@@ -329,6 +307,53 @@ bool str_get_float (const char *float_str, unsigned float_str_len,
     }
 
     return true;
+}
+
+// if value is a float in scientific notation eg 4.31e-03, it is converted to eg 0.00431 and true is returned. otherwise false is returned.
+bool str_scientific_to_decimal (const char *float_str, unsigned float_str_len, char *modified, unsigned *modified_len /* in / out */, double *value)
+{
+    // short circuit normal floats eg 0.941
+    if (float_str_len < 5) return false; // scientific notation has a minimum of 5 characters eg 3e-05 
+    
+    bool negative = (float_str[0] == '-');
+    bool has_decimal = float_str[negative+1] == '.';
+    if (has_decimal && float_str_len < 7 + negative) return false; // short circuit common normal numbers eg 0.885
+    if (!has_decimal && float_str[negative+1] != 'e' && float_str[negative+1] != 'E') return false; // expecting [-]3. or [-]3e or [-]3E (single digit mantissa)
+
+    SAFE_NUL (&float_str[float_str_len]);  // no "return" until SAFE_RESTORE
+
+        int mantissa_len = strcspn (float_str, "eE");
+        if (mantissa_len == float_str_len) goto not_scientific_float; // no e or E
+        
+        int exp_len = float_str_len - mantissa_len - 1;
+        if (exp_len < 3) goto not_scientific_float; // not standard notiation, expecting eg e-02
+
+        char *after;
+        int exp = strtod (&float_str[mantissa_len+1], &after); 
+        if (after != float_str + float_str_len) goto not_scientific_float;
+
+        double f = atof (float_str);
+
+    SAFE_RESTORE;
+
+    if (exp > -1) return false; // this function currently works only for 0.xxx numbers (all digits after the decimal point). TO DO: remove limitation
+
+    int decimal_digits = mantissa_len - negative - has_decimal + (-exp) - 1; // eg. -2.30e-02 --> -0.0230  mantissa_len=5 exp=-2 --> width=7
+    
+    if (modified) {
+        if (*modified_len < decimal_digits + 2 + negative) return false; // not enough room (+1 for \0)
+        
+        sprintf (modified, "%.*f", decimal_digits, f);
+        *modified_len = decimal_digits + 2 + negative;
+    }
+
+    if (value) *value = f;
+
+    return true;
+
+not_scientific_float:
+    SAFE_RESTORE;
+    return false;
 }
 
 StrText str_pointer (const void *p)

@@ -384,6 +384,10 @@ batch_dvcf()
     # prepare chain file
     $genozip -e $GRCh38 ${chain%%.genozip} -fq 
 
+    # test explicit reference
+    test_header "${files[0]} - DVCF test - explicit reference"
+    $genozip test/${files[0]} -fo $output -C $chain -e $GRCh38 || exit 1
+
     for file in ${files[@]}; do
         test_header "$file - DVCF test"
 

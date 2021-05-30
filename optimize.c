@@ -68,10 +68,8 @@ bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_
     return true;
 }
 
-bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len /* in / out */)
 {
-    if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
-
     char *writer = optimized_snip;
     unsigned digit_i=0;
     for (unsigned i=0; i <= len; i++) { 
@@ -80,7 +78,7 @@ bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_
 
             // optimize might actually increase the length in edge cases, e.g. -.1 -> -0.1, so we
             // make sure we have enough room for another number
-            if ((writer - optimized_snip) + MAX_NUM_LEN > OPTIMIZE_MAX_SNIP_LEN) return false;
+            if ((writer - optimized_snip) + MAX_NUM_LEN > *optimized_snip_len) return false;
 
             unsigned one_number_len;
             bool ret = optimize_float_2_sig_dig (&snip[i-digit_i], digit_i, 0, writer, &one_number_len);
@@ -99,8 +97,6 @@ bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_
 
 bool optimize_vcf_pl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
-    if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
-
     char *writer = optimized_snip;
     unsigned digit_i=0;
     for (unsigned i=0; i <= len; i++) { 

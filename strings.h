@@ -70,7 +70,9 @@ extern StrText str_pointer (const void *p);
 extern StrText str_time (void);
 
 #define FLOAT_FORMAT_LEN 12
-extern _Bool str_get_float (const char *float_str, unsigned float_str_len, float *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len);
+extern _Bool str_get_float (const char *float_str, unsigned float_str_len, double *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len);
+
+extern bool str_scientific_to_decimal (const char *float_str, unsigned float_str_len, char *modified, unsigned *modified_len, double *value);
 
 extern unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char sep, const char **items, unsigned *item_lens, _Bool exactly, const char *enforce_msg);
 

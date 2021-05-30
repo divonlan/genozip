@@ -586,7 +586,8 @@ void chain_load (void)
     buf_alloc (evb, &chain, 0, 1000, ChainAlignment, 1, "chain"); // must be allocated by main thread
     
     z_file = file_open (flag.reading_chain, READ, Z_FILE, DT_CHAIN);    
-    zfile_read_genozip_header (0);
+    SectionHeaderGenozipHeader header;
+    zfile_read_genozip_header (&header);
     
     ASSINP (z_file->data_type == DT_CHAIN, "expected %s to be a genozip'ed chain file, but its a %s file. Tip: compress the chain with \"genozip --input chain\"", 
             z_name, dt_name (z_file->data_type));
@@ -607,6 +608,11 @@ void chain_load (void)
     SAVE_VALUE (z_file); // actually, read the reference first
     ref_load_external_reference (false);
     RESTORE_VALUE (z_file);
+
+    // test for matching MD5 between external reference and reference in the chain file header (doing it here, because reference is read after chain file, if its explicitly specified)
+    ASSERT (digest_is_equal (header.ref_file_md5, ref_file_md5),
+            "%s: Bad reference file:\n%s (MD5=%s) was used for compressing the chain file\n%s (MD5=%s) has a different MD5",
+            z_name, header.ref_filename, digest_display_ex (header.ref_file_md5, DD_MD5).s, ref_filename, digest_display_ex (ref_file_md5, DD_MD5).s);
 
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines

@@ -6,8 +6,6 @@
 #ifndef OPTIMIZE_INCLUDED
 #define OPTIMIZE_INCLUDED
 
-#define OPTIMIZE_MAX_SNIP_LEN 300
-
 #include "genozip.h"
 
 extern bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_at /* 0 if no cap */,

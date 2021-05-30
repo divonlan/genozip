@@ -415,7 +415,7 @@ static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const ch
 static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
 {
     int64_t dosage = (vb->gt_ctx && vcf_has_value_in_sample_(vb, vb->gt_ctx)) ? vb->gt_ctx->last_value.i : -1; // dosage store here by vcf_seg_FORMAT_GT
-    float ds_val;
+    double ds_val;
     unsigned format_len;
     char snip[FLOAT_FORMAT_LEN + 20] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
 
@@ -792,14 +792,24 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         DictId dict_id = samples->items[i].dict_id;
         Context *ctx = ctxs[i], *other_ctx;
 
-        unsigned opt_snip_len = 0;
-        char opt_snip[OPTIMIZE_MAX_SNIP_LEN];
+        unsigned modified_len = sf_len[i] + 20;
+        char modified[modified_len];
 
-#       define SEG_OPTIMIZED do { seg_by_ctx (vb, opt_snip, opt_snip_len, ctx, opt_snip_len); \
-                                  int32_t shrinkage = (int)sf_len[i] - (int)opt_snip_len;     \
+#       define SEG_OPTIMIZED do { seg_by_ctx (vb, modified, modified_len, ctx, modified_len); \
+                                  int32_t shrinkage = (int)sf_len[i] - (int)modified_len;     \
                                   vb->recon_size      -= shrinkage;                           \
                                   vb->recon_size_luft -= shrinkage; } while (0)
-        
+
+        // --chain: if this is RendAlg=A_1 subfield, convert a eg 4.31e-03 to e.g. 0.00431. This is to
+        // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
+        if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && str_scientific_to_decimal (sf[i], sf_len[i], modified, &modified_len, NULL)) {
+            int32_t shrinkage = (int32_t)sf_len[i] - (int32_t)modified_len; // possibly negative = growth
+            vb->recon_size      -= shrinkage; 
+            vb->recon_size_luft -= shrinkage; 
+            sf[i] = modified; 
+            sf_len[i] = modified_len; 
+        }
+
         if (!sf_len[i])
             seg_by_ctx (vb, "", 0, ctx, 0); // generates WORD_INDEX_EMPTY_SF
 
@@ -817,15 +827,15 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
 
         // ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
         else if (flag.optimize_PL && dict_id.num == dict_id_FORMAT_PL && 
-            optimize_vcf_pl (sf[i], sf_len[i], opt_snip, &opt_snip_len)) 
+            optimize_vcf_pl (sf[i], sf_len[i], modified, &modified_len)) 
             SEG_OPTIMIZED;
 
         else if (flag.optimize_GL && dict_id.num == dict_id_FORMAT_GL &&
-            optimize_vector_2_sig_dig (sf[i], sf_len[i], opt_snip, &opt_snip_len))
+            optimize_vector_2_sig_dig (sf[i], sf_len[i], modified, &modified_len))
             SEG_OPTIMIZED;
     
         else if (flag.optimize_GP && dict_id.num == dict_id_FORMAT_GP &&  
-            optimize_vector_2_sig_dig (sf[i], sf_len[i], opt_snip, &opt_snip_len))
+            optimize_vector_2_sig_dig (sf[i], sf_len[i], modified, &modified_len))
             SEG_OPTIMIZED;
 
         // note: GP and PL - for non-optimized, I tested segging as A_R_G and seg_array - they are worse or not better than the default. likely because the values are correlated.

@@ -457,11 +457,13 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
     RESTORE_VALUE (txt_file);
 }
 
-void TEST() {
+void TEST(char *str) {
 }
 
 int main (int argc, char **argv)
 {    
+    //TEST ("3.2E-003");
+    
     info_stream = stdout; // may be changed during intialization
     profiler_initialize();
     buf_initialize(); 

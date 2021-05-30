@@ -434,20 +434,18 @@ bool seg_integer_or_not_do (VBlockP vb, ContextP ctx,
 bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
-    float value;
     char snip[1 + FLOAT_FORMAT_LEN];
     unsigned format_len;
 
     // case: its an float
     if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        str_get_float (this_value, this_value_len, &value, &snip[2], &format_len)) {
+        str_get_float (this_value, this_value_len, &ctx->last_value.f, &snip[2], &format_len)) {
 
         ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
-        ctx->last_value.f = (double)value;
 
         // add to local
         buf_alloc (vb, &ctx->local, 1, vb->lines.len, float, CTX_GROWTH, "contexts->local");
-        NEXTENT (float, ctx->local) = value;
+        NEXTENT (float, ctx->local) = (float)ctx->last_value.f; // 32 bit
         
         // add to b250
         snip[0] = SNIP_LOOKUP;

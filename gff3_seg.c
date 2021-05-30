@@ -156,8 +156,6 @@ badly_formatted:
 
 bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len)
 {
-    char optimized_snip[OPTIMIZE_MAX_SNIP_LEN]; // used for 1. fields that are optimized 2. fields translated luft->primary
-
     // ID - this is a sequential number (at least in GRCh37/38)
     if (dict_id.num == dict_id_ATTR_ID) {
         Context *ctx = ctx_get_ctx (vb, dict_id);
@@ -242,7 +240,9 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **t
     }
 
     // Optimize Variant_freq
-    unsigned optimized_snip_len;
+    unsigned optimized_snip_len = *this_value_len + 20;
+    char optimized_snip[optimized_snip_len]; // used for 1. fields that are optimized 2. fields translated luft->primary
+
     if (flag.optimize_Vf && (dict_id.num == dict_id_ATTR_Variant_freq) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
         

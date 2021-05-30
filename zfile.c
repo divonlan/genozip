@@ -600,19 +600,19 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
                                    flag.reading_chain ? REF_LIFTOVER : REF_EXTERNAL, false);
             }
             else 
-                ASSINP (flag.genocat_no_ref_file, "%s: please use --reference specify the current path to reference file with which %s was compressed (original path was %s)",
-                        global_cmd, z_name, header->ref_filename);
+                ASSINP (flag.genocat_no_ref_file, "Please use --reference specify the path to the LUFT (target) coordinates reference file. Original path was %s",
+                        header->ref_filename);
         }
 
         // test for matching MD5 between specified external reference and reference in the header
-        ASSERT (!flag.explicit_ref || (!has_ref || digest_is_equal (header->ref_file_md5, ref_file_md5)),
+        ASSERT (!flag.explicit_ref || flag.reading_chain || (!has_ref || digest_is_equal (header->ref_file_md5, ref_file_md5)),
                  "%s: Bad reference file:\n%s (MD5=%s) was used for compressing\n%s (MD5=%s) has a different MD5",
-                 z_name, header->ref_filename, digest_display (header->ref_file_md5).s, ref_filename, digest_display (ref_file_md5).s);
+                 z_name, header->ref_filename, digest_display_ex (header->ref_file_md5, DD_MD5).s, ref_filename, digest_display_ex (ref_file_md5, DD_MD5).s);
     }
 }
 
 // returns false if file should be skipped
-bool zfile_read_genozip_header (char *created) // optional outs
+bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optional outs
 {
     // read the footer from the end of the file
     if (file_get_size (z_file->name) < sizeof(SectionFooterGenozipHeader) ||
@@ -645,7 +645,8 @@ bool zfile_read_genozip_header (char *created) // optional outs
     zfile_read_section_do (z_file, evb, 0, &evb->z_data, "genozip_header", SEC_GENOZIP_HEADER, &dummy_sl, sizeof_genozip_header, __FUNCTION__, __LINE__);
 
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
-
+    if (out_header) *out_header = *header;
+    
     ASSERTGOTO (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION,
                 "Error: %s cannot be opened because it was compressed with a newer version of genozip (version %u) while the version you're running is older (version %s).\n"
                 "You might want to consider upgrading genozip to the newest version.\n",
@@ -709,8 +710,6 @@ bool zfile_read_genozip_header (char *created) // optional outs
     
     ASSINP (!flag.test || !digest_is_zero(header->digest_bound), 
             "--test cannot be used wih %s, as it was compressed without a digest. See https://genozip.com/digest.html", z_name);
-
-    if (created) memcpy (created, header->created, FILE_METADATA_LEN);
 
     zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", 0, SEC_GENOZIP_HEADER);
     z_file->section_list_buf.len /= sizeof (SectionEnt); // fix len

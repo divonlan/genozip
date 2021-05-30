@@ -517,17 +517,24 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_1)
     if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
 
     char format[20];
-    float af;
+    double af;
+
+    // if we're validating a FORMAT field with --chain (in vcf_seg_validate_luft_trans_one_sample) - accept  a valid scientific notation
+    // as it will be converted to normal notation in vcf_seg_one_sample (note: this is 100% as we are more strict)
+    if (validate_only && chain_is_loaded && dict_id_is_vcf_format_sf (ctx->dict_id)) {
+        double af;
+        if (str_scientific_to_decimal (recon, recon_len, NULL, NULL, &af) && af >= 0.0 && af <= 1.0) return true; // scientific notation in the valid range
+    }
 
     // if item format is inconsistent with AF being a probability value - we won't translate it
-    if (!str_get_float (recon, recon_len, &af, format, NULL) || af < 0 || af > 1) 
+    if (!str_get_float (recon, recon_len, &af, format, NULL) || af < 0.0 || af > 1.0) 
         return false;
     
     if (validate_only) return true; 
 
     vb->txt_data.len -= recon_len;
-    char af_str[30];
-    sprintf (af_str, format, 1 - af);
+    char af_str[50];
+    sprintf (af_str, format, 1.0 - af);
     RECONSTRUCT (af_str, strlen (af_str)); // careful not to use bufprintf as it adds a \0 and we are required to translate in-place for all FORMAT fields
     
     return true;
@@ -734,30 +741,36 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     #define CALL_WITH_FALLBACK(f) do { if (f) seg_by_ctx ((VBlockP)vb, value, value_len, ctx, value_len); \
                                        not_yet_segged = false; } while(0) 
 
-    char modified_snip[OPTIMIZE_MAX_SNIP_LEN]; // used for 1. fields that are optimized 2. fields translated luft->primary
-    unsigned modified_snip_len;
+    unsigned modified_len = value_len + 20;
+    char modified[modified_len]; // used for 1. fields that are optimized 2. fields translated luft->primary. A_1 transformed 4.321e-03->0.004321
+    
     Context *ctx = ctx_get_ctx (vb, dict_id), *other_ctx = NULL;
     bool not_yet_segged = true;
     
-    // note: since we use modified_snip for both optimization and luft_back - we currently don't support
+    // note: since we use modified for both optimization and luft_back - we currently don't support
     // subfields having both translators and optimization. This can be fixed if needed.
-    #define ADJUST_FOR_OPTIMIZED do { \
-        int32_t shrinkage = (int32_t)value_len - (int32_t)modified_snip_len;\
+    #define ADJUST_FOR_MODIFIED do { \
+        int32_t shrinkage = (int32_t)value_len - (int32_t)modified_len;\
         vb->recon_size -= shrinkage; \
         vb->recon_size_luft -= shrinkage; \
-        value = modified_snip; \
-        value_len = modified_snip_len; \
+        value = modified; \
+        value_len = modified_len; \
     } while(0)
 
     ctx->line_is_luft_trans = false; // initialize
     
+    // --chain: if this is RendAlg=A_1 subfield, convert a eg 4.31e-03 to e.g. 0.00431. This is to
+    // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
+    if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && str_scientific_to_decimal (value, value_len, modified, &modified_len, NULL))
+        ADJUST_FOR_MODIFIED;
+        
     // Translatable item on a Luft line: attempt to lift-back the value, so we can seg it as primary
     if (vb->line_coords == DC_LUFT && needs_translation (ctx)) {
 
         // If cross-rendering to Primary is successful - proceed to Seg this value in primary coords, and assign a translator for reconstructing if --luft
-        if (vcf_lo_seg_cross_render_to_primary (vb, ctx, value, value_len, modified_snip, &modified_snip_len)) {
-            value = modified_snip; 
-            value_len = modified_snip_len; 
+        if (vcf_lo_seg_cross_render_to_primary (vb, ctx, value, value_len, modified, &modified_len)) {
+            value = modified; 
+            value_len = modified_len; 
             ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
         } 
 
@@ -779,8 +792,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
 
     // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
     // Optimize VQSLOD
-    if (dict_id.num == dict_id_INFO_VQSLOD && flag.optimize_VQSLOD && optimize_float_2_sig_dig (value, value_len, 0, modified_snip, &modified_snip_len)) 
-        ADJUST_FOR_OPTIMIZED;
+    if (dict_id.num == dict_id_INFO_VQSLOD && flag.optimize_VQSLOD && optimize_float_2_sig_dig (value, value_len, 0, modified, &modified_len)) 
+        ADJUST_FOR_MODIFIED;
     
     // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
     // END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
