@@ -373,7 +373,7 @@ static TranslatorId vcf_header_set_luft_trans (const char *id, unsigned id_len, 
     if (luft_trans == TRANS_ID_UNKNOWN) 
         luft_trans = (number_len==1) ? vcf_lo_luft_trans_id (dict_id, *number) : TRANS_ID_NONE;
 
-    ctx_add_new_zf_ctx_from_txtheader (dict_id, id, id_len, luft_trans);
+    ctx_add_new_zf_ctx_from_txtheader (dict_id, luft_trans);
 
     return luft_trans;
 }

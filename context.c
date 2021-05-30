@@ -567,7 +567,7 @@ finish:
 }
 
 // ZIP only: called when inspecting a txtheader for assigning liftover translators
-void ctx_add_new_zf_ctx_from_txtheader (DictId dict_id, const char *name, unsigned name_len, TranslatorId luft_translator)
+void ctx_add_new_zf_ctx_from_txtheader (DictId dict_id, TranslatorId luft_translator)
 {
     // adding a new dictionary is proctected by a mutex. note that z_file->num_contexts is accessed by other threads
     // without mutex proction when searching for a dictionary - that's why we update it at the end, after the new
@@ -589,7 +589,7 @@ void ctx_add_new_zf_ctx_from_txtheader (DictId dict_id, const char *name, unsign
     zf_ctx->st_did_i   = DID_I_NONE;
     zf_ctx->dict_id    = dict_id;
     zf_ctx->luft_trans = luft_translator;
-    memcpy ((char*)zf_ctx->name, name, MIN (sizeof(zf_ctx->name)-1, name_len));
+    strcpy ((char*)zf_ctx->name, dis_dict_id_name (dict_id).s);
 
     // only when the new entry is finalized, do we increment num_contexts, atmoically , this is because
     // other threads might access it without a mutex when searching for a dict_id
