@@ -218,7 +218,7 @@ LICENSE.non-commercial.txt: text_license.h # not dependent on genozip.exe, so we
 SPHINX = /home/divon/miniconda3/bin/sphinx-build
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/advanced.rst docs/index.rst docs/license.rst \
        docs/publications.rst docs/installing.rst docs/contact.rst docs/examples.rst docs/source.rst docs/logo.png \
-	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-translation.rst \
+	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst \
 	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
 	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst docs/specs.rst\

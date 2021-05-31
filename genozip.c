@@ -163,8 +163,10 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     // 4) reset flag.unbind if file contains only one component
     
     TEMP_FLAG (genocat_no_reconstruct, true); // so zfile_read_genozip_header doesn't fail on a reference file before flags_update_piz_one_file is run
+    TEMP_FLAG (genocat_no_ref_file, true);    // so zfile_read_genozip_header doesn't call zfile_read_genozip_header_handle_ref_info before flags_update_piz_one_file calculates genocat_no_ref_file
     if (!z_file->file || !zfile_read_genozip_header (0)) goto done; 
     RESTORE_FLAG(genocat_no_reconstruct);
+    RESTORE_FLAG(genocat_no_ref_file);
 
     if (z_dual_coords)
         z_file->max_conc_writing_vbs = linesorter_get_max_conc_writing_vbs(); // get data by reading all SEC_RECON_PLAN headers

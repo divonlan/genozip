@@ -336,7 +336,7 @@ bool str_scientific_to_decimal (const char *float_str, unsigned float_str_len, c
 
     SAFE_RESTORE;
 
-    if (exp > -1) return false; // this function currently works only for 0.xxx numbers (all digits after the decimal point). TO DO: remove limitation
+    if (exp > -1) return false; // this function currently works only for 0.*** numbers (all digits after the decimal point). TO DO: remove limitation
 
     int decimal_digits = mantissa_len - negative - has_decimal + (-exp) - 1; // eg. -2.30e-02 --> -0.0230  mantissa_len=5 exp=-2 --> width=7
     

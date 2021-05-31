@@ -600,7 +600,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
                                    flag.reading_chain ? REF_LIFTOVER : REF_EXTERNAL, false);
             }
             else 
-                ASSINP (flag.genocat_no_ref_file, "Please use --reference specify the path to the LUFT (target) coordinates reference file. Original path was %s",
+                ASSINP (flag.genocat_no_ref_file, "Please use --reference to specify the path to the LUFT (target) coordinates reference file. Original path was %s",
                         header->ref_filename);
         }
 

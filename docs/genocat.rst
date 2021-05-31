@@ -21,7 +21,7 @@ One or more file names must be given.
 
           |
 
-**Subsetting (aka filtering) options (options resulting in modified display of the data)**
+**Subsetting options (options resulting in modified display of the data)**
 
 .. option:: --downsample rate[,shard].  Show only one in every <rate> lines (or reads in the case of FASTQ). The optional <shard> parameter indicates which of the shards is shown. Other subsetting options (if any) will be applied to the surviving lines only.
 
@@ -60,7 +60,39 @@ One or more file names must be given.
    | *Note*: For Chain files this applies to the source contig (qName).
    |
 
-.. option:: -s, --samples [^]sample[,...].  (VCF) Show a subset of samples (individuals). 
+.. option:: -g, --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads ; CHAIN: sets) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
+
+          |
+
+.. option:: -n, --lines [first]-[last] or [first].  Show a certain range of lines. <first> and <last> are numbers of lines in the file (starting from 1). 
+
+   |
+   | *Examples*: 
+
+================================ ========================================================
+``genocat --lines 1000-2000``    displays the 1001 lines between 1000 and 2000
+``genocat --lines=1000-``        displays all lines starting from 1000 (*optional* =)
+``genocat -n -2000``             displays lines 1 to 2000 (``-n`` *instead of* ``--lines``)
+``genocat -n 1000``              displays 10 lines starting from line 1000
+================================ ========================================================
+
+
+   | *Note on outputting as BAM*: The numbering excludes the BAM header. 
+   | *Note on FASTQ*: The numbering is of reads rather than lines. 
+   | *Note*: The entire file header is included if any part of it is.
+   | *Note*: Line numbers are taken before any additional filters are applied.
+
+.. option:: --head [num_lines].  Show <num_lines> lines from the start of the file.
+
+          |
+
+.. option:: --tail [num_lines].  Show <num_lines> lines from the end of the file.
+
+          |
+
+**VCF options**
+
+.. option:: -s, --samples [^]sample[,...].  Show a subset of samples (individuals). 
 
    |
    | *Examples*:
@@ -77,7 +109,53 @@ One or more file names must be given.
    | *Note*: Multiple ``-s`` arguments may be specified - this is equivalent to chaining their samples with a comma separator in a single argument.
    |
 
-.. option:: --FLAG {+-^}value.  (SAM BAM) Filter lines based on the FLAG value: <value> is a decimal or hexadecimal value and should be prefixed by + - or ^: 
+.. option:: -G, --drop-genotypes.  Output the data without the samples and FORMAT column.
+   
+          |
+
+.. option:: --GT-only.  Within samples output only genotype (GT) data - dropping the other subfields.
+
+          |
+
+.. option:: --unsorted.  If a file contains a "reconstruction plan" (see genozip --sort) the file will be displayed sorted by default. --unsorted overrides this behavior and shows the file in its unsorted form. This is useful if the file was highly unsorted causing sorting during genocat to consume a lot of memory.
+
+          |
+
+.. option:: -1, --header-one.  Output only the last line on the header (the line with the field and sample names).
+          
+          |
+
+.. option:: --bcf  Output as BCF. Note: bcftools needs to be installed for this option to work.
+
+          |
+
+.. option:: --luft.  Render a DVCF file in Luft coordinates (absent this option, a DVCF will be rendered in Primary coordinates).
+      
+   | See: :ref:`dvcf`
+   |
+
+.. option:: --show-dvcf.  For each variant, show its coordinate system (Primary, Luft or Both), and its oStatus. May be used with or without combination of --luft.
+   
+   | See: :ref:`dvcf`
+   |
+          
+.. option:: --show-counts=o\$TATUS.  Show summary statistics of variant lift outcome.
+
+   | See: :ref:`dvcf`
+   |
+      
+.. option:: --show-counts=COORDS.  Show summary statistics of variant coordinates.
+
+   | See: :ref:`dvcf`
+   |
+
+.. option:: --no-PG.  When modifying the data in a file using genocat Genozip normally adds a "##genozip_command" line to the VCF header. With this option it doesn't.
+
+          |
+
+**SAM and BAM options**
+
+.. option:: --FLAG {+-^}value.  Filter lines based on the FLAG value: <value> is a decimal or hexadecimal value and should be prefixed by + - or ^: 
 
    ==  =======================================================================
    \+  INCLUDES lines in which ALL flags in *value* are set in the line's FLAG
@@ -88,44 +166,13 @@ One or more file names must be given.
    | *Example*: --FLAG -192 includes only lines in which neither FLAG 64 nor 128 are set. This can also be expressed as --FLAG -0xC0 
    |
    | More information of FLAGs can be found in section 1.4 of the `SAM spec <https://samtools.github.io/hts-specs/SAMv1.pdf>`_.
+   |
 
-          |
-
-.. option:: --MAPQ [^]value.  (SAM BAM) Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
+.. option:: --MAPQ [^]value.  Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
    
           |
 
-.. option:: -g, --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads ; CHAIN: sets) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
-
-          |
-
-.. option:: -n, --lines [first]-[last] or [first].  Show a certain range of lines. <first> and <last> are numbers of lines in the file (starting from 1). 
-
-   |
-   | *Examples*: 
-
-   ================================ ========================================================
-   ``genocat --lines 1000-2000``    displays the 1001 lines between 1000 and 2000
-   ``genocat --lines=1000-``        displays all lines starting from 1000 (*optional* =)
-   ``genocat -n -2000``             displays lines 1 to 2000 (``-n`` *instead of* ``--lines``)
-   ``genocat -n 1000``              displays 10 lines starting from line 1000
-   ================================ ========================================================
-
-
-   | *Note on outputting as BAM*: The numbering excludes the BAM header. 
-   | *Note on FASTQ*: The numbering is of reads rather than lines. 
-   | *Note*: The entire file header is included if any part of it is.
-   | *Note*: Line numbers are taken before any additional filters are applied.
-
-.. option:: --head [num_lines].  Show <num_lines> lines from the start of the file.
-
-          |
-
-.. option:: --tail [num_lines].  Show <num_lines> lines from the end of the file.
-
-          |
-
-.. option:: --bases [^]value.  (SAM BAM FASTQ) Filter lines based on the IUPAC characters (bases) of the sequence data. 
+.. option:: --bases [^]value.  Filter lines based on the IUPAC characters (bases) of the sequence data. 
    
    |
    | *Examples*: 
@@ -139,25 +186,35 @@ One or more file names must be given.
    | Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/bases.html>`_
    |
 
-.. option:: -K, --kraken filename. Load a .kraken.genozip file for use with --taxid. 
+.. option:: --bam  Output as BAM. Note: this option is implicit if --output specifies a filename ending with .bam
 
-   | See: :ref:`kraken`
+          |
+
+.. option:: --sam  Output as SAM. This option is the default in genocat on SAM and BAM data, and is implicit if --output specifies a filename ending with .sam
+
+          |
+
+.. option:: --fastq  Output as FASTQ. Note: this option is implicit if --output specifies a filename ending with .fq or .fastq
+
+   | see more details: :ref:`sam2fq`
    |
 
-.. option:: -k, --taxid [^]taxid[+0].  Show only lines than match the Taxonomy ID <taxid>. ^ for a negative search. +0 means <taxid> AND unclassified. Requires either using in combination with --kraken or for the file to have been compressed with genozip --kraken.
+.. option:: --no-PG.  When modifying the data in a file using genocat Genozip normally adds information about the modification in the file header. With this option it doesn't.
 
-   | See: :ref:`kraken`
-   |
+          |
 
-.. option:: -G, --drop-genotypes.  (VCF) Output the data without the samples and FORMAT column.
-   
+
+**FASTQ options**
+
+.. option:: --bases [^]value.  Filter lines based on the IUPAC characters (bases) of the sequence data (see SAM/BAM options).
+
+**FASTA options**
+
+.. option:: -1, --header-one.  Output the sequence name up to the first space or tab.
+
           |
 
 .. option:: -H, --no-header.  Don't output the header lines.
-
-          |
-
-.. option:: -1, --header-one.  (VCF FASTA) VCF: Output only the last line on the header (the line with the field and sample names). FASTA: Output the sequence name up to the first space or tab.
 
           |
 
@@ -165,16 +222,46 @@ One or more file names must be given.
 
           |
 
-.. option:: --GT-only.  (VCF) Within samples output only genotype (GT) data - dropping the other subfields.
-
-          |
-
-.. option:: --unsorted.  If a file contains a "reconstruction plan" (see genozip --sort) the file will be displayed sorted by default. --unsorted overrides this behavior and shows the file in its unsorted form. This is useful if the file was highly unsorted causing sorting during genocat to consume a lot of memory.
-
-          |
-
-.. option:: --sequential.  (FASTA) Output in sequential format - each sequence in a single line.
+.. option:: --sequential.  Output in sequential format - each sequence in a single line.
    
+          |
+
+.. option:: --phylip  Output a Multi-FASTA in Phylip format. All sequences must be the same length.
+
+          |
+
+**Phylip options**
+
+.. option:: --fasta  (Phylip only) Output as Multi-FASTA.
+
+          |
+
+**Chain options**
+
+.. option:: --add-qName-chr.  rewrites the qName - single-character or double-digit chromosome names are prefixed with "chr" and "MT" is rewritten as "chrM".
+
+          |
+
+**23andMe options**
+
+.. option:: --vcf  Output as VCF. --vcf must be used in combination with --reference to specify the reference file as listed in the header of the 23andMe file (usually this is GRCh37). Note: INDEL genotypes ('DD' 'DI' 'II') as well as uncalled sites ('--') are discarded.
+
+          |
+
+**Filtering using kraken data**
+
+| Works for SAM, BAM, FASTQ and FASTA - See: :ref:`kraken`
+
+.. option:: -K, --kraken filename. Load a .kraken.genozip file for use with --taxid. 
+
+          |
+
+.. option:: -k, --taxid [^]taxid[+0].  Show only lines than match the Taxonomy ID <taxid>. ^ for a negative search. +0 means <taxid> AND unclassified. Requires either using in combination with --kraken or for the file to have been compressed with genozip --kraken.
+
+          |
+
+.. option:: --show-kraken[=INCLUDED|EXCLUDED]. In combination with --taxid reports whether each line is included or excluded. =INCLUDED or =EXCLUDED reports only a subset of lines accordingly. Combine with --count for a fast report without display the file itself. 
+
           |
 
 **Analysis options**
@@ -199,20 +286,6 @@ One or more file names must be given.
     
           |
 
-.. include:: opt-translation.rst
-
-**Dual-coordinate VCF options**
-
-| See: :ref:`dvcf`
-
-.. option:: --luft.  Render a DVCF file in Luft coordinates (absent this option, a DVCF will be rendered in Primary coordinates).
-    
-          |
-
-.. option:: --show-dvcf.  For each variant, show its coordinate system (Primary, Luft or Both), and its oStatus. May be used with or without combination of --luft.
-
-          |
-
 **General options**
 
 .. include:: opt-piz.rst
@@ -221,17 +294,8 @@ One or more file names must be given.
 
 .. include:: opt-quiet.rst
 
-.. option:: --no-PG.  (VCF SAM BAM) When modifying the data in a file using genocat Genozip normally adds information about the modification in the file header. With this option it doesn't.
-    
-          |
-
 .. include:: opt-threads.rst
-.. include:: opt-stats.rst
-
-.. option:: --show-kraken[=INCLUDED|EXCLUDED]. In combination with --taxid reports whether each line is included or excluded. =INCLUDED or =EXCLUDED reports only a subset of lines accordingly. Combine with --count for a fast report without display the file itself. 
-
-| See: :ref:`kraken`
-                        
+.. include:: opt-stats.rst                        
 
 .. option:: --validate[=valid]  Validates that the file(s) are valid genozip files. By default reports files that are invalid. With --validate=valid reports files that are valid, and if run on a single exit code indicates validity.
     

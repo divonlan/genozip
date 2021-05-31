@@ -43,7 +43,7 @@ typedef struct {
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted,
-        kraken_taxid;
+        kraken_taxid, add_qName_chr;
         
     int64_t lines_first, lines_last, tail; // set by --lines 
     char *grep;

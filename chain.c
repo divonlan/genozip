@@ -489,30 +489,67 @@ static inline void chain_piz_filter_add_contig_length (VBlock *vb)
     mutex_unlock (chain_mutex);
 }
 
+static inline void chain_piz_filter_add_qName_chr (VBlock *vb)
+{
+    char c_3 = *(LASTENT (char, vb->txt_data)-3);
+    char c_2 = *(LASTENT (char, vb->txt_data)-2);
+    char c_1 = *(LASTENT (char, vb->txt_data)-1);
+    
+    // case: last reconstructed text look like " 2 " - single character chrom
+    if (c_2 == ' ') { 
+        vb->txt_data.len -= 2;
+        RECONSTRUCT ("chr", 3);
+        RECONSTRUCT1 (c_1);
+        RECONSTRUCT1 (' ');
+    }
+
+    // case: last reconstructed text look like " 22 " - double digit chrom
+    else if (c_3 == ' ' && IS_DIGIT (c_2) && IS_DIGIT (c_1)) { 
+        vb->txt_data.len -= 3;
+        RECONSTRUCT ("chr", 3);
+        RECONSTRUCT1 (c_2);
+        RECONSTRUCT1 (c_1);
+        RECONSTRUCT1 (' ');
+    }
+
+    // case: last reconstructed text look like " MT " 
+    else if (c_3 == ' ' && c_2 == 'M' && c_1 == 'T') { 
+        vb->txt_data.len -= 3;
+        RECONSTRUCT ("chrM ", 5);
+    }
+}
+
 CONTAINER_FILTER_FUNC (chain_piz_filter)
 {
     // ingest alignments (and report Chain file data issues) only when consuming with --chain, not when merely pizzing
-    if (!flag.reading_chain) goto done; 
+    if (flag.reading_chain) { 
 
-    // before alignment-set first EOL and before alignments - initialize next_dst_0pos and next_src_0pos
-    if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 13) 
-        chain_piz_filter_init_alignment_set (vb);
+        // before alignment-set first EOL and before alignments - initialize next_dst_0pos and next_src_0pos
+        if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 13) 
+            chain_piz_filter_init_alignment_set (vb);
 
-    // save src_gap before reconstructing dst_gap (src_gap was just processed)
-    else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 4) 
-        chain_piz_filter_save_src_gap (vb);
+        // save src_gap before reconstructing dst_gap (src_gap was just processed)
+        else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 4) 
+            chain_piz_filter_save_src_gap (vb);
 
-    // before EOF of each alignment, ingest alignment
-    else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 5) 
-        chain_piz_filter_ingest_alignmet (vb);
+        // before EOF of each alignment, ingest alignment
+        else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 5) 
+            chain_piz_filter_ingest_alignmet (vb);
 
-    // before alignment-set second EOL and after alignments - verify that numbers add up, and also set contigs
-    else if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 15) {
-        chain_piz_filter_verify_alignment_set (vb);
-        chain_piz_filter_add_contig_length (vb);
+        // before alignment-set second EOL and after alignments - verify that numbers add up, and also set contigs
+        else if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 15) {
+            chain_piz_filter_verify_alignment_set (vb);
+            chain_piz_filter_add_contig_length (vb);
+        }
     }
 
-done:    
+    // genocat of a chain file (not --chain)
+    else {
+        // rewrite NAMEDST 1,...,Y -> chr1,...,chrY ; MT -> chrM
+        if (flag.add_qName_chr && dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 8) 
+            chain_piz_filter_add_qName_chr (vb);
+    }
+
     return true;    
 }
 

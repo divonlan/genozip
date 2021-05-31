@@ -347,6 +347,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _H1 {"no-header",     no_argument,       &flag.no_header,        1 }
         #define _H0 {"header-only",   no_argument,       &flag.header_only,      1 }
         #define _1  {"header-one",    no_argument,       &flag.header_one,       1 }
+        #define _wc {"add-qName-chr", no_argument,     &flag.add_qName_chr,  1 }
         #define _IU {"IUPAC",         required_argument, 0, 24                     }
         #define _iu {"bases",         required_argument, 0, 24                     }
         #define _GT {"GT-only",       no_argument,       &flag.gt_only,          1 }
@@ -417,10 +418,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _lg, _i, _I, _c, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                   _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM,         _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,                             _rg, _sR,      _sC, _cC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,         _oe, _00 };
-        static Option genounzip_lo[]  = { _lg,         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                            _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                                                  _sR,      _sC,      _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,              _oe, _00 };
-        static Option genocat_lo[]    = { _lg,         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _s, _sf, _sq, _G, _1, _H0, _H1, _Gt, _IU, _iu, _GT, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn, _ov, _oc,    _xt, _dm, _dp, _dt,           _ds, _sS,                                                                                   _fs, _g, _n, _nt, _nh,     _sR,      _sC,      _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR,    _oe, _00 };
-        static Option genols_lo[]     = { _lg,                 _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                             _sM,                                                                                _b, _oe, _00 };
+        static Option genozip_lo[]    = { _lg, _i, _I, _c, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                   _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM,         _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,                             _rg, _sR,      _sC, _cC, _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,              _oe, _00 };
+        static Option genounzip_lo[]  = { _lg,         _c,     _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                            _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                                                  _sR,      _sC,      _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,                   _oe, _00 };
+        static Option genocat_lo[]    = { _lg,         _c,     _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _s, _sf, _sq, _G, _1, _H0, _H1, _Gt, _IU, _iu, _GT, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn, _ov, _oc,    _xt, _dm, _dp, _dt,           _ds, _sS,                                                                                   _fs, _g, _n, _nt, _nh,     _sR,      _sC,      _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR, _wc,    _oe, _00 };
+        static Option genols_lo[]     = { _lg,                 _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                             _sM,                                                                                     _b, _oe, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -743,6 +744,7 @@ void flags_update (unsigned num_files, const char **filenames)
 
     // cases where we don't need to load the reference file, even if the genozip file normally needs it
     // note: we don't exclude due to collect_coverage here, instead we do it in main_load_reference
+    // note: this is here and not in flags_update_piz_one_file bc it is consumed by main_load_reference
     flag.genocat_no_ref_file = exe_type == EXE_GENOCAT &&
         (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
          flag.dump_one_local_dict_id.num || flag.dump_one_b250_dict_id.num || // all other sections (except CHROM) are blocked from reading in piz_default_skip_section
@@ -868,6 +870,9 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         flag.header_only_fast = true;
     }
 
+    flag.genocat_no_ref_file = flag.genocat_no_ref_file || // set in flags_update
+                               z_file->data_type == DT_CHAIN; // we only need the reference when using the chain file with --chain (chain_load doesn't call flags_update_piz_one_file)
+
     // genocat quits after reading global area - it doesn't read TXT_HEADER or VBs
     flag.genocat_global_area_only = exe_type == EXE_GENOCAT &&
         (flag.show_stats || flag.show_dict || flag.list_chroms || flag.show_one_dict ||
@@ -946,6 +951,8 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          (z_file->data_type == DT_FASTQ && (flag.header_only_fast || flag.bases)) || 
          // SAM specific modifiers
          (z_file->data_type == DT_SAM   && (flag.sam_flag_filter || flag.sam_mapq_filter || flag.bases)) || 
+         // CHAIN specific modifiers
+         (z_file->data_type == DT_CHAIN && (flag.add_qName_chr)) ||
          // Dual-coordinate-file modifiers
          z_dual_coords || // vcf_lo_piz_TOPLEVEL_cb_filter_line will drop lines of the wrong coordinate
          // general filters 
