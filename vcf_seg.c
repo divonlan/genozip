@@ -11,22 +11,48 @@
 #include "zip.h"
 #include "dict_id.h"
 #include "codec.h"
+#include "strings.h"
 
 const char *coords_names[4] = COORDS_NAMES;
+
+static MiniContainer line_number_container = {};
 
 // called by main thread after reading the header
 void vcf_zip_initialize (void)
 {
     vcf_lo_zip_initialize ();
     vcf_seg_samples_initialize ();
+
+    // container just for adding a prefix to the delta-encoded line number (the container is all_the_same)
+    if (flag.add_line_numbers && !line_number_container.repeats) { // possibly already initialized by previous files
+        line_number_container = (MiniContainer) {
+            .repeats   = 1,
+            .nitems_lo = 1,
+            .items     = { { .dict_id = (DictId)dict_id_fields[VCF_LINE_NUM] } }
+        };
+    }
 }
 
-void vcf_zip_after_compute (VBlockP vb)
+void vcf_zip_read_one_vb (VBlockP vb)
 {
-    if (z_dual_coords && !flag.rejects_coord) { // normal file, not zipping rejects files
-        if (vb->lo_rejects[DC_PRIMARY-1].len) vcf_lo_append_rejects_file (vb, DC_PRIMARY);
-        if (vb->lo_rejects[DC_LUFT-1].len)    vcf_lo_append_rejects_file (vb, DC_LUFT);
+    // in case we're replacing ID with the line number
+    if (flag.add_line_numbers) {
+        vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
+        txt_file->num_lines += str_count_char (vb->txt_data.data, vb->txt_data.len, '\n');  // update here instead of in zip_update_txt_counters;
     }
+}
+
+void vcf_zip_after_compute (VBlockP vb_)
+{
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
+    if (z_dual_coords && !flag.rejects_coord) { // normal file, not zipping rejects files
+        if (vb->lo_rejects[DC_PRIMARY-1].len) vcf_lo_append_rejects_file (vb_, DC_PRIMARY);
+        if (vb->lo_rejects[DC_LUFT-1].len)    vcf_lo_append_rejects_file (vb_, DC_LUFT);
+    }
+
+    if (chain_is_loaded && vb->rejects_report.len) 
+        buf_add_buf (evb, &z_file->rejects_report, &vb->rejects_report, char, "rejects_report");
 }   
 
 // called by Compute threadfrom seg_all_data_lines
@@ -34,47 +60,52 @@ void vcf_seg_initialize (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    vb->contexts[VCF_CHROM]   .no_stons    = true; // needs b250 node_index for random access and reconstrution plan
-    vb->contexts[VCF_oCHROM]  .no_stons    = true; // same
-    vb->contexts[VCF_FORMAT]  .no_stons    = true;
-    vb->contexts[VCF_INFO]    .no_stons    = true;
-    vb->contexts[VCF_oSTATUS] .no_stons    = true;
-    vb->contexts[VCF_COORDS]  .no_stons    = true;
-    vb->contexts[VCF_TOPLEVEL].no_stons    = true; 
-    vb->contexts[VCF_TOPLUFT] .no_stons    = true; 
-    vb->contexts[VCF_LIFT_REF].no_stons    = true; 
-    vb->contexts[VCF_COPYPOS] .no_stons    = true; 
-    vb->contexts[VCF_oXSTRAND].no_stons    = true; // keep in b250 so it can be eliminated as all_the_same
-    vb->contexts[VCF_oCHROM]  .no_vb1_sort = true; // indices need to remain as in the Chain file
-    vb->contexts[VCF_oSTATUS] .no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
-    vb->contexts[VCF_COORDS]  .no_vb1_sort = true; // indices need to remaining matching to Coords
-    vb->contexts[VCF_REFALT]  .keep_snip   = true; // set ctx->last_snip after evaluating
-    vb->contexts[VCF_oXSTRAND].keep_snip   = true;
+    CTX(VCF_CHROM)->   no_stons    = true; // needs b250 node_index for random access and reconstrution plan
+    CTX(VCF_oCHROM)->  no_stons    = true; // same
+    CTX(VCF_FORMAT)->  no_stons    = true;
+    CTX(VCF_INFO)->    no_stons    = true;
+    CTX(VCF_oSTATUS)-> no_stons    = true;
+    CTX(VCF_COORDS)->  no_stons    = true;
+    CTX(VCF_TOPLEVEL)->no_stons    = true; 
+    CTX(VCF_TOPLUFT)-> no_stons    = true; 
+    CTX(VCF_LIFT_REF)->no_stons    = true; 
+    CTX(VCF_COPYPOS)-> no_stons    = true; 
+    CTX(VCF_oXSTRAND)->no_stons    = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(VCF_oCHROM)->  no_vb1_sort = true; // indices need to remain as in the Chain file
+    CTX(VCF_oSTATUS)-> no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
+    CTX(VCF_COORDS)->  no_vb1_sort = true; // indices need to remaining matching to Coords
+    CTX(VCF_REFALT)->  keep_snip   = true; // set ctx->last_snip after evaluating
+    CTX(VCF_oXSTRAND)->keep_snip   = true;
 
-    vb->contexts[VCF_oSTATUS] .flags.store = STORE_INDEX;
-    vb->contexts[VCF_COORDS]  .flags.store = STORE_INDEX;
-    vb->contexts[VCF_oXSTRAND].flags.store = STORE_INDEX;
-    vb->contexts[VCF_CHROM]   .flags.store = STORE_INDEX; // since v12
-    vb->contexts[VCF_oCHROM]  .flags.store = STORE_INDEX; // used by regions_is_site_included
-    vb->contexts[VCF_POS]     .flags.store = STORE_INT;   // since v12
-    vb->contexts[VCF_oPOS]    .flags.store = STORE_INT;   // used by vcf_piz_luft_END
+    CTX(VCF_oSTATUS)-> flags.store = STORE_INDEX;
+    CTX(VCF_COORDS)->  flags.store = STORE_INDEX;
+    CTX(VCF_oXSTRAND)->flags.store = STORE_INDEX;
+    CTX(VCF_CHROM)->   flags.store = STORE_INDEX; // since v12
+    CTX(VCF_oCHROM)->  flags.store = STORE_INDEX; // used by regions_is_site_included
+    CTX(VCF_POS)->     flags.store = STORE_INT;   // since v12
+    CTX(VCF_oPOS)->    flags.store = STORE_INT;   // used by vcf_piz_luft_END
 
     // counts sections
-    vb->contexts[VCF_oSTATUS] .counts_section = true;
-    vb->contexts[VCF_COORDS]  .counts_section = true;
+    CTX(VCF_CHROM)->   counts_section = true;
+    CTX(VCF_oCHROM)->  counts_section = true;
+
+    if (z_dual_coords) {
+        CTX(VCF_oSTATUS)->counts_section = true;
+        CTX(VCF_COORDS)-> counts_section = true;
+    }
 
     // consolidate stats
-    vb->contexts[VCF_oREFALT].st_did_i = vb->contexts[VCF_LIFT_REF].st_did_i = VCF_REFALT;
-    vb->contexts[VCF_oPOS].st_did_i = vb->contexts[VCF_COPYPOS].st_did_i = VCF_POS;
-    vb->contexts[VCF_oCHROM].st_did_i = VCF_CHROM;
-    vb->contexts[VCF_COPYSTAT].st_did_i = vb->contexts[VCF_oSTATUS].st_did_i = VCF_COORDS; // dual-coordinate non-reconstruted stuff goes here
+    CTX(VCF_oREFALT)->st_did_i = CTX(VCF_LIFT_REF)->st_did_i = VCF_REFALT;
+    CTX(VCF_oPOS)->st_did_i = CTX(VCF_COPYPOS)->st_did_i = VCF_POS;
+    CTX(VCF_oCHROM)->st_did_i = VCF_CHROM;
+    CTX(VCF_COPYSTAT)->st_did_i = CTX(VCF_oSTATUS)->st_did_i = VCF_COORDS; // dual-coordinate non-reconstruted stuff goes here
     
     Context *gt_gtx   = ctx_get_ctx (vb, dict_id_FORMAT_GT);
     gt_gtx->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
     vb->ht_matrix_ctx = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
 
     // room for already existing FORMATs from previous VBs
-    vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_nodes.len;
+    vb->format_mapper_buf.len = CTX(VCF_FORMAT)->ol_nodes.len;
     buf_alloc_zero (vb, &vb->format_mapper_buf, 0, vb->format_mapper_buf.len, Container, 1.2, "format_mapper_buf");
     
     // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
@@ -84,32 +115,44 @@ void vcf_seg_initialize (VBlock *vb_)
         codec_pbwt_seg_init (vb_, runs_ctx, fgrc_ctx, gt_gtx->did_i);
     }
 
+    if (flag.add_line_numbers) {
+        // create a b250 and dict entry for VCF_LINE_NUM, VCF_ID - these become "all_the_same" so no need to seg them explicitly hereinafter        
+        #define LN_PREFIX_LEN 3 // "LN="
+        static const char prefix[] = { CON_PREFIX_SEP, // has prefix 
+                                       CON_PREFIX_SEP, // end of (empty) container-wide prefix
+                                       'L', 'N', '=', CON_PREFIX_SEP };  // NOTE: if changing prefix, update LN_PREFIX_LEN
+
+        container_seg_by_ctx (vb, CTX(VCF_ID), (Container *)&line_number_container, prefix, sizeof prefix, 0); 
+        ctx_decrement_count (vb_, CTX(VCF_ID), 0);
+        CTX(VCF_ID)->no_stons = true;
+    }
+
     // evaluate oSTATUS and COORDS, XSTRAND snips in order, as we rely on their indices being identical to the order of these arrays
     for (int i=0; i < NUM_LO_STATUSES; i++) {
-        WordIndex node_index = ctx_evaluate_snip_seg (vb_, &vb->contexts[VCF_oSTATUS], dvcf_status_names[i], strlen (dvcf_status_names[i]), NULL);
-        ctx_decrement_count (vb_, &vb->contexts[VCF_oSTATUS], node_index);
+        WordIndex node_index = ctx_evaluate_snip_seg (vb_, CTX(VCF_oSTATUS), dvcf_status_names[i], strlen (dvcf_status_names[i]), NULL);
+        ctx_decrement_count (vb_, CTX(VCF_oSTATUS), node_index);
     }
 
     for (int i=0; i < NUM_COORDS; i++) {
-        WordIndex node_index = ctx_evaluate_snip_seg (vb_, &vb->contexts[VCF_COORDS], coords_names[i], strlen (coords_names[i]), NULL);
-        ctx_decrement_count (vb_, &vb->contexts[VCF_COORDS], node_index);
+        WordIndex node_index = ctx_evaluate_snip_seg (vb_, CTX(VCF_COORDS), coords_names[i], strlen (coords_names[i]), NULL);
+        ctx_decrement_count (vb_, CTX(VCF_COORDS), node_index);
     }
 
-    ctx_evaluate_snip_seg (vb_, &vb->contexts[VCF_oXSTRAND], "-", 1, NULL);
-    ctx_decrement_count (vb_, &vb->contexts[VCF_oXSTRAND], 0);
+    ctx_evaluate_snip_seg (vb_, CTX(VCF_oXSTRAND), "-", 1, NULL);
+    ctx_decrement_count (vb_, CTX(VCF_oXSTRAND), 0);
 
-    ctx_evaluate_snip_seg (vb_, &vb->contexts[VCF_oXSTRAND], "X", 1, NULL);
-    ctx_decrement_count (vb_, &vb->contexts[VCF_oXSTRAND], 1);
+    ctx_evaluate_snip_seg (vb_, CTX(VCF_oXSTRAND), "X", 1, NULL);
+    ctx_decrement_count (vb_, CTX(VCF_oXSTRAND), 1);
 
     // create a b250 and dict entry for LIFT_REF, COPYSTAT and COPYPOS - these become "all_the_same" so no need to seg them explicitly hereinafter
     seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFT_REF }), 2, VCF_LIFT_REF, 0); 
-    ctx_decrement_count (vb_, &vb->contexts[VCF_LIFT_REF], 0);
+    ctx_decrement_count (vb_, CTX(VCF_LIFT_REF), 0);
 
     seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYSTAT }), 2, VCF_COPYSTAT, 0); 
-    ctx_decrement_count (vb_, &vb->contexts[VCF_COPYSTAT], 0);
+    ctx_decrement_count (vb_, CTX(VCF_COPYSTAT), 0);
 
     seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS }), 2, VCF_COPYPOS, 0);
-    ctx_decrement_count (vb_, &vb->contexts[VCF_COPYPOS], 0);
+    ctx_decrement_count (vb_, CTX(VCF_COPYPOS), 0);
 }             
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -143,7 +186,7 @@ void vcf_seg_finalize (VBlockP vb_)
                           { .dict_id = (DictId)dict_id_fields[VCF_EOL],     .seperator = ""   } },
     };
 
-    Context *ctx = &vb->contexts[VCF_TOPLEVEL];
+    Context *ctx = CTX(VCF_TOPLEVEL);
 
     if (vb->vb_coords == DC_BOTH || !z_dual_coords)
         container_seg_by_ctx (vb_, ctx, (ContainerP)&top_level, 0, 0, 0); 
@@ -180,12 +223,12 @@ void vcf_seg_finalize (VBlockP vb_)
     };
 
     if (vb->vb_coords == DC_BOTH)
-        container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLUFT], (ContainerP)&top_luft, 0, 0, 0);
+        container_seg_by_ctx (vb_, CTX(VCF_TOPLUFT), (ContainerP)&top_luft, 0, 0, 0);
 
     // similarly, when processing the rejects file containing variants that are luft-only, we add a "##luft_only=" prefix
     else if (vb->vb_coords == DC_LUFT) { // luft-only variants 
         static const char luft_only_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HK_LUFT_ONLY CON_PREFIX_SEP_;
-        container_seg_by_ctx (vb_, &vb->contexts[VCF_TOPLUFT], (ContainerP)&top_luft, luft_only_prefix, strlen (luft_only_prefix), (sizeof HK_LUFT_ONLY - 1) * vb->lines.len);
+        container_seg_by_ctx (vb_, CTX(VCF_TOPLUFT), (ContainerP)&top_luft, luft_only_prefix, strlen (luft_only_prefix), (sizeof HK_LUFT_ONLY - 1) * vb->lines.len);
         vb->recon_size_luft += (sizeof HK_LUFT_ONLY - 1) * vb->lines.len; // when reconstructing luft-only rejects, we also reconstruct a prefix for each line
         // note: there is no equivalent of ctx->txt_len for Luft coordinates
     }
@@ -262,9 +305,9 @@ static void vcf_seg_format_get_contexts (VBlockVCF *vb, ZipDataLineVCF *dl)
 {
     ContainerP format_mapper = ENT (Container, vb->format_mapper_buf, dl->format_node_i);
 
-    // an array of blocks of MAX_SUBFIELDS of ContextP. The number of such blocks is format_contexts.len
-    buf_alloc_zero (vb, &vb->format_contexts, 0, vb->format_mapper_buf.len * MAX_SUBFIELDS, ContextP, CTX_GROWTH, "format_contexts");
-    ContextP *ctxs = ENT (ContextP, vb->format_contexts, dl->format_node_i * MAX_SUBFIELDS);
+    // an array of blocks of MAX_FIELDS of ContextP. The number of such blocks is format_contexts.len
+    buf_alloc_zero (vb, &vb->format_contexts, 0, vb->format_mapper_buf.len * MAX_FIELDS, ContextP, CTX_GROWTH, "format_contexts");
+    ContextP *ctxs = ENT (ContextP, vb->format_contexts, dl->format_node_i * MAX_FIELDS);
 
     for (unsigned i=0; i < con_nitems (*format_mapper); i++) 
         if (!ctxs[i])
@@ -297,9 +340,9 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
     bool last_item = false;
     do {
-        ASSVCF (con_nitems (format_mapper) < MAX_SUBFIELDS,
+        ASSVCF (con_nitems (format_mapper) < MAX_FIELDS,
                 "FORMAT field has too many subfields, the maximum allowed is %u: \"%.*s\"",  
-                MAX_SUBFIELDS, field_len, field_start);
+                MAX_FIELDS, field_len, field_start);
 
         DictId dict_id = vcf_seg_get_format_subfield (&str, (unsigned *)&len);
         last_item = (str[-1] == '\t' || str[-1] == '\n');
@@ -372,6 +415,18 @@ static inline void vcf_seg_assign_dl_sorted (VBlockVCF *vb, ZipDataLineVCF *dl, 
     }
 }
 
+static void vcf_seg_add_line_number (VBlockVCFP vb, unsigned VCF_ID_len)
+{
+    char line_num[20];
+    unsigned line_num_len = str_int (vb->first_line + vb->line_i, line_num);
+
+    seg_pos_field ((VBlockP)vb, VCF_LINE_NUM, VCF_LINE_NUM, false, true, 0, line_num, line_num_len, 0, line_num_len + 1 + LN_PREFIX_LEN); // +1 for tab +3 for "LN="
+    
+    int shrinkage = (int)VCF_ID_len - line_num_len - LN_PREFIX_LEN;
+    vb->recon_size -= shrinkage;
+    vb->recon_size_luft -= shrinkage;
+}
+
 /* segment a VCF line into its fields:
    fields CHROM->FORMAT are "field" contexts
    all samples go into the SAMPLES context, which is a Container
@@ -405,7 +460,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         if (vb->line_coords == DC_LUFT) {
             save_recon_size = vb->recon_size;
             for (unsigned i=0; i < save_txt_len_len; i++)
-                save_txt_len[i] = vb->contexts[i].txt_len; // txt_len is for PRIMARY reconstruction ; we don't calculate txt_len for LUFT
+                save_txt_len[i] = CTX(i)->txt_len; // txt_len is for PRIMARY reconstruction ; we don't calculate txt_len for LUFT
         }
         
         // make sure we don't change recon_size_luft if segging a primary-only line
@@ -419,8 +474,8 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     
     else { // LUFT
         dl->chrom_index[1] = seg_by_did_i (vb_, VCF_CHROM_str, VCF_CHROM_len, VCF_oCHROM, VCF_CHROM_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
-        random_access_update_chrom (vb_, DC_LUFT, dl->chrom_index[1], VCF_CHROM_str, VCF_CHROM_len);
-        vb->contexts[vb->vb_coords==DC_LUFT ? VCF_oCHROM : VCF_CHROM].txt_len++; // account for the tab - in oCHROM in the ##luft_only VB and in CHROM (on behalf on the primary CHROM) if this is a Dual-coord line (we will rollback accounting later if its not)
+        random_access_update_chrom (vb_, DC_LUFT, dl->chrom_index[1], VCF_CHROM_str, VCF_CHROM_len); // also sets vb->chrom_name
+        CTX(vb->vb_coords==DC_LUFT ? VCF_oCHROM : VCF_CHROM)->txt_len++; // account for the tab - in oCHROM in the ##luft_only VB and in CHROM (on behalf on the primary CHROM) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
 
     GET_NEXT_ITEM (VCF_POS);
@@ -430,7 +485,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, false, false, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len+1);
 
         if (pos == 0 && !(*VCF_POS_str == '.' && VCF_POS_len == 1)) // POS == 0 - invalid value return from seg_pos_field
-            WARN_ONCE ("FYI: invalid POS=%"PRId64" value in chrom=%.*s vb_i=%u vb_line_i=%u: line will be compressed, but not indexed", 
+            WARN_ONCE ("FYI: invalid POS=%"PRId64" value in chrom=%.*s vb_i=%u vb_line_i=%"PRIu64": line will be compressed, but not indexed", 
                        pos, vb->chrom_name_len, vb->chrom_name, vb->vblock_i, vb->line_i);
                 
         if (pos) random_access_update_pos (vb_, DC_PRIMARY, VCF_POS);
@@ -439,11 +494,15 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     else { // LUFT
         dl->pos[1] = seg_pos_field (vb_, VCF_oPOS, VCF_oPOS, false, false, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len);
         if (dl->pos[1]) random_access_update_pos (vb_, DC_LUFT, VCF_oPOS);
-        vb->contexts[vb->vb_coords==DC_LUFT ? VCF_oPOS : VCF_POS].txt_len++; // account for the tab - in oPOS in the ##luft_only VB and in POS (on behalf on the primary POS) if this is a Dual-coord line (we will rollback accounting later if its not)
+        CTX(vb->vb_coords==DC_LUFT ? VCF_oPOS : VCF_POS)->txt_len++; // account for the tab - in oPOS in the ##luft_only VB and in POS (on behalf on the primary POS) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
 
     GET_NEXT_ITEM (VCF_ID);
-    seg_id_field (vb_, dict_id_fields[VCF_ID], VCF_ID_str, VCF_ID_len, true);
+
+    if (flag.add_line_numbers) 
+        vcf_seg_add_line_number (vb, VCF_ID_len);
+    else
+        seg_id_field (vb_, dict_id_fields[VCF_ID], VCF_ID_str, VCF_ID_len, true);
 
     // REF + ALT 
     GET_NEXT_ITEM (VCF_REF);
@@ -492,13 +551,12 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
         vcf_seg_format_field (vb, dl, field_start, field_len);
 
-        vcf_seg_format_get_contexts (vb, dl);
-
-        ASSVCF0 (separator == '\n' || dl->has_genotype_data || dl->has_haplotype_data,
-                 "expecting line to end as it has no genotype or haplotype data, but it is not");
-
         if (separator != '\n') { // has samples
-        
+
+            ASSVCF0 (dl->has_genotype_data || dl->has_haplotype_data, "expecting line to end as it has no sample data, but it has not");
+            
+            vcf_seg_format_get_contexts (vb, dl);
+
             const char *backup_luft_samples = NULL; uint32_t backup_luft_samples_len=0;
             if (vb->line_coords == DC_LUFT) {
                  backup_luft_samples = ENT (char, vb->lo_rejects[DC_LUFT-1], save_lo_rejects_len + (next_field - field_start_line));
@@ -551,7 +609,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
             // unaccount for this line, if its a Luft-only line in a dual-coordinate variant (i.e. main VCF data line) as it won't appear in the default reconstruction
             if (vb->vb_coords == DC_BOTH && vb->line_coords == DC_LUFT)
                 for (unsigned i=0; i < vb->num_contexts; i++) 
-                    vb->contexts[i].txt_len = (i < save_txt_len_len ? save_txt_len[i] : 0);
+                    CTX(i)->txt_len = (i < save_txt_len_len ? save_txt_len[i] : 0);
         }
         
         // in case of a reject line - update reject_bytes to indicate its consumption

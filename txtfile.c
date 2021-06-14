@@ -451,7 +451,9 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
-                             testing_memory;
+                             testing_memory           ||
+                             flag.optimize_DESC       || // fastq_zip_read_one_vb needs to count lines
+                             flag.add_line_numbers;      // vcf_zip_read_one_vb   needs to count lines
 
     for (int32_t block_i=0; ; block_i++) {
 

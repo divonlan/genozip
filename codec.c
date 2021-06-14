@@ -147,7 +147,7 @@ static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 
 // this function tests each of our generic codecs on a 100KB sample of local or b250 data, and assigns the best one based on 
 // compression ratio, or if the ratio is very similar, and the time is quite different, then based on time.
-// the codec is then committed to zf_ctx, so that future VBs that clone recieve it and needn't test again.
+// the codec is then committed to zctx, so that future VBs that clone recieve it and needn't test again.
 // This function is called from two places:
 // 1. For contexts with generic codecs, left as CODEC_UNKNOWN by the segmenter, we are called from zip_assign_best_codec.
 //    For vb=1, this is called while holding the vb=1 lock, so that for all such contexts that appear in vb=1, they are
@@ -193,8 +193,8 @@ Codec codec_assign_best_codec (VBlockP vb,
      
     // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
     // it doesn't prevent double testing 100% of time, but that's good enough) 
-    Codec zf_codec = is_local ? z_file->contexts[ctx->did_i].lcodec :  // read without locking (1 byte)
-                     is_b250  ? z_file->contexts[ctx->did_i].bcodec :
+    Codec zf_codec = is_local ? ZCTX(ctx->did_i)->lcodec :  // read without locking (1 byte)
+                     is_b250  ? ZCTX(ctx->did_i)->bcodec :
                                 CODEC_UNKNOWN;
     
     if (zf_codec != CODEC_UNKNOWN) {
@@ -235,7 +235,7 @@ Codec codec_assign_best_codec (VBlockP vb,
         fflush (info_stream);
     }
 
-    // assign the best codec - the first one in the sorted array - and commit it to zf_ctx
+    // assign the best codec - the first one in the sorted array - and commit it to zctx
     *selected_codec = tests[0].codec;
 
     if (is_b250 || is_local) ctx_commit_codec_to_zf_ctx (vb, ctx, is_local);

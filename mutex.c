@@ -35,8 +35,8 @@ void mutex_lock_do (Mutex *mutex, const char *func)
     if (show) iprintf ("LOCKING : Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
 
     int ret = pthread_mutex_lock (&mutex->mutex); 
-    ASSERT (!ret, "called from %s by %"PRIu64": pthread_mutex_lock failed: %s", 
-            func, (uint64_t)pthread_self(), strerror (ret)); 
+    ASSERT (!ret, "called from %s by thread=%"PRIu64": pthread_mutex_lock failed on mutex->name=%s: %s", 
+            func, (uint64_t)pthread_self(), mutex && mutex->name ? mutex->name : "(null)", strerror (ret)); 
 
     mutex->lock_func = func; // mutex->lock_func is protected by the mutex
 

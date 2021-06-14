@@ -22,7 +22,7 @@ extern void random_access_update_last_pos (VBlockP vb, Coords dc, PosType last_p
 extern void random_access_update_to_entire_chrom (VBlockP vb, Coords dc, PosType first_pos_of_chrom, PosType last_pos_of_chrom);
 extern void random_access_merge_in_vb (VBlockP vb, Coords dc);
 extern void random_access_finalize_entries (BufferP ra_buf);
-extern void random_access_compress (Buffer *ra_buf, SectionType sec_type, Coords dc, const char *msg);
+extern void random_access_compress (ConstBufferP ra_buf, SectionType sec_type, Coords dc, const char *msg);
 
 // PIZ
 extern bool random_access_is_vb_included (uint32_t vb_i);

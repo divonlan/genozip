@@ -89,7 +89,7 @@ Examples:
                      
 .. option:: -e, --reference filename.  Use a reference file (filename extension .ref.genozip) - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat. While genozip is capabale of compressing without a reference it can utilize a reference file to improve compression of FASTQ SAM/BAM and VCF files. The improvement for FASTQ files is substantial; for SAM/BAM it may be significant; for VCF if it is significant only if REFALT content is a significant percentage of the zip content (see "% of zip" in --show-stats)
 
-   | Note: this is equivalent of setting the environment variable GENOZIP_REFERENCE with the reference filename.
+   | Note: this is equivalent of setting the environment variable $GENOZIP_REFERENCE with the reference filename.
    |
                      
 .. option:: -E, --REFERENCE filename.  Similar to --reference except genozip copies the reference (or part of it) to the output file so there is no need to specify --reference in genounzip and genocat. Note on using with --password: the copy of the reference file stored in the compressed file is never encrypted.
@@ -110,15 +110,45 @@ Examples:
 
 .. option:: --chain  chain-file.  Lifts a VCF to be a dual-coordinate VCF (DVCF).
 
-| See: :ref:`dvcf`
+   | See: :ref:`dvcf`
+   |
+
+.. option:: --allow-ambiguous.  Used in combination with --chain - allow Insertion Deletion and Structural variants that Genozip isn't sure whether they are a REF⇆ALT switch or not. Absent this flag these variants would not be lifted and would remain Primary-only variants.
+
+   | See: :ref:`dvcf`
+   |
+
+.. option:: --reject-ref-alt-switches.  Used in combination with --chain - Bi-allelic SNP variants with a REF⇆ALT switch are normally lifted and their INFO and FORMAT subfields modified to reflect the REF⇆ALT switch. With this option these variants are rejected from lifting and remain Primary-only variants.
+
+
+   | See: :ref:`dvcf`
+   |
+
+.. option:: --show-counts=o\$TATUS.  Show summary statistics of variant lift outcome. This is set by default when using --chain.
+
+   | See: :ref:`dvcf`
+   |
+      
+.. option:: --show-counts=COORDS.  Show summary statistics of variant coordinates.
+
+   | See: :ref:`dvcf`
+   |
+
+.. option:: --show-chain.  Used in combination with --chain - displays all chain file alignments.
+
+   |
 
 .. option:: --sort.  Causes genozip to generate a "reconstruction plan" that will allow genocat to show the file sorted. This is designed for mildly-unsorted files. If the file is highly unsorted this might result in genocat loading a big portion of the uncompressed file to memory (genocat --unsorted can be used to prevent sorting). This option is always set for dual-coordinates files unless overridden with --unsorted.
 
-                     |
+   |
 
 .. option:: --unsorted.  Don't generate a "reconstruction plan".
 
-                     |
+   |
+
+.. option:: --add-line-numbers.  Replaces the ID field in each variant with a sequential line number starting from 1.
+
+   |
 
 **FASTQ-specific options (ignored for other file types)**
 

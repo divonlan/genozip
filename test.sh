@@ -1,6 +1,8 @@
 #!/bin/bash 
 
 shopt -s extglob  # Enables extglob - see https://mywiki.wooledge.org/glob
+export GENOZIP_TEST="Yes" # Causes output of debugger arguments
+unset GENOZIP_REFERENCE   # initialize
 
 TESTDIR=test
 OUTDIR=$TESTDIR/tmp
@@ -180,6 +182,20 @@ test_optimize()
     cleanup
 }
 
+test_md5()
+{
+    test_header "$1 --md5 - see that it is the correct MD5"
+    local file=$TESTDIR/$1
+
+    $genozip $file -f --md5 -o $output || exit 1
+    genozip_md5=`$genols $output | grep $output | cut -c 51-82`
+    real_md5=`md5sum $file | cut -d" " -f1`
+
+    if [[ "$genozip_md5" != "$real_md5" ]]; then echo "FAILED - expected MD5=\"$real_md5\" but genozip calculated MD5=\"$genozip_md5\""; exit 1; fi
+
+    cleanup
+}
+
 test_translate_bam_to_sam() # $1 bam file 
 {
     test_header "$1 - translate BAM to SAM"
@@ -249,7 +265,9 @@ test_backward_compatability()
 batch_print_header()
 {
     batch_id=$((batch_id + 1))
-    echo "******* ${FUNCNAME[1]} (batch_id=${batch_id}) *******"
+    echo "***************************************************************************"
+    echo "******* ${FUNCNAME[1]} (batch_id=${batch_id}) "
+    echo "***************************************************************************"
 }
 
 # minimal files - expose edge cases where fields have only 1 instance
@@ -272,10 +290,12 @@ batch_basic()
     for file in ${basics[@]}; do
 
         if [ $file == basic.chain ]; then
-            export GENOZIP_REFERENCE=$GRCh38
+            export GENOZIP_REFERENCE=${hg19}:${GRCh38}
         else
             unset GENOZIP_REFERENCE
         fi
+
+        test_md5 $file # note: basic.bam needs to be non-BGZF for this to pass
 
         if [ $file != basic.bam ] && [ $file != basic.generic ]; then # binary files have no \n 
             test_unix_style $file
@@ -295,6 +315,7 @@ batch_basic()
 
         test_multi_bound $file $replace # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
         test_optimize $file
+        unset GENOZIP_REFERENCE
     done
 }
 
@@ -318,8 +339,8 @@ batch_precompressed()
 batch_bgzf()
 {
     batch_print_header
-    #local files=(basic.bam basic-bgzf-6.sam.gz basic-bgzf-9.sam.gz basic-bgzf-6-no-eof.sam.gz basic-1bgzp_block.bam)
-    local files=()
+    local files=(basic-bgzf.bam basic-bgzf-6.sam.gz basic-bgzf-9.sam.gz basic-bgzf-6-no-eof.sam.gz basic-1bgzp_block.bam)
+    #local files=()
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
@@ -382,11 +403,11 @@ batch_dvcf()
     local file
 
     # prepare chain file
-    $genozip -e $GRCh38 ${chain%%.genozip} -fq 
+    $genozip -e $hg19 -e $GRCh38 ${chain%%.genozip} -fq || exit 1
 
     # test explicit reference
     test_header "${files[0]} - DVCF test - explicit reference"
-    $genozip test/${files[0]} -fo $output -C $chain -e $GRCh38 || exit 1
+    $genozip test/${files[0]} -fo $output -C $chain -e $hg19 -e $GRCh38 || exit 1
 
     for file in ${files[@]}; do
         test_header "$file - DVCF test"
@@ -495,7 +516,7 @@ batch_single_thread()
     test_standard "-@1" "-@1" basic.vcf 
     
     # with reference
-    test_standard "-@1 -e$GRCh38" "-@1" basic.chain 
+    test_standard "-@1 -e$hg19 -e$GRCh38" "-@1" basic.chain 
     
     # with chain and reference (note: cannot --test dual-coord files)
     $genozip -@1 -C$chain basic-dvcf-source.vcf -f 
@@ -634,7 +655,7 @@ batch_grep_count_lines()
         if [ $file == basic.fa ] || [ $file == basic.bam ] || [ $file == basic.generic ]; then continue; fi
 
         if [ $file == basic.chain ]; then
-            export GENOZIP_REFERENCE=$GRCh38
+            export GENOZIP_REFERENCE=${hg19}:${GRCh38}
         else
             unset GENOZIP_REFERENCE
         fi
@@ -657,8 +678,16 @@ batch_grep_count_lines()
         test_count_genocat_lines $TESTDIR/$file "--no-header --lines=${count}-${count}" $lines
         test_count_genocat_lines $TESTDIR/$file "--no-header --lines=100000-" 0
 
+        unset GENOZIP_REFERENCE
     done
+
+    # regions-file
+    test_count_genocat_lines "$TESTDIR/basic.vcf" "-R $TESTDIR/basic.vcf.regions -H" 6
+
+    # regions
+    test_count_genocat_lines "$TESTDIR/basic.vcf" "--regions 13:207237509-207237510,1:207237250 -H" 6
 }
+
 batch_backward_compatability()
 {
     batch_print_header
@@ -701,8 +730,11 @@ batch_real_world_with_ref()
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
-    # with reference
-    local files=( test.GRCh38_to_GRCh37.chain test.HG002_NA24385_SRR1767406_IonXpress_020_rawlib_24028.30k.sam \
+    # with two references
+    test_standard "-mf $1 -e $GRCh38 -e $hg19" " " test.GRCh38_to_GRCh37.chain 
+
+    # with a reference
+    local files=( test.HG002_NA24385_SRR1767406_IonXpress_020_rawlib_24028.30k.sam \
                   test.human.fq.gz test.human2.bam test.human2.sam \
                   test.human2-R1.100K.fq.bz2 test.m64136_200621_234916.ccs.10k.bam test.m64136_200621_234916.ccs.10k.sam \
                   test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz )
@@ -710,7 +742,7 @@ batch_real_world_with_ref()
     echo "subsets of real world files (with reference)"
     test_standard "-mf $1 -e $hg19" " " ${files[*]}
 
-    for f in $files; do rm -f ${f}.genozip; done
+    for f in $files test.GRCh38_to_GRCh37.chain; do rm -f test/${f}.genozip ; done
 }
 
 batch_real_world_small_vbs()
@@ -791,7 +823,7 @@ batch_reference()
 
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
-    test_standard "-me$GRCh38" "-e$GRCh38" test.human-unsorted.sam test.human.fq.gz test.human-sorted.sam
+    test_standard "-me$GRCh38" " " test.human-unsorted.sam test.human.fq.gz test.human-sorted.sam
 
     echo "multiple bound SAM with --REFERENCE" 
     test_standard "-mE$GRCh38" " " test.human-unsorted.sam test.human-sorted.sam

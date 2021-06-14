@@ -26,6 +26,8 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->last_end_line_i = 0;
     memset (vb->ad_values, 0, sizeof (vb->ad_values));
     vb->sample_i = 0;
+    vb->new_ref = 0;
+    vb->is_del_sv = 0;
     
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);
@@ -36,6 +38,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     buf_free (&vb->format_mapper_buf);
     buf_free (&vb->format_contexts);
     buf_free (&vb->info_items);
+    buf_free (&vb->rejects_report);
 }
 
 void vcf_vb_destroy_vb (VBlockVCF *vb)
@@ -49,6 +52,7 @@ void vcf_vb_destroy_vb (VBlockVCF *vb)
     buf_destroy (&vb->format_mapper_buf);
     buf_destroy (&vb->format_contexts);
     buf_destroy (&vb->info_items);
+    buf_destroy (&vb->rejects_report);
 }
 
 // free memory allocations that assume subsequent files will have the same number of samples.

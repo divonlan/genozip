@@ -20,7 +20,7 @@ One or more file names must be given
 
 .. option:: -e, --reference filename.  Load a reference file prior to decompressing. Required only for files compressed with --reference
 
-     | Note: this is equivalent of setting the environment variable GENOZIP_REFERENCE with the reference filename.
+     | Note: this is equivalent of setting the environment variable $GENOZIP_REFERENCE with the reference filename.
      |
 
 .. include:: opt-piz.rst
@@ -41,9 +41,10 @@ One or more file names must be given
 
           |
 
-.. option:: -c, --stdout  (obsolete) use genocat instead          
+.. option:: -^, --replace  Replace the source file with the result file rather than leaving it unchanged.
 
           |
+
 
 .. include:: opt-quiet.rst
 .. include:: opt-threads.rst

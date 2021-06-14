@@ -55,7 +55,7 @@ static unsigned taxid_redirection_snip_len;
 // ----------------------
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
-void sam_zip_qual (VBlock *vb, uint32_t vb_line_i, char **line_qual_data, uint32_t *line_qual_len, uint32_t maximum_len) 
+void sam_zip_qual (VBlock *vb, uint64_t vb_line_i, char **line_qual_data, uint32_t *line_qual_len, uint32_t maximum_len) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
@@ -77,7 +77,7 @@ void sam_zip_qual (VBlock *vb, uint32_t vb_line_i, char **line_qual_data, uint32
 }
 
 // callback function for compress to get data of one line
-void sam_zip_u2 (VBlock *vb, uint32_t vb_line_i, char **line_u2_data,  uint32_t *line_u2_len, uint32_t maximum_len) 
+void sam_zip_u2 (VBlock *vb, uint64_t vb_line_i, char **line_u2_data,  uint32_t *line_u2_len, uint32_t maximum_len) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
@@ -94,7 +94,7 @@ void sam_zip_u2 (VBlock *vb, uint32_t vb_line_i, char **line_u2_data,  uint32_t 
 // callback function for compress to get BD_BI data of one line: this is an
 // interlaced line containing a character from BD followed by a character from BI - since these two fields are correlated
 // note: if only one of BD or BI exists, the missing data in the interlaced string will be 0 (this should is not expected to ever happen)
-void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i, 
+void sam_zip_bd_bi (VBlock *vb_, uint64_t vb_line_i, 
                     char **line_data, uint32_t *line_len,  // out 
                     uint32_t maximum_len)
 {
@@ -145,24 +145,24 @@ void sam_seg_initialize (VBlock *vb)
 
     // note: all numeric fields needs STORE_INT to be reconstructable to BAM (possibly already set)
     // via the translators set in the SAM_TOP2BAM Container
-    vb->contexts[SAM_SQBITMAP].ltype    = LT_BITMAP;
-    vb->contexts[SAM_SQBITMAP].local_always = true;
-    vb->contexts[SAM_TLEN].flags.store  = STORE_INT;
-    vb->contexts[SAM_MAPQ].flags.store  = STORE_INT;
-    vb->contexts[SAM_FLAG].flags.store  = STORE_INT;
-    vb->contexts[SAM_RNAME].flags.store = STORE_INDEX; // since v12
-    vb->contexts[SAM_POS].flags.store   = STORE_INT;   // since v12
-    vb->contexts[SAM_PNEXT].flags.store = STORE_INT;
-    vb->contexts[SAM_STRAND].ltype      = LT_BITMAP;
-    vb->contexts[SAM_GPOS].ltype        = LT_UINT32;
-    vb->contexts[SAM_GPOS].flags.store  = STORE_INT;
+    CTX(SAM_SQBITMAP)->ltype    = LT_BITMAP;
+    CTX(SAM_SQBITMAP)->local_always = true;
+    CTX(SAM_TLEN)->flags.store  = STORE_INT;
+    CTX(SAM_MAPQ)->flags.store  = STORE_INT;
+    CTX(SAM_FLAG)->flags.store  = STORE_INT;
+    CTX(SAM_RNAME)->flags.store = STORE_INDEX; // since v12
+    CTX(SAM_POS)->flags.store   = STORE_INT;   // since v12
+    CTX(SAM_PNEXT)->flags.store = STORE_INT;
+    CTX(SAM_STRAND)->ltype      = LT_BITMAP;
+    CTX(SAM_GPOS)->ltype        = LT_UINT32;
+    CTX(SAM_GPOS)->flags.store  = STORE_INT;
 
-    vb->contexts[SAM_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
-    vb->contexts[SAM_TOP2BAM].no_stons  = true;
-    vb->contexts[SAM_TOP2FQ].no_stons   = true;
+    CTX(SAM_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(SAM_TOP2BAM)->no_stons  = true;
+    CTX(SAM_TOP2FQ)->no_stons   = true;
 
-    Context *rname_ctx = &vb->contexts[SAM_RNAME];
-    Context *rnext_ctx = &vb->contexts[SAM_RNEXT];
+    Context *rname_ctx = CTX(SAM_RNAME);
+    Context *rnext_ctx = CTX(SAM_RNEXT);
 
     rname_ctx->flags.store = rnext_ctx->flags.store = STORE_INDEX; // when reconstructing BAM, we output the word_index instead of the string
     rname_ctx->no_stons = rnext_ctx->no_stons = true;  // BAM reconstruction needs RNAME, RNEXT word indices. also needed for random access.
@@ -174,9 +174,9 @@ void sam_seg_initialize (VBlock *vb)
     codec_acgt_comp_init (vb);
 
     if (kraken_is_loaded) {
-        vb->contexts[SAM_TAXID].flags.store    = STORE_INT;
-        vb->contexts[SAM_TAXID].no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
-        vb->contexts[SAM_TAXID].counts_section = true; 
+        CTX(SAM_TAXID)->flags.store    = STORE_INT;
+        CTX(SAM_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
+        CTX(SAM_TAXID)->counts_section = true; 
     }
 
     COPY_TIMER (seg_initialize);
@@ -186,10 +186,10 @@ void sam_seg_finalize (VBlockP vb)
 {
     // for qual data - select domqual compression if possible, or fallback 
     if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) 
-        vb->contexts[SAM_QUAL].ltype  = LT_SEQUENCE; 
+        CTX(SAM_QUAL)->ltype  = LT_SEQUENCE; 
 
     if (!codec_domq_comp_init (vb, SAM_U2_Z, sam_zip_u2)) 
-        vb->contexts[SAM_U2_Z].ltype  = LT_SEQUENCE; 
+        CTX(SAM_U2_Z)->ltype  = LT_SEQUENCE; 
 
     // top level snip - reconstruction as SAM
     SmallContainer top_level_sam = { 
@@ -211,7 +211,7 @@ void sam_seg_finalize (VBlockP vb)
                        { .dict_id = (DictId)dict_id_fields[SAM_OPTIONAL],                   },
                        { .dict_id = (DictId)dict_id_fields[SAM_EOL],                        } }
     };
-    container_seg_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], (ContainerP)&top_level_sam, 0, 0, 0);
+    container_seg_by_ctx (vb, CTX(SAM_TOPLEVEL), (ContainerP)&top_level_sam, 0, 0, 0);
 
     // top level snip - reconstruction as BAM
     // strategy: we start by reconstructing the variable-length fields first (after a prefix that sets them in place) 
@@ -243,7 +243,7 @@ void sam_seg_finalize (VBlockP vb)
                                             CON_PREFIX_SEP, // end of (empty) container-wide prefix
                                             ' ',' ',' ',' ', CON_PREFIX_SEP }; // first item prefix - 4 spaces (place holder for block_size)
 
-    container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2BAM], (ContainerP)&top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
+    container_seg_by_ctx (vb, CTX(SAM_TOP2BAM), (ContainerP)&top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
                           IS_BAM ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
 
     // top level snip - reconstruction as FASTQ
@@ -266,7 +266,7 @@ void sam_seg_finalize (VBlockP vb)
     static const char fastq_line_prefix[] = { CON_PREFIX_SEP, CON_PREFIX_SEP, '@', CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, 
                                               CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, '+', '\n', CON_PREFIX_SEP };
 
-    container_seg_by_ctx (vb, &vb->contexts[SAM_TOP2FQ], (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
+    container_seg_by_ctx (vb, CTX(SAM_TOP2FQ), (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -341,16 +341,15 @@ void sam_seg_verify_rname_pos (VBlock *vb, const char *p_into_txt, PosType this_
         max_pos = ENT (RefContig, *header_contigs, vb->chrom_node_index)->max_pos;
     }
     else {
-        WordIndex ref_contig = ref_contig_get_by_chrom (vb, vb->chrom_node_index); // possibly an alt contig
+        WordIndex ref_contig = ref_contig_get_by_chrom (vb, gref, vb->chrom_node_index, &max_pos); // possibly an alt contig
         if (ref_contig == WORD_INDEX_NONE) {
             WARN_ONCE ("FYI: RNAME \"%.*s\" (and possibly others) is missing in the reference file. No harm.", 
                        vb->chrom_name_len, vb->chrom_name);
             return; // the sequence will be segged as unaligned
         }
-        max_pos = ENT (RefContig, loaded_contigs, ref_contig)->max_pos;
     }
 
-    ASSINP (this_pos <= max_pos, "%s: Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%u chrom_node_index=%d", 
+    ASSINP (this_pos <= max_pos, "%s: Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%"PRIu64" chrom_node_index=%d", 
             txt_name, this_pos, vb->chrom_name_len, vb->chrom_name, max_pos, vb->vblock_i, vb->line_i, vb->chrom_node_index);
 }
 
@@ -363,7 +362,7 @@ void sam_seg_tlen_field (VBlockSAM *vb,
                          int64_t tlen_value, // option 2
                          PosType pnext_pos_delta, int32_t cigar_seq_len)
 {
-    Context *ctx = &vb->contexts[SAM_TLEN];
+    Context *ctx = CTX(SAM_TLEN);
 
     if (tlen) { // option 1
         ASSSEG0 (tlen_len, tlen, "empty TLEN");
@@ -414,7 +413,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 {
     START_TIMER;
 
-    Context *bitmap_ctx = &vb->contexts[bitmap_did];
+    Context *bitmap_ctx = CTX(bitmap_did);
     Context *nonref_ctx = bitmap_ctx + 1;
 
     ASSERT (recursion_level < 4, "excess recursion recursion_level=%u seq_len=%u level_0_cigar=%s", // this would mean a read of about 4M bases... in 2020, this looks unlikely
@@ -454,7 +453,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     if (seq[0] == '*') goto done; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
 
     RefLock lock;
-    Range *range = ref_seg_get_locked_range ((VBlockP)vb, vb->chrom_node_index, pos, vb->ref_consumed, seq, &lock);
+    Range *range = ref_seg_get_locked_range ((VBlockP)vb, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, vb->ref_consumed, seq, &lock);
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range || // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
@@ -468,7 +467,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
         random_access_update_last_pos ((VBlockP)vb, DC_PRIMARY, pos + vb->ref_consumed - 1);
 
-        if (range) ref_unlock (lock);
+        if (range) ref_unlock (gref, lock);
         
         // note: in case of a missing range (which can be the first range in this seq, or a subsequent range), we zero the entire remaining bitmap.
         // this is because, absent a reference, we don't know how much ref is consumed by this missing range.
@@ -525,7 +524,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
                 }
 
                 // case our seq is identical to the reference at this site
-                else if (range && normal_base && seq[i] == ref_get_nucleotide (range, actual_next_ref)) {
+                else if (range && normal_base && seq[i] == ref_base_by_idx (range, actual_next_ref)) {
                     bit_array_set (bitmap, bit_i); bit_i++;
 
                     if (flag.reference == REF_EXT_STORE)
@@ -583,7 +582,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
         if (next_ref == pos_index + ref_len_this_level && subcigar_len) break;
     }
 
-    if (range) ref_unlock (lock);       
+    if (range) ref_unlock (gref, lock);       
 
     uint32_t this_seq_last_pos = pos + (next_ref - pos_index) - 1;
 
@@ -1094,8 +1093,8 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 
         dl->u2_data_start = value - vb->txt_data.data;
         dl->u2_data_len   = value_len;
-        vb->contexts[SAM_U2_Z].txt_len   += add_bytes;
-        vb->contexts[SAM_U2_Z].local.len += value_len;
+        CTX(SAM_U2_Z)->txt_len   += add_bytes;
+        CTX(SAM_U2_Z)->local.len += value_len;
     }
 
     // Numeric array array
@@ -1162,7 +1161,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
 {
     const bool is_bam = IS_BAM;
     Container con = { .repeats=1 };
-    char prefixes[MAX_SUBFIELDS * 6 + 3]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PREFIX_SEP ; +3 for the initial CON_PREFIX_SEP
+    char prefixes[MAX_FIELDS * 6 + 3]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PREFIX_SEP ; +3 for the initial CON_PREFIX_SEP
     prefixes[0] = prefixes[1] = prefixes[2] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix followed by seperator for empty prefix for translator-only item[0]
     unsigned prefixes_len=3;
     const char *value, *tag;
@@ -1190,7 +1189,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         };
         con_inc_nitems (con);
 
-        ASSSEG (con_nitems(con) <= MAX_SUBFIELDS, value, "too many optional fields, limit is %u", MAX_SUBFIELDS);
+        ASSSEG (con_nitems(con) <= MAX_FIELDS, value, "too many optional fields, limit is %u", MAX_FIELDS);
 
         // in the optional field prefix (unlike array type), all integer types become 'i'.
         char prefix_type = sam_seg_bam_type_to_sam_type (type);
@@ -1207,12 +1206,12 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         if (con.items[num_items-1].seperator[0] & 0x80) // is a flag
             con.items[num_items-1].seperator[0] &= ~(CI_NATIVE_NEXT & ~(uint8_t)0x80); // last Optional field has no tab
         con.items[num_items-1].seperator[1] = 0;
-        container_seg_by_ctx (vb, &vb->contexts[SAM_OPTIONAL], &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * (num_items-1)); // account for : SAM: "MX:i:" BAM: "MXi"
+        container_seg_by_ctx (vb, CTX(SAM_OPTIONAL), &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * (num_items-1)); // account for : SAM: "MX:i:" BAM: "MXi"
     }
     else
         // NULL means MISSING Container item (of the toplevel container) - will cause container_reconstruct_do of 
         // the toplevel container to delete of previous separator (\t)
-        container_seg_by_ctx (vb, &vb->contexts[SAM_OPTIONAL], 0, 0, 0, 0); 
+        container_seg_by_ctx (vb, CTX(SAM_OPTIONAL), 0, 0, 0, 0); 
 
     return next_field;        
 }
@@ -1265,7 +1264,7 @@ void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, ui
     dl->qual_data_start = qual - vb->txt_data.data;
     dl->qual_data_len   = qual_data_len;
 
-    Context *qual_ctx = &vb->contexts[SAM_QUAL];
+    Context *qual_ctx = CTX(SAM_QUAL);
     qual_ctx->local.len += dl->qual_data_len;
     qual_ctx->txt_len   += add_bytes;
 }
@@ -1302,8 +1301,8 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     GET_NEXT_ITEM (SAM_QNAME);
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
-    seg_compound_field (vb_, &vb->contexts[SAM_QNAME], field_start, field_len, arg, 0, 1 /* \n */);
-    vb->contexts[SAM_QNAME].last_txt_index = ENTNUM (vb->txt_data, field_start); // store for kraken
+    seg_compound_field (vb_, CTX(SAM_QNAME), field_start, field_len, arg, 0, 1 /* \n */);
+    CTX(SAM_QNAME)->last_txt_index = ENTNUM (vb->txt_data, field_start); // store for kraken
     vb->last_txt_len (SAM_QNAME) = field_len;
 
     SEG_NEXT_ITEM (SAM_FLAG);
@@ -1335,7 +1334,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, false, 0, field_start, field_len, 0, field_len+1);
 
     GET_NEXT_ITEM (SAM_TLEN);
-    sam_seg_tlen_field (vb, field_start, field_len, 0, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len);
+    sam_seg_tlen_field (vb, field_start, field_len, 0, CTX(SAM_PNEXT)->last_delta, dl->seq_len);
 
     GET_NEXT_ITEM (SAM_SEQ);
 
@@ -1355,7 +1354,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // add BIN so this file can be reconstructed as BAM
     bam_seg_bin (vb, 0, (uint16_t)flag, this_pos);
 
-    // OPTIONAL fields - up to MAX_SUBFIELDS of them
+    // OPTIONAL fields - up to MAX_FIELDS of them
     next_field = sam_seg_optional_all (vb, dl, next_field, len, has_13, separator, 0);
 
     SEG_EOL (SAM_EOL, false); /* last field accounted for \n */

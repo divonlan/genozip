@@ -124,7 +124,7 @@ static void zip_dynamically_set_max_memory (void)
         //if (flag.vblock_memory < txt_file->reject_bytes && test_i != num_tests-1) 
         //    continue;
 
-        VBlock *vb = vb_get_vb ("dynamically_set_memory", 1);
+        VBlock *vb = vb_get_vb (DYN_SET_MEM_TASK, 1);
         txtfile_read_vblock (vb, true);
 
         // case: we found at least one full line - we can calculate the memory now
@@ -163,7 +163,7 @@ static void zip_dynamically_set_max_memory (void)
 
             // on Windows and Mac - which tend to have less memory in typical configurations, warn if we need a lot
             #if defined _WIN32 || defined APPLE
-                flag.vblock_memory = MIN (flag.vblock_memory, 32 << 20); // limit to 32MB per VB unless users says otherwise to protect interactivity 
+                flag.vblock_memory = MIN (flag.vblock_memory, 32 << 20); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
 
                 uint64_t concurrent_vbs = 1 + txt_file->disk_size ? MIN (1+ txt_file->disk_size / flag.vblock_memory, global_max_threads)
                                                                   : global_max_threads;
@@ -199,6 +199,9 @@ static void zip_dynamically_set_max_memory (void)
     // if we failed to calculate - use default
     if (!done)
         flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
+
+    // restore (used for --optimize-DESC / --add-line-numbers)
+    txt_file->num_lines = 0;
 }
 
 static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i,
@@ -407,7 +410,7 @@ done:
 static void zip_handle_unique_words_ctxs (VBlock *vb)
 {
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = &vb->contexts[did_i];
+        Context *ctx = CTX(did_i);
     
         if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
         if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
@@ -441,7 +444,7 @@ static void zip_generate_ctxs (VBlock *vb)
 
     // generate & write b250 data for all primary fields
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = &vb->contexts[did_i];
+        Context *ctx = CTX(did_i);
 
         // case: the entire context is just numbers in local, and b250 is only SNIP_LOOKUPs. 
         // ctx->numeric_only is set to indicate we get rid of the b250.
@@ -491,7 +494,7 @@ static void zip_compress_ctxs (VBlock *vb)
 
     // generate & write b250 data for all primary fields
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = &vb->contexts[did_i];
+        Context *ctx = CTX(did_i);
 
         if (ctx->b250.len) {
             if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
@@ -516,16 +519,18 @@ static void zip_compress_ctxs (VBlock *vb)
     COPY_TIMER (zip_compress_ctxs);
 }
 
+// called by main thread after VB has completed processing
 static void zip_update_txt_counters (VBlock *vb)
 {
-    // note: in case of an FASTQ with flag.optimize_DESC, we already updated this in fastq_txtfile_count_lines
-    if (!(flag.optimize_DESC && vb->data_type == DT_FASTQ)) 
+    // note: in case of an FASTQ with flag.optimize_DESC or VCF with add_line_numbers, we already updated this in *_zip_read_one_vb
+    if (!(flag.optimize_DESC && vb->data_type == DT_FASTQ) &&
+        !(flag.add_line_numbers && (vb->data_type == DT_VCF || vb->data_type == DT_BCF)))
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
 
-    // counters of data AS IT APPEARS IN THE TEXT FILE
+    // counters of data AS IT APPEARS IN THE TXT FILE
     if (!flag.rejects_coord) {      
-        z_file->num_lines                += (int64_t)vb->lines.len;      // lines in all bound files in this z_file
-        z_file->txt_data_so_far_single_0 += (int64_t)vb->txt_size; // length of data before any modifications
+        z_file->num_lines                += (int64_t)vb->lines.len; // lines in all bound files in this z_file
+        z_file->txt_data_so_far_single_0 += (int64_t)vb->txt_size;  // length of data before any modifications
         z_file->txt_data_so_far_bind_0   += (int64_t)vb->txt_size;
     }
 
@@ -553,7 +558,7 @@ static void zip_write_global_area (Digest single_component_digest)
         
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL || flag.reference == REF_MAKE_CHAIN) 
-        ref_alt_chroms_compress();
+        ref_alt_chroms_compress(gref);
 
     // output reference, if needed
     bool store_ref = flag.reference == REF_INTERNAL || flag.reference == REF_EXT_STORE || flag.make_reference;
@@ -575,7 +580,7 @@ static void zip_write_global_area (Digest single_component_digest)
         random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, DC_LUFT, flag.show_index ? RA_MSG_LUFT : NULL);
 
     if (store_ref) 
-        random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
+        random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
 
     stats_compress();
 
@@ -816,8 +821,11 @@ finish:
     if (flag.sort && !flag.seg_only)
         linesorter_compress_recon_plan();
 
-    if (z_closes_after_me && !flag.seg_only)
+    if (z_closes_after_me && !flag.seg_only) {
         zip_write_global_area (single_component_digest);
+
+        if (chain_is_loaded) vcf_liftover_display_lift_report();
+    }
 
     zip_display_compression_ratio (flag.bind ? DIGEST_NONE : single_component_digest, z_closes_after_me); // Done for reference + final compression ratio calculation
     

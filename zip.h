@@ -8,6 +8,8 @@
 
 #include "genozip.h"
 
+#define DYN_SET_MEM_TASK "dynamically_set_memory"
+
 extern void zip_one_file (const char *vcf_basename, bool *is_last_file, bool z_closes_after_me);
 
 #endif

@@ -71,7 +71,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-ref-seq  ZUC. Show the reference sequences as stored in genozip file or a reference file. Combine with --regions to see specific regions (genocat only). Combine with --sequential to omit newlines. '-' appears in unset loci. Note: the sequence stored in a .ref.genozip is NOT 100% identical to the FASTA that was used to generate it.
+.. option:: --show-ref-seq  ZUC. Show the reference sequences as stored internally in a SAM, BAM or FASTQ file (also works for a reference file, but --reference --regions is faster). Combine with --regions to see specific regions (genocat only). Combine with --sequential to omit newlines. '-' appears in unset loci.
 
           |
 
@@ -88,10 +88,6 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
           |
 
 .. option:: --show-ref-contigs  ZUC. Show the details of the reference contigs. 
-
-          |
-
-.. option:: --show-chain-contigs  Z. Show the details of the chain file contigs. Used in combination with --chain.
 
           |
 
@@ -127,10 +123,6 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-chain  Z. Show chain file alignments. Example: ``genozip -C GRCh37_to_GRCh38.chain.genozip --show-chain .``
-
-          |
-
 .. option:: --show-dvcf  C. Show line-by-line outcome of the liftover of that line. Used with dual-coordinate files and may be combined --luft.
 
     | See: :ref:`dvcf`
@@ -162,6 +154,10 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
           |
 
 .. option:: --debug-allthesame  Z. See contexts that are marked as "all the same" and are removed or shrunk.
+
+          |
+
+.. option:: --debug-recon-size  Z. See vb->context[]->txt_len and vb->recon_size.
 
           |
 

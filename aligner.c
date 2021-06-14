@@ -101,6 +101,7 @@ BitArray aligner_seq_to_bitmap (const char *seq, word_t seq_len,
 // returns false if no match found.
 // note: matches that imply a negative GPOS (i.e. their beginning is aligned to before the start of the genome), aren't consisdered
 static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
+                                          const BitArray *genome, const BitArray *emoneg, PosType genome_nbases,
                                           bool *is_forward, bool *is_all_ref) // out
 {
     START_TIMER;
@@ -111,7 +112,7 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
     
     PosType gpos = NO_GPOS, best_gpos = NO_GPOS; // match not found yet
     bool best_is_forward = false;
-
+    
     // convert seq to a bitmap
     bool maybe_perfect_match;
     word_t seq_bits_words[roundup_bits2words64(seq_len * 2)];
@@ -219,6 +220,10 @@ done:
 
 void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t seq_len)
 {
+    const BitArray *genome, *emoneg;
+    PosType genome_nbases;
+    ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
+
     // these 4 contexts are consecutive and in the same order for all relevant data_types in data_types.h
     Context *nonref_ctx = bitmap_ctx + 1; // NONREF
     Context *gpos_ctx   = bitmap_ctx + 3; // GPOS
@@ -237,14 +242,14 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     buf_alloc_old (vb, &gpos_ctx->local,   MAX (nonref_ctx->local.len + sizeof (uint32_t), vb->lines.len * sizeof (uint32_t)), CTX_GROWTH, "contexts->local"); 
 
     bool is_forward, is_all_ref;
-    PosType gpos = aligner_best_match ((VBlockP)vb, seq, seq_len, &is_forward, &is_all_ref);
+    PosType gpos = aligner_best_match ((VBlockP)vb, seq, seq_len, genome, emoneg, genome_nbases, &is_forward, &is_all_ref);
 
     // case: we're the 2nd of the pair - the bit represents whether this strand is equal to the pair's strand (expecting
     // it to be 1 in most cases - making the bitmap highly compressible)
     if (gpos_ctx->pair_local) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
         
-        ASSERT (vb->line_i < pair_strand->nbits, "vb=%u cannot get pair_1 STRAND bit for line_i=%u because pair_1 strand bitarray has only %u bits",
+        ASSERT (vb->line_i < pair_strand->nbits, "vb=%u cannot get pair_1 STRAND bit for line_i=%"PRIu64" because pair_1 strand bitarray has only %u bits",
                 vb->vblock_i, vb->line_i, (unsigned)pair_strand->nbits);
 
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
@@ -262,7 +267,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     bool store_local = true;
     if (gpos_ctx->pair_local) {
 
-        ASSERT (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair_1 GPOS for line_i=%u because pair_1 GPOS.len=%"PRIu64,
+        ASSERT (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair_1 GPOS for line_i=%"PRIu64" because pair_1 GPOS.len=%"PRIu64,
                 vb->vblock_i, vb->line_i, gpos_ctx->pair.len);
 
         PosType pair_gpos = (PosType)*ENT (uint32_t, gpos_ctx->pair, vb->line_i); // same location, in the pair's local
@@ -294,7 +299,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     }
 
     // lock region of reference to protect is_set
-    RefLock lock = (flag.reference == REF_EXT_STORE) ? ref_lock (gpos, seq_len) : REFLOCK_NONE;
+    RefLock lock = (flag.reference == REF_EXT_STORE) ? ref_lock (gref, gpos, seq_len) : REFLOCK_NONE;
 
     // shortcut if we have a full reference match
     if (is_all_ref) {
@@ -302,7 +307,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
         bitmap_ctx->next_local += seq_len;
         
         if (flag.reference == REF_EXT_STORE) 
-            bit_array_set_region (genome_is_set, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
+            ref_set_genome_is_used (gref, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
 
         goto done;
     }
@@ -325,7 +330,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
                 
                 // TO DO: replace this with bit_array_or_with (dst, start, len, src, start) (dst=is_set, src=bitmap) (bug 174)
                 if (flag.reference == REF_EXT_STORE) 
-                    bit_array_set (genome_is_set, ref_i); // we will need this ref to reconstruct
+                    ref_set_genome_is_used (gref, ref_i, 1);  // we will need this ref to reconstruct
 
                 use_reference = true;
             }
@@ -341,7 +346,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     bitmap_ctx->next_local = next_bit;
 
 done:
-    ref_unlock (lock);
+    ref_unlock (gref, lock);
 }
 
 // PIZ: SEQ reconstruction 
@@ -375,6 +380,10 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
             vb->txt_data.len -= recon_len; // roll back reconstruction
             gpos = gpos_ctx->last_value.i;
         }
+
+        const BitArray *genome, *emoneg;
+        PosType genome_nbases;
+        ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
 
         // sanity check - the sequence is supposed to fit in the 
         ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome->nbits / 2, "gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,

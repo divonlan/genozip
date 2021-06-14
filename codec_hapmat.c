@@ -79,7 +79,7 @@ static HaploTypeSortHelperIndex *codec_hapmat_count_alt_alleles (VBlockVCF *vb)
     return helper_index;
 }
 
-static void codec_hapmat_compress_one_array (VBlockP vb_, uint32_t ht_i, 
+static void codec_hapmat_compress_one_array (VBlockP vb_, uint64_t ht_i, 
                                              char **line_data_1, uint32_t *line_data_len_1,
                                              uint32_t unused_maximum_len)
 {
@@ -302,7 +302,7 @@ void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
             break;
 
         default: 
-            ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%u vb_i=%u: Invalid character found in decompressed HT array: '%c' (ASCII %u)", 
+            ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%"PRIu64" vb_i=%u: Invalid character found in decompressed HT array: '%c' (ASCII %u)", 
                    vb->line_i, vb->vblock_i, ht, ht);
     }
 }

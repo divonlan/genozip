@@ -321,7 +321,7 @@ bug fixes, including major bug with mc:i optional field in SAM
 - minor bug fixes
 
 10.0.0  31/Dec/2020
-- Increased MAX_SUBFIELDS from 64 to 2048. This sets the maximum number of INFO and FORMAT tags in VCF, 
+- Increased MAX_FIELDS from 64 to 2048. This sets the maximum number of INFO and FORMAT tags in VCF, 
   maximum number of optional fields in SAM/BAM and maximum ATTR in GVF.
 - Set size of vblock dynamically
 - VCF: support FORMAT tags that begin with a character other than a letter (eg a digit)
@@ -423,6 +423,10 @@ c. Many other improvements:
 - new option: genocat --MAPQ - filters a SAM or BAM file by the value of the MAPQ field
 - new option: genocat --bases - filters a SAM/BAM/FASTQ for SEQ base values
 - new option: --echo displays the command line and a timestamp upon completion ofq execution (successful or failed)
+- new option: genocat --regions-file - reading regions from as an alternative to --regions
+- new option: genocat --show-chain - for chain files - show chain file alignments
+- new option: genocat --show-chain-contigs - for chain files - show contig list
+- new option: genocat --add_qName_chr - for chain files - changes eg 22->chr22 and MT->chrM for all qNames  
 - discontinued support for GTShark codec - use genozip v11 to decompress old VCF files compressed with --gtshark
 - VCF: better compression of FORMAT/F2R1, INFO/MLEAC, FORMAT/MB, FORMAT/SB, FORMAT/ADALL, FORMAT/ADF, FORMAT/ADR, FORMAT/AF, FORMAT/SAC
 d. Much improved website genozip.com
@@ -438,7 +442,6 @@ e. Option changes:
 - Default number of threads is now 75% of cores for Windows and Mac and 110% of cores for Linux (modifiable with --threads)
 f. New advanced options:
 - new option: genocat --show-dvcf - shows line-by-line result of the liftover (applied to a dual coordinate VCF file)
-- new option: genozip --show-chain-contigs - used in combination with --chain
 - new option: genozip --show-kraken - used in combination with --taxid
 - new option: --show-uncompress. Shows uncompressing of section data.
 - new option: --show-flags. Shows internal flags after initialization.

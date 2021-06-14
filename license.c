@@ -77,7 +77,7 @@ static void license_store_locally (uint32_t license_num)
 
     fclose (fp);
 
-    free (filename);
+    FREE (filename);
 }
 
 static uint32_t licence_retrieve_locally (void)
@@ -91,7 +91,7 @@ static uint32_t licence_retrieve_locally (void)
     ASSERT0 (fscanf (fp, "%u", &license_num) == 1, "failed to read license_num");
     
     fclose (fp);
-    free (filename);
+    FREE (filename);
 
     return license_num;
 }
@@ -139,7 +139,7 @@ static void license_submit (const char *institution, const char *name, const cha
 
     url_read_string (url, NULL, 0, "Failed to register the license");
 
-    free (institutionE); free (nameE); free (emailE); free (osE);
+    FREE (institutionE); FREE (nameE); FREE (emailE); FREE (osE);
 }
 
 static bool license_verify_email (char *response, unsigned response_size, const char *unused)
@@ -169,8 +169,9 @@ static void license_exit_if_not_confirmed (const char *response)
 // load license if it exists, or register a new one
 
 // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
-// and might put you personally as well as your organization at legal and financial risk.
-// Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
+// and might put you personally as well as your organization at legal and financial risk - Genozip copyright holders
+// view themselves as entitled to any or all of the financial gains you and your organization make while using an 
+// unlicensed copy of Genozip. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 uint32_t license_get (void)
 {
     uint32_t license_num = licence_retrieve_locally();
@@ -224,7 +225,7 @@ uint32_t license_get (void)
     fprintf (stderr, "Send new feature updates: %s\n", update[0]=='Y' ? "Yes" : "No");
     fprintf (stderr, "System info: OS=%s cores=%u endianity=%s IP=%s\n", os, cores, endianity, ip);
     fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
-    fprintf (stderr, "genozip license number: %u\n\n", license_num);
+    fprintf (stderr, "Genozip license number: %u\n\n", license_num);
 
     str_query_user ("Proceed with completing the registration? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
     license_exit_if_not_confirmed (confirm);
@@ -233,7 +234,7 @@ uint32_t license_get (void)
 
     license_store_locally (license_num);
 
-    fprintf (stderr, "\nCongratulations! Your genozip non-commerical license has been granted.\n\n");
+    fprintf (stderr, "\nCongratulations! Your Genozip non-commerical license has been granted.\n\n");
 
     return license_num;
 }

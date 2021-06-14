@@ -6,16 +6,27 @@ Usage: ``genocat`` [options]... [files]...
 
 One or more file names must be given.
 
-**Reference-file related options**
+**General options**
 
-.. option:: -e, --reference filename.  Load a reference file prior to decompressing. Required only for files compressed with --reference. When no non-reference file is specified display the reference data itself (typically used in combination with --regions).
+.. include:: opt-piz.rst
 
-   | Note: this is equivalent of setting the environment variable GENOZIP_REFERENCE with the reference filename.
-   |
+.. option:: -z, --bgzf level.  Compress the output to the BGZF format (.gz extension). Note that by default genocat does not compress with BGZF (except for BAM that is compressed with level 1). Use this option if downstream tools require it.
 
-.. option:: -E, --REFERENCE filename.  With no non-reference file specified. Display the reverse complement of the reference data itself. Typically used in combination with --regions.
+.. include:: opt-quiet.rst
 
+.. include:: opt-threads.rst
+.. include:: opt-stats.rst                        
+
+.. option:: --validate[=valid]  Validates that the file(s) are valid genozip files. By default reports files that are invalid. With --validate=valid reports files that are valid, and if run on a single exit code indicates validity.
+    
           |
+
+.. include:: opt-help.rst
+
+.. option:: -e, --reference filename.  Load a reference file prior to decompressing. Used for files compressed with --reference. 
+
+   | Note: this is equivalent of setting the environment variable $GENOZIP_REFERENCE with the reference filename.
+   |
 
 .. option:: --show-reference  Show the name and MD5 of the reference file that needs to be provided to uncompress this file.
 
@@ -30,11 +41,8 @@ One or more file names must be given.
 .. option:: --component component-number.  View a specific component of a genozip file. <component-number> is the number of the component as it appears in the genols list - the first component being number 1.
 
           |
-.. option:: --interleaved  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file ; then a read from the second file ; then the next read from the first file and so on.
 
-          |
-
-.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (VCF SAM/BAM GVF FASTA 23andMe Chain) Show one or more regions of the file. 
+   .. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (VCF SAM/BAM GVF FASTA 23andMe Chain Reference) Show one or more regions of the file. 
 
    |
    | *Examples*: 
@@ -59,6 +67,21 @@ One or more file names must be given.
    |
    | *Note*: For Chain files this applies to the source contig (qName).
    |
+   | *Note*: To view reference files use in combination with --reference. To view in reverse-complemenet use --REFERENCE instead. Combine with --no-header to suppress output of the chromosome name.
+   |
+
+.. option:: -R, --regions-file [^]filename.  (VCF SAM/BAM GVF FASTA 23andMe Chain Reference) Show regions from a list in tab-separated file. To include all regions EXCEPT those in the file٫ prefix the filename with ^.
+
+|
+| *Example of a valid file: The first two rows produce the same 100-base region, and the third row is a single base*:
+
+::
+
+   chr22	17000000	17000099
+   chr22	17000000	+100
+   chr22	17000000
+
+          |
 
 .. option:: -g, --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads ; CHAIN: sets) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
 
@@ -117,6 +140,14 @@ One or more file names must be given.
 
           |
 
+.. option:: --snps-only.  Drops variants that are not a Single Nucleotide Polymorphism (SNP).
+
+          |
+
+.. option:: --indels-only.  Drops variants that are not Insertions or Deletions (INDEL).
+
+          |
+
 .. option:: --unsorted.  If a file contains a "reconstruction plan" (see genozip --sort) the file will be displayed sorted by default. --unsorted overrides this behavior and shows the file in its unsorted form. This is useful if the file was highly unsorted causing sorting during genocat to consume a lot of memory.
 
           |
@@ -134,7 +165,7 @@ One or more file names must be given.
    | See: :ref:`dvcf`
    |
 
-.. option:: --show-dvcf.  For each variant, show its coordinate system (Primary, Luft or Both), and its oStatus. May be used with or without combination of --luft.
+.. option:: -y, --show-dvcf.  For each variant, show its coordinate system (Primary, Luft or Both), and its oStatus. May be used with or without combination of --luft.
    
    | See: :ref:`dvcf`
    |
@@ -203,10 +234,15 @@ One or more file names must be given.
 
           |
 
-
 **FASTQ options**
 
+.. option:: --interleaved  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file ; then a read from the second file ; then the next read from the first file and so on.
+
+          |
+
 .. option:: --bases [^]value.  Filter lines based on the IUPAC characters (bases) of the sequence data (see SAM/BAM options).
+
+          |
 
 **FASTA options**
 
@@ -236,9 +272,32 @@ One or more file names must be given.
 
           |
 
-**Chain options**
+**Reference file options**
+
+.. option:: --reference <file> --regions <regions> [--header-only] View one or more regions of a reference file
+
+   | Note: Use --REFERENCE instead of --reference to view the region in reverse complement
+   | Note: --regions-file maybe used intead of --regions
+   | Note: Combine with --no-header to suppress output of the chromosome name.
+   | Note: Short forms of the options (eg -e instead of --reference) are fine too. 
+
+          |
+
+.. option:: --show-ref-contigs  ZUC. Show the details of the reference contigs. 
+
+          |
+
+**Chain file options**
 
 .. option:: --add-qName-chr.  rewrites the qName - single-character or double-digit chromosome names are prefixed with "chr" and "MT" is rewritten as "chrM".
+
+          |
+
+.. option:: --show-chain  Show chain file alignments. 
+
+          |
+
+.. option:: --show-chain-contigs  Show the details of the chain file contigs. 
 
           |
 
@@ -286,19 +345,3 @@ One or more file names must be given.
     
           |
 
-**General options**
-
-.. include:: opt-piz.rst
-
-.. option:: -z, --bgzf level.  Compress the output to the BGZF format (.gz extension). Note that by default genocat does not compress with BGZF (except for BAM that is compressed with level 1). Use this option if downstream tools require it.
-
-.. include:: opt-quiet.rst
-
-.. include:: opt-threads.rst
-.. include:: opt-stats.rst                        
-
-.. option:: --validate[=valid]  Validates that the file(s) are valid genozip files. By default reports files that are invalid. With --validate=valid reports files that are valid, and if run on a single exit code indicates validity.
-    
-          |
-
-.. include:: opt-help.rst

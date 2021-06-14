@@ -266,7 +266,7 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
 // Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
 static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, const char *value, int value_len) // returns true if caller still needs to seg 
 {
-    if (vb->contexts[VCF_REFALT].last_snip_len != 3) return true; // not simple two bases - caller should seg
+    if (CTX(VCF_REFALT)->last_snip_len != 3) return true; // not simple two bases - caller should seg
 
     char *str = (char *)value;
     int64_t sum = 0;
@@ -283,7 +283,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, con
 
     if (str - value != value_len + 1 /* +1 due to final str++ */) return true; // invalid BaseCounts data - caller should seg
 
-    const char *refalt = vb->contexts[VCF_REFALT].last_snip;
+    const char *refalt = CTX(VCF_REFALT)->last_snip;
 
     unsigned ref_i = acgt_encode[(int)refalt[0]];
     unsigned alt_i = acgt_encode[(int)refalt[2]];
@@ -317,7 +317,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, con
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 {
     const char *refalt; unsigned refalt_len;
-    reconstruct_peek (vb, &vb->contexts[VCF_REFALT], &refalt, &refalt_len);
+    reconstruct_peek (vb, CTX(VCF_REFALT), &refalt, &refalt_len);
 
     uint32_t counts[4], sorted_counts[4] = {}; // counts of A, C, G, T
 
@@ -360,13 +360,11 @@ TRANSLATOR_FUNC (vcf_piz_luft_XREV)
     char recon_copy[recon_len];
     memcpy (recon_copy, recon, recon_len);
 
-    unsigned num_items = str_count_char (recon, recon_len, ',') + 1;
-    const char *items[num_items]; unsigned item_lens[num_items];
-    str_split (recon_copy, recon_len, num_items, ',', items, item_lens, true, "vcf_piz_luft_XREV");
+    str_split_enforce (recon_copy, recon_len, 0, ',', item, true, "vcf_piz_luft_XREV");
 
     // re-reconstruct in reverse order
     vb->txt_data.len -= recon_len;
-    for (int i=num_items-1; i >= 1; i--)
+    for (int i=n_items-1; i >= 1; i--)
         RECONSTRUCT_SEP (items[i], item_lens[i], ',');
         
     RECONSTRUCT (items[0], item_lens[0]);
@@ -386,7 +384,7 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, const char
                       .drop_final_repeat_sep = true,
                       .keep_empty_item_sep   = true }; // don't delete the | before an empty item
 
-    Context *sf_ctxs[MAX_SUBFIELDS] = {};
+    Context *sf_ctxs[MAX_FIELDS] = {};
 
     uint32_t item_i=0;
     const char *item_start = field;
@@ -397,8 +395,8 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, const char
                         "expecting all repeats of %s to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has more: %.*s", 
                         vep_ctx->name, con_nitems(con), con.repeats, field_len, field);
 
-                ASSVCF (item_i < MIN (126, MAX_SUBFIELDS), "exceeded the max number of %s items=%u", 
-                        vep_ctx->name, MIN (126, MAX_SUBFIELDS)); // the 126 constraint is just the context naming scheme
+                ASSVCF (item_i < MIN (126, MAX_FIELDS), "exceeded the max number of %s items=%u", 
+                        vep_ctx->name, MIN (126, MAX_FIELDS)); // the 126 constraint is just the context naming scheme
                 
                 char name[8];
                 sprintf (name, "%c%c_%.3s", item_i < 63 ? '_' : '`', '@' + (item_i % 63), vep_ctx->name);
@@ -553,18 +551,37 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
     // check that lifting-over of END is delta-encoded and is lifted over to the same, non-xstrand, Chain alignment, and reject if not
     if (chain_is_loaded && LO_IS_OK (last_ostatus)) { 
 
-        bool bad_mapping = !vb->contexts[VCF_POS].last_delta; // reject if END was not stored as a delta - our translator won't work
-        bool xstrand = false;
-        PosType opos = 0;
+        bool is_xstrand = vb->last_index (VCF_oXSTRAND); // set in vcf_lo_seg_generate_INFO_DVCF
+        PosType end     = vb->last_int (VCF_POS); 
+        PosType aln_last_pos = chain_get_aln_last_pos (vb->pos_aln_i); 
 
-        if (!bad_mapping) {
-            uint32_t end_aln_i;
-            LiftOverStatus end_ostatus = vcf_lo_get_liftover_coords (vb, 0, &opos, &xstrand, &end_aln_i); // uses vb->chrom_node_index and POS->last_int
-            bad_mapping = LO_IS_REJECTED (end_ostatus) || end_aln_i != vb->pos_aln_i;
+        // case: we don't yet handle END translation in case of a reverse strand
+        if (is_xstrand)            
+            REJECT_SUBFIELD (LO_INFO, end_ctx, "Genozip limitation: variant with INFO/END and chain file alignment with a negative strand%s", "");
+
+        // case: END goes beyond the end of the chain file alignment and its a <DEL>
+        else if (vb->is_del_sv && end > aln_last_pos) {
+
+            // case: END goes beyond end of alignment
+            PosType gap_after = chain_get_aln_gap_after (vb->pos_aln_i);
+            
+            // case: END falls in the gap after - <DEL> is still valid but translated END needs to be closer to POS to avoid gap - 
+            // we don't yet do this
+            if (end <= aln_last_pos + gap_after)
+                REJECT_SUBFIELD (LO_INFO, end_ctx, "Genozip limitation: <DEL> variant: INFO/END=%.*s is in the gap after the end of the chain file alignment", end_len, end_str);
+    
+            // case: END falls on beyond the gap (next alignment or beyond) - this variant cannot be lifted
+            else
+                REJECT_SUBFIELD (LO_INFO, end_ctx, "<DEL> variant: INFO/END=%.*s is beyond the end of the chain file alignment and also beyond the gap after the alignment", end_len, end_str);
         }
 
-        if (bad_mapping || xstrand) 
-            vcf_lo_seg_rollback_and_reject (vb, LO_INFO, end_ctx);
+        // case: END goes beyond the end of the chain file alignment and its NOT a <DEL>
+        else if (!vb->is_del_sv && end > aln_last_pos) 
+            REJECT_SUBFIELD (LO_INFO, end_ctx, "POS and INFO/END=%.*s are not on the same chain file alignment", end_len, end_str);
+
+        // case: reject if END was not stored as a delta - our translator won't work
+        else if (!CTX(VCF_POS)->last_delta)
+            REJECT_SUBFIELD (LO_INFO, end_ctx, "Genozip limitation: INFO/END=%.*s too far from POS", end_len, end_str);        
     }
 }
 
@@ -575,8 +592,6 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
 {
     // ZIP liftover validation: postpone to vcf_seg_INFO_END
     if (validate_only) return true; 
-
-  //  if (vb->rejects_vb || LO_IS_REJECTED (vb->last_index (VCF_oSTATUS))) return false; // not translated if rejected
 
     PosType translated_end;
 
@@ -610,7 +625,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
     
     bool has_end = ((VBlockVCFP)vb)->last_end_line_i == vb->line_i; // true if INFO/END was encountered
 
-    Context *pos_ctx = &vb->contexts[VCF_POS];
+    Context *pos_ctx = CTX(VCF_POS);
     int64_t pos;
 
     if (has_end) {
@@ -634,7 +649,7 @@ static inline bool vcf_seg_test_SVLEN (VBlockVCF *vb, const char *svlen_str, uns
     int64_t svlen;
     if (!str_get_int (svlen_str, svlen_str_len, &svlen)) return false;
 
-    int64_t last_delta = vb->contexts[VCF_POS].last_delta; // INFO_END is an alias of POS - so the last delta would be between END and POS
+    int64_t last_delta = CTX(VCF_POS)->last_delta; // INFO_END is an alias of POS - so the last delta would be between END and POS
     return last_delta == -svlen;
 }
 
@@ -643,7 +658,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SVLEN)
 {
     if (!reconstruct) goto done;
 
-    int64_t value = -vb->contexts[VCF_POS].last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
+    int64_t value = -CTX(VCF_POS)->last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
     char str[30];
     unsigned str_len = str_int (value, str);
     RECONSTRUCT (str, str_len);
@@ -666,7 +681,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
     if (!ctx_encountered_in_line (vb, dict_id_INFO_LUFT, NULL) && // note: no need to chech PRIM because LUFT and PRIM always appear together
         !ctx_encountered_in_line (vb, dict_id_INFO_LREJ, NULL) &&
         !ctx_encountered_in_line (vb, dict_id_INFO_PREJ, NULL)) {
-        vcf_lo_seg_rollback_and_reject (vb, LO_ADDED_VARIANT, NULL);
+        vcf_lo_seg_rollback_and_reject (vb, LO_ADDED_VARIANT, NULL); // note: we don't report this reject because it doesn't happen during --chain
         added_variant = true; // we added a REJX field in a variant that will be reconstructed in the current coordintes
     }
 
@@ -761,7 +776,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     
     // --chain: if this is RendAlg=A_1 subfield in a REF<>ALT variant, convert a eg 4.31e-03 to e.g. 0.00431. This is to
     // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
-    if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && last_ostatus == LO_OK_REF_ALT_SWTCH && 
+    if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && last_ostatus == LO_OK_REF_ALT_SWITCH_SNP && 
         str_scientific_to_decimal (value, value_len, modified, &modified_len, NULL))
         ADJUST_FOR_MODIFIED;
         
@@ -787,8 +802,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
 
         if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, true)) 
             ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
-        else
-            vcf_lo_seg_rollback_and_reject (vb, LO_INFO, ctx);
+        else 
+            REJECT_SUBFIELD (LO_INFO, ctx, "Cannot cross-render INFO subfield %s: \"%.*s\"", ctx->name, value_len, value);            
     }
 
     // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
@@ -870,21 +885,18 @@ static int sort_by_subfield_name (const void *a, const void *b)
 
 void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_len)
 {
-    const char *pairs[MAX_SUBFIELDS];
-    unsigned pair_lens[MAX_SUBFIELDS];
-
     // parse the info string
-    unsigned num_items = str_split (info_str, info_len, MAX_SUBFIELDS-2, ';', pairs, pair_lens, false, 0); // -2 - leave room for LUFT + PRIM
-    ASSVCF (num_items, "Too many INFO subfields, Genozip supports up to %u", MAX_SUBFIELDS-2);
+    str_split (info_str, info_len, MAX_FIELDS-2, ';', pair, false); // -2 - leave room for LUFT + PRIM
+    ASSVCF (n_pairs, "Too many INFO subfields, Genozip supports up to %u", MAX_FIELDS-2);
 
-    buf_alloc (vb, &vb->info_items, 0, num_items + 2, InfoItem, CTX_GROWTH, "info_items");
+    buf_alloc (vb, &vb->info_items, 0, n_pairs + 2, InfoItem, CTX_GROWTH, "info_items");
     vb->info_items.len = 0; // reset from previous line
 
     int ac_i = -1; 
     InfoItem lift_ii = {}, rejt_ii = {};
 
     // pass 1: initialize info items + get indices of AC, and the DVCF items
-    for (unsigned i=0; i < num_items; i++) {
+    for (unsigned i=0; i < n_pairs; i++) {
         const char *equal_sign = memchr (pairs[i], '=', pair_lens[i]);
         unsigned name_len = (unsigned)(equal_sign - pairs[i]); // nonsense if no equal sign
 
@@ -922,8 +934,14 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
         // decide if to reject it
         if (rejt_ii.dict_id.num) {
             uint32_t shrinkage = rejt_ii.name_len + rejt_ii.value_len + 1; // unaccount for name, value and  
-            vb->recon_size -= shrinkage;
+            vb->recon_size      -= shrinkage;
             vb->recon_size_luft -= shrinkage; // since its read from TXT, it is accounted for initialially in both recon_size and recon_size_luft
+        }
+
+        // case: line was reject - PRIM/LUFT changed to REJx (note: vcf_lo_seg_rollback_and_reject didn't decrement recon_size* in this case, bc PRIM/LUFT was not "encountered" yet)
+        if (LO_IS_REJECTED (last_ostatus)) {
+            vb->recon_size      -= lift_ii.value_len;
+            vb->recon_size_luft -= lift_ii.value_len; // since its read from TXT, it is accounted for initialially in both recon_size and recon_size_luft
         }
     }
         
@@ -999,6 +1017,6 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
             total_names_len += ii->name_len + 1; // +1 for ; \t or \n separator
     }
 
-    container_seg_by_ctx (vb, &vb->contexts[VCF_INFO], &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
+    container_seg_by_ctx (vb, CTX(VCF_INFO), &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
 }
 

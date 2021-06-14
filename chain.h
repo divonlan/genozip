@@ -25,17 +25,19 @@ extern CONTAINER_FILTER_FUNC (chain_piz_filter);
 // using the chain data in genozip --chain
 extern void chain_load (void);
 extern void chain_destroy (void);
-extern const char *chain_get_dst_contig (uint32_t contig_i, PosType *length);
-extern void chain_copy_dst_contigs_to_z_file (DidIType dst_contig_did_i);
-extern WordIndex chain_get_src_contig_index (const char *contig, unsigned contig_len);
-extern void chain_append_all_dst_contig_index (const char *src_contig_name, unsigned src_contig_name_len, Buffer *dst_contigs);
+extern const char *chain_get_luft_contig (uint32_t contig_i, PosType *length);
+extern void chain_copy_contigs_to_z_file (DidIType luft_contig_did_i);
+extern WordIndex chain_get_prim_contig_index_by_name (const char *contig, unsigned contig_len);
+extern uint64_t chain_get_num_prim_contigs (void);
+extern void chain_append_all_luft_contig_index (const char *prim_contig_name, unsigned prim_contig_name_len, Buffer *luft_contigs);
+extern bool chain_get_liftover_coords (WordIndex prim_contig_index,  PosType prim_1pos, 
+                                       WordIndex *luft_contig_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i);
+extern PosType chain_get_aln_last_pos (uint32_t aln_i);
+extern PosType chain_get_aln_gap_after (uint32_t aln_i);
 
-extern bool chain_get_liftover_coords (WordIndex src_contig_index,  PosType src_1pos, 
-                                       WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i);
-
-#define CHAIN_SPECIAL { chain_piz_special_BACKSPACE, chain_piz_special_ENDDST, chain_piz_special_SIZE }
+#define CHAIN_SPECIAL { chain_piz_special_BACKSPACE, chain_piz_special_ENDLUFT, chain_piz_special_SIZE }
 SPECIAL (CHAIN, 0, BACKSPACE, chain_piz_special_BACKSPACE);
-SPECIAL (CHAIN, 1, ENDDST,    chain_piz_special_ENDDST);
+SPECIAL (CHAIN, 1, ENDLUFT,    chain_piz_special_ENDLUFT);
 SPECIAL (CHAIN, 2, SIZE,      chain_piz_special_SIZE);
 #define NUM_CHAIN_SPECIAL 3
 

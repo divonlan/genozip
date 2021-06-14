@@ -22,11 +22,12 @@ typedef struct {
     
     // genozip options that affect the compressed file
     int fast, make_reference, multifasta, md5;
-    char *vblock;
+    const char *vblock;
     
     // ZIP: data modifying options
     int optimize, optimize_sort, optimize_PL, optimize_GL, optimize_GP, optimize_VQSLOD,  // optimize flags
-        optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC;
+        optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
+        allow_ambiguous, reject_ref_alt_switches, add_line_numbers;
     
     #define NOT_PAIRED_END 0 
     #define PAIR_READ_1    1
@@ -42,11 +43,13 @@ typedef struct {
 
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
-        regions, samples, drop_genotypes, gt_only, sequential, no_pg, interleave, luft, sort, unsorted,
+        regions, samples, 
+        drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
+        sequential, no_pg, interleave, 
         kraken_taxid, add_qName_chr;
-        
+    const char *regions_file;
     int64_t lines_first, lines_last, tail; // set by --lines 
-    char *grep;
+    const char *grep;
     uint32_t one_vb, one_component, downsample, shard ;
     enum { SAM_FLAG_INCLUDE_IF_ALL=1, SAM_FLAG_INCLUDE_IF_NONE, SAM_FLAG_EXCLUDE_IF_ALL } sam_flag_filter;
     enum { SAM_MAPQ_INCLUDE_IF_AT_LEAST=1, SAM_MAPQ_EXCLUDE_IF_AT_LEAST } sam_mapq_filter;
@@ -59,14 +62,14 @@ typedef struct {
 
     // options affecting the software interaction (but not the file contents)
     int force, quiet, show_filename,
-        to_stdout,   // redirect txt output upon decompression to stdout 
+        to_stdout,   // set implicitly if genocat without --output
         replace, 
         do_register,
         lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
         test,        // implies md5
         index_txt,   // create an index
         list;        // a genols option
-    char *threads_str, *out_filename;
+    const char *threads_str, *out_filename;
 
     ReferenceType reference;
 
@@ -86,24 +89,23 @@ typedef struct {
         show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         show_vblocks, show_threads, show_uncompress,
-        debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_allthesame,
+        debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_allthesame, debug_recon_size,
         seg_only, xthreads, show_flags,
         echo,    // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
-    char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
+    const char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
 
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
            show_one_counts,
            dump_one_b250_dict_id,   // argument of --dump-b250-one
            dump_one_local_dict_id;  // argument of --dump-local-one
-    char *show_one_dict;     // argument of --show-dict-one
+    const char *show_one_dict;     // argument of --show-dict-one
 
     // internal flags set by the system, not the command line
     Coords rejects_coord;    // ZIP only: currently zipping liftover rejects file / component containing only PRIMARY or LUFT variants
     bool debug,              // set if DEBUG is defined
          ref_use_aligner,    // ZIP: compression requires using the aligner
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
-         reading_reference,  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_dicts,   // PIZ (genocat): we don't need to read the dicts
          genocat_global_area_only, // PIZ (genocat): we quit after processing the global area
@@ -120,16 +122,18 @@ typedef struct {
          missing_contexts_allowed, // PIZ: its not an error if contexts are missing - just reconstruct as an empty string
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
-         explicit_ref,       // ref_filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
+         explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          dyn_set_mem,        // ZIP: we're now segging as part of zip_dynamically_set_max_memory()
          collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
 
+    Reference reading_reference;  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
+
 #define flag_loading_auxiliary (flag.reading_reference || flag.reading_chain || flag.reading_kraken) // PIZ: currently reading auxiliary file (reference, chain etc)
 
-    char *reading_chain;     // system is currently loading a chain file by this name
-    char *reading_kraken;    // system is currently loading a kraken file by this name
-    char *unbind;
-    char *log_filename;      // output to info_stream goes here
+    const char *reading_chain; // system is currently loading a chain file by this name
+    const char *reading_kraken;// system is currently loading a kraken file by this name
+    const char *unbind;
+    const char *log_filename;  // output to info_stream goes here
 
     enum { BIND_NONE, BIND_ALL, BIND_PAIRS, BIND_REJECTS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
     uint64_t stdin_size;

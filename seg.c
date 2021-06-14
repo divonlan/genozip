@@ -21,6 +21,7 @@
 #include "container.h"
 #include "codec.h"
 #include "reference.h"
+#include "zip.h"
 
 WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                          bool *is_new) // optional out
@@ -252,10 +253,10 @@ PosType seg_pos_field (VBlock *vb,
                        char missing,           // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
                        const char *pos_str, unsigned pos_len, // option 1
                        PosType this_pos,       // option 2
-                       unsigned add_bytes)
+                       unsigned add_bytes)     
 {
-    Context *snip_ctx = &vb->contexts[snip_did_i];
-    Context *base_ctx = &vb->contexts[base_did_i];
+    Context *snip_ctx = CTX(snip_did_i);
+    Context *base_ctx = CTX(base_did_i);
 
     snip_ctx->no_stons = true;
     base_ctx->flags.store = STORE_INT;
@@ -269,8 +270,8 @@ PosType seg_pos_field (VBlock *vb,
         
         else {
             this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, zero_is_bad, &err);
-            ASSERT (seg_bad_snips_too || !err, "invalid value %.*s in %s vb=%u line_i=%u", 
-                    pos_len, pos_str, vb->contexts[snip_did_i].name, vb->vblock_i, vb->line_i);
+            ASSERT (seg_bad_snips_too || !err, "invalid value %.*s in %s vb=%u line_i=%"PRIu64, 
+                    pos_len, pos_str, CTX(snip_did_i)->name, vb->vblock_i, vb->line_i);
         }
 
         // we accept out-of-range integer values for non-self-delta
@@ -763,11 +764,9 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx,
                             const char *snip, unsigned snip_len, 
                             unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
-    buf_alloc (vb, &ctx->local, snip_len + 1, vb->lines.len * (snip_len+1), char, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, snip_len + 1, 0, char, CTX_GROWTH, "contexts->local"); // no multiplying by line.len, as snip can idiosyncratically be very large
     if (snip_len) buf_add (&ctx->local, snip, snip_len); 
-    
-    static const char sep[1] = { SNIP_SEP };
-    buf_add (&ctx->local, sep, 1); 
+    NEXTENT (char, ctx->local) = 0;
 
     if (add_bytes) ctx->txt_len += add_bytes;
 }
@@ -829,7 +828,7 @@ static void seg_set_hash_hints (VBlock *vb, int third_num)
 
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
 
-        Context *ctx = &vb->contexts[did_i];
+        Context *ctx = CTX(did_i);
         if (ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists
 
         if (third_num == 1) 
@@ -875,8 +874,8 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 
     // allocate more to the b250 buffer of the fields, which each have num_lines entries
     for (DidIType f=0; f < DTF(num_fields); f++) 
-        if (buf_is_alloc (&vb->contexts[f].b250))
-            buf_alloc_zero (vb, &vb->contexts[f].b250, vb->lines.len - num_old_lines, 0, uint32_t, 1, "contexts->b250");
+        if (buf_is_alloc (&CTX(f)->b250))
+            buf_alloc_zero (vb, &CTX(f)->b250, vb->lines.len - num_old_lines, 0, uint32_t, 1, "contexts->b250");
 }
 
 static void seg_verify_file_size (VBlock *vb)
@@ -888,21 +887,25 @@ static void seg_verify_file_size (VBlock *vb)
     ASSERT (vb->recon_size_luft >= 0, "recon_size_luft=%d is negative for vb_i=%u, coord=%s", vb->recon_size_luft, vb->vblock_i, coords_names[vb->vb_coords]);
 
     for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) 
-        recon_size += vb->contexts[sf_i].txt_len;
+        recon_size += CTX(sf_i)->txt_len;
     
     uint32_t vb_recon_size = vb->vb_coords == DC_LUFT ? vb->recon_size_luft : vb->recon_size; // in primary reconstruction, ##luft_only VB is reconstructed in luft coords
-    if (vb_recon_size != recon_size) { 
+    if (vb_recon_size != recon_size || flag.debug_recon_size) { 
 
-        fprintf (stderr, "Txt lengths:\n");
+        fprintf (stderr, "context.txt_len for vb=%u:\n", vb->vblock_i);
         for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
-            Context *ctx = &vb->contexts[sf_i];
+            Context *ctx = CTX(sf_i);
             fprintf (stderr, "%s: %u\n", dis_dict_id_ex (ctx->dict_id, true).s, (uint32_t)ctx->txt_len);
         }
-        
-        ABORT ("Error while verifying reconstructed vb_i=%u size: "
-               "reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)", 
-               vb->vblock_i, str_uint_commas (recon_size).s, vb->vb_coords == DC_LUFT ? "_luft" : "", str_uint_commas (vb_recon_size).s, 
-               (int32_t)recon_size - (int32_t)vb_recon_size, str_size (flag.vblock_memory).s);
+
+        fprintf (stderr, "vb=%u reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
+                 vb->vblock_i, str_uint_commas (recon_size).s, vb->vb_coords == DC_LUFT ? "_luft" : "", str_uint_commas (vb_recon_size).s, 
+                 (int32_t)recon_size - (int32_t)vb_recon_size, str_size (flag.vblock_memory).s);
+
+        ASSERT (vb_recon_size == recon_size, "Error while verifying reconstructed size - to get vblock:\n"
+                "%s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s",
+                /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len,
+                /* output filename:   */ vb->vblock_i, file_plain_ext_by_dt (vb->data_type));
     }
 }
 
@@ -917,7 +920,7 @@ void seg_all_data_lines (VBlock *vb)
  
     // allocate the b250 for the fields which each have num_lines entries
     for (DidIType f=0; f < DTF(num_fields); f++) 
-        buf_alloc (vb, &vb->contexts[f].b250, 0, vb->lines.len, WordIndex, 1, "contexts->b250");
+        buf_alloc (vb, &CTX(f)->b250, 0, vb->lines.len, WordIndex, 1, "contexts->b250");
     
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
 
@@ -967,7 +970,8 @@ void seg_all_data_lines (VBlock *vb)
 
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
-    if (!flag.make_reference) seg_verify_file_size (vb);
+    if (!flag.make_reference && strcmp (vb->compute_task, DYN_SET_MEM_TASK)) 
+        seg_verify_file_size (vb);
 
     COPY_TIMER (seg_all_data_lines);
 }

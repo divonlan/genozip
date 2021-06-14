@@ -66,7 +66,7 @@ WordIndex container_seg_by_ctx_do (VBlock *vb, Context *ctx, ConstContainerP con
     container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
 
     if (flag.show_containers) { 
-        iprintf ("VB=%u Line=%u Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
+        iprintf ("VB=%u Line=%"PRIu64" Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
                  vb->vblock_i, vb->line_i, ctx->did_i, ctx->name, con->repeats, con->repsep[0], con->repsep[1]);
         for (unsigned i=0; i < con_nitems (*con); i++) {
             const ContainerItem *item = &con->items[i];
@@ -144,7 +144,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
     // we can cache did_i up to 254. dues historical reasons the field is only 8 bit. that's enough in most cases anyway.
     for (unsigned i=0; i < num_items; i++) 
         item_ctxs[i] = !con->items[i].dict_id.num      ? NULL 
-                     : con->items[i].did_i_small < 255 ? &vb->contexts[con->items[i].did_i_small]
+                     : con->items[i].did_i_small < 255 ? CTX(con->items[i].did_i_small)
                      :                                   ctx_get_existing_ctx (vb, con->items[i].dict_id);
 
     // for containers, new_value is the some of all its items, all repeats last_value (either int or float)
@@ -197,7 +197,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             last_non_filtered_item_i = i;
 
             if (flag.show_containers && item_ctx) // show container reconstruction 
-                iprintf ("VB=%u Line=%u Repeat=%u %s->%s trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
+                iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s->%s trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
                          vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctx->name,
                          vb->translation.trans_containers ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
@@ -279,7 +279,8 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
         // call callback if needed now that repeat reconstruction is done (always callback for top level)
         if (con->callback || (con->is_toplevel && DTP (container_cb)))
-            DT_FUNC(vb, container_cb)(vb, ctx->dict_id, con->is_toplevel, rep_i, rep_reconstruction_start, AFTERENT (char, vb->txt_data) - rep_reconstruction_start);
+            DT_FUNC(vb, container_cb)(vb, ctx->dict_id, con->is_toplevel, rep_i, con->repeats, rep_reconstruction_start, 
+                    AFTERENT (char, vb->txt_data) - rep_reconstruction_start);
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
         if (con->is_toplevel) {
@@ -316,7 +317,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             }
 
             if (vb->drop_curr_line) {
-                ASSERT (flag.maybe_vb_modified_by_reconstructor, "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code. vb_i=%u line_i=%u", 
+                ASSERT (flag.maybe_vb_modified_by_reconstructor, "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code. vb_i=%u line_i=%"PRIu64, 
                         vb->drop_curr_line, vb->vblock_i, vb->line_i);
 
                 vb->txt_data.len = vb->line_start;
@@ -325,7 +326,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                 vb->num_nondrop_lines++;
 
             if (flag.show_containers && vb->drop_curr_line) // show container reconstruction 
-                iprintf ("VB=%u Line=%u dropped due to \"%s\"\n", vb->vblock_i, vb->line_i, vb->drop_curr_line);
+                iprintf ("VB=%u Line=%"PRIu64" dropped due to \"%s\"\n", vb->vblock_i, vb->line_i, vb->drop_curr_line);
         }
     } // repeats loop
 
@@ -378,8 +379,8 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
         base64_decode (snip, &b64_len, (uint8_t*)&con);
         con.repeats = BGEN24 (con.repeats);
 
-        ASSERT (con_nitems (con) <= MAX_SUBFIELDS, "A container of %s has %u items which is beyond MAX_SUBFIELDS=%u. Please upgrade to latest version of genozip to access this file.",
-                ctx->name, con_nitems (con), MAX_SUBFIELDS);
+        ASSERT (con_nitems (con) <= MAX_FIELDS, "A container of %s has %u items which is beyond MAX_FIELDS=%u. Please upgrade to latest version of genozip to access this file.",
+                ctx->name, con_nitems (con), MAX_FIELDS);
 
         // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
         for (uint32_t item_i=0; item_i < con_nitems (con); item_i++)
@@ -471,7 +472,7 @@ void container_display (ConstContainerP con)
 
 // Translators reconstructing last_value as a little endian binary
 #define SET_n(type,mn,mx) type n = (type)ctx->last_value.i; \
-                           ASSINP (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx), "Error: Failed to convert %s to %s because of bad data in line %u of the %s file: value of %s=%"PRId64" is out of range [%"PRId64"-%"PRId64"]",\
+                           ASSINP (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx), "Error: Failed to convert %s to %s because of bad data in line %"PRIu64" of the %s file: value of %s=%"PRId64" is out of range [%"PRId64"-%"PRId64"]",\
                                    dt_name (z_file->data_type), dt_name (flag.out_dt), vb->line_i, dt_name (z_file->data_type), \
                                    ctx->name, (int64_t)(ctx->last_value.i), (int64_t)(mn), (int64_t)(mx))
 

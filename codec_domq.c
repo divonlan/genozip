@@ -50,7 +50,7 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
 #   define DOMQUAL_LINE_SAMPLE_LEN 500          // we don't need more than this to find the dom (in case of long reads of 10s of thousands)
 #   define NUM_LINES_IN_SAMPLE 5
 
-    Context *qual_ctx = &vb->contexts[qual_did_i];
+    Context *qual_ctx = CTX(qual_did_i);
     qual_ctx->lcodec = CODEC_UNKNOWN; // cancel possible inheritence from previous VB
 
     uint32_t char_counter[256] = { 0 };
@@ -225,7 +225,7 @@ static inline uint32_t shorten_run (uint8_t *run, uint32_t old_num_bytes, uint32
 // reconstructed a run of the dominant character
 static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, Context *domqruns_ctx, char dom, uint32_t max_len)
 {
-    ASSERT (domqruns_ctx->next_local < domqruns_ctx->local.len, "unexpectedly reached the end of vb->domqruns_ctx in vb_i=%u (first_line=%u len=%u)", 
+    ASSERT (domqruns_ctx->next_local < domqruns_ctx->local.len, "unexpectedly reached the end of vb->domqruns_ctx in vb_i=%u (first_line=%"PRIu64" len=%u)", 
             vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len);
 
     // read the entire runlength (even bytes that are in excess of max_len)
@@ -291,6 +291,6 @@ void codec_domq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
         qual_len++;
     }
 
-    ASSERT (qual_len == vb->seq_len, "expecting qual_len(%u) == vb->seq_len(%u) in vb_i=%u (last_line=%u, num_lines=%u) line_i=%u", 
-            qual_len, vb->seq_len, vb->vblock_i, vb->first_line + (uint32_t)vb->lines.len-1, (uint32_t)vb->lines.len, vb->line_i);   
+    ASSERT (qual_len == vb->seq_len, "expecting qual_len(%u) == vb->seq_len(%u) in vb_i=%u (last_line=%"PRIu64", num_lines=%"PRIu64") line_i=%"PRIu64"", 
+            qual_len, vb->seq_len, vb->vblock_i, vb->first_line + vb->lines.len-1, vb->lines.len, vb->line_i);   
 }

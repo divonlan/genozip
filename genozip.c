@@ -43,9 +43,6 @@ void main_exit (bool show_stack, bool is_error)
     if (is_error && flag.debug_threads)
         threads_write_log (true);
         
-    if (is_error && flag.echo)
-        flags_display_debugger_params();
-
     if (show_stack) threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
 
     buf_test_overflows_all_vbs("exit_on_error");
@@ -120,8 +117,8 @@ static void main_print_help (bool explicit)
 // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
 // from Windows Explorer - the terminal will open and he will see the help
 #ifdef _WIN32
-    if (!explicit) {
-        iprint0 ("Press any key to continue...\n");
+    if (!explicit && isatty(0) && isatty (1)) {
+        printf ("Press any key to continue...\n");
         getc(stdin);
     }
 #endif
@@ -161,12 +158,9 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
     // 3) identify skip cases (DT_NONE returned) - empty file, unzip of a reference
     // 4) reset flag.unbind if file contains only one component
-    
     TEMP_FLAG (genocat_no_reconstruct, true); // so zfile_read_genozip_header doesn't fail on a reference file before flags_update_piz_one_file is run
-    TEMP_FLAG (genocat_no_ref_file, true);    // so zfile_read_genozip_header doesn't call zfile_read_genozip_header_handle_ref_info before flags_update_piz_one_file calculates genocat_no_ref_file
     if (!z_file->file || !zfile_read_genozip_header (0)) goto done; 
     RESTORE_FLAG(genocat_no_reconstruct);
-    RESTORE_FLAG(genocat_no_ref_file);
 
     if (z_dual_coords)
         z_file->max_conc_writing_vbs = linesorter_get_max_conc_writing_vbs(); // get data by reading all SEC_RECON_PLAN headers
@@ -174,13 +168,13 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     if (z_file->max_conc_writing_vbs < 3) z_file->max_conc_writing_vbs = 3;
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
-    if (flag.reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
+    if (flag.reference == REF_EXTERNAL && !ref_is_external_loaded(gref)) {
         ASSINP0 (flag.reference != REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
         if (!flag.genocat_no_reconstruct || 
             (flag.collect_coverage && z_file->data_type == DT_FASTQ)) { // in collect_coverage with FASTQ we read the non-data sections of the reference
             SAVE_VALUE (z_file); // actually, read the reference first
-            ref_load_external_reference (false);
+            ref_load_external_reference (gref, NULL);
             RESTORE_VALUE (z_file);
         }
     }
@@ -223,19 +217,22 @@ done:
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
 // genounzipping, we create a new genounzip process
-static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_last_txt_file)
+static void main_test_after_genozip (const char *exec_name, const char *z_filename, bool is_last_txt_file, bool is_chain)
 {
     const char *password = crypt_get_password();
 
     // finish dumping reference and/or refhash to cache before destroying it...
-    ref_create_cache_join();
+    ref_create_cache_join (gref);
+    ref_create_cache_join (prim_ref);
+
     refhash_create_cache_join();
     
     // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
     // Note: on Windows, freeing memory takes considerable time.
 #if defined _WIN32 || defined __APPLE__
     if (buf_get_memory_usage () > (1ULL<<31)) {
-        ref_destroy_reference(true); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
+        ref_destroy_reference (gref, true); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
+        ref_destroy_reference (prim_ref, true); 
         kraken_destroy();
         chain_destroy();
         vb_destroy_pool_vbs();
@@ -257,8 +254,8 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
                                   flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
                                   flag.debug_threads ? "--debug-threads" : SKIP_ARG,
                                   flag.echo          ? "--echo"          : SKIP_ARG,
-                                  flag.reference == REF_EXTERNAL ? "--reference" : SKIP_ARG,
-                                  flag.reference == REF_EXTERNAL ? ref_filename  : SKIP_ARG,
+                                  flag.reference == REF_EXTERNAL && !is_chain ? "--reference" : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
+                                  flag.reference == REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
                                   NULL);
 
     // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
@@ -269,7 +266,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
 }
 
-static void main_genozip_open_z_file_write (char **z_filename)
+static void main_genozip_open_z_file_write (const char **z_filename)
 {
     DataType z_data_type = txt_file->data_type;
 
@@ -287,10 +284,13 @@ static void main_genozip_open_z_file_write (char **z_filename)
         // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
         const char *genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (txt_file->data_type, txt_file->type)];
 
+        if (chain_is_loaded && txt_file->data_type == DT_VCF)
+            genozip_ext = DVCF_GENOZIP_;
+
         if (file_has_ext (local_txt_filename, file_exts[txt_file->type]))
-            sprintf (*z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_txt_filename, genozip_ext); 
+            sprintf ((char *)*z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_txt_filename, genozip_ext); 
         else 
-            sprintf (*z_filename, "%s%s", local_txt_filename, genozip_ext); 
+            sprintf ((char *)*z_filename, "%s%s", local_txt_filename, genozip_ext); 
 
         FREE (basename);
     }
@@ -300,7 +300,7 @@ static void main_genozip_open_z_file_write (char **z_filename)
 
 static void main_genozip (const char *txt_filename, 
                           const char *next_txt_filename, // ignored unless we are of pair_1 in a --pair
-                          char *z_filename,
+                          const char *z_filename,
                           unsigned txt_file_i, bool is_last_txt_file,
                           Coords txt_file_coords,
                           char *exec_name)
@@ -321,8 +321,6 @@ static void main_genozip (const char *txt_filename,
 
     // skip this file if its size is 0
     RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
-
-    flag.to_stdout = !txt_filename && !z_filename; // implicit setting of stdout by using stdin, unless -o was used
 
     if (!txt_file->file) goto done; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
 
@@ -357,6 +355,8 @@ static void main_genozip (const char *txt_filename,
 
     file_close (&txt_file, false, !is_last_txt_file);  // no need to waste time closing the last file, the process termination will do that
 
+    bool is_chain = (z_file->data_type == DT_CHAIN);
+
     // close the file if its an open disk file AND we need to close it
     if (!flag.to_stdout && z_file && z_closes_after_me) {
 
@@ -379,7 +379,7 @@ static void main_genozip (const char *txt_filename,
     RESTORE_FLAG (quiet); // don't pass on quiet to test, just because we turned it on for rejects 
 
     // test the compression, if the user requested --test
-    if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_txt_file);
+    if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_txt_file, is_chain);
 
     // remove after test (if any) was successful - NOT GOOD ENOUGH - bug 342
     if (remove_txt_file) file_remove (txt_filename, true); 
@@ -449,8 +449,19 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
-    if (!ref_is_reference_loaded())
-        ref_load_external_reference (false); // also loads refhash if needed
+    if (!ref_is_external_loaded (gref))
+        ref_load_external_reference (gref, NULL); // also loads refhash if needed
+
+    if (dt == DT_CHAIN && !ref_is_external_loaded (prim_ref)) {
+
+        ref_set_reference (prim_ref, NULL, REF_EXTERNAL, false); // set the prim_ref from $GENOZIP_REFERENCE if applicable
+
+        ASSINP0 (ref_get_filename (prim_ref), 
+                "When compressing a chain file, you must also specify two --reference arguments: the first is the reference file in Primary coordinates "
+                "(i.e. those of the VCF files to be lifted), and the second is the reference file in Luft coordinates (i.e. the coordinates aftering lifting). See "WEBSITE_DVCF);
+
+        ref_load_external_reference (prim_ref, NULL);
+    }
 
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
     if (!old_ref_use_aligner && flag.ref_use_aligner) 
@@ -490,11 +501,11 @@ int main (int argc, char **argv)
 
         if (exe_type == EXE_GENOLS) command = LIST; // genols can be run without arguments
         
-        // genozip with no input filename, no output filename, and no output or input redirection 
+        // genozip with no input filename, no output filename, and no input redirection 
         // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
         // coming from a pipe. the user must use "-" to redirect from stdin
         else if (command == -1 && optind == argc && !flag.out_filename && 
-                 (isatty(0) || arch_am_i_in_docker()) && isatty(1)) {
+                 (isatty(0) || arch_am_i_in_docker())) {
             // case: --register
             if (flag.do_register) {
                 license_get();
@@ -502,8 +513,8 @@ int main (int argc, char **argv)
             }
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
-            if (exe_type == EXE_GENOCAT && flag.reference) 
-                ref_load_external_reference (true);
+            if (exe_type == EXE_GENOCAT && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) 
+                ref_display_ref (gref);
 
             // otherwise: show help
             else
@@ -550,11 +561,16 @@ int main (int argc, char **argv)
 
     primary_command = command; 
 
-    // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
+    // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
+    // and might put you personally as well as your organization at legal and financial risk - Genozip copyright holders
+    // view themselves as entitled to any or all of the financial gains you and your organization make while using an 
+    // unlicensed copy of Genozip. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
     if (command == ZIP) license_get(); 
 
-    if (flag.reading_chain) 
+    if (flag.reading_chain) {
         chain_load();
+        if (exe_type == EXE_GENOCAT) exit(0);
+    }
 
     if (flag.reading_kraken) kraken_load();
 
@@ -601,7 +617,8 @@ int main (int argc, char **argv)
         WARN0 ("All files are valid genozip files");
 
     // finish dumping reference and/or refhash to cache
-    ref_create_cache_join();
+    ref_create_cache_join (gref);
+    ref_create_cache_join (prim_ref);
     refhash_create_cache_join();
 
     exit_ok;

@@ -40,13 +40,13 @@ bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flag
 
 void me23_seg_initialize (VBlock *vb)
 {
-    vb->contexts[ME23_CHROM].no_stons    = true;
-    vb->contexts[ME23_CHROM].no_vb1_sort = true;
-    vb->contexts[ME23_CHROM].flags.store = STORE_INDEX; // since v12
-    vb->contexts[ME23_POS].flags.store   = STORE_INT;   // since v12
-    vb->contexts[ME23_GENOTYPE].ltype    = LT_SEQUENCE;
-    vb->contexts[ME23_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
-    vb->contexts[ME23_TOP2VCF].no_stons  = true;
+    CTX(ME23_CHROM)->no_stons    = true;
+    CTX(ME23_CHROM)->no_vb1_sort = true;
+    CTX(ME23_CHROM)->flags.store = STORE_INDEX; // since v12
+    CTX(ME23_POS)->flags.store   = STORE_INT;   // since v12
+    CTX(ME23_GENOTYPE)->ltype    = LT_SEQUENCE;
+    CTX(ME23_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(ME23_TOP2VCF)->no_stons  = true;
 }
 
 void me23_seg_finalize (VBlockP vb)
@@ -63,7 +63,7 @@ void me23_seg_finalize (VBlockP vb)
                        { .dict_id = (DictId)dict_id_fields[ME23_EOL],                        } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[ME23_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, CTX(ME23_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 
     SmallContainer top_level_to_vcf = { 
         .repeats   = vb->lines.len,
@@ -75,7 +75,7 @@ void me23_seg_finalize (VBlockP vb)
                        { .dict_id = (DictId)dict_id_fields[ME23_GENOTYPE], .seperator = "\n", .translator = ME232VCF_GENOTYPE } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[ME23_TOP2VCF], (ContainerP)&top_level_to_vcf, 0, 0, 0);
+    container_seg_by_ctx (vb, CTX(ME23_TOP2VCF), (ContainerP)&top_level_to_vcf, 0, 0, 0);
 }
 
 bool me23_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -110,7 +110,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     ASSSEG (field_len == 1 || field_len == 2, field_start, "expecting all genotype data to be 1 or 2 characters, but found one with %u: %.*s",
             field_len, field_len, field_start);
 
-    seg_add_to_local_fixed (vb, &vb->contexts[ME23_GENOTYPE], field_start, field_len); 
+    seg_add_to_local_fixed (vb, CTX(ME23_GENOTYPE), field_start, field_len); 
         
     char lookup[2] = { SNIP_LOOKUP, '0' + field_len };
     seg_by_did_i (vb, lookup, 2, ME23_GENOTYPE, field_len + 1);
@@ -149,7 +149,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     buf_alloc_old (comp_vb, txtheader_buf, 1.3*comp_vb->compressed.len + (sizeof VCF_HEAD_1 - 1) + (sizeof VCF_HEAD_3p1 - 1) + (sizeof VCF_HEAD_3p2 - 1)+80 +
                num_chroms * (sizeof VCF_HEAD_2 + 100), 1, "txt_data");
     
-    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_1, ref_filename);
+    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_1, ref_get_filename (gref));
     
     // add contigs used in this file
     for (uint32_t chrom_i=0; chrom_i < num_chroms; chrom_i++) {
@@ -157,7 +157,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
         // get contig length from loaded reference
         uint32_t chrom_name_len;
         const char *chrom_name = ctx_get_snip_by_word_index (ctx, chrom_i, 0, &chrom_name_len);
-        PosType contig_len = ref_contigs_get_contig_length (WORD_INDEX_NONE, chrom_name, chrom_name_len, true);
+        PosType contig_len = ref_contigs_get_contig_length (gref, WORD_INDEX_NONE, chrom_name, chrom_name_len, true);
 
         bufprintf (comp_vb, txtheader_buf, VCF_HEAD_2, chrom_name, contig_len);
     }
@@ -207,14 +207,14 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
 
     // chroms don't have the same index in the ME23 z_file and in the reference file - we need to translate chrom_index
     WordIndex save_chrom_node_index = vb->chrom_node_index;
-    vb->chrom_node_index = ref_contigs_get_word_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, true);
+    vb->chrom_node_index = ref_contigs_get_by_name (gref, vb->chrom_name, vb->chrom_name_len, true);
 
     // if not found, try common alternative names
     if (vb->chrom_node_index == WORD_INDEX_NONE)
-        vb->chrom_node_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, WORD_INDEX_NONE);
+        vb->chrom_node_index = ref_alt_chroms_get_alt_index (gref, vb->chrom_name, vb->chrom_name_len, 0, WORD_INDEX_NONE);
 
     // get the value of the loaded reference at this position    
-    const Range *range = ref_piz_get_range (vb, pos, 1);
+    const Range *range = ref_piz_get_range (vb, gref, pos, 1);
     vb->chrom_node_index = save_chrom_node_index; // restore
 
     ASSERT (range, "Failed to find the site chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
@@ -224,7 +224,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     ASSERT (ref_is_idx_in_range (range, idx), "idx=%u but range has only %"PRIu64" nucleotides. pos=%"PRId64" range=%s", 
             idx, range->ref.nbits / 2, pos, ref_display_range (range).s);
 
-    char ref_b = ref_get_nucleotide (range, idx);
+    char ref_b = ref_base_by_idx (range, idx);
 
     // get GENOTYPE from txt_data
     char b1 = recon[0];

@@ -513,7 +513,7 @@ static bool file_open_txt_read (File *file)
                                                 "samtools", "view", "-OSAM", "--threads", "8", "-h", // in practice, samtools is able to consume 1.3 cores
                                                 file_samtools_no_PG() ? "--no-PG" : "-h", // don't add a PG line to the header (just repeat -h if this is an older samtools without --no-PG - no harm)
                                                 file->is_remote ? SKIP_ARG : file->name,  // local file name 
-                                                ref_get_cram_ref(), NULL);
+                                                ref_get_cram_ref(gref), NULL);
             file->file = stream_from_stream_stdout (input_decompressor);
             break;
         }
@@ -1023,6 +1023,7 @@ void file_close (File **file_p,
         buf_destroy (&file->recon_plan);
         buf_destroy (&file->comp_info);
         buf_destroy (&file->txt_file_info);
+        buf_destroy (&file->rejects_report);
 
         FREE (file->name);
         FREE (file->basename);

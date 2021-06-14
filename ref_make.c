@@ -7,6 +7,8 @@
 #include "mutex.h"
 #include "refhash.h"
 #include "random_access.h"
+#include "context.h"
+#include "file.h"
 
 SPINLOCK (make_ref_spin);
 #define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)
@@ -17,11 +19,11 @@ static Range *ref_make_ref_get_range (uint32_t vblock_i)
 {
     // access ranges.len under the protection of the mutex
     spin_lock (make_ref_spin);
-    ranges.len = MAX (ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from FASTA ZIP compute thread)
-    ASSERT (ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
+    gref->ranges.len = MAX (gref->ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from FASTA ZIP compute thread)
+    ASSERT (gref->ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
     spin_unlock (make_ref_spin);
 
-    return ENT (Range, ranges, vblock_i-1);
+    return ENT (Range, gref->ranges, vblock_i-1);
 }
 
 // called during REF ZIP compute thread, from zip_compress_one_vb (as "compress" defined in data_types.h)
@@ -29,7 +31,7 @@ static Range *ref_make_ref_get_range (uint32_t vblock_i)
 void ref_make_create_range (VBlockP vb)
 {
     Range *r = ref_make_ref_get_range (vb->vblock_i);
-    uint64_t seq_len = vb->contexts[FASTA_NONREF].local.len;
+    uint64_t seq_len = CTX(FASTA_NONREF)->local.len;
 
     // at this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
     // the missing details will be added during ref_make_prepare_range_for_compress
@@ -61,13 +63,13 @@ void ref_make_ref_init (void)
     ASSERT0 (flag.make_reference, "Expecting flag.make_reference=true");
 
     // remove old cache files
-    ref_remove_cache();
+    ref_remove_cache (gref);
     refhash_remove_cache();
 
-    buf_alloc (evb, &ranges, 0, MAKE_REF_NUM_RANGES, Range, 1, "ranges"); // must be allocated by main thread as its evb
-    ranges_type = RT_MAKE_REF;
+    buf_alloc (evb, &gref->ranges, 0, MAKE_REF_NUM_RANGES, Range, 1, "ranges"); // must be allocated by main thread as its evb
+    ranges_type (gref) = RT_MAKE_REF;
     
-    buf_zero (&ranges);
+    buf_zero (&gref->ranges);
 
     refhash_initialize (NULL);
 
@@ -78,9 +80,9 @@ void ref_make_ref_init (void)
 // the "read" part of reference-compressing dispatcher, called from ref_compress_ref
 void ref_make_prepare_range_for_compress (VBlockP vb)
 {
-    if (vb->vblock_i-1 == ranges.len) return; // we're done
+    if (vb->vblock_i-1 == gref->ranges.len) return; // we're done
 
-    Range *r = ENT (Range, ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
+    Range *r = ENT (Range, gref->ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
 
     // we have exactly one contig for each VB, one one RAEntry for that contig
     // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
@@ -97,5 +99,4 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
     vb->range_num_set_bits = r->ref.nbits / 2;
     vb->ready_to_dispatch  = true;
 }
-
 

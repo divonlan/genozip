@@ -11,6 +11,7 @@
 #include "aes.h"
 #include "data_types.h"
 #include "mutex.h"
+#include "buffer.h"
 
 // REFERENCE file - only appears in .genozip format
 #define REF_GENOZIP_   ".ref" GENOZIP_EXT
@@ -22,6 +23,7 @@
 #define VCF_BZ2_       ".vcf.bz2"
 #define VCF_XZ_        ".vcf.xz"
 #define VCF_GENOZIP_   ".vcf" GENOZIP_EXT
+#define DVCF_GENOZIP_  ".d.vcf" GENOZIP_EXT
 
 // SAM file variations
 #define SAM_           ".sam"
@@ -373,11 +375,12 @@ typedef struct File {
     Buffer coverage;
     Buffer read_count;
     Buffer unmapped_read_count;
-
+    
     // Z_FILE: DVCF stuff
     char *rejects_file_name[2];        // ZIP: [0]=DC_PRIMARY [1]=DC_LUFT
     FILE *rejects_file[2];             // ZIP: rejects txt file
     uint64_t rejects_disk_size[2];     // ZIP
+    Buffer rejects_report;             // ZIP --chain: human readable report about rejects
 
     // TXT_FILE: DVCF stuff
     Coords coords;                     // TXT FILE ZIP: Set from ##dual_coordinates and immutable thereafter

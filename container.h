@@ -10,7 +10,7 @@
 #include "sections.h"
 
 #pragma pack(1)
-#define CONTAINER_MAX_PREFIXES_LEN (32 * MAX_SUBFIELDS)    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
+#define CONTAINER_MAX_PREFIXES_LEN (32 * MAX_FIELDS)    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
 #define CON_PREFIX_SEP              '\x4'  // starts the prefix string and terminates every prefix within it
 #define CON_PREFIX_SEP_             "\x4"  // string version
 #define CON_PREFIX_SEP_SHOW_REPEATS '\x5'  // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
@@ -56,7 +56,7 @@ typedef struct ContainerItem {
     char repsep[2];                    /* repeat seperator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 
-typedef struct Container      { CONTAINER_FIELDS(MAX_SUBFIELDS) } Container;
+typedef struct Container      { CONTAINER_FIELDS(MAX_FIELDS) } Container;
 typedef struct MiniContainer  { CONTAINER_FIELDS(1) } MiniContainer;
 #define NUM_SMALL_CONTAINER_SUBFIELDS 16
 typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) } SmallContainer;

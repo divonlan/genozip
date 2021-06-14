@@ -66,6 +66,8 @@ extern DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode m
 extern const char *digest_name (void);
 
 #define digest_is_equal(digest1,digest2) ((digest1).ulls[0] == (digest2).ulls[0] && (digest1).ulls[1] == (digest2).ulls[1])
+extern bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_digest);
+extern void digest_verify_ref_is_equal (const Reference ref, const char *header_ref_filename, const Digest header_md5);
 
 #define md5_is_zero(digest) (!(digest).ulls[0] && !(digest).ulls[1])
 #define v8_digest_is_zero(digest) (command == PIZ && z_file->genozip_version < 9 && md5_is_zero(digest))

@@ -43,8 +43,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     /* tracking lines */\
     Buffer lines;              /* ZIP: An array of *DataLine* - the lines in this VB */\
                                /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is AFTERENT(txt_data). */\
-    uint16_t first_line;       /* PIZ: line number in source txt file (counting from 1), of this variant block */\
-                               /* ZIP: used for optimize_DESC in FASTQ */ \
+    uint64_t first_line;       /* PIZ: line number in source txt file (counting from 1), of this variant block */\
+                               /* ZIP: used for optimize_DESC in FASTQ and add_line_numbers in VCF */ \
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
     \
     /* tracking execution */\
@@ -57,7 +57,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint32_t recon_num_lines_luft; /* ZIP only, dual coordinates files only: DC_LUFT + DC_BOTH lines in this VB */ \
     int32_t txt_size;          /* ZIP: original size of of text data read from the file */ \
     uint32_t longest_line_len; /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
-    uint32_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
+    uint64_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
     uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
     \
     Digest digest_so_far;      /* partial calculation of MD5 up to and including this VB */ \
@@ -124,16 +124,19 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Context contexts[MAX_DICTS];    \
     DidIType dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
-    /* ZIP only: reference range lookup caching */ \
-    RangeP prev_range;         /* previous range returned by ref_seg_get_locked_range */ \
+    /* reference stuff */ \
+    Reference ref;             /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \
+    \
+    /* reference range lookup caching */ \
+    RangeP prev_range[2];        /* previous range returned by ref_seg_get_locked_range */ \
     uint32_t prev_range_range_i; /* range_i used to calculate previous range */ \
-    WordIndex prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
+    WordIndex prev_range_chrom_node_index[2]; /* chrom used to calculate previous range */ \
     \
     /* liftover stuff */ \
     Coords vb_coords;          /* ZIP: DC_PRIMARY, DC_LUFT or DC_BOTH */ \
                                /* PIZ: DC_PRIMARY or DC_LUFT - influenced by FlagsVbHeader.coords and flag.luft */ \
     Coords line_coords;        /* Seg: coords of current line - DC_PRIMARY or DC_LUFT */ \
-    Buffer liftover;           /* ZIP: map from chrom_node_index (not word index!) to entry in chain_index */ \
+    Buffer chrom_map_vcf_to_chain;  /* ZIP with --chain: map from chrom_node_index (not word index!) to entry in primary contig in chain (not reference!) */ \
     uint32_t pos_aln_i;        /* ZIP: chain alignment of POS (used to compare to that of END) */\
     Buffer lo_rejects[2];      /* ZIP generating a dual-coordinates file: txt lines rejected for liftover */ \
     int32_t reject_bytes;      /* ZIP of a Luft file: number of bytes of reject data in this VB (data originating from ##primary_only/##luft_only) */ \

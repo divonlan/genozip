@@ -1,12 +1,4 @@
-.. option:: -c, --stdout  Send output to standard output instead of a file.
-
-          |
-
 .. option:: -f, --force  Force overwrite of the output file.
-
-          |
-
-.. option:: -^, --replace  Replace the source file with the result file rather than leaving it unchanged.
 
           |
 

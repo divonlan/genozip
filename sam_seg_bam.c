@@ -109,17 +109,17 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t s
     
     else {
 #ifdef DEBUG // we show this warning only in DEBUG because I found actual files that have edge cases that don't work with our formula (no harm though)
-        WARN_ONCE ("FYI: bad bin value in vb=%u vb->line_i=%u: this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
+        WARN_ONCE ("FYI: bad bin value in vb=%u vb->line_i=%"PRIu64": this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
                     vb->vblock_i, vb->line_i, this_pos, vb->ref_consumed, sam_flag, last_pos, bin, reg2bin);
 #endif
         seg_integer (vb, SAM_BAM_BIN, bin, is_bam);
-        vb->contexts[SAM_BAM_BIN].flags.store = STORE_INT;
+        CTX(SAM_BAM_BIN)->flags.store = STORE_INT;
     }
 }
 
 static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
-    ASSERT (ref_id >= -1 && ref_id < (int32_t)txtheader_get_contigs()->len, "vb=%u line_i=%u: encountered ref_id=%d but header has only %u contigs",
+    ASSERT (ref_id >= -1 && ref_id < (int32_t)txtheader_get_contigs()->len, "vb=%u line_i=%"PRIu64": encountered ref_id=%d but header has only %u contigs",
             vb->vblock_i, vb->line_i, ref_id, (uint32_t)txtheader_get_contigs()->len);
 
     // get snip and snip_len
@@ -321,7 +321,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     // a non-sensical block_size might indicate an false-positive identification of a BAM alignment in bam_unconsumed
     ASSERT (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
-            "vb=%u line_i=%u (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
+            "vb=%u line_i=%"PRIu64" (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
             vb->vblock_i, vb->line_i, block_size+4, remaining_txt_len);
 
     int32_t ref_id      = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
@@ -354,12 +354,12 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, false, 0, 0, 0, next_pos, sizeof (uint32_t)); // PNEXT
 
-    sam_seg_tlen_field (vb, 0, 0, (int64_t)tlen, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len); // TLEN
+    sam_seg_tlen_field (vb, 0, 0, (int64_t)tlen, CTX(SAM_PNEXT)->last_delta, dl->seq_len); // TLEN
 
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
-    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], next_field, // QNAME
+    seg_compound_field ((VBlockP)vb, CTX(SAM_QNAME), next_field, // QNAME
                         l_read_name-1, arg, 0, 2 /* account for \0 and l_read_name */); 
-    vb->contexts[SAM_QNAME].last_txt_index = ENTNUM (vb->txt_data, next_field); // store for kraken
+    CTX(SAM_QNAME)->last_txt_index = ENTNUM (vb->txt_data, next_field); // store for kraken
     vb->last_txt_len (SAM_QNAME) = l_read_name-1;
 
     next_field += l_read_name; // inc. \0
@@ -402,7 +402,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     // finally we can segment the textual CIGAR now (including if n_cigar_op=0)
     bam_seg_cigar_field (vb, dl, l_seq, n_cigar_op);
 
-    // OPTIONAL fields - up to MAX_SUBFIELDS of them
+    // OPTIONAL fields - up to MAX_FIELDS of them
     next_field = sam_seg_optional_all (vb, dl, next_field, 0,0,0, alignment + block_size + sizeof (uint32_t));
     
     buf_free (&vb->textual_cigar);

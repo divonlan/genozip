@@ -53,18 +53,19 @@ We shall now convert this file to a Dual-coordinates VCF, containing both GRCh37
 
 Steps:
 
-1. Prepare a reference file in Luft coordinates in genozip format. The following results in the file named ``GRCh38.ref.genozip`` :
+1. Prepare two reference files in genozip format: for Primary and Luft coordinates. The following results in the files named ``GRCh37.ref.genozip`` and ``GRCh38.ref.genozip`` :
 
 ::
 
+    genozip --make-reference GRCh37.fa 
     genozip --make-reference GRCh38.fa 
 
 
-2. Prepare a chain file in genozip format. Genozip uses chain files in the popular `UCSC chain file format <https://genome.ucsc.edu/goldenPath/help/chain.html>`_. Here are some :ref:`links to available chain files<dvcf-chain-files>`. The following command line generates the file ``GRCh37_to_GRCh38.chain.genozip`` :
+1. Prepare a chain file in genozip format. Genozip uses chain files in the `UCSC chain file format <https://genome.ucsc.edu/goldenPath/help/chain.html>`_. Here are some :ref:`links to available chain files<dvcf-chain-files>`. The following command line generates the file ``GRCh37_to_GRCh38.chain.genozip`` :
 
 ::
 
-    genozip GRCh37_to_GRCh38.chain.gz --reference GRCh38.ref.genozip
+    genozip GRCh37_to_GRCh38.chain.gz --reference GRCh37.ref.genozip --reference GRCh38.ref.genozip
 
 Note that the first two steps are preparation steps that need to be executed only once. Now that we have the chain file, we can convert any number of VCF files to DVCF:
 
@@ -292,6 +293,38 @@ Also, look at the variant ID=3 - this is the variant with the REF⇆ALT switch. 
 
 This demonstrates how a VCF file can continue to evolve, adding and dropping variants, adding, removing or modifying INFO and FORMAT fields, all while continuing to maintain both coordinates, renderable in either Primary or Luft coordinates as required by any particular step in an analysis process.
 
+**--allow-ambiguous - handling ambiguous REF⇆ALT switches**
+
+There are three cases where Genozip is unable to determine whether a variant has a REF⇆ALT switch or not. We refer to these variants as *ambiguous* . These are:
+
+*1. Some cases of insertion* 
+
+Example: ``REF=C ALT=CAG Luft-reference=CAG``. Both ``REF=C ALT=CAG`` and ``REF=CAG ALT=C`` (i.e. a REF⇆ALT switch) are plausible.
+
+However, if, for example, ``Luft-reference=CTT`` this variant is not ambiguous since ALT does not match the Luft reference.
+
+*2. Same cases deletion*
+
+Example: ``REF=CAG ALT=C Luft-reference=CAG``. Both ``REF=CAG ALT=C`` and ``REF=C ALT=CAG`` (i.e. a REF⇆ALT switch) are plausible.
+
+However, if, for example, ``Luft-reference=CTT`` this variant is not ambiguous since REF does not match the Luft reference, and it is a REF⇆ALT switch. Nevertheless, Genozip doesn't currently support REF⇆ALT switch of Indels and will reject this variant with ``RefLongChange``.
+
+*3. All* `structural variants <https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/>`_ with a special ALT (one enclosed in <> brackets, such as <DEL>).
+
+Example: REF=C ALT=<DEL> Luft-reference=C. 
+
+By dafault, ``genozip`` rejects lifting these variants, hence making them Primary-only variants, with an oStatus of AmbigIns, AmbigDel or AmbigStructVar. 
+
+Using ``genozip --chain`` in combination with ``--allow-ambiguous`` will cause ``genozip`` to instead lift these variants, with an oStatus of OkAmbigIns, OkAmbigDel or OkAmbigSV. 
+
+The oStatus is viewable using ``genocat --show-dvcf``.
+
+**--reject-ref-alt-switches - handling bi-allelic SNP REF⇆ALT switches**
+
+By default, bi-allelic SNP variants with a REF⇆ALT switch will be lifted by Genozip (with an oStatus of OkRefAltSwitch), also updating the affected annoations as described in :ref:`Rendering a DVCF <dvcf-rendering>`.
+
+Using ``genozip --chain`` in combination with ``--reject-ref-alt-switches`` will cause Genozip to reject lifting these variants, hence making them Primary-only variants with an oStatus of RefAltSwitch.
+
 **--show-dvcf - variant by variant info**
 
 Now let's look at a couple of interesting analytics: ``--show-dvcf`` is a useful tool for getting visibility into how Genozip handled each variant. It may also be used in combination with ``--luft``:
@@ -336,3 +369,40 @@ To see summary statistics of how variants were handled, we can use --show-counts
     BOTH    2       50.00%
     LUFT    1       25.00%
     PRIM    1       25.00%
+
+The oSTATUSes produced are as follows:
+
+==============  ==================================
+oSTATUS         Occurs when...
+==============  ==================================
+OKRefSame       Dual coordinate variant - REF unchanged for SNP variant
+OkRefSameIndel  Dual coordinate variant - REF unchanged for non-SNP variant
+OkRefAltSwitch  Dual coordinate variant - REF⇆ALT switch
+OkAmbigIns      Dual coordinate variant - Unable to determine if REF⇆ALT switched for an insertion variant - user specified ``-–allow-ambiguous``
+OkAmbigDel      Dual coordinate variant - Unable to determine if REF⇆ALT switched for a deletion variant - user specified ``-–allow-ambiguous``
+OkAmbigSV       Dual coordinate variant - Unable to determine if REF⇆ALT switched for a structural variant - user specified ``-–allow-ambiguous``
+NoChrom         Lift failed - chain file doesn't have a mapping for CHROM 
+NoMapping       Lift failed - chain file doesn't have a mapping for (CHROM,POS)
+RefLongChange   Lift failed - REF changed, and it is longer than 1 base
+RefLongXstrand  Lift failed - XSTRAND=X, and REF is more than 1 base
+AltLongXstrand  Lift failed - XSTRAND=X, and ALT is longer than 1 character
+RefChngeNotAlt  Lift failed - REF changed in a bi-allelic variant, but it is not a REF⇆ALT switch
+RefChg>2Allele  Lift failed - REF changed, and it is not a bi-allelic variant
+RefAltSwitch    Lift failed - REF⇆ALT switch, and user specified ``--reject-ref-alt-switches``
+AmbigIns        Lift failed - Unable to determine if REF⇆ALT switched for an insertion variant
+AmbigDel        Lift failed - Unable to determine if REF⇆ALT switched for a deletion variant
+AmbigStructVar         Lift failed - Unable to determine if REF⇆ALT switched for a structural variant
+AddedVariant    Non-dual-coordinate variant added to a DVCF 
+INFO/END        Failed to cross-render END: POS and INFO/END are not on the same chain file alignment
+INFO/AC         Failed to cross-render AC: INFO/AN is missing for this variant 
+INFO/*tag*      Failed to cross-render this INFO tag
+FORMAT/*tag*    Failed to cross-render this FORMAT tag
+==============  ==================================
+
+**Other useful options**
+
+- ``genozip --chain <chain-file> --show-chain <my-vcf.vcf>`` - displays all the chain file alignments.
+
+- ``genocat --reference <ref-file> --regions chr22:17000000-17000100`` - displays a region of a reference.
+  
+- ``genocat --REFERENCE <ref-file> --regions chr22:17000000-17000100`` - displays the region in reverse-complement.

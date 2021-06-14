@@ -39,11 +39,11 @@ VBlock *evb = NULL;
     func (&vb->coverage);            \
     func (&vb->read_count);          \
     func (&vb->unmapped_read_count); \
-    func (&vb->liftover);            \
+    func (&vb->chrom_map_vcf_to_chain); \
     func (&vb->lo_rejects[0]);       \
     func (&vb->lo_rejects[1]);       \
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
-    for (unsigned i=0; i < MAX_DICTS; i++) if (vb->contexts[i].dict_id.num) ctx_func (&vb->contexts[i]); \
+    for (unsigned i=0; i < MAX_DICTS; i++) if (CTX(i)->dict_id.num) ctx_func (CTX(i)); \
     if (vb->data_type_alloced != DT_NONE && dt_props[vb->data_type_alloced].vb_func) dt_props[vb->data_type_alloced].vb_func(vb);    
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
@@ -89,8 +89,8 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->drop_curr_line = vb->chrom_name = vb->fragment_start = NULL;
-    vb->prev_range = NULL;
-    vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
+    vb->prev_range[0] = vb->prev_range[1] = NULL;
+    vb->prev_range_chrom_node_index[0] = vb->prev_range_chrom_node_index[1] = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->digest_so_far = DIGEST_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
     vb->fragment_ctx = vb->ht_matrix_ctx = vb->runs_ctx = vb->fgrc_ctx = NULL;
@@ -101,6 +101,7 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     vb->compute_task = NULL;
     vb->compute_func = NULL;
     vb->translation = (DtTranslation){};
+    vb->ref = NULL;
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
     mutex_destroy (vb->vb_ready_for_compute_thread);
@@ -270,7 +271,8 @@ void vb_cleanup_memory (void)
     if (z_file->data_type != DT_NONE && DTPZ(cleanup_memory))
         DTPZ(cleanup_memory)(evb);
 
-    ref_unload_reference();
+    if (command == ZIP && (flag.reference == REF_INTERNAL || flag.reference == REF_EXT_STORE))
+        ref_unload_reference (gref);
 }
 
 // frees memory of all VBs, except for non-pool VBs (evb)

@@ -32,7 +32,7 @@ const uint8_t acgt_encode[256] = { ['A']=0, ['C']=1, ['G']=2, ['T']=3,
 
 void codec_acgt_comp_init (VBlock *vb)
 {
-        Context *nonref_ctx   = &vb->contexts[DTF(nonref)];
+        Context *nonref_ctx   = CTX(DTF(nonref));
         nonref_ctx->lcodec    = CODEC_ACGT; // ACGT is better than LZMA and BSC
         nonref_ctx->ltype     = LT_SEQUENCE;
 
@@ -90,7 +90,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
     
     #define PACK(data,len) { if (len) vb->has_non_agct = codec_acgt_pack (packed, (data), (len)) || vb->has_non_agct; }
 
-    Context *nonref_ctx   = &vb->contexts[DTF(nonref)];
+    Context *nonref_ctx   = CTX(DTF(nonref));
     Context *nonref_x_ctx = nonref_ctx + 1;
 
     ASSERT0 (!vb->compressed.len && !vb->compressed.param, "expecting vb->compressed to be free, but its not");
@@ -174,7 +174,7 @@ void codec_xcgt_uncompress (VBlock *vb, Codec codec, uint8_t param,
     const BitArray *acgt_packed = buf_get_bitarray (&vb->compressed); // data from NONREF context (2-bit per base)
     const char *acgt_x = FIRSTENT (const char, *uncompressed_buf); // data from NONREF_X context
     
-    Context *nonref_ctx = &vb->contexts[DTF(nonref)];
+    Context *nonref_ctx = CTX(DTF(nonref));
     char *nonref = FIRSTENT (char, nonref_ctx->local); // note: local was allocated by caller ahead of comp_uncompress -> codec_acgt_uncompress of the NONREF context
 
     for (uint32_t i=0; i < uncompressed_len; i++) {

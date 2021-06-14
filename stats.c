@@ -74,7 +74,10 @@ static void stats_output_file_metadata (Buffer *buf)
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
-        bufprintf (evb, buf, "Reference: %s\n", ref_filename);
+        bufprintf (evb, buf, "Reference: %s\n", ref_get_filename (gref));
+
+    if (z_file->data_type == DT_CHAIN)
+        bufprintf (evb, buf, "Source reference: %s\n", ref_get_filename (prim_ref));
 
     if (z_file->data_type == DT_VCF) 
         bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
@@ -154,10 +157,10 @@ void stats_set_consolidation (VBlock *vb, DidIType parent, unsigned num_deps, ..
 
     for (unsigned d=0; d < num_deps; d++) {
         DidIType dep = (DidIType)va_arg (args, int); 
-        vb->contexts[dep].st_did_i = parent;
+        CTX(dep)->st_did_i = parent;
     }
 
-    vb->contexts[parent].is_stats_parent = true;
+    CTX(parent)->is_stats_parent = true;
     
     va_end (args);
 }

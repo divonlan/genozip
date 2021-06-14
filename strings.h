@@ -28,12 +28,35 @@ extern char *str_tolower (const char *in, char *out /* out allocated by caller -
 extern char *str_toupper (const char *in, char *out);
 extern _Bool str_case_compare (const char *str1, const char *str2, unsigned len, _Bool *identical);
 
+static inline char *str_tolower_(const char *in, char *out, unsigned len)
+{
+    for (unsigned i=0; i < len; i++) out[i] = LOWER_CASE (in[i]); 
+    return out;
+}
+
+static inline char *str_toupper_(const char *in, char *out, unsigned len)
+{
+    unsigned i;
+    for (i=0; i < len; i++) out[i] = UPPER_CASE (in[i]);
+    return out;
+}
+
+static inline char *str_reverse (const char *in, char *out, unsigned len)
+{
+    unsigned i;
+    for (i=0; i < len; i++) out[len-1-i] = in[i]; 
+    return out;
+}
+
+extern const char REVCOMP[], UPPER_REVCOMP[];
+extern char *str_to_revcomp (const char *in, char *out, unsigned len);
+
 static inline uint64_t str_count_char (const char *str, uint64_t len, char c)
 {
     if (!str) return 0;
     
-    uint64_t count=0;
-    for (uint64_t i=0; i < len; i++)
+    uint64_t count=0, i;
+    for (i=0; i < len; i++)
         if (str[i] == c) count++;
 
     return count;
@@ -74,7 +97,17 @@ extern _Bool str_get_float (const char *float_str, unsigned float_str_len, doubl
 
 extern bool str_scientific_to_decimal (const char *float_str, unsigned float_str_len, char *modified, unsigned *modified_len, double *value);
 
-extern unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char sep, const char **items, unsigned *item_lens, _Bool exactly, const char *enforce_msg);
+extern unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_items, char sep, const char **items, unsigned *item_lens, _Bool exactly, const char *enforce_msg);
+
+// name      : eg "item", macro defines variables "items" (array of pointers), item_lens (array or unsigned), n_items (actual number of items)
+// max_items : maximum allowed items, or 0 if not known
+#define str_split(str,str_len,max_items,sep,name,exactly) str_split_enforce((str),(str_len),(max_items),(sep),name,(exactly),NULL)
+
+#define str_split_enforce(str,str_len,max_items,sep,name,exactly,enforce) \
+    unsigned n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
+    const char *name##s[n_##name##s]; \
+    unsigned name##_lens[n_##name##s]; \
+    n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), name##s, name##_lens, (exactly), (enforce)); 
 
 extern const char *type_name (unsigned item, 
                               const char * const *name, // the address in which a pointer to name is found, if item is in range

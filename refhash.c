@@ -66,7 +66,7 @@ const char complement[256] =  { ['A']='T', ['C']='G', ['G']='C', ['T']='A',  // 
 
 // cache stuff
 static ThreadId refhash_cache_creation_thread_id;
-static bool refhash_creating_cache = false;
+static VBlockP cache_create_vb = NULL;
 
 // ------------------------------------------------------
 // stuff related to creating the refhash
@@ -95,8 +95,8 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
 }
 
 // get base - might be in this range or next range
-#define GET_BASE(idx) (idx           < num_bases        ? ref_get_nucleotide (r, idx)                : \
-                       idx-num_bases < ref_size(next_r) ? ref_get_nucleotide (next_r, idx-num_bases) : \
+#define GET_BASE(idx) (idx           < num_bases        ? ref_base_by_idx (r, idx)                : \
+                       idx-num_bases < ref_size(next_r) ? ref_base_by_idx (next_r, idx-num_bases) : \
                        /* else */                         'X' /* no more bases */)
 
 // make-reference: generate the refhash data for one range of the reference. called by ref_compress_one_range (compute thread)
@@ -108,7 +108,7 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
     
     ASSERT (this_range_size * 2 == r->ref.nbits, 
             "mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64" r->range_id=%u", 
-            this_range_size, this_range_size*2, r->ref.nbits, ENT (char, z_file->contexts[0].dict, ENT (CtxNode, z_file->contexts[0].nodes, r->chrom)->char_index), 
+            this_range_size, this_range_size*2, r->ref.nbits, ENT (char, ZCTX(0)->dict, ENT (CtxNode, ZCTX(0)->nodes, r->chrom)->char_index), 
             r->first_pos, r->last_pos, r->range_id);
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
@@ -254,20 +254,21 @@ static void refhash_create_cache (VBlockP unused)
 
 static void refhash_create_cache_in_background (void)
 {
-    // start creating the genome cache now in a background thread, but only if we loaded the entire reference
-    if (!flag.regions) { 
-        refhash_get_cache_fn(); // generate name before we close z_file
-        refhash_cache_creation_thread_id = threads_create (refhash_create_cache, evb);
-        refhash_creating_cache = true;
-    }
+    if (flag.regions) return; // can't create cache as reference isn't fully loaded
+
+    cache_create_vb = vb_get_vb ("refhash_create_cache_in_background", 0);
+    cache_create_vb->compute_task = "create_refhash_cache";
+
+    refhash_get_cache_fn(); // generate name before we close z_file
+    refhash_cache_creation_thread_id = threads_create (refhash_create_cache, cache_create_vb);
 }
 
 void refhash_create_cache_join (void)
 {
-    if (!refhash_creating_cache) return;
+    if (!cache_create_vb) return;
 
     threads_join (&refhash_cache_creation_thread_id, NULL);
-    refhash_creating_cache = false;
+    vb_release_vb (&cache_create_vb);
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -321,13 +322,13 @@ static void refhash_read_one_vb (VBlockP vb)
 
 void refhash_load_standalone (void)
 {
-    flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
+    flag.reading_reference = gref; // tell file.c and fasta.c that this is a reference
 
     TEMP_VALUE (command, PIZ);
     CLEAR_FLAG (test);
 
-    z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
-    z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
+    z_file = file_open (ref_get_filename (gref), READ, Z_FILE, DT_FASTA);    
+    z_file->basename = file_basename (ref_get_filename (gref), false, "(reference)", NULL, 0);
 
     zfile_read_genozip_header (0);
 
@@ -339,9 +340,8 @@ void refhash_load_standalone (void)
     RESTORE_FLAG (test);
     RESTORE_VALUE (command);
 
-    flag.reading_reference = false;
+    flag.reading_reference = NULL;
 }
-
 
 // ----------------------------
 // general stuff
@@ -404,7 +404,7 @@ void refhash_initialize (bool *dispatcher_invoked)
             refhash_initialize_refhashs_array();
 
             sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-            dispatcher_fan_out_task ("load_refhash", ref_filename,
+            dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
                                      PROGRESS_MESSAGE, "Reading and caching reference hash table...", 
                                      flag.test, true, true, false, 0, 100,
                                      refhash_read_one_vb, 
@@ -432,6 +432,8 @@ void refhash_initialize (bool *dispatcher_invoked)
 
 void refhash_destroy (void)
 {
+    refhash_create_cache_join(); // wait for cache writing, if we're writing
+
     buf_destroy (&refhash_buf);
     FREE (refhashs);
 }

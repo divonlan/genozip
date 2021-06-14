@@ -47,7 +47,7 @@
 
 typedef struct CtxNode {
     CharIndex char_index; // character index into dictionary array
-    uint32_t snip_len;    // not including SNIP_SEP terminator present in dictionary array
+    uint32_t snip_len;    // not including \0 terminator present in dictionary array
     Base250  word_index;  // word index into dictionary 
 } CtxNode;
 
@@ -64,9 +64,6 @@ typedef struct {
 #define INTERLACE(type,n) ((((type)n) < 0) ? ((SAFE_NEGATE(type,n) << 1) - 1) : (((u##type)n) << 1))
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
-#define CTX &vb->contexts
-#define Z_CTX &z_file->contexts
-
 #define NEXTLOCAL(type, ctx) (*ENT (type, (ctx)->local, (ctx)->next_local++))
 static inline bool PAIRBIT(Context *ctx)      { BitArrayP b = buf_get_bitarray (&ctx->pair);  bool ret = bit_array_get (b, ctx->next_local);                    return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
 static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); bool ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; }
@@ -77,6 +74,8 @@ static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 #define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index.n : WORD_INDEX_NONE)
 
+#define CTX(did_i)          (&vb->contexts[did_i])
+#define ZCTX(did_i)         (&z_file->contexts[did_i])
 #define last_int(did_i)     contexts[did_i].last_value.i
 #define last_index(did_i)   contexts[did_i].last_value.i
 #define last_float(did_i)   contexts[did_i].last_value.f
@@ -88,7 +87,7 @@ static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (
 
 static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
-extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
+extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vctx, const char *snip, uint32_t snip_len, bool *is_new);
 extern int64_t ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 
@@ -100,7 +99,7 @@ extern CtxNode *ctx_node_vb_do (const Context *ctx, WordIndex node_index, const 
 extern CtxNode *ctx_node_zf_do (const Context *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
-extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vb_ctx, bool is_lcodec);
+extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec);
 
 extern Context *ctx_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType map_did_i, DidIType *num_contexts, DictId dict_id);
 

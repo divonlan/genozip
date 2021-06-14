@@ -97,19 +97,19 @@ void kraken_zip_initialize (void)
 
 void kraken_seg_initialize (VBlock *vb)
 {
-    vb->contexts[KRAKEN_TAXID].flags.store    = STORE_INT;
-    vb->contexts[KRAKEN_TAXID].no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
-    vb->contexts[KRAKEN_TAXID].counts_section = true; 
+    CTX(KRAKEN_TAXID)->flags.store    = STORE_INT;
+    CTX(KRAKEN_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
+    CTX(KRAKEN_TAXID)->counts_section = true; 
 
-    vb->contexts[KRAKEN_KMERTAX].st_did_i   = KRAKEN_KMERS;
-    vb->contexts[KRAKEN_KMERLEN].st_did_i   = KRAKEN_KMERS;
+    CTX(KRAKEN_KMERTAX)->st_did_i   = KRAKEN_KMERS;
+    CTX(KRAKEN_KMERLEN)->st_did_i   = KRAKEN_KMERS;
 
-    vb->contexts[KRAKEN_KMERS].no_stons     =  // container context
-    vb->contexts[KRAKEN_QNAME].no_stons     =  // container context
-    vb->contexts[KRAKEN_TOPLEVEL].no_stons  = 
-    vb->contexts[KRAKEN_TOP2TAXID].no_stons = 
-    vb->contexts[KRAKEN_EOL].no_stons       = 
-    vb->contexts[KRAKEN_CU].no_stons        = true; // no singletons, so b250 can be optimized away 
+    CTX(KRAKEN_KMERS)->no_stons     =  // container context
+    CTX(KRAKEN_QNAME)->no_stons     =  // container context
+    CTX(KRAKEN_TOPLEVEL)->no_stons  = 
+    CTX(KRAKEN_TOP2TAXID)->no_stons = 
+    CTX(KRAKEN_EOL)->no_stons       = 
+    CTX(KRAKEN_CU)->no_stons        = true; // no singletons, so b250 can be optimized away 
 }
 
 void kraken_seg_finalize (VBlockP vb)
@@ -128,7 +128,7 @@ void kraken_seg_finalize (VBlockP vb)
                           { .dict_id = (DictId)dict_id_fields[KRAKEN_EOL],                        } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[KRAKEN_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, CTX(KRAKEN_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 
     // top level container when loading a kraken file with --kraken
     SmallContainer top2taxid = { 
@@ -140,14 +140,14 @@ void kraken_seg_finalize (VBlockP vb)
                             { .dict_id = (DictId)dict_id_fields[KRAKEN_TAXID],  .seperator = { CI_TRANS_NOR /* no reconstruct */ } } },
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[KRAKEN_TOP2TAXID], (ContainerP)&top2taxid, 0, 0, 0);
+    container_seg_by_ctx (vb, CTX(KRAKEN_TOP2TAXID), (ContainerP)&top2taxid, 0, 0, 0);
 }
 
 // ZIP: called by main thread after compute has finished. 
 void kraken_zip_after_compute (VBlockP vb)
 {
     // add up the total length of all QNAMEs in the file - will be transferred to PIZ via SectionHeaderCounts.nodes_param of TAXID
-    z_file->contexts[KRAKEN_TAXID].nodes.param += vb->last_int(KRAKEN_QNAME); 
+    ZCTX(KRAKEN_TAXID)->nodes.param += vb->last_int(KRAKEN_QNAME); 
 }
 
 bool kraken_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -189,15 +189,10 @@ static void kraken_seg_kmers (VBlock *vb, const char *value, int32_t value_len, 
     };
 
 
-    const char *kmers[num_kmers+1];
-    unsigned kmer_lens[num_kmers+1];
-    str_split (value, value_len, num_kmers, ' ', kmers, kmer_lens, true, "kmers");
+    str_split_enforce (value, value_len, num_kmers, ' ', kmer, true, "kmers");
 
     for (unsigned k=0; k < num_kmers; k++) {
-        const char *items[3];
-        unsigned item_lens[3];
-
-        str_split (kmers[k], kmer_lens[k], 2, ':', items, item_lens, true, "kmer items");
+        str_split_enforce (kmers[k], kmer_lens[k], 2, ':', item, true, "kmer items");
 
         // KMER taxid - either copy from TAXID or seg a normal snip
         if (taxid_len == item_lens[0] && !memcmp (taxid, items[0], taxid_len)) 
@@ -209,7 +204,7 @@ static void kraken_seg_kmers (VBlock *vb, const char *value, int32_t value_len, 
         seg_by_did_i (vb, items[1], item_lens[1], KRAKEN_KMERLEN, item_lens[1]);
     }
 
-    container_seg_by_ctx (vb, &vb->contexts[KRAKEN_KMERS], (ContainerP)&kmers_con, 0, 0, num_kmers*2-1 + final_space); // account for ':' within kmers and ' ' betweem them
+    container_seg_by_ctx (vb, CTX(KRAKEN_KMERS), (ContainerP)&kmers_con, 0, 0, num_kmers*2-1 + final_space); // account for ':' within kmers and ' ' betweem them
 }
 
 // example: "C       ST-E00180:535:HCNW2CCX2:8:1101:16183:1221       570     150|150 A:1 570:21 543:5 91347:8 0:81 |:| A:1 543:4 570:25 0:32 28384:5 0:49"
@@ -228,7 +223,7 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     GET_NEXT_ITEM (KRAKEN_QNAME);
     SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
-    seg_compound_field ((VBlockP)vb, &vb->contexts[KRAKEN_QNAME], field_start, field_len, arg, 0, 1 /* \t */);
+    seg_compound_field ((VBlockP)vb, CTX(KRAKEN_QNAME), field_start, field_len, arg, 0, 1 /* \t */);
 
     vb->last_int(KRAKEN_QNAME) += field_len+1; // count total QNAME lengths in this VB (+1 for separator)
 
@@ -237,7 +232,7 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
     if (memchr (field_start, '|', field_len)) { 
         SegCompoundArg arg = { .pipe = true };
         // compound and not array, bc pair_2's seq_len is often a lot more random than pair_1's so use different contexts
-        seg_compound_field ((VBlockP)vb, &vb->contexts[KRAKEN_SEQLEN], field_start, field_len, arg, 0, 1 /* \t */); 
+        seg_compound_field ((VBlockP)vb, CTX(KRAKEN_SEQLEN), field_start, field_len, arg, 0, 1 /* \t */); 
     }
     else 
         seg_by_did_i (vb, field_start, field_len, KRAKEN_SEQLEN, field_len+1);
@@ -282,11 +277,11 @@ void kraken_piz_handover_data (VBlockP vb)
     uint64_t dict_start = qname_dict.len;
     buf_add_buf (evb, &qname_dict, &vb->txt_data, char, "qname_dict");
 
-    ARRAY (QnameNode, nodes, vb->contexts[KRAKEN_QNAME].nodes);
+    ARRAY (QnameNode, nodes, CTX(KRAKEN_QNAME)->nodes);
     for (uint64_t i=0; i < nodes_len; i++)
         nodes[i].char_index += dict_start;
 
-    buf_add_buf (evb, &qname_nodes, &vb->contexts[KRAKEN_QNAME].nodes, QnameNode, "qname_nodes");
+    buf_add_buf (evb, &qname_nodes, &CTX(KRAKEN_QNAME)->nodes, QnameNode, "qname_nodes");
 }
 
 // callback called after every repeat of TOP2HASH, i.e. when run with --taxid
@@ -312,12 +307,12 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
                 snip_len -= 2;
             }
 
-            buf_alloc (vb, &vb->contexts[KRAKEN_QNAME].nodes, 1, vb->lines.len, QnameNode, 1.5, "contexts->nodes");
+            buf_alloc (vb, &CTX(KRAKEN_QNAME)->nodes, 1, vb->lines.len, QnameNode, 1.5, "contexts->nodes");
             
             ASSERT (this_taxid <= MAX_TAXID, "taxid=%u exceeds maximum of %u", this_taxid, MAX_TAXID);
             ASSERT (snip_len <= MAX_SNIP_LEN, "Length of QNAME \"%.*s\" exceeds maximum of %u", snip_len, recon, MAX_SNIP_LEN);
 
-            NEXTENT (QnameNode, vb->contexts[KRAKEN_QNAME].nodes) = (QnameNode){ 
+            NEXTENT (QnameNode, CTX(KRAKEN_QNAME)->nodes) = (QnameNode){ 
                 .char_index = recon - vb->txt_data.data, // will be updated in kraken_piz_handover_data
                 .snip_len   = snip_len,
                 .hash       = hash_do (qname_hashtab.len, recon, snip_len),

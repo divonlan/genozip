@@ -235,7 +235,7 @@ Digest md5_finalize (Md5Context *ctx)
     ctx->buffer.words[15] = LTEN32 (ctx->hi);
 
     md5_transform (ctx, ctx->buffer.bytes, 64);
-    Digest digest = { .words = { LTEN32 (ctx->a), LTEN32 (ctx->a), LTEN32 (ctx->c), LTEN32 (ctx->d) } };
+    Digest digest = { .words = { LTEN32 (ctx->a), LTEN32 (ctx->b), LTEN32 (ctx->c), LTEN32 (ctx->d) } };
 
     memset (ctx, 0, sizeof (Md5Context)); // return to its pre-initialized state, should it be used again
 

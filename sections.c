@@ -205,8 +205,17 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
         iprintf ("  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
         iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);
         iprintf ("  license_hash: %s\n",            digest_display (header->license_hash).s);
-        iprintf ("  reference filename: %*s\n",     -REF_FILENAME_LEN, header->ref_filename);
+        iprintf ("  reference filename: %s\n",     header->ref_filename);
         iprintf ("  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
+
+        switch (BGEN16 (header->data_type)) {
+            case DT_CHAIN:
+                iprintf ("  primary-coordinates reference filename: %s\n", header->dt_specific.chain.prim_filename);
+                iprintf ("  primary-coordinates reference file hash: %s\n", digest_display (header->dt_specific.chain.prim_file_md5).s);
+                break;
+
+            default: break;
+        }
     }
 
     iprint0 ("  sections:\n");
@@ -263,8 +272,9 @@ uint32_t st_header_size (SectionType sec_type)
     ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
     return sec_type == SEC_NONE ? 0 
-         : sec_type == SEC_VB_HEADER  && (command == PIZ && z_file->genozip_version < 12) ? sizeof (SectionHeaderVbHeader) - 3*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was 12 bytes shorter
-         : sec_type == SEC_TXT_HEADER && (command == PIZ && z_file->genozip_version < 12) ? sizeof (SectionHeaderTxtHeader) -  sizeof(uint64_t) // in v8-11, SectionHeaderTxtHeader was 8 bytes shorter
+         : sec_type == SEC_VB_HEADER      && command == PIZ && z_file->genozip_version < 12 ? sizeof (SectionHeaderVbHeader) - 3*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was shorter
+         : sec_type == SEC_TXT_HEADER     && command == PIZ && z_file->genozip_version < 12 ? sizeof (SectionHeaderTxtHeader) -  sizeof(uint64_t) // in v8-11, SectionHeaderTxtHeader was shorter
+         : sec_type == SEC_GENOZIP_HEADER && command == PIZ && z_file->genozip_version < 12 ? sizeof (SectionHeaderGenozipHeader) -  REF_FILENAME_LEN - sizeof(Digest) // in v8-11, SectionHeaderTxtHeader was shorter
          : abouts[sec_type].header_size;
 }
 

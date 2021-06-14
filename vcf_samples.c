@@ -110,9 +110,9 @@ static WordIndex vcf_seg_FORMAT_A_R_G (VBlockVCF *vb, Context *ctx, Container co
                                        void (*seg_item_cb)(VBlockVCFP, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
                                                            const char**, const unsigned*, const int64_t*))
 {   
-    const char *items[MAX_ARG_ARRAY_ITEMS]; unsigned item_lens[MAX_ARG_ARRAY_ITEMS];
-    con.nitems_lo = str_split (value, value_len, MAX_ARG_ARRAY_ITEMS, ',', items, item_lens, false, NULL);
-    if (!con.nitems_lo) 
+    str_split (value, value_len, MAX_ARG_ARRAY_ITEMS, ',', item, false);
+    
+    if (!(con.nitems_lo = n_items)) 
         return seg_by_ctx (vb, value, value_len, ctx, value_len); // too many items - normal seg
 
     Context *item_ctxs[con.nitems_lo];
@@ -382,7 +382,7 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
     if (str_get_int (cell, cell_len, &ps_value) && ps_value == ctx->last_value.i) // same as previous line
         return seg_by_ctx (vb, ((char []){ SNIP_SELF_DELTA, '0' }), 2, ctx, cell_len);
 
-    return seg_delta_vs_other (vb, ctx, &vb->contexts[VCF_POS], cell, cell_len, 1000);
+    return seg_delta_vs_other (vb, ctx, CTX(VCF_POS), cell, cell_len, 1000);
 }
 
 //----------
@@ -480,7 +480,7 @@ static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCF *vb, unsigned new_ploid
 {
     // protect against highly unlikely case that we don't have enough consumed txt data to store increased-ploidy ht data 
     ASSVCF (new_ploidy * vb->line_i * vcf_num_samples <= max_new_size, 
-            "haplotype data overflow due to increased ploidy on line %u", vb->line_i);
+            "haplotype data overflow due to increased ploidy on line %"PRIu64, vb->line_i);
 
     uint32_t num_samples = vb->line_i * vcf_num_samples + vb->sample_i; // all samples in previous lines + previous samples in current line
     char *ht_data = FIRSTENT (char, vb->ht_matrix_ctx->local);
@@ -669,12 +669,8 @@ static bool vcf_piz_luft_switch_first_last (VBlockP vb, ContextP ctx, char *reco
     char copy[recon_len];
     memcpy (copy, recon, recon_len);
     
-    const char *items[num_items];
-    unsigned item_lens[num_items];
-    
-    // if item format is inconsistent with VCF header - we won't translate it
-    if (!str_split (copy, recon_len, num_items, ',', items, item_lens, true, NULL))
-        return false;
+    str_split (copy, recon_len, num_items, ',', item, true);
+    if (!n_items) return false; // if item format is inconsistent with VCF header - we won't translate it
 
     if (validate_only) return true;
     
@@ -723,14 +719,13 @@ TRANSLATOR_FUNC (vcf_piz_luft_G)
 // if any context fails luft-translation, returns that context, or if all is good, returns NULL
 static inline Context *vcf_seg_validate_luft_trans_one_sample (VBlockVCF *vb, ContextP *ctxs, uint32_t num_items, char *sample, unsigned sample_len)
 {
-    char *items[num_items]; unsigned item_lens[num_items];
-    ASSVCF ((num_items = str_split (sample, sample_len, num_items, ':', (const char **)items, item_lens, false, NULL)), // possibly less than declared
-            "Sample %u has too many subfields - FORMAT field specifies only %u: \"%.*s\"", vb->sample_i+1, num_items, sample_len, sample);
+    str_split (sample, sample_len, num_items, ':', item, false);
+    ASSVCF (n_items, "Sample %u has too many subfields - FORMAT field specifies only %u: \"%.*s\"", vb->sample_i+1, n_items, sample_len, sample);
 
-    for (unsigned i=0; i < num_items; i++) 
+    for (unsigned i=0; i < n_items; i++) 
         if (needs_translation (ctxs[i]) && item_lens[i]) {
             if ((vb->line_coords == DC_LUFT && !vcf_lo_seg_cross_render_to_primary (vb, ctxs[i], items[i], item_lens[i], NULL, NULL)) ||
-                (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans]((VBlockP)vb, ctxs[i], items[i], item_lens[i], true))))
+                (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans]((VBlockP)vb, ctxs[i], (char *)items[i], item_lens[i], true))))
                 return ctxs[i];  // failed translation
         }
 
@@ -757,11 +752,11 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCF *vb, uint3
 
         field_start = next_field;
         next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, &has_13, "sample-subfield");
-        ASSVCF (field_len, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", vb->sample_i+1);
+        ASSVCF (field_len, "unexpected tab character after sample # %u", vb->sample_i);
 
         Context *failed_ctx = vcf_seg_validate_luft_trans_one_sample (vb, ctxs, num_items, (char *)field_start, field_len);
         if (failed_ctx) { // some context doesn't luft-translate as required
-            vcf_lo_seg_rollback_and_reject (vb, LO_FORMAT, failed_ctx); // rollback liftover
+            REJECT_SUBFIELD (LO_FORMAT, failed_ctx, "Cannot cross-render sample due to field %s: \"%.*s\"", failed_ctx->name, field_len, field_start);
 
             // make all contexts untranslateable in this line
             for (unsigned i=0; i < num_items; i++)  // iterate on the order as in the line
@@ -781,61 +776,59 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCF *vb, uint3
 // returns the number of colons in the sample
 static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContextP *ctxs, ContainerP samples, const char *sample, unsigned sample_len)
 {
-    uint32_t format_num_subfields = con_nitems (*samples);
-    const char *sf[format_num_subfields]; unsigned sf_len[format_num_subfields];
+    str_split (sample, sample_len, con_nitems (*samples), ':', sf, false);
 
-    uint32_t num_subfields = str_split (sample, sample_len, format_num_subfields, ':', sf, sf_len, false, 0);
-    ASSVCF (num_subfields, "Sample %u has too many subfields - FORMAT field specifies only %u: \"%.*s\"", vb->sample_i+1, format_num_subfields, sample_len, sample);
+    ASSVCF (n_sfs, "Sample %u has too many subfields - FORMAT field specifies only %u: \"%.*s\"", vb->sample_i+1, con_nitems (*samples), sample_len, sample);
 
-    for (unsigned i=0; i < num_subfields; i++) { 
+    for (unsigned i=0; i < n_sfs; i++) { 
 
         DictId dict_id = samples->items[i].dict_id;
         Context *ctx = ctxs[i], *other_ctx;
 
-        unsigned modified_len = sf_len[i] + 20;
+        unsigned modified_len = sf_lens[i] + 20;
         char modified[modified_len];
 
 #       define SEG_OPTIMIZED do { seg_by_ctx (vb, modified, modified_len, ctx, modified_len); \
-                                  int32_t shrinkage = (int)sf_len[i] - (int)modified_len;     \
+                                  int32_t shrinkage = (int)sf_lens[i] - (int)modified_len;     \
                                   vb->recon_size      -= shrinkage;                           \
                                   vb->recon_size_luft -= shrinkage; } while (0)
 
         // --chain: if this is RendAlg=A_1 subfield, convert a eg 4.31e-03 to e.g. 0.00431. This is to
         // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
-        if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && str_scientific_to_decimal (sf[i], sf_len[i], modified, &modified_len, NULL)) {
-            int32_t shrinkage = (int32_t)sf_len[i] - (int32_t)modified_len; // possibly negative = growth
+        if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && str_scientific_to_decimal (sfs[i], sf_lens[i], modified, &modified_len, NULL)) {
+            int32_t shrinkage = (int32_t)sf_lens[i] - (int32_t)modified_len; // possibly negative = growth
             vb->recon_size      -= shrinkage; 
             vb->recon_size_luft -= shrinkage; 
-            sf[i] = modified; 
-            sf_len[i] = modified_len; 
+            sfs[i] = modified; 
+            sf_lens[i] = modified_len; 
         }
 
-        if (!sf_len[i])
+        if (!sf_lens[i])
             seg_by_ctx (vb, "", 0, ctx, 0); // generates WORD_INDEX_EMPTY_SF
 
         // note: cannot use switch bc dict_id_* are variables, not constants
 
         // ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
         else if (dict_id.num == dict_id_FORMAT_GT)
-            vcf_seg_FORMAT_GT (vb, ctx, dl, sf[i], sf_len[i]);
+            vcf_seg_FORMAT_GT (vb, ctx, dl, sfs[i], sf_lens[i]);
 
         // ## Allele DoSage
         // Also: ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
         else if (dict_id.num == dict_id_FORMAT_DS && // DS special only works if we also have GT
                  samples->items[0].dict_id.num == dict_id_FORMAT_GT)
-            vcf_seg_FORMAT_DS (vb, ctx, sf[i], sf_len[i]);
+            vcf_seg_FORMAT_DS (vb, ctx, sfs[i], sf_lens[i]);
 
         // ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
         else if (flag.optimize_PL && dict_id.num == dict_id_FORMAT_PL && 
-            optimize_vcf_pl (sf[i], sf_len[i], modified, &modified_len)) 
+            optimize_vcf_pl (sfs[i], sf_lens[i], modified, &modified_len)) 
             SEG_OPTIMIZED;
 
         else if (flag.optimize_GL && dict_id.num == dict_id_FORMAT_GL &&
-            optimize_vector_2_sig_dig (sf[i], sf_len[i], modified, &modified_len))
+            optimize_vector_2_sig_dig (sfs[i], sf_lens[i], modified, &modified_len))
             SEG_OPTIMIZED;
     
         else if (flag.optimize_GP && dict_id.num == dict_id_FORMAT_GP &&  
-            optimize_vector_2_sig_dig (sf[i], sf_len[i], modified, &modified_len))
+            optimize_vector_2_sig_dig (sfs[i], sf_lens[i], modified, &modified_len))
             SEG_OPTIMIZED;
 
         // note: GP and PL - for non-optimized, I tested segging as A_R_G and seg_array - they are worse or not better than the default. likely because the values are correlated.
@@ -843,72 +836,72 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         // case: PS ("Phase Set") - might be the same as POS (for example, if set by Whatshap: https://whatshap.readthedocs.io/en/latest/guide.html#features-and-limitations)
         // or might be the same as the previous line
         else if (dict_id.num == dict_id_FORMAT_PS) 
-            vcf_seg_FORMAT_PS (vb, ctx, sf[i], sf_len[i]);
+            vcf_seg_FORMAT_PS (vb, ctx, sfs[i], sf_lens[i]);
 
         // standard: ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
         // GIAB: ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Net Genotype quality across all datasets, calculated from GQ scores of callsets supporting the consensus GT, using only one callset from each dataset">   
         else if (dict_id.num == dict_id_FORMAT_GQ) 
-            vcf_seg_FORMAT_transposed (vb, ctx, sf[i], sf_len[i], sf_len[i]);
+            vcf_seg_FORMAT_transposed (vb, ctx, sfs[i], sf_lens[i], sf_lens[i]);
             
         // ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
         else if (dict_id.num == dict_id_FORMAT_DP) 
-            vcf_seg_FORMAT_DP (vb, ctx, sf[i], sf_len[i]);
+            vcf_seg_FORMAT_DP (vb, ctx, sfs[i], sf_lens[i]);
             
         // ##FORMAT=<ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         else if (dict_id.num == dict_id_FORMAT_MIN_DP && vcf_has_value_in_sample (vb, dict_id_FORMAT_DP, &other_ctx)) 
-            seg_delta_vs_other (vb, ctx, other_ctx, sf[i], sf_len[i], -1);
+            seg_delta_vs_other (vb, ctx, other_ctx, sfs[i], sf_lens[i], -1);
 
         else if (dict_id.num == dict_id_FORMAT_AF) 
-            vcf_seg_FORMAT_AF (vb, ctx, sf[i], sf_len[i]);
+            vcf_seg_FORMAT_AF (vb, ctx, sfs[i], sf_lens[i]);
 
         // standard: ##FORMAT=<ID=AD,Number=.,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">  
         // GIAB: ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Net allele depths across all unfiltered datasets with called genotype">
         else if (dict_id.num == dict_id_FORMAT_AD) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_AD, sf[i], sf_len[i], STORE_INT, vcf_seg_AD_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_AD, sfs[i], sf_lens[i], STORE_INT, vcf_seg_AD_items);
 
         // GIAB: ##FORMAT=<ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
         else if (dict_id.num == dict_id_FORMAT_ADALL) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADALL, sf[i], sf_len[i], STORE_INT, vcf_seg_ADALL_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADALL, sfs[i], sf_lens[i], STORE_INT, vcf_seg_ADALL_items);
 
         else if (dict_id.num == dict_id_FORMAT_ADF) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADF, sf[i], sf_len[i], STORE_NONE, vcf_seg_ADF_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADF, sfs[i], sf_lens[i], STORE_NONE, vcf_seg_ADF_items);
 
         else if (dict_id.num == dict_id_FORMAT_ADR) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADR, sf[i], sf_len[i], STORE_NONE, vcf_seg_ADR_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADR, sfs[i], sf_lens[i], STORE_NONE, vcf_seg_ADR_items);
 
         // ##FORMAT=<ID=F1R2,Number=R,Type=Integer,Description="Count of reads in F1R2 pair orientation supporting each allele">
         else if (dict_id.num == dict_id_FORMAT_F1R2) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_F1R2, sf[i], sf_len[i], STORE_INT, NULL);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_F1R2, sfs[i], sf_lens[i], STORE_INT, NULL);
 
         // ##FORMAT=<ID=F2R1,Number=R,Type=Integer,Description="Count of reads in F2R1 pair orientation supporting each allele">
         else if (dict_id.num == dict_id_FORMAT_F2R1) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_F2R1, sf[i], sf_len[i], STORE_INT, vcf_seg_F2R1_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_F2R1, sfs[i], sf_lens[i], STORE_INT, vcf_seg_F2R1_items);
 
         // ##FORMAT=<ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
         else if (dict_id.num == dict_id_FORMAT_SB) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_SB, sf[i], sf_len[i], STORE_NONE, vcf_seg_SB_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_SB, sfs[i], sf_lens[i], STORE_NONE, vcf_seg_SB_items);
 
         // ##FORMAT=<ID=MB,Number=4,Type=Integer,Description="Per-sample component statistics to detect mate bias">
         else if (dict_id.num == dict_id_FORMAT_MB) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_MB, sf[i], sf_len[i], STORE_NONE, vcf_seg_MB_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_MB, sfs[i], sf_lens[i], STORE_NONE, vcf_seg_MB_items);
 
         // ##FORMAT=<ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
         else if (dict_id.num == dict_id_FORMAT_SAC) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_SAC, sf[i], sf_len[i], STORE_NONE, vcf_seg_SAC_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_SAC, sfs[i], sf_lens[i], STORE_NONE, vcf_seg_SAC_items);
 
         else // default
-            seg_by_ctx (vb, sf[i], sf_len[i], ctx, sf_len[i]);
+            seg_by_ctx (vb, sfs[i], sf_lens[i], ctx, sf_lens[i]);
 
         vcf_set_encountered_in_sample (ctx);
     }
 
     // missing subfields - defined in FORMAT but missing (not merely empty) in sample
-    for (unsigned i=num_subfields; i < format_num_subfields; i++)  
+    for (unsigned i=n_sfs; i < con_nitems (*samples); i++)  
         seg_by_ctx (vb, NULL, 0, ctxs[i], 0); // generates WORD_INDEX_MISSING_SF
 
-    return num_subfields - 1; // number of colons
+    return n_sfs - 1; // number of colons
 }
 
 //------------
@@ -923,7 +916,7 @@ const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, ch
     // - num_items as the number of FORMAT subfields (inc. GT)
 
     Container samples = *ENT (Container, vb->format_mapper_buf, dl->format_node_i); // make a copy of the template
-    ContextP *ctxs = ENT (ContextP, vb->format_contexts, dl->format_node_i * MAX_SUBFIELDS);
+    ContextP *ctxs = ENT (ContextP, vb->format_contexts, dl->format_node_i * MAX_FIELDS);
     uint32_t num_items = con_nitems (samples);
 
     // check that all subfields in all samples can be luft-translated as required, or make this a LUFT-only / PRIMARY-only line.
@@ -971,7 +964,7 @@ const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, ch
             if (ctxs[i]->line_is_luft_trans)
                 samples.items[i].translator = ctxs[i]->luft_trans;
 
-    container_seg_by_ctx (vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
+    container_seg_by_ctx (vb, CTX(VCF_SAMPLES), &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
 
     if (vb->ht_matrix_ctx)
         vb->ht_matrix_ctx->local.len = (vb->line_i+1) * vb->ht_per_line;

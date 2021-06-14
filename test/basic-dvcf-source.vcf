@@ -17,9 +17,10 @@
 ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
 ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
 ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
+##reference=http://somewhere.com/some-original-ref.fa.gz
 ##co=
 ##co= this VCF is in h37 coordinates, designed to create a dual-coordinate VCF in conjunction with 
-##co=     GRCh37_to_GRCh38.chain.genozip and GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
+##co= GRCh37_to_GRCh38.chain.genozip and GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 ##co=
 ##contig=<ID=1,length=249250621>
 ##contig=<ID=2>
@@ -28,8 +29,8 @@
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Person1	Person2
 1	329162	1	G	A	100	REF_CHANGE_NOT_ALT	.	GT:AD:AF:DP:F1R2:F2R1:GQ:PL:GP:PRI:SB:MB	1|0:11,41:0.788:52:6,19:5,22:14:81,17,0:43.186,14.186,0.1691:0,34.77,37.77:8,3,25,16:5,6,21,20	0|0:29,73:0.716:102:11,41:18,32:15:76,18,0:37.91,14.881,0.14423:0,34.77,37.77:12,17,30,43:14,15,34,39
 1	348307	2	c	G	100	xstrand_lower-case-ref	AF=0.9	GT:AF	1|0:4.7	0|0:-0.50
-1	353813	3	C	GA	100	xstrand:long-ALT	.	GT	1|0	0|0
-1	366043	4	CA	A	100	xstrand:long-REF	.	GT	1|0	0|0
+1	353813	3	T	GA	100	xstrand:long-ALT	.	GT	1|0	0|0
+1	366043	4	AA	A	100	xstrand:long-REF	.	GT	1|0	0|0
 1	385798	5	G	A,T	100	xstrand:2-ALT	.	GT	1|0	0|0
 1	20159588	6	C	a	100	REF_ALT_SWITCH:AC-with-len-diff:lower-alt:ExpAF	AN=1000;AC=999;AF=9.99e-01	GT:AD:AF:DP:F1R2:F2R1:GQ:PL:GP:PRI:SB:MB	1|0:11,41:0.788:52:6,19:5,22:14:81,17,0:43.186,14.186,0.1691:0,34.77,37.77:8,3,25,16:5,6,21,20	0|0:29,73:0.716:102:11,41:18,32:15:76,18,0:37.91,14.881,0.14423:0,34.77,37.77:12,17,30,43:14,15,34,39
 1	20523874	7	C	G	100	REF_ALT_SWITCH:unphased-miscalculated:AF-AN-after-AC:growing-exp-AF	AF=2.1e-10;AC=1;AN=4	GT:AF	0/1:3.3e-10	1/1
@@ -40,7 +41,8 @@
 1	20539032	12	A	T	.	REF_ALT_SWITCH:Monoploid-G	.	GT:GP	1:37.91,0.14423
 1	20600265	13	a	C	100	OREF_IS_REF:lower_ref:SB-not-in-header	.	GT:AD:AF:DP:F1R2:F2R1:GQ:PL:GP:PRI:SB:MB	1|0:11,41:0.788:52:6,19:5,22:14:81,17,0:43.186,14.186,0.1691:0,34.77,37.77:8,3,25,16:5,6,21,20	0/0:29,73:0.716:102:11,41:18,32:15:76,18,0:37.91,14.881,0.14423:0,34.77,37.77:12,17,30,43:14,15,34,39
 1	20600703	14	A	G	100	OREF_IS_REF:bad-GL:bad-AD	.	GT:GL:AD	0/1:1,2,3,4:1	1/1:2:1,2,3
-1	20600710	15	T	.	100	MISSING_ALT	.	GT	0/1	1/1
+1	20600710	15	A	.	100	MISSING_ALT	.	GT	0/1	1/1
+1	20600712	15	TGG	T	100	Deletion	.	GT	0/1	1/1
 2	100000000	16	G	A	.	END_MAPPING	END=100030000	GT	.	.
 2	150000001	17	G	A	.	END_good	END=150000100	GT	.	.
 2	150000101	18	G	A	.	END_good2:switch	END=150000200	GT	.	.
@@ -50,4 +52,14 @@
 2	243152700	22	.	.	.	missing-ref	.	GT	.	.
 2	243152701	23	G	A	.	END_XSTRAND	END=243152702	GT	.	.
 2	243152702	24	G	A	.	BaseCounts_XSTRAND	BaseCounts=0,1,45,23	GT	.	.
-bogus-chrom	.	25	.	.	.	no-chrom	.	GT	.	.
+chr22	16671884	25	TG	T	99	DEL-X-OkRefSameIndel:alt-chrom-name	.	GT:DS:GL	0|0:0.35:0,0,0
+chr22	16671885	26	GT	T	99	same-but-right-aligned	.	GT:DS:GL	0|0:0.35:0,0,0
+chr22	16672935	27	C	CTT	20	INS-X-OkRefSameIndel	.	GT:DS:GL	0|0:0.1:0,0,0
+chr22	16672945	28	G	TTG	20	same-but-right-aligned	.	GT:DS:GL	0|0:0.1:0,0,0
+chr22	46534946	29	T	TGGC	719	INS-RefNewAlleleIndel	.	GT:DS:GL	0|1:1:0,0,0
+chr22	46534947	30	C	GGCC	719	same-but-right-aligned	.	GT:DS:GL	0|1:1:0,0,0
+chr22	49767909	31	GC	G	97	DEL-OkRefAltSwitchIndel	.	GT:DS:GL	0|0:0.1:0,0,0
+chr22	49767918	32	CA	A	97	same-but-right-aligned	.	GT:DS:GL	0|0:0.1:0,0,0
+chr22	49769318	33	T	TC	1036	INS-OkRefAltSwitchIndel	.	GT:DS:GL	1|1:2:0,0,0
+chr22	49769321	34	T	CT	1036	same-but-right-aligned	.	GT:DS:GL	1|1:2:0,0,0
+bogus-chrom	.	35	.	.	.	no-chrom	.	GT	.	.

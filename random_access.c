@@ -186,7 +186,7 @@ void random_access_merge_in_vb (VBlock *vb, Coords dc)
 
     buf_alloc (evb, z_buf, 0, z_buf->len + src_ra_len, RAEntry, 2, "z_file->ra_buf"); 
 
-    Context *chrom_ctx = &vb->contexts[dc==DC_PRIMARY ? CHROM : ODID(oCHROM)];
+    Context *chrom_ctx = CTX(dc==DC_PRIMARY ? CHROM : ODID(oCHROM));
     ASSERT0 (chrom_ctx, "cannot find chrom_ctx");
 
     for (unsigned i=0; i < src_ra_len; i++) {
@@ -273,8 +273,10 @@ void random_access_finalize_entries (Buffer *ra_buf)
     }
 }
 
-void random_access_compress (Buffer *ra_buf, SectionType sec_type, Coords dc, const char *msg)
+void random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Coords dc, const char *msg)
 {
+    BufferP ra_buf = (BufferP)ra_buf_; // we will restore everything so that Const is honoured
+
     if (msg) random_access_show_index (ra_buf, true, dc==DC_LUFT ? ODID(oCHROM) : CHROM, msg);
     
     BGEN_random_access (ra_buf); // make ra_buf into big endian
@@ -284,7 +286,10 @@ void random_access_compress (Buffer *ra_buf, SectionType sec_type, Coords dc, co
 
     ra_buf->len *= sizeof (RAEntry); // change len to count bytes
     zfile_compress_section_data_ex (evb, sec_type, ra_buf, 0,0, CODEC_LZMA, sec_flags); // ra data compresses better with LZMA than BZLIB
+
+    // restore so we leave it intact as promised by Const
     ra_buf->len /= sizeof (RAEntry); // restore
+    BGEN_random_access (ra_buf); // make ra_buf into big endian
 }
 
 // --------------------

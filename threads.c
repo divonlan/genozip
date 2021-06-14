@@ -29,7 +29,7 @@
 #include "vblock.h"
 
 static Buffer threads = EMPTY_BUFFER;
-static Mutex threads_mutex = {};
+static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
 static pthread_t main_thread;
 
 static Buffer log = EMPTY_BUFFER; // for debugging thread issues, activated with --debug-threads

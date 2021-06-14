@@ -52,8 +52,6 @@
 const char *dvcf_status_names[] = DVCF_STATUS_NAMES;
 const LuftTransLateProp ltrans_props[NUM_VCF_TRANS] = DVCF_TRANS_PROPS;
 
-#define WORD_INDEX_MISSING -2 // a value in liftover_chrom2chainsrc
-
 // constant snips initialized at the beginning of the first file zip
 #define LO_SNIP_LEN 200
 static char info_luft_snip[LO_SNIP_LEN]={}, info_prim_snip[LO_SNIP_LEN]={}, info_rejt_luft_snip[LO_SNIP_LEN]={}, info_rejt_prim_snip[LO_SNIP_LEN]={};
@@ -71,8 +69,8 @@ void vcf_lo_zip_initialize (void)
     lo_snip_initialized = true;
 
     // case: --chain : create SRCNAME context from liftover contigs and dict
-    if (chain_is_loaded && z_file->num_txt_components_so_far == 1) // copy only once
-        chain_copy_dst_contigs_to_z_file (DTFZ (ochrom));
+    if (chain_is_loaded && z_file->num_txt_components_so_far == 1)  // copy only once
+        chain_copy_contigs_to_z_file (DTFZ (ochrom));
 
     // prepare (constant) snips. note: we need these snips both for --chain and when zipping dual-coord files
     SmallContainer con = {
@@ -153,38 +151,48 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
 }
 
 // SEG: map coordinates primary->luft. In case of failure, sets dst_contig_index, dst_1pos, xstrand to 0.
-LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
+LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
 {
-    // extend vb->liftover if needed
-    if (vb->chrom_node_index >= vb->liftover.len) { 
-        buf_alloc (vb, &vb->liftover, 0, MAX (vb->chrom_node_index+1, 100), WordIndex, 0, "liftover");
+    #define WORD_INDEX_MISSING -2
+    #define WORD_INDEX_NOT_IN_PRIM_REF -3
+
+    // extend vb->chrom_map_vcf_to_chain if needed - map between VCF node index (NOT word index) and chain primary contigs (NOT reference primary contigs)
+    if (vb->chrom_node_index >= vb->chrom_map_vcf_to_chain.len) { 
+        buf_alloc (vb, &vb->chrom_map_vcf_to_chain, 0, MAX (vb->chrom_node_index+1, chain_get_num_prim_contigs()), WordIndex, 2, "chrom_map_vcf_to_chain");
 
         // initialize new entries allocated to WORD_INDEX_MISSING
-        uint32_t size = vb->liftover.size / sizeof (WordIndex);
-        for (uint32_t i=vb->liftover.param; i < size; i++)
-            *ENT (WordIndex, vb->liftover, i) = WORD_INDEX_MISSING;
+        uint32_t size = vb->chrom_map_vcf_to_chain.size / sizeof (WordIndex);
+        for (uint32_t i=vb->chrom_map_vcf_to_chain.param; i < size; i++)
+            *ENT (WordIndex, vb->chrom_map_vcf_to_chain, i) = WORD_INDEX_MISSING;
 
-        vb->liftover.param = size; // param holds the number of entries initialized >= len
-        vb->liftover.len   = vb->chrom_node_index + 1;
+        vb->chrom_map_vcf_to_chain.param = size; // param holds the number of entries initialized >= len
+        vb->chrom_map_vcf_to_chain.len   = vb->chrom_node_index + 1;
     }
 
-    ARRAY (WordIndex, map, vb->liftover);
+    ARRAY (WordIndex, map, vb->chrom_map_vcf_to_chain);
 
     // if chrom is not yet mapped to src_contig, map it now:
     // map from chrom_node_index (not word index!) to entry in chain_index
-    if (map[vb->chrom_node_index] == WORD_INDEX_MISSING) 
-        map[vb->chrom_node_index] = chain_get_src_contig_index (vb->chrom_name, vb->chrom_name_len);
+    if (map[vb->chrom_node_index] == WORD_INDEX_MISSING) {
+        map[vb->chrom_node_index] = chain_get_prim_contig_index_by_name (vb->chrom_name, vb->chrom_name_len);
 
-    if (map[vb->chrom_node_index] == WORD_INDEX_NONE) {
+        // check if the error is due to missing contig in primary reference, or only chain file
+        if (map[vb->chrom_node_index] == WORD_INDEX_NONE &&
+            ref_contigs_get_by_name (prim_ref, vb->chrom_name, vb->chrom_name_len, true) == WORD_INDEX_NONE)
+            map[vb->chrom_node_index] = WORD_INDEX_NOT_IN_PRIM_REF;
+    }
+
+    if (map[vb->chrom_node_index] == WORD_INDEX_NONE || map[vb->chrom_node_index] == WORD_INDEX_NOT_IN_PRIM_REF) {
         if (dst_contig_index) *dst_contig_index = WORD_INDEX_NONE;
         if (dst_1pos) *dst_1pos = 0;
         if (xstrand) *xstrand = false;
-        return LO_NO_CHROM;
+        
+        return map[vb->chrom_node_index] == WORD_INDEX_NONE ? LO_CHROM_NOT_IN_CHAIN : LO_CHROM_NOT_IN_PRIM_REF;
     }
+    
     else {
-        bool mapping_ok = chain_get_liftover_coords (map[vb->chrom_node_index], vb->last_int(VCF_POS), 
-                                                     dst_contig_index, dst_1pos, xstrand, aln_i); // if failure, sets output to 0.
-        return mapping_ok ? LO_OK : LO_NO_MAPPING;
+        bool mapping_ok = chain_get_liftover_coords (map[vb->chrom_node_index], pos, dst_contig_index, dst_1pos, xstrand, aln_i); // if failure, sets output to 0.
+        return mapping_ok ? LO_OK : LO_NO_MAPPING_IN_CHAIN;
     }
 }                                
 
@@ -272,7 +280,7 @@ static void vcf_lo_seg_REJX_do (VBlockVCFP vb, unsigned add_bytes)
     seg_by_did_i (vb, "", 0, SEL (VCF_oREFALT, VCF_REFALT), 0);
     seg_by_did_i (vb, "", 0, SEL (VCF_oPOS,    VCF_POS),    0);
 
-    vb->contexts[VCF_COPYSTAT].txt_len += add_bytes; // we don't need to seg COPYSTAT because it is all_the_same. Just account for add_bytes.
+    CTX(VCF_COPYSTAT)->txt_len += add_bytes; // we don't need to seg COPYSTAT because it is all_the_same. Just account for add_bytes.
 
     // if we're segging a Primary line, and rejecting the Luft rendition, then the reject will be only reconstructed in primary coordinates, and vice verse
     // we modified the text by adding this string (the "REJX" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
@@ -294,7 +302,7 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
     // unaccount for INFO/LUFT (in primary reconstruction) and INFO/PRIM (in Luft reconstruction)
     Context *luft_ctx; 
     if (ctx_encountered_in_line (vb, dict_id_INFO_LUFT, &luft_ctx)) { // we always have both LUFT and PRIM, or neither
-        vb->recon_size -= luft_ctx->last_txt_len;
+        vb->recon_size      -= luft_ctx->last_txt_len;
         vb->recon_size_luft -= ctx_get_existing_ctx (vb, dict_id_INFO_PRIM)->last_txt_len;
     }
 
@@ -332,22 +340,41 @@ void vcf_lo_set_rollback_point (VBlockVCFP vb)
 // Primary and Luft only line: Lrej and Prej
 void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 {
-    bool xstrand;
-    LiftOverStatus ostatus = vcf_lo_get_liftover_coords (vb, &dl->chrom_index[1], &dl->pos[1], &xstrand, &vb->pos_aln_i);
+    bool is_xstrand;
+    PosType pos = vb->last_int(VCF_POS);
+
+    LiftOverStatus ostatus = vcf_lo_get_liftover_coords (vb, pos, &dl->chrom_index[1], &dl->pos[1], &is_xstrand, &vb->pos_aln_i);
     unsigned oref_len;
 
-    if (LO_IS_OK (ostatus)) // now update ostatus the relationship between REF, ALT, oREF and xstrand.
-         ostatus = vcf_refalt_check_oref (vb, dl, xstrand, &oref_len);
+    if (ostatus == LO_NO_MAPPING_IN_CHAIN) {
+        vcf_lo_seg_rollback_and_reject (vb, LO_NO_MAPPING_IN_CHAIN, NULL);
+        REJECT_MAPPING ("No alignment in the chain file");
+    }
+    
+    else if (ostatus == LO_CHROM_NOT_IN_CHAIN) {
+        vcf_lo_seg_rollback_and_reject (vb, LO_CHROM_NOT_IN_CHAIN, NULL);
+        REJECT_MAPPING ("CHROM missing in chain file");
+    }
 
-    if (LO_IS_REJECTED (ostatus)) {
+    else if (ostatus == LO_CHROM_NOT_IN_PRIM_REF) {
+        vcf_lo_seg_rollback_and_reject (vb, LO_CHROM_NOT_IN_PRIM_REF, NULL);
+        REJECT_MAPPING ("CHROM missing in Primary reference file");
+    }
+
+    // REF & ALT - update ostatus based the relationship between REF, ALT, oREF and is_xstrand.
+    if (LO_IS_REJECTED (ostatus = vcf_refalt_lift (vb, dl, is_xstrand))) {
         vcf_lo_seg_rollback_and_reject (vb, ostatus, NULL);
         return;
     }
 
+    oref_len = (ostatus == LO_OK_REF_ALT_SWITCH_SNP || ostatus == LO_OK_REF_ALT_SWITCH_INDEL) ? vb->main_alt_len : vb->main_ref_len;
+    
     // Seg oCHROM
     Context *ochrom_ctx = &vb->contexts[VCF_oCHROM];
-    const char *ochrom; unsigned ochrom_len;
-    ctx_get_snip_by_zf_node_index (&ochrom_ctx->ol_nodes, &ochrom_ctx->ol_dict, dl->chrom_index[1], &ochrom, &ochrom_len);
+    const char *ochrom=""; unsigned ochrom_len=0;
+
+    if (dl->chrom_index[1] != WORD_INDEX_NONE)
+        ctx_get_snip_by_zf_node_index (&ochrom_ctx->ol_nodes, &ochrom_ctx->ol_dict, dl->chrom_index[1], &ochrom, &ochrom_len);
 
     seg_by_ctx (vb, ochrom, ochrom_len, ochrom_ctx, ochrom_len);
     random_access_update_chrom ((VBlockP)vb, DC_LUFT, dl->chrom_index[1], ochrom, ochrom_len);
@@ -359,14 +386,19 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     random_access_update_pos ((VBlockP)vb, DC_LUFT, VCF_oPOS);
 
     // special snip for oREFALT - vcf_piz_special_oREF will reconstruct it based on REF, ALT, oStatus and xstrand
-    vb->contexts[VCF_LIFT_REF].txt_len += oref_len; // no need to seg VCF_LIFT_REF here as it is all_the_same, just account for txt_len
-    seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_other_REFALT }), 2, VCF_oREFALT, 0); // 0 as not reconstructed by genounzip
+    CTX(VCF_LIFT_REF)->txt_len += oref_len; // no need to seg VCF_LIFT_REF here as it is all_the_same, just account for txt_len
 
-    seg_by_did_i (vb, xstrand ? "X" : "-", 1, VCF_oXSTRAND, 1);
+    if (ostatus == LO_OK_REF_NEW_SNP) // include new REF
+        seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_other_REFALT, vb->new_ref }), 3, VCF_oREFALT, 0); // 0 as not reconstructed by genounzip
+    
+    else // oREF can be calculated
+        seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_other_REFALT }), 2, VCF_oREFALT, 0); // 0 as not reconstructed by genounzip
+                
+    vb->last_index(VCF_oXSTRAND) = seg_by_did_i (vb, is_xstrand ? "X" : "-", 1, VCF_oXSTRAND, 1); // index used by vcf_seg_INFO_END
 
     // Add LUFT container - we modified the txt by adding these 4 fields to INFO/LUFT. We account for them now, and we will account for the INFO name etc in vcf_seg_info_field
     Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, dict_id_INFO_LUFT, 3);
-    luft_ctx->last_txt_len = opos_len + ochrom_len + 5; // 5 = 3 commas + oref + xstrand (the "PRIM="/"LUFT=" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
+    luft_ctx->last_txt_len = opos_len + ochrom_len + oref_len + 4; // used for rollback: 4 = 3 commas + xstrand (the "PRIM="/"LUFT=" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
     vb->recon_size += luft_ctx->last_txt_len; // We added INFO/LUFT to the Primary coordinates reconstruction
 
     // Do the same for PRIM. 
@@ -386,6 +418,22 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 // Liftrejt snip:   REJECTION_REASON
 // -----------------------------------------------------------------------
 
+static inline bool vcf_lo_is_same_seq (const char *seq1, unsigned seq1_len, const char *seq2, unsigned seq2_len, bool is_xstrand) 
+{
+    if (seq1_len != seq2_len) return false;
+
+    if (!is_xstrand) {
+        for (PosType i=0; i < seq1_len ; i++)
+            if (UPPER_CASE (seq1[i]) != UPPER_CASE (seq2[i])) return false;
+    }
+    else { // xstrand
+        for (PosType i=0; i < seq1_len ; i++)
+            if (UPPER_CASE (seq1[i]) != UPPER_REVCOMP[(int)seq2[seq1_len-i-1]]) return false;
+    }
+
+    return true;
+}
+
 // When segging INFO/LUFT or INFO/PRIM of a dual coordinate file, set the last_ostatus based on the observed relationship 
 // between the REF and ALT in the main VCF fields, and the REF in the INFO/LIFT[OVER|BACK] field
 // returns true if status OK and false if REJECTED
@@ -395,53 +443,47 @@ static bool vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, const char *fie
                                                   const char *main_alt, unsigned main_alt_len,
                                                   unsigned *info_alt_len /* out */)
 {
+    #define IS_SNP (main_ref_len == 1 && (main_alt_len==1 || str_count_char (main_alt, main_alt_len, ',')*2+1 == main_alt_len))
+
     LiftOverStatus ostatus;
-    #define RESULT(o) do {ostatus=(o); goto done; } while(0)
 
-    // if is_xstrand, expecting REF and oREF to be of length 1 (or else this line would have been rejected)
-    if (!is_xstrand && main_ref_len > 1) RESULT (LO_REF_LONG_XSTRAND);
-    if (!is_xstrand && info_ref_len > 1) RESULT (LO_ALT_LONG_XSTRAND);
-    
-    // if REF or oREF are longer than 1 (and !is_xstrand as verified above), then they must be identical
-    if (main_ref_len > 1 || info_ref_len > 1) {
+    // short-circuit the majority case of a non-xstrand, no-base-change, bi allelic SNP
+    if (main_ref_len == 1 && main_alt_len == 1 && !is_xstrand && main_ref[0] == info_ref[0])
+        ostatus = LO_OK_REF_SAME_SNP;
 
-        if (main_ref_len != info_ref_len || memcmp (main_ref, info_ref, main_ref_len))
-            RESULT (LO_REF_LONG_CHANGE);
+    // check for no-base-change 
+    else if (vcf_lo_is_same_seq (main_ref, main_ref_len, info_ref, info_ref_len, is_xstrand))
+        ostatus = IS_SNP ? LO_OK_REF_SAME_SNP : LO_OK_REF_SAME_INDEL;
 
-        RESULT (LO_OK_REF_SAME);
+    // check for REF<>ALT switch 
+    else if (vcf_lo_is_same_seq (main_alt, main_alt_len, info_ref, info_ref_len, is_xstrand))
+        ostatus = IS_SNP ? LO_OK_REF_ALT_SWITCH_SNP : LO_OK_REF_ALT_SWITCH_INDEL;
+
+    else { 
+        // this can happen only when genozipping a DVCF file produced by a different tool, like a more advanced version of genozip...
+        WARNVCF ("FYI: Unsupported REF/ALT configuration: REF=%.*s ALT=%.*s INFO/DVCF/REF=%.*s INFO/DVCF/XSTRAND=%c", 
+                  main_ref_len, main_ref, main_alt_len, main_alt, info_ref_len, info_ref, is_xstrand ? 'X' : '-');
+        ostatus = LO_UNSUPPORTED_REFALT;
     }
-
-    // case: REF and oREF are both of length 1
-    else switch (vcf_refalt_ref_equals_ref2_or_alt (main_ref[0], info_ref[0], main_alt, 1, is_xstrand)) {
-        case EQUALS_ALT     : RESULT (LO_OK_REF_ALT_SWTCH);
-        case EQUALS_REF2    : RESULT (LO_OK_REF_SAME);
-        case EQUALS_MISSING : RESULT (LO_OK_REF_SAME); // both are '.'
-        case EQUALS_NEITHER : RESULT (LO_REF_CHNG_NOT_ALT);
-    }
-
-    ABORT0_R ("Should never reach here");
-
-done:
+        
     if (LO_IS_OK (ostatus)) {
         seg_by_did_i (vb, dvcf_status_names[ostatus], strlen (dvcf_status_names[ostatus]), VCF_oSTATUS, 0); // 0 bc doesn't reconstruct by default
         vcf_set_ostatus (ostatus); // we can set if OK, but only vcf_lo_seg_rollback_and_reject can set if reject
 
-        *info_alt_len = (ostatus == LO_OK_REF_ALT_SWTCH ? main_ref_len : main_alt_len);
+        *info_alt_len = (ostatus == LO_OK_REF_ALT_SWITCH_SNP ? main_ref_len : main_alt_len);
         return true;
     }
     else {
         vcf_lo_seg_rollback_and_reject (vb, ostatus, NULL); // segs *rej and oSTATUS
         return false;
     }
-
-    #undef RESULT
 }
 
 // Segging a Primary line, INFO/LUFT field ; or Luft line, INFO/PRIM field:
 // parse the of LUFT/PRIM record, seg the contained fields, and seg the LUFT and PRIM snips
 void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *value, int value_len)
 {
-    ASSVCF (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file", txt_name);
+    ASSVCF (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains INFO/"INFO_LUFT" or INFO/"INFO_PRIM" fields", txt_name);
     ASSVCF (txt_file->coords, "Found an %s subfield, but this is not a dual-coordinates VCF because it is missing \"" HK_DC_PRIMARY "\" or \"" HK_DC_LUFT "\" in the VCF header", dis_dict_id_ex (dict_id, true).s);
 
     Coords coord = (dict_id.num == dict_id_INFO_LUFT ? DC_PRIMARY : DC_LUFT);
@@ -452,8 +494,8 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
         
     // parse and verify PRIM or LUFT record
-    const char *strs[NUM_IL_FIELDS]; unsigned str_lens[NUM_IL_FIELDS]; 
-    ASSVCF (str_split (value, value_len, NUM_IL_FIELDS, ',', strs, str_lens, true, 0), "Invalid %s field: \"%.*s\"", field_name, value_len, value);
+    str_split (value, value_len, NUM_IL_FIELDS, ',', str, true);
+    ASSVCF (n_strs, "Invalid %s field: \"%.*s\"", field_name, value_len, value);
     const char *info_chrom  = strs[IL_CHROM]; 
     unsigned info_chrom_len = str_lens[IL_CHROM];
     const char *info_ref    = strs[IL_REF];
@@ -486,7 +528,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
 
     // "Seg" other coord's REF to appear in the this PRIM/LUFT - a SPECIAL that reconstructs the other REFALT, and discards the ALT
     // note: no need to actually seg here as it is all_the_same handled in vcf_seg_initialize, just account for txt_len
-    vb->contexts[VCF_LIFT_REF].txt_len += SEL (info_ref_len, 0); // we account for oREF (to be shown in INFO/LUFT in default reconstruction). 
+    CTX(VCF_LIFT_REF)->txt_len += SEL (info_ref_len, 0); // we account for oREF (to be shown in INFO/LUFT in default reconstruction). 
 
     // Seg the XSTRAND (same for both coordinates)
     seg_by_did_i (vb, (is_xstrand ? "X" : "-"), 1, VCF_oXSTRAND, 1);
@@ -502,7 +544,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
 // Segging a Primary or Luft dual-coordinates VCF file, INFO/Prej or Lrej field:
 void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, DictId dict_id, const char *value, int value_len)
 {
-    ASSVCF (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file", txt_name);
+    ASSVCF (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains INFO/"INFO_LREJ" or INFO/"INFO_PREJ" fields", txt_name);
     ASSVCF (txt_file->coords, "Found an %s subfield, but this is not a dual-coordinates VCF because it is missing \"" HK_DC_PRIMARY "\" or \"" HK_DC_LUFT "\" in the VCF header", dis_dict_id_ex (dict_id, true).s);
 
     Coords coord = (dict_id.num == dict_id_INFO_LREJ ? DC_PRIMARY : DC_LUFT);
@@ -583,3 +625,20 @@ void vcf_lo_append_rejects_file (VBlockP vb, Coords coord)
     buf_free (&vb->lo_rejects[coord-1]);
 }
 
+void vcf_liftover_display_lift_report (void)
+{
+    char report_fn[strlen (z_name) + 50];
+    sprintf (report_fn, "%s.rejects.txt", z_name);
+
+    if (z_file->rejects_report.len)
+        buf_dump_to_file (report_fn, &z_file->rejects_report, 1, false, false, false);
+
+    if (!flag.quiet)
+        iprintf ("\nCongratulations! %s is a dual-coordinate VCF (DVCF). You can now:\n"
+                "1. Render the data in Primary coordinates: genocat %s\n"
+                "2. Render the data in Luft coordinates: genocat --luft %s\n"
+                "3. See line by line variant status: genocat --show-dvcf %s (also works in combination with --luft)\n"
+                "4. See the lift rejects report (only exists in case of rejects): see %s\n"
+                "5. Learn more about DVCF: https://genozip.com/dvcf.html\n\n", 
+                z_name, z_name, z_name, z_name, report_fn);
+}

@@ -288,7 +288,7 @@ bool codec_pbwt_compress (VBlock *vb,
     buf_free (&vb->codec_bufs[0]); // allocated in codec_pbwt_initialize_state
 
     // the allele sections are further compressed with the best simple codec 
-    // note: this simple codec (not CODEC_PBWT) will be the codec stored in zf_ctx->lcodec
+    // note: this simple codec (not CODEC_PBWT) will be the codec stored in zctx->lcodec
     PAUSE_TIMER; //  don't include sub-codec compressor - it accounts for itself
     codec_assign_best_codec (vb, vb->runs_ctx, NULL, SEC_LOCAL);
     codec_assign_best_codec (vb, vb->fgrc_ctx, NULL, SEC_LOCAL);

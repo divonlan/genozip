@@ -3,6 +3,10 @@
 //   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <errno.h>
 #include "genozip.h"
 #include "regions.h"
 #include "buffer.h"
@@ -164,13 +168,76 @@ void regions_add (const char *region_str)
     }
 }
 
+// called from main when parsing the command line to add the argument of --regions
+// file format: tab separated file, each line contains 2 or 3 columns: CHROM POS or CHROM POS END (1-based POS like VCF, inclusive range)
+void regions_add_by_file (const char *regions_filename)
+{
+    if (regions_filename[0] == '^') {
+        is_negative_regions = true;
+        regions_filename++;
+        ASSINP0 (regions_filename[0], "bad --regions-file argument");
+    }
+    
+    char *data = NULL;
+    FILE *fp = fopen  (regions_filename, "r"); // textual (no "b") - removes the \r
+    ASSINP (fp, "cannot open file %s: %s", regions_filename, strerror (errno));
+
+    struct stat st;
+    ASSINP (!fstat (fileno (fp), &st), "fstat failed on %s: %s", regions_filename, strerror (errno));
+    if (!st.st_size) { fclose (fp); return; }; // empty file, nothing to do
+    
+    data = MALLOC (st.st_size); // might be smaller if file contains Windows-style \r
+    size_t size;
+    ASSINP ((size = fread (data, 1, st.st_size, fp)) > 0, "failed to read %u bytes from %s", (unsigned)st.st_size, regions_filename);
+
+    str_split_enforce (data, size, 0, '\n', line, true, "regions"); 
+
+    ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", regions_filename);
+    n_lines--;
+
+    buf_alloc (evb, &regions_buf, 0, n_lines, Region, 0, "regions_buf");
+
+    for (unsigned i=0; i < n_lines; i++) { // -1 as last line (following terminating newline) is empty
+
+        unsigned num_fields = str_count_char (lines[i], line_lens[i], '\t') + 1;
+        ASSINP (num_fields == 2 || num_fields == 3, "Expecting either 2 or 3 tab-separated columns in line %u of %s, but found: \"%.*s\"",
+                i+1, regions_filename, line_lens[i], lines[i]);
+
+        str_split_enforce (lines[i], line_lens[i], num_fields, '\t', field, true, "fields");
+
+        ((char**)fields)[0][field_lens[0]] = 0; // nul-terminate chrom
+        ASSINP (regions_is_valid_chrom (fields[0]), "Invalid chrom in %s line %i: \"%s\"", regions_filename, i+1, fields[0]);
+        
+        bool has_len = num_fields == 3 && fields[2][0] == '+';
+        
+        PosType start_pos, end_pos, len;
+        ASSINP (str_get_int (fields[1], field_lens[1], &start_pos), "Invalid start pos (column 2) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[1], fields[1]);
+        
+        ASSINP (has_len || num_fields == 2 || str_get_int_range64 (fields[2], field_lens[2], start_pos, MAX_POS, &end_pos), 
+                "Invalid end pos (column 3) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[2], fields[2]);
+
+        ASSINP (!has_len || str_get_int_range64 (fields[2]+1, field_lens[2]-1, 0, MAX_POS, &len), 
+                "Invalid len (column 3) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[2], fields[2]);
+
+        NEXTENT (Region, regions_buf) = (Region){ 
+            .chrom     = fields[0], 
+            .start_pos = start_pos, 
+            .end_pos   = (num_fields==2) ? start_pos 
+                       : has_len         ? (start_pos + len - 1) // user specified length, eg +10, rather than end
+                       :                   end_pos 
+        };
+    }
+
+    // note: we don't free data, as chrom of each region points into it
+    fclose (fp);
+}
+
 // convert the list of regions as parsed from --regions, to an array of chregs - one for each chromosome.
 // 1. convert the chrom string to a chrom word index
 // 2. for "all chrom" regions - include them in all chregs
-void regions_make_chregs (void)
+void regions_make_chregs (ContextP chrom_ctx)
 {
     ARRAY (Region, regions, regions_buf);
-    Context *chrom_ctx = &z_file->contexts[flag.luft ? ODID(oCHROM) : CHROM];
 
     num_chroms = chrom_ctx->word_list.len;
     chregs = CALLOC (num_chroms * sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom
@@ -182,6 +249,10 @@ void regions_make_chregs (void)
         int32_t chrom_word_index = WORD_INDEX_NONE; // All chromosomes, unless reg->chrom is defined
         if (reg->chrom) {
             chrom_word_index = ctx_search_for_word_index (chrom_ctx, regions[i].chrom, strlen (regions[i].chrom));
+
+            // if we have a reference file loaded, try getting an alternative name
+            if (chrom_word_index == WORD_INDEX_NONE)
+                chrom_word_index = ref_alt_chroms_get_alt_index (gref, regions[i].chrom, strlen (regions[i].chrom), 0, WORD_INDEX_NONE);
 
             // if the requested chrom does not exist in the file, we remove this region
             if (chrom_word_index == WORD_INDEX_NONE) continue;
@@ -290,8 +361,13 @@ bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType min_pos, P
     return false; // no intersection found
 }
 
+unsigned regions_get_num_range_intersections (WordIndex chrom_word_index)
+{
+    return flag.regions ? chregs[chrom_word_index].len : 1; // no --regions = whole chromosome
+}
+
 // used by ref_display_ref. if an intersection was found - returns the min,max pos and true, otherwise returns false
-bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos,
+bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos, unsigned intersect_i,
                                      PosType *intersect_min_pos, PosType *intersect_max_pos) // out
 {
     if (!flag.regions) { // if no regions are specified, the entire range "intersects"
@@ -301,11 +377,9 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
     }
 
     Buffer *chregs_buf = &chregs[chrom_word_index];
-    if (!chregs_buf->len) return false; // no intersection with this chromosome
+    if (intersect_i >= chregs_buf->len) return false; // intersect_i is out of range with this chromosome (possibly because len=0 - no intersections with this chromosome)
 
-    ASSINP0 (chregs_buf->len==1, "Error: when using --regions to display a reference, you can specify at most on region per chromosome");
-
-    Chreg *chreg = FIRSTENT (Chreg, *chregs_buf);
+    Chreg *chreg = ENT (Chreg, *chregs_buf, intersect_i);
 
     if (chreg->start_pos > max_pos || chreg->end_pos < min_pos) 
         return false; // no intersection with this chromosome

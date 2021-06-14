@@ -356,7 +356,7 @@ void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_thre
 
     // add non-Buffer reference memory
     if (flag.reference != REF_NONE) 
-        stats[num_stats++] = ref_memory_consumption();
+        stats[num_stats++] = ref_memory_consumption (gref); // only reports for DENOVO references
 
     // sort stats by bytes
     qsort (stats, num_stats, sizeof (MemStats), buf_stats_sort_by_bytes);
@@ -456,9 +456,10 @@ uint64_t buf_alloc_do (VBlock *vb,
 
     if (!requested_size) return 0; // nothing to do
 
-#define REQUEST_TOO_BIG_THREADSHOLD (4ULL*1024*1024*1024) // 4 GB
-    ASSERTW (requested_size < REQUEST_TOO_BIG_THREADSHOLD, "Warning: buf_alloc called from %s:%u requested %s. This is suspeciously high and might indicate a bug. buf=%s",
-             func, code_line, str_size (requested_size).s, buf_desc (buf).s);
+#define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
+    if (requested_size > REQUEST_TOO_BIG_THREADSHOLD) // use WARN instead of ASSERTW to have a place for breakpoint
+        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspeciously high and might indicate a bug. buf=%s",
+              func, code_line, str_size (requested_size).s, buf_desc (buf).s);
 
     // sanity checks
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
@@ -901,7 +902,7 @@ void buf_add_string (VBlockP vb, Buffer *buf, const char *str)
     uint64_t len = strlen (str); 
     ASSERT (len < 10000000, "len=%"PRIu64" too long, looks like a bug", len);
 
-    buf_add_more (vb, buf, str, len, buf->name ? buf->name : "string_buf");
+    buf_add_more (vb, buf, str, len, buf->name ? buf->name : "string_buf"); // allocates one char extra
     buf->data[buf->len] = '\0'; // string terminator without increasing buf->len
 }
 

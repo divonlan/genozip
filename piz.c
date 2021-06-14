@@ -31,6 +31,7 @@
 #include "strings.h"
 #include "threads.h"
 #include "endianness.h"
+#include "website.h"
 
 // called by main thread in FASTA and FASTQ, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
@@ -59,7 +60,7 @@ bool piz_test_grep (VBlock *vb)
     // reconstruct each description line and check for string matching with flag.grep
     bool found = false, match = false;
 
-    Context *desc_ctx =  &vb->contexts[vb->data_type == DT_FASTQ ? FASTQ_DESC : FASTA_DESC];
+    Context *desc_ctx =  CTX(vb->data_type == DT_FASTQ ? FASTQ_DESC : FASTA_DESC);
     desc_ctx->iterator.next_b250 = FIRSTENT (uint8_t, desc_ctx->b250); 
 
     uint32_t num_descs; // number of desciption lines in this VB
@@ -102,7 +103,7 @@ bool piz_test_grep (VBlock *vb)
     ctx_init_iterator (desc_ctx);
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
         
-        Context *ctx = &vb->contexts[did_i];
+        Context *ctx = CTX(did_i);
         if (dict_id_is_type_1 (ctx->dict_id)) {
             ctx_init_iterator (ctx);
             ctx->last_delta = ctx->last_value.f = 0;
@@ -221,7 +222,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 
     // initialize pair iterators (pairs only exist in fastq)
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
-        Context *ctx = &vb->contexts[did_i];
+        Context *ctx = CTX(did_i);
         if (buf_is_alloc (&ctx->pair))
             ctx->pair_b250_iter = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->pair),
                                                   .prev_word_index = -1 };
@@ -241,7 +242,7 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     ASSERT (vb->vblock_i, "vb->vblock_i is 0: vb->compute_thread_id=%d pthread=%"PRIu64, 
             vb->compute_thread_id, (uint64_t)pthread_self());
 
-    ASSERT (!flag.reference || (genome && genome->nbits) || flag.genocat_no_ref_file,
+    ASSERT (!flag.reference || ref_is_loaded (gref) || flag.genocat_no_ref_file,
             "reference is not loaded correctly (vb=%u)", vb->vblock_i);
 
     // note: txt_data is fully allocated in advance and cannot be extended mid-reconstruction (container_reconstruct_do and possibly others rely on this)
@@ -291,7 +292,7 @@ static void piz_read_all_ctxs (VBlock *vb, Section *next_sl)
 }
 
 // Called by PIZ main thread: read all the sections at the end of the file, before starting to process VBs
-DataType piz_read_global_area (void)
+DataType piz_read_global_area (Reference ref)
 {
     bool success = zfile_read_genozip_header (0);
 
@@ -305,10 +306,10 @@ DataType piz_read_global_area (void)
     bool has_ref_sections = !!sections_last_sec (SEC_REFERENCE, true);
 
     ASSERTW (!has_ref_sections || flag.reference != REF_EXTERNAL || flag.reading_reference, 
-             "%s: ignoring reference file %s because it was not compressed with --reference", z_name, ref_filename);
+             "%s: ignoring reference file %s because it was not compressed with --reference", z_name, ref_get_filename (ref));
 
     if (!flag.reading_reference && has_ref_sections) {
-        ref_destroy_reference(false);     // destroy an old reference, if one is loaded
+        ref_destroy_reference (ref, false);     // destroy an old reference, if one is loaded
         flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
     }
 
@@ -319,9 +320,9 @@ DataType piz_read_global_area (void)
     if (!flag.header_only && !z_dual_coords) { // dual coordinates need this stuff of for the rejects part of the header
 
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
-        ref_alt_chroms_load(); 
+        ref_alt_chroms_load (ref); 
 
-        ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
+        ref_contigs_load_contigs (ref); // note: in case of REF_EXTERNAL, reference is already pre-loaded
 
         // read dict_id aliases, if there are any
         dict_id_read_aliases();
@@ -333,8 +334,8 @@ DataType piz_read_global_area (void)
         ctx_read_all_counts(); // read all counts section
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-        if (flag.regions && z_file->contexts[flag.luft ? ODID(oCHROM) : CHROM].word_list.len) // FASTQ compressed without reference, has no CHROMs 
-            regions_make_chregs();
+        if (flag.regions && ZCTX(flag.luft ? ODID(oCHROM) : CHROM)->word_list.len) // FASTQ compressed without reference, has no CHROMs 
+            regions_make_chregs (&z_file->contexts[flag.luft ? ODID(oCHROM) : CHROM]);
 
         // if the regions are negative, transform them to the positive complement instead
         regions_transform_negative_to_positive_complement();
@@ -347,29 +348,29 @@ DataType piz_read_global_area (void)
         random_access_load_ra_section (SEC_RANDOM_ACCESS, flag.luft ? ODID(oCHROM) : CHROM, &z_file->ra_buf, "z_file->ra_buf", 
                                        !flag.show_index ? NULL : flag.luft ? RA_MSG_LUFT : RA_MSG_PRIM);
 
-        random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, &ref_stored_ra, "ref_stored_ra", 
+        random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, ref_get_stored_ra (ref), "ref_stored_ra", 
                                        flag.show_ref_index && !flag.reading_reference ? RA_MSG_REF : NULL);
 
-        if ((flag.reference == REF_STORED || flag.reference == REF_EXTERNAL) && 
+        if ((flag.reference == REF_STORED || flag.reference == REF_EXTERNAL || flag.reference == REF_LIFTOVER) && 
             !flag.reading_reference && !flag.genocat_no_reconstruct)
-            ref_contigs_sort_chroms(); // create alphabetically sorted index for user file chrom word list
+            ref_contigs_sort_chroms(); // create alphabetically sorted index for user file (not reference) chrom word list
 
         // case: reading reference file
         if (flag.reading_reference) {
 
             // when reading the reference for genocat --show-sex/coverage/idxstats, don't need the actual REF sections 
             if (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage || flag.idxstats)) 
-                goto done;
+                goto done;  
 
             bool dispatcher_invoked = false;
 
             // attempt to mmap a cached reference, and if one doesn't exist, uncompress the reference file and cache it
-            if (!ref_mmap_cached_reference()) {
-                ref_load_stored_reference();
-                ref_generate_reverse_complement_genome();
+            if (!ref_mmap_cached_reference (ref)) {
+                ref_load_stored_reference (ref);
+                ref_generate_reverse_complement_genome (ref);
 
                 // start creating the genome cache now in a background thread, but only if we loaded the entire reference
-                if (!flag.regions) ref_create_cache_in_background(); 
+                if (!flag.regions) ref_create_cache_in_background (ref); 
 
                 dispatcher_invoked = true;
             }
@@ -390,7 +391,7 @@ DataType piz_read_global_area (void)
         // case: non-reference file has stored reference sections
         else if (has_ref_sections) {
             if (!flag.genocat_no_ref_file) { 
-                ref_load_stored_reference();
+                ref_load_stored_reference (gref);
 
                 // exit now if all we wanted was just to see the reference (we've already shown it)
                 if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok;
@@ -450,7 +451,7 @@ static bool piz_read_one_vb (VBlock *vb)
     if (flag.unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
 
     if (flag.show_vblocks) 
-        iprintf ("READING(id=%d) vb_i=%u first_line=%u num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
+        iprintf ("READING(id=%d) vb_i=%u first_line=%"PRIu64" num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, vb->first_line, vb->recon_num_lines, vb->recon_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
     ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
@@ -493,7 +494,7 @@ static Digest piz_one_verify_digest (void)
     Digest decompressed_file_digest = digest_finalize (&txt_file->digest_ctx_bound, "file:digest_ctx_bound"); 
     char s[200]; 
 
-    if (digest_is_equal (decompressed_file_digest, original_digest)) {
+    if (digest_recon_is_equal (decompressed_file_digest, original_digest)) {
         if (flag.test) { 
             sprintf (s, "%s = %s verified as identical to the original %s", 
                      digest_name(), digest_display (decompressed_file_digest).s, dt_name (txt_file->data_type));
@@ -541,11 +542,11 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, Section sl_ent)
 
     if (reconstruct) 
         dispatcher_compute (dispatcher, piz_reconstruct_one_vb);
-
+    
     // case: we won't proceed to uncompressing, reconstructing we're done reading - just handover
     // an empty VB as it appears in the recon plan, and writer might be already blocking on waiting for it
     else {
-        dispatcher_abandon_next_vb (dispatcher); // we're not going to reconstruct it
+        dispatcher_abandon_next_vb (dispatcher); // just moves the to processed_vb so dispatcher_recycle_vbs can recycle it
         piz_handover_or_discard_vb (dispatcher, &next_vb);
     }
 
@@ -555,7 +556,7 @@ static bool piz_dispatch_one_vb (Dispatcher dispatcher, Section sl_ent)
 static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlock *vb, uint64_t *num_nondrop_lines)
 {
     ASSERTW (vb->txt_data.len == vb->recon_size || flag.data_modified, // files are the same size, unless we intended to modify the data
-            "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
+            "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%"PRIu64") had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
             vb->vblock_i, (unsigned)vb->lines.len, vb->first_line, str_uint_commas (vb->recon_size).s, dt_name (txt_file->data_type), 
             str_uint_commas (vb->txt_data.len).s, 
             (int32_t)vb->txt_data.len - (int32_t)vb->recon_size);
@@ -581,7 +582,7 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
     digest_initialize();
 
     // read genozip header
-    DataType data_type = piz_read_global_area();
+    DataType data_type = piz_read_global_area (gref);
     if (data_type == DT_NONE || flag.reading_reference) 
         return NULL; // no components in this file (as is always the case with reference files) 
 
@@ -590,7 +591,7 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
     writer_create_plan();
 
     ASSINP (!flag.test || !digest_is_zero (z_file->digest), 
-            "Error testing %s: --test cannot be used with this file, as it was not compressed with digest information. See https://genozip.com/digest.html", z_name);
+            "Error testing %s: --test cannot be used with this file, as it was not compressed with digest information. See " WEBSITE_DIGEST, z_name);
 
     if (flag.test || flag.md5) 
         ASSINP0 (dt_get_translation(NULL).is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 

@@ -86,7 +86,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
 {
     clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
-    DispatcherData *dd = (DispatcherData *)CALLOC (sizeof(DispatcherData));
+    DispatcherData *dd   = (DispatcherData *)CALLOC (sizeof(DispatcherData));
     dd->task_name        = task_name;
     dd->next_vb_i        = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
     dd->max_threads      = MIN (max_threads, MAX_COMPUTED_VBS);
@@ -102,8 +102,8 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool for all fan-outs throughout the execution
     vb_create_pool (MAX ((command == ZIP ? 2 : 1), global_max_threads)    // compute thread VBs (ZIP needs at least 2, one for zip_dynamically_set_max_memory)
                   + (command == PIZ)               // txt header VB (for PIZ) or 
-                  + z_file->max_conc_writing_vbs); // writer thread VBs 
-
+                  + z_file->max_conc_writing_vbs + // writer thread VBs 
+                  + 2);                            // background cache creation of (gref + primref) or (gref + gref refhash)
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
         dd->progress_prefix = progress_new_component (filename, prog_msg, test_mode); 
 
@@ -196,6 +196,17 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP))
     dd->num_running_compute_threads++;
 }
 
+void dispatcher_abandon_next_vb (Dispatcher dispatcher)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+    VBlockP vb = dd->vbs[dd->next_dispatched];
+    ASSERTNOTNULL (vb);
+    ASSERT0 (vb->vblock_i, "dispatcher_compute: cannot dont_compute a VB because vb->vblock_i=0");
+
+    dd->processed_vb = vb;
+    dd->vbs[dd->next_dispatched] = NULL;
+}
+
 bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final) 
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
@@ -251,12 +262,6 @@ VBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     return dd->vbs[dd->next_dispatched];
-}
-
-void dispatcher_abandon_next_vb (Dispatcher dispatcher)
-{
-    DispatcherData *dd = (DispatcherData *)dispatcher;
-    dd->vbs[dd->next_dispatched] = NULL; 
 }
 
 void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb)

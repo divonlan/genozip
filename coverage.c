@@ -11,15 +11,15 @@
 
 void coverage_initialize (VBlock *vb)
 {
-    vb->coverage.len = vb->contexts[CHROM].word_list.len + NUM_COVER_TYPES;
+    vb->coverage.len = CTX(CHROM)->word_list.len + NUM_COVER_TYPES;
     buf_alloc (vb, &vb->coverage, 0, vb->coverage.len, uint64_t, 1, "coverage");
     buf_zero (&vb->coverage); // zero every VB even if already allocated from prev VB
 
-    vb->read_count.len = vb->contexts[CHROM].word_list.len + NUM_COVER_TYPES;
+    vb->read_count.len = CTX(CHROM)->word_list.len + NUM_COVER_TYPES;
     buf_alloc (vb, &vb->read_count, 0, vb->read_count.len, uint64_t, 1, "read_count");
     buf_zero (&vb->read_count); // zero every VB even if already allocated from prev VB
     
-    vb->unmapped_read_count.len = vb->contexts[CHROM].word_list.len;
+    vb->unmapped_read_count.len = CTX(CHROM)->word_list.len;
     buf_alloc (vb, &vb->unmapped_read_count, 0, vb->unmapped_read_count.len, uint64_t, 1, "unmapped_read_count");
     buf_zero (&vb->unmapped_read_count); // zero every VB even if already allocated from prev VB
 }
@@ -50,7 +50,8 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
 {
     uint64_t coverage_AS=0, len_AS=0;
     const Buffer *header_contigs = txtheader_get_contigs();
-
+    const Buffer *loaded_contigs = ref_get_contigs (gref);
+    
     for (uint64_t i=0; i < txt_file->coverage.len; i++) {
 
         if (i == index_chrX || i == index_chrY) continue; // not autosome
@@ -62,7 +63,7 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
         ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
         
         PosType len = header_contigs ? ENT (RefContig, *header_contigs, i)->max_pos
-                    :                  ENT (RefContig, loaded_contigs,  i)->max_pos;
+                    :                  ENT (RefContig, *loaded_contigs, i)->max_pos;
 
         if (cn_len > 5 || len <= (1>>20)) continue; // not primary autosome (note: in SAM/BAM compression with REF_INTERNAL the minimum length of a contig 1MB)
 
@@ -79,8 +80,9 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
 void coverage_sex_classifier (bool is_first_z_file)
 {    
     const Buffer *header_contigs = txtheader_get_contigs();
+    const Buffer *loaded_contigs = ref_get_contigs (gref);
 
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs) {
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs->len && !header_contigs) {
         WARN ("%s: %s: --sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
@@ -94,15 +96,15 @@ void coverage_sex_classifier (bool is_first_z_file)
 
     double len_chr1 = index_chr1 == WORD_INDEX_NONE ? 1
                     : header_contigs                ? ENT (RefContig, *header_contigs, index_chr1)->max_pos
-                    :                                 ENT (RefContig, loaded_contigs,  index_chr1)->max_pos;
+                    :                                 ENT (RefContig, *loaded_contigs, index_chr1)->max_pos;
 
     double len_chrX = index_chrX == WORD_INDEX_NONE ? 1
                     : header_contigs                ? ENT (RefContig, *header_contigs, index_chrX)->max_pos
-                    :                                 ENT (RefContig, loaded_contigs,  index_chrX)->max_pos;
+                    :                                 ENT (RefContig, *loaded_contigs, index_chrX)->max_pos;
 
     double len_chrY = index_chrY == WORD_INDEX_NONE ? 1
                     : header_contigs                ? ENT (RefContig, *header_contigs, index_chrY)->max_pos
-                    :                                 ENT (RefContig, loaded_contigs,  index_chrY)->max_pos;
+                    :                                 ENT (RefContig, *loaded_contigs, index_chrY)->max_pos;
 
     ARRAY (uint64_t, coverage, txt_file->coverage);
 
@@ -183,8 +185,9 @@ void coverage_show_coverage (void)
     ASSERTNOTEMPTY (txt_file->coverage);
 
     const Buffer *header_contigs = txtheader_get_contigs();
+    const Buffer *loaded_contigs = ref_get_contigs (gref);
 
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && !header_contigs) {
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs->len && !header_contigs) {
         WARN ("%s: %s: --coverage for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
@@ -225,7 +228,7 @@ void coverage_show_coverage (void)
 
         PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0
                     : header_contigs                    ? ENT (RefContig, *header_contigs, i)->max_pos
-                    :                                     ENT (RefContig, loaded_contigs,  i)->max_pos;
+                    :                                     ENT (RefContig, *loaded_contigs, i)->max_pos;
 
         if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && cn_len <= 5))
             iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
@@ -273,8 +276,9 @@ void coverage_show_idxstats (void)
     ASSERTNOTEMPTY (txt_file->coverage);
 
     const Buffer *header_contigs = txtheader_get_contigs();
+    const Buffer *loaded_contigs = ref_get_contigs (gref);
 
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs.len && header_contigs) {
+    if (z_file->data_type == DT_FASTQ && !loaded_contigs->len && header_contigs) {
         WARN ("%s: %s: --idxstats for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
@@ -289,7 +293,7 @@ void coverage_show_idxstats (void)
 
         PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0
                     : header_contigs                ? ENT (RefContig, *header_contigs, i)->max_pos
-                    :                                 ENT (RefContig, loaded_contigs,  i)->max_pos;
+                    :                                 ENT (RefContig, *loaded_contigs, i)->max_pos;
 
         iprintf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", cn_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
     }

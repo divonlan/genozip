@@ -34,7 +34,7 @@ Digest digest_finalize (DigestContext *ctx, const char *msg)
                              : md5_finalize (&ctx->md5_ctx);
 
     if (flag.show_digest) 
-        iprintf ("%s finalize %s: %s\n", DIGEST_NAME, msg, digest_display_ex (digest, DD_SHORT).s);
+        iprintf ("%s finalize %s: %s\n", DIGEST_NAME, msg, digest_display_ex (digest, DD_NORMAL).s);
 
     return digest;
 }
@@ -59,13 +59,14 @@ Digest digest_do (const void *data, uint32_t len)
 
 void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
 {
-    DigestContext before = *ctx;
+    DigestContext before;
 
     if (IS_ADLER) {
         if (!ctx->adler_ctx.initialized) {
             ctx->adler_ctx.adler = 1;
             ctx->adler_ctx.initialized = true;
         }
+        if (flag.show_digest) before = *ctx;
         ctx->adler_ctx.adler = libdeflate_adler32 (ctx->adler_ctx.adler, buf->data, buf->len);
     }
 
@@ -74,6 +75,7 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
             md5_initialize (&ctx->md5_ctx);
             ctx->md5_ctx.initialized = true;
         }
+        if (flag.show_digest) before = *ctx;
         md5_update (&ctx->md5_ctx, buf->data, buf->len);
     }
 
@@ -84,8 +86,8 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
         iprintf ("vb=%05d %s update %s (len=%"PRIu64" so_far=%"PRIu64") 32chars=\"%s\": before=%s after=%s\n", 
                  buf->vb->vblock_i, DIGEST_NAME, msg, buf->len, ctx->common.bytes_digested, 
                  str_to_single_line_printable (buf->data, MIN (32, (int)buf->len), str), 
-                 digest_display_ex (digest_snapshot (&before), DD_SHORT).s, 
-                 digest_display_ex (digest_snapshot (ctx), DD_SHORT).s);
+                 digest_display_ex (digest_snapshot (&before), DD_NORMAL).s, 
+                 digest_display_ex (digest_snapshot (ctx), DD_NORMAL).s);
     }
 }
 
@@ -132,7 +134,7 @@ void digest_one_vb (VBlock *vb)
             Digest piz_digest_so_far = digest_snapshot (&txt_file->digest_ctx_bound);
 
             // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-            if (!digest_is_equal (vb->digest_so_far, piz_digest_so_far) && !digest_is_equal (vb->digest_so_far, DIGEST_NONE)) {
+            if (!digest_recon_is_equal (piz_digest_so_far, vb->digest_so_far) && !digest_is_equal (vb->digest_so_far, DIGEST_NONE)) {
 
                 TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
@@ -159,6 +161,30 @@ void digest_one_vb (VBlock *vb)
 
     vb_digest_last++; // next please
     mutex_unlock (vb_digest_mutex);
+}
+
+// in v6-v11 we had a bug were the 2nd 32b of an MD5 digest was a copy of the first 32b
+bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_digest) 
+{
+    if (z_file->genozip_version >= 12) return digest_is_equal (recon_digest, expected_digest);
+
+    return recon_digest.words[0] == expected_digest.words[0] &&
+           (recon_digest.words[0] == expected_digest.words[1] /* buggy md5 */ || !recon_digest.words[1] /* adler */) &&
+           recon_digest.words[2] == expected_digest.words[2] &&
+           recon_digest.words[3] == expected_digest.words[3]; 
+}
+
+// in v6-v11 we had a bug were the 2nd 32b of an MD5 digest was a copy of the first 32b
+void digest_verify_ref_is_equal (const Reference ref, const char *header_ref_filename, const Digest header_md5)
+{
+    Digest ref_md5 = ref_get_file_md5 (ref);
+    uint8_t version = ref_get_genozip_version (ref);
+
+    ASSERT ((version >= 12 && digest_is_equal (ref_md5, header_md5)) ||
+            (version <= 11 && ref_md5.words[0] == header_md5.words[0] && ref_md5.words[2] == header_md5.words[2] && ref_md5.words[3] == header_md5.words[3]),
+            "%s: Bad reference file:\n%s (MD5=%s) was used for compressing\n%s (MD5=%s) has a different MD5",
+            z_name, header_ref_filename, digest_display_ex (header_md5, DD_MD5).s, 
+            ref_get_filename (ref), digest_display_ex (ref_md5, DD_MD5).s);
 }
 
 DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode)

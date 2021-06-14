@@ -159,8 +159,14 @@ typedef struct {
     char     created[FILE_METADATA_LEN];  // nul-terminated metadata
     Digest   license_hash;            // MD5(license_num)
 #define REF_FILENAME_LEN 256
-    char     ref_filename[REF_FILENAME_LEN]; // external reference filename, null-terimated. ref_filename[0]=0 if there is no external reference.
+    char     ref_filename[REF_FILENAME_LEN]; // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference.
     Digest   ref_file_md5;            // SectionHeaderGenozipHeader.digest_bound.md5 of the reference FASTA genozip file
+    union {
+        struct {
+            char prim_filename[REF_FILENAME_LEN]; // external primary coordinates reference file, nul-terimated. added v12.
+            Digest prim_file_md5;     // SectionHeaderGenozipHeader.digest_bound.md5 of the primary reference file. added v12.
+        } chain;
+    } dt_specific;    
 } SectionHeaderGenozipHeader;
 
 // this footer appears AFTER the genozip header data, facilitating reading the genozip header in reverse from the end of the file
@@ -346,12 +352,8 @@ typedef struct RefContig {
     PosType gpos;                // The GPOS in genome matching min_pos in contig.
 
     // Properties, as they appear in the DESC line of the reference FASTA (character arrays are 0-padded)
-    char AC[16];
-    char AS[16];
-    char rl[32];
-    uint64_t gi;
-    uint64_t LN;
-    Digest M5;
+    #define REFCONTIG_MD_LEN 96
+    char metadata[REFCONTIG_MD_LEN];  // nul-termianted string. note: prior to v12 this space was occupied by specific fields, which were never utilized
 } RefContig; 
 
 // the data of SEC_REF_ALT_CHROMS

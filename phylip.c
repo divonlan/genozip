@@ -67,14 +67,14 @@ typedef struct {
 unsigned phy_vb_zip_dl_size (void) { return sizeof (ZipDataLinePHY); }
 
 // callback functions for codec_* to get data of one line
-void phy_zip_id (VBlock *vb, uint32_t vb_line_i, char **seq_data,  uint32_t *seq_len, uint32_t maximum_len) 
+void phy_zip_id (VBlock *vb, uint64_t vb_line_i, char **seq_data,  uint32_t *seq_len, uint32_t maximum_len) 
 {
     ZipDataLinePHY *dl = DATA_LINE (vb_line_i);
     *seq_len  = PHY_ID_LEN;
     *seq_data = ENT (char, vb->txt_data, dl->line_start);
 }
 
-void phy_zip_seq (VBlock *vb, uint32_t vb_line_i, char **seq_data,  uint32_t *seq_len, uint32_t maximum_len) 
+void phy_zip_seq (VBlock *vb, uint64_t vb_line_i, char **seq_data,  uint32_t *seq_len, uint32_t maximum_len) 
 {
     ZipDataLinePHY *dl = DATA_LINE (vb_line_i);
     *seq_len  = phy_seq_len;
@@ -87,10 +87,10 @@ void phy_zip_seq (VBlock *vb, uint32_t vb_line_i, char **seq_data,  uint32_t *se
 
 void phy_seg_initialize (VBlock *vb)
 {
-    vb->contexts[PHY_SEQ].ltype = LT_SEQUENCE;
-    vb->contexts[PHY_ID].ltype  = LT_SEQUENCE;
-    vb->contexts[PHY_TOPLEVEL].no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
-    vb->contexts[PHY_TOP2FASTA].no_stons = true;
+    CTX(PHY_SEQ)->ltype = LT_SEQUENCE;
+    CTX(PHY_ID)->ltype  = LT_SEQUENCE;
+    CTX(PHY_TOPLEVEL)->no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(PHY_TOP2FASTA)->no_stons = true;
 }
 
 void phy_seg_finalize (VBlockP vb)
@@ -105,7 +105,7 @@ void phy_seg_finalize (VBlockP vb)
                          { .dict_id = (DictId)dict_id_fields[PHY_EOL] } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[PHY_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, CTX(PHY_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 
     SmallContainer top_level_to_fasta = { 
         .repeats   = vb->lines.len,
@@ -119,7 +119,7 @@ void phy_seg_finalize (VBlockP vb)
                                          CON_PREFIX_SEP,        // end of (empty) container-wide prefix
                                          '>', CON_PREFIX_SEP }; // sequence ID prefix in fasta
 
-    container_seg_by_ctx (vb, &vb->contexts[PHY_TOP2FASTA], (ContainerP)&top_level_to_fasta, fasta_prefix, sizeof (fasta_prefix), 0);
+    container_seg_by_ctx (vb, CTX(PHY_TOP2FASTA), (ContainerP)&top_level_to_fasta, fasta_prefix, sizeof (fasta_prefix), 0);
 }
 
 bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -129,8 +129,8 @@ bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 const char *phy_seg_txt_line (VBlock *vb, const char *line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
-    Context *id_ctx  = &vb->contexts[PHY_ID];
-    Context *seq_ctx = &vb->contexts[PHY_SEQ];
+    Context *id_ctx  = CTX(PHY_ID);
+    Context *seq_ctx = CTX(PHY_SEQ);
 
     ASSSEG0 (remaining_txt_len >= PHY_ID_LEN + phy_seq_len + 1 /* newline */, line, "Phylip data ends abruptly");
 

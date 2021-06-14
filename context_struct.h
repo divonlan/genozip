@@ -52,7 +52,7 @@ typedef struct Context {
 #define ston_nodes ol_nodes    // ZIP zfile: nodes of singletons
     Buffer nodes;              // ZIP: array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
                                // PIZ: in kraken's KRAKEN_QNAME context - contains qname_nodes 
-                               // ZIP->PIZ zf_ctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
+                               // ZIP->PIZ zctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
     Buffer counts;             // ZIP/PIZ: counts of snips (array of int64_t)
     
     const char *last_snip;     // Seg: point into dict or ol_dict of the last snip evaluated, used only if keep_snip=true
@@ -87,15 +87,15 @@ typedef struct Context {
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and the rest of linked to them by linked list
     uint32_t local_hash_prime; // prime number - size of the core (without extensions) has table 
-    int32_t num_new_entries_prev_merged_vb; // zf_ctx: updated in every merge - how many new words happened in this VB
-                               // vb_ctx: copied from zf_ctx during clone, and used to initialize the size of local_hash
+    int32_t num_new_entries_prev_merged_vb; // zctx: updated in every merge - how many new words happened in this VB
+                               // vctx: copied from zctx during clone, and used to initialize the size of local_hash
                                //         0 means no VB merged yet with this. if a previous vb had 0 new words, it will still be 1.
-    Buffer global_hash;        // global hash table that is populated during merge in zf_ctx and is overlayed to vb_ctx during clone.
+    Buffer global_hash;        // global hash table that is populated during merge in zctx and is overlayed to vctx during clone.
     uint32_t global_hash_prime; // prime number - size of the core (without extensions) has table 
 
-    uint32_t merge_num;        // in vb_ctx: the merge_num when global_hash was cloned. only entries with merge_num <= this number 
+    uint32_t merge_num;        // in vctx: the merge_num when global_hash was cloned. only entries with merge_num <= this number 
                                // are valid. other entries may be added by later merges and should be ignored.
-                               // in zf_ctx: incremented with every merge into this ctx.
+                               // in zctx: incremented with every merge into this ctx.
     // the next 2 are used in merge to set the size of the global hash table, when the first vb to create a ctx does so
     uint32_t nodes_len_at_1_3, nodes_len_at_2_3;  // value of nodes->len after an estimated 1/3 + 2/3 of the lines have been segmented
     

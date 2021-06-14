@@ -26,8 +26,8 @@ extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, 
 extern WordIndex seg_by_ctx_do (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
 #define seg_by_ctx(vb,snip,snip_len,ctx,add_bytes)               seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), (ctx), (add_bytes), NULL)
 #define seg_by_dict_id(vb,snip,snip_len,dict_id,add_bytes)       seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), ctx_get_ctx ((vb), (dict_id)), (add_bytes), NULL)
-#define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), &vb->contexts[did_i], (add_bytes), (is_new))
-#define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), &vb->contexts[did_i], (add_bytes), NULL)
+#define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), CTX(did_i), (add_bytes), (is_new))
+#define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), CTX(did_i), (add_bytes), NULL)
 
 extern WordIndex seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
@@ -150,7 +150,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
 #define SEG_EOL(f,account_for_ascii10) seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); 
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
-    ASSINP (condition, "Error in file %s: "format "\n\nvb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
+    ASSINP (condition, "Error in file %s: "format "\n\nvb_line_i:%"PRIu64" vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
                        "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
                        "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
                        "\n%d characters before to %d characters after (in quotes): \"%.*s\""\

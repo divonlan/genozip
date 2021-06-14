@@ -59,13 +59,18 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
 {
     if (item < 0) return true;
 
+    // --GT-only - don't reconstruct non-GT sample subfields
     if (flag.gt_only && dict_id.num == dict_id_fields[VCF_SAMPLES] 
         && con->items[item].dict_id.num != dict_id_FORMAT_GT) 
         return false; 
 
+    // --drop-genotypes: remove the two tabs at the end of the line
+    if (flag.drop_genotypes && con->items[item].dict_id.num == dict_id_fields[VCF_EOL])
+        vb->txt_data.len -= 2;
+
     // in dual-coordinates files - get the COORDS and oSTATUS at the beginning of each line
-    else if (con->items[item].dict_id.num == dict_id_fields[VCF_oSTATUS] || 
-             con->items[item].dict_id.num == dict_id_fields[VCF_COORDS]) {
+    else if ( con->items[item].dict_id.num == dict_id_fields[VCF_oSTATUS] || 
+            con->items[item].dict_id.num == dict_id_fields[VCF_COORDS]) {
         if (flag.show_dvcf)
             return true; // show
         else if (z_dual_coords)
@@ -81,24 +86,22 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
             
         else if (vb->vb_coords == DC_PRIMARY && (con->items[item].dict_id.num == dict_id_INFO_PRIM || con->items[item].dict_id.num == dict_id_INFO_PREJ))
             return false;
-    } 
-        
+    }
+
     return true;    
 }
 
-// FORMAT - obey GT-only and drop-genotypes ; load haplotype line
+// FORMAT - obey GT-only ; load haplotype line (note: if drop_genotypes we don't reach here, as FORMAT is eliminated by vcf_piz_is_skip_section)
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
 {
     VBlockVCF *vb_vcf = (VBlockVCF *)vb;
-
-    if (flag.drop_genotypes) goto done;
 
     bool has_GT = (snip_len>=2 && snip[0]=='G' && snip[1] == 'T' && (snip_len==2 || snip[2] == ':'));
     
     if (reconstruct) {
         if (flag.gt_only) {
             if (has_GT)
-                RECONSTRUCT ("GT\t", 3);
+                RECONSTRUCT ("GT", 2);
         }
         else 
             RECONSTRUCT (snip, snip_len);
@@ -111,7 +114,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
         vb_vcf->hapmat_index_ctx = ctx_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
         codec_hapmat_piz_calculate_columns (vb);
     }
-done:
+
     return false; // no new value
 }
 
@@ -119,10 +122,10 @@ done:
 // callback called after reconstruction
 // ------------------------------------
 
-static void inline vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, int32_t recon_len)
+static void inline vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, unsigned num_reps, int32_t recon_len)
 {
     if (!samples_am_i_included (rep))
-        vb->txt_data.len -= recon_len;
+        vb->txt_data.len -= recon_len + (rep == num_reps - 1); // if last sample, we also remove the preceeding \t (recon_len includes the sample's separator \t, except for the last sample that doesn't have a separator)
 }
 
 CONTAINER_CALLBACK (vcf_piz_container_cb)
@@ -143,8 +146,14 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         // case: we are reconstructing with --luft and we reconstructed one VCF line
         if (z_dual_coords) 
             vcf_lo_piz_TOPLEVEL_cb_filter_line (vb);
+
+        if (flag.snps_only && !vcf_refalt_piz_is_variant_snp (vb))
+            vb->drop_curr_line = "snps_only";
+
+        if (flag.indels_only && !vcf_refalt_piz_is_variant_indel (vb))
+            vb->drop_curr_line = "indels_only";
     }
 
     else if (dict_id.num == dict_id_fields[VCF_SAMPLES] && flag.samples) 
-        vcf_piz_SAMPLES_subset_samples (vcf_vb, rep, recon_len);
+        vcf_piz_SAMPLES_subset_samples (vcf_vb, rep, num_reps, recon_len);
 }

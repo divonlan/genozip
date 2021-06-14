@@ -72,8 +72,8 @@ extern void mutex_wait_do (MutexP mutex, const char *func, uint32_t line);
 #endif // __APPLE__
 
 #define SPINLOCK(name) \
-    static pthread_spinlock_t name; \
-    static bool name##_initialized = false;
+    pthread_spinlock_t name; \
+    bool name##_initialized
 
 #ifdef __APPLE__
 #ifdef __MAC_10_12

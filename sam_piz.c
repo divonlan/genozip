@@ -102,7 +102,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
 
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 
-    Context *nonref_ctx      = &vb->contexts[SAM_NONREF];
+    Context *nonref_ctx      = CTX(SAM_NONREF);
     const char *nonref       = ENT (const char, nonref_ctx->local, nonref_ctx->next_local); // possibly, this VB has no nonref (i.e. everything is ref), in which case nonref would be an invalid pointer. That's ok, as it will not be accessed.
     const char *nonref_start = nonref;
     unsigned subcigar_len    = 0;
@@ -134,7 +134,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     }
 
     const char *next_cigar = vb->last_cigar; // don't change vb->last_cigar as we may still need it, eg if we have an E2 optional field
-    range = vb->ref_consumed ? ref_piz_get_range (vb_, pos, vb->ref_consumed) : NULL;
+    range = vb->ref_consumed ? ref_piz_get_range (vb_, gref, pos, vb->ref_consumed) : NULL;
     
     while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {
         
@@ -142,7 +142,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
             subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
             cigar_op = cigar_lookup_sam[(uint8_t)*(next_cigar++)];
-            ASSERT (cigar_op, "Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
+            ASSERT (cigar_op, "Invalid CIGAR op while reconstructing line %"PRIu64": '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
             cigar_op &= 0x0f; // remove validity bit
         }
 
@@ -155,12 +155,14 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
 
                     if (!ref_is_nucleotide_set (range, idx)) { 
                         ref_print_is_set (range, pos + ref_consumed, stderr);
-                        ABORT ("Error in sam_reconstruct_seq: while reconstructing line %u (vb_i=%u: last_txt_line=%u num_lines=%u): reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
+                        ABORT ("Error in sam_reconstruct_seq: while reconstructing line %"PRIu64" (vb_i=%u: last_txt_line=%"PRIu64" num_lines=%"PRIu64"): reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
                                " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
-                               vb->line_i, vb->vblock_i, (uint32_t)(vb->first_line + vb->lines.len - 1), (uint32_t)vb->lines.len, range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);
+                               vb->line_i, vb->vblock_i, (vb->first_line + vb->lines.len - 1), vb->lines.len, 
+                               range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, 
+                               range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);
                     }
 
-                    char ref = ref_get_nucleotide (range, idx);
+                    char ref = ref_base_by_idx (range, idx);
                     RECONSTRUCT1 (ref); 
                 }
             }
@@ -237,8 +239,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
         buf_free (&vb_sam->textual_cigar);
 
         // if BIN is SAM_SPECIAL_BIN, inst.semaphone is set by bam_piz_special_BIN - a signal to us to calculate
-        if (vb->contexts[SAM_BAM_BIN].semaphore) {
-            vb->contexts[SAM_BAM_BIN].semaphore = false;
+        if (CTX(SAM_BAM_BIN)->semaphore) {
+            CTX(SAM_BAM_BIN)->semaphore = false;
 
             PosType pos = vb->last_int(SAM_POS);
             bool segment_unmapped = (sam_flag & SAM_FLAG_UNMAPPED);
@@ -272,7 +274,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
     ASSERT0 (snip_len, "snip_len=0");
 
     int32_t tlen_by_calc = atoi (snip);
-    int32_t tlen_val = tlen_by_calc + vb->contexts[SAM_PNEXT].last_delta + vb->seq_len;
+    int32_t tlen_val = tlen_by_calc + CTX(SAM_PNEXT)->last_delta + vb->seq_len;
 
     new_value->i = tlen_val;
 
@@ -312,7 +314,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
 
     // note: bd and bi use their own next_local to retrieve data from bdbi_ctx. the actual index
     // in bdbi_ctx.local is calculated given the interlacing
-    ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, dis_dict_id (ctx->dict_id).s);
+    ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%"PRIu64": unexpected end of %s data", vb->line_i, dis_dict_id (ctx->dict_id).s);
 
     char *dst        = AFTERENT (char, vb->txt_data);
     const char *src  = ENT (char, bdbi_ctx->local, ctx->next_local * 2);
@@ -547,7 +549,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL)
 {
     /* up to v11 we used this translator to set alignment.block_size. due to container logic change, it
        has now moved to sam_piz_container_cb. we keep this translator function for backward
-       compatability with old bam.genozip files */
+       compatability with v11 bam.genozip files */
     return 0;
 }
 

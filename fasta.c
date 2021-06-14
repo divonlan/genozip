@@ -17,6 +17,7 @@
 #include "reconstruct.h"
 #include "vblock.h"
 #include "kraken.h"
+#include "reference.h"
 
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
@@ -24,6 +25,8 @@
 typedef struct {
     uint32_t seq_data_start, seq_len; // regular fasta and make-reference: start & length within vb->txt_data
 } ZipDataLineFASTA;
+
+Buffer contig_metadata = {}; // make-ref: contig header of each contig, except for chrom name
 
 // IMPORTANT: if changing fields in VBlockFASTA, also update fasta_vb_release_vb 
 typedef struct VBlockFASTA {    
@@ -33,12 +36,14 @@ typedef struct VBlockFASTA {
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB is interpreted as a description, not a comment
     enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP & PIZ (FASTA only, not REF)
 
-    uint32_t lines_this_contig;    // ZIP
+    uint32_t lines_this_contig;     // ZIP
 
     // caching of seq line snips
-    uint32_t std_line_len;         // ZIP: determined by first non-first-line seq line in VB 
-    WordIndex std_line_node_index; // ZIP: node index for non-first lines, with same length as std_line_len
+    uint32_t std_line_len;          // ZIP: determined by first non-first-line seq line in VB 
+    WordIndex std_line_node_index;  // ZIP: node index for non-first lines, with same length as std_line_len
 
+    bool has_contig_metadata;       // used by make-reference
+    ContigMetadata contig_metadata; 
 } VBlockFASTA;
 
 #define DATA_LINE(i) ENT (ZipDataLineFASTA, vb->lines, (i))
@@ -55,7 +60,7 @@ void fasta_vb_release_vb (VBlockFASTA *vb)
     if (vb->data_type == DT_REF && command == PIZ) return; // this is actually a VBlock, not VBlockFASTA
     
     memset ((char *)vb + sizeof (VBlock), 0, sizeof (VBlockFASTA) - sizeof (VBlock)); // zero all data unique to VBlockFASTA
-    vb->contexts[FASTA_NONREF].local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
+    CTX(FASTA_NONREF)->local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
 }
 
 void fasta_vb_destroy_vb (VBlockFASTA *vb) {}
@@ -68,6 +73,19 @@ void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start
     *seq_data_start = DATA_LINE(line_i)->seq_data_start;
     *seq_len        = DATA_LINE(line_i)->seq_len;
 }
+
+// make-refernece called by main thread after completing compute thread of VB 
+void fasta_make_add_contigs (VBlockP vb)
+{
+    if (((VBlockFASTA *)vb)->has_contig_metadata) {
+        buf_alloc (evb, &contig_metadata, 1, 1000, ContigMetadata, 2, "contig_metadata");
+        NEXTENT (ContigMetadata, contig_metadata) = ((VBlockFASTA *)vb)->contig_metadata;
+    }
+}
+
+void fasta_make_finalize (void) { buf_free (&contig_metadata); }
+
+ConstBufferP fasta_get_contig_metadata (void) { return &contig_metadata; }
 
 //-------------------------
 // TXTFILE stuff
@@ -144,7 +162,7 @@ out_of_data:
 //-------------------------
 
 // callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
-void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i, 
+void fasta_zip_seq (VBlock *vb, uint64_t vb_line_i, 
                     char **line_seq_data, uint32_t *line_seq_len,  // out 
                     uint32_t maximum_len)
 {
@@ -157,7 +175,7 @@ void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i,
         *line_seq_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;
 }   
 
-void fasta_seg_initialize (VBlockFASTA *vb)
+void fasta_seg_initialize (VBlock *vb)
 {
     START_TIMER;
 
@@ -166,8 +184,8 @@ void fasta_seg_initialize (VBlockFASTA *vb)
 
     if (!flag.make_reference) {
 
-        vb->contexts[FASTA_CONTIG].flags.store = STORE_INDEX; // since v12
-        vb->contexts[FASTA_LINEMETA].no_stons  = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
+        CTX(FASTA_CONTIG)->flags.store = STORE_INDEX; // since v12
+        CTX(FASTA_LINEMETA)->no_stons  = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
 
         // if this FASTA contains unrelated contigs, we're better off with ACGT        
         if (!flag.multifasta)
@@ -175,27 +193,27 @@ void fasta_seg_initialize (VBlockFASTA *vb)
 
         // if the contigs in this FASTA are related, LZMA will do a better job (but it will consume a lot of memory)
         else {
-            vb->contexts[FASTA_NONREF].lcodec = CODEC_LZMA;
-            vb->contexts[FASTA_NONREF].ltype  = LT_SEQUENCE;
+            CTX(FASTA_NONREF)->lcodec = CODEC_LZMA;
+            CTX(FASTA_NONREF)->ltype  = LT_SEQUENCE;
         }
   
         if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
-            vb->contexts[FASTA_NONREF].no_callback = true; // override callback if we are segmenting to a reference
+            CTX(FASTA_NONREF)->no_callback = true; // override callback if we are segmenting to a reference
 
         // in --stats, consolidate stats into FASTA_NONREF
-        stats_set_consolidation ((VBlockP)vb, FASTA_NONREF, 1, FASTA_NONREF_X);
+        stats_set_consolidation (vb, FASTA_NONREF, 1, FASTA_NONREF_X);
     }
     else { // make-reference
-        vb->contexts[FASTA_CONTIG].no_vb1_sort = true; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference
+        CTX(FASTA_CONTIG)->no_vb1_sort = true; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference 
     }
 
-    vb->contexts[FASTA_CONTIG  ].no_stons = true; // needs b250 node_index for reference
-    vb->contexts[FASTA_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(FASTA_CONTIG  )->no_stons = true; // needs b250 node_index for reference
+    CTX(FASTA_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 
     if (kraken_is_loaded) {
-        vb->contexts[FASTA_TAXID].flags.store    = STORE_INT;
-        vb->contexts[FASTA_TAXID].no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
-        vb->contexts[FASTA_TAXID].counts_section = true; 
+        CTX(FASTA_TAXID)->flags.store    = STORE_INT;
+        CTX(FASTA_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
+        CTX(FASTA_TAXID)->counts_section = true; 
     }
 
     COPY_TIMER (seg_initialize);
@@ -213,7 +231,7 @@ void fasta_seg_finalize (VBlockP vb)
                           { .dict_id = (DictId)dict_id_fields[FASTA_EOL], .translator = FASTA2PHYLIP_EOL } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[FASTA_TOPLEVEL], (ContainerP)&top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 }
 
 bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -229,6 +247,8 @@ bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
 // note: we store the DESC container in its own ctx rather than just directly in LINEMETA, to make it easier to grep
 static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool *has_13)
 {
+    SAFE_NUL (&line_start[line_len]);
+    
     // we store the contig name in a dictionary only (no b250), to be used if this fasta is used as a reference
     const char *chrom_name = line_start + 1;
     unsigned chrom_name_len = strcspn (line_start + 1, " \t\r\n");
@@ -237,7 +257,7 @@ static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_
 
     if (!flag.make_reference) {
         static SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
-        seg_compound_field ((VBlockP)vb, &vb->contexts[FASTA_DESC], line_start, line_len, arg, 0, 0);
+        seg_compound_field ((VBlockP)vb, CTX(FASTA_DESC), line_start, line_len, arg, 0, 0);
         
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other (SNIP_REDIRECTION, dict_id_fields[FASTA_DESC], false, 0, &special_snip[2], &special_snip_len);
@@ -249,11 +269,19 @@ static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_
         SEG_EOL (FASTA_EOL, true);
     }
 
+    // case make_ref: add contig metadata (the rest of the line, except for the chrom_name)
+    else {
+        const char *md_start = chrom_name + chrom_name_len + strspn (&chrom_name[chrom_name_len], " \t");
+        unsigned md_len = MIN (strcspn (md_start, "\n\r"), REFCONTIG_MD_LEN-1);
+        memcpy (vb->contig_metadata.s, md_start, md_len);
+        vb->has_contig_metadata = true;        
+    }
+
     // add contig to CONTIG dictionary (but not b250) and verify that its unique
     bool is_new;
-    WordIndex chrom_node_index = ctx_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[FASTA_CONTIG], chrom_name, chrom_name_len, &is_new);
-    ctx_decrement_count ((VBlockP)vb, &vb->contexts[FASTA_CONTIG], chrom_node_index);
-    
+    WordIndex chrom_node_index = ctx_evaluate_snip_seg ((VBlockP)vb, CTX(FASTA_CONTIG), chrom_name, chrom_name_len, &is_new);
+    ctx_decrement_count ((VBlockP)vb, CTX(FASTA_CONTIG), chrom_node_index);
+
     random_access_update_chrom ((VBlockP)vb, DC_PRIMARY, chrom_node_index, chrom_name, chrom_name_len);
 
     ASSINP (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
@@ -261,12 +289,13 @@ static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_
             (flag.reference==REF_EXTERNAL || flag.reference==REF_EXT_STORE) ? " (possibly the contig size exceeds vblock size, try enlarging with --vblock)" : "");
         
     vb->last_line = FASTA_LINE_DESC;    
+    SAFE_RESTORE;
 }
 
 static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool *has_13)
 {
     if (!flag.make_reference) {
-        seg_add_to_local_text ((VBlockP)vb, &vb->contexts[FASTA_COMMENT], line_start, line_len, line_len); 
+        seg_add_to_local_text ((VBlockP)vb, CTX(FASTA_COMMENT), line_start, line_len, line_len); 
 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other (SNIP_OTHER_LOOKUP, dict_id_fields[FASTA_COMMENT], false, 0, &special_snip[2], &special_snip_len);
@@ -283,8 +312,8 @@ static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint
 
 static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_first_line_in_contig)
 {
-    Context *lm_ctx  = &vb->contexts[FASTA_LINEMETA];
-    Context *seq_ctx = &vb->contexts[FASTA_NONREF];
+    Context *lm_ctx  = CTX(FASTA_LINEMETA);
+    Context *seq_ctx = CTX(FASTA_NONREF);
 
     // cached node index
     if (!is_first_line_in_contig && line_len == vb->std_line_len) {
@@ -321,7 +350,7 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_
                                                   .seq_len        = line_len };
 
     if (flag.make_reference)
-        vb->contexts[FASTA_NONREF].local.len += line_len;
+        CTX(FASTA_NONREF)->local.len += line_len;
 
     // after last line in contig, we know if its SIMPLE or PBWT and seg all lines in this contig into FASTA_LINEMETA
     if (!flag.make_reference && is_last_line_in_contig) {
@@ -571,7 +600,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
             (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTA_TAXID, false)) ||
             ( kraken_is_loaded && !kraken_is_included_loaded (vb, desc_start + 1, chrom_name_len));
     
-    vb->chrom_node_index = ctx_search_for_word_index (&vb->contexts[CHROM], desc_start + 1, chrom_name_len);
+    vb->chrom_node_index = ctx_search_for_word_index (CTX(CHROM), desc_start + 1, chrom_name_len);
 
     // note: this logic allows the to grep contigs even if --no-header 
     if (fasta_vb->contig_grepped_out)
@@ -609,7 +638,7 @@ TXTHEADER_TRANSLATOR (txtheader_fa2phy)
     // get length of contigs and error if they are not all the same length
     uint32_t contig_len = random_access_verify_all_contigs_same_length();
 
-    bufprintf (comp_vb, txtheader_buf, "%"PRIu64" %u\n", z_file->contexts[FASTA_CONTIG].word_list.len, contig_len);
+    bufprintf (comp_vb, txtheader_buf, "%"PRIu64" %u\n", ZCTX(FASTA_CONTIG)->word_list.len, contig_len);
 }
 
 // Translating FASTA->PHYLIP: drop EOL after DESC + don't allow multiple consecutive EOL

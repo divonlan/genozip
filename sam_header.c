@@ -113,7 +113,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
         // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
         if (!flag.reference || flag.reference == REF_INTERNAL) 
-            ref_initialize_ranges (RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
+            ref_initialize_ranges (gref, RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
         // evb buffers must be alloced by main threads, since other threads cannot modify evb's buf_list
         random_access_alloc_ra_buf (evb, DC_PRIMARY, 0);
@@ -277,12 +277,12 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
     // analysis. Better give an error here than create confusion downstream. 
     ASSINP (n_ref ||  // has SQ records
             !z_file->z_flags.dts_ref_internal || // has external reference
-            z_file->contexts[SAM_POS].word_list.len==1, // has only one POS word = "Delta 0" = unaligned SAM that doesn't need contigs 
+            ZCTX(SAM_POS)->word_list.len==1, // has only one POS word = "Delta 0" = unaligned SAM that doesn't need contigs 
             "Failed to convert %s from SAM to BAM: genounzip requires that either the SAM header has SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or the file was genozipped with --reference or --REFERENCE", z_name);
 
     // if no SQ lines - get lines from loaded contig (will be available only if file was compressed with --reference or --REFERENCE)
     bool from_SQ = !!n_ref;
-    if (!from_SQ) n_ref = ref_num_loaded_contigs();
+    if (!from_SQ) n_ref = ref_num_loaded_contigs (gref);
 
     // grow buffer to accommodate estimated reference size (we will more in txtheader_sam2bam_ref_info if not enough)
     buf_alloc (comp_vb, txtheader_buf, n_ref * 100 + (50 + strlen (flags_command_line())), 0, char, 1, 0);
@@ -306,6 +306,6 @@ TXTHEADER_TRANSLATOR (txtheader_sam2bam)
         sam_foreach_SQ_line (text, txtheader_sam2bam_ref_info, txtheader_buf);
 
     // option 2: copy reference information from ref_contigs if available - i.e. if pizzed with external or stored reference
-    else if (ref_num_loaded_contigs()) 
-        ref_contigs_iterate (txtheader_sam2bam_ref_info, txtheader_buf);
+    else if (ref_num_loaded_contigs (gref)) 
+        ref_contigs_iterate (gref, txtheader_sam2bam_ref_info, txtheader_buf);
 }

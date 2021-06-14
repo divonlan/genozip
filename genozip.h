@@ -20,7 +20,7 @@
 
 #define MAX_POS ((PosType)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
 
-#define MAX_SUBFIELDS 2048  // Maximum number of items in a Container (for example: VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc). This value can be increased subject to MAX_DICTS<=253.
+#define MAX_FIELDS 2048  // Maximum number of fields in a line (eg VCF variant, SAM line etc), including VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc. 
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
@@ -51,6 +51,7 @@ typedef const struct BitArray *ConstBitArrayP;
 typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
 typedef struct Mutex *MutexP;
+typedef struct RefStruct *Reference;
 
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);
@@ -73,7 +74,7 @@ typedef union DictId {
 #pragma pack()
 
 typedef uint16_t DidIType;    // index of a context in vb->contexts or z_file->contexts / a counter of contexts
-#define DID_I_NONE ((DidIType)-1)
+#define DID_I_NONE ((DidIType)0xFFFF)
 
 typedef uint64_t CharIndex;   // index within dictionary
 typedef int32_t WordIndex;    // used for word and node indices
@@ -176,7 +177,7 @@ typedef uint8_t TranslatorId;
 #define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item, bool *reconstruct)
 
 // called after reconstruction of each repeat, IF Container.callback or Container.is_top_level is set
-#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, char *recon, int32_t recon_len)
+#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, unsigned num_reps, char *recon, int32_t recon_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 
@@ -190,7 +191,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 #define ENC_NAMES { "NO_ENC", "AES256" }
 
 #define COMPRESSOR_CALLBACK(func) \
-void func (VBlockP vb, uint32_t vb_line_i, \
+void func (VBlockP vb, uint64_t vb_line_i, \
            char **line_data, uint32_t *line_data_len,\
            uint32_t maximum_size); // might be less than the size available if we're sampling in zip_assign_best_codec()
 #define CALLBACK_NO_SIZE_LIMIT 0xffffffff // for maximum_size
@@ -239,6 +240,8 @@ extern bool progress_newline_since_update;
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
 #define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { progress_newline; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)
 #define ASSERTW0(condition, string)          do { if (!(condition) && !flag.quiet) { progress_newline; fprintf (stderr, "%s\n", string); } } while(0)
+#define ASSRET(condition, ret, format, ...)  do { if (!(condition)) { progress_newline; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); return ret; }} while(0)
+#define ASSRET0(condition, ret, string)      do { if (!(condition)) { progress_newline; fprintf (stderr, "%s\n", string); return ret; } } while(0)
 #define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { progress_newline; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} while(0)
 #define RETURNW0(condition, ret, string)     do { if (!(condition)) { if (!flag.quiet) { progress_newline; fprintf (stderr, "%s\n", string); } return ret; } } while(0)
 #define ABORT(format, ...)                   do { progress_newline; fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);} while(0)

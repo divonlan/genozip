@@ -14,10 +14,15 @@ extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(fasta_zip_seq)
-extern void ref_make_create_range (VBlockP vb);
+extern void vcf_zip_after_compute (VBlockP vb);
+
+// make-reference stuff
+extern void fasta_make_add_contigs (VBlockP vb);
+extern ConstBufferP fasta_get_contig_metadata (void);
+extern void fasta_make_finalize (void);
 
 // SEG Stuff
-extern void fasta_seg_initialize();
+extern void fasta_seg_initialize(VBlockP vb);
 extern void fasta_seg_finalize (VBlockP vb);
 extern bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern const char *fasta_seg_txt_line();

@@ -27,7 +27,7 @@ static int64_t reconstruct_from_delta (VBlock *vb,
                                        bool reconstruct) 
 {
     ASSERT (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    ASSERT (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. vb_i=%u line_in_vb=%u",
+    ASSERT (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. vb_i=%u line_in_vb=%"PRIu64,
             my_ctx->name, delta_snip_len, delta_snip, base_ctx->name, base_ctx->name, vb->vblock_i, vb->line_i - vb->first_line);
 
     if (delta_snip_len == 1 && delta_snip[0] == '-')
@@ -47,7 +47,7 @@ static int64_t reconstruct_from_delta (VBlock *vb,
 
 #define ASSERT_IN_BOUNDS \
     ASSERT (ctx->next_local < ctx->local.len, \
-            "reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s)", \
+            "reconstructing txt_line=%"PRIu64" vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s)", \
             vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec))
 
 static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reconstruct)
@@ -55,7 +55,7 @@ static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reco
     uint32_t start = ctx->next_local; 
     ARRAY (char, data, ctx->local);
 
-    while (ctx->next_local < ctx->local.len && data[ctx->next_local] != SNIP_SEP) ctx->next_local++;
+    while (ctx->next_local < ctx->local.len && data[ctx->next_local] != 0) ctx->next_local++;
     ASSERT_IN_BOUNDS;
 
     char *snip = &data[start];
@@ -119,7 +119,7 @@ static void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const cha
     }
     else {
         len = vb->seq_len;
-        ASSERT (ctx->next_local + len <= ctx->local.len, "reading txt_line=%u vb_i=%u: unexpected end of %s data", 
+        ASSERT (ctx->next_local + len <= ctx->local.len, "reading txt_line=%"PRIu64" vb_i=%u: unexpected end of %s data", 
                 vb->line_i, vb->vblock_i, ctx->name);
 
         if (reconstruct) RECONSTRUCT (&ctx->local.data[ctx->next_local], len);
@@ -242,7 +242,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
 
     case SNIP_SPECIAL:
-        ASSERT (snip_len >= 2, "SNIP_SPECIAL expects snip_len=%u >= 2. ctx=%s vb_i=%u line_i=%u", 
+        ASSERT (snip_len >= 2, "SNIP_SPECIAL expects snip_len=%u >= 2. ctx=%s vb_i=%u line_i=%"PRIu64, 
                 snip_len, snip_ctx->name, vb->vblock_i, vb->line_i);
                 
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
@@ -309,13 +309,13 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     ASSERT (did_i < vb->num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u for vb_i=%u", 
             func, did_i, vb->num_contexts, vb->vblock_i);
 
-    Context *ctx = &vb->contexts[did_i];
+    Context *ctx = CTX(did_i);
 
     ASSERT0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "ctx not initialized (dict_id=0)");
 
     // update ctx, if its an alias (only for primary field aliases as they have contexts, other alias don't have ctx)
     if (!ctx->dict_id.num) 
-        ctx = &vb->contexts[ctx->did_i]; // ctx->did_i is different than did_i if its an alias
+        ctx = CTX(ctx->did_i); // ctx->did_i is different than did_i if its an alias
 
     ctx->last_txt_index = (uint32_t)vb->txt_data.len;
 
@@ -366,7 +366,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
             reconstruct_from_local_text (vb, ctx, reconstruct); break;
 
         default:
-            ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%u", ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
+            ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%"PRIu64, ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
         }
     }
 
@@ -383,7 +383,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     }
 
     else ASSERT (flag.missing_contexts_allowed,
-                 "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
+                 "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%"PRIu64" did_i=%u ctx->did=%u ctx->dict_id=%s", 
                  ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 
     if (sep && reconstruct) RECONSTRUCT1 (sep); 

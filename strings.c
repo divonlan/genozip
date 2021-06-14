@@ -18,7 +18,7 @@ char *str_tolower (const char *in, char *out /* out allocated by caller - can be
     char *startout = out;
 
     for (; *in; in++, out++) 
-        *out = (*in >= 'A' && *in <= 'Z') ? *in + 32 : *in;
+        *out = LOWER_CASE (*in);
     
     return startout;
 }
@@ -28,7 +28,7 @@ char *str_toupper (const char *in, char *out /* out allocated by caller - can be
     char *startout = out;
 
     for (; *in; in++, out++) 
-        *out = (*in >= 'a' && *in <= 'z') ? *in - 32 : *in;
+        *out = UPPER_CASE (*in);
     
     return startout;
 }
@@ -389,13 +389,13 @@ bool str_case_compare (const char *str1, const char *str2, unsigned len,
     return true; // case-insenstive identical
 }
 
-// splits a string with (num_items-1) separators (doesn't need to be nul-terminated) to up to or exactly num_items
+// splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items
 // returns the actual number of items, or 0 is unsuccessful
-unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char sep,
-                    const char **items,  // out - array of char* of length num_items - one more than the number of separators
-                    unsigned *item_lens, // optional out - corresponding lengths
-                    bool exactly,
-                    const char *enforce_msg)   // non-NULL if enforcement of length is requested
+unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_items, char sep,
+                       const char **items,  // out - array of char* of length max_items - one more than the number of separators
+                       unsigned *item_lens, // optional out - corresponding lengths
+                       bool exactly,
+                       const char *enforce_msg)   // non-NULL if enforcement of length is requested
 
 {
     items[0] = str;
@@ -403,9 +403,9 @@ unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char 
 
     for (uint32_t i=0; i < str_len ; i++) 
         if (str[i] == sep) {
-            if (item_i == num_items) {
+            if (item_i == max_items) {
                 ASSERT (!enforce_msg, "expecting up to %u %s separators but found more: (100 first) %.*s", 
-                        num_items-1, enforce_msg, MIN (str_len, 100), str);
+                        max_items-1, enforce_msg, MIN (str_len, 100), str);
                 return 0; // too many separators
             }
             items[item_i++] = &str[i+1];
@@ -418,10 +418,10 @@ unsigned str_split (const char *str, unsigned str_len, uint32_t num_items, char 
         item_lens[item_i-1] = &str[str_len] - items[item_i-1];
     }
 
-    ASSERT (!exactly || !enforce_msg || item_i == num_items, "Expecting the number of %s to be %u, but it is %u: (100 first) \"%.*s\"", 
-            enforce_msg, num_items, str_len ? item_i : 0, MIN (100, str_len), str);
+    ASSERT (!exactly || !enforce_msg || item_i == max_items, "Expecting the number of %s to be %u, but it is %u: (100 first) \"%.*s\"", 
+            enforce_msg, max_items, str_len ? item_i : 0, MIN (100, str_len), str);
     
-    return (!exactly || item_i == num_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
+    return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
 }
 
 const char *type_name (unsigned item, 
@@ -557,3 +557,15 @@ StrText str_time (void)
     return s;
 }
 
+// C<>G A<>T c<>g a<>t ; other ASCII 32->126 preserved ; other = 0
+const char REVCOMP[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`tbgdefchijklmnopqrsauvwxyz{|}~";
+
+// same as REVCOMP[UPPER_CASE(c)]
+const char UPPER_REVCOMP[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`TBGDEFCHIJKLMNOPQRSAUVWXYZ{|}~";
+
+char *str_to_revcomp (const char *in, char *out, unsigned len)
+{
+    for (unsigned i=0; i < len; i++)
+        out[i] = REVCOMP[(int)in[len-i-1]];
+    return out;
+}

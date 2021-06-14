@@ -55,8 +55,8 @@ extern const BufDescType buf_desc (const Buffer *buf);
 static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *func, uint32_t code_line) 
 { 
     uint64_t index = (buf->len++) * size;
-    ASSERT (index + size <= buf->size, "called from %s:%u: NEXTENT went beyond end of buffer: size=%u index=%"PRIu64": %s", 
-            func, code_line, (unsigned)size, index, buf_desc (buf).s);
+    ASSERT (index + size <= buf->size, "called from %s:%u: NEXTENT went beyond end of buffer: size=%u index=%"PRIu64": %.*s", 
+            func, code_line, (unsigned)size, index, (int)sizeof(BufDescType)-1, &buf_desc (buf).s[0]);
     return index;
 }
 #define NEXTENT(type, buf)    (*(type *)(&(buf).data[NEXTENT_get_index (&(buf), sizeof(type), __FUNCTION__, __LINE__)]))
@@ -146,7 +146,7 @@ extern void buf_grab_do (VBlockP dst_vb, Buffer *dst_buf, const char *dst_name, 
 } while(0)
 
 #define buf_add_more(vb_, buf, new_data, new_data_len, name) do { \
-    uint32_t new_len = (uint32_t)(new_data_len); /* copy in case caller uses ++ */ \
+    uint64_t new_len = (uint64_t)(new_data_len); /* copy in case caller uses ++ */ \
     if (new_len) { \
         buf_alloc ((vb_) ? (VBlockP)(vb_) : (buf)->vb, (buf), (new_len), (buf)->len+(new_len)+1 /* +1 - room for \0 or seperator */, char, 1.5, (name)); \
         memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
@@ -155,7 +155,7 @@ extern void buf_grab_do (VBlockP dst_vb, Buffer *dst_buf, const char *dst_name, 
 } while(0)
 
 #define buf_add_buf(vb_,dst_buf,src_buf,type,name) do { \
-    buf_alloc ((vb_) ? (vb_) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, 1.5, (name)); \
+    buf_alloc ((vb_) ? (vb_) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, CTX_GROWTH, (name)); \
     memcpy (AFTERENT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
     (dst_buf)->len += (src_buf)->len; \
 } while (0)
@@ -174,7 +174,7 @@ extern void buf_add_int (VBlockP vb, Buffer *buf, int64_t value);
 } while(0)
 
 #define BUFPRINTF_MAX_LEN 5000
-#define bufprintf(vb, buf, format, ...)  do { char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_add_string ((vb), (buf), __s); } while (0)
+#define bufprintf(vb, buf, format, ...)  do { char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_add_string ((VBlockP)(vb), (buf), __s); } while (0)
 #define bufprint0 buf_add_string 
 
 extern void buf_print (Buffer *buf, bool add_newline);

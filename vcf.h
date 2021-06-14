@@ -22,6 +22,8 @@ typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to
 
 // ZIP stuff
 extern void vcf_zip_initialize (void);
+extern void vcf_zip_read_one_vb (VBlockP vb);
+extern void vcf_liftover_display_lift_report (void);
 
 // SEG stuff
 extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
@@ -114,9 +116,9 @@ typedef struct {
 extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
 
 #define needs_translation(ctx)  (z_dual_coords && (ctx)->luft_trans && \
-    ((ltrans_props[(ctx)->luft_trans].upon == TW_REF_ALT_SWITCH && last_ostatus == LO_OK_REF_ALT_SWTCH) || \
+    ((ltrans_props[(ctx)->luft_trans].upon == TW_REF_ALT_SWITCH && last_ostatus == LO_OK_REF_ALT_SWITCH_SNP) || \
      (ltrans_props[(ctx)->luft_trans].upon == TW_ALWAYS         && LO_IS_OK (last_ostatus))             || \
-     (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *vb->contexts[VCF_oXSTRAND].last_snip == 'X')))
+     (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *CTX(VCF_oXSTRAND)->last_snip == 'X')))
 
 #define VCF_DICT_ID_ALIASES \
     /*         alias                           maps to this ctx          */  \

@@ -111,9 +111,10 @@ bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
     // for documentation on these parameters, see lzma/LzmaLib.h
     CLzmaEncProps props;
     LzmaEncProps_Init (&props);
-    props.level        = 5;    // Level 5 consumes < 200MB ; level 7 consumes up to 350MB per VB. negligible difference between level 5,7,9 (< 0.1% file size)
+    props.level        = 5;    // Without setting dictSize, Level 5 consumes < 200MB ; level 7 consumes up to 350MB per VB. negligible difference between level 5,7,9 (< 0.1% file size)
     props.fb           = 273;  // a bit better compression with no noticable impact on memory or speed
     props.writeEndMark = true; // add an "end of compression" mark - better error detection during decompress
+    props.dictSize     = MIN (*uncompressed_len, flag.vblock_memory);
 
     CLzmaEncHandle lzma_handle = LzmaEnc_Create (&alloc_stuff);
     ASSERT0 (lzma_handle, "LzmaEnc_Create failed");

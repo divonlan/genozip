@@ -21,11 +21,11 @@
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlock *vb)
 {
-    vb->contexts[GFF3_SEQID].flags.store = STORE_INDEX; // since v12
-    vb->contexts[GFF3_START].flags.store = STORE_INT;   // since v12
-    vb->contexts[GFF3_SEQID].no_stons    = true; // needs b250 node_index for random access
-    vb->contexts[GFF3_ATTRS].no_stons    = true;
-    vb->contexts[GFF3_TOPLEVEL].no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(GFF3_SEQID)->flags.store = STORE_INDEX; // since v12
+    CTX(GFF3_START)->flags.store = STORE_INT;   // since v12
+    CTX(GFF3_SEQID)->no_stons    = true; // needs b250 node_index for random access
+    CTX(GFF3_ATTRS)->no_stons    = true;
+    CTX(GFF3_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
 }
 
 void gff3_seg_finalize (VBlockP vb)
@@ -47,7 +47,7 @@ void gff3_seg_finalize (VBlockP vb)
                        { .dict_id = (DictId)dict_id_fields[GFF3_EOL],    .seperator = ""   } }
     };
 
-    container_seg_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], (Container *)&top_level, 0, 0, 0);
+    container_seg_by_ctx (vb, CTX(GFF3_TOPLEVEL), (Container *)&top_level, 0, 0, 0);
 }
 
 bool gff3_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -275,7 +275,7 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned inf
     const char *this_name = info_str, *this_value = NULL;
     int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
 
-    InfoItem info_items[MAX_SUBFIELDS];
+    InfoItem info_items[MAX_FIELDS];
 
     // get name / value pairs - and insert values to the "name" dictionary
     bool reading_name = true;
@@ -322,8 +322,8 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned inf
                 this_name_len = 0;
                 con_inc_nitems (con);
 
-                ASSSEG (con_nitems(con) <= MAX_SUBFIELDS, info_str, 
-                        "A line has too many subfields (tags) in ATTRS - the maximum supported is %u", MAX_SUBFIELDS);
+                ASSSEG (con_nitems(con) <= MAX_FIELDS, info_str, 
+                        "A line has too many subfields (tags) in ATTRS - the maximum supported is %u", MAX_FIELDS);
             }
             else this_value_len++;
         }
@@ -358,7 +358,7 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned inf
         total_names_len += ii->len + 1; // +1 for ; \t or \n separator
     }
 
-    container_seg_by_ctx (vb, &vb->contexts[GFF3_ATTRS], &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
+    container_seg_by_ctx (vb, CTX(GFF3_ATTRS), &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
 }
 
 
