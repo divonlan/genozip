@@ -5,7 +5,7 @@ Capabilities
    :maxdepth: 1
 
    Compression <compression>
-   Dual-coordinates VCF <dvcf>
+   Dual-coordinate VCF (DVCF) <dvcf>
    Downsampling <downsampling>
    Viewing SAM/BAM as FASTQ <sam2fq>
    Filtering by species using kraken2 <kraken>
