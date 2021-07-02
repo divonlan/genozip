@@ -17,6 +17,7 @@ genozip
 genounzip*
 genocat*
 genols*
+!genols.[ch]
 genozip-debug*
 genozip-opt*
 1000genomes/*

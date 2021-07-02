@@ -60,9 +60,9 @@ test:
     - genozip --help
 
 about:
-  home: https://github.com/divonlan/genozip
+  home: https://genozip.com
   dev_url: https://github.com/divonlan/genozip
-# doc_url: https://genozip.readthedocs.io/
+  doc_url: https://genozip.com
   license: CUSTOM
   license_family: OTHER
   license_file: 
