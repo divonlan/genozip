@@ -6,6 +6,9 @@
 #ifdef _WIN32
 #include <direct.h>
 #endif
+#if defined __APPLE__ 
+#include "compatibility/mac_gettime.h"
+#endif
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>

@@ -13,6 +13,7 @@
 #include <execinfo.h>
 #include <signal.h>
 #ifdef __APPLE__
+#include "compatibility/mac_gettime.h"
 #include <sys/sysctl.h>
 #else // LINUX
 #include <sched.h>

@@ -9,7 +9,7 @@
 #include "genozip.h"
 #include <time.h>
 #ifdef __APPLE__ 
-//#include "compatibility/mac_gettime.h"
+#include "compatibility/mac_gettime.h"
 #endif
 
 typedef struct {

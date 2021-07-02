@@ -1,5 +1,6 @@
 #if defined __APPLE__
 
+#include <time.h>
 #include <sys/types.h>
 #include <sys/_types/_timespec.h>
 #include <mach/mach.h>

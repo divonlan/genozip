@@ -9,9 +9,6 @@
 #include "progress.h"
 #include "profiler.h" // for TimeSpecType
 #include "flags.h"
-#if defined __APPLE__ 
-//#include "compatibility/mac_gettime.h"
-#endif
 
 bool progress_newline_since_update = false; // global: might be not 100% with threads, but that's ok
 

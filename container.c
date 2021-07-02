@@ -4,6 +4,9 @@
 //   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#if defined __APPLE__ 
+#include "compatibility/mac_gettime.h"
+#endif
 #include "genozip.h"
 #include "container.h"
 #include "vblock.h"

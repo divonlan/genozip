@@ -405,7 +405,7 @@ bug fixes, including major bug with mc:i optional field in SAM
 - genocat <file1> <file2>.... now will show the header of only the first file. To show headers of all files use 
   genounzip --stdout instead.
 
-12.0.0
+12.0.2
 a. Dual-coordinates VCF files: genozip --chain to create a dual-coordinates file ; genocat --luft ("lifted") to see https://genozip.com/dvcf.html
 b. Filtering by taxonomy using kraken2 files - support for compressing kraken output files --kraken, --taxid, see: https://genozip.com/kraken.html.
 c. Many other improvements:

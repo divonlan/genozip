@@ -4,7 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #if defined __APPLE__ 
-//#include "compatibility/mac_gettime.h"
+#include "compatibility/mac_gettime.h"
 #endif
 
 #include "genozip.h"

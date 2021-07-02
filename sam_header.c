@@ -10,7 +10,7 @@
 #include "libdeflate/libdeflate.h"
 #include <time.h>
 #if defined __APPLE__ 
-//#include "compatibility/mac_gettime.h"
+#include "compatibility/mac_gettime.h"
 #endif
 #include "sam_private.h"
 #include "file.h"
