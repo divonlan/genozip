@@ -231,6 +231,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
+	@git commit -m "generate conf.py" docs/conf.py
 
 docs/LICENSE.for-docs.txt: genozip$(EXE)
 	@./genozip$(EXE) --license=74 > $@
