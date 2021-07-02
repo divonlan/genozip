@@ -109,13 +109,13 @@ extern unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_it
 
 extern void str_remove_window_r (unsigned n_lines, const char **lines, unsigned *line_lens);
 
-extern unsigned str_split_ints_do (const char *str, unsigned str_len, uint32_t max_items, char sep, bool exactly, int64_t *items);
+extern unsigned str_split_ints_do (const char *str, unsigned str_len, uint32_t max_items, char sep, _Bool exactly, int64_t *items);
 #define str_split_ints(str,str_len,max_items,sep,name,exactly) \
     unsigned n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     int64_t name##s[n_##name##s]; \
     n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
 
-extern unsigned str_split_floats_do (const char *str, unsigned str_len, uint32_t max_items, char sep, bool exactly, double *items);
+extern unsigned str_split_floats_do (const char *str, unsigned str_len, uint32_t max_items, char sep, _Bool exactly, double *items);
 #define str_split_floats(str,str_len,max_items,sep,name,exactly) \
     unsigned n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     double name##s[n_##name##s]; \
