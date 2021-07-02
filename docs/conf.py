@@ -22,7 +22,7 @@ copyright = '2019-2021, Divon Lan'
 author = 'Divon Lan'
 
 # The full version, including alpha/beta/rc tags
-release = '12.0.-1'
+release = '12.0.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -54,13 +54,10 @@ html_theme = 'alabaster'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-# See: https://www.davesite.com/webstation/html/favicon.shtml
-html_favicon = 'favicon.ico'
-
 # see: https://stackoverflow.com/questions/59215996/how-to-add-a-logo-to-my-readthedocs-logo-rendering-at-0px-wide
 html_logo = "_static/logo.png" # copied to _static by the system
 html_logo = "logo.png" # copied to _static by the system
-#html_theme_options = {
-#    'logo_only': True,
-#    'display_version': False,
-#}
+html_theme_options = {
+    'logo_only': True,
+    'display_version': False,
+}
