@@ -85,7 +85,7 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = vb->line_start = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = vb->num_nondrop_lines = 0;
-    vb->has_non_agct = vb->is_rejects_vb = false;    
+    vb->is_rejects_vb = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->drop_curr_line = vb->chrom_name = vb->fragment_start = NULL;
@@ -104,6 +104,8 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     vb->ref = NULL;
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
+    vb->iupacs_last_range = NULL;
+    vb->iupacs_last_opos = vb->iupacs_next_opos = 0;
     mutex_destroy (vb->vb_ready_for_compute_thread);
 
     FINALIZE_VB_BUFS (buf_free, ctx_free_context, release_vb);

@@ -30,9 +30,9 @@ endif
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
 MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
-		  data_types.c bit_array.c progress.c \
+		  data_types.c bit_array.c progress.c coords.c writer.c\
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
-		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c writer.c \
+		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c\
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
 		  fasta.c fastq.c gff3_seg.c me23.c phylip.c chain.c kraken.c generic.c \
@@ -63,9 +63,9 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h  \
-			 reference.h ref_private.h refhash.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
-			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h \
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
+			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
+			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h \
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/deflate.h zlib/trees.h \
@@ -148,10 +148,10 @@ all   : $(OBJDIR) $(EXECUTABLES) LICENSE.non-commercial.txt
 	@chmod +x test.sh
 
 debug : CFLAGS += $(DEBUGFLAGS)
-debug : $(OBJDIR) $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
+debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
 opt   : CFLAGS += -g $(OPTFLAGS)
-opt   : $(OBJDIR) $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
+opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 -include $(DEPS)
 
@@ -176,12 +176,16 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
 test/%.bam : test/%.sam
+ifeq ($(OS),Windows_NT)
 	@echo "Generating $@ from $<"
 	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools  view $< -OBAM -o $@"
+endif
 
 test/%.cram : test/%.sam
+ifeq ($(OS),Windows_NT)
 	@echo "Generating $@ from $<"
 	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OCRAM -o $@ -T data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz"
+endif
 
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
@@ -217,7 +221,7 @@ LICENSE.non-commercial.txt: text_license.h # not dependent on genozip.exe, so we
 
 SPHINX = /home/divon/miniconda3/bin/sphinx-build
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/advanced.rst docs/index.rst docs/license.rst \
-       docs/publications.rst docs/installing.rst docs/contact.rst docs/examples.rst docs/source.rst docs/logo.png \
+       docs/publications.rst docs/installing.rst docs/contact.rst docs/compression.rst docs/source.rst docs/logo.png \
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst \
 	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
@@ -387,6 +391,11 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
 distribution: docs testfiles conda/.conda-timestamp docs/genozip-installer.exe # mac/.remote_mac_timestamp
 	
+test-backup: genozip.exe
+	@echo "Compresing test/ files for in preparation for backup (except cram and bcf)"
+	@rm -f test/*.genozip
+	@(cd test; genozip.exe -f `ls -1d *|grep -v / |grep -v cram | grep -v bcf`)
+
 endif # Windows
 
 ifeq ($(uname),Darwin)
@@ -479,5 +488,5 @@ clean:
 	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup
 

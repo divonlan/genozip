@@ -101,7 +101,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     seg_chrom_field (vb, field_start, field_len);
 
     GET_NEXT_ITEM (ME23_POS);
-    seg_pos_field (vb, ME23_POS, ME23_POS, false, false, 0, field_start, field_len, 0, field_len+1);
+    seg_pos_field (vb, ME23_POS, ME23_POS, 0, 0, field_start, field_len, 0, field_len+1);
     random_access_update_pos (vb, DC_PRIMARY, ME23_POS);
 
     // Genotype (a combination of one or two bases or "--")
@@ -207,11 +207,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
 
     // chroms don't have the same index in the ME23 z_file and in the reference file - we need to translate chrom_index
     WordIndex save_chrom_node_index = vb->chrom_node_index;
-    vb->chrom_node_index = ref_contigs_get_by_name (gref, vb->chrom_name, vb->chrom_name_len, true);
-
-    // if not found, try common alternative names
-    if (vb->chrom_node_index == WORD_INDEX_NONE)
-        vb->chrom_node_index = ref_alt_chroms_get_alt_index (gref, vb->chrom_name, vb->chrom_name_len, 0, WORD_INDEX_NONE);
+    vb->chrom_node_index = ref_contigs_get_by_name (gref, vb->chrom_name, vb->chrom_name_len, true, false);
 
     // get the value of the loaded reference at this position    
     const Range *range = ref_piz_get_range (vb, gref, pos, 1);

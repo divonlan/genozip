@@ -114,14 +114,12 @@ static void main_print_help (bool explicit)
     
     str_print_text (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
 
-// in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
-// from Windows Explorer - the terminal will open and he will see the help
-#ifdef _WIN32
-    if (!explicit && isatty(0) && isatty (1)) {
+    // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
+    // from Windows Explorer - the terminal will open and he will see the help
+    if (flag.is_windows && !explicit && isatty(0) && isatty (1)) {
         printf ("Press any key to continue...\n");
         getc(stdin);
     }
-#endif
 }
 
 static void main_print_version()
@@ -473,10 +471,11 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 void TEST(char *str) {
 }
 
+
 int main (int argc, char **argv)
 {    
     //TEST ("3.2E-003");
-    
+
     info_stream = stdout; // may be changed during intialization
     profiler_initialize();
     buf_initialize(); 

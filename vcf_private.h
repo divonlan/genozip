@@ -24,13 +24,17 @@ typedef struct {
 } ZipDataLineVCF;
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
+typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
+
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 typedef struct VBlockVCF {
 
     VBLOCK_COMMON_FIELDS
 
     // charactaristics of the data
+    
     uint16_t ploidy;           // ZIP only
+    VcfVersion vcf_version;
 
     uint32_t sample_i;         // ZIP: current sample in line (0-based) being segmented 
 
@@ -89,7 +93,7 @@ typedef enum {
     LO_OK                        = 1,  // internal progress step in ZIP - never written z_file
     LO_OK_REF_SAME_SNP           = 2,  // REF and ALT are the same for a SNP
     LO_OK_REF_SAME_INDEL         = 3,  // REF and ALT are the same for an INDEL, and confirmed not to be a REF<>ALT switch
-    LO_OK_REF_SAME_SV            = 4,  // REF and ALT are the same for a Structural Variant
+    LO_OK_REF_SAME_SV            = 4,  // REF and ALT are the same for a variant with a symbolic ALT allele
     LO_OK_REF_ALT_SWITCH_SNP     = 5,  // REF and ALT are switched, and INFO and FORMAT subfields updated
     LO_OK_REF_ALT_SWITCH_INDEL   = 6,  // REF and ALT are switched, and INFO and FORMAT subfields updated
     LO_OK_REF_NEW_SNP            = 7,  // REF in a SNP was replaced with a new REF - can only happen if AF=1
@@ -108,15 +112,17 @@ typedef enum {
     LO_NEW_ALLELE_SNP            = 14, // The Luft reference represents an allele that is neither REF or ALT
     LO_REF_MULTIALT_SWITCH_INDEL = 15, // REF changes for a multi-allelic INDEL, or REF change would make a bi-allelic into a tri-allelic INDEL
     LO_NEW_ALLELE_INDEL          = 16, // The Luft reference represents an allele that is neither REF or ALT
-    LO_COMPLEX_REFALT            = 17, // Genozip limiation: The combination of REF, ALT and the Luft reference is too complex
-    LO_COMPLEX_REARRANGEMENTS    = 18, // Genozip limiation: Variant contains VCF 4.3 "complex rearrangements"
+    LO_NEW_ALLELE_SV             = 17, // Genozip limiation: The Luft reference is different than REF for a variant with a symbolic ALT allele
+    LO_XSTRAND_SV                = 18, // Genozip limiation: A variant with a symbolic ALT allele mapped to the reverse strand
+    LO_COMPLEX_REARRANGEMENTS    = 19, // Genozip limiation: Variant contains VCF 4.2 "complex rearrangements"
+    LO_NOT_LEFT_ANCHORED         = 20, // Genozip limiation: We require non-SNP variants to be left anchored (i.e. A AG, not G AG)
 
     // Reasons when genozipping a DVCF file (without --chain)
-    LO_ADDED_VARIANT             = 19, // Variant was added to file after it was already lifted over
-    LO_UNSUPPORTED_REFALT        = 20, // INFO/DVCF fields indicate an unsupported REF/ALT configuration - perhaps other tool, perhaps later version of Genozip
+    LO_ADDED_VARIANT             = 21, // Variant was added to file after it was already lifted over
+    LO_UNSUPPORTED_REFALT        = 22, // INFO/DVCF fields indicate an unsupported REF/ALT configuration - perhaps other tool, perhaps later version of Genozip
 
-    LO_INFO                      = 21, // An error cross-rending an INFO subfield (including INFO/END)
-    LO_FORMAT                    = 22, // An error cross-rending an FORMAT subfield
+    LO_INFO                      = 23, // An error cross-rending an INFO subfield (including INFO/END)
+    LO_FORMAT                    = 24, // An error cross-rending an FORMAT subfield
     
     NUM_LO_STATUSES
 } LiftOverStatus;
@@ -130,13 +136,16 @@ extern const char *dvcf_status_names[];
     "Rejected", "ChromNotInPrimReference", "ChromNotInChainFile", "NoMappingInChainFile", "REFMismatchesReference", \
     "RefMultiAltSwitchSNP", "RefNewAlleleSNP", \
     "RefMultiAltSwitchIndel", "RefNewAlleleIndel", \
-    "ComplexRefAlt", "ComplexRearrangements", \
+    "RefNewAlleleSV", "XstrandSV", "ComplexRearrangements", "NotLeftAnchored", \
     "AddedVariant", "UnsupportedRefAlt", \
     "INFO", "FORMAT" \
 }
 
 #define LO_IS_REJECTED(ost) ((ost) >= LO_REJECTED) // note: this condition works also for unrecognized reject strings (that an have index >= NUM_LO_STATUSES)
 #define LO_IS_OK(ost) ((ost) >= LO_OK && (ost) < LO_REJECTED)
+#define LO_IS_OK_SNP(ost) ((ost)==LO_OK_REF_SAME_SNP || (ost)==LO_OK_REF_ALT_SWITCH_SNP || (ost)==LO_OK_REF_NEW_SNP)
+#define LO_IS_OK_INDEL(ost) ((ost)==LO_OK_REF_SAME_INDEL || (ost)==LO_OK_REF_ALT_SWITCH_INDEL)
+#define LO_IS_OK_SWITCH(ost) ((ost)==LO_OK_REF_ALT_SWITCH_SNP || (ost)==LO_OK_REF_ALT_SWITCH_INDEL)
 
 #define last_ostatus (ctx_has_value_in_line_(vb, CTX(VCF_oSTATUS)) ? (LiftOverStatus)vb->last_index (VCF_oSTATUS) : LO_UNKNOWN)
 #define last_ostatus_name_piz (last_ostatus < CTX(VCF_oSTATUS)->word_list.len ? ctx_get_words_snip (CTX(VCF_oSTATUS), last_ostatus) : "Invalid oStatus")
@@ -145,17 +154,18 @@ extern const char *dvcf_status_names[];
 typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFields; 
 
 // Liftover - header keys
-#define HK_GENOZIP_CMD "##genozip_command="
-#define HK_CHAIN       "##chain="
-#define HK_DC          "##dual_coordinates"
+#define HK_GENOZIP_CMD  "##genozip_command="
+#define HK_CHAIN        "##chain="
+#define HK_DC           "##dual_coordinates"
 #define HK_ORIGINAL_REF "##original_reference="
 #define HK_DC_PRIMARY  HK_DC"=PRIMARY"
 #define HK_DC_LUFT     HK_DC"=LUFT"
 #define HK_RENDERALG_ATTR "RendAlg"
-#define KH_INFO_LUFT   "##INFO=<ID=" INFO_LUFT ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_COORDS "\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
-#define KH_INFO_PRIM   "##INFO=<ID=" INFO_PRIM ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
-#define KH_INFO_LREJ   "##INFO=<ID=" INFO_LREJ ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
-#define KH_INFO_PREJ   "##INFO=<ID=" INFO_PREJ ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
+#define KH_INFO_LUFT    "##INFO=<ID=" INFO_LUFT ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_COORDS "\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
+#define KH_INFO_PRIM    "##INFO=<ID=" INFO_PRIM ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
+#define KH_INFO_LREJ    "##INFO=<ID=" INFO_LREJ ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
+#define KH_INFO_PREJ    "##INFO=<ID=" INFO_PREJ ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
+#define KH_INFO_oSTATUS "##INFO=<ID=oSTATUS,Number=1,Type=String,Description=\"Lift status\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
 
 // header keys that appear only in a Primary VCF file
 #define HK_LUFT_CONTIG "##luft_contig="     
@@ -174,6 +184,7 @@ extern char *vcf_samples_is_included;
 
 #define MAX_VCF_ID_LEN 100 // including terminating nul
 extern const char *vcf_header_get_VCF_ID_by_dict_id (DictId dict_id, bool must_exist);
+extern VcfVersion vcf_header_get_version (void);
 
 // Samples stuff
 extern void vcf_seg_samples_initialize (void);
@@ -190,6 +201,7 @@ extern void vcf_finalize_seg_info (VBlockVCF *vb);
 
 // Refalt stuff
 extern void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len);
+extern void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus ostatus, bool is_xstrand, unsigned add_bytes);
 extern LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool xstrand);
 typedef enum { EQUALS_NEITHER, EQUALS_REF, EQUALS_ALT, EQUALS_MISSING } RefAltEquals;
 RefAltEquals vcf_refalt_oref_equals_ref_or_alt (char oref, char ref, const char *alt, unsigned alt_len, bool is_xstrand);
@@ -221,6 +233,8 @@ extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockP vb);
 #define REJECT_MAPPING(reason)                    do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s CHROM=%.*s POS=%"PRId64 " " reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; } while(0)
 #define REJECT_SUBFIELD(ostatus, ctx, reason,...) do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s CHROM=%.*s POS=%"PRId64" " reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
                                                        vcf_lo_seg_rollback_and_reject (vb, (ostatus), (ctx)); } while(0)
+#define LIFTOK(ostatus, reason, ...) do { if (flag.show_lift && !flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s CHROM=%.*s POS=%"PRId64" REF=%.*s%s " reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN (100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define LIFTOK0(ostatus, reason) LIFTOK(ostatus, reason "%s", "")
 #define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s CHROM=%.*s POS=%"PRId64" REF=%.*s%s " reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN (100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
 #define REJECTIF0(condition, ostatus, reason)     do { if (condition) REJECT (ostatus, reason "%s", ""); } while (0)
 

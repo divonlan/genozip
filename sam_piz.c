@@ -630,14 +630,6 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 // reverse-complement the sequence if needed, and drop if "*"
 TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
 {
-    // full printable ascii with only AGCT->TCGA and agct->tcga
-    static const char complement[256] = { [33]='!','"','#','$','%','&','\'','(',')','*','+',',','-','.','/',
-                                          '0','1','2','3','4','5','6','7','8','9',':',';','<','=','>','?','@',
-                                          'T','B','G','D','E','F','C','H','I','J','K','L','M','N','O','P','Q','R','S','A','U','V','W','X','Y','Z',
-                                          '[','\\',']','^','_','`',
-                                          't','b','g','d','e','f','c','h','i','j','k','l','m','n','o','p','q','r','s','a','u','v','w','x','y','z'
-                                          ,'{','|','}','~' };
-
     uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
     
     // case: SEQ is "*" - don't show this fastq record
@@ -645,20 +637,8 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
         vb->drop_curr_line = "no_seq";
 
     // case: this sequence is reverse complemented - reverse-complement it
-    else if (sam_flag & SAM_FLAG_REV_COMP) {
-
-        // we move from the outside in, switching the left and right bases while also complementing both
-        for (unsigned i=0; i < recon_len / 2; i++) {
-            char l_base = recon[i];
-            char r_base = recon[recon_len-1-i];
-
-            recon[i]                     = complement[(uint8_t)r_base];
-            recon[recon_len-1-i] = complement[(uint8_t)l_base];
-        }
-
-        if (recon_len % 2) // we have an odd number of bases - now complement the middle one
-            recon[recon_len/2] = complement[(uint8_t)recon[recon_len/2]];
-    }
+    else if (sam_flag & SAM_FLAG_REV_COMP) 
+        str_revcomp (recon, recon_len);
 
     return 0;
 }

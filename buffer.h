@@ -60,8 +60,11 @@ static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *
     return index;
 }
 #define NEXTENT(type, buf)    (*(type *)(&(buf).data[NEXTENT_get_index (&(buf), sizeof(type), __FUNCTION__, __LINE__)]))
-#define ENTNUM(buf, ent)      ((uint32_t)((((char*)(ent)) - ((buf).data)) / sizeof (*(ent))))
+#define ENTNUM(buf, ent)      ((int32_t)((((char*)(ent)) - ((buf).data)) / (int32_t)sizeof (*(ent)))) // signed integer
 #define ISLASTENT(buf,ent)    (ENTNUM((buf),(ent)) == (buf).len - 1)
+#define ISAFTERENT(buf,ent)   (!(buf).data || ENTNUM((buf),(ent)) >= (buf).len)
+#define ISFIRSTENT(buf,ent)   (ENTNUM((buf),(ent)) == 0)
+#define ISBEFOREENT(buf,ent)  (!(buf).data || ENTNUM((buf),(ent)) <= -1)
 
 extern void buf_initialize(void);
 

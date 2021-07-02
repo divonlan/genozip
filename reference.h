@@ -69,6 +69,7 @@ extern void ref_unload_reference (Reference ref);
 extern void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap);
 extern MemStats ref_memory_consumption (const Reference ref);
 extern const Range *ref_piz_get_range (VBlockP vb, Reference ref, PosType first_pos_needed, uint32_t num_nucleotides_needed);
+extern Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_chrom_index);
 extern Range *ref_seg_get_locked_range (VBlockP vb, Reference ref, WordIndex chrom, const char *chrom_name, unsigned chrom_name_len, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, RefLock *lock);
 extern const char *ref_get_cram_ref (const Reference ref);
 extern void ref_generate_reverse_complement_genome (Reference ref);
@@ -88,6 +89,9 @@ extern void ref_compress_ref (void);
 extern void ref_make_ref_init (void);
 extern void ref_consume_ref_fasta_global_area (void);
 extern void ref_make_create_range (VBlockP vb);
+extern void ref_make_after_compute (VBlockP vb);
+extern ConstBufferP ref_make_get_contig_metadata (void);
+extern void ref_make_finalize (void);
 
 // cache stuff
 extern bool ref_mmap_cached_reference (Reference ref);
@@ -98,7 +102,8 @@ extern void ref_remove_cache (Reference ref);
 // contigs stuff
 typedef struct { char s[REFCONTIG_MD_LEN]; } ContigMetadata;
 
-extern WordIndex ref_contigs_get_by_name (Reference ref, const char *chrom_name, unsigned chrom_name_len, bool soft_fail);
+extern WordIndex ref_contigs_get_by_name (Reference ref, const char *chrom_name, unsigned chrom_name_len, bool alt_ok, bool soft_fail);
+extern WordIndex ref_contigs_get_by_name_or_alt (Reference ref, const char *chrom_name, unsigned chrom_name_len, bool soft_fail);
 
 extern ConstBufferP ref_get_contigs (const Reference ref);
 extern void ref_contigs_get (const Reference ref, ConstBufferP *out_contig_dict, ConstBufferP *out_contigs);
@@ -111,7 +116,7 @@ extern void ref_contigs_load_contigs (Reference ref);
 typedef void (*RefContigsIteratorCallback)(const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param);
 extern void ref_contigs_iterate (const Reference ref, RefContigsIteratorCallback callback, void *callback_param);
 extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos);
-extern WordIndex ref_contig_get_by_chrom (ConstVBlockP vb, const Reference ref, WordIndex txt_chrom_index, PosType *max_pos);
+extern WordIndex ref_contig_get_by_chrom (ConstVBlockP vb, const Reference ref, WordIndex txt_chrom_index, const char *chrom_name, unsigned chrom_name_len, PosType *max_pos);
 
 // alt chroms stuff
 extern void ref_alt_chroms_load (Reference ref);

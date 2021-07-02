@@ -1,4 +1,4 @@
-This program, "genozip", and all associated, source code, object code, documentation and other
+This program, "Genozip", and all associated, source code, object code, documentation and other
 files, are copyright (C) 2019-2021 Divon M Lan ("Copyright Owner"). All rights reserved.
 
 This license is limited in scope, and covers NON-COMMERCIAL and some other limited use cases as
@@ -9,12 +9,12 @@ For a commercial license, please contact sales@genozip.com
 Acknowledgement: portions of the text of this license are based on Apache License 2.0, however it
 differs from it substantially
 
-TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+TERMS AND CONDITIONS FOR USE
 
 1. Definitions.
 
-"License" shall mean the terms and conditions for use, reproduction, and distribution as defined by
-Sections 1 through 9 of this document.
+"License" shall mean the terms and conditions for use as defined by Sections 1 through 6 of this
+document.
 
 "Licensor" shall mean Copyright Owner or entity authorized by Copyright Owner that is granting the
 License.
@@ -75,9 +75,9 @@ Internet website
       b4. This license DOES permit Using, including reproducing and distributing, the three
 Executables genounzip, genocat and genols for any purpose including commercial.
 
-   c. This license DOES NOT permit compressing a file, unless the uncompressed file is also kept or
-the potential loss of data due to genozip not being able to uncompress the compressed file would
-not cause any harm.
+   c. This license DOES NOT permit compressing a file, unless the file is retained in its original
+form as well or the potential loss of data due to Genozip not being able to uncompress the
+compressed file would not cause any harm.
 
    d. This license is conditional on You accurately registering Your name, email and organization
 which you may be prompted for by an Executable of the Work, or if not prompted, you should supply
@@ -100,20 +100,12 @@ exercise of permissions under this License.
 
 6. Limitation of Liability. In no event and under no legal theory, whether in tort (including
 negligence), contract, or otherwise, unless required by applicable law (such as deliberate and
-grossly negligent acts) or agreed to in writing, shall any Contributor be liable to You for damages
-, including any direct, indirect, special, incidental, or consequential damages of any character
-arising as a result of this License or out of the use or inability to use the Work (including but
-not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any
-and all other commercial damages or losses), even if such Contributor has been advised of the
-possibility of such damages.
-
-7. Accepting Warranty or Additional Liability. While redistributing the Work or Derivative Works
-thereof, You may choose to offer, and charge a fee for, acceptance of support, warranty, indemnity,
-or other liability obligations and/or rights consistent with this License. However, in accepting
-such obligations, You may act only on Your own behalf and on Your sole responsibility, not on
-behalf of any other Contributor, and only if You agree to indemnify, defend, and hold each
-Contributor harmless for any liability incurred by, or claims asserted against, such Contributor by
-reason of your accepting any such warranty or additional liability.
+grossly negligent acts) or agreed to in writing, shall Licensor or Copyright Owner be liable to You
+for damages, including any direct, indirect, special, incidental, or consequential damages of any
+character arising as a result of this License or out of the use or inability to use the Work 
+(including but not limited to damages for loss of goodwill, work stoppage, computer failure or
+malfunction, file corruption, data loss, or any and all other commercial damages or losses), even
+if Licensor or Copyright Owner has been advised of the possibility of such damages.
 
 END OF TERMS AND CONDITIONS
 

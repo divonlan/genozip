@@ -56,7 +56,7 @@ static char *get_license_filename (bool create_folder_if_needed)
 
 #else
     const char *folder = getenv ("HOME");
-    ASSINP0 (folder, "%s: cannot store license, because HOME env var is not defined");
+    ASSINP0 (folder, "%s: cannot calculate license file name, because $HOME env var is not defined");
 #endif    
 
     char *filename = MALLOC (strlen(folder) + 50);
@@ -88,7 +88,7 @@ static uint32_t licence_retrieve_locally (void)
     if (!fp) return 0; // no license
 
     uint32_t license_num=0; // initialize - so that we return 0 if fscanf fails to read a number
-    ASSERT0 (fscanf (fp, "%u", &license_num) == 1, "failed to read license_num");
+    ASSINP (fscanf (fp, "%u", &license_num) == 1, "failed to parse license file %s, please re-register with genozip --register", filename);
     
     fclose (fp);
     FREE (filename);
@@ -96,9 +96,10 @@ static uint32_t licence_retrieve_locally (void)
     return license_num;
 }
 
-static void license_submit (const char *institution, const char *name, const char *email, 
+static bool license_submit (const char *institution, const char *name, const char *email, 
                             char commerical, char update, 
-                            const char *os, unsigned cores, const char *endianity, const char *ip, const char *dist, uint32_t license_num)
+                            const char *os, unsigned cores, const char *endianity,  
+                            const char *ip, const char *user_host, const char *dist, uint32_t license_num)
 {
     // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396
 
@@ -124,6 +125,7 @@ static void license_submit (const char *institution, const char *name, const cha
                        "&entry.81542373=%s"
                        "&entry.1668073218=%u"
                        "&entry.1943454647=%s"
+                       "&entry.1763961212=%s"
                        "&entry.1655649315=%u"
                        "&entry.186159495=%s"
                        "&entry.1598028195=%s"
@@ -133,13 +135,15 @@ static void license_submit (const char *institution, const char *name, const cha
     char *nameE        = url_esc_non_valid_chars (name);
     char *emailE       = url_esc_non_valid_chars (email);
     char *osE          = url_esc_non_valid_chars (os);
+    char *user_hostE   = url_esc_non_valid_chars (user_host);
 
     char url[600];
-    sprintf (url, url_format, institutionE, nameE, emailE, commerical, update, osE, cores, ip, license_num, GENOZIP_CODE_VERSION, dist, endianity);
+    sprintf (url, url_format, institutionE, nameE, emailE, commerical, update, osE, cores, ip, user_hostE, license_num, GENOZIP_CODE_VERSION, dist, endianity);
 
-    url_read_string (url, NULL, 0, "Failed to register the license");
-
-    FREE (institutionE); FREE (nameE); FREE (emailE); FREE (osE);
+    bool success = url_read_string (url, NULL, 0) >= 0;
+    
+    FREE (institutionE); FREE (nameE); FREE (emailE); FREE (osE); FREE (user_hostE);
+    return success;
 }
 
 static bool license_verify_email (char *response, unsigned response_size, const char *unused)
@@ -161,7 +165,7 @@ static bool license_verify_name (char *response, unsigned response_size, const c
 static void license_exit_if_not_confirmed (const char *response)
 {
     if (response[0] == 'N') {
-        fprintf (stderr, "\nYou have not registered. You may register at any time in the future.\nWishing you a wonderful day from the genozip team!\n");
+        fprintf (stderr, "\nYou have not registered. You may register at any time in the future.\n\nWishing you a wonderful day from the Genozip team! https://genozip.com\n");
         exit_ok;
     }
 }
@@ -215,26 +219,37 @@ uint32_t license_get (void)
     const char *dist = arch_get_distribution();
     unsigned cores = arch_get_num_cores();
     const char *endianity = arch_get_endianity();
+    const char *user_host = arch_get_user_host();
     license_num    = license_generate_num();
 
     fprintf (stderr, "\nThank you. To complete your license registration, genozip will now submit the following information to the genozip licensing server:\n\n");
+
+    fprintf (stderr, "=====================================================================\n");
     fprintf (stderr, "Licensee institution / company name: %s\n", institution);
     fprintf (stderr, "Licensee name: %s\n", name);
     fprintf (stderr, "Licensee email address: %s\n", email);
     fprintf (stderr, "Commercial: %s\n", commercial[0]=='Y' ? "Yes" : "No");
     fprintf (stderr, "Send new feature updates: %s\n", update[0]=='Y' ? "Yes" : "No");
     fprintf (stderr, "System info: OS=%s cores=%u endianity=%s IP=%s\n", os, cores, endianity, ip);
+    fprintf (stderr, "Username: %s\n", user_host);
     fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
-    fprintf (stderr, "Genozip license number: %u\n\n", license_num);
-
+    fprintf (stderr, "Genozip license number: %u\n", license_num);
+    fprintf (stderr, "I accept the terms & conditions of the Genozip non-commercial license\n");
+    fprintf (stderr, "=====================================================================\n\n");
+    
     str_query_user ("Proceed with completing the registration? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
     license_exit_if_not_confirmed (confirm);
     
-    license_submit (institution, name, email, commercial[0], update[0], os, cores, endianity, ip, dist, license_num);
+    bool submitted = license_submit (institution, name, email, commercial[0], update[0], os, cores, endianity, ip, user_host, dist, license_num);
+
+    ASSINP0 (submitted,
+             "Failed to register the license, possibly because the Internet is not accessible or the registration server\n"
+             "(which is hosted on a Google server) is not accessible. If this problem persists, you can register manually by\n"
+             "sending an email to register@genozip.com - copy & paste the lines between the \"======\" into the email message.\n");
 
     license_store_locally (license_num);
-
-    fprintf (stderr, "\nCongratulations! Your Genozip non-commerical license has been granted.\n\n");
+    fprintf (stderr, "\nCongratulations! Your Genozip non-commerical license has been granted.\n\n"
+                     "Please see the documentation on https://genozip.com\n\n");
 
     return license_num;
 }

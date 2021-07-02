@@ -7,6 +7,7 @@
 #define FLAGS_INCLUDED
 
 #include "genozip.h"
+#include "coords.h"
 
 typedef enum { 
     REF_NONE,       // ZIP (except SAM) and PIZ when user didn't specify an external reference
@@ -25,9 +26,9 @@ typedef struct {
     const char *vblock;
     
     // ZIP: data modifying options
-    int optimize, optimize_sort, optimize_PL, optimize_GL, optimize_GP, optimize_VQSLOD,  // optimize flags
+    int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
-        allow_ambiguous, reject_ref_alt_switches, add_line_numbers;
+        allow_ambiguous, add_line_numbers;
     
     #define NOT_PAIRED_END 0 
     #define PAIR_READ_1    1
@@ -43,13 +44,13 @@ typedef struct {
 
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
-        regions, samples, 
+        regions, gpos, samples, 
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
         sequential, no_pg, interleave, 
-        kraken_taxid, add_qName_chr;
+        kraken_taxid, with_chr;
     const char *regions_file;
     int64_t lines_first, lines_last, tail; // set by --lines 
-    const char *grep;
+    const char *grep; int grepw; unsigned grep_len; // set by --grep and --grep-w
     uint32_t one_vb, one_component, downsample, shard ;
     enum { SAM_FLAG_INCLUDE_IF_ALL=1, SAM_FLAG_INCLUDE_IF_NONE, SAM_FLAG_EXCLUDE_IF_ALL } sam_flag_filter;
     enum { SAM_MAPQ_INCLUDE_IF_AT_LEAST=1, SAM_MAPQ_EXCLUDE_IF_AT_LEAST } sam_mapq_filter;
@@ -74,7 +75,7 @@ typedef struct {
     ReferenceType reference;
 
     // stats / metadata flags for end users
-    int show_stats, show_dvcf; 
+    int show_stats, show_dvcf, show_ostatus, show_lift; 
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     
     // analysis
@@ -86,7 +87,7 @@ typedef struct {
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq,
-        show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_chain,
+        show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_ref_iupacs, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         show_vblocks, show_threads, show_uncompress,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_allthesame, debug_recon_size,
@@ -104,6 +105,7 @@ typedef struct {
     // internal flags set by the system, not the command line
     Coords rejects_coord;    // ZIP only: currently zipping liftover rejects file / component containing only PRIMARY or LUFT variants
     bool debug,              // set if DEBUG is defined
+         is_windows, is_mac, is_linux, // set according to OS
          ref_use_aligner,    // ZIP: compression requires using the aligner
          const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data

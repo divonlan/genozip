@@ -27,6 +27,7 @@ typedef struct {
 typedef struct {
     PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
     PosType end_pos;         // the region searched will include both the start and the end
+    bool revcomp;            // display the region in reverse complement
 } Chreg; // = Chromosome Region
 
 static Buffer regions_buf = EMPTY_BUFFER; // all regions together
@@ -56,7 +57,9 @@ static bool regions_parse_pos (const char *str, Region *reg)
         if (!str_get_int (str, sep - str, &reg->start_pos)) return false;
         if (!str_get_int (sep+1, str+len-(sep+1), &reg->end_pos)) return false;
 
-        if (reg->start_pos > reg->end_pos) SWAP (reg->start_pos, reg->end_pos);
+        // case: "1000000-5" (start 1000000, end 999996)
+        if (reg->start_pos > reg->end_pos && reg->end_pos < 1000) 
+            reg->end_pos = MAX (1, reg->start_pos - reg->end_pos + 1);
 
         return true;
     }
@@ -191,7 +194,8 @@ void regions_add_by_file (const char *regions_filename)
     ASSINP ((size = fread (data, 1, st.st_size, fp)) > 0, "failed to read %u bytes from %s", (unsigned)st.st_size, regions_filename);
 
     str_split_enforce (data, size, 0, '\n', line, true, "regions"); 
-
+    str_remove_window_r (n_lines, lines, line_lens);
+    
     ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", regions_filename);
     n_lines--;
 
@@ -267,15 +271,16 @@ void regions_make_chregs (ContextP chrom_ctx)
             buf_alloc (evb, &chregs[chr_i], 0, chregs[chr_i].len, Chreg, 2, "chregs");
             
             Chreg *chreg = LASTENT (Chreg, chregs[chr_i]);
-            chreg->start_pos = reg->start_pos;
-            chreg->end_pos   = reg->end_pos;
+            chreg->revcomp   = reg->end_pos < reg->start_pos; 
+            chreg->start_pos = chreg->revcomp ? reg->end_pos : reg->start_pos;
+            chreg->end_pos   = chreg->revcomp ? reg->start_pos : reg->end_pos;
         }
     }
 
     //regions_display("After regions_make_chregs");
 }
 
-// a user can specific a negative region eg ^13:100-200. We convert the set of negative regions
+// a user can specify negative region eg ^13:100-200. We convert the set of negative regions
 // to the complementary set of positive regions
 void regions_transform_negative_to_positive_complement()
 {
@@ -368,7 +373,7 @@ unsigned regions_get_num_range_intersections (WordIndex chrom_word_index)
 
 // used by ref_display_ref. if an intersection was found - returns the min,max pos and true, otherwise returns false
 bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos, unsigned intersect_i,
-                                     PosType *intersect_min_pos, PosType *intersect_max_pos) // out
+                                     PosType *intersect_min_pos, PosType *intersect_max_pos, bool *revcomp) // out
 {
     if (!flag.regions) { // if no regions are specified, the entire range "intersects"
         *intersect_min_pos = min_pos;
@@ -386,6 +391,7 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
 
     *intersect_min_pos = MAX (min_pos, chreg->start_pos);
     *intersect_max_pos = MIN (max_pos, chreg->end_pos);
+    *revcomp = chreg->revcomp;
 
     return true;
 }

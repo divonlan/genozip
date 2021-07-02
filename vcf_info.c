@@ -15,6 +15,7 @@
 #include "codec.h"
 #include "reconstruct.h"
 #include "gff3.h"
+#include "coords.h"
 
 typedef struct { char name[64];
                  const char *value; 
@@ -258,6 +259,87 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
 #undef adjustment
 #undef snip_i
 
+// -------
+// INFO/AA
+// -------
+
+// checks if value is identifcal to the REF or one of the ALT alleles, and if so segs a SPECIAL snip
+static bool vcf_seg_INFO_allele (VBlockVCF *vb, Context *ctx, const char *value, int value_len) // returns true if caller still needs to seg 
+{
+    // short circuit in common case of '.'
+    if (value_len == 1 && *value == '.') return true; // caller should seg
+    
+    int allele = -1;
+    
+    // check if its equal main REF (which can by REF or oREF)
+    if (value_len == vb->main_ref_len && !memcmp (value, vb->main_refalt, value_len))
+        allele = 0;
+
+    // check if its equal one of the ALTs
+    else {
+        str_split (&vb->main_refalt[vb->main_ref_len+1], vb->main_alt_len, 0, ',', alt, false);
+
+        for (int alt_i=0; alt_i < n_alts; alt_i++) 
+            if (value_len == alt_lens[alt_i] && !memcmp (value, alts[alt_i], value_len)) {
+                allele = alt_i + 1;
+                break;
+            }
+    }
+
+    if (allele == -1) return true; // caller should seg
+
+    char snip[] = { SNIP_SPECIAL, VCF_SPECIAL_ALLELE, '0' + vb->line_coords, '0' + allele /* ASCII 48...147 */ };
+    seg_by_ctx (vb, snip, sizeof (snip), ctx, value_len);
+    
+    return false;
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
+{
+    Coords seg_line_coord = snip[0] - '0';
+    int allele = snip[1] - '0';
+    LiftOverStatus ostatus = last_ostatus;
+
+    if (LO_IS_OK_SWITCH (ostatus) && seg_line_coord != vb->vb_coords) {
+        ASSPIZ (allele >= 0 && allele <= 1, "unexpected allele=%d with REF<>ALT switch", allele);
+        allele = 1 - allele;
+    }
+
+    DidIType refalt_did = (vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT); // we need the one that was already reconstructed in REF/ALT
+    const char *refalt = last_txt (vb, refalt_did);
+    unsigned refalt_len = vb->last_txt_len (refalt_did);
+
+    if (!refalt_len) goto done; // variant is single coordinate in the other coordinate
+
+    char *tab = memchr (refalt, '\t', refalt_len);
+    ASSPIZ (tab, "Invalid refalt: \"%.*s\"", MIN (refalt_len, 100), refalt);
+
+    // case: the allele is REF
+    if (allele == 0)
+        RECONSTRUCT (refalt, tab - refalt);
+    
+    // case: the allele is one of the alts
+    else {
+        str_split (tab+1, &refalt[refalt_len] - (tab+1), 0, ',', alt, false);
+        RECONSTRUCT (alts[allele-1], alt_lens[allele-1]);
+    }
+
+done:
+    return false; // no new value
+}
+
+// translator only validates - as vcf_piz_special_INFO_ALLELE copies verbatim
+TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
+{
+    VBlockVCFP vcf_vb = ((VBlockVCFP)vb);
+
+    // reject if LO_OK_REF_NEW_SNP and value is equal to REF
+    if (validate_only && last_ostatus == LO_OK_REF_NEW_SNP && 
+        recon_len == vcf_vb->main_ref_len && !memcmp (recon, vcf_vb->main_refalt, recon_len)) return false;
+
+    return true;
+}
+
 // ---------------
 // INFO/BaseCounts
 // ---------------
@@ -266,7 +348,8 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
 // Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
 static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, const char *value, int value_len) // returns true if caller still needs to seg 
 {
-    if (CTX(VCF_REFALT)->last_snip_len != 3) return true; // not simple two bases - caller should seg
+    if (CTX(VCF_REFALT)->last_snip_len != 3 || vb->line_coords == DC_LUFT) 
+        return true; // not a bi-allelic SNP or line is a luft line without easy access to REFALT - caller should seg
 
     char *str = (char *)value;
     int64_t sum = 0;
@@ -503,41 +586,6 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
     return true;    
 }
 
-// ---------------------
-// INFO/AF and FORMAT/AF
-// ---------------------
-
-// Lift-over translator for INFO/AF and FORMAT/AF fields, IF it is bi-allelic and we have a ALT<>REF switch.
-// We change the probability value to 1-AF
-// returns true if successful (return value used only if validate_only)
-TRANSLATOR_FUNC (vcf_piz_luft_A_1)
-{
-    if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
-
-    char format[20];
-    double af;
-
-    // if we're validating a FORMAT field with --chain (in vcf_seg_validate_luft_trans_one_sample, if REF<>ALT) - accept a valid scientific notation
-    // as it will be converted to normal notation in vcf_seg_one_sample
-    if (validate_only && chain_is_loaded && dict_id_is_vcf_format_sf (ctx->dict_id)) {
-        double af;
-        if (str_scientific_to_decimal (recon, recon_len, NULL, NULL, &af) && af >= 0.0 && af <= 1.0) return true; // scientific notation in the valid range
-    }
-
-    // if item format is inconsistent with AF being a probability value - we won't translate it
-    if (!str_get_float (recon, recon_len, &af, format, NULL) || af < 0.0 || af > 1.0) 
-        return false;
-    
-    if (validate_only) return true; 
-
-    vb->txt_data.len -= recon_len;
-    char af_str[50];
-    sprintf (af_str, format, 1.0 - af);
-    RECONSTRUCT (af_str, strlen (af_str)); // careful not to use bufprintf as it adds a \0 and we are required to translate in-place for all FORMAT fields
-    
-    return true;
-}
-
 // --------
 // INFO/END
 // --------
@@ -545,7 +593,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_1)
 static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_str, unsigned end_len) // note: ctx is INFO/END *not* POS (despite being an alias)
 {
     // END is an alias of POS
-    seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, true, 0, end_str, end_len, 0, end_len);
+    seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | SPF_UNLIMIED_DELTA, 0, end_str, end_len, 0, end_len);
     
     // case --chain: if we have lifted-over POS (as primary POS field or in INFO/LIFTBACK), 
     // check that lifting-over of END is delta-encoded and is lifted over to the same, non-xstrand, Chain alignment, and reject if not
@@ -579,9 +627,9 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
         else if (!vb->is_del_sv && end > aln_last_pos) 
             REJECT_SUBFIELD (LO_INFO, end_ctx, "POS and INFO/END=%.*s are not on the same chain file alignment", end_len, end_str);
 
-        // case: reject if END was not stored as a delta - our translator won't work
+        // case: invalid value. since we use SPF_UNLIMIED_DELTA, any integer value should succeed
         else if (!CTX(VCF_POS)->last_delta)
-            REJECT_SUBFIELD (LO_INFO, end_ctx, "Genozip limitation: INFO/END=%.*s too far from POS", end_len, end_str);        
+            REJECT_SUBFIELD (LO_INFO, end_ctx, "INFO/END=%.*s has an invalid value", end_len, end_str);        
     }
 }
 
@@ -753,7 +801,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
 static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char *value, unsigned value_len)
 {
     #define CALL(f) do { (f); not_yet_segged = false; } while(0) 
-    #define CALL_WITH_FALLBACK(f) do { if (f) seg_by_ctx ((VBlockP)vb, value, value_len, ctx, value_len); \
+    #define CALL_WITH_FALLBACK(f) do { if (f (vb, ctx, value, value_len)) seg_by_ctx ((VBlockP)vb, value, value_len, ctx, value_len); \
                                        not_yet_segged = false; } while(0) 
 
     unsigned modified_len = value_len + 20;
@@ -776,7 +824,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     
     // --chain: if this is RendAlg=A_1 subfield in a REF<>ALT variant, convert a eg 4.31e-03 to e.g. 0.00431. This is to
     // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
-    if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && last_ostatus == LO_OK_REF_ALT_SWITCH_SNP && 
+    if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && LO_IS_OK_SWITCH (last_ostatus) && 
         str_scientific_to_decimal (value, value_len, modified, &modified_len, NULL))
         ADJUST_FOR_MODIFIED;
         
@@ -822,15 +870,15 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
 
     // ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
     else if (dict_id.num == dict_id_INFO_BaseCounts) 
-        CALL_WITH_FALLBACK (vcf_seg_INFO_BaseCounts (vb, ctx, value, value_len));
+        CALL_WITH_FALLBACK (vcf_seg_INFO_BaseCounts);
     
     // ##INFO=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
     else if (dict_id.num == dict_id_INFO_DP) 
-        CALL_WITH_FALLBACK (vcf_seg_INFO_DP (vb, ctx, value, value_len));
+        CALL_WITH_FALLBACK (vcf_seg_INFO_DP);
 
     // Source File
     else if (dict_id.num == dict_id_INFO_SF) 
-        CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init (vb, ctx, value, value_len));
+        CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init);
 
     //##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
     else if (dict_id.num == dict_id_INFO_AN) 
@@ -848,6 +896,11 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
 
     else if (dict_id.num == dict_id_INFO_MLEAC && ctx_has_value_in_line (vb, dict_id_INFO_AC, &other_ctx)) 
         CALL (seg_delta_vs_other (vb, ctx, other_ctx, value, value_len, -1));
+
+    // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
+    else if ((z_dual_coords  && ctx->luft_trans == VCF2VCF_ALLELE) || // if DVCF - apply to all fields (perhaps including AA) with RendAlg=ALLELE
+             (!z_dual_coords && dict_id.num == dict_id_INFO_AA)) // apply to INFO/AA if not DVCF
+        CALL_WITH_FALLBACK (vcf_seg_INFO_allele);
 
     // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
     else if (dict_id.num == dict_id_INFO_CSQ) 
@@ -873,6 +926,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     ctx_set_encountered_in_line (ctx);
     
     #undef CALL
+    #undef CALL_WITH_FALLBACK
 }
 
 static int sort_by_subfield_name (const void *a, const void *b)  
@@ -912,7 +966,7 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
         ASSVCF (!z_dual_coords || 
                   (((ii.dict_id.num != dict_id_INFO_LUFT && ii.dict_id.num != dict_id_INFO_LREJ) || vb->line_coords == DC_PRIMARY) && 
                    ((ii.dict_id.num != dict_id_INFO_PRIM && ii.dict_id.num != dict_id_INFO_PREJ) || vb->line_coords == DC_LUFT)),
-                "Not expecting %s in a %s-coordinate line", dis_dict_id_ex (ii.dict_id, true).s, coords_names[vb->line_coords]);
+                "Not expecting %s in a %s-coordinate line", dis_dict_id_ex (ii.dict_id, true).s, coords_name (vb->line_coords));
 
         if (ii.dict_id.num == dict_id_INFO_AC) 
             ac_i = vb->info_items.len;
@@ -969,7 +1023,8 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
 {
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true,
-                      .filter_items        = z_dual_coords }; // vcf_piz_filter chooses which DVCF item to show based on flag.luft 
+                      .filter_items        = z_dual_coords,   // vcf_piz_filter chooses which DVCF item to show based on flag.luft 
+                      .callback            = z_dual_coords }; // vcf_piz_container_cb appends oSTATUS to INFO if requested 
 
     // seg INFO/SF, if there is one
     if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
@@ -1000,8 +1055,12 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
         // if we're preparing a dual-coordinate VCF and this line as a REF-ALT switch - assign the liftover-translator for this item,
         // which was calculated in vcf_header_set_translators
         Context *ii_ctx = ctx_get_existing_ctx (vb, ii->dict_id);
-        if (ii_ctx && ii_ctx->line_is_luft_trans) // item was segged in Primary coords and needs a luft translator to be reconstruced in --luft
+        if (ii_ctx && ii_ctx->line_is_luft_trans) { // item was segged in Primary coords and needs a luft translator to be reconstruced in --luft
             con.items[i].translator = ii_ctx->luft_trans;
+
+            if (ii_ctx->luft_trans == VCF2VCF_A_AN)
+                ii_ctx->flags.store = STORE_INT; // consumed by vcf_piz_luft_A_AN
+        }
             
         // add to the prefixes
         ASSVCF (prefixes_len + ii->name_len + 1 <= CONTAINER_MAX_PREFIXES_LEN, 

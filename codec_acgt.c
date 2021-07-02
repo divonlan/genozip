@@ -23,8 +23,19 @@ const char acgt_decode[4] = { 'A', 'C', 'G', 'T' };
 
 // table to convert ASCII to ACGT encoding. A,C,G,T (lower and upper case) are encoded as 0,1,2,3 respectively, 
 // and everything else (including N) is encoded as 0
-const uint8_t acgt_encode[256] = { ['A']=0, ['C']=1, ['G']=2, ['T']=3, 
-                                   ['a']=0, ['c']=1, ['g']=2, ['t']=3 }; // all others are 0
+const uint8_t acgt_encode[256] = { ['A']=0, ['C']=1, ['G']=2, ['T']=3,  // all others are 0
+                                   ['a']=0, ['c']=1, ['g']=2, ['t']=3, 
+                                   
+                                   // IUPAC codes are to one of their bases: http://www.bioinformatics.org/sms/iupac.html
+                                   // the base to which a IUPAC is mapped, is the lowest alphanetically of its participating bases, per 1.6.1-REF in the VCF specification: https://samtools.github.io/hts-specs/VCFv4.3.pdf
+                                   // (expected by vcf_refalt_lift_snp)
+                                   ['U']=3, ['R']=0, ['Y']=1, ['S']=1,
+                                   ['W']=0, ['K']=2, ['M']=0, ['B']=1,
+                                   ['D']=0, ['H']=0, ['V']=0, ['N']=0,
+
+                                   ['u']=3, ['r']=0, ['y']=1, ['s']=1,
+                                   ['w']=0, ['k']=2, ['m']=0, ['b']=1,
+                                   ['d']=0, ['h']=0, ['v']=0, ['n']=0  }; 
 
 //--------------
 // ZIP side
@@ -42,28 +53,21 @@ void codec_acgt_comp_init (VBlock *vb)
 }
 
 // packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->compressed. 
-/// returns true if non-ACGT was encountered.
-bool codec_acgt_pack (BitArray *packed, const char *data, uint64_t data_len)
+static void codec_acgt_pack (BitArray *packed, const char *data, uint64_t data_len)
 {
     // increase bit array to accomodate data
-    uint64_t next_bit    = packed->nbits;
+    uint64_t next_bit = packed->nbits;
     packed->nbits += data_len * 2;
     packed->nwords = roundup_bits2words64 (packed->nbits);
     
-    bool has_non_agct    = false;
-
     // pack nucleotides - each character is packed into 2 bits
     for (uint64_t i=0 ; i < data_len ; i++) {
-        has_non_agct = has_non_agct || !IS_NUCLEOTIDE (data[i]);
-        
         uint8_t encoding = acgt_encode[(uint8_t)data[i]];
         
         bit_array_assign (packed, next_bit,   (encoding & 1)     );
         bit_array_assign (packed, next_bit+1, (encoding & 2) >> 1);
         next_bit += 2;
     }
-
-    return has_non_agct;
 }
 
 // This function decompsoses SEQ data into two buffers:
@@ -88,7 +92,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
     
     START_TIMER;
     
-    #define PACK(data,len) { if (len) vb->has_non_agct = codec_acgt_pack (packed, (data), (len)) || vb->has_non_agct; }
+    #define PACK(data,len) { if (len) codec_acgt_pack (packed, (data), (len)); }
 
     Context *nonref_ctx   = CTX(DTF(nonref));
     Context *nonref_x_ctx = nonref_ctx + 1;
@@ -96,7 +100,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
     ASSERT0 (!vb->compressed.len && !vb->compressed.param, "expecting vb->compressed to be free, but its not");
 
     // we will pack into vb->compressed
-    buf_alloc_old (vb, &vb->compressed, roundup_bits2bytes64 (*uncompressed_len * 2), 1, "compress");
+    buf_alloc (vb, &vb->compressed, 0, roundup_bits2bytes64 (*uncompressed_len * 2), uint8_t, 1, "compress");
     BitArray *packed = buf_get_bitarray (&vb->compressed);
 
     // option 1 - pack contiguous data
@@ -110,7 +114,7 @@ START_TIMER;
 
         // calculate the exception in-place in NONREF.local also overlayed to NONREF_X.local
         for (uint32_t i=0; i < *uncompressed_len; i++) \
-            ((char*)uncompressed)[i] = (uint8_t)(uncompressed[i]) ^ acgt_exceptions[(uint8_t)(uncompressed[i])];
+            ((uint8_t*)uncompressed)[i] = (uint8_t)(uncompressed[i]) ^ acgt_exceptions[(uint8_t)(uncompressed[i])];
 COPY_TIMER (tmp1);
     }
 
@@ -118,7 +122,7 @@ COPY_TIMER (tmp1);
     else if (callback) {
 START_TIMER;        
 
-        buf_alloc_old (vb, &nonref_x_ctx->local, *uncompressed_len, CTX_GROWTH, "contexts->local");
+        buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, "contexts->local");
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
             char *data_1=0;

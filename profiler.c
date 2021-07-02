@@ -7,6 +7,7 @@
 #include "profiler.h"
 #include "flags.h"
 #include "vblock.h"
+#include "flags.h"
 
 static Mutex evb_profile_mutex = {};
 
@@ -88,15 +89,10 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     static const char *space = "                                                   ";
 #   define PRINT(x, level) if (p->x) iprintf ("%.*s" #x ": %u\n", level*3, space, ms(p->x));
     
-#if defined _WIN32
-    static const char *os ="Windows";
-#elif defined __APPLE__
-    static const char *os ="MacOS";
-#elif defined __linux__
-    static const char *os ="Linux";
-#else
-    static const char *os ="Unknown OS";
-#endif
+    const char *os = flag.is_windows ? "Windows"
+                   : flag.is_mac   ? "MacOS"
+                   : flag.is_linux   ? "Linux"
+                   :                "Unknown OS";
 
     iprintf ("\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
     iprintf ("OS=%s\n", os);

@@ -42,14 +42,16 @@ One or more file names must be given.
 
           |
 
-   .. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (VCF SAM/BAM GVF FASTA 23andMe Chain Reference) Show one or more regions of the file. 
+.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (VCF SAM/BAM GVF FASTA 23andMe Chain Reference) Show one or more regions of the file. 
 
    |
    | *Examples*: 
 
    ============================================== ======================================
    ``genocat myfile.vcf.genozip -r 22:1000-2000`` Positions 1000 to 2000 on contig 22
+   ``genocat myfile.ref.genozip -r 22:2000-1000`` Reverse complement of positions 1000 to 2000 on contig 22 (reference file only)
    ``genocat myfile.sam.genozip -r 22:1000+151``  151 bases, starting pos 1000, on contig 22
+   ``genocat myfile.ref.genozip -r 22:1000-151``  Reverse complement of 151 bases, from 1000 to 850, on contig 22 (reference file only)
    ``genocat myfile.vcf.genozip -r -2000,2500-``  Two ranges on all contigs
    ``genocat myfile.sam.genozip -r chr21,chr22``  Contigs chr21 and chr22 in their entirety
    ``genocat myfile.vcf.genozip -r ^MT,Y``        All contigs, excluding MT and Y
@@ -65,9 +67,7 @@ One or more file names must be given.
    |
    | *Note*: For FASTA and Chain files, only whole-contig regions are possible.
    |
-   | *Note*: For Chain files this applies to the source contig (qName).
-   |
-   | *Note*: To view reference files use in combination with --reference. To view in reverse-complemenet use --REFERENCE instead. Combine with --no-header to suppress output of the chromosome name.
+   | *Note*: For Chain files this applies to the Primary contig (qName).
    |
 
 .. option:: -R, --regions-file [^]filename.  (VCF SAM/BAM GVF FASTA 23andMe Chain Reference) Show regions from a list in tab-separated file. To include all regions EXCEPT those in the file٫ prefix the filename with ^.
@@ -83,7 +83,11 @@ One or more file names must be given.
 
           |
 
-.. option:: -g, --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads ; CHAIN: sets) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
+.. option:: --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads ; CHAIN: sets) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
+
+          |
+
+.. option:: -g, --grep-w string.  Same as --grep, but restrict to whole words.
 
           |
 
@@ -115,7 +119,7 @@ One or more file names must be given.
 
 **VCF options**
 
-.. option:: -s, --samples [^]sample[,...].  Show a subset of samples (individuals). 
+.. option:: -s, --samples [^]sample[,...] or num_samples.  Show a subset of samples (individuals). No other fields (such as AF, AC) are updated.
 
    |
    | *Examples*:
@@ -123,6 +127,7 @@ One or more file names must be given.
    ================================================== ======================================
    ``genocat myfile.vcf.genozip -s HG00255,HG00256``  show two samples
    ``genocat myfile.vcf.genozip -s ^HG00255,HG00256`` show all samples except these two
+   ``genocat myfile.vcf.genozip -s 5``                show the first 5 samples
    ================================================== ======================================
    
    | *Note*: This does not change the INFO data (including the AC and AN tags).
@@ -132,7 +137,7 @@ One or more file names must be given.
    | *Note*: Multiple ``-s`` arguments may be specified - this is equivalent to chaining their samples with a comma separator in a single argument.
    |
 
-.. option:: -G, --drop-genotypes.  Output the data without the samples and FORMAT column.
+.. option:: -G, --drop-genotypes.  Output the data without the samples and FORMAT column. No other fields (such as AF, AC) are updated.
    
           |
 
@@ -165,7 +170,12 @@ One or more file names must be given.
    | See: :ref:`dvcf`
    |
 
-.. option:: -y, --show-dvcf.  For each variant, show its coordinate system (Primary, Luft or Both), and its oStatus. May be used with or without combination of --luft.
+.. option:: -y, --show-dvcf.  For each variant show its coordinate system (Primary or Luft or Both) and its oStatus. May be used with or without --luft.
+   
+   | See: :ref:`dvcf`
+   |
+          
+.. option:: --show-ostatus.  Add oSTATUS to the INFO field. May be used with or without of --luft.
    
    | See: :ref:`dvcf`
    |
@@ -181,6 +191,10 @@ One or more file names must be given.
    |
 
 .. option:: --no-PG.  When modifying the data in a file using genocat Genozip normally adds a "##genozip_command" line to the VCF header. With this option it doesn't.
+
+          |
+
+.. option:: --gpos.  Replaces (CHROM,POS) with a coordinate in GPOS (Global POSition) terms. GPOS is a single genome-wide coordinate defined by a reference file, in which contigs appear in the order of the original FASTA data used to generate the reference file. Must be used in combination with --reference. The mapping of CHROM to GPOS can be viewed with "genocat --show-ref-contigs <reference-file.ref.genozip>". 
 
           |
 
@@ -221,7 +235,7 @@ One or more file names must be given.
 
           |
 
-.. option:: --sam  Output as SAM. This option is the default in genocat on SAM and BAM data, and is implicit if --output specifies a filename ending with .sam
+.. option:: --sam  Output as SAM. This option is the default in genocat on SAM and BAM data and is implicit if --output specifies a filename ending with .sam
 
           |
 
@@ -276,20 +290,28 @@ One or more file names must be given.
 
 .. option:: --reference <file> --regions <regions> [--header-only] View one or more regions of a reference file
 
-   | Note: Use --REFERENCE instead of --reference to view the region in reverse complement
+   | Note: For reverse complement, use a reverse range, eg -r1000000-999995 or equivalently -r1000000-6
    | Note: --regions-file maybe used intead of --regions
    | Note: Combine with --no-header to suppress output of the chromosome name.
    | Note: Short forms of the options (eg -e instead of --reference) are fine too. 
 
           |
 
-.. option:: --show-ref-contigs  ZUC. Show the details of the reference contigs. 
+.. option:: --gpos. In combination with --reference and --regions or --regions-file - shows coordinates in GPOS (Global POSition) terms - a single genome-wide numeric coordinate - rather than (CHROM,POS).
+
+          |
+
+.. option:: --show-ref-contigs. Show the details of the reference file contigs. 
+
+          |
+
+.. option:: --show-ref-iupacs. Show non-ACTGN `IUPAC <http://www.bioinformatics.org/sms/iupac.html>`_ pseudo-bases in the reference file. 
 
           |
 
 **Chain file options**
 
-.. option:: --add-qName-chr.  rewrites the qName - single-character or double-digit chromosome names are prefixed with "chr" and "MT" is rewritten as "chrM".
+.. option:: --with-chr.  rewrites the qName - single-character or double-digit chromosome names are prefixed with "chr" and "MT" is rewritten as "chrM".
 
           |
 

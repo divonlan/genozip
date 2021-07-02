@@ -400,7 +400,7 @@ void refhash_initialize (bool *dispatcher_invoked)
         bool mapped_cache = buf_mmap (evb, &refhash_buf, refhash_get_cache_fn(), true, "refhash_buf");
         if (!mapped_cache) { 
             // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
-            buf_alloc_old (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
+            buf_alloc (evb, &refhash_buf, 0, refhash_size, uint8_t, 1, "refhash_buf"); 
             refhash_initialize_refhashs_array();
 
             sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
@@ -422,7 +422,7 @@ void refhash_initialize (bool *dispatcher_invoked)
         // NOTE: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min
         // due to a different LZMA internal mode when compressing the hash. However, the resulting file is MUCH smaller,
         // and loading of refhash during zip is MUCH faster
-        buf_alloc_old (evb, &refhash_buf, refhash_size, 1, "refhash_buf"); 
+        buf_alloc (evb, &refhash_buf, 0, refhash_size, uint8_t, 1, "refhash_buf"); 
         buf_set (&refhash_buf, 0xff); 
     }
 

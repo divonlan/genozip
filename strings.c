@@ -424,6 +424,64 @@ unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_items, ch
     return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
 }
 
+// remove \r from each lines[] that has it as its final character, but decrementing the matching line_lens
+void str_remove_window_r (unsigned n_lines, const char **lines, unsigned *line_lens)
+{
+    for (unsigned i=0; i < n_lines; i++)
+        if (line_lens[i] >= 1 && lines[i][line_lens[i]-1] == '\r')
+            line_lens[i]--;
+}
+
+// splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items integers
+// returns the actual number of items, or 0 is unsuccessful
+unsigned str_split_ints_do (const char *str, unsigned str_len, uint32_t max_items, char sep, bool exactly,
+                            int64_t *items)  // out - array of integers
+                       
+{
+    const char *after = &str[str_len];
+    SAFE_NUL (after);
+
+    unsigned item_i;
+    for (item_i=0; item_i < max_items && str < after; item_i++, str++) {
+        items[item_i] = strtoll (str, (char **)&str, 10);
+        if (item_i < max_items-1 && *str != sep) {
+            item_i=0;
+            break; // fail
+        }
+    }
+
+    if (str < after) item_i = 0;
+
+    SAFE_RESTORE;
+
+    return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
+}
+
+// splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items floats
+// returns the actual number of items, or 0 is unsuccessful
+unsigned str_split_floats_do (const char *str, unsigned str_len, uint32_t max_items, char sep, bool exactly,
+                              double *items)  // out - array of floats
+                       
+{
+    const char *after = &str[str_len];
+    SAFE_NUL (after);
+
+    unsigned item_i;
+    for (item_i=0; item_i < max_items && str < after; item_i++, str++) {
+        items[item_i] = strtod (str, (char**)&str);
+        if (item_i < max_items-1 && *str != sep) {
+            item_i=0;
+            break; // fail
+        }
+    }
+
+    if (str < after) item_i = 0;
+
+    SAFE_RESTORE;
+
+    return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
+}
+
 const char *type_name (unsigned item, 
                        const char * const *name, // the address in which a pointer to name is found, if item is in range
                        unsigned num_names)
@@ -558,14 +616,24 @@ StrText str_time (void)
 }
 
 // C<>G A<>T c<>g a<>t ; other ASCII 32->126 preserved ; other = 0
-const char REVCOMP[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`tbgdefchijklmnopqrsauvwxyz{|}~";
+const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`tbgdefchijklmnopqrsauvwxyz{|}~";
 
-// same as REVCOMP[UPPER_CASE(c)]
-const char UPPER_REVCOMP[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`TBGDEFCHIJKLMNOPQRSAUVWXYZ{|}~";
+// same as COMPLEM[UPPER_CASE(c)]
+const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`TBGDEFCHIJKLMNOPQRSAUVWXYZ{|}~";
 
-char *str_to_revcomp (const char *in, char *out, unsigned len)
+// reverse-complements a string in-place
+char *str_revcomp (char *seq, unsigned seq_len)
 {
-    for (unsigned i=0; i < len; i++)
-        out[i] = REVCOMP[(int)in[len-i-1]];
-    return out;
+    for (unsigned i=0; i < seq_len / 2; i++) {
+        char l_base = seq[i];
+        char r_base = seq[seq_len-1-i];
+
+        seq[i]           = COMPLEM[(uint8_t)r_base];
+        seq[seq_len-1-i] = COMPLEM[(uint8_t)l_base];
+    }
+
+    if (seq_len % 2) // we have an odd number of bases - now complement the middle one
+        seq[seq_len/2] = COMPLEM[(uint8_t)seq[seq_len/2]];
+
+    return seq;
 }

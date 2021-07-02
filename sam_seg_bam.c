@@ -341,7 +341,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     bam_seg_ref_id (vb_, SAM_RNAME, ref_id, -1); // ref_id (RNAME)
 
     // note: pos can have a value even if ref_id=-1 (RNAME="*") - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
-    seg_pos_field (vb_, SAM_POS, SAM_POS, false, false, 0, 0, 0, this_pos, sizeof (uint32_t)); // POS
+    seg_pos_field (vb_, SAM_POS, SAM_POS, 0, 0, 0, 0, this_pos, sizeof (uint32_t)); // POS
     if (ref_id >= 0) sam_seg_verify_rname_pos (vb_, NULL, this_pos);
 
     random_access_update_pos (vb_, DC_PRIMARY, SAM_POS);
@@ -352,7 +352,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     
     bam_seg_ref_id (vb_, SAM_RNEXT, next_ref_id, ref_id); // RNEXT
 
-    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, false, 0, 0, 0, next_pos, sizeof (uint32_t)); // PNEXT
+    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, 0, 0, 0, 0, next_pos, sizeof (uint32_t)); // PNEXT
 
     sam_seg_tlen_field (vb, 0, 0, (int64_t)tlen, CTX(SAM_PNEXT)->last_delta, dl->seq_len); // TLEN
 

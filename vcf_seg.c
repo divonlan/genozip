@@ -12,8 +12,7 @@
 #include "dict_id.h"
 #include "codec.h"
 #include "strings.h"
-
-const char *coords_names[4] = COORDS_NAMES;
+#include "coords.h"
 
 static MiniContainer line_number_container = {};
 
@@ -35,6 +34,9 @@ void vcf_zip_initialize (void)
 
 void vcf_zip_read_one_vb (VBlockP vb)
 {
+    // set vcf_version in VB, since the the vcf_version in vcf_header might change as we might be reading the next txt file
+    ((VBlockVCFP)vb)->vcf_version = vcf_header_get_version();
+
     // in case we're replacing ID with the line number
     if (flag.add_line_numbers) {
         vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
@@ -134,7 +136,7 @@ void vcf_seg_initialize (VBlock *vb_)
     }
 
     for (int i=0; i < NUM_COORDS; i++) {
-        WordIndex node_index = ctx_evaluate_snip_seg (vb_, CTX(VCF_COORDS), coords_names[i], strlen (coords_names[i]), NULL);
+        WordIndex node_index = ctx_evaluate_snip_seg (vb_, CTX(VCF_COORDS), coords_name(i), strlen (coords_name(i)), NULL);
         ctx_decrement_count (vb_, CTX(VCF_COORDS), node_index);
     }
 
@@ -263,13 +265,15 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == dict_id_INFO_AF              ||
         dict_id.num == dict_id_INFO_AN              ||
         dict_id.num == dict_id_INFO_DP              ||
+        dict_id.num == dict_id_INFO_AA              || // stored as a SPECIAL snip
         dict_id.num == dict_id_INFO_MLEAC           ||
         dict_id.num == dict_id_INFO_MLEAF           ||
+        dict_id.num == dict_id_INFO_LDAF            ||
         dict_id.num == dict_id_INFO_MQ0             ||
-        dict_id.num == dict_id_INFO_LUFT        ||
-        dict_id.num == dict_id_INFO_PRIM        ||
-        dict_id.num == dict_id_INFO_LREJ        ||
-        dict_id.num == dict_id_INFO_PREJ        ||
+        dict_id.num == dict_id_INFO_LUFT            ||
+        dict_id.num == dict_id_INFO_PRIM            ||
+        dict_id.num == dict_id_INFO_LREJ            ||
+        dict_id.num == dict_id_INFO_PREJ            ||
 
         // INFO/ AC_* AN_* AF_* and ???_AF are small
         ((dict_id.id[0] == ('A' | 0xc0)) && (dict_id.id[1] == 'C' || dict_id.id[1] == 'F' || dict_id.id[1] == 'N') && dict_id.id[2] == '_') ||
@@ -287,7 +291,7 @@ static DictId vcf_seg_get_format_subfield (const char **str, uint32_t *len) // r
     if ((*str)[0] >= 64 && (*str)[0] <= 127) 
         dict_id = dict_id_make (*str, i, DTYPE_VCF_FORMAT);
     
-    // case: unusual field - starts with an out-range character, eg a digit - prefix with @ so its a legal FORMAT dict_id
+    // case: unusual field - starts with an out-of-range character, eg a digit - prefix with @ so its a legal FORMAT dict_id
     else {
         SAFE_ASSIGN (*str - 1, '@');
         dict_id = dict_id_make (*str-1, i+1, DTYPE_VCF_FORMAT);
@@ -357,7 +361,16 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
                 "string %.*s in the FORMAT field \"%.*s\" is not a legal subfield", 
                 DICT_ID_LEN, dict_id.id, field_len, field_start);
 
+        // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains dict_id_FORMAT_GL.
+        // so that vcf_seg_one_sample treats it as GL, and converts it to PL.
+        if (dict_id.num == dict_id_FORMAT_GL && flag.GL_to_PL)
+            ((char *)str)[-3] = 'P'; // change GL to GP (note: FORMAT changes and field changes, but still stored in dict_id=GL)
+
+        // case: optimize_GP - only relevant to VCF 4.3 where GP is probabilities and PP is Phred values (up to 4.2 GP was Phred values)
+        if (dict_id.num == dict_id_FORMAT_GP && flag.GP_to_PP && vb->vcf_version >= VCF_v4_3)
+            ((char *)str)[-3] = 'P'; // change GP to PP (note: FORMAT changes and field changes, but still stored in dict_id=GP)
     } 
+
     while (!last_item && len > 0);
     
     bool is_new;
@@ -420,7 +433,7 @@ static void vcf_seg_add_line_number (VBlockVCFP vb, unsigned VCF_ID_len)
     char line_num[20];
     unsigned line_num_len = str_int (vb->first_line + vb->line_i, line_num);
 
-    seg_pos_field ((VBlockP)vb, VCF_LINE_NUM, VCF_LINE_NUM, false, true, 0, line_num, line_num_len, 0, line_num_len + 1 + LN_PREFIX_LEN); // +1 for tab +3 for "LN="
+    seg_pos_field ((VBlockP)vb, VCF_LINE_NUM, VCF_LINE_NUM, SPF_ZERO_IS_BAD, 0, line_num, line_num_len, 0, line_num_len + 1 + LN_PREFIX_LEN); // +1 for tab +3 for "LN="
     
     int shrinkage = (int)VCF_ID_len - line_num_len - LN_PREFIX_LEN;
     vb->recon_size -= shrinkage;
@@ -482,7 +495,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     vb->last_txt_len (VCF_POS) = VCF_POS_len;
 
     if (vb->line_coords == DC_PRIMARY) {
-        PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, false, false, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len+1);
+        PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, 0, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len+1);
 
         if (pos == 0 && !(*VCF_POS_str == '.' && VCF_POS_len == 1)) // POS == 0 - invalid value return from seg_pos_field
             WARN_ONCE ("FYI: invalid POS=%"PRId64" value in chrom=%.*s vb_i=%u vb_line_i=%"PRIu64": line will be compressed, but not indexed", 
@@ -492,7 +505,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     }
 
     else { // LUFT
-        dl->pos[1] = seg_pos_field (vb_, VCF_oPOS, VCF_oPOS, false, false, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len);
+        dl->pos[1] = seg_pos_field (vb_, VCF_oPOS, VCF_oPOS, 0, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len);
         if (dl->pos[1]) random_access_update_pos (vb_, DC_LUFT, VCF_oPOS);
         CTX(vb->vb_coords==DC_LUFT ? VCF_oPOS : VCF_POS)->txt_len++; // account for the tab - in oPOS in the ##luft_only VB and in POS (on behalf on the primary POS) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
@@ -591,7 +604,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         bool lo_ok = LO_IS_OK (last_ostatus);
 
         Coords reconstructable_coords = lo_ok ? DC_BOTH : vb->line_coords;
-        const char *name = coords_names[reconstructable_coords]; 
+        const char *name = coords_name (reconstructable_coords); 
         seg_by_did_i (vb, name, strlen (name), VCF_COORDS, 0); // 0 as its not in the txt data
         
         if (reconstructable_coords & DC_PRIMARY) vb->recon_num_lines++;   // PRIMARY or BOTH

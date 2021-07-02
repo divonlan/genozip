@@ -12,11 +12,8 @@ cleanup() {
 }
 
 cmp_2_files() {
-#    if (( `$md5 $1 ${2%.*} | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
-
     if (( `$md5 $1 $2 | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
         echo "MD5 comparison FAILED: $1 $2"
-#        $md5 $1 ${2%.*}
         $md5 $1 $2
         exit 1
     fi
@@ -189,9 +186,9 @@ test_md5()
 
     $genozip $file -f --md5 -o $output || exit 1
     genozip_md5=`$genols $output | grep $output | cut -c 51-82`
-    real_md5=`md5sum $file | cut -d" " -f1`
+    real_md5=`$md5 $file | cut -d" " -f1`
 
-    if [[ "$genozip_md5" != "$real_md5" ]]; then echo "FAILED - expected MD5=\"$real_md5\" but genozip calculated MD5=\"$genozip_md5\""; exit 1; fi
+    if [[ "$genozip_md5" != "$real_md5" ]]; then echo "FAILED - expected $file to have MD5=\"$real_md5\" but genozip calculated MD5=\"$genozip_md5\""; exit 1; fi
 
     cleanup
 }
@@ -399,7 +396,7 @@ batch_dvcf()
 {
     batch_print_header
 
-    local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.ExAC.vcf.gz test.human2.filtered.snp.vcf test.NA12878.sorted.vcf)
+    local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.chr22.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz test.NA12878.sorted.vcf)
     local file
 
     # prepare chain file
@@ -519,10 +516,10 @@ batch_single_thread()
     test_standard "-@1 -e$hg19 -e$GRCh38" "-@1" basic.chain 
     
     # with chain and reference (note: cannot --test dual-coord files)
-    $genozip -@1 -C$chain basic-dvcf-source.vcf -f 
+    $genozip -@1 -C$chain test/basic-dvcf-source.vcf -f || exit 1
 
     # with kraken aux file
-    $genozip -@1 test/basic.kraken -fo $kraken
+    $genozip -@1 test/basic.kraken -fo $kraken || exit 1
     test_kraken "-@1 -K$kraken test/basic.bam" "-@1 -k570" "-@1 -k^570" 
 }
 
@@ -711,7 +708,7 @@ batch_real_world_1()
 
     # without reference
     local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* \
-                   test.*fq* test.*fastq* test.*fa* test.*fasta* \
+                   test.*fq* test.*fa* test.*fasta* \
                    basic.phy* test.*gvf* \
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v .genozip` )
@@ -757,7 +754,7 @@ batch_real_world_small_vbs()
     fi
 
     # lots of small VBs
-    local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* test.*fastq* | \
+    local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* | \
                    grep -v "$filter_out" | grep -v .genozip` )
 
     echo "subsets of real world files (lots of small VBs -B1)"
@@ -884,8 +881,6 @@ batch_genols()
     rm -f $output
 }
 
-make --quiet testfiles
-
 output=${OUTDIR}/output.genozip
 output2=${OUTDIR}/output2.genozip
 recon=${OUTDIR}/recon.txt
@@ -893,6 +888,10 @@ kraken=${OUTDIR}/kraken.genozip
 
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
+
+if [ -n "$is_windows" ]; then
+    make --quiet testfiles
+fi
 
 hg19=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
@@ -953,7 +952,7 @@ for exe in ${exes[@]}; do
 done
 
 if `command -v md5 >& /dev/null`; then
-    md5=md5 # mac
+    md5="md5 -q" # mac
 else
     md5=md5sum 
 fi

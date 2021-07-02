@@ -54,7 +54,7 @@ void threads_print_call_stack (void)
 #endif
 }
 
-#ifndef _WIN32
+#ifdef __linux__
 
 static void threads_sigsegv_handler (void) 
 {
@@ -73,14 +73,16 @@ static void threads_sighup_handler (void)
 static void *threads_signal_handler (void *sigset)
 {    
     while (1) {
-        int sig, err;
+        int sig=0, err=0;
         ASSERT (!(err = sigwait ((sigset_t *)sigset, &sig)), "sigwait failed: %s", strerror (err));
 
         switch (sig) {
-            case SIGSEGV : threads_sigsegv_handler();            break;
-            case SIGHUP  : threads_sighup_handler();             break;
-            case SIGUSR1 : buf_show_memory_handler();   break;
-            case SIGUSR2 : threads_write_log (false);            break;
+            case SIGSEGV : threads_sigsegv_handler(); break;
+            case SIGHUP  : threads_sighup_handler();  break;
+            case SIGUSR1 : fprintf (stderr, "Caught signal SIGUSR1, showing memory\n");
+                           buf_show_memory_handler(); break;
+            case SIGUSR2 : fprintf (stderr, "Caught signal SIGUSR2, writing threads log\n");
+                           threads_write_log (false); break;
             default      : ABORT ("Unexpected signal %s", strsignal (sig));
         }
     }
@@ -97,7 +99,8 @@ void threads_initialize (void)
 
     buf_alloc (evb, &log, 500, 1000000, char, 2, "log");
 
-#ifndef _WIN32
+// only Linux, as in Mac sigwait sometimes returns "invalid argument" - TODO solve this
+#ifdef __linux__
 
     // block some signals - we will wait for them explicitly in threads_signal_handler(). this is inherited by all threads
     sigset_t sigset;
@@ -122,10 +125,12 @@ bool threads_am_i_main_thread (void)
 
 void threads_write_log (bool to_info_stream)
 {
-    if (!log.len) return;
+    if (!log.len)
+        iprint0 ("\nNo thread log - activate with --debug-threads\n");
 
-    if (to_info_stream)
+    else if (to_info_stream)
         iprintf ("\nThread log (activated by --debug-threads):\n%.*s", (int)log.len, log.data);
+    
     else {
         char filename[100];
         sprintf (filename, "genozip.threads-log.%u", getpid());

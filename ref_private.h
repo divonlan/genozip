@@ -60,6 +60,9 @@ typedef struct RefStruct {
     uint32_t genome_num_muteces;
     char *genome_mutex_names;
 
+    // iupac stuff
+    Buffer iupacs_buf; 
+
 } RefStruct;
 
 extern void ref_make_prepare_range_for_compress (VBlockP vb);

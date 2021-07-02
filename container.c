@@ -15,6 +15,7 @@
 #include "endianness.h"
 #include "file.h"
 #include "regions.h"
+#include "piz.h"
 
 //----------------------
 // Segmentation
@@ -307,14 +308,38 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                 vb->drop_curr_line = "tail";
 
             // filter by --grep (but not for FASTQ or FASTA - they implement their own logic)
-            if (!vb->drop_curr_line && flag.grep && txt_file->data_type != DT_FASTA && txt_file->data_type != DT_FASTQ) {
-                SAFE_NUL (&rep_reconstruction_start[AFTERENT (char, vb->txt_data) - rep_reconstruction_start]);
+            if (!vb->drop_curr_line && flag.grep && txt_file->data_type != DT_FASTA && txt_file->data_type != DT_FASTQ
+                && !piz_grep_match (rep_reconstruction_start, AFTERENT (char, vb->txt_data)))
+                vb->drop_curr_line = "grep";
+                /*
+                //SAFE_NUL (&rep_reconstruction_start[AFTERENT (char, vb->txt_data) - rep_reconstruction_start]);
+                SAFE_NUL (AFTERENT (char, vb->txt_data));
 
-                if (!strstr (rep_reconstruction_start, flag.grep))
+                if (!flag.grepw && strstr (rep_reconstruction_start, flag.grep))
                     vb->drop_curr_line = "grep";
 
+                // case: --grepw - grep whole word
+                else if (flag.grepw) { 
+                    const char *s = rep_reconstruction_start;
+                    while (s <= AFTERENT (char, vb->txt_data) - flag.grep_len) {
+                        if (!(s = strstr (s, flag.grep))) break;
+
+                        char before = (s == rep_reconstruction_start ? ' ' : s[-1]);
+                        char after  = s[flag.grep_len];
+                    
+                        if (!IS_LETTER(before) && !IS_DIGIT(before) &&
+                            !IS_LETTER(after) && !IS_DIGIT(after)) {
+                            
+                            vb->drop_curr_line = "grep";
+                            break;
+                        }
+
+                        s += flag.grep_len;
+                    }
+                }
+                            
                 SAFE_RESTORE;
-            }
+            }*/
 
             if (vb->drop_curr_line) {
                 ASSERT (flag.maybe_vb_modified_by_reconstructor, "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code. vb_i=%u line_i=%"PRIu64, 

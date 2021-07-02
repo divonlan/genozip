@@ -21,17 +21,19 @@ static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[MAX_ARG_ARRAY_ITEMS][32
 static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[MAX_ARG_ARRAY_ITEMS], adr_snip_lens[MAX_ARG_ARRAY_ITEMS], adf_snip_lens[MAX_ARG_ARRAY_ITEMS], 
                 af_snip_len, sac_snip_lens[MAX_ARG_ARRAY_ITEMS/2];
 
-#define vcf_encountered_in_sample_(vb, ctx) (ctx_encountered_in_line_(vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
-#define vcf_encountered_in_sample(vb, dict_id, p_ctx) (ctx_encountered_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
+#define vcf_encountered_in_sample_(vb, ctx) (ctx_encountered_in_line_(vb, ctx) && (ctx)->last_sample_i == ((VBlockVCFP)vb)->sample_i)
+#define vcf_encountered_in_sample(vb, dict_id, p_ctx) (ctx_encountered_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == ((VBlockVCFP)vb)->sample_i)
 #define vcf_has_value_in_sample_(vb, ctx) (ctx_has_value_in_line_(vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
 #define vcf_has_value_in_sample(vb, dict_id, p_ctx) (ctx_has_value_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
 #define vcf_set_last_sample_value(vb, ctx, last_value) do { ctx_set_last_value (vb, ctx, last_value); (ctx)->last_sample_i = (vb)->sample_i; } while (0);
 
 #define vcf_set_encountered_in_sample(ctx)  /* set encountered if not already vcf_set_last_sample_value */  \
     if (!vcf_has_value_in_sample_(vb, ctx)) { \
-        (ctx)->last_line_i   = -(int32_t)vb->line_i - 1; \
+        (ctx)->last_line_i   = -(int32_t)vb->line_i - 1; /* encountered in line */ \
         (ctx)->last_sample_i = vb->sample_i;  \
     }
+
+#define vcf_reset_encountered_in_sample(ctx) (ctx)->last_sample_i = LAST_LINE_I_INIT
 
 // prepare snip of A - B
 static void vcf_seg_prepare_minus_snip (DictId dict_id_a, DictId dict_id_b, char *snip, unsigned *snip_len)
@@ -406,10 +408,92 @@ static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const ch
         return vcf_seg_FORMAT_transposed (vb, ctx, cell, cell_len, cell_len); // this handles DP that is an integer or '.'
 }
 
+// ---------------------
+// INFO/AF and FORMAT/AF
+// ---------------------
+
+// translate to (max_value - value).
+static int32_t vcf_piz_luft_trans_complement_to_max_value (VBlockP vb, ContextP ctx, char *recon, int32_t recon_len, bool validate_only, double max_value)
+{
+    if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
+
+    char format[20];
+    double f;
+
+    // if we're validating a FORMAT field with --chain (in vcf_seg_validate_luft_trans_one_sample, if REF<>ALT) - accept a valid scientific notation
+    // as it will be converted to normal notation in vcf_seg_one_sample
+    if (validate_only && chain_is_loaded && dict_id_is_vcf_format_sf (ctx->dict_id) &&
+        str_scientific_to_decimal (recon, recon_len, NULL, NULL, &f) && f >= 0.0 && f <= max_value) return true; // scientific notation in the valid range
+
+    // if item format is inconsistent with AF being a probability value - we won't translate it
+    if (!str_get_float (recon, recon_len, &f, format, NULL) || f < 0.0 || f > max_value) 
+        return false;
+    
+    if (validate_only) return true; 
+
+    vb->txt_data.len -= recon_len;
+    char f_str[50];
+    sprintf (f_str, format, max_value - f);
+    RECONSTRUCT (f_str, strlen (f_str)); // careful not to use bufprintf as it adds a \0 and we are required to translate in-place for all FORMAT fields
+    
+    return true;
+}
+
+
+// Lift-over translator for INFO/AF, FORMAT/AF and similar fields, IF it is bi-allelic and we have a ALT<>REF switch.
+// We change the probability value to 1-AF
+// returns true if successful (return value used only if validate_only)
+TRANSLATOR_FUNC (vcf_piz_luft_A_1)
+{
+    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, recon, recon_len, validate_only, 1);
+}
+
+//----------
+// FORMAT/GL
+// ---------
+
+// convert an array of probabilities to an array of integer phred scores capped at 60
+static void vcf_convert_prob_to_phred (VBlockVCFP vb, const char *flag_name, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+{
+    str_split_floats (snip, len, 0, ',', prob, false);
+    ASSVCF (n_probs, "cannot to apply %s to value \"%.*s\"", flag_name, len, snip); // not an array of floats - abort, because we already changed the FORMAT field
+
+    unsigned phred_len = 0;
+    for (unsigned i=0; i < n_probs; i++) {
+        
+        int64_t phred = MIN (60, (int64_t)(((-probs[i]) * 10)+0.5)); // round to the nearest int, capped at 60
+
+        phred_len += str_int (phred, &optimized_snip[phred_len]);
+        if (i < n_probs - 1)
+            optimized_snip[phred_len++] = ',';
+    }
+
+    *optimized_snip_len = phred_len;
+}
+
+// converts an array of phred scores (possibly floats) to integers capped at 60
+static bool vcf_phred_optimize (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len /* in / out */)
+{
+    str_split_floats (snip, len, 0, ',', item, false);
+    if (!n_items) return false; // not an array of floats
+
+    unsigned out_len = 0;
+
+    for (unsigned i=0; i < n_items; i++) {
+        int64_t new_phred = MIN (60, (int64_t)(items[i] + 0.5));
+        out_len += str_int (new_phred, &optimized_snip[out_len]);
+        if (i < n_items-1) optimized_snip[out_len++] = ',';
+    }
+
+    *optimized_snip_len = out_len;
+    return true;
+}
+
 //----------
 // FORMAT/DS
 // ---------
 
+// DS is a value [0,ploidy] which is a the sum of GP values that refer to allele!=0. Eg for bi-allelic diploid it is: GP[1] + 2*GP[2] (see: https://www.biostars.org/p/227346/)
 // the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,
 // along with the floating point format to allow exact reconstruction
 static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
@@ -451,6 +535,18 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_DS)
 
 done:
     return false; // no new value
+}
+
+// Lift-over translator for FORMAT/DS, IF it is bi-allelic and we have a ALT<>REF switch.
+// We change the value to (ploidy-value)
+// returns true if successful (return value used only if validate_only)
+TRANSLATOR_FUNC (vcf_piz_luft_PLOIDY)
+{
+    ContextP gt_ctx;
+    if (!vcf_encountered_in_sample (vb, dict_id_FORMAT_GT, &gt_ctx)) return false; // we can't translate unless this variant as GT
+
+    // use gt_prev_ploidy: in Seg, set by vcf_seg_FORMAT_GT, in validate and piz set by vcf_piz_luft_GT 
+    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, recon, recon_len, validate_only, ((VBlockVCFP)vb)->gt_prev_ploidy);
 }
 
 //----------
@@ -644,6 +740,8 @@ TRANSLATOR_FUNC (vcf_piz_luft_GT)
     for (uint32_t i=1; i < recon_len; i += 2)  
         if (recon[i] != '/' && recon[i] != '|') return false;
 
+    ((VBlockVCFP)vb)->gt_prev_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
+
     if (validate_only) return true;
 
     // exchange 0 <> 1
@@ -720,16 +818,29 @@ TRANSLATOR_FUNC (vcf_piz_luft_G)
 static inline Context *vcf_seg_validate_luft_trans_one_sample (VBlockVCF *vb, ContextP *ctxs, uint32_t num_items, char *sample, unsigned sample_len)
 {
     str_split (sample, sample_len, num_items, ':', item, false);
-    ASSVCF (n_items, "Sample %u has too many subfields - FORMAT field specifies only %u: \"%.*s\"", vb->sample_i+1, n_items, sample_len, sample);
+    ASSVCF (n_items, "Sample %u has too many subfields - FORMAT field specifies only %u: \"%.*s\"", vb->sample_i+1, num_items, sample_len, sample);
 
-    for (unsigned i=0; i < n_items; i++) 
+    ContextP failed_ctx = NULL; // optimistic initialization - nothing failed
+
+    uint32_t save_ploidy = vb->gt_prev_ploidy; // ruined by vcf_piz_luft_GT 
+    
+    for (unsigned i=0; i < n_items; i++) {
         if (needs_translation (ctxs[i]) && item_lens[i]) {
             if ((vb->line_coords == DC_LUFT && !vcf_lo_seg_cross_render_to_primary (vb, ctxs[i], items[i], item_lens[i], NULL, NULL)) ||
-                (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans]((VBlockP)vb, ctxs[i], (char *)items[i], item_lens[i], true))))
-                return ctxs[i];  // failed translation
+                (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans]((VBlockP)vb, ctxs[i], (char *)items[i], item_lens[i], true)))) {
+                failed_ctx = ctxs[i];  // failed translation
+                break;
+            }
         }
+        vcf_set_encountered_in_sample (ctxs[i]); // might be needed for validation 
+    }
 
-    return NULL; // all good
+    // reset modified values, in preparation for real Seg
+    vb->gt_prev_ploidy = save_ploidy;
+    for (unsigned i=0; i < n_items; i++) 
+        vcf_reset_encountered_in_sample (ctxs[i]); 
+
+    return failed_ctx; 
 }
 
 // If ALL subfields in ALL samples can luft-translate as required: 1.sets ctx->line_is_luft_trans for all contexts 2.lifted-back if this is a LUFT lne
@@ -785,17 +896,19 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         DictId dict_id = samples->items[i].dict_id;
         Context *ctx = ctxs[i], *other_ctx;
 
-        unsigned modified_len = sf_lens[i] + 20;
-        char modified[modified_len];
+        unsigned modified_len = sf_lens[i]*2 + 10;
+        char modified[modified_len]; // theoritcal risk of stack overflow if subfield value is very large
 
 #       define SEG_OPTIMIZED do { seg_by_ctx (vb, modified, modified_len, ctx, modified_len); \
-                                  int32_t shrinkage = (int)sf_lens[i] - (int)modified_len;     \
+                                  int32_t shrinkage = (int)sf_lens[i] - (int)modified_len;    \
                                   vb->recon_size      -= shrinkage;                           \
                                   vb->recon_size_luft -= shrinkage; } while (0)
 
-        // --chain: if this is RendAlg=A_1 subfield, convert a eg 4.31e-03 to e.g. 0.00431. This is to
+        // --chain: if this is RendAlg=A_1 and RendAlg=PLOIDY subfield, convert a eg 4.31e-03 to e.g. 0.00431. This is to
         // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
-        if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && str_scientific_to_decimal (sfs[i], sf_lens[i], modified, &modified_len, NULL)) {
+        if (chain_is_loaded && (ctx->luft_trans == VCF2VCF_A_1 || ctx->luft_trans == VCF2VCF_PLOIDY) && 
+            str_scientific_to_decimal (sfs[i], sf_lens[i], modified, &modified_len, NULL)) {
+            
             int32_t shrinkage = (int32_t)sf_lens[i] - (int32_t)modified_len; // possibly negative = growth
             vb->recon_size      -= shrinkage; 
             vb->recon_size_luft -= shrinkage; 
@@ -815,23 +928,35 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         // ## Allele DoSage
         // Also: ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
         else if (dict_id.num == dict_id_FORMAT_DS && // DS special only works if we also have GT
-                 samples->items[0].dict_id.num == dict_id_FORMAT_GT)
+                 samples->items[0].dict_id.num == dict_id_FORMAT_GT
+                 && !z_dual_coords) // don't use this in a DVCF, as it will incorrectly change if GT is translated
             vcf_seg_FORMAT_DS (vb, ctx, sfs[i], sf_lens[i]);
 
-        // ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
-        else if (flag.optimize_PL && dict_id.num == dict_id_FORMAT_PL && 
-            optimize_vcf_pl (sfs[i], sf_lens[i], modified, &modified_len)) 
+        // --GL-to-PL:  GL: 0.00,-0.60,-8.40 -> PL: 0,6,60
+        // note: we changed the FORMAT field GL->PL in vcf_seg_format_field. data is still stored in the GL context.
+        // ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Phred-scaled genotype likelihoods rounded to the closest integer">
+        else if (flag.GL_to_PL && dict_id.num == dict_id_FORMAT_GL) {
+            vcf_convert_prob_to_phred (vb, "--GL-to-PL", sfs[i], sf_lens[i], modified, &modified_len);
             SEG_OPTIMIZED;
+        }
 
-        else if (flag.optimize_GL && dict_id.num == dict_id_FORMAT_GL &&
-            optimize_vector_2_sig_dig (sfs[i], sf_lens[i], modified, &modified_len))
+        // convert GP (probabilities) to PP (phred values). applicable for v4.3 and over
+        // ##FORMAT=<ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
+        else if (flag.GP_to_PP && dict_id.num == dict_id_FORMAT_GP && vb->vcf_version >= VCF_v4_3) {
+            vcf_convert_prob_to_phred (vb, "--GP-to-PP", sfs[i], sf_lens[i], modified, &modified_len);
             SEG_OPTIMIZED;
-    
-        else if (flag.optimize_GP && dict_id.num == dict_id_FORMAT_GP &&  
-            optimize_vector_2_sig_dig (sfs[i], sf_lens[i], modified, &modified_len))
-            SEG_OPTIMIZED;
+        }
 
         // note: GP and PL - for non-optimized, I tested segging as A_R_G and seg_array - they are worse or not better than the default. likely because the values are correlated.
+
+        // ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
+        else if (flag.optimize_phred && 
+                 (  dict_id.num == dict_id_FORMAT_PL  || 
+                    dict_id.num == dict_id_FORMAT_PP  || 
+                    dict_id.num == dict_id_FORMAT_PRI || 
+                    (dict_id.num == dict_id_FORMAT_GP && vb->vcf_version <= VCF_v4_2)) && // up to v4.2 GP contained phred values (since 4.3 it contains probabilities) 
+                 vcf_phred_optimize (sfs[i], sf_lens[i], modified, &modified_len)) 
+            SEG_OPTIMIZED;
 
         // case: PS ("Phase Set") - might be the same as POS (for example, if set by Whatshap: https://whatshap.readthedocs.io/en/latest/guide.html#features-and-limitations)
         // or might be the same as the previous line

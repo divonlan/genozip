@@ -46,6 +46,7 @@ typedef const struct CtxNode *ConstMtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
 typedef const struct SectionEnt *Section;
 typedef struct Range *RangeP;
+typedef const struct Range *ConstRangeP;
 typedef struct BitArray *BitArrayP;
 typedef const struct BitArray *ConstBitArrayP;
 typedef struct RAEntry *RAEntryP;
@@ -79,13 +80,6 @@ typedef uint16_t DidIType;    // index of a context in vb->contexts or z_file->c
 typedef uint64_t CharIndex;   // index within dictionary
 typedef int32_t WordIndex;    // used for word and node indices
 typedef int64_t PosType;      // used for position coordinate within a genome
-
-typedef enum __attribute__ ((__packed__)) { DC_NONE, DC_PRIMARY, DC_LUFT, DC_BOTH } Coords; // 2 bits, part of the file format, goes into FlagsTxtHeader, FlagsVbHeader
-#define NUM_COORDS 4
-#define COORDS_NAMES { "NONE", "PRIM", "LUFT", "BOTH" }
-#define OTHER_COORDS(c) ((c)==DC_PRIMARY ? DC_LUFT : DC_PRIMARY)
-#define SEL(prim,luft) ((vb->line_coords == DC_PRIMARY) ? (prim) : (luft))
-extern const char *coords_names[4];
 
 typedef union { // 64 bit
     int64_t i;
@@ -136,6 +130,8 @@ typedef int ThreadId;
 #define MIN(a, b) (((a) < (b)) ? (a) : (b) )
 #define MAX(a, b) (((a) > (b)) ? (a) : (b) )
 #endif
+
+#define IS_FLAG(flag, mask) (((flag) & (mask)) == (mask))
 
 #define SWAP(a,b) do { typeof(a) tmp = a; a = b; b = tmp; } while(0)
 

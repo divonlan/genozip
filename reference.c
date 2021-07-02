@@ -94,7 +94,7 @@ void ref_unload_reference (Reference ref)
         buf_free (&ref->ranges);
     }
 
-    // case: these buffers are immutable so the next file can use them
+    // case: free, unless these buffers are immutable so the next file can use them
     if (flag.reference == REF_INTERNAL || flag.reference == REF_STORED) {
         buf_free (&ref->ref_external_ra);
         buf_free (&ref->ref_file_section_list);
@@ -146,6 +146,9 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
     buf_destroy (&ref->loaded_contigs_dict);
     buf_destroy (&ref->loaded_contigs_by_name);
     buf_destroy (&ref->loaded_contigs_by_LN);
+
+    // iupacs stuff
+    buf_destroy (&ref->iupacs_buf);
 
     ref_lock_free (ref);
     
@@ -244,7 +247,7 @@ static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, co
 }
 
 // Compute thread: called by ref_uncompress_one_range
-static Range *ref_get_range_by_chrom (Reference ref, WordIndex chrom, const char **chrom_name)
+Range *ref_get_range_by_chrom (Reference ref, WordIndex chrom, const char **chrom_name)
 {
     Context *ctx = &z_file->contexts[CHROM];
     ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "chrom=%d out of range - ctx->word_list.len=%u",
@@ -257,6 +260,13 @@ static Range *ref_get_range_by_chrom (Reference ref, WordIndex chrom, const char
     
     Range *r = ENT (Range, ref->ranges, chrom); // in PIZ, we have one range per chrom
     return r;
+}
+
+Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_chrom_index)
+{
+    if (ref_chrom_index == WORD_INDEX_NONE || ref_chrom_index >= ref->ranges.len) return NULL;
+
+    return ENT (Range, ref->ranges, ref_chrom_index); // in PIZ, we have one range per chrom
 }
 
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
@@ -292,8 +302,9 @@ static void ref_show_sequence (Reference ref)
 
         // get first pos and last pos, potentially modified by --regions
         PosType first_pos, last_pos;
+        bool revcomp; // to do: implement
         if (!r->ref.nbits ||
-            !regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, 0, &first_pos, &last_pos)) continue;
+            !regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, 0, &first_pos, &last_pos, &revcomp)) continue;
 
         if (r->ref.nbits) {
             iprintf ("%.*s\n", r->chrom_name_len, r->chrom_name);
@@ -777,16 +788,8 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, Reference ref, WordIn
                 ref_index = ENT (RefContig, *header_contigs, chrom)->chrom_index; // possibly WORD_INDEX_NONE
 
             // case: not in file header, check in reference
-            else if (chrom_name) {
-                ref_index = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true);
-
-                if (ref_index == WORD_INDEX_NONE) 
-                    ref_index = ref_alt_chroms_get_alt_index (ref, chrom_name, chrom_name_len, 0, WORD_INDEX_NONE);
-            }
-
-            // case: chrom doesn't exist in header - look for it in the reference by name
             if (ref_index == WORD_INDEX_NONE) 
-                ref_index = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true);
+                ref_index = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true, true);
 
             // case: still can't find - give up
             if (ref_index == WORD_INDEX_NONE) 
@@ -795,7 +798,7 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, Reference ref, WordIn
 
         // case: we don't have a header - reference contigs occupy the CHROM nodes first, and after any non-reference chroms
         else { 
-            ref_index = ref_contig_get_by_chrom (vb, ref, chrom, NULL);
+            ref_index = ref_contig_get_by_chrom (vb, ref, chrom, chrom_name, chrom_name_len, NULL);
 
             // case: the contig is not in the reference - we will just consider it an unaligned line 
             // (we already gave a warning for this in ref_contigs_get_ref_chrom, so no need for another one)
@@ -821,9 +824,9 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, Reference ref, WordIn
             pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, txt_name, ref->filename);
 
     vb->prev_range[ref==prim_ref] = range;
-    vb->prev_range_chrom_node_index[ref==prim_ref] = vb->chrom_node_index;
+    vb->prev_range_chrom_node_index[ref==prim_ref] = chrom; // the chrom that started this search, leading to this range
 
-    return range; // returning locked range
+    return range; 
 }
 
 // ZIP: returns a range that includes pos and is locked for (pos,len)
@@ -1045,7 +1048,7 @@ static void ref_compress_one_range (VBlockP vb)
                      BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
     }
 
-    // Second. SEC_REFERENCE
+    // Second, SEC_REFERENCE
     if (r) LTEN_bit_array (&r->ref);
 
     header.h.section_type          = SEC_REFERENCE;
@@ -1132,7 +1135,7 @@ static void ref_finalize_denovo_ranges (void)
         Range *r = ENT (Range, gref->ranges, range_i);
         
         if (ref_is_range_used (r))
-            r->chrom = ref_contigs_get_by_name (gref, r->chrom_name, r->chrom_name_len, false);
+            r->chrom = ref_contigs_get_by_name (gref, r->chrom_name, r->chrom_name_len, false, false);
     }
 
     // sort by chrom then pos, and place the unused ranges at the end
@@ -1169,7 +1172,7 @@ void ref_compress_ref (void)
     if (ranges_type(gref) != RT_MAKE_REF)
         ref_contigs_compress (gref); // also assigns gpos to de-novo ranges 
 
-    // copy already-compressed SEQ sections from the genozip reference file, but only such sections that are almost entirely
+    // copy already-compressed SEC_REFERENCE sections from the genozip reference file, but only such sections that are almost entirely
     // covered by ranges with is_accessed=true. we mark these ranges affected as is_accessed=false.
     if (ranges_type(gref) == RT_LOADED || ranges_type(gref) == RT_CACHED)
         ref_copy_compressed_sections_from_reference_file (gref);
@@ -1292,27 +1295,35 @@ void ref_display_ref (Reference ref)
         unsigned num_intersections = regions_get_num_range_intersections (r->chrom);
         if (!num_intersections) continue;
 
-        if (!flag.no_header) printf ("%.*s\n", r->chrom_name_len, r->chrom_name); // note: this runs stand-alone, so we always output to stdout, not info_stream
+        if (!flag.no_header && !flag.gpos) printf ("%.*s\n", r->chrom_name_len, r->chrom_name); // note: this runs stand-alone, so we always output to stdout, not info_stream
         
         for (unsigned inter_i=0; inter_i < num_intersections; inter_i++) {
          
             PosType display_first_pos, display_last_pos;
+            bool revcomp;
             
-            ASSERT0 (regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, inter_i, &display_first_pos, &display_last_pos), "unexpectedly, no intersection");
+            ASSERT0 (regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, inter_i, &display_first_pos, &display_last_pos, &revcomp), 
+                     "unexpectedly, no intersection");
+
+            int64_t adjust = flag.gpos ? r->gpos - r->first_pos : 0;
 
             // case: normal sequence
-            if (flag.reference == REF_EXTERNAL) {
-                printf ("%"PRIu64"-%"PRIu64"\t", display_first_pos, display_last_pos);
+            if (!revcomp) {
+                if (display_first_pos == display_last_pos)
+                    printf ("%"PRIu64"\t", display_first_pos + adjust);
+                else
+                    printf ("%"PRIu64"-%"PRIu64"\t", display_first_pos + adjust, display_last_pos + adjust);
+
                 for (PosType pos=display_first_pos; pos <= display_last_pos; pos++)
                     fputc (ref_base_by_pos (r, pos), stdout);
             }
 
             // case: reverse complement
             else {
-                iprintf ("REVCOMP %"PRIu64"-%"PRIu64"\t", display_last_pos, display_first_pos);
+                iprintf ("COMPLEM %"PRIu64"-%"PRIu64"\t", display_last_pos + adjust, display_first_pos + adjust);
                 for (PosType pos=display_last_pos; pos >= display_first_pos; pos--) {
                     char base = ref_base_by_pos (r, pos);
-                    fputc (REVCOMP[(int)base], stdout);
+                    fputc (COMPLEM[(int)base], stdout);
                 }        
             }
 
@@ -1551,7 +1562,7 @@ char *ref_dis_subrange (const Range *r, PosType start_pos, PosType len, char *se
         end_idx = MAX (start_pos - (len-1) + 1, r->first_pos) - r->first_pos;
 
         for (idx = start_idx; idx >= end_idx; idx--) 
-            seq[start_idx - idx] = REVCOMP[(int)ref_base_by_idx (r, idx)];
+            seq[start_idx - idx] = COMPLEM[(int)ref_base_by_idx (r, idx)];
 
         seq[start_idx - idx] = 0;
     }

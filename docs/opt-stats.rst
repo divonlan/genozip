@@ -1,4 +1,4 @@
-.. option:: -w, --show-stats   Show the internal structure of a genozip file and the associated compression statistics.
+.. option:: -w, --stats   Show the internal structure of a genozip file and the associated compression statistics.
 
                      |
                      

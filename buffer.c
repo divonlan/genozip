@@ -289,6 +289,7 @@ void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb)
 static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), void *arg)
 {
     VBlockPool *vb_pool = vb_get_pool ();
+    if (!vb_pool) return;
 
     for (int vb_i=-1; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
 
@@ -365,7 +366,7 @@ void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_thre
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
     fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists. global_max_threads=%u\n", 
-             str_size (total_bytes).s, num_buffers, vb_get_pool()->num_allocated_vbs, global_max_threads);
+             str_size (total_bytes).s, num_buffers, vb_get_pool() ? vb_get_pool()->num_allocated_vbs : 0, global_max_threads);
     if (command == ZIP) 
         fprintf (memory_full ? stderr : info_stream, "vblock_memory = %u MB\n", (unsigned)(flag.vblock_memory >> 20));
     

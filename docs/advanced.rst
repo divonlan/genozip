@@ -91,6 +91,10 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
+.. option:: --show-ref-iupacs  ZC. Show the the IUPACs in the reference. In combination with genozip --chain, also shows the VCF variants that have a IUPAC in the Luft reference and how they are handled.
+
+          |
+
 .. option:: --show-kraken  C. Show inclusion or exclusion of lines. Used in combination with --taxid.
 
           |

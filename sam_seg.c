@@ -341,7 +341,7 @@ void sam_seg_verify_rname_pos (VBlock *vb, const char *p_into_txt, PosType this_
         max_pos = ENT (RefContig, *header_contigs, vb->chrom_node_index)->max_pos;
     }
     else {
-        WordIndex ref_contig = ref_contig_get_by_chrom (vb, gref, vb->chrom_node_index, &max_pos); // possibly an alt contig
+        WordIndex ref_contig = ref_contig_get_by_chrom (vb, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, &max_pos); // possibly an alt contig
         if (ref_contig == WORD_INDEX_NONE) {
             WARN_ONCE ("FYI: RNAME \"%.*s\" (and possibly others) is missing in the reference file. No harm.", 
                        vb->chrom_name_len, vb->chrom_name);
@@ -695,7 +695,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         seg_by_ctx (vb, nm,     nm_len,     nm_ctx,     1 + nm_len);
         
         Context *pos_ctx = ctx_get_ctx (vb, con.items[1].dict_id);
-        seg_pos_field ((VBlockP)vb, pos_ctx->did_i, pos_ctx->did_i, false, false, 0, pos, pos_len, 0, 1 + pos_len);
+        seg_pos_field ((VBlockP)vb, pos_ctx->did_i, pos_ctx->did_i, 0, 0, pos, pos_len, 0, 1 + pos_len);
     }
 
     container_seg_by_dict_id (vb, subfield_dict_id, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);
@@ -756,21 +756,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         seg_by_ctx (vb, cigar,  cigar_len,  cigar_ctx,  1 + cigar_len);
         seg_by_ctx (vb, nm,     nm_len,     nm_ctx,     1 + nm_len);
         
-        // if its an "important" chrom (heuristic: rname_len <= 5) - have its own POS context (pos values of the same chr in subsequent XA fields are often
-        // similar, but can be placed in different positions within their respective XA arrays)
-        /*if (rname_len <= 5) {
-            char id[DICT_ID_LEN] = "X2A";
-            memcpy (&id[3], rname, rname_len);
-
-            Context *chr_ctx = ctx_get_ctx (vb, dict_id_make (id, 3 + rname_len, DTYPE_SAM_OPTIONAL));
-            chr_ctx->st_did_i = ctx->did_i;
-            seg_pos_field ((VBlockP)vb, chr_ctx->did_i, chr_ctx->did_i, false, pos, pos_len, 0, 1 + pos_len); // +1 for separator
-            
-            seg_by_ctx (vb, ((char []){ SNIP_SPECIAL, (char)SAM_SPECIAL_XA_POS }), 2, pos_ctx, 0); 
-            pos_ctx->no_stons = true;
-        }
-        else // we will add this ^ back in a future release */  
-            seg_integer_or_not ((VBlockP)vb, pos_ctx, pos, pos_len, 1+pos_len);
+        seg_integer_or_not ((VBlockP)vb, pos_ctx, pos, pos_len, 1+pos_len);
     }
 
     container_seg_by_dict_id (vb, dict_id_OPTION_XA, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);
@@ -876,7 +862,7 @@ static inline void sam_seg_mc_field (VBlockSAM *vb, DictId dict_id,
     
     // delta vs PNEXT
     else
-        seg_pos_field ((VBlockP)vb, mc_did_i, SAM_PNEXT, true, false, 0, snip, snip_len, 0, add_bytes);
+        seg_pos_field ((VBlockP)vb, mc_did_i, SAM_PNEXT, SPF_BAD_SNIPS_TOO, 0, snip, snip_len, 0, add_bytes);
 }
 
 // optimization for Ion Torrent flow signal (ZM) - negative values become zero, positives are rounded to the nearest 10
@@ -1314,7 +1300,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     GET_NEXT_ITEM (SAM_POS);
-    PosType this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, false, false, 0, field_start, field_len, 0, field_len+1);
+    PosType this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, 0, 0, field_start, field_len, 0, field_len+1);
     sam_seg_verify_rname_pos (vb_, SAM_RNAME_str, this_pos);
     
     random_access_update_pos (vb_, DC_PRIMARY, SAM_POS);
@@ -1331,7 +1317,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     SEG_NEXT_ITEM (SAM_RNEXT);
     
     GET_NEXT_ITEM (SAM_PNEXT);
-    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, false, 0, field_start, field_len, 0, field_len+1);
+    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, 0, 0, field_start, field_len, 0, field_len+1);
 
     GET_NEXT_ITEM (SAM_TLEN);
     sam_seg_tlen_field (vb, field_start, field_len, 0, CTX(SAM_PNEXT)->last_delta, dl->seq_len);

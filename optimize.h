@@ -17,6 +17,4 @@ extern bool optimize_vcf_format (DictId dict_id, const char *snip, unsigned len,
 
 extern void optimize_phred_quality_string (char *str, unsigned len);
 
-extern bool optimize_vcf_pl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
-
 #endif

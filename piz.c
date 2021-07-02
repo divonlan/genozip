@@ -18,6 +18,7 @@
 #include "regions.h"
 #include "dict_id.h"
 #include "reference.h"
+#include "ref_iupacs.h"
 #include "refhash.h"
 #include "progress.h"
 #include "profiler.h"
@@ -32,6 +33,39 @@
 #include "threads.h"
 #include "endianness.h"
 #include "website.h"
+
+bool piz_grep_match (const char *start, const char *after)
+{
+    bool found = false;
+    SAFE_NUL (after);
+
+    if (!flag.grepw) {
+        found = !!strstr (start, flag.grep);
+        goto done;
+    }
+
+    // case: --grepw - grep whole word
+    const char *s = start;
+    while (s <= after - flag.grep_len) {
+        if (!(s = strstr (s, flag.grep))) break;
+
+        char before = (s == start ? ' ' : s[-1]);
+        char after  = s[flag.grep_len];
+    
+        if (!IS_LETTER(before) && !IS_DIGIT(before) && before != '_' &&
+            !IS_LETTER(after) && !IS_DIGIT(after) && after != '_') {
+            
+            found = true;
+            break;
+        }
+
+        s += flag.grep_len;
+    }
+
+done:                
+    SAFE_RESTORE;
+    return found;
+}
 
 // called by main thread in FASTA and FASTQ, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
@@ -78,13 +112,11 @@ bool piz_test_grep (VBlock *vb)
 
         reconstruct_from_ctx (vb, desc_ctx->did_i, 0, true);
 
-        *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string
-
-        match = flag.grep && !!strstr (vb->txt_data.data, flag.grep); // note: this function is also called due to --regions in FASTA
+        match = flag.grep && piz_grep_match (FIRSTENT (char, vb->txt_data), AFTERENT (char, vb->txt_data));
 
         vb->txt_data.len = 0; // reset
 
-        if (match) { // 
+        if (match) { 
             found = true; // we've found a match to the grepped string
             if (vb->data_type == DT_FASTQ) break; // for FASTA, we need to go until the last line, for FASTQ, we can break here
         }
@@ -317,7 +349,8 @@ DataType piz_read_global_area (Reference ref)
     // Note: some dictionaries are skipped based on skip() and all flag logic should implemented there
     ctx_read_all_dictionaries(); 
 
-    if (!flag.header_only && !z_dual_coords) { // dual coordinates need this stuff of for the rejects part of the header
+//    if (!flag.header_only && !z_dual_coords) { // dual coordinates need this stuff of for the rejects part of the header
+    if (!flag.header_only || z_dual_coords) { // dual coordinates need this stuff of for the rejects part of the header
 
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
         ref_alt_chroms_load (ref); 
@@ -327,6 +360,10 @@ DataType piz_read_global_area (Reference ref)
         // read dict_id aliases, if there are any
         dict_id_read_aliases();
     }
+
+    // reading external references for lifting with --chain - load the IUPACs list of the reference (rare non-ACTG "bases")
+    if ((flag.reading_chain && flag.reading_reference) || flag.show_ref_iupacs)
+        ref_iupacs_load(ref);
 
     // if the user wants to see only the header, we can skip regions and random access
     if (!flag.header_only) {

@@ -143,7 +143,7 @@ WordIndex ref_alt_chroms_get_alt_index (Reference ref, const char *chrom, unsign
         chr_chrom[3] = chrom[0];
         chr_chrom[4] = (chrom_len == 2 ? chrom[1] : 0);
 
-        alt_chrom_index = ref_contigs_get_by_name (ref, chr_chrom, chrom_len+3, true); 
+        alt_chrom_index = ref_contigs_get_by_name (ref, chr_chrom, chrom_len+3, false, true); 
     }
 
     // M, MT, chrM, chrMT 
@@ -152,15 +152,15 @@ WordIndex ref_alt_chroms_get_alt_index (Reference ref, const char *chrom, unsign
              (chrom_len==1 && chrom[0]=='M') ||
              (chrom_len==2 && chrom[0]=='M' && chrom[1]=='T')) {
 
-        alt_chrom_index = ref_contigs_get_by_name (ref, "chrMT", 5, true); 
-        if (alt_chrom_index == WORD_INDEX_NONE) alt_chrom_index = ref_contigs_get_by_name (ref, "chrM", 4, true); 
-        if (alt_chrom_index == WORD_INDEX_NONE) alt_chrom_index = ref_contigs_get_by_name (ref, "MT", 2, true); 
-        if (alt_chrom_index == WORD_INDEX_NONE) alt_chrom_index = ref_contigs_get_by_name (ref, "M", 1, true); 
+        alt_chrom_index = ref_contigs_get_by_name (ref, "chrMT", 5, false, true); 
+        if (alt_chrom_index == WORD_INDEX_NONE) alt_chrom_index = ref_contigs_get_by_name (ref, "chrM", 4, false, true); 
+        if (alt_chrom_index == WORD_INDEX_NONE) alt_chrom_index = ref_contigs_get_by_name (ref, "MT", 2, false, true); 
+        if (alt_chrom_index == WORD_INDEX_NONE) alt_chrom_index = ref_contigs_get_by_name (ref, "M", 1, false, true); 
     }
     
     // Chr? or Chr?? -> ? or ??
     else if ((chrom_len == 4 || chrom_len == 5) && !memcmp (chrom, "chr", 3))
-        alt_chrom_index = ref_contigs_get_by_name (ref, &chrom[3], chrom_len-3, true); 
+        alt_chrom_index = ref_contigs_get_by_name (ref, &chrom[3], chrom_len-3, false, true); 
 
     // AC subfield in DESC in reference FASTAs, eg GRCh37/38, eg "GL000207.1" -> "chr18_gl000207_random"
     // https://www.ncbi.nlm.nih.gov/Sequin/acc.html

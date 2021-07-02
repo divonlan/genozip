@@ -82,7 +82,10 @@ int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 
 void chain_zip_initialize (void)
 {
-    ASSINP0 (flag.reference == REF_EXTERNAL, "Please specify the destination reference file with --reference");
+    ASSINP0 (flag.reference == REF_EXTERNAL || flag.force, "Please specify the destination reference file with --reference or use --force to override this");
+
+    if (flag.reference != REF_EXTERNAL) return;
+
     flag.reference = REF_MAKE_CHAIN; // since we're not attempting to use the data from the reference to compress the chain file itself
 
     if (z_file->num_txt_components_so_far == 1) { // run only for 1st component in a bound file
@@ -189,7 +192,7 @@ static void chain_seg_luft_end_field (VBlock *vb, const char *field_start, int f
     }
 
     else
-        seg_pos_field (vb, CHAIN_ENDLUFT, CHAIN_STARTLUFT, false, false, 0, field_start, field_len, 0, field_len + 1);
+        seg_pos_field (vb, CHAIN_ENDLUFT, CHAIN_STARTLUFT, 0, 0, field_start, field_len, 0, field_len + 1);
 }
 
 static bool chain_seg_verify_contig (VBlock *vb, Reference ref, WordIndex name_index, bool is_new, bool *once,
@@ -257,10 +260,10 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     SEG_NEXT_ITEM_SP (CHAIN_STRNDPRIM);
 
     GET_NEXT_ITEM_SP (CHAIN_STARTPRIM);
-    seg_pos_field (vb, CHAIN_STARTPRIM, CHAIN_ENDPRIM, false, false, 0, field_start, field_len, 0, field_len + 1);
+    seg_pos_field (vb, CHAIN_STARTPRIM, CHAIN_ENDPRIM, 0, 0, field_start, field_len, 0, field_len + 1);
 
     GET_NEXT_ITEM_SP (CHAIN_ENDPRIM);
-    seg_pos_field (vb, CHAIN_ENDPRIM, CHAIN_STARTPRIM, false, false, 0, field_start, field_len, 0,field_len + 1);
+    seg_pos_field (vb, CHAIN_ENDPRIM, CHAIN_STARTPRIM, 0, 0, field_start, field_len, 0,field_len + 1);
 
     GET_NEXT_ITEM_SP (CHAIN_NAMELUFT);
     WordIndex name_luft_index = seg_by_did_i_ex (vb, CHAIN_NAMELUFT_str, CHAIN_NAMELUFT_len, CHAIN_NAMELUFT, CHAIN_NAMELUFT_len+1, &is_new);
@@ -278,7 +281,7 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     SEG_NEXT_ITEM_SP (CHAIN_STRNDLUFT);
 
     GET_NEXT_ITEM_SP (CHAIN_STARTLUFT);
-    seg_pos_field (vb, CHAIN_STARTLUFT, CHAIN_ENDLUFT, false, false, 0, field_start, field_len, 0, field_len + 1);
+    seg_pos_field (vb, CHAIN_STARTLUFT, CHAIN_ENDLUFT, 0, 0, field_start, field_len, 0, field_len + 1);
 
     GET_NEXT_ITEM_SP (CHAIN_ENDLUFT);
     chain_seg_luft_end_field (vb, field_start, field_len);
@@ -286,7 +289,7 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     // if ID is numeric, preferably store as delta, if not - normal snip
     GET_LAST_ITEM_SP (CHAIN_ID);
     if (str_is_int (field_start, field_len))
-        seg_pos_field (vb, CHAIN_ID, CHAIN_ID, false, false, 0, field_start, field_len, 0, field_len + 1); // just a numeric delta    
+        seg_pos_field (vb, CHAIN_ID, CHAIN_ID, 0, 0, field_start, field_len, 0, field_len + 1); // just a numeric delta    
     else
         seg_by_did_i (vb, field_start, field_len, CHAIN_ID, field_len + 1);
 
@@ -598,7 +601,7 @@ CONTAINER_FILTER_FUNC (chain_piz_filter)
     // genocat of a chain file (not --chain)
     else {
         // rewrite NAMELUFT 1,...,Y -> chr1,...,chrY ; MT -> chrM
-        if (flag.add_qName_chr && dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 8) 
+        if (flag.with_chr && dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 8) 
             chain_piz_filter_add_qName_chr (vb);
     }
     
@@ -687,6 +690,9 @@ void chain_load (void)
     
     ASSINP (z_file->data_type == DT_CHAIN, "expected %s to be a genozip'ed chain file, but its a %s file. Tip: compress the chain with \"genozip --input chain\"", 
             z_name, dt_name (z_file->data_type));
+
+    ASSINP (ref_get_filename (gref) && ref_get_filename (prim_ref), 
+            "%s is an invalid chain file: it was not compressed with source and destination references using genozip --reference", z_name);
 
     z_file->basename = file_basename (flag.reading_chain, false, "(chain-file)", NULL, 0);
 

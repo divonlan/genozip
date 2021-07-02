@@ -174,14 +174,30 @@ const char *arch_get_os (void)
 
 const char *arch_get_ip_addr (const char *reason) // optional text in case curl execution fails
 {
-    static char ip_str[1000];
+    static char ip_str[50] = "0.0.0.0"; // default in case of failure
 
-    url_read_string ("https://api.ipify.org", ip_str, sizeof(ip_str), reason);
+    url_read_string ("https://api.ipify.org", ip_str, sizeof(ip_str)); // ignore failure
 
     return ip_str;
 }
 
+const char *arch_get_user_host (void)
+{
+    static char user_host[200];
 
+#ifdef _WIN32
+    const char *host = getenv ("HOSTNAME");
+    if (!host) host = "";
+#else
+    char host[100] = "";
+    gethostname (host, sizeof (host)-1);
+#endif
+
+    const char *user = getenv (flag.is_windows ? "USERNAME" : "USER");
+
+    sprintf (user_host, "%.99s@%.99s", user ? user : "", host);
+    return user_host;
+}
 
 bool arch_am_i_in_docker (void)
 {

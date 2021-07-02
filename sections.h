@@ -31,6 +31,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_BGZF            = 15, // optionally appears per component (txt header) and contains the uncompressed sizes of the source file bgzf block
     SEC_RECON_PLAN      = 16, // introduced v12
     SEC_COUNTS          = 17, // introduced v12
+    SEC_REF_IUPACS      = 18, // introduced v12
 
     NUM_SEC_TYPES // fake section for counting
 } SectionType;
@@ -55,6 +56,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     {"SEC_BGZF",            sizeof (SectionHeader)              }, \
     {"SEC_RECON_PLAN",      sizeof (SectionHeaderReconPlan)     }, \
     {"SEC_COUNTS",          sizeof (SectionHeaderCounts)        }, \
+    {"SEC_REF_IUPACS",      sizeof (SectionHeader)              }, \
 }
 
 // Section headers - big endian
@@ -355,6 +357,12 @@ typedef struct RefContig {
     #define REFCONTIG_MD_LEN 96
     char metadata[REFCONTIG_MD_LEN];  // nul-termianted string. note: prior to v12 this space was occupied by specific fields, which were never utilized
 } RefContig; 
+
+// the data of SEC_REF_IUPACS (added v12)
+typedef struct Iupac {
+    PosType gpos;
+    char iupac;
+} Iupac;
 
 // the data of SEC_REF_ALT_CHROMS
 typedef struct { WordIndex txt_chrom, ref_chrom; } AltChrom; 

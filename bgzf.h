@@ -53,5 +53,5 @@ extern struct FlagsBgzf bgzf_get_compression_level (const char *filename, const 
 extern bool bgzf_load_isizes (Section sl_ent);
 extern void bgzf_calculate_blocks_one_vb (VBlockP vb, uint32_t vb_txt_data_len);
 extern void bgzf_compress_vb (VBlockP vb);
-extern void bgzf_write_to_disk (VBlockP vb);
+extern void bgzf_write_to_disk (VBlockP wvb, VBlockP vb);
 extern void bgzf_write_finalize (FileP file);

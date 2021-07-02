@@ -74,14 +74,14 @@ void ref_contigs_compress (Reference ref)
 
     RefContig *last = NULL;
 
-    ConstBufferP contig_metadata = fasta_get_contig_metadata();
+    ConstBufferP contig_metadata = ref_make_get_contig_metadata(); // empty unless this is --make-reference
 
     for (uint32_t range_i=0; range_i < ref->ranges.len; range_i++) {
         Range *r = ENT (Range, ref->ranges, range_i);
 
         // in case of RT_DENOVO, chrom_word_index might still be WORD_INDEX_NONE. We get it now from the z_file data
         if (r->chrom == WORD_INDEX_NONE)
-            r->chrom = ref_contigs_get_by_name (ref, r->chrom_name, r->chrom_name_len, false);
+            r->chrom = ref_contigs_get_by_name (ref, r->chrom_name, r->chrom_name_len, false, false);
 
         // first range of a contig
         if (!last || r->chrom != last->chrom_index) {
@@ -294,15 +294,19 @@ static WordIndex ref_contigs_get_by_name_do (Reference ref, const char *chrom_na
 
 // binary search for this chrom in loaded_contigs_by_name. we count on gcc tail recursion optimization to keep this fast.
 // looks in Reference contigs if ref is provided, or in CHROM if ref=NULL
-WordIndex ref_contigs_get_by_name (Reference ref, const char *chrom_name, unsigned chrom_name_len, bool soft_fail)
+WordIndex ref_contigs_get_by_name (Reference ref, const char *chrom_name, unsigned chrom_name_len, bool alt_ok, bool soft_fail)
 {
-    WordIndex word_index = ref_contigs_get_by_name_do (ref, chrom_name, chrom_name_len, 0, 
-                                                       ref ? ref->loaded_contigs_by_name.len-1 : z_file->chroms_sorted_index.len-1);
+    WordIndex ref_index = ref_contigs_get_by_name_do (ref, chrom_name, chrom_name_len, 0, 
+                                                      ref ? ref->loaded_contigs_by_name.len-1 : z_file->chroms_sorted_index.len-1);
 
-    ASSINP (soft_fail || word_index != WORD_INDEX_NONE, "Error: contig \"%.*s\" is observed in %s but is not found in the reference %s",
+    // case alt_ok: if not found, try common alternative names
+    if (alt_ok && ref_index == WORD_INDEX_NONE) 
+        ref_index = ref_alt_chroms_get_alt_index (ref, chrom_name, chrom_name_len, 0, WORD_INDEX_NONE);
+
+    ASSINP (soft_fail || ref_index != WORD_INDEX_NONE, "Error: contig \"%.*s\" is observed in %s but is not found in the reference %s",
             chrom_name_len, chrom_name, txt_name, ref->filename);
 
-    return word_index;
+    return ref_index;
 }
 
 static WordIndex ref_contigs_get_by_uniq_len_do (Reference ref, PosType LN, WordIndex first_sorted_index, WordIndex last_sorted_index)
@@ -383,11 +387,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, const char *ch
                                                    PosType *last_pos, // if 0, set from reference, otherwise verify
                                                    WordIndex header_chrom)
 {               
-    WordIndex ref_chrom = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true);
-
-    // case: not found, try again, with common alternative names (eg "22"->"chr22") from the reference
-    if (ref_chrom == WORD_INDEX_NONE) 
-        ref_chrom = ref_alt_chroms_get_alt_index (ref, chrom_name, chrom_name_len, *last_pos, WORD_INDEX_NONE);
+    WordIndex ref_chrom = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true, true);
         
     // case: found (original or alternate name), but in a different index than header - create a alt_chrom entry to map indeces
     // note: in case of an alt name, but in the correct index - no need to create an alt chrom entry as no index mapping is needed
@@ -441,7 +441,7 @@ PosType ref_contigs_get_contig_length (const Reference ref,
                                        bool enforce)
 {
     if (chrom_index == WORD_INDEX_NONE && chrom_name)
-        chrom_index = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true);
+        chrom_index = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, false, true);
 
     // if not found, try common alternative names
     if ((chrom_index == WORD_INDEX_NONE || chrom_index >= ref->ranges.len) && chrom_name)
@@ -549,21 +549,22 @@ WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos)
 }
 
 // returns txt_chrom_index if its in the reference OR an alt chrom index (eg 22->chr22) in the reference OR WORD_INDEX_NONE
-WordIndex ref_contig_get_by_chrom (ConstVBlockP vb, const Reference ref, WordIndex txt_chrom_index, 
+WordIndex ref_contig_get_by_chrom (ConstVBlockP vb, const Reference ref, WordIndex txt_chrom_index, const char *chrom_name, unsigned chrom_name_len,
                                    PosType *max_pos) // optional out
 {
-    WordIndex contig_index;
+    WordIndex contig_index = WORD_INDEX_NONE;
 
     // case: chrom is part of the reference (same index)
     if (txt_chrom_index < ref->loaded_contigs.len) 
         contig_index = txt_chrom_index; 
 
     // case: chrom is not in the reference as is, test if it is in the reference using an alternative name (eg "22"->"chr22")
-    else
-        contig_index = ref_alt_chroms_get_alt_index (ref, vb->chrom_name, vb->chrom_name_len, 0, WORD_INDEX_NONE); 
+    else if (chrom_name) 
+        contig_index = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true, true);
 
     if (max_pos && contig_index != WORD_INDEX_NONE) 
         *max_pos = ENT (RefContig, ref->loaded_contigs, contig_index)->max_pos;
 
     return contig_index;
 }
+

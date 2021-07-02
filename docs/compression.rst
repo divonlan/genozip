@@ -1,5 +1,7 @@
-Examples
-========
+.. _compression:
+
+Compression
+===========
 
 **Simple compression and uncompression**
 
@@ -7,12 +9,16 @@ Examples
     |
     | ``genounzip sample.bam.genozip``
 
-**Creating a reference file**
-    
-    ``genozip --make-reference myfasta.fa``
+**Viewing compression stats**
 
+    | ``genozip sample.bam --stats``
+    | 
+    | ``genocat sample.bam.genozip --stats``
+     
 **Compressing a FASTQ, SAM/BAM or VCF file(s) with a reference**
 
+    | First, create a refrence file: ``genozip --make-reference myfasta.fa``
+    |
     | ``genozip --reference myfasta.ref.genozip mysample1.fq mysample2.fq mysample3.fq``
     |
     | ``genozip --reference myfasta.ref.genozip mysample.bam``
@@ -32,7 +38,7 @@ Examples
     |
     | 4. Compression of CRAM (but not SAM or BAM) files requires samtools to be installed.
     |
-    | 5. Use ``--REFERENCE`` instead of ``--reference`` to store the relevant parts of the reference file as part of the compressed file itself, which will then allow decompression with genounzip without need of the reference file.
+    | 5. Use ``--REFERENCE`` instead of ``--reference`` to store the relevant parts of the reference file as part of the compressed file itself, which will then allow decompression with ``genounzip`` or ``genocat`` without need of the reference file.
 
 **Compressing and uncompressing paired-end reads with --pair** 
 
@@ -68,13 +74,8 @@ Examples
     | ``genocat --downsample 10 mysample.fq.genozip``   
     | Displays 1 in 10 reads.
 
-    | *Notes*:
+    | *Note*: These are just some examples - there are many more subsetting options see :doc:`genocat`.
     |
-    | 1. ``--regions`` works with VCF, SAM/BAM, FASTA, 23andMe, GVF and reference files ; ``--grep`` works with FASTQ, FASTA ; ``--samples`` works with VCF ; ``--downsample`` works with all types
-    |
-    | 2. There is no need for a separate indexing step or index file
-    |
-    | 3. Many more options (see :doc:`genocat` for full list): ``--no-header`` ; ``--header-only`` ; ``--header-one`` ; ``--sequential`` ; ``--list-chroms`` ; ``--drop-genotypes`` ; ``--GT-only``
 
 **Binding mutiple files into a single genozip file and unbinding**
 

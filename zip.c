@@ -21,6 +21,7 @@
 #include "dict_id.h"
 #include "reference.h"
 #include "refhash.h"
+#include "ref_iupacs.h"
 #include "progress.h"
 #include "mutex.h"
 #include "fastq.h"
@@ -565,8 +566,10 @@ static void zip_write_global_area (Digest single_component_digest)
     if (store_ref) 
         ref_compress_ref();
         
-    if (flag.make_reference)
+    if (flag.make_reference) {
+        ref_iupacs_compress();
         refhash_compress_refhash();
+    }
 
     // add dict_id aliases list, if we have one
     Buffer *dict_id_aliases_buf = dict_id_create_aliases_buf();
@@ -723,6 +726,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
     }
 }
 
+// called main thread, in order of VBs
 static void zip_complete_processing_one_vb (VBlockP vb)
 {
     if (DTP(zip_after_compute)) DTP(zip_after_compute)(vb);

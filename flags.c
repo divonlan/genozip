@@ -30,6 +30,13 @@ Flags flag = {
 #ifdef DEBUG
     .debug        = true,
 #endif
+#ifdef _WIN32
+    .is_windows   = true,
+#elif defined __APPLE__
+    .is_mac       = true,
+#elif defined __linux__
+    .is_linux     = true,
+#endif
     .out_dt       = DT_NONE, 
     .bgzf         = FLAG_BGZF_BY_ZFILE,
     .kraken_taxid = TAXID_NONE,
@@ -59,9 +66,9 @@ static void flags_show_flags (void)
     iprintf ("vblock=%s\n", flag.vblock ? flag.vblock : "(none)");
     iprintf ("optimize=%s\n", flag.optimize ? "true" : "false");
     iprintf ("optimize_sort=%s\n", flag.optimize_sort ? "true" : "false");
-    iprintf ("optimize_PL=%s\n", flag.optimize_PL ? "true" : "false");
-    iprintf ("optimize_GL=%s\n", flag.optimize_GL ? "true" : "false");
-    iprintf ("optimize_GP=%s\n", flag.optimize_GP ? "true" : "false");
+    iprintf ("optimize_phred=%s\n", flag.optimize_phred ? "true" : "false");
+    iprintf ("GL_to_PL=%s\n", flag.GL_to_PL ? "true" : "false");
+    iprintf ("GP_to_PP=%s\n", flag.GP_to_PP ? "true" : "false");
     iprintf ("optimize_VQSLOD=%s\n", flag.optimize_VQSLOD ? "true" : "false");
     iprintf ("optimize_QUAL=%s\n", flag.optimize_QUAL ? "true" : "false");
     iprintf ("optimize_Vf=%s\n", flag.optimize_Vf ? "true" : "false");
@@ -74,6 +81,7 @@ static void flags_show_flags (void)
     iprintf ("no_header=%d\n", flag.no_header);
     iprintf ("header_only=%s\n", flag.header_only ? "true" : "false");
     iprintf ("regions=%s\n", flag.regions ? "true" : "false");
+    iprintf ("gpos=%s\n", flag.gpos ? "true" : "false");
     iprintf ("samples=%s\n", flag.samples ? "true" : "false");
     iprintf ("drop_genotypes=%s\n", flag.drop_genotypes ? "true" : "false");
     iprintf ("gt_only=%s\n", flag.gt_only ? "true" : "false");
@@ -86,7 +94,7 @@ static void flags_show_flags (void)
     iprintf ("sort=%s\n", flag.sort ? "true" : "false");
     iprintf ("unsorted=%s\n", flag.unsorted ? "true" : "false");
     iprintf ("kraken_taxid=%d\n", flag.kraken_taxid);
-    iprintf ("grep=%s\n", flag.grep ? flag.grep : "(none)");
+    iprintf ("grep=%s grepw=%s grep_len=%u\n", flag.grep ? flag.grep : "(none)", flag.grepw ? "true" : "false", flag.grep_len);
     iprintf ("lines_first=%"PRId64"\n", flag.lines_first);
     iprintf ("lines_last=%"PRId64"\n", flag.lines_last);
     iprintf ("tail=%"PRId64"\n", flag.tail);
@@ -113,6 +121,7 @@ static void flags_show_flags (void)
     iprintf ("out_filename=%s\n", flag.out_filename ? flag.out_filename : "(none)");
     iprintf ("reference=%d\n", flag.reference);
     iprintf ("show_stats=%d\n", flag.show_stats);
+    iprintf ("show_lift=%d\n", flag.show_lift);
     iprintf ("validate=%d\n", flag.validate);
     iprintf ("list_chroms=%s\n", flag.list_chroms ? "true" : "false");
     iprintf ("show_sex=%s\n", flag.show_sex ? "true" : "false");
@@ -120,6 +129,7 @@ static void flags_show_flags (void)
     iprintf ("count=%d\n", flag.count);
     iprintf ("show_coverage=%d\n", flag.show_coverage);
     iprintf ("show_dvcf=%s\n", flag.show_dvcf ? "true" : "false");
+    iprintf ("show_ostatus=%s\n", flag.show_ostatus ? "true" : "false");
     iprintf ("show_memory=%s\n", flag.show_memory ? "true" : "false");
     iprintf ("show_dict=%s\n", flag.show_dict ? "true" : "false");
     iprintf ("show_b250=%s\n", flag.show_b250 ? "true" : "false");
@@ -135,6 +145,7 @@ static void flags_show_flags (void)
     iprintf ("show_ref_hash=%s\n", flag.show_ref_hash ? "true" : "false");
     iprintf ("show_ref_index=%s\n", flag.show_ref_index ? "true" : "false");
     iprintf ("show_ref_alts=%s\n", flag.show_ref_alts ? "true" : "false");
+    iprintf ("show_ref_iupacs=%s\n", flag.show_ref_iupacs ? "true" : "false");
     iprintf ("show_chain=%s\n", flag.show_chain ? "true" : "false");
     iprintf ("show_codec=%s\n", flag.show_codec ? "true" : "false");
     iprintf ("show_containers=%s\n", flag.show_containers ? "true" : "false");
@@ -168,6 +179,9 @@ static void flags_show_flags (void)
     iprintf ("dump_one_local_dict_id=%s\n", dis_dict_id (flag.dump_one_local_dict_id).s);
     iprintf ("show_one_dict=%s\n", flag.show_one_dict ? flag.show_one_dict : "(none)");
     iprintf ("debug=%s\n", flag.debug ? "true" : "false");
+    iprintf ("windows=%s\n", flag.is_windows ? "true" : "false");
+    iprintf ("apple=%s\n", flag.is_mac ? "true" : "false");
+    iprintf ("linux=%s\n", flag.is_linux ? "true" : "false");
     iprintf ("ref_use_aligner=%s\n", flag.ref_use_aligner ? "true" : "false");
     iprintf ("const_chroms=%s\n", flag.const_chroms ? "true" : "false");
     iprintf ("reading_reference=%s\n", flag.reading_reference==gref ? "GREF" : flag.reading_reference==prim_ref ? "CHAIN_SRC" : "NONE");
@@ -312,9 +326,9 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _9  {"optimize",      no_argument,       &flag.optimize,         1 } // US spelling
         #define _99 {"optimise",      no_argument,       &flag.optimize,         1 } // British spelling
         #define _9s {"optimize-sort", no_argument,       &flag.optimize_sort,    1 }
-        #define _9P {"optimize-PL",   no_argument,       &flag.optimize_PL,      1 }
-        #define _9G {"optimize-GL",   no_argument,       &flag.optimize_GL,      1 }
-        #define _9g {"optimize-GP",   no_argument,       &flag.optimize_GP,      1 }
+        #define _9P {"optimize-phred",no_argument,       &flag.optimize_phred,   1 }
+        #define _9G {"GL-to-PL",      no_argument,       &flag.GL_to_PL,         1 }
+        #define _9g {"GP-to-PP",      no_argument,       &flag.GP_to_PP,         1 }
         #define _9V {"optimize-VQSLOD", no_argument,     &flag.optimize_VQSLOD,  1 }
         #define _9Q {"optimize-QUAL", no_argument,       &flag.optimize_QUAL,    1 } 
         #define _9f {"optimize-Vf",   no_argument,       &flag.optimize_Vf,      1 }
@@ -329,6 +343,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _B  {"vblock",        required_argument, 0, 'B'                    }
         #define _r  {"regions",       required_argument, 0, 'r'                    }
         #define _R  {"regions-file",  required_argument, 0, 'R'                    }
+        #define _Rg {"gpos",     no_argument,       &flag.gpos,        1 }
         #define _s  {"samples",       required_argument, 0, 's'                    }
         #define _sf {"FLAG",          required_argument, 0, 17                     }
         #define _sq {"MAPQ",          required_argument, 0, 18                     }
@@ -344,7 +359,8 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _mf {"multifasta",    no_argument,       &flag.multifasta,       1 }
         #define _mF {"multi-fasta",   no_argument,       &flag.multifasta,       1 }
         #define _x  {"index",         no_argument,       &flag.index_txt,        1 }
-        #define _g  {"grep",          required_argument, 0, 'g'                    }
+        #define _g  {"grep",          required_argument, 0, 25                     }
+        #define _gw {"grep-w",        required_argument, 0, 'g'                    }
         #define _n  {"lines",         required_argument, 0, 'n'                    }
         #define _nh {"head",          required_argument, 0, 22                     }
         #define _nt {"tail",          required_argument, 0, 23                     }
@@ -352,9 +368,8 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _H1 {"no-header",     no_argument,       &flag.no_header,        1 }
         #define _H0 {"header-only",   no_argument,       &flag.header_only,      1 }
         #define _1  {"header-one",    no_argument,       &flag.header_one,       1 }
-        #define _wc {"add-qName-chr", no_argument,       &flag.add_qName_chr,    1 }
+        #define _wc {"with-chr",      no_argument,       &flag.with_chr,         1 }
         #define _aa {"allow-ambiguous", no_argument,     &flag.allow_ambiguous,  1 } 
-        #define _rs {"reject-ref-alt-switches", no_argument, &flag.reject_ref_alt_switches,  1 } 
         #define _IU {"IUPAC",         required_argument, 0, 24                     }
         #define _iu {"bases",         required_argument, 0, 24                     }
         #define _GT {"GT-only",       no_argument,       &flag.gt_only,          1 }
@@ -366,6 +381,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _pg {"no-pg",         no_argument,       &flag.no_pg,            1 }
         #define _fs {"sequential",    no_argument,       &flag.sequential,       1 }  
         #define _rg {"register",      no_argument,       &flag.do_register,      1 }
+        #define _sl {"show-lifts",     no_argument,       &flag.show_lift,       1 } 
         #define _ss {"stats",         no_argument,       &flag.show_stats,       1 } 
         #define _SS {"STATS",         no_argument,       &flag.show_stats,       2 } 
         #define _lc {"list-chroms",   no_argument,       &flag.list_chroms,      1 } // identical to --show-dict=CHROM 
@@ -381,6 +397,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _st {"show-time",     optional_argument, 0, 1                      } 
         #define _sm {"show-memory",   no_argument,       &flag.show_memory,      1 } 
         #define _sS {"show-dvcf",     no_argument,       &flag.show_dvcf,        1 } 
+        #define _sY {"show-ostatus",  no_argument,       &flag.show_ostatus,     1 } 
         #define _sh {"show-headers",  optional_argument, 0, 10                     } 
         #define _si {"show-index",    no_argument,       &flag.show_index,       1 } 
         #define _Si {"show-ref-index",no_argument,       &flag.show_ref_index,   1 } 
@@ -398,6 +415,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sR {"show-reference",no_argument,       &flag.show_reference,   1 }  
         #define _sC {"show-ref-contigs", no_argument,    &flag.show_ref_contigs, 1 }  
         #define _cC {"show-chain-contigs", no_argument,  &flag.show_chain_contigs, 1 }  
+        #define _rI {"show-ref-iupacs", no_argument,     &flag.show_ref_iupacs,  1 }  
         #define _rA {"show-ref-alts", no_argument,       &flag.show_ref_alts,    1 }  
         #define _rS {"show-ref-seq",  no_argument,       &flag.show_ref_seq,     1 }  
         #define _cn {"show-containers", no_argument,     &flag.show_containers,  1 }  
@@ -428,10 +446,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                 _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM, _dr,         _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,                             _rg, _sR,      _sC,      _hC, _rA, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,              _oe, _aa, _rs, _al, _00 };
-        static Option genounzip_lo[]  = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                          _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                                                       _sR,      _sC,      _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,                   _oe,                _00 };
-        static Option genocat_lo[]    = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _R, _s, _sf, _sq, _G, _1, _H0, _H1, _Gt, _So, _Io, _IU, _iu, _GT, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _oc,    _xt, _dm, _dp, _dt,                _ds, _sS,                                                                                   _fs, _g, _n, _nt, _nh,     _sR,      _sC, _cC, _hC, _rA, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR, _wc,    _oe,                _00 };
-        static Option genols_lo[]     = { _lg,             _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                              _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                                  _sM,                                                                                     _b, _oe,                _00 };
+        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                      _sl, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM, _dr,              _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,                                  _rg, _sR,      _sC,      _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,              _oe, _aa, _al, _00 };
+        static Option genounzip_lo[]  = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                    _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                                                                 _sR,      _sC,      _hC, _rA,      _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,                   _oe,           _00 };
+        static Option genocat_lo[]    = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _Gt, _So, _Io, _IU, _iu, _GT,      _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _oc,    _xt, _dm, _dp, _dt,                _ds, _sS, _sY,                                                                                   _fs, _g, _gw, _n, _nt, _nh,     _sR,      _sC, _cC, _hC, _rA, _rI, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR, _wc,    _oe,           _00 };
+        static Option genols_lo[]     = { _lg,             _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                                        _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                                                 _sM,                                                                                     _b, _oe,           _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -477,7 +495,8 @@ verify_command:
             case 'E' : ref_set_reference (gref, optarg, REF_EXT_STORE, true); break;
             case 'f' : flag.force         = 1       ; break;
             case 'F' : flag.fast          = 1       ; break;
-            case 'g' : flag.grep          = optarg  ; break;
+            case 'g' : flag.grepw = true; // fall-through
+            case 25  : flag.grep = optarg; flag.grep_len = strlen (flag.grep) ; break;
             case 'G' : flag.drop_genotypes= 1       ; break;
             case 'H' : flag.no_header     = 1       ; break;
             case 'i' : file_set_input_type (optarg) ; break;
@@ -613,9 +632,10 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.count,       flag.header_one,     "--count",            OT("header-one", "1"));
     CONFLICT (flag.test,        flag.make_reference, "--make-reference",   OT("test", "t"));
     CONFLICT (flag.sort,        flag.unsorted,       "--sort",             "--unsorted");
+    CONFLICT (flag.show_ostatus,flag.show_dvcf,      "--show-ostatus",     "--show-dvcf");
     CONFLICT (flag.multifasta,  flag.make_reference, "--make-reference",   "multifasta");
-    CONFLICT (flag.reference,   flag.make_reference, "--make-reference", OT("reference", "e"));
-    CONFLICT (flag.reference,   flag.show_ref_seq, "--show_ref_seq", OT("reference", "e"));
+    CONFLICT (flag.reference,   flag.make_reference, "--make-reference",   OT("reference", "e"));
+    CONFLICT (flag.reference,   flag.show_ref_seq,   "--show_ref_seq",     OT("reference", "e"));
     CONFLICT (flag.dump_one_b250_dict_id.num, flag.dump_one_local_dict_id.num, "--dump-one-b250", "--dump-one-local");
     CONFLICT (flag.show_stats,  flag.grep,           OT("stats", "w"),     OT("grep", "g"));
     CONFLICT (flag.show_stats,  flag.lines_first>=0, OT("stats", "w"),     OT("lines", "n"));
@@ -801,7 +821,7 @@ void flags_update_zip_one_file (void)
     // if --optimize was selected, all optimizations are turned on
     if (flag.optimize) switch (dt) {
         case DT_BCF   :
-        case DT_VCF   : flag.optimize_PL = flag.optimize_GL = flag.optimize_GP = flag.optimize_VQSLOD = flag.optimize_sort = true; break;
+        case DT_VCF   : flag.GP_to_PP = flag.GL_to_PL = flag.optimize_phred = flag.optimize_VQSLOD = flag.optimize_sort = true; break;
         case DT_GFF3  : flag.optimize_sort = flag.optimize_Vf = true; break;
         case DT_BAM   :
         case DT_SAM   : flag.optimize_QUAL = flag.optimize_ZM = true; break;
@@ -810,7 +830,7 @@ void flags_update_zip_one_file (void)
     }
     
     // if any optimization flag is on, we turn on flag.optimize
-    else flag.optimize = flag.optimize_sort || flag.optimize_PL || flag.optimize_GL || flag.optimize_GP || flag.optimize_VQSLOD ||
+    else flag.optimize = flag.optimize_sort || flag.optimize_phred || flag.GL_to_PL || flag.GP_to_PP || flag.optimize_VQSLOD ||
                          flag.optimize_QUAL || flag.optimize_Vf || flag.optimize_ZM || flag.optimize_DESC;
 
     // cases where txt data is modified during Seg - digest is not stored, it cannot be tested with --test and other limitations 
@@ -916,7 +936,8 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          flag.show_index || flag.show_one_counts.num ||
          flag.show_reference || flag.show_ref_contigs || 
          flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
-         flag.show_ref_seq || flag.show_aliases || flag.show_gheader);
+         flag.show_ref_seq || flag.show_aliases || flag.show_gheader ||
+         (dt == DT_REF && flag.show_ref_iupacs));
 
     // if this flag is set, data will be read and uncompressed (unless blocked in piz_is_skip_section), 
     // but not reconstructed or written
@@ -981,7 +1002,8 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          // translating to another data
         (!flag.reconstruct_as_src || 
          // VCF specific VB modifiers
-         (dt == DT_VCF   && (flag.samples || flag.drop_genotypes || flag.gt_only || flag.snps_only || flag.indels_only)) || 
+         (dt == DT_VCF   && (flag.samples || flag.drop_genotypes || flag.gt_only || flag.snps_only || flag.indels_only || 
+                             flag.show_dvcf || flag.show_ostatus)) || 
          // FASTA specific modifiers
          (dt == DT_FASTA && (flag.sequential || flag.header_only_fast || flag.header_one || flag.no_header)) || 
          // FASTQ specific modifiers
@@ -989,7 +1011,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          // SAM specific modifiers
          (dt == DT_SAM   && (flag.sam_flag_filter || flag.sam_mapq_filter || flag.bases)) || 
          // CHAIN specific modifiers
-         (dt == DT_CHAIN && (flag.add_qName_chr)) ||
+         (dt == DT_CHAIN && (flag.with_chr)) ||
          // Dual-coordinate-file modifiers
          z_dual_coords || // vcf_lo_piz_TOPLEVEL_cb_filter_line will drop lines of the wrong coordinate
          // general filters 
@@ -1059,6 +1081,9 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 
     // -- grep doesn't work with binary files
     ASSINP (!flag.grep || !out_dt_is_binary, "--grep is not supported when outputting %s data", dt_name (flag.out_dt));
+
+    // --gpos requires --reference
+    ASSINP0 (!flag.gpos || flag.reference, "--gpos requires --reference");
 
     // translator limitations
     ASSINP0 ((flag.out_dt != DT_SAM && flag.out_dt != DT_BAM) || dt == DT_SAM || dt == DT_BAM,

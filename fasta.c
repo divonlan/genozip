@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include "fasta.h"
+#include "fasta_private.h"
 #include "seg.h"
 #include "context.h"
 #include "file.h"
@@ -15,7 +15,6 @@
 #include "codec.h"
 #include "stats.h"
 #include "reconstruct.h"
-#include "vblock.h"
 #include "kraken.h"
 #include "reference.h"
 
@@ -25,27 +24,6 @@
 typedef struct {
     uint32_t seq_data_start, seq_len; // regular fasta and make-reference: start & length within vb->txt_data
 } ZipDataLineFASTA;
-
-Buffer contig_metadata = {}; // make-ref: contig header of each contig, except for chrom name
-
-// IMPORTANT: if changing fields in VBlockFASTA, also update fasta_vb_release_vb 
-typedef struct VBlockFASTA {    
-    VBLOCK_COMMON_FIELDS
-
-    bool contig_grepped_out;
-    // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB is interpreted as a description, not a comment
-    enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP & PIZ (FASTA only, not REF)
-
-    uint32_t lines_this_contig;     // ZIP
-
-    // caching of seq line snips
-    uint32_t std_line_len;          // ZIP: determined by first non-first-line seq line in VB 
-    WordIndex std_line_node_index;  // ZIP: node index for non-first lines, with same length as std_line_len
-
-    bool has_contig_metadata;       // used by make-reference
-    ContigMetadata contig_metadata; 
-} VBlockFASTA;
-
 #define DATA_LINE(i) ENT (ZipDataLineFASTA, vb->lines, (i))
 
 unsigned fasta_vb_size (DataType dt) 
@@ -73,19 +51,6 @@ void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start
     *seq_data_start = DATA_LINE(line_i)->seq_data_start;
     *seq_len        = DATA_LINE(line_i)->seq_len;
 }
-
-// make-refernece called by main thread after completing compute thread of VB 
-void fasta_make_add_contigs (VBlockP vb)
-{
-    if (((VBlockFASTA *)vb)->has_contig_metadata) {
-        buf_alloc (evb, &contig_metadata, 1, 1000, ContigMetadata, 2, "contig_metadata");
-        NEXTENT (ContigMetadata, contig_metadata) = ((VBlockFASTA *)vb)->contig_metadata;
-    }
-}
-
-void fasta_make_finalize (void) { buf_free (&contig_metadata); }
-
-ConstBufferP fasta_get_contig_metadata (void) { return &contig_metadata; }
 
 //-------------------------
 // TXTFILE stuff

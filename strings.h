@@ -36,27 +36,25 @@ static inline char *str_tolower_(const char *in, char *out, unsigned len)
 
 static inline char *str_toupper_(const char *in, char *out, unsigned len)
 {
-    unsigned i;
-    for (i=0; i < len; i++) out[i] = UPPER_CASE (in[i]);
+    for (unsigned i=0; i < len; i++) out[i] = UPPER_CASE (in[i]);
     return out;
 }
 
 static inline char *str_reverse (const char *in, char *out, unsigned len)
 {
-    unsigned i;
-    for (i=0; i < len; i++) out[len-1-i] = in[i]; 
+    for (unsigned i=0; i < len; i++) out[len-1-i] = in[i]; 
     return out;
 }
 
-extern const char REVCOMP[], UPPER_REVCOMP[];
-extern char *str_to_revcomp (const char *in, char *out, unsigned len);
+extern const char COMPLEM[], UPPER_COMPLEM[];
+extern char *str_revcomp (char *seq, unsigned seq_len);
 
 static inline uint64_t str_count_char (const char *str, uint64_t len, char c)
 {
     if (!str) return 0;
     
-    uint64_t count=0, i;
-    for (i=0; i < len; i++)
+    uint64_t count=0;
+    for (uint64_t i=0; i < len; i++)
         if (str[i] == c) count++;
 
     return count;
@@ -95,7 +93,7 @@ extern StrText str_time (void);
 #define FLOAT_FORMAT_LEN 12
 extern _Bool str_get_float (const char *float_str, unsigned float_str_len, double *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len);
 
-extern bool str_scientific_to_decimal (const char *float_str, unsigned float_str_len, char *modified, unsigned *modified_len, double *value);
+extern _Bool str_scientific_to_decimal (const char *float_str, unsigned float_str_len, char *modified, unsigned *modified_len, double *value);
 
 extern unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_items, char sep, const char **items, unsigned *item_lens, _Bool exactly, const char *enforce_msg);
 
@@ -108,6 +106,20 @@ extern unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_it
     const char *name##s[n_##name##s]; \
     unsigned name##_lens[n_##name##s]; \
     n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), name##s, name##_lens, (exactly), (enforce)); 
+
+extern void str_remove_window_r (unsigned n_lines, const char **lines, unsigned *line_lens);
+
+extern unsigned str_split_ints_do (const char *str, unsigned str_len, uint32_t max_items, char sep, bool exactly, int64_t *items);
+#define str_split_ints(str,str_len,max_items,sep,name,exactly) \
+    unsigned n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
+    int64_t name##s[n_##name##s]; \
+    n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
+
+extern unsigned str_split_floats_do (const char *str, unsigned str_len, uint32_t max_items, char sep, bool exactly, double *items);
+#define str_split_floats(str,str_len,max_items,sep,name,exactly) \
+    unsigned n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
+    double name##s[n_##name##s]; \
+    n_##name##s = str_split_floats_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
 
 extern const char *type_name (unsigned item, 
                               const char * const *name, // the address in which a pointer to name is found, if item is in range

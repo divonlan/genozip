@@ -143,6 +143,10 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     bool is_rejects_vb;        /* PIZ/ZIP: this is a VB of rejects variants for header ##primary_only/##luft_only */ \
     bool is_unsorted[2];       /* ZIP: line order of this VB[primary, luft] is unsorted */ \
     \
+    /* ref_iupac quick lookup */\
+    ConstRangeP iupacs_last_range; \
+    PosType iupacs_last_opos, iupacs_next_opos; \
+    \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
     Buffer show_b250_buf;      /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
@@ -151,9 +155,6 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     /* Codec stuff */ \
     Codec codec_using_codec_bufs; /* codec currently using codec_bufs */\
     Buffer codec_bufs[NUM_CODEC_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
-    \
-    /* used by CODEC_ACGT (For SEQ) */ \
-    bool has_non_agct;         /* ZIP only */ \
     \
     /* used by CODEC_PBWT, CODEC_HAPMAT and CODEC_GTSHARK */ \
     uint32_t ht_per_line; \

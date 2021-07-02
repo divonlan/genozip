@@ -1,17 +1,25 @@
+// ------------------------------------------------------------------
+//   ref_make.c
+//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #include "data_types.h"
 #include "codec.h" // must be included before reference.h
 #include "reference.h"
 #include "vblock.h"
-#include "fasta.h"
+#include "fasta_private.h"
 #include "ref_private.h"
 #include "mutex.h"
 #include "refhash.h"
 #include "random_access.h"
 #include "context.h"
 #include "file.h"
+#include "ref_iupacs.h"
 
 SPINLOCK (make_ref_spin);
 #define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)
+
+static Buffer contig_metadata = {}; // contig header of each contig, except for chrom name
 
 // called from ref_make_create_range, returns the range for this fasta VB. note that we have exactly one range per VB
 // as txtfile_read_vblock makes sure we have only one full or partial contig per VB (if flag.make_reference)
@@ -19,7 +27,7 @@ static Range *ref_make_ref_get_range (uint32_t vblock_i)
 {
     // access ranges.len under the protection of the mutex
     spin_lock (make_ref_spin);
-    gref->ranges.len = MAX (gref->ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from FASTA ZIP compute thread)
+    gref->ranges.len = MAX (gref->ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
     ASSERT (gref->ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
     spin_unlock (make_ref_spin);
 
@@ -46,9 +54,14 @@ void ref_make_create_range (VBlockP vb)
 
         const uint8_t *line_seq = ENT (uint8_t, vb->txt_data, seq_data_start);
         for (uint64_t base_i=0; base_i < seq_len; base_i++) {
-            uint8_t encoding = acgt_encode[line_seq[base_i]];
+            char base = line_seq[base_i];
+            uint8_t encoding = acgt_encode[(int)base];
             bit_array_assign (&r->ref, bit_i, encoding & 1);
             bit_array_assign (&r->ref, bit_i + 1, (encoding >> 1) & 1);
+
+            // store very rare IUPAC bases (GRCh38 has 94 of them)
+            ref_iupacs_add (vb, bit_i/2, base);
+
             bit_i += 2;
         }
     }
@@ -84,7 +97,7 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
 
     Range *r = ENT (Range, gref->ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
 
-    // we have exactly one contig for each VB, one one RAEntry for that contig
+    // we have exactly one contig for each VB (but possibly multiple VBs with the same contig), one one RAEntry for that contig
     // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
     random_access_get_ra_info (vb->vblock_i, &r->chrom, &r->first_pos, &r->last_pos);
     
@@ -98,5 +111,30 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
     vb->range              = r; // range to compress
     vb->range_num_set_bits = r->ref.nbits / 2;
     vb->ready_to_dispatch  = true;
+}
+
+// make-refernece called by main thread after completing compute thread of VB 
+void ref_make_after_compute (VBlockP vb_)
+{
+    VBlockFASTA *vb = (VBlockFASTA *)vb_;
+
+    // add contig metadata
+    if (vb->has_contig_metadata) {
+        buf_alloc (evb, &contig_metadata, 1, 1000, ContigMetadata, 2, "contig_metadata");
+        NEXTENT (ContigMetadata, contig_metadata) = vb->contig_metadata;
+    }
+
+    // collect iupacs
+    ref_iupacs_after_compute (vb_);
+}
+
+ConstBufferP ref_make_get_contig_metadata (void) 
+{ 
+    return &contig_metadata; 
+}
+
+void ref_make_finalize (void) 
+{ 
+    buf_free (&contig_metadata); 
 }
 

@@ -95,38 +95,6 @@ bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_
     return true;
 }
 
-bool optimize_vcf_pl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
-{
-    char *writer = optimized_snip;
-    unsigned digit_i=0;
-    for (unsigned i=0; i <= len; i++) { 
-        if (snip[i] == ',' || i == len) { // end of number
-            if (digit_i == 1) 
-                *(writer++) = snip[i-1];
-                
-            else if (digit_i > 2 || (digit_i == 2 && snip[i-2] >= '6')) { // optimize - phred score of 60 or more (= 1 in 1 ^ 10^-10) is changed to 99
-                *(writer++) = '6';
-                *(writer++) = '0';
-            }
-            else if (digit_i == 2) { 
-                *(writer++) = snip[i-2];
-                *(writer++) = snip[i-1];
-            }
-            else return false; // digit_i==0
-
-            if (i < len) *(writer++) = ',';
-            digit_i=0;
-        }
-        else if (IS_DIGIT (snip[i]))
-            digit_i++;
-        
-        else return false; // another character
-    }
-    
-    *optimized_snip_len = writer - optimized_snip;
-    return true;
-}
-
 // change the quality scores to be in a small number of bins, similar to Illumina: https://sapac.illumina.com/content/dam/illumina-marketing/documents/products/technotes/technote_understanding_quality_scores.pdf
 // This is assuming standard Sanger format of Phred scores between 0 and 93 encoded in ASCII 33->126
 // See here: https://pythonhosted.org/OBITools/fastq.html

@@ -159,7 +159,7 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **t
     // ID - this is a sequential number (at least in GRCh37/38)
     if (dict_id.num == dict_id_ATTR_ID) {
         Context *ctx = ctx_get_ctx (vb, dict_id);
-        seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, true, false, 0, *this_value, *this_value_len, 0, *this_value_len);
+        seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, SPF_BAD_SNIPS_TOO, 0, *this_value, *this_value_len, 0, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -377,11 +377,11 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     SEG_NEXT_ITEM (GFF3_TYPE);
 
     GET_NEXT_ITEM (GFF3_START);
-    seg_pos_field (vb, GFF3_START, GFF3_START, false, false, 0, field_start, field_len, 0, field_len+1);
+    seg_pos_field (vb, GFF3_START, GFF3_START, 0, 0, field_start, field_len, 0, field_len+1);
     random_access_update_pos (vb, DC_PRIMARY, GFF3_START);
 
     GET_NEXT_ITEM (GFF3_END);
-    seg_pos_field (vb, GFF3_END, GFF3_START, false, false, 0, field_start, field_len, 0, field_len+1);
+    seg_pos_field (vb, GFF3_END, GFF3_START, 0, 0, field_start, field_len, 0, field_len+1);
 
     SEG_NEXT_ITEM (GFF3_SCORE);
     SEG_NEXT_ITEM (GFF3_STRAND);

@@ -8,6 +8,9 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#ifndef _WIN32
+#include <fcntl.h>
+#endif
 
 #define Z_LARGE64
 #ifdef __APPLE__
@@ -32,24 +35,51 @@ bool url_is_url (const char *filename)
 // returns error string if curl itself (not server) failed, or NULL if successful
 static void url_do_curl (const char *url, bool head,
                          char *stdout_data, unsigned *stdout_len,
-                         char *error, unsigned *error_len,
-                         const char *reason) // optional text in case curl execution fails
+                         char *error, unsigned *error_len) 
 {
     curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
-                          reason ? reason : "To read from a URL",
+                          "To read from a URL", // reason in case of failure to execute curl
                           "curl", url,
                           head ? "--head" : NULL,
                           NULL); // not silent - we want to collect errors
+/*
+    if (!url_wait_for_pipe (fileno (stream_from_stream_stdout (curl)), fileno (stream_from_stream_stderr (curl)))) {
+        #define TIMEOUT_ERROR "Timeout while wait for server"
+        strcpy (error, TIMEOUT_ERROR);
+        *error_len = sizeof TIMEOUT_ERROR;
+        return;
+    }
+*/
+    int fd1 = fileno (stream_from_stream_stdout (curl));
+    int fd2 = fileno (stream_from_stream_stderr (curl));
 
-    *stdout_len = read (fileno (stream_from_stream_stdout (curl)), stdout_data, CURL_RESPONSE_LEN-1);
+#ifndef _WIN32
+    // set non-blocking (unfortunately _pipes in Windows are always blocking)
+    ASSERT (!fcntl(fd1, F_SETFL, fcntl (fd1, F_GETFL) | O_NONBLOCK), "fcntl failed: %s", strerror (errno));
+#endif
+
+    for (int i=0; i < 100; i++) {
+        int ret = read (fd1, stdout_data, CURL_RESPONSE_LEN-1);
+        if (ret == -1) {
+            if (errno == EAGAIN) { // doesn't happen on Windows
+                usleep (100000); // 100ms
+                continue;
+            }
+            ABORT ("failed to read() from the pipe: %s", strerror (errno));
+        }
+    
+        *stdout_len = (unsigned)ret;
+        break;
+    }
+
     stdout_data[*stdout_len] = '\0'; // terminate string
 
-    *error_len = read (fileno (stream_from_stream_stderr (curl)), error, CURL_RESPONSE_LEN-1);
+    *error_len = read (fd2, error, CURL_RESPONSE_LEN-1);
     error[*error_len] = '\0'; // terminate string
 
     int curl_exit_code = stream_close (&curl, STREAM_DONT_WAIT_FOR_PROCESS); // Don't wait for process - Google Forms call hangs if waiting
     if (!curl_exit_code) 
-        return; // curl itself is good - we may have or not an error in "error" from the server
+        return; // curl itself is good - we may have or not an error in "error" from the server or in case of no connection
 
 #ifdef _WIN32
     if (curl_exit_code == ENFILE) return; // we didn't read all the data on the pipe - that's ok
@@ -167,16 +197,15 @@ const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file
 }
 
 
-// reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0)
-uint32_t url_read_string (const char *url, char *data, uint32_t data_size,
-                          const char *reason) // optional text in case curl execution fails
+// reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0), or -1 if failed
+int32_t url_read_string (const char *url, char *data, uint32_t data_size)
 {
     char response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
-    unsigned response_len, error_len;
+    unsigned response_len=0, error_len=0;
 
-    url_do_curl (url, false, response, &response_len, error, &error_len, reason);
+    url_do_curl (url, false, response, &response_len, error, &error_len);
 
-    ASSINP (!error_len || response_len, "Error accessing the Internet: %s", error);
+    if (error_len && !response_len) return -1; // failure
 
     if (data) {
         unsigned len = MIN (data_size-1, response_len);

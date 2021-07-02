@@ -373,10 +373,8 @@ static bool file_open_txt_read (File *file)
     // open the file, based on the codec
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type);
 
-#ifdef _WIN32 
-    ASSINP0 (!file->redirected || file->codec == CODEC_NONE, 
+    ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
              "genozip on Windows supports piping in only plain (uncompressed) data");
-#endif
 
     switch (file->codec) { 
         case CODEC_GZ:   // we test the first few bytes of the file to differentiate between NONE, GZ and BGZIP
@@ -447,7 +445,7 @@ static bool file_open_txt_read (File *file)
             // 2. On Windows, we can't pipe binary files, bc Windows converts \n to \r\n
             // 3. The codec at this point is what the user declared in -i (we haven't tested for gz yet)
 #ifdef _WIN32 
-            ASSINP0 (!file->redirected || file->codec == CODEC_NONE, 
+            ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
                      "genozip on Windows supports piping in only plain (uncompressed) data");
 #else
             ASSINP (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF, 
@@ -801,6 +799,8 @@ static bool file_open_z (File *file)
 
         mutex_initialize (file->dicts_mutex);
 
+        if (flag.force) unlink (file->name); // delete file if it already exists (needed in weird cases, eg symlink to non-existing file)
+
         file->file = fopen (file->name, file->mode);
 
         if (chain_is_loaded)
@@ -1070,9 +1070,8 @@ void file_mkfifo (const char *filename)
 
 bool file_is_fifo (const char *filename)
 {
-#ifdef _WIN32
-    return false; // we don't support FIFOs in Win32 yet
-#endif
+    if (flag.is_windows) return false; // we don't support FIFOs in Win32 yet
+
     struct stat st;
     ASSERT (!stat (filename, &st), "stat failed on %s", filename);
 

@@ -19,6 +19,7 @@
 #include "website.h"
 
 // Globals
+static VcfVersion vcf_version;
 uint32_t vcf_num_samples = 0; // number of samples in the file
 static uint32_t vcf_num_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that vcf_num_samples if --samples is used
 static Buffer vcf_field_name_line = EMPTY_BUFFER;  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during bound
@@ -57,13 +58,22 @@ static bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bo
 static void vcf_header_trim_field_name_line (Buffer *vcf_header);
 
 // returns the length of the first line, if it starts with ##fileformat, or 0
-static inline unsigned vcf_header_get_fileformat_line_len (const Buffer *txt_header)
+// note: per VCF spec, the ##fileformat line must be the first in the file
+static inline unsigned vcf_header_parse_fileformat_line (const Buffer *txt_header)
 {
     ARRAY (char, line, *txt_header);
     if (!LINEIS ("##fileformat")) return 0;
 
     const char *newline = memchr (line, '\n', line_len);
-    return newline ? newline - line + 1 : 0;
+    unsigned len = newline ? newline - line + 1 : 0;
+
+    if      (!memcmp (line, "##fileformat=VCFv4.1", MIN (20, len))) vcf_version = VCF_v4_1;
+    else if (!memcmp (line, "##fileformat=VCFv4.2", MIN (20, len))) vcf_version = VCF_v4_2;
+    else if (!memcmp (line, "##fileformat=VCFv4.3", MIN (20, len))) vcf_version = VCF_v4_3;
+    else if (!memcmp (line, "##fileformat=VCFv4.4", MIN (20, len))) vcf_version = VCF_v4_4;
+    else if (!memcmp (line, "##fileformat=VCFv4.5", MIN (20, len))) vcf_version = VCF_v4_5;
+
+    return len;
 }
 
 static inline bool is_field_name_line (const char *line, unsigned line_len)
@@ -514,6 +524,20 @@ static void vcf_header_handle_contigs (Buffer *txt_header)
         qsort (vcf_header_liftover_dst_contigs.data, vcf_header_liftover_dst_contigs.len, sizeof (WordIndex), dst_contigs_sorter);
 }
 
+static void vcf_header_add_FORMAT_lines (Buffer *txt_header)
+{
+    #define PL_LINE "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"Phred-scaled genotype likelihoods rounded to the closest integer\">\n"
+    #define PP_LINE "##FORMAT=<ID=PP,Number=G,Type=Integer,Description=\"Phred-scaled genotype posterior probabilities rounded to the closest integer\">\n"
+
+    txt_header->len -= vcf_field_name_line.len; // remove field name line
+
+    if (flag.GP_to_PP) buf_add_more (evb, txt_header, PP_LINE, sizeof PP_LINE - 1, "txt_data");
+    if (flag.GL_to_PL) buf_add_more (evb, txt_header, PL_LINE, sizeof PL_LINE - 1, "txt_data");
+
+    // add back the field name (#CHROM) line
+    buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_data");
+}
+
 static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
 {
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
@@ -523,6 +547,13 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     
     // handle contig lines
     vcf_header_handle_contigs (txt_header);
+
+    // add PP and/or PL INFO lines if needed
+    if ((flag.GP_to_PP || flag.GL_to_PL) && !flag.rejects_coord)
+        vcf_header_add_FORMAT_lines (txt_header);
+
+    // set vcf_version
+    unsigned fileformat_line_len = vcf_header_parse_fileformat_line (txt_header);
 
     // if --chain: scan header for ##FORMAT and ##INFO - for translatable subfields - create contexts, and populate Context.luft_trans
     if (chain_is_loaded) flag.bind = BIND_REJECTS;
@@ -535,8 +566,8 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     if ((chain_is_loaded || txt_file->coords) && !flag.rejects_coord) {
         
         // add the ##fileformat line, if there is one
-        buf_add_more (evb, &evb->lo_rejects[0], txt_header->data, vcf_header_get_fileformat_line_len (txt_header), "lo_rejects");
-        buf_add_more (evb, &evb->lo_rejects[1], txt_header->data, vcf_header_get_fileformat_line_len (txt_header), "lo_rejects");
+        buf_add_more (evb, &evb->lo_rejects[0], txt_header->data, fileformat_line_len, "lo_rejects");
+        buf_add_more (evb, &evb->lo_rejects[1], txt_header->data, fileformat_line_len, "lo_rejects");
         
         // add the #CHROM line
         char *line;
@@ -586,6 +617,10 @@ static bool vcf_inspect_txt_header_piz (VBlock *txt_header_vb, Buffer *txt_heade
     // if needed, liftover the header
     if (flag.luft && !flag.header_one && !flag.rejects_coord) 
         vcf_header_piz_liftover_header (txt_header_vb, txt_header);
+
+    // if needed, add ##INFO oSTATUS line
+    if (flag.show_ostatus)
+        bufprintf (txt_header_vb, txt_header, KH_INFO_oSTATUS"\n", GENOZIP_CODE_VERSION);
 
     // add genozip command line
     if (!flag.header_one && exe_type == EXE_GENOCAT && !flag.genocat_no_reconstruct && !flag.rejects_coord
@@ -733,23 +768,32 @@ static void vcf_header_subset_samples (Buffer *vcf_field_name_line)
     // go through the vcf file's samples and add those that are consistent with the --samples requested
     vcf_num_displayed_samples = 0;
 
-    #define working_buf evb->codec_bufs[0]
+    buf_copy (evb, &evb->codec_bufs[0], &cmd_samples_buf, char*, 0, 0, 0);
+    ARRAY (const char *, snames, evb->codec_bufs[0]);
 
-    buf_copy (evb, &working_buf, &cmd_samples_buf, char*, 0, 0, 0);
+    int fixed_len = (snames_len == 1 && atoi (snames[0]) >= 1) ? atoi (snames[0]) : 0;
 
     for (unsigned i=0; i < num_samples; i++) {
         vcf_sample_names[i] = strtok_r (next_token, "\t", &next_token);
         bool handled = false;
 
-        for (unsigned s=0; s < working_buf.len; s++) 
-            if (!strcmp (vcf_sample_names[i], *ENT(char *, working_buf, s))) { // found
+        // case: --samples <number>
+        if (fixed_len && i < fixed_len) {
+            vcf_samples_is_included[i] = true;
+            samples_accept (vcf_sample_names[i]);
+            (*(uint64_t *)&snames_len) = 0;
+            continue;
+        }
+        
+        for (unsigned s=0; s < snames_len; s++) 
+            if (!strcmp (vcf_sample_names[i], snames[s])) { // found
                 vcf_samples_is_included[i] = !cmd_is_negative_samples;
                 if (!cmd_is_negative_samples) 
                     samples_accept (vcf_sample_names[i]);
 
                 // remove this sample from the --samples list as we've found it already
-                memcpy (ENT(char *, working_buf, s), ENT(char *, working_buf, s+1), (working_buf.len-s-1) * sizeof (char *));
-                working_buf.len--;
+                memcpy (&snames[s], &snames[s+1], (snames_len-s-1) * sizeof (char *));
+                (*(uint64_t *)&snames_len)--; // override const
                 handled = true;
                 break;
             }
@@ -761,14 +805,13 @@ static void vcf_header_subset_samples (Buffer *vcf_field_name_line)
     *LASTENT (char, *vcf_field_name_line) = '\n'; // change last separator from \t
 
     // warn about any --samples items that were not found in the vcf file (all the ones that still remain in the buffer)
-    for (unsigned s=0; s < working_buf.len; s++) 
-        ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", *ENT(char *, working_buf, s));
+    for (unsigned s=0; s < snames_len; s++) 
+        ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", snames[s]);
 
     // if the user filtered out all samples, its equivalent of drop_genotypes
     if (!vcf_num_displayed_samples) flag.drop_genotypes = true;
 
-    buf_free (&working_buf);
-    #undef working_buf
+    buf_free (&evb->codec_bufs[0]);
 }
 
 // called from genozip.c for processing the --samples flag
@@ -800,10 +843,10 @@ void vcf_samples_add  (const char *samples_str)
             }
         if (is_duplicate) continue; // skip duplicates "genocat -s sample1,sample2,sample1"
 
-        buf_alloc_old (evb, &cmd_samples_buf, MAX (cmd_samples_buf.len + 1, 100) * sizeof (char*), 2, "cmd_samples_buf");
+        buf_alloc (evb, &cmd_samples_buf, 1, 100, char*, 2, "cmd_samples_buf");
 
         NEXTENT (char *, cmd_samples_buf) = one_sample;
     }
 }
 
-
+VcfVersion vcf_header_get_version (void) { return vcf_version; }

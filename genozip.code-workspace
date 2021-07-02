@@ -43,7 +43,9 @@
 			"linesorter.h": "c",
 			"endianness.h": "c",
 			"system_error": "cpp",
-			"context.h": "c"
+			"context.h": "c",
+			"progress.h": "c",
+			"unistd.h": "c"
 		},
 		"files.autoSave": "onFocusChange",
 		"files.exclude": {

@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include "genozip.h"
 #include "sections.h"
+#include "coords.h"
 
 #define RA_MISSING_RA_MIN (MAX_POS + 1)
 #define RA_MISSING_RA_MAX (-1)

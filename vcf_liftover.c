@@ -48,6 +48,7 @@
 #include "strings.h"
 #include "random_access.h"
 #include "reconstruct.h"
+#include "coords.h"
 
 const char *dvcf_status_names[] = DVCF_STATUS_NAMES;
 const LuftTransLateProp ltrans_props[NUM_VCF_TRANS] = DVCF_TRANS_PROPS;
@@ -116,6 +117,28 @@ void vcf_lo_zip_initialize (void)
     container_prepare_snip ((Container*)&con, 0, 0, info_rejt_prim_snip, &info_rejt_prim_snip_len);
 }
 
+// returns true if dict_id is AF_* or *_AF, excluding MAX_AF
+static inline bool vcf_lo_is_INFO_AF_type (DictId dict_id)
+{
+    // case AF_*
+    if (dict_id.id[0] == ('A' | 0xc0) && dict_id.id[1] == 'F' && dict_id.id[2] == '_') return true;
+
+    // get dict_id string length (up to DICT_ID_LEN)
+    unsigned len=DICT_ID_LEN;
+    for (int i=DICT_ID_LEN-1; i >= 0; i--)
+        if (!dict_id.id[i]) len--;
+        else break;
+
+    // case *_AF. Note this works on long names like "gnomAD_ASJ_AF" too due to how dict_id_make works
+    // note: we exclude MAX_AF as it is the maximum of all population AFs - it will not be correct after flipping
+    if (len > 3 && dict_id_is_vcf_info_sf (dict_id) &&  
+        dict_id.id[len-3] == '_' && dict_id.id[len-2] == 'A' && dict_id.id[len-1] == 'F' && 
+        dict_id.num != dict_id_INFO_MAX_AF)
+        return true;
+
+    return false;
+}
+
 // get liftover translator ID. For contexts for which there is an ##INFO or ##FORMAT field in the VCF header,
 // these are entered to the context by vcf_header. Fields appearing in the file are queries by Seg. 
 TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
@@ -138,10 +161,12 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
     ||       dict_id.num == dict_id_INFO_MLEAC)      return VCF2VCF_A_AN;
     else if (dict_id.num == dict_id_INFO_AF 
     ||       dict_id.num == dict_id_INFO_MLEAF  
+    ||       dict_id.num == dict_id_INFO_LDAF  
     ||       dict_id.num == dict_id_FORMAT_AF  
-    ||       (dict_id.id[0] == ('A' | 0xc0) && dict_id.id[1] == 'F' && dict_id.id[2] == '_') // INFO/AF_*
-    ||       (dict_id_is_vcf_info_sf (dict_id) && dict_id.id[3] == '_' && dict_id.id[4] == 'A' && dict_id.id[5] == 'F' && !dict_id.id[6])) // INFO/???_AF
+    ||       vcf_lo_is_INFO_AF_type (dict_id))
           return VCF2VCF_A_1; // eg 0.150 -> 0.850 (upon REF<>ALT SWITCH)
+    else if (dict_id.num == dict_id_FORMAT_DS)       return VCF2VCF_PLOIDY; // eg (if ploidy=2): 1.25 -> 0.75 
+    else if (dict_id.num == dict_id_INFO_AA)         return VCF2VCF_ALLELE; 
     else if (dict_id.num == dict_id_FORMAT_SAC       // eg 25,1,6,2 --> 6,2,25,1 (upon REF<>ALT SWITCH)
     ||       dict_id.num == dict_id_FORMAT_SB        // SB and MB - I don't fully understand these, but at least for bi-allelic variants, empirically the sum of the first two values equals first value of AD and the sum of last two values adds up to the second value of AD
     ||       dict_id.num == dict_id_FORMAT_MB)       return VCF2VCF_R2;   
@@ -178,7 +203,7 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex
 
         // check if the error is due to missing contig in primary reference, or only chain file
         if (map[vb->chrom_node_index] == WORD_INDEX_NONE &&
-            ref_contigs_get_by_name (prim_ref, vb->chrom_name, vb->chrom_name_len, true) == WORD_INDEX_NONE)
+            ref_contigs_get_by_name (prim_ref, vb->chrom_name, vb->chrom_name_len, false, true) == WORD_INDEX_NONE)
             map[vb->chrom_node_index] = WORD_INDEX_NOT_IN_PRIM_REF;
     }
 
@@ -367,8 +392,13 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
         return;
     }
 
-    oref_len = (ostatus == LO_OK_REF_ALT_SWITCH_SNP || ostatus == LO_OK_REF_ALT_SWITCH_INDEL) ? vb->main_alt_len : vb->main_ref_len;
-    
+    oref_len = LO_IS_OK_SWITCH (ostatus) ? vb->main_alt_len : vb->main_ref_len;
+
+    // case is_xstrand: oPOS now points to the old anchor base - the last base in oREF - change it to point to the new anchor - 
+    // the base before oREF (vb->new_ref contains the new anchor base)
+    if (is_xstrand && LO_IS_OK_INDEL(ostatus)) 
+        dl->pos[1] -= oref_len;
+
     // Seg oCHROM
     Context *ochrom_ctx = &vb->contexts[VCF_oCHROM];
     const char *ochrom=""; unsigned ochrom_len=0;
@@ -382,18 +412,15 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     // we add oPOS, oCHROM, oREF and oXSTRAND-  only in case ostatus is LO_IS_OK - they will be consumed by the info_luft_snip container
     // note: no need to seg VCF_COPYPOS explicitly here, as it is all_the_same handled in vcf_seg_initialize
     unsigned opos_len = str_int_len (dl->pos[1]);
-    seg_pos_field ((VBlockP)vb, VCF_oPOS, VCF_oPOS, false, true, 0, 0, 0, dl->pos[1], opos_len);
+    seg_pos_field ((VBlockP)vb, VCF_oPOS, VCF_oPOS, SPF_ZERO_IS_BAD, 0, 0, 0, dl->pos[1], opos_len);
     random_access_update_pos ((VBlockP)vb, DC_LUFT, VCF_oPOS);
 
-    // special snip for oREFALT - vcf_piz_special_oREF will reconstruct it based on REF, ALT, oStatus and xstrand
-    CTX(VCF_LIFT_REF)->txt_len += oref_len; // no need to seg VCF_LIFT_REF here as it is all_the_same, just account for txt_len
+    // no need to seg VCF_LIFT_REF here as it is all_the_same, just account for txt_len
+    CTX(VCF_LIFT_REF)->txt_len += oref_len; 
 
-    if (ostatus == LO_OK_REF_NEW_SNP) // include new REF
-        seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_other_REFALT, vb->new_ref }), 3, VCF_oREFALT, 0); // 0 as not reconstructed by genounzip
-    
-    else // oREF can be calculated
-        seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_other_REFALT }), 2, VCF_oREFALT, 0); // 0 as not reconstructed by genounzip
-                
+    // special snip for oREFALT - vcf_piz_special_oREF will reconstruct it based on REF, ALT, oStatus and xstrand
+    vcf_refalt_seg_other_REFALT (vb, VCF_oREFALT, ostatus, is_xstrand, 0); // 0 as not reconstructed by genounzip
+
     vb->last_index(VCF_oXSTRAND) = seg_by_did_i (vb, is_xstrand ? "X" : "-", 1, VCF_oXSTRAND, 1); // index used by vcf_seg_INFO_END
 
     // Add LUFT container - we modified the txt by adding these 4 fields to INFO/LUFT. We account for them now, and we will account for the INFO name etc in vcf_seg_info_field
@@ -418,7 +445,7 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 // Liftrejt snip:   REJECTION_REASON
 // -----------------------------------------------------------------------
 
-static inline bool vcf_lo_is_same_seq (const char *seq1, unsigned seq1_len, const char *seq2, unsigned seq2_len, bool is_xstrand) 
+static inline bool vcf_lo_is_same_seq (const char *seq1, unsigned seq1_len, const char *seq2, unsigned seq2_len, bool is_snp, bool is_xstrand) 
 {
     if (seq1_len != seq2_len) return false;
 
@@ -426,9 +453,14 @@ static inline bool vcf_lo_is_same_seq (const char *seq1, unsigned seq1_len, cons
         for (PosType i=0; i < seq1_len ; i++)
             if (UPPER_CASE (seq1[i]) != UPPER_CASE (seq2[i])) return false;
     }
-    else { // xstrand
+    else { 
+        // if xstrand Indel - don't compare anchor bases. Note: a non-SNP is_xstrand is always an Indel bc we don't support xstrand with structural variants
+        if (!is_snp) {
+            seq1++; seq1_len--; 
+            seq2++; seq2_len--;
+        }
         for (PosType i=0; i < seq1_len ; i++)
-            if (UPPER_CASE (seq1[i]) != UPPER_REVCOMP[(int)seq2[seq1_len-i-1]]) return false;
+            if (UPPER_CASE (seq1[i]) != UPPER_COMPLEM[(int)seq2[seq1_len-i-1]]) return false;
     }
 
     return true;
@@ -437,27 +469,36 @@ static inline bool vcf_lo_is_same_seq (const char *seq1, unsigned seq1_len, cons
 // When segging INFO/LUFT or INFO/PRIM of a dual coordinate file, set the last_ostatus based on the observed relationship 
 // between the REF and ALT in the main VCF fields, and the REF in the INFO/LIFT[OVER|BACK] field
 // returns true if status OK and false if REJECTED
-static bool vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, const char *field_name, bool is_xstrand,
-                                                  const char *main_ref, unsigned main_ref_len,
-                                                  const char *info_ref, unsigned info_ref_len,
-                                                  const char *main_alt, unsigned main_alt_len,
-                                                  unsigned *info_alt_len /* out */)
+static LiftOverStatus vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, const char *field_name, bool is_xstrand,
+                                                            const char *main_ref, unsigned main_ref_len,
+                                                            const char *info_ref, unsigned info_ref_len,
+                                                            const char *main_alt, unsigned main_alt_len,
+                                                            unsigned *info_alt_len /* out */)
 {
-    #define IS_SNP (main_ref_len == 1 && (main_alt_len==1 || str_count_char (main_alt, main_alt_len, ',')*2+1 == main_alt_len))
-
     LiftOverStatus ostatus;
 
     // short-circuit the majority case of a non-xstrand, no-base-change, bi allelic SNP
-    if (main_ref_len == 1 && main_alt_len == 1 && !is_xstrand && main_ref[0] == info_ref[0])
+    if (main_ref_len == 1 && main_alt_len == 1 && !is_xstrand && main_ref[0] == info_ref[0]) {
         ostatus = LO_OK_REF_SAME_SNP;
+        goto finalize;
+    }
+
+    bool is_snp = main_ref_len == 1 && (main_alt_len==1 || str_count_char (main_alt, main_alt_len, ',')*2+1 == main_alt_len);
+
+    // check for structural variant
+    if (memchr (main_alt, '<', main_alt_len)) 
+        ostatus = LO_OK_REF_SAME_SV;
 
     // check for no-base-change 
-    else if (vcf_lo_is_same_seq (main_ref, main_ref_len, info_ref, info_ref_len, is_xstrand))
-        ostatus = IS_SNP ? LO_OK_REF_SAME_SNP : LO_OK_REF_SAME_INDEL;
+    else if (vcf_lo_is_same_seq (main_ref, main_ref_len, info_ref, info_ref_len, is_snp, is_xstrand))
+        ostatus = is_snp ? LO_OK_REF_SAME_SNP : LO_OK_REF_SAME_INDEL;
 
     // check for REF<>ALT switch 
-    else if (vcf_lo_is_same_seq (main_alt, main_alt_len, info_ref, info_ref_len, is_xstrand))
-        ostatus = IS_SNP ? LO_OK_REF_ALT_SWITCH_SNP : LO_OK_REF_ALT_SWITCH_INDEL;
+    else if (vcf_lo_is_same_seq (main_alt, main_alt_len, info_ref, info_ref_len, is_snp, is_xstrand))
+        ostatus = is_snp ? LO_OK_REF_ALT_SWITCH_SNP : LO_OK_REF_ALT_SWITCH_INDEL;
+
+    else if (is_snp && main_alt_len == 1)
+        ostatus = LO_OK_REF_NEW_SNP;
 
     else { 
         // this can happen only when genozipping a DVCF file produced by a different tool, like a more advanced version of genozip...
@@ -465,18 +506,18 @@ static bool vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, const char *fie
                   main_ref_len, main_ref, main_alt_len, main_alt, info_ref_len, info_ref, is_xstrand ? 'X' : '-');
         ostatus = LO_UNSUPPORTED_REFALT;
     }
-        
+
+finalize:        
     if (LO_IS_OK (ostatus)) {
         seg_by_did_i (vb, dvcf_status_names[ostatus], strlen (dvcf_status_names[ostatus]), VCF_oSTATUS, 0); // 0 bc doesn't reconstruct by default
         vcf_set_ostatus (ostatus); // we can set if OK, but only vcf_lo_seg_rollback_and_reject can set if reject
 
-        *info_alt_len = (ostatus == LO_OK_REF_ALT_SWITCH_SNP ? main_ref_len : main_alt_len);
-        return true;
+        *info_alt_len = (LO_IS_OK_SWITCH (ostatus) ? main_ref_len : main_alt_len);
     }
-    else {
+    else 
         vcf_lo_seg_rollback_and_reject (vb, ostatus, NULL); // segs *rej and oSTATUS
-        return false;
-    }
+
+    return ostatus;
 }
 
 // Segging a Primary line, INFO/LUFT field ; or Luft line, INFO/PRIM field:
@@ -489,13 +530,14 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
     Coords coord = (dict_id.num == dict_id_INFO_LUFT ? DC_PRIMARY : DC_LUFT);
     const char *field_name = dis_dict_id_ex (dict_id, true).s; // hopefully the returned-by-value structure stays in scope despite not assigning it...
 
-    ASSVCF (vb->line_coords == coord, "Found an %s subfield, not expecting because this is a %s line", field_name, coords_names[vb->line_coords]);
+    ASSVCF (vb->line_coords == coord, "Found an %s subfield, not expecting because this is a %s line", field_name, coords_name (vb->line_coords));
 
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
         
     // parse and verify PRIM or LUFT record
-    str_split (value, value_len, NUM_IL_FIELDS, ',', str, true);
-    ASSVCF (n_strs, "Invalid %s field: \"%.*s\"", field_name, value_len, value);
+    str_split (value, value_len, NUM_IL_FIELDS + 1, ',', str, false); // possibly oSTATUS in addition from --show-ostatus which we shall ignore
+    ASSVCF (n_strs == 4, "Invalid %s field: \"%.*s\"", field_name, value_len, value);
+
     const char *info_chrom  = strs[IL_CHROM]; 
     unsigned info_chrom_len = str_lens[IL_CHROM];
     const char *info_ref    = strs[IL_REF];
@@ -508,11 +550,14 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
             "%s has an invalid XSTRAND=\"%.*s\" - expected \"-\" or \"X\"", field_name, str_lens[IL_XSTRAND], strs[IL_XSTRAND]);
     bool is_xstrand = (strs[IL_XSTRAND][0] == 'X');
 
-    if (!vcf_lo_seg_ostatus_from_LUFT_or_PRIM (vb, field_name, is_xstrand,
-                                               vb->main_refalt, vb->main_ref_len, 
-                                               info_ref, info_ref_len, 
-                                               vb->main_refalt + vb->main_ref_len + 1, vb->main_alt_len,
-                                               &info_alt_len)) return; // rolled back and segged *rej instead, due to rejection
+    LiftOverStatus ostatus = 
+        vcf_lo_seg_ostatus_from_LUFT_or_PRIM (vb, field_name, is_xstrand,
+                                              vb->main_refalt, vb->main_ref_len, 
+                                              info_ref, info_ref_len, 
+                                              vb->main_refalt + vb->main_ref_len + 1, vb->main_alt_len,
+                                              &info_alt_len); 
+                                              
+    if (LO_IS_REJECTED (ostatus)) return; // rolled back and segged *rej instead, due to rejection
 
     // Seg other (than vb->line_coords) coords' CHROM
     dl->chrom_index[SEL(1,0)] = seg_by_did_i (vb, info_chrom, info_chrom_len, SEL(VCF_oCHROM, VCF_CHROM), info_chrom_len);
@@ -520,15 +565,22 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
     
     // Seg other coord's POS
     // note: no need to seg VCF_COPYPOS explicitly here, as it is all_the_same handled in vcf_seg_initialize
-    dl->pos[SEL(1,0)] = seg_pos_field ((VBlockP)vb, SEL(VCF_oPOS, VCF_POS), SEL(VCF_oPOS, VCF_POS), false, true, 0, 0, 0, info_pos_value, info_pos_len);
+    dl->pos[SEL(1,0)] = seg_pos_field ((VBlockP)vb, SEL(VCF_oPOS, VCF_POS), SEL(VCF_oPOS, VCF_POS), SPF_ZERO_IS_BAD, 0, 0, 0, info_pos_value, info_pos_len);
     if (dl->pos[SEL(1,0)])random_access_update_pos ((VBlockP)vb, SEL(DC_LUFT, DC_PRIMARY), SEL (VCF_oPOS, VCF_POS));
 
     // Seg other coord's REFALT - this will be a SPECIAL that reconstructs from this coords REFALT + INFO_REF + XSTRAND
-    seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_other_REFALT }), 2, SEL(VCF_oREFALT, VCF_REFALT), SEL (0, info_ref_len + 2 + info_alt_len)); // account for REFALT + 2 tabs (primary coords) if we are segging it now (but not for oREFALT)
+    if (ostatus == LO_OK_REF_NEW_SNP || (LO_IS_OK_INDEL (ostatus) && is_xstrand))
+        vb->new_ref = info_ref[0]; // new anchor or new REF SNP (consumed by vcf_refalt_seg_other_REFALT)
 
+    vcf_refalt_seg_other_REFALT (vb, SEL(VCF_oREFALT, VCF_REFALT), ostatus, is_xstrand, SEL (0, info_ref_len + 2 + info_alt_len)); // account for REFALT + 2 tabs (primary coords) if we are segging it now (but not for oREFALT)
+    
     // "Seg" other coord's REF to appear in the this PRIM/LUFT - a SPECIAL that reconstructs the other REFALT, and discards the ALT
     // note: no need to actually seg here as it is all_the_same handled in vcf_seg_initialize, just account for txt_len
     CTX(VCF_LIFT_REF)->txt_len += SEL (info_ref_len, 0); // we account for oREF (to be shown in INFO/LUFT in default reconstruction). 
+
+    // an Indel with REF<>ALT switch can change the size of the oREF field in INFO/LUFT
+    if (ostatus == LO_OK_REF_ALT_SWITCH_INDEL) 
+        vb->recon_size += (int)vb->main_ref_len - (int)info_ref_len;
 
     // Seg the XSTRAND (same for both coordinates)
     seg_by_did_i (vb, (is_xstrand ? "X" : "-"), 1, VCF_oXSTRAND, 1);
@@ -548,7 +600,7 @@ void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, DictId dict_id, const char *value, int
     ASSVCF (txt_file->coords, "Found an %s subfield, but this is not a dual-coordinates VCF because it is missing \"" HK_DC_PRIMARY "\" or \"" HK_DC_LUFT "\" in the VCF header", dis_dict_id_ex (dict_id, true).s);
 
     Coords coord = (dict_id.num == dict_id_INFO_LREJ ? DC_PRIMARY : DC_LUFT);
-    ASSVCF (vb->line_coords == coord, "Found an %s subfield, not expecting because this is a %s line", dis_dict_id_ex (dict_id, true).s, coords_names[vb->line_coords]);
+    ASSVCF (vb->line_coords == coord, "Found an %s subfield, not expecting because this is a %s line", dis_dict_id_ex (dict_id, true).s, coords_name (vb->line_coords));
 
     // value may be with or without a string eg "INFO/AC" ; "NO_MAPPING". We take the value up to the comma.
     const char *slash = memchr (value, '/', value_len);
@@ -611,7 +663,7 @@ void vcf_lo_append_rejects_file (VBlockP vb, Coords coord)
     // create rejects file if not already open
     if (!z_file->rejects_file[coord-1]) {
         z_file->rejects_file_name[coord-1] = malloc (strlen (z_file->name) + 20);
-        sprintf (z_file->rejects_file_name[coord-1], "%s.%s_ONLY%s", z_file->name, coords_names[coord], file_plain_ext_by_dt (z_file->data_type));
+        sprintf (z_file->rejects_file_name[coord-1], "%s.%s_ONLY%s", z_file->name, coords_name (coord), file_plain_ext_by_dt (z_file->data_type));
         
         z_file->rejects_file[coord-1] = fopen (z_file->rejects_file_name[coord-1], "wb+");
         ASSERT (z_file->rejects_file[coord-1], "fopen() failed to open %s: %s", z_file->rejects_file_name[coord-1], strerror (errno));

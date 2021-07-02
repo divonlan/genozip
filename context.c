@@ -460,7 +460,7 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
         if (is_zf_ctx) mutex_initialize (ctx->mutex);
 
         // a new non-field context that is not defined in the header - see if we have a default translator for it
-        if (z_dual_coords && !dict_id_is_field (dict_id))
+        if (z_dual_coords && !dict_id_is_field (dict_id)) 
             ctx->luft_trans = vcf_lo_luft_trans_id (dict_id, '.'); // TO DO: make data-type agnostic (bug 359)
     } 
 }

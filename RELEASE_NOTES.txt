@@ -412,6 +412,7 @@ c. Many other improvements:
 - Support genocat --sort for VCF files ; --sort implied for dual-coordinates VCF files. Disabled by --unsorted.
 - Fixed bug with subsetting samples in VCF (genocat --sample). The fix will work on files compressed with 11.0.9 onwards.
 - Now, genounzip always unbinds files, and genocat always concatenates
+d. New options:
 - new option: genocat --component <component-number> - to view a single component of a bound file (including one of the fastq files in a paired file)
 - new option: genocat --lines [start]-[last] - show a subset of lines of the file.
 - new option: genocat --head [num_lines] - show lines from the start of the file.
@@ -426,14 +427,15 @@ c. Many other improvements:
 - new option: genocat --regions-file - reading regions from as an alternative to --regions
 - new option: genocat --show-chain - for chain files - show chain file alignments
 - new option: genocat --show-chain-contigs - for chain files - show contig list
-- new option: genocat --add_qName_chr - for chain files - changes eg 22->chr22 and MT->chrM for all qNames  
+- new option: genocat --with-chr - for chain files - changes eg 22->chr22 and MT->chrM for all qNames  
 - discontinued support for GTShark codec - use genozip v11 to decompress old VCF files compressed with --gtshark
-- VCF: better compression of FORMAT/F2R1, INFO/MLEAC, FORMAT/MB, FORMAT/SB, FORMAT/ADALL, FORMAT/ADF, FORMAT/ADR, FORMAT/AF, FORMAT/SAC
-d. Much improved website genozip.com
+- VCF: better compression of FORMAT/F2R1, INFO/MLEAC, INFO/AA, FORMAT/MB, FORMAT/SB, FORMAT/ADALL, FORMAT/ADF, FORMAT/ADR, FORMAT/AF, FORMAT/SAC
 e. Option changes:
+- genozip - resturctured optimization options for VCF: --optimize-phred, --GL-to-PL, --GP-to-PP
 - genounzip now always unbinds files, and the --unbind is canceled. the --prefix can now used to set a prefix.
 - genocat --fastq will NOT add /1 or /2 to R1 and R2 reads in the case that --FLAG is specified as well
-- genocat --grep now works with most data types
+- genocat --grep now works with most data types, --grep-w restrict to whole words
+- genocat --samples now also accepts a number - "--samples 5" shows the first 5 samples
 - genocat --validate=valid displays filenames that are valid genozip files. No change when used without "=valid".
 - genols --unbind (-u) option is renamed --list (-l). genozip --list option is canceled.
 - --sex, --coverage, --stats and --STATS replace --show-sex, --show-coverage --show-stats, --SHOW-STATS respectively
@@ -446,5 +448,7 @@ f. New advanced options:
 - new option: --show-uncompress. Shows uncompressing of section data.
 - new option: --show-flags. Shows internal flags after initialization.
 - new option: --show-plan. Shows reconstruction plan
+- new option: --show-ref-iupacs. Show non-ACGT iupac codes in a reference file
 - new option: --debug-stats. For debugging development of stats.c
 - new option: --debug-allthesame. For debugging development of the allthesame algorithm
+g. Much improved website genozip.com

@@ -22,6 +22,7 @@
 #include "codec.h"
 #include "reference.h"
 #include "zip.h"
+#include "coords.h"
 
 WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                          bool *is_new) // optional out
@@ -248,8 +249,7 @@ static PosType seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_le
 PosType seg_pos_field (VBlock *vb, 
                        DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
                        DidIType base_did_i,    // mandatory: base for delta
-                       bool seg_bad_snips_too, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
-                       bool zero_is_bad,       // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
+                       unsigned opt,           // a combination of SPF_* options
                        char missing,           // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
                        const char *pos_str, unsigned pos_len, // option 1
                        PosType this_pos,       // option 2
@@ -269,8 +269,8 @@ PosType seg_pos_field (VBlock *vb,
             err = ERR_SEG_NOT_INTEGER; // not an error, just so that we seg this as SNIP_DONT_STORE
         
         else {
-            this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, zero_is_bad, &err);
-            ASSERT (seg_bad_snips_too || !err, "invalid value %.*s in %s vb=%u line_i=%"PRIu64, 
+            this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, IS_FLAG (opt, SPF_ZERO_IS_BAD), &err);
+            ASSERT (IS_FLAG (opt, SPF_BAD_SNIPS_TOO) || !err, "invalid value %.*s in %s vb=%u line_i=%"PRIu64, 
                     pos_len, pos_str, CTX(snip_did_i)->name, vb->vblock_i, vb->line_i);
         }
 
@@ -305,7 +305,7 @@ PosType seg_pos_field (VBlock *vb,
     // if the delta is too big, add this_pos (not delta) to local and put SNIP_LOOKUP in the b250
     // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
     // section in every VB just for a single entry in case of a nicely sorted file
-    if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value.i) {
+    if (!IS_FLAG (opt, SPF_UNLIMIED_DELTA) && (pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value.i) {
 
         // store the value in in 32b local
         buf_alloc (vb, &snip_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
@@ -883,8 +883,8 @@ static void seg_verify_file_size (VBlock *vb)
     uint32_t recon_size = 0; // reconstructed size, as viewed in reconstruction
 
     // sanity checks
-    ASSERT (vb->recon_size >= 0, "recon_size=%d is negative for vb_i=%u, coord=%s", vb->recon_size, vb->vblock_i, coords_names[vb->vb_coords]);
-    ASSERT (vb->recon_size_luft >= 0, "recon_size_luft=%d is negative for vb_i=%u, coord=%s", vb->recon_size_luft, vb->vblock_i, coords_names[vb->vb_coords]);
+    ASSERT (vb->recon_size >= 0, "recon_size=%d is negative for vb_i=%u, coord=%s", vb->recon_size, vb->vblock_i, coords_name(vb->vb_coords));
+    ASSERT (vb->recon_size_luft >= 0, "recon_size_luft=%d is negative for vb_i=%u, coord=%s", vb->recon_size_luft, vb->vblock_i, coords_name(vb->vb_coords));
 
     for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) 
         recon_size += CTX(sf_i)->txt_len;

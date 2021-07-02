@@ -180,7 +180,7 @@ void digest_verify_ref_is_equal (const Reference ref, const char *header_ref_fil
     Digest ref_md5 = ref_get_file_md5 (ref);
     uint8_t version = ref_get_genozip_version (ref);
 
-    ASSERT ((version >= 12 && digest_is_equal (ref_md5, header_md5)) ||
+    ASSINP ((version >= 12 && digest_is_equal (ref_md5, header_md5)) ||
             (version <= 11 && ref_md5.words[0] == header_md5.words[0] && ref_md5.words[2] == header_md5.words[2] && ref_md5.words[3] == header_md5.words[3]),
             "%s: Bad reference file:\n%s (MD5=%s) was used for compressing\n%s (MD5=%s) has a different MD5",
             z_name, header_ref_filename, digest_display_ex (header_md5, DD_MD5).s, 

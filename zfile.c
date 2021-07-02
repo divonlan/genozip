@@ -28,6 +28,7 @@
 #include "md5.h"
 #include "flags.h"
 #include "website.h"
+#include "coords.h"
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
@@ -42,7 +43,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
     bool v12 = (command == ZIP || z_file->genozip_version >= 12);
 
-    char str[1000];
+    char str[2048];
     #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 
     #define SEC_TAB "            ++  "
 
@@ -93,7 +94,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
                  BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                  digest_display (h->digest_single).s, digest_display (h->digest_header).s, 
                  codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
-                 coords_names[h->h.flags.txt_header.rejects_coord], h->h.flags.txt_header.is_txt_luft, TXT_FILENAME_LEN, h->txt_filename);
+                 coords_name (h->h.flags.txt_header.rejects_coord), h->h.flags.txt_header.is_txt_luft, TXT_FILENAME_LEN, h->txt_filename);
         break;
     }
 
@@ -103,7 +104,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
                  BGEN32 (h->num_lines_prim),  v12 ? BGEN32 (h->num_lines_luft)  : 0, 
                  BGEN32 (h->recon_size_prim), v12 ? BGEN32 (h->recon_size_luft) : 0, 
                  BGEN32 (h->longest_line_len), 
-                 BGEN32 (h->z_data_bytes), digest_display (h->digest_so_far).s, coords_names[h->h.flags.vb_header.coords]);
+                 BGEN32 (h->z_data_bytes), digest_display (h->digest_so_far).s, coords_name (h->h.flags.vb_header.coords));
         break;
     }
 
@@ -353,8 +354,6 @@ LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
 // returns compressed size
 uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_size /* 0 means entire local buffer */)
 {   
-    vb->has_non_agct = false;
-    
     struct FlagsCtx flags = ctx->flags; // make a copy
     flags.paired     = ctx->pair_local;
     flags.copy_param = ctx->local_param;
@@ -822,7 +821,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
         header.ref_file_md5 = ref_get_file_md5 (gref);
     }
 
-    if (z_file->data_type == DT_CHAIN) {
+    if (flag.reference == REF_MAKE_CHAIN) {
         strncpy (header.dt_specific.chain.prim_filename, ref_get_filename (prim_ref), REF_FILENAME_LEN-1);
         header.dt_specific.chain.prim_file_md5 = ref_get_file_md5 (prim_ref);
     }
@@ -1045,7 +1044,7 @@ void zfile_output_processed_vb (VBlock *vb)
     vb->z_data.len = 0;
 
     // this function holds the mutex and hence has a non-trival performance penalty. we call
-    // it only if the user specifically requested --show-stats
+    // it only if the user specifically requested --stats
     if (flag.show_stats) ctx_update_stats (vb);
 
     if (flag.show_headers && buf_is_alloc (&vb->show_headers_buf))

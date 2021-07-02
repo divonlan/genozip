@@ -14,6 +14,7 @@
 #include "strings.h"
 #include "codec.h"
 #include "reconstruct.h"
+#include "piz.h"
 
 bool vcf_piz_read_one_vb (VBlock *vb, Section sl)
 { 
@@ -53,6 +54,29 @@ bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     return false;
 }
 
+static void vcf_piz_replace_pos_with_gpos (VBlockP vb)
+{
+    DidIType chrom_did_i = (vb->vb_coords == DC_LUFT ? VCF_oCHROM : VCF_CHROM);
+    Context *pos_ctx = CTX (vb->vb_coords == DC_LUFT ? VCF_oPOS : VCF_POS);
+
+    WordIndex ref_chrom_index = ref_contigs_get_by_name (gref, last_txt (vb, chrom_did_i), vb->last_txt_len (chrom_did_i), true, true);
+    Range *r = ref_get_range_by_ref_index (vb, gref, ref_chrom_index); // possibly NULL
+
+    // remove CHROM and POS and two \t
+    vb->txt_data.len -= pos_ctx->last_txt_len + vb->last_txt_len (chrom_did_i) + 2; // remove main CHROM\tPOS\t
+
+    PosType pos = pos_ctx->last_value.i;
+    PosType gpos = (r && pos >= r->first_pos && pos <= r->last_pos) ? r->gpos + (pos - r->first_pos) : 0; 
+
+    // if CHROM exists in the reference, POS must fit withing it
+    ASSPIZ (!r || (pos >= r->first_pos && pos <= r->last_pos), "POS=%"PRId64" is out of bounds for reference of CHROM: [%"PRId64",%"PRId64"]", 
+            pos, r->first_pos, r->last_pos);
+
+    RECONSTRUCT ("GPOS\t", 5); 
+    RECONSTRUCT_INT (gpos);
+    RECONSTRUCT1('\t');
+}
+
 // filter is called before reconstruction of a repeat or an item, and returns false if item should 
 // not be reconstructed. contexts are not consumed.
 CONTAINER_FILTER_FUNC (vcf_piz_filter)
@@ -69,8 +93,8 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
         vb->txt_data.len -= 2;
 
     // in dual-coordinates files - get the COORDS and oSTATUS at the beginning of each line
-    else if ( con->items[item].dict_id.num == dict_id_fields[VCF_oSTATUS] || 
-            con->items[item].dict_id.num == dict_id_fields[VCF_COORDS]) {
+    else if (con->items[item].dict_id.num == dict_id_fields[VCF_oSTATUS] || 
+             con->items[item].dict_id.num == dict_id_fields[VCF_COORDS]) {
         if (flag.show_dvcf)
             return true; // show
         else if (z_dual_coords)
@@ -87,6 +111,10 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
         else if (vb->vb_coords == DC_PRIMARY && (con->items[item].dict_id.num == dict_id_INFO_PRIM || con->items[item].dict_id.num == dict_id_INFO_PREJ))
             return false;
     }
+
+    // --gpos: after main POS or oPOS reconstructed - re-write POS as GPOS
+    else if (item == 4 && flag.gpos) 
+        vcf_piz_replace_pos_with_gpos (vb);
 
     return true;    
 }
@@ -128,6 +156,14 @@ static void inline vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, 
         vb->txt_data.len -= recon_len + (rep == num_reps - 1); // if last sample, we also remove the preceeding \t (recon_len includes the sample's separator \t, except for the last sample that doesn't have a separator)
 }
 
+static void inline vcf_piz_append_ostatus_to_INFO (VBlockP vb)
+{
+    DECLARE_SNIP;
+    ctx_get_snip_by_word_index (CTX(VCF_oSTATUS), vb->last_index (VCF_oSTATUS), &snip, &snip_len);
+    RECONSTRUCT (";oSTATUS=", 9);
+    RECONSTRUCT (snip, snip_len);
+}
+
 CONTAINER_CALLBACK (vcf_piz_container_cb)
 {
     VBlockVCFP vcf_vb = (VBlockVCFP)vb;
@@ -153,6 +189,10 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         if (flag.indels_only && !vcf_refalt_piz_is_variant_indel (vb))
             vb->drop_curr_line = "indels_only";
     }
+
+    // if requested, add oSTATUS at thend of INFO
+    else if (flag.show_ostatus && dict_id.num == dict_id_fields[VCF_INFO]) 
+        vcf_piz_append_ostatus_to_INFO (vb);
 
     else if (dict_id.num == dict_id_fields[VCF_SAMPLES] && flag.samples) 
         vcf_piz_SAMPLES_subset_samples (vcf_vb, rep, num_reps, recon_len);

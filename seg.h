@@ -41,8 +41,11 @@ extern bool seg_integer_or_not_do (VBlockP vb, ContextP ctx, const char *this_va
 extern bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
 #define seg_float_or_not(vb, ctx, this_value, this_value_len, add_bytes) seg_float_or_not_do ((VBlockP)(vb), (ctx), (this_value), (this_value_len), (add_bytes))
 
-#define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
-extern PosType seg_pos_field (VBlockP vb, DidIType snip_did_i, DidIType base_did_i, bool seg_bad_snips_too, bool zero_is_bad, 
+#define MAX_POS_DELTA 32000   // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
+#define SPF_BAD_SNIPS_TOO  1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+#define SPF_ZERO_IS_BAD    2  // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
+#define SPF_UNLIMIED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA
+extern PosType seg_pos_field (VBlockP vb, DidIType snip_did_i, DidIType base_did_i, unsigned opt, 
                               char missing, const char *pos_str, unsigned pos_len, PosType this_pos, unsigned add_bytes);
 
 extern void seg_id_field_do (VBlockP vb, DictId dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator);

@@ -55,7 +55,12 @@ Examples:
 .. option:: -o, --output output-filename.  This option can also be used to bind multiple input files into a single genozip file. genounzip will unbind the file back to its components while genocat will concatenate them. To bind files they must be of the same type (e.g. VCF or SAM) and if they are VCF files they must contain the same samples. genozip takes advantage of similarities between the input files so that the bound file is usually smaller than the combined size of individually compressed files.
 
                      |
-                     
+
+.. option:: -9, --optimize, --optimise  Modify the file in ways that are likely insignificant for analytical purposes but significantly improve compression and somewhat improve the speed of genocat --regions. This option activates all optimizations.
+
+      | Note: files compressed with this option are NOT identical to the original file after decompression. For this reason, it is not possible to use this option in combination with --test or --md5.
+      |
+                                       
 .. option:: --best  Best compression but slower than --fast mode. This is the default mode of genozip - this flag has no additional effect.
 
                      |
@@ -83,11 +88,11 @@ Examples:
 .. include:: opt-quiet.rst
 .. include:: opt-threads.rst
                      
-.. option:: -B, --vblock number.  Set the maximum size of data (between 1 and 2048 in megabytes) of the textual input data that a thread processes at any given time. By default genozip sets this value dynamically based on the characateristics of the file and it is reported in --show-stats (but capped at 32MB on Windows and MacOS). Smaller values will result in faster subsetting with genocat --regions and --grep. Larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression.
+.. option:: -B, --vblock number.  Set the maximum size of data (between 1 and 2048 in megabytes) of the textual input data that a thread processes at any given time. By default genozip sets this value dynamically based on the characateristics of the file and it is reported in --stats (but capped at 32MB on Windows and MacOS). Smaller values will result in faster subsetting with genocat --regions and --grep. Larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression.
 
                      |
                      
-.. option:: -e, --reference filename.  Use a reference file (filename extension .ref.genozip) - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat. While genozip is capabale of compressing without a reference it can utilize a reference file to improve compression of FASTQ SAM/BAM and VCF files. The improvement for FASTQ files is substantial; for SAM/BAM it may be significant; for VCF if it is significant only if REFALT content is a significant percentage of the zip content (see "% of zip" in --show-stats)
+.. option:: -e, --reference filename.  Use a reference file (filename extension .ref.genozip) - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat. While genozip is capabale of compressing without a reference it can utilize a reference file to improve compression of FASTQ SAM/BAM and VCF files. The improvement for FASTQ files is substantial; for SAM/BAM it may be significant; for VCF if it is significant only if REFALT content is a significant percentage of the zip content (see "% of zip" in --stats)
 
    | Note: this is equivalent of setting the environment variable $GENOZIP_REFERENCE with the reference filename.
    |
@@ -113,12 +118,7 @@ Examples:
    | See: :ref:`dvcf`
    |
 
-.. option:: --allow-ambiguous.  Used in combination with --chain - allow Insertion Deletion and Structural variants that Genozip isn't sure whether they are a REF⇆ALT switch or not. Absent this flag these variants would not be lifted and would remain Primary-only variants.
-
-   | See: :ref:`dvcf`
-   |
-
-.. option:: --reject-ref-alt-switches.  Used in combination with --chain - Bi-allelic SNP variants with a REF⇆ALT switch are normally lifted and their INFO and FORMAT subfields modified to reflect the REF⇆ALT switch. With this option these variants are rejected from lifting and remain Primary-only variants.
+.. option:: --show-lifts.  Used in combination with --chain - output successful lifts to the rejects file too, not only rejected lifts.
 
 
    | See: :ref:`dvcf`
@@ -150,29 +150,7 @@ Examples:
 
    |
 
-**FASTQ-specific options (ignored for other file types)**
-
-.. option:: -2, --pair  Compress pairs of paired-end FASTQ files resulting in compression ratios better than compressing the files individually. When using this option every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display it interleaved use genocat --interleaved. To unbind the genozip file back to its original FASTQ files use genounzip.
-
-                     |
-                     
-**FASTA-specific options (ignored for other file types):**
-
-.. option:: --make-reference  Compresss a FASTA file to be used as a reference in --reference or --REFERENCE.
-
-                     |
-                     
-.. option:: --multifasta  All contigs in the FASTA file are variations of a the same contig (i.e. they are somewhat similar to each other). genozip uses this information to improve the compression.
-
-                     |
-                     
-**Optimizing**
-
-.. option:: -9, --optimize, --optimise  Modify the file in ways that are likely insignificant for analytical purposes but significantly improve compression and somewhat improve the speed of genocat --regions. This option activates all optimizations. Alternatively they can be activated individually as listed below.
-
-   Note: files compressed with this option are NOT identical to the original file after decompression. For this reason, it is not possible to use this option in combination with --test or --md5
-
-*VCF optimizations* 
+*VCF optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
 
 .. option:: --optimize-sort  INFO subfields are sorted alphabetically.               
 
@@ -180,26 +158,29 @@ Examples:
                               |
 
 
-.. option:: --optimize-PL  PL data: Phred values of over 60 are changed to 60.     
+.. option:: --optimize-phred  Applied to FORMAT/PL FORMAT/PRI FORMAT/PP and (VCF v4.2 or earlier) FORMAT/GL - Phred scores are rounded to the nearest integer and capped at 60.
 
-                              | Example: ``0,18,270`` -> ``0,18,60``
+                              | Example: ``0.40,17.75,270.4`` -> ``0,18,60``
                               |
 
-.. option:: --optimize-GL  GL data: Numbers are rounded to 2 significant digits.   
+.. option:: --GL-to-PL  The FORMAT/GL field is converted to PL and Phred values are capped at 60.
 
-                              | Example: ``-2.61618,-0.447624,-0.193264`` -> ``-2.6,-0.45,-0.19``
+                              | Example: GL= ``-7.61618,-0.447624,-0.193264`` -> PL= ``60,4,2``
                               |
 
-.. option:: --optimize-GP  GP data: Numbers are rounded to 2 significant digits as with GL.
+.. option:: --GP-to-PP  Applicable to VCF v4.3 and later: The FORMAT/GP field is converted to PP and Phred values are capped at 60.
 
+                              | Example: GP= ``-7.61618,-0.447624,-0.193264`` -> PP= ``60,4,2``
                               |
 
 .. option:: --optimize-VQSLOD  VQSLOD data: Number is rounded to 2 significant digits. 
 
                               | Example: ``-4.19494`` -> ``-4.2``
 
-*SAM and BAM optimizations*
-   
+**SAM/BAM-specific options (ignored for other file types)**
+
+*SAM and BAM optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
+
 .. option:: --optimize-QUAL  The QUAL quality field and the secondary U2 quality field (if it exists) are modified to group quality scores into a smaller number of bins:
 
                      ============ ======
@@ -219,12 +200,19 @@ Examples:
                      | Example: ``LSVIHINKHK`` -> ``IIIIFIIIFI``
                      |
 
-.. option:: --optimize-ZM  ZM:B:s data: negative Ion Torrent flow signal values are changed to zero, and positives are rounded to the nearest 10.  
+.. option:: --optimize-ZM  ZM:B:s data: negative Ion Torrent flow signal values are changed to zero and positives are rounded to the nearest 10.  
 
                      Example: ``-20,212,427`` -> ``0,210,430``
+                              
+                                                            
+**FASTQ-specific options (ignored for other file types)**
 
-*FASTQ optimizations*
-   
+.. option:: -2, --pair  Compress pairs of paired-end FASTQ files resulting in compression ratios better than compressing the files individually. When using this option every two consecutive files on the file list should be paired-end FASTQ files with an identical number of reads and consistent file names and --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To display it interleaved use genocat --interleaved. To unbind the genozip file back to its original FASTQ files use genounzip.
+
+                     |
+                     
+*FASTQ optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
+
 .. option:: --optimize-DESC  Replaces the description line with @filename:read_number.
                      
                      | Example: ``@A00488:61:HMLGNDSXX:4:1101:1561:1000 2:N:0:CTGAAGCT+ATAGAGGC`` -> ``@sample.fq.gz:100`` (100 is the read sequential number within this fastq file)
@@ -232,7 +220,24 @@ Examples:
 
 .. option:: --optimize-QUAL  The quality data is optimized as described for SAM above.
 
-*GVF optimizations*
+                     |
+
+**FASTA-specific options (ignored for other file types):**
+
+.. option:: --make-reference  Compresss a FASTA file to be used as a reference in --reference or --REFERENCE.
+
+   | Example: ``genozip --make-reference hs37d5.fa.gz``
+   |
+   | Example: ``cat *.fa | genozip --input fasta --make-reference --output myref.ref.genozip``
+   |
+                     
+.. option:: --multifasta  All contigs in the FASTA file are variations of a the same contig (i.e. they are somewhat similar to each other). genozip uses this information to improve the compression.
+
+                     |
+
+**GVF-specific options (ignored for other file types):**
+
+*GVF optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
    
 .. option:: --optimize-sort  Attributes are sorted alphabetically.
                      

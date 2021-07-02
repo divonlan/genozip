@@ -164,6 +164,8 @@ static uint32_t writer_init_comp_info (void)
         ||
            (flag.luft && comp->rejects_coord == DC_LUFT && !flag.one_component)
         ||        
+           (comp->rejects_coord && flag.header_one && z_file->data_type == DT_VCF) // --header-one - we don't need the ##primary_only / ##luft_only lines
+        ||        
            (flag.one_component && flag.one_component-1 != comp_i); // --component specifies a single component, and this is not it 
 
         // conditions we write the txt header (doesn't affect the VBs of this component)
@@ -510,7 +512,7 @@ void writer_create_plan (void)
 // Writer thread stuff
 // -------------------
 
-static void writer_flush_vb (VBlockP vb)
+static void writer_flush_vb (VBlockP wvb, VBlockP vb)
 {
     START_TIMER;
 
@@ -519,7 +521,7 @@ static void writer_flush_vb (VBlockP vb)
         if (flag.maybe_vb_modified_by_writer) 
             bgzf_compress_vb (vb); // compress data into vb->compressed (using BGZF blocks from source file or new ones)
 
-        bgzf_write_to_disk (vb); 
+        bgzf_write_to_disk (wvb, vb); 
     }
 
     else if (vb->txt_data.len) {
@@ -678,13 +680,13 @@ static void writer_main_loop (VBlockP wvb)
         switch (p->num_lines) {
 
             case PLAN_TXTHEADER:   
-                writer_flush_vb (v->vb); // write the txt header in its entirety
+                writer_flush_vb (wvb, v->vb); // write the txt header in its entirety
                 vb_release_vb (&v->vb);
                 break;
 
             case PLAN_FULL_VB:   
                 if (!flag.downsample) {
-                    writer_flush_vb (v->vb); // write entire VB
+                    writer_flush_vb (wvb, v->vb); // write entire VB
                     txt_file->lines_written_so_far += v->vb->num_nondrop_lines;
                 }
                 else 
@@ -709,10 +711,10 @@ static void writer_main_loop (VBlockP wvb)
         }
 
         if (wvb->txt_data.len > 4*1024*1024) // flush VB every 4MB
-            writer_flush_vb (wvb);
+            writer_flush_vb (wvb, wvb);
     }
 
-    writer_flush_vb (wvb);
+    writer_flush_vb (wvb, wvb);
     vb_release_vb (&wvb); 
 }
 

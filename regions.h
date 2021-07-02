@@ -15,7 +15,7 @@ extern void regions_transform_negative_to_positive_complement(void);
 extern bool regions_get_ra_intersection (WordIndex chrom_node_index, PosType min_pos, PosType max_pos);
 
 extern unsigned regions_get_num_range_intersections (WordIndex chrom_word_index);
-extern bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos, unsigned intersect_i, PosType *intersect_min_pos, PosType *intersect_max_pos);
+extern bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos, unsigned intersect_i, PosType *intersect_min_pos, PosType *intersect_max_pos, bool *revcomp);
 
 extern unsigned regions_max_num_chregs(void);
 extern void regions_display(const char *title);

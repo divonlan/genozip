@@ -7,10 +7,10 @@ Genozip
    :maxdepth: 3
 
    Installing <installing> 
+   Manual <manual>
    Capabilities <capabilities>
    Applications <applications> 
    Algorithms <algorithms>
-   Manual <manual>
    Specifications <specs>
    Source code <source>
    Publications & Citing <publications>

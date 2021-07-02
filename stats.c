@@ -73,11 +73,11 @@ static void stats_output_file_metadata (Buffer *buf)
                    flag.pair ? " (paired)" : "",
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
-    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
-        bufprintf (evb, buf, "Reference: %s\n", ref_get_filename (gref));
-
     if (z_file->data_type == DT_CHAIN)
-        bufprintf (evb, buf, "Source reference: %s\n", ref_get_filename (prim_ref));
+        bufprintf (evb, buf, "PRIM reference: %s\n", ref_get_filename (prim_ref));
+
+    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || z_file->data_type == DT_CHAIN) 
+        bufprintf (evb, buf, "%sReference: %s\n", z_file->data_type == DT_CHAIN ? "LUFT " : "", ref_get_filename (gref));
 
     if (z_file->data_type == DT_VCF) 
         bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
@@ -111,7 +111,7 @@ static void stats_output_file_metadata (Buffer *buf)
 
 typedef struct {
     DidIType my_did_i, st_did_i;
-    int64_t txt_size, z_size;
+    int64_t txt_len, z_size;
     const char *name;
     char  type[20];
     StrText did_i, words, hash, uncomp_dict, comp_dict, comp_b250, comp_data;
@@ -132,15 +132,15 @@ static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
             for (unsigned child=0; child < num_stats; child++) {
 
                 if (sbl[parent].my_did_i  == sbl[child].st_did_i) {
-                    sbl[parent].txt_size  += sbl[child].txt_size;
+                    sbl[parent].txt_len  += sbl[child].txt_len;
                     sbl[parent].z_size    += sbl[child].z_size;  
                     sbl[parent].pc_of_txt += sbl[child].pc_of_txt;
                     sbl[parent].pc_of_z   += sbl[child].pc_of_z;  
 
                     if (flag.debug_stats)
-                        iprintf ("Consolidated %s (did=%u) (txt_size=%"PRIu64" z_size=%"PRIu64") into %s (did=%u) (AFTER: txt_size=%"PRIu64" z_size=%"PRIu64")\n",
-                                 sbl[child].name, sbl[child].my_did_i, sbl[child].txt_size, sbl[child].z_size, 
-                                 sbl[parent].name, sbl[parent].my_did_i, sbl[parent].txt_size, sbl[parent].z_size);
+                        iprintf ("Consolidated %s (did=%u) (txt_len=%"PRIu64" z_size=%"PRIu64") into %s (did=%u) (AFTER: txt_len=%"PRIu64" z_size=%"PRIu64")\n",
+                                 sbl[child].name, sbl[child].my_did_i, sbl[child].txt_len, sbl[child].z_size, 
+                                 sbl[parent].name, sbl[parent].my_did_i, sbl[parent].txt_len, sbl[parent].z_size);
 
                     sbl[child] = (StatsByLine){ .my_did_i = DID_I_NONE, .st_did_i = DID_I_NONE };
                 }
@@ -185,15 +185,15 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
                     survivor = &sbl[i]; // first found gets to be the survivor
                 }
                 else {
-                    survivor->txt_size  += sbl[i].txt_size;
+                    survivor->txt_len  += sbl[i].txt_len;
                     survivor->z_size    += sbl[i].z_size;  
                     survivor->pc_of_txt += sbl[i].pc_of_txt;
                     survivor->pc_of_z   += sbl[i].pc_of_z; 
                     survivor->name       = consolidated_name; // rename only if at least one was consolidated
 
                     if (flag.debug_stats)
-                        iprintf ("Consolidated %s (txt_size=%"PRIu64" z_size=%"PRIu64") into %s (AFTER: txt_size=%"PRIu64" z_size=%"PRIu64")\n",
-                                 sbl[i].name, sbl[i].txt_size, sbl[i].z_size, survivor->name, survivor->txt_size, survivor->z_size);
+                        iprintf ("Consolidated %s (txt_len=%"PRIu64" z_size=%"PRIu64") into %s (AFTER: txt_len=%"PRIu64" z_size=%"PRIu64")\n",
+                                 sbl[i].name, sbl[i].txt_len, sbl[i].z_size, survivor->name, survivor->txt_len, survivor->z_size);
 
                     sbl[i] = (StatsByLine){}; 
                 }
@@ -204,8 +204,8 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
     va_end (args);
 }
 
-static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_ratio_0, Codec codec,
-                                int64_t all_txt_size, int64_t all_txt_size_0, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
+static void stats_output_stats (StatsByLine *s, unsigned num_stats, double src_comp_ratio, Codec codec,
+                                int64_t all_txt_len, int64_t all_txt_len_0, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
     bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
     bufprintf (evb, &z_file->stats_buf, "NAME              GENOZIP      %%      TXT       %%   RATIO\n%s", "");
@@ -215,27 +215,27 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double txt_r
             bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                        s->name, 
                        str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
-                       str_size ((double)s->txt_size).s, s->pc_of_txt, // txt size and % of total txt which is in this line
-                       (double)s->txt_size / (double)s->z_size); // ratio z vs txt
+                       str_size ((double)s->txt_len).s, s->pc_of_txt, // txt size and % of total txt which is in this line
+                       (double)s->txt_len / (double)s->z_size); // ratio z vs txt
                        
-    if (txt_ratio_0 != 1)
+    if (src_comp_ratio != 1)
         bufprintf (evb, &z_file->stats_buf, 
                    "TOTAL vs %-6s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                    codec_name (codec),
                    str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
-                   str_size (all_txt_size_0 / txt_ratio_0).s, all_pc_of_txt, // total txt fize and ratio z vs txt
-                   all_comp_ratio / txt_ratio_0);
+                   str_size (all_txt_len_0 / src_comp_ratio).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+                   all_comp_ratio / src_comp_ratio);
     
     bufprintf (evb, &z_file->stats_buf, 
                "%-15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-               txt_ratio_0 != 1 ? "TOTAL vs TXT" : "TOTAL",
+               src_comp_ratio != 1 ? "TOTAL vs TXT" : "TOTAL",
                str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
-               str_size (all_txt_size).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+               str_size (all_txt_len_0).s, all_pc_of_txt, // total txt fize and ratio z vs txt
                all_comp_ratio);
 }
 
 static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
-                                int64_t all_txt_size, int64_t all_uncomp_dict, int64_t all_comp_dict, int64_t all_comp_b250, int64_t all_comp_data, 
+                                int64_t all_txt_len, int64_t all_uncomp_dict, int64_t all_comp_dict, int64_t all_comp_b250, int64_t all_comp_data, 
                                 int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
 #define PC(pc) ((pc==0 || pc>=10) ? 0 : (pc<1 ? 2:1))
@@ -256,12 +256,12 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
                        PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
                        s->hash.s, s->pc_hash_occupancy, // Up to here - these don't appear in the total
                        s->uncomp_dict.s, s->comp_dict.s, s->comp_b250.s, s->comp_data.s, str_size (s->z_size).s, 
-                       str_size ((double)s->txt_size).s, (double)s->txt_size / (double)s->z_size, s->pc_of_txt, s->pc_of_z);
+                       str_size ((double)s->txt_len).s, (double)s->txt_len / (double)s->z_size, s->pc_of_txt, s->pc_of_z);
 
     bufprintf (evb, &z_file->STATS_buf, "TOTAL                                                                               "
                "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
                str_size (all_uncomp_dict).s, str_size (all_comp_dict).s,  str_size (all_comp_b250).s, 
-               str_size (all_comp_data).s,   str_size (all_z_size).s, str_size (all_txt_size).s, 
+               str_size (all_comp_data).s,   str_size (all_z_size).s, str_size (all_txt_len).s, 
                all_comp_ratio, all_pc_of_txt, all_pc_of_z);
 }
 
@@ -271,7 +271,7 @@ void stats_compress (void)
     stats_output_file_metadata(&z_file->stats_buf);
     buf_copy (evb, &z_file->STATS_buf, &z_file->stats_buf, char,0,0, "z_file->STATS_buf");
 
-    int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_size=0;
+    int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_len=0;
 
     // prepare data
     StatsByLine sbl[MAX_DICTS + NUM_SEC_TYPES] = { }, *s = sbl;
@@ -301,16 +301,16 @@ void stats_compress (void)
         if (ctx && !ctx->b250.num_b250_words && !ctx->txt_len && !ctx->b250.len && !ctx->is_stats_parent && !s->z_size) 
             continue;
 
-        s->txt_size = SEC(i) == SEC_TXT_HEADER  ? txtheader_get_bound_headers_len()
-                    : !ctx                      ? 0 
-                    :                             ctx->txt_len;
+        s->txt_len = SEC(i) == SEC_TXT_HEADER  ? txtheader_get_bound_headers_len()
+                   : !ctx                      ? 0 
+                   :                             ctx->txt_len;
         
         all_comp_dict   += dict_compressed_size;
         all_uncomp_dict += ctx ? ctx->dict.len : 0;
         all_comp_b250   += b250_compressed_size;
         all_comp_data   += local_compressed_size;
         all_z_size      += s->z_size;
-        all_txt_size    += s->txt_size;
+        all_txt_len     += s->txt_len;
 
         s->name = ctx ? ctx->name : ST_NAME (SEC(i)); 
         strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
@@ -340,52 +340,58 @@ void stats_compress (void)
 
         /* comp b250      */ s->comp_b250 = str_size (b250_compressed_size);
         /* comp data      */ s->comp_data = str_size (local_compressed_size);
-        /* % of txt       */ s->pc_of_txt = 100.0 * (double)s->txt_size / (double)z_file->txt_data_so_far_bind;
+        /* % of txt       */ s->pc_of_txt = 100.0 * (double)s->txt_len / (double)z_file->txt_data_so_far_bind;
         /* % of genozip   */ s->pc_of_z   = 100.0 * (double)s->z_size / (double)z_file->disk_so_far;
 
         s++;
     }
     unsigned num_stats = s - sbl;
 
-    double all_comp_ratio = (double)all_txt_size / (double)all_z_size;
-    double all_pc_of_txt  = 100.0 * (double)all_txt_size / (double)z_file->txt_data_so_far_bind;
-    double all_pc_of_z    = 100.0 * (double)all_z_size / (double)z_file->disk_so_far;
+    // note: for txt size and compression ratio in the TOTAL line (all_comp_ratio) we use txt_data_so_far_bind_0 
+    // (the original txt data size) and not all_txt_size (size after ZIP modifications like --optimize). 
+    // Therefore, in case of ZIP-modified txt, the sum of the (modified) fields in the TXT column will NOT equal the
+    // TOTAL in the TXT column. That's ok.
+    double all_comp_ratio = (double)z_file->txt_data_so_far_bind_0 /* without modifications */ / (double)all_z_size;
+    double all_pc_of_txt  = 100.0 * (double)all_txt_len / (double)z_file->txt_data_so_far_bind /* with modifications */;
+    double all_pc_of_z    = 100.0 * (double)all_z_size  / (double)z_file->disk_so_far;
 
-    // long form stats from --show-STATS    
+    // long form stats from --STATS    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
     stats_output_STATS (sbl, num_stats, 
-                        all_txt_size, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_data, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
+                        all_txt_len, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_data, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
     
     // consolidates stats of child contexts into the parent one
     stats_consolidate_ctxs (sbl, num_stats);
     
-    stats_consolidate_non_ctx (sbl, num_stats, "Reference", 5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
-                               ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS));
+    stats_consolidate_non_ctx (sbl, num_stats, "Reference", 6, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
+                               ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS),
+                               ST_NAME (SEC_REF_IUPACS));
 
     stats_consolidate_non_ctx (sbl, num_stats, "Other", 16, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
                                TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
     
-    ASSERTW (all_txt_size == z_file->txt_data_so_far_bind || flag.make_reference, // all_txt_size=0 in make-ref as there are no contexts
-             "Expecting all_txt_size=%"PRId64" == z_file->txt_data_so_far_bind=%"PRId64, all_txt_size, z_file->txt_data_so_far_bind);
+    ASSERTW (all_txt_len == z_file->txt_data_so_far_bind || flag.make_reference, // all_txt_len=0 in make-ref as there are no contexts
+             "Expecting all_txt_len=%"PRId64" == z_file->txt_data_so_far_bind=%"PRId64, all_txt_len, z_file->txt_data_so_far_bind);
 
-    // short form stats from --show-stats    
+    // short form stats from --stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
 
     // source compression, eg BGZF, against txt before any modifications
-    double txt_ratio_0 = (double)z_file->txt_data_so_far_bind_0 / (double)z_file->txt_disk_so_far_bind; 
+    double src_comp_ratio = (double)z_file->txt_data_so_far_bind_0 / (double)z_file->txt_disk_so_far_bind; 
 
-    stats_output_stats (sbl, num_stats, txt_ratio_0, z_file->codec, all_txt_size, z_file->txt_data_so_far_bind_0, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
+    stats_output_stats (sbl, num_stats, src_comp_ratio, z_file->codec, all_txt_len, z_file->txt_data_so_far_bind_0, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
 
     stats_check_count (all_z_size, count_per_section);
 
-    // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_so_far is 
-    // missing, while txt_data_so_far_single is what was actually processed
-    ASSERTW (all_txt_size == z_file->txt_data_so_far_bind || flag.data_modified || flag.make_reference, 
+    // note: we use txt_data_so_far_bind is the sum of recon_sizes - see zip_update_txt_counters - which is
+    // expected to be the sum of txt_len. However, this NOT the size of the original file which is stored in
+    // z_file->txt_data_so_far_bind_0.
+    ASSERTW (all_txt_len == z_file->txt_data_so_far_bind || flag.data_modified || flag.make_reference, 
              "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             dt_name (z_file->data_type), str_uint_commas (all_txt_size).s, str_uint_commas (z_file->txt_data_so_far_bind).s, 
-             (int32_t)(z_file->txt_data_so_far_bind - all_txt_size)); 
+             dt_name (z_file->data_type), str_uint_commas (all_txt_len).s, str_uint_commas (z_file->txt_data_so_far_bind).s, 
+             (int32_t)(z_file->txt_data_so_far_bind - all_txt_len)); 
 
     zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf);
     zfile_compress_section_data (evb, SEC_STATS, &z_file->STATS_buf);
