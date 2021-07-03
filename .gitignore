@@ -85,3 +85,4 @@ conda/README.md
 *.hcache
 unused-code
 genozip.threads-log.*
+.genozip_license

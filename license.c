@@ -119,6 +119,8 @@ static bool license_submit (const char *institution, const char *name, const cha
      }
     }; loop(document.body);
     */
+
+    // note: identical to register.sh
     char *url_format = PREFIX
                        "?entry.344252538=%.100s"
                        "&entry.926671216=%.50s"
@@ -227,6 +229,7 @@ uint32_t license_get (void)
 
     fprintf (stderr, "\nThank you. To complete your license registration, genozip will now submit the following information to the genozip licensing server:\n\n");
 
+    // note: text needs to match scripts/register.sh
     fprintf (stderr, "=====================================================================\n");
     fprintf (stderr, "Licensee institution / company name: %s\n", institution);
     fprintf (stderr, "Licensee name: %s\n", name);

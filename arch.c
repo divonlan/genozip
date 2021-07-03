@@ -159,13 +159,13 @@ const char *arch_get_os (void)
 #ifdef _WIN32
     uint32_t windows_version = GetVersion();
 
-    sprintf (os, "Windows %u.%u.%u", LOBYTE(LOWORD(windows_version)), HIBYTE(LOWORD(windows_version)), HIWORD(windows_version));
+    sprintf (os, "Windows_%u.%u.%u", LOBYTE(LOWORD(windows_version)), HIBYTE(LOWORD(windows_version)), HIWORD(windows_version));
 #else
 
     struct utsname uts;
     ASSERT (!uname (&uts), "uname failed: %s", strerror (errno));
 
-    sprintf (os, "%s %s", uts.sysname, uts.release);
+    sprintf (os, "%s_%s", uts.sysname, uts.release);
 
 #endif
 
