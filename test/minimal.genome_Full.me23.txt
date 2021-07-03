@@ -1,3 +1,0 @@
-# 23andMe
-# rsid	chromosome	position	genotype
-0	1	82154	AA

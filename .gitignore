@@ -1,3 +1,6 @@
+private
+test
+scripts
 launch.json
 *.back
 .conda-timestamp
