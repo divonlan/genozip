@@ -24,7 +24,7 @@ Dual coordinates VCF files (or DVCFs), are VCF files that contain coordinates in
 
 Both *renditions* are standard-compliant VCF files, and both contain precisely the same information, with the only difference being how the information is presented.
 
-Crucially, since both renditions contain all the information needed for rendering the file in both coordinate systems, the file in either rendition can be processed through any bioinformatics tool or pipeline, and still maintain its dual coordinates. In other words, an analytics pipeline may now have some steps that operate on the file in one coordinate system, and other steps operate in other coordinate system, and the same data can flow through these steps seemlessly.
+Crucially, since both renditions contain all the information needed for rendering the file in both coordinate systems, the file in either rendition can be processed through any bioinformatics tool or pipeline, and still maintain its dual coordinates. In other words, an analytics pipeline may now have some steps that operate on the file in one coordinate system, and other steps operate in the other coordinate system, and the same data can flow through these steps seamlessly.
 
 |
 
