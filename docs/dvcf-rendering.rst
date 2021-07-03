@@ -97,6 +97,7 @@ When cross-rendering (either in ``genocat --luft`` or when executing ``genozip``
 |           |                   |                                            | Ploidy > 2      | FORMAT/PL      |
 |           |                   |                                            |                 | FORMAT/PRI     |
 |           |                   |                                            |                 | FORMAT/GP      |
+|           |                   |                                            |                 | FORMAT/PP      |
 +-----------+-------------------+--------------------------------------------+-----------------+----------------+
 | R         | REF⇆ALT switch    | Re-order the per-allele values of the      | Not bi-allelic  | Number=R       |
 |           |                   | subfield                                   |                 | FORMAT/AD      |
@@ -115,6 +116,7 @@ When cross-rendering (either in ``genocat --luft`` or when executing ``genozip``
 | A_1       | REF⇆ALT switch    | Applied to AF-like fields:                 | Value ∉ [0,1]   | INFO/AF        |
 |           |                   | new value is (1.0-value)                   |                 | INFO/AF\_\*    |
 |           |                   |                                            |                 | INFO/\*_AF     |
+|           |                   |                                            |                 | (not MAX_AF)   |
 |           |                   |                                            |                 | INFO/MLEAF     |
 |           |                   |                                            |                 | INFO/LDAF      |
 |           |                   |                                            |                 | FORMAT/AF      |

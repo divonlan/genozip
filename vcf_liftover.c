@@ -152,7 +152,7 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
         return VCF2VCF_R;
 
     else if (number == 'G' || dict_id.num == dict_id_FORMAT_GL || dict_id.num == dict_id_FORMAT_PL || dict_id.num == dict_id_FORMAT_PRI ||
-             dict_id.num == dict_id_FORMAT_GP)
+             dict_id.num == dict_id_FORMAT_GP || dict_id.num == dict_id_FORMAT_PP)
         return VCF2VCF_G;
 
     else if (dict_id.num == dict_id_FORMAT_GT)       return VCF2VCF_GT;
