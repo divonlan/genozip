@@ -8,5 +8,6 @@
 
 extern uint32_t license_get (void);
 extern void license_display (void);
+extern void license_set_filename (const char *filename);
 
 #endif

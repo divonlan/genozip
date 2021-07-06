@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "genozip.h"
 #include "strings.h"
 #include "arch.h"
@@ -24,6 +26,8 @@
 #include "buffer.h"
 #include "flags.h"
 #include "md5.h"
+
+static const char *license_filename = NULL;  // non-standard filename set with --licfile
 
 void license_display (void)
 {
@@ -44,8 +48,18 @@ static uint32_t license_generate_num(void)
     return md5.words[0]; // 32 bit
 }
 
-static char *get_license_filename (bool create_folder_if_needed)
+void license_set_filename (const char *filename)
 {
+    struct stat sb;
+    ASSINP (!stat (filename, &sb), "Failed to access license file %s: %s", filename, strerror (errno));
+
+    license_filename = filename;
+}
+
+static const char *get_license_filename (bool create_folder_if_needed)
+{
+    if (license_filename) return license_filename; // non-standard filename set with --licfile
+
 #ifdef _WIN32
     ASSINP0 (getenv ("APPDATA"), "%s: cannot store license, because APPDATA env var is not defined");
 
@@ -70,7 +84,7 @@ static char *get_license_filename (bool create_folder_if_needed)
 
 static void license_store_locally (uint32_t license_num)
 {
-    char *filename = get_license_filename (true);
+    const char *filename = get_license_filename (true);
 
     FILE *fp = fopen (filename, "wb");
     ASSINP (fp, "Error: failed to open %s for writing: %s", filename, strerror (errno));
@@ -79,13 +93,11 @@ static void license_store_locally (uint32_t license_num)
     ASSERT (res > 0, "failed to write to %s: %s", filename, strerror (errno));
 
     fclose (fp);
-
-    FREE (filename);
 }
 
 static uint32_t licence_retrieve_locally (void)
 {
-    char *filename = get_license_filename (true);
+    const char *filename = get_license_filename (true);
 
     FILE *fp = fopen (filename, "rb");
     if (!fp) return 0; // no license
@@ -94,7 +106,6 @@ static uint32_t licence_retrieve_locally (void)
     ASSINP (fscanf (fp, "%u", &license_num) == 1, "failed to parse license file %s, please re-register with genozip --register", filename);
     
     fclose (fp);
-    FREE (filename);
 
     return license_num;
 }

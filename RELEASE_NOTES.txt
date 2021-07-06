@@ -452,3 +452,6 @@ f. New advanced options:
 - new option: --debug-stats. For debugging development of stats.c
 - new option: --debug-allthesame. For debugging development of the allthesame algorithm
 g. Much improved website genozip.com
+
+12.0.3 6/July/2021
+- new option: --licfile. See genozip.com/using-on-hpc.html

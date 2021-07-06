@@ -14,7 +14,7 @@ Genozip
    Specifications <specs>
    Source code <source>
    Publications & Citing <publications>
-   License <license>
+   Non-commercial license <license>
    Contact <contact>
   
 |
