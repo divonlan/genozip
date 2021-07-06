@@ -11,6 +11,14 @@ This was observed both in GATK 3.5 and 4.1.
 
 Genozip can directly filter the offending lines out of a BAM file:
 
+Step 1: Compress the file with Genozip:
+
+::
+
+    genozip myfile.bam
+
+Step 2: Filter it:
+
 - Keep only lines in which SEQ consists of only A,C,T,G,N:
 
 ::
