@@ -111,6 +111,12 @@ Examples:
 
                      |
 
+.. option:: --licfile  Supply a license file.
+
+| See: :ref:`using-on-hpc`
+
+                     |
+                     
 **VCF-specific options**
 
 .. option:: --chain  chain-file.  Lifts a VCF to be a dual-coordinate VCF (DVCF).
