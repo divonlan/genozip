@@ -84,7 +84,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 libdeflate/compiler_gcc.h          libdeflate/libdeflate.h \
 			 libdeflate/cpu_features_common.h   libdeflate/matchfinder_common.h
 
-GENERATED_TEST_FILES = test/basic.bam test/minimal.bam # test/basic.cram test/minimal.cram (our test files don't fit a reference - which is required to make a CRAM)
+GENERATED_TEST_FILES = private/test/basic.bam private/test/minimal.bam # test/basic.cram test/minimal.cram (our test files don't fit a reference - which is required to make a CRAM)
 
 ifeq ($(CC),cl) # Microsoft Visual C
 	$(error Only the gcc compiler is currently supported)
@@ -175,13 +175,13 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
-test/%.bam : test/%.sam
+private/test/%.bam : private/test/%.sam
 ifeq ($(OS),Windows_NT)
 	@echo "Generating $@ from $<"
 	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools  view $< -OBAM -o $@"
 endif
 
-test/%.cram : test/%.sam
+private/test/%.cram : private/test/%.sam
 ifeq ($(OS),Windows_NT)
 	@echo "Generating $@ from $<"
 	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OCRAM -o $@ -T data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz"
