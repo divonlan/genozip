@@ -42,9 +42,9 @@ When a DVCF file is rendered with ``--luft``, XSTRAND is placed, unmodified, as 
 
 **REF**
 
-Genozip checks whether the Luft reference matches REF\ :subscript:`prim` or one of the ALT\ :subscript:`prim` alleles. For Indels it does so by counting the number of repeats to the right of variant. It reverse-complements if XSTRAND=X.
+Genozip checks whether the Luft reference matches REF\ :subscript:`prim` or one of the ALT\ :subscript:`prim` alleles. For indels it does so by counting the number of repeats to the right of variant. It reverse-complements if XSTRAND=X.
 
-If an Indel is reverse-complemented, it is also left-anchored, for example:
+If an indel is reverse-complemented, it is also left-anchored, for example:
 
   | ``POS=10 REF=ACG ALT=A`` Original Deletion 
 
@@ -52,11 +52,11 @@ If an Indel is reverse-complemented, it is also left-anchored, for example:
   
   | ``POS=7 REF=GCG ALT=G`` Step 2: Left-anchoring: The base to the left of REF (as it appears in the reference) - ``G`` in this example - is added as a new left-anchor, and the right-side anchor ``T`` is discarded. We also decrement POS to reflect the added base.
 
-*Note*: Left-anchoring is *not* the same as left-aligning. Had the variant been left aligned, the POS would have been rolled all the way back to the beginning of the repeats of the *payload* of the Indel (the payload in the example above being ``CG``). Genozip does not left-align Indel variants when lifting because it would have been incorrect - the bases that appear before the a variant, for the specific samples in a particular VCF file, are not knowable from the VCF data alone.
+*Note*: Left-anchoring is *not* the same as left-aligning. Had the variant been left aligned, the POS would have been rolled all the way back to the beginning of the repeats of the *payload* of the indel (the payload in the example above being ``CG``). Genozip does not left-align indel variants when lifting because it would have been incorrect - the bases that appear before the a variant, for the specific samples in a particular VCF file, are not knowable from the VCF data alone.
 
 If the mapped sequence in the Luft reference matches neither REF\ :subscript:`prim` nor ALT\ :subscript:`prim`, or if it matches one of the ALTs but the variant is not bi-allelic, the variant is rejected from lifting with RefMultiAltSwitchSNP or RefMultiAltSwitchIndel. This is because Genozip only supports REF⇆ALT switches of bi-allelic variants.
 
-Complex Indels (those where both REF and at least one of the ALTs are multi-base) - are lifted only if the REF matches exactly in both references (with or without XSTRAND). 
+Complex indels (those where both REF and at least one of the ALTs are multi-base) - are lifted only if the REF matches exactly in both references (with or without XSTRAND). 
 
 Variants with symbolic allele ALTs (those with ALT values such as <DEL> or <INS>) are lifted only if the REF matches exactly in both references. They are rejected with XstrandSV if the mapping is with XSTRAND, and they are also rejected with INFO/END, if INFO/END does not map to the same chain file alignment as POS.
 

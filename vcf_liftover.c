@@ -454,7 +454,7 @@ static inline bool vcf_lo_is_same_seq (const char *seq1, unsigned seq1_len, cons
             if (UPPER_CASE (seq1[i]) != UPPER_CASE (seq2[i])) return false;
     }
     else { 
-        // if xstrand Indel - don't compare anchor bases. Note: a non-SNP is_xstrand is always an Indel bc we don't support xstrand with structural variants
+        // if xstrand indel - don't compare anchor bases. Note: a non-SNP is_xstrand is always an indel bc we don't support xstrand with structural variants
         if (!is_snp) {
             seq1++; seq1_len--; 
             seq2++; seq2_len--;
@@ -578,7 +578,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
     // note: no need to actually seg here as it is all_the_same handled in vcf_seg_initialize, just account for txt_len
     CTX(VCF_LIFT_REF)->txt_len += SEL (info_ref_len, 0); // we account for oREF (to be shown in INFO/LUFT in default reconstruction). 
 
-    // an Indel with REF<>ALT switch can change the size of the oREF field in INFO/LUFT
+    // an indel with REF<>ALT switch can change the size of the oREF field in INFO/LUFT
     if (ostatus == LO_OK_REF_ALT_SWITCH_INDEL) 
         vb->recon_size += (int)vb->main_ref_len - (int)info_ref_len;
 
