@@ -269,7 +269,8 @@ uint32_t license_get (void)
 
     license_store_locally (license_num);
     fprintf (stderr, "\nCongratulations! Your Genozip non-commerical license has been granted.\n\n"
-                     "Please see the documentation on https://genozip.com\n\n");
+                     "Documentation: " GENOZIP_URL "\n\n"
+                     "Citing: " WEBSITE_PUBLICATIONS "\n\n");
 
     return license_num;
 }
