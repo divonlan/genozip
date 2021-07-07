@@ -26,6 +26,7 @@
 #include "buffer.h"
 #include "flags.h"
 #include "md5.h"
+#include "website.h"
 
 static const char *license_filename = NULL;  // non-standard filename set with --licfile
 
@@ -200,10 +201,12 @@ uint32_t license_get (void)
     // UI flow to generate a new license for the user
 
     // if stdin or stderr is redirected - we cannot ask the user an interactive question
-    ASSINP (isatty(0) && isatty(2), "%s: Use of genozip is free, but requires registration. Please run: genozip --register", global_cmd);
+    ASSINP0 (isatty(0) && isatty(2), "Use of genozip is free for non-commercial purposes, but requires registration. Please run: genozip --register.\n"
+                                     "If you are unable to register (for example because this is a batch-job machine) please see: " WEBSITE_USING_ON_HPC);
 
     fprintf (stderr, "Welcome to genozip!\n\n"
-                     "The use of genozip for non-commercial purposes (as defined in the license) is FREE, but requires registration\n\n");
+                     "The use of genozip for non-commercial purposes (as defined in the license: "WEBSITE_LICENSE") is FREE, but requires registration.\n"
+                     "If you are not sure whether your usage is considered non-commercial, please email register@genozip.com\n\n");
 
     char confirm[1000], institution[1000], name[1000], email[1000], commercial[1000], update[1000];
 

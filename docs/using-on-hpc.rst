@@ -18,3 +18,5 @@ In these environments, do the following:
 ::
 
     genozip --licfile mydir/.genozip_license mydata.bam
+
+Still can't register the license? email register@genozip.com for help.
