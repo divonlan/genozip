@@ -207,7 +207,8 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     file_close (&z_file, false, false);
     is_first_z_file = false;
 
-    if (flag.replace && txt_filename && z_filename) file_remove (z_filename, true); 
+    // case --replace: now that the file (or multiple bound files) where reconstructed, we can remove the genozip file
+    if (flag.replace && (txt_filename || flag.unbind) && z_filename) file_remove (z_filename, true); 
 
 done:
     RESTORE_FLAGS;
@@ -334,7 +335,7 @@ static void main_genozip (const char *txt_filename,
     }
 
     if (!flag.rejects_coord)
-        stats_add_txt_name (txt_name); // add txt file name to stats data stored in z_file
+        stats_add_txt_name (txt_name); // add txt_name (inluding stdin) to stats data stored in z_file
 
     TEMP_FLAG (quiet, flag.rejects_coord ? true : flag.quiet); // no warnings when (re) processing rejects
 
@@ -379,8 +380,24 @@ static void main_genozip (const char *txt_filename,
     // test the compression, if the user requested --test
     if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_txt_file, is_chain);
 
-    // remove after test (if any) was successful - NOT GOOD ENOUGH - bug 342
-    if (remove_txt_file) file_remove (txt_filename, true); 
+    // remove after test (if any) was successful
+    if (remove_txt_file) {
+        
+        // add file to remove_list, don't actually remove it yet
+        static Buffer remove_list = { .name = "remove_list" };
+        buf_add_string (evb, &remove_list, txt_filename);
+        remove_list.len++;   // include the \0 separator added by buf_add_string
+        remove_list.param++; // count files
+
+        // case: z_file has closed and tested if needed - remove all files included in this z_file 
+        if (z_closes_after_me) {
+            str_split (remove_list.data, remove_list.len-1, remove_list.param, '\0', rm_file, true); // -1 to remove last \0
+            for (unsigned i=0; i < n_rm_files; i++)
+                file_remove (rm_files[i], true); 
+            
+            buf_free (&remove_list);
+        }
+    }
 
 done: {
     // propogate up some flags
