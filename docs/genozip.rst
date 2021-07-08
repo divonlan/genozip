@@ -92,7 +92,7 @@ Examples:
 
                      |
                      
-.. option:: -e, --reference filename.  Use a reference file (filename extension .ref.genozip) - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat. While genozip is capabale of compressing without a reference it can utilize a reference file to improve compression of FASTQ SAM/BAM and VCF files. The improvement for FASTQ files is substantial; for SAM/BAM it may be significant; for VCF if it is significant only if REFALT content is a significant percentage of the zip content (see "% of zip" in --stats)
+.. option:: -e, --reference filename.  Use a reference file (filename extension .ref.genozip) - this is a FASTA file genozipped with the --make-reference option. The same reference needs to be provided to genounzip or genocat. While genozip is capabale of compressing without a reference it can utilize a reference file to improve compression of FASTQ SAM/BAM and VCF files. The improvement for FASTQ files is substantial; for SAM/BAM it may be significant, in particular for low-coverage files; for VCF if it is significant only if REFALT content is a significant percentage of the zip content (see "% of zip" in --stats)
 
    | Note: this is equivalent of setting the environment variable $GENOZIP_REFERENCE with the reference filename.
    |
