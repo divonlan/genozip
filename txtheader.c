@@ -69,26 +69,31 @@ void txtheader_alloc_contigs (uint32_t more_contigs, uint32_t more_dict_len, boo
 void txtheader_add_contig (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *liftover_)
 {
     bool liftover = !!liftover_;
-    WordIndex ref_chrom=WORD_INDEX_NONE;
-
-    if (!liftover && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER))
-        ref_chrom = ref_contigs_ref_chrom_from_header_chrom (flag.reference == REF_LIFTOVER ? prim_ref : gref, 
-                                                             chrom_name, chrom_name_len, &last_pos, contigs.len);
 
     Buffer *this_contigs = liftover ? &ocontigs      : &contigs;
     Buffer *this_dict    = liftover ? &ocontigs_dict : &contigs_dict;
+
+    // case: we have a reference, we use the reference chrom_index
+    WordIndex chrom_index;
+    if (!liftover && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER))
+        chrom_index = ref_contigs_ref_chrom_from_header_chrom (flag.reference == REF_LIFTOVER ? prim_ref : gref, 
+                                                               chrom_name, chrom_name_len, &last_pos, contigs.len);
+
+    // case: no reference, chrom_index is the index of the CHROM context, where these contigs will be copied by txtheader_zip_prepopulate_contig_ctxs
+    else
+        chrom_index = this_contigs->len;
 
     // add to contigs. note: index is this_contigs is by order of appearance in header, not the same as the reference
     NEXTENT (RefContig, *this_contigs) = (RefContig){ 
         .max_pos     = last_pos, 
         .char_index  = this_dict->len, 
         .snip_len    = chrom_name_len,
-        .chrom_index = ref_chrom // WORD_INDEX_NONE if not in reference
+        .chrom_index = chrom_index
     };
 
     if (flag.show_txt_contigs) 
         iprintf ("%sindex=%u \"%.*s\" LN=%"PRId64" ref_chrom_index=%u snip_len=%u\n", 
-                 liftover ? "liftover: " : "", (unsigned)this_contigs->len-1, chrom_name_len, chrom_name, last_pos, ref_chrom, chrom_name_len);
+                 liftover ? "liftover: " : "", (unsigned)this_contigs->len-1, chrom_name_len, chrom_name, last_pos, chrom_index, chrom_name_len);
 
     // add to contigs_dict
     buf_add (this_dict, chrom_name, chrom_name_len);

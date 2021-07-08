@@ -478,15 +478,15 @@ void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf
     ASSERT0 (buf_is_alloc (contigs_buf) && buf_is_alloc (contigs_dict_buf),
              "expecting contigs and contigs_dict to be allocated");
 
-    Context *zctx = &z_file->contexts[dst_did_i];
+    Context *zctx = ZCTX(dst_did_i);
     ASSERTNOTINUSE (zctx->dict); // make sure we only build it once... 
     
     zctx->no_stons = true;
     zctx->st_did_i = DID_I_NONE;
 
-    // copy dict
     ARRAY (RefContig, contigs, *contigs_buf);
 
+    // copy dict
     buf_copy (evb, &zctx->dict, contigs_dict_buf, char, 0, 0, "z_file->contexts->dict");
     buf_set_overlayable (&zctx->dict);
 

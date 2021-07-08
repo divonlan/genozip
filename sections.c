@@ -194,7 +194,7 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
     ARRAY (SectionEnt, ents, z_file->section_list_buf);
 
     if (header) {
-        iprintf ("Contents of the genozip header (output of --show-gheader) of %s:\n", z_name);
+        iprintf ("Contents of the SEC_GENOZIP_HEADER section (output of --show-gheader) of %s:\n", z_name);
         iprintf ("  genozip_version: %u\n",         header->genozip_version);
         iprintf ("  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
         iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 

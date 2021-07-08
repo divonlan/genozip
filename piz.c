@@ -349,7 +349,6 @@ DataType piz_read_global_area (Reference ref)
     // Note: some dictionaries are skipped based on skip() and all flag logic should implemented there
     ctx_read_all_dictionaries(); 
 
-//    if (!flag.header_only && !z_dual_coords) { // dual coordinates need this stuff of for the rejects part of the header
     if (!flag.header_only || z_dual_coords) { // dual coordinates need this stuff of for the rejects part of the header
 
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)

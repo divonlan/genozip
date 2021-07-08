@@ -39,12 +39,11 @@ static void BGEN_ref_contigs (Buffer *contigs_buf)
 static void ref_contigs_show (const Buffer *contigs_buf, bool created)
 {
     ARRAY (const RefContig, cn, *contigs_buf);
-    Context *chrom_ctx = &z_file->contexts[CHROM];
 
     iprintf ("\nContigs as they appear in the reference%s:\n", created ? " created (note: contig names are as they appear in the txt data, not the reference)" : "");
     for (uint32_t i=0; i < cn_len; i++) {
 
-        const char *chrom_name = ENT (const char, chrom_ctx->dict, cn[i].char_index);
+        const char *chrom_name = ENT (const char, ZCTX(CHROM)->dict, cn[i].char_index);
 
         if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER || 
             z_file->data_type == DT_REF) 
@@ -103,7 +102,7 @@ void ref_contigs_compress (Reference ref)
             const Buffer *header_contigs = txtheader_get_contigs();
             if (header_contigs) {
                 // search for the reference chrom index r->chrom in header_contigs to find the equivalent chrom (same or alt name) in txt
-                for (uint32_t i=0; i < header_contigs->len; i++)
+                for (uint32_t i=0; i < header_contigs->len; i++) 
                     if (ENT (RefContig, *header_contigs, i)->chrom_index == r->chrom) {
                         txt_chrom = i;
                         break; // found
@@ -121,8 +120,8 @@ void ref_contigs_compress (Reference ref)
                 .gpos        = r->gpos - delta, 
                 .min_pos     = r->first_pos - delta,
                 .max_pos     = r->last_pos,
-                .chrom_index = r->chrom,  // reference index
-                .char_index  = chrom_node ? chrom_node->char_index : (CharIndex)-1, 
+                .chrom_index = r->chrom,  // reference index (except if REF_INTERNAL - index into ZCTX(CHROM))
+                .char_index  = chrom_node ? chrom_node->char_index : 0, 
                 .snip_len    = chrom_node ? chrom_node->snip_len   : 0
             };
 
@@ -198,7 +197,7 @@ static void ref_contigs_create_sorted_index (Reference ref)
 
 static int ref_contigs_sort_chroms_alphabetically (const void *a, const void *b)
 {
-    Context *ctx = &z_file->contexts[CHROM];
+    Context *ctx = ZCTX (CHROM);
 
     uint32_t index_a = *(uint32_t *)a;
     uint32_t index_b = *(uint32_t *)b;
@@ -215,7 +214,7 @@ void ref_contigs_sort_chroms (void)
 {
     uint32_t num_chroms = ZCTX(CHROM)->word_list.len;
 
-    // z_file->chroms_sorted_index - an array of uint32 of indexes into ZCTX(CHROM].word_list - sorted by alphabetical order of the snip in z_file->contexts[CHROM)->dict
+    // z_file->chroms_sorted_index - an array of uint32 of indexes into ZCTX(CHROM)->word_list - sorted by alphabetical order of the snip in ZCTX(CHROM)->dict
     buf_alloc (evb, &z_file->chroms_sorted_index, 0, num_chroms, uint32_t, 1, "z_file->chroms_sorted_index");
     for (uint32_t i=0; i < num_chroms; i++)
         NEXTENT (uint32_t, z_file->chroms_sorted_index) = i;
@@ -350,7 +349,7 @@ const char *ref_contigs_get_chrom_snip (Reference ref, WordIndex chrom_index, co
 void ref_contigs_generate_data_if_denovo (Reference ref)
 {
     // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
-    Context *chrom_ctx = &z_file->contexts[CHROM];
+    Context *chrom_ctx = ZCTX(CHROM);
 
     ASSINP (flag.reference == REF_INTERNAL || (buf_is_alloc (&chrom_ctx->dict) && buf_is_alloc (&chrom_ctx->word_list)),
             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);

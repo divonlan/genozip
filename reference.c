@@ -327,7 +327,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     WordIndex chrom          = (WordIndex)BGEN32 (header->chrom_word_index);
     uint32_t uncomp_len      = BGEN32 (header->h.data_uncompressed_len);
     PosType ref_sec_pos      = (PosType)BGEN64 (header->pos);
-    PosType ref_sec_gpos     = (PosType)BGEN64 (header->gpos);
+    PosType ref_sec_gpos     = (PosType)BGEN64 (header->gpos); // this is equal to sec_start_gpos. However up to 12.0.3 we had a bug in case of compacted ranges in a SAM/BAM DENOVO reference with start flanking regions - GPOS in the section header of a didn't reflect the flanking removal, so header->gpos cannot be trusted as correct for older SAM/BAM DENOVO reference files
     PosType ref_sec_len      = (PosType)BGEN32 (header->num_bases);
     PosType ref_sec_last_pos = ref_sec_pos + ref_sec_len - 1;
     PosType compacted_ref_len=0, initial_flanking_len=0, final_flanking_len=0; 
@@ -338,10 +338,10 @@ static void ref_uncompress_one_range (VBlockP vb)
     PosType sec_start_gpos          = r->gpos + sec_start_within_contig;
     PosType sec_end_within_contig   = sec_start_within_contig + ref_sec_len - 1;
     
-    bool is_compacted = (header->h.section_type == SEC_REF_IS_SET); // we have a SEC_REF_IS_SET if  SEC_REFERENCE was compacted
+    bool is_compacted = (header->h.section_type == SEC_REF_IS_SET); // we have a SEC_REF_IS_SET if SEC_REFERENCE was compacted
 
     if (flag.show_reference && primary_command == PIZ && r)  // in ZIP, we show the compression of SEC_REFERENCE into z_file, not the uncompression of the reference file
-        iprintf ("vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
+        iprintf ("vb_i=%u Uncompressing %-14s chrom=%u ('%.*s') gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
                  vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
                  BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
@@ -380,6 +380,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         // note on locking: while different threads uncompress regions of the range that are non-overlapping, 
         // there might be a 64b word that is split between two ranges
         RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len); 
+
         bit_array_copy (&r->is_set, sec_start_within_contig, is_set, 0, ref_sec_len); // initialization of is_set - case 3
         ref_unlock (vb->ref, lock);
 
@@ -393,7 +394,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         header = (SectionHeaderReference *)&vb->z_data.data[*ENT (uint32_t, vb->z_section_headers, 1)];
 
         if (flag.show_reference && primary_command == PIZ && r) 
-            iprintf ("vb_i=%u Uncompressing %-14s chrom=%u (%.*s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
+            iprintf ("vb_i=%u Uncompressing %-14s chrom=%u ('%.*s') gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
                      vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
                      BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
@@ -412,7 +413,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         ASSERT (uncomp_len == roundup_bits2bytes64 (ref_sec_len*2), "uncomp_len=%u inconsistent with ref_len=%"PRId64, uncomp_len, ref_sec_len); 
 
         if (primary_command == ZIP && flag.reference == REF_EXT_STORE) { // initialization of is_set - case 1
-            RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len);
+            RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len + 31);
             bit_array_clear_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is cleared
             ref_unlock (vb->ref, lock);
         }
@@ -451,7 +452,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", 0, SEC_REFERENCE);
 
     // lock - while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
-    RefLock lock = ref_lock (vb->ref, ref_sec_gpos, ref_sec_len); 
+    RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len); 
 
     if (is_compacted) {
         const BitArray *compacted = buf_zfile_buf_to_bitarray (&vb->compressed, compacted_ref_len * 2);
@@ -468,6 +469,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     }
 
     ref_unlock (vb->ref, lock);
+
     buf_free (&vb->compressed);
 
 finish:
@@ -895,7 +897,7 @@ static void ref_copy_one_compressed_section (Reference ref, File *ref_file, cons
         iprintf ("Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
                  ref->filename, BGEN32 (header->chrom_word_index), 
                  ENT (char, ctx->dict, node->char_index), 
-                 BGEN64(header->gpos), BGEN64(header->pos), 
+                 BGEN64 (header->gpos), BGEN64 (header->pos), 
                  BGEN32 (header->num_bases), 
                  BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset));
     }
@@ -957,11 +959,9 @@ static bool ref_remove_flanking_regions (Reference ref, Range *r, uint64_t r_num
         r->is_set.nbits - r_num_set_bits - *start_flanking_region_len - end_flanking_region_len;
 
     // remove flanking regions - will allow a smaller allocation for the reference in PIZ 
+    r->gpos      += *start_flanking_region_len;
     r->first_pos += *start_flanking_region_len;
     r->last_pos  -= end_flanking_region_len;
-
-    if (ranges_type(ref) == RT_LOADED || ranges_type(ref) == RT_CACHED) // note: for RT_DENOVO, gpos is still 0 at this point
-        r->gpos  += *start_flanking_region_len;
 
     ASSERT (r->last_pos >= r->first_pos, "bad removal of flanking regions: r->first_pos=%"PRId64" r->last_pos=%"PRId64,
             r->first_pos, r->last_pos);
