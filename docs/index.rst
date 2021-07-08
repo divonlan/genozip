@@ -11,7 +11,6 @@ Genozip
    Capabilities <capabilities>
    Applications <applications> 
    Algorithms <algorithms>
-   Specifications <specs>
    Source code <source>
    Publications & Citing <publications>
    Non-commercial license <license>

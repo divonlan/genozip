@@ -225,7 +225,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst \
 	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
-	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst docs/specs.rst\
+	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst \
 	   docs/sam2fq.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst docs/using-on-hpc.rst \
 	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-spec.rst docs/dvcf-chain-files.rst 
 
