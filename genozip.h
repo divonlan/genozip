@@ -271,4 +271,5 @@ extern bool progress_newline_since_update;
 #define EXIT_STREAM               4
 #define EXIT_SIGHUP               5
 #define EXIT_SIGSEGV              6
+#define EXIT_ABNORMAL             7
 #endif

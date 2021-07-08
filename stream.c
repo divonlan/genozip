@@ -347,11 +347,14 @@ int stream_wait_for_exit (Stream *stream)
     CloseHandle (stream->pid);
 
 #else
-    waitpid (stream->pid, &stream->exit_status, 0); 
+    int exit_status;
+    waitpid (stream->pid, &exit_status, 0); 
+
+    stream->exit_status = WIFEXITED (exit_status) ? WEXITSTATUS (exit_status) : EXIT_ABNORMAL;
 
     // in Windows, the main process fails to CreateProcess it exits. In Unix, it is the child process that 
     // fails to execv, and exits and code EXIT_STREAM. The main process catches it here, and exits silently.
-    if (WEXITSTATUS (stream->exit_status) == EXIT_STREAM) 
+    if (stream->exit_status == EXIT_STREAM) 
         exit(EXIT_GENERAL_ERROR); // child process failed to exec and displayed error message, we can exit silently
 
 #endif
