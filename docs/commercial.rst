@@ -26,7 +26,7 @@ Enterprise    Annual revenue above $50M  $8000 / year
     |
     | - A "commercial setting" includes any for-profit entity, and also includes any non-profit entity operating a commercial activity (such as hospital, clinical lab, research services organization etc). In short, if you have clients paying you for your services which involve processing genomic data, you require a commercial license. 
     |
-    | - If you plan to provide a software solution to your clients that incorporates Genozip, each client needs its own license. 
+    | - If you plan to provide a software solution to your clients that incorporates Genozip, each client will need their own license. 
     |
     | - Payment is annual.
     |

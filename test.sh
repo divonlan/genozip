@@ -4,7 +4,7 @@ shopt -s extglob  # Enables extglob - see https://mywiki.wooledge.org/glob
 export GENOZIP_TEST="Yes" # Causes output of debugger arguments
 unset GENOZIP_REFERENCE   # initialize
 
-TESTDIR=test
+TESTDIR=private/test
 OUTDIR=$TESTDIR/tmp
 
 cleanup() { 
@@ -50,7 +50,7 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         for file in ${args[@]:2}; do 
             cp $TESTDIR/$file $OUTDIR/copy.$file
             copies+=( $OUTDIR/copy.$file )
-            args+=( tmp/copy.$file ) # adding the test/ prefix in a sec
+            args+=( tmp/copy.$file ) # adding the ${TESTDIR}/ prefix in a sec
         done
     fi
 
@@ -404,7 +404,7 @@ batch_dvcf()
 
     # test explicit reference
     test_header "${files[0]} - DVCF test - explicit reference"
-    $genozip test/${files[0]} -fo $output -C $chain -e $hg19 -e $GRCh38 || exit 1
+    $genozip ${TESTDIR}/${files[0]} -fo $output -C $chain -e $hg19 -e $GRCh38 || exit 1
 
     for file in ${files[@]}; do
         test_header "$file - DVCF test"
@@ -417,9 +417,9 @@ batch_dvcf()
         # compare src to primary (ignoring header and INFO fields)
         echo -n "Step 1: make ${primary}.genozip from $file : " 
         if [ "$file" == basic-dvcf-luft.vcf ]; then # this file is already a Luft rendition
-            $genozip test/$file -fo ${primary}.genozip || exit 1
+            $genozip ${TESTDIR}/$file -fo ${primary}.genozip || exit 1
         else
-            $genozip -C $chain test/$file -fo ${primary}.genozip || exit 1
+            $genozip -C $chain ${TESTDIR}/$file -fo ${primary}.genozip || exit 1
         fi
 
         echo -n "Step 2: make ${primary} from ${primary}.genozip : " 
@@ -469,11 +469,11 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
 {
     batch_print_header
 
-    local files=(test/basic.bam test/basic-test-kraken.fq test/basic-test-kraken.fa test/basic.kraken \
-                 test/basic.sam)
+    local files=(${TESTDIR}/basic.bam ${TESTDIR}/basic-test-kraken.fq ${TESTDIR}/basic-test-kraken.fa ${TESTDIR}/basic.kraken \
+                 ${TESTDIR}/basic.sam)
     local file
 
-    $genozip test/basic.kraken -fo $kraken
+    $genozip ${TESTDIR}/basic.kraken -fo $kraken
 
     # testing filtering FASTA, FASTQ, SAM and KRAKEN itself with --taxid 
     for file in ${files[@]}; do
@@ -481,24 +481,24 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
     done
 
     # testing filtering SAM translated to FASTQ with --taxid 
-    test_kraken "test/basic.bam $1" \
+    test_kraken "${TESTDIR}/basic.bam $1" \
                 "--fastq -k570 $2" \
                 "--fastq -k^570 $2"
     
     # testing filtering SAM translated to FASTQ with --taxid and +0 
-    test_kraken "test/basic.bam $1" \
+    test_kraken "${TESTDIR}/basic.bam $1" \
                 "--fastq -k570+0 $2" \
                 "--fastq -k^570+0 $2"
     
     # testing filtering SAM with a concatenated KRAKEN file (representing slightly different classifications
     # originating from separate kraken2 of R1 and R2 FASTQ files)
-    $genozip test/basic.kraken test/basic-2nd-file.kraken -fo $kraken
+    $genozip ${TESTDIR}/basic.kraken ${TESTDIR}/basic-2nd-file.kraken -fo $kraken
 
-    test_kraken "test/basic.bam $1"\
+    test_kraken "${TESTDIR}/basic.bam $1"\
                 "-k570 $2" \
                 "-k^570 $2"
 
-    test_kraken "test/basic.bam $1"\
+    test_kraken "${TESTDIR}/basic.bam $1"\
                 "-k570+0 $2" \
                 "-k^570+0 $2"
     cleanup
@@ -516,11 +516,11 @@ batch_single_thread()
     test_standard "-@1 -e$hg19 -e$GRCh38" "-@1" basic.chain 
     
     # with chain and reference (note: cannot --test dual-coord files)
-    $genozip -@1 -C$chain test/basic-dvcf-source.vcf -f || exit 1
+    $genozip -@1 -C$chain ${TESTDIR}/basic-dvcf-source.vcf -f || exit 1
 
     # with kraken aux file
-    $genozip -@1 test/basic.kraken -fo $kraken || exit 1
-    test_kraken "-@1 -K$kraken test/basic.bam" "-@1 -k570" "-@1 -k^570" 
+    $genozip -@1 ${TESTDIR}/basic.kraken -fo $kraken || exit 1
+    test_kraken "-@1 -K$kraken ${TESTDIR}/basic.bam" "-@1 -k570" "-@1 -k^570" 
 }
 
 batch_iupac() 
@@ -528,8 +528,8 @@ batch_iupac()
     batch_print_header
 
     # SAM
-    test_count_genocat_lines test/basic.sam "-H --bases=AGCTN" 7
-    test_count_genocat_lines test/basic.sam "-H --bases=^AGCTN" 1
+    test_count_genocat_lines ${TESTDIR}/basic.sam "-H --bases=AGCTN" 7
+    test_count_genocat_lines ${TESTDIR}/basic.sam "-H --bases=^AGCTN" 1
 
     # BAM
     test_header "genocat --bases AGCTN --count --bam"
@@ -543,8 +543,8 @@ batch_iupac()
     if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 
     # FASTQ
-    test_count_genocat_lines test/basic.fq "-H --IUPAC=AGCTN" 20
-    test_count_genocat_lines test/basic.fq "-H --IUPAC=^AGCTN" 4
+    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --IUPAC=AGCTN" 20
+    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --IUPAC=^AGCTN" 4
 }
 
 # Test SAM/BAM translations
@@ -739,7 +739,7 @@ batch_real_world_with_ref()
     echo "subsets of real world files (with reference)"
     test_standard "-mf $1 -e $hg19" " " ${files[*]}
 
-    for f in $files test.GRCh38_to_GRCh37.chain; do rm -f test/${f}.genozip ; done
+    for f in $files test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
 }
 
 batch_real_world_small_vbs()
@@ -876,7 +876,7 @@ batch_genols()
 {
     batch_print_header
 
-    $genozip test/basic.sam test/minimal.sam -fo $output -p abcd || exit 1
+    $genozip ${TESTDIR}/basic.sam ${TESTDIR}/minimal.sam -fo $output -p abcd || exit 1
     $genols $output -p abcd || exit 1
     rm -f $output
 }
@@ -963,7 +963,7 @@ cleanup
 # only if doing a full test (starting from 0) - delete genome and hash caches
 sparkling_clean()
 {
-    rm -f ${hg19}.*cache* ${GRCh38}.*cache* test/*.genozip test/*rejects*
+    rm -f ${hg19}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*rejects*
 }
 
 # unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )

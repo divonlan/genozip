@@ -455,3 +455,8 @@ g. Much improved website genozip.com
 
 12.0.3 6/July/2021
 - new option: --licfile. See genozip.com/using-on-hpc.html
+
+12.0.4 8/July/2021
+- safer implementation of --replace
+- updated non-commercial license
+- bug fixes
