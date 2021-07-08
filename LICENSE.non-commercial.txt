@@ -64,8 +64,9 @@ commerical goals; and/or (iii) a client is paying You for the work that includes
 genozip. If you are uncertain about whether your case would fall into these categories, please
 enquire with register@genozip.com.
 
-      b1. This license DOES permit Using the Work for educational or training purposes, including
-by a commerical entity.
+      b1. This license DOES permit Using the Work for academic research that lacks ultimate
+commercial goals, and/or for educational purposes and/or for training purposes, including by a
+commerical entity.
 
       b2. This license DOES permit Using the Work for the purpose of evaluating it for a duration
 of 30 days, including by a commerical entity.
@@ -89,7 +90,9 @@ registration confirmation after registering by emailing register@genozip.com.
 3. Severe non-compliance. Violation of section 2.b. and/or 2.d. is considered severe non-compliance
 with this non-commercial license. In this case, Licensor claims, and You hereby agree to, equally
 shared ownership with Licensor of any revenue generated and/or any intellectual property created
-that involved the non-compliant use of Genozip.
+that involved the non-compliant use of Genozip. If you are reviewing this license and concerned
+that this section might apply to you, please review our commercial license options at http:/
+/genozip.com/commercial.html
 
 4. Submission of Contributions. Unless You explicitly state otherwise, any software source code
 intentionally submitted for inclusion in the Work by You to the Licensor shall imply complete and
