@@ -460,3 +460,6 @@ g. Much improved website genozip.com
 - safer implementation of --replace
 - updated non-commercial license
 - bug fixes
+
+12.0.5 9/July/2021
+- Compressing low-coverage SAM/BAM files without a reference: better compression ratio, better decompression performance

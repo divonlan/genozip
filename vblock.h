@@ -70,7 +70,6 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
-    uint32_t range_num_set_bits;  /* ZIP: main thread telling compute thread to how many bits are set in range.is_set */ \
     \
     /* data for dictionary compressing */ \
     char *fragment_start;        \

@@ -108,9 +108,9 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
     if (r->gpos % 64 && r->chrom != (r-1)->chrom) // each new chrom needs to have a GPOS aligned to 64, so that we can overload is_set bits between the whole genome and individual chroms
         r->gpos = ROUNDUP64 (r->gpos);
 
-    vb->range              = r; // range to compress
-    vb->range_num_set_bits = r->ref.nbits / 2;
-    vb->ready_to_dispatch  = true;
+    vb->range             = r; // range to compress
+    vb->range->num_set    = r->ref.nbits / 2;
+    vb->ready_to_dispatch = true;
 }
 
 // make-refernece called by main thread after completing compute thread of VB 

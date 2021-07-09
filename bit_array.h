@@ -187,7 +187,10 @@ static inline void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) //
 
 // Allocate using existing struct
 extern BitArray bit_array_alloc_do (bit_index_t nbits, bool clear, const char *func, uint32_t code_line);
-#define bit_array_alloc(nbits, clear) bit_array_alloc_do (nbits, clear, __FUNCTION__, __LINE__)
+#define bit_array_alloc(nbits, clear) bit_array_alloc_do ((nbits), (clear), __FUNCTION__, __LINE__)
+
+extern void bit_array_realloc_do (BitArray *bitarr, bit_index_t nbits, bit_index_t low_level_nbits, bool clear, const char *func, uint32_t code_line);
+#define bit_array_realloc(bitarr, nbits, low_level_nbits, clear) bit_array_realloc_do ((bitarr), (nbits), (low_level_nbits), (clear), __FUNCTION__, __LINE__)
 
 extern void bit_array_free (BitArray* bitarr);
 
@@ -440,10 +443,6 @@ extern size_t bit_array_print_hex (const BitArray* bitarr,
 // Clone and copy
 //
 
-// Copy a BitArray struct and the data it holds - returns pointer to new object
-#define bit_array_dup	bit_array_clone
-BitArray* bit_array_clone(const BitArray* bitarr);
-
 // Copy bits from one array to another
 // Note: use MACRO bit_array_copy
 // Destination and source can be the same bit_array and
@@ -452,8 +451,8 @@ extern void bit_array_copy(BitArray* dst, bit_index_t dstindx,
                            const BitArray* src, bit_index_t srcindx,
                            bit_index_t length);
 
-// copy all of src to dst. dst is resized to match src.
-extern void bit_array_copy_all(BitArray* dst, const BitArray* src);
+// concatenate src at the end of dst (divon)
+extern void bit_array_concat (BitArray *base, const BitArray *add, unsigned additional_concats_expected);
 
 // for each 2 bits in the src array, the dst array will contain those 2 bits in the reverse
 // position, as well as transform them 00->11 11->00 01->10 10->01

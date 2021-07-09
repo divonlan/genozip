@@ -331,6 +331,24 @@ BitArray bit_array_alloc_do (bit_index_t nbits, bool clear, const char *func, ui
     return bitarr;
 }
 
+void bit_array_realloc_do (BitArray *bitarr, bit_index_t nbits, 
+                           bit_index_t low_level_nbits, // if not 0, we over-allocated in anticipation of further reallocs (improves performance)
+                           bool clear, const char *func, uint32_t code_line)
+{
+    ASSERT0 (bitarr->type == BITARR_REGULAR, "bit array needs to be BITARR_REGULAR for realloc");
+
+    if (!low_level_nbits) low_level_nbits = nbits;
+
+    bitarr->words  = buf_low_level_realloc (bitarr->words, roundup_bits2bytes64(low_level_nbits), "", func, code_line);
+    bitarr->nbits  = nbits;
+    bitarr->nwords = roundup_bits2words64 (nbits);
+
+    if (clear && nbits > bitarr->nbits) 
+        bit_array_clear_region (bitarr, bitarr->nbits, nbits - bitarr->nbits);
+
+    bit_array_clear_excess_bits_in_top_word (bitarr); // zero the bits in the top word that are beyond nbits
+}
+
 void bit_array_free (BitArray* bitarr)
 {
     FREE (bitarr->words);
@@ -918,6 +936,20 @@ void bit_array_copy(BitArray* dst, bit_index_t dstindx,
   _array_copy(dst, dstindx, src, srcindx, length);
 
   DEBUG_VALIDATE(dst);
+}
+
+// concatenate src at the end of dst (divon)
+void bit_array_concat (BitArray *base, const BitArray *add, 
+                       unsigned additional_concats_expected) // low-level realloc more than need, expecting additional concats - improves perforamce
+{
+    bit_index_t index = base->nbits;
+
+    bit_array_realloc (base, 
+                       base->nbits + add->nbits, 
+                       base->nbits + (add->nbits * (1+additional_concats_expected)), // low level allocation of anticipated additional similar-size concats - improves performance
+                       false);
+                       
+    bit_array_copy (base, index, add, 0, add->nbits);
 }
 
 void bit_array_overlay (BitArray *overlaid_bitarr, BitArray *regular_bitarr, bit_index_t start, bit_index_t nbits)
