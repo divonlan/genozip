@@ -70,10 +70,10 @@ Source
    b. This license does NOT permit Using the features of the Work
 intended for compressing data, including the genozip Executable, for any
 purpose except b1,b2,b3,b4 hereinafter if (i) You are a commercial entity
-or Your work involing using Genozip is on behalf or for the benefit of a
+or Your work involving using Genozip is on behalf or for the benefit of a
 commercial entity; and/or (ii) the use of the Work is in the context of
 work that has ultimate commerical goals; and/or (iii) a client is paying
-You for the work that includes the usage of genozip. If you are uncertain
+You for the work that includes the usage of Genozip. If you are uncertain
 about whether your case would fall into these categories, please enquire
 with register@genozip.com.
 
