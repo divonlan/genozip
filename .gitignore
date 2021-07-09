@@ -15,6 +15,7 @@ launch.json
 *.bz2
 *.xz
 *.exe
+*.new
 !windows/genozip-installer.exe
 genozip
 genounzip*
