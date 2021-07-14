@@ -70,7 +70,7 @@ One or more file names must be given.
    | *Note*: For Chain files this applies to the Primary contig (qName).
    |
 
-.. option:: -R, --regions-file [^]filename.  (VCF SAM/BAM GVF FASTA 23andMe Chain Reference) Show regions from a list in tab-separated file. To include all regions EXCEPT those in the file٫ prefix the filename with ^.
+.. option:: -R, --regions-file [^]filename.  (VCF SAM/BAM GVF FASTA 23andMe Chain Reference) Show regions from a list in tab-separated file. To include all regions EXCEPT those in the file٫ prefix the filename with ^. If filename is - (or ^-) data is taken from stdin rather than a file.
 
 |
 | *Example of a valid file: The first two rows produce the same 100-base region, and the third row is a single base*:

@@ -111,7 +111,7 @@ void sam_zip_bd_bi (VBlock *vb_, uint64_t vb_line_i,
 
     if (!line_data) return; // only length was requested
 
-    buf_alloc_old (vb, &vb->bd_bi_line, dl->seq_len * 2, 2, "bd_bi_line");
+    buf_alloc (vb, &vb->bd_bi_line, 0, dl->seq_len * 2, uint8_t, 2, "bd_bi_line");
 
     // calculate character-wise delta
     for (unsigned i=0; i < dl->seq_len; i++) {
@@ -416,7 +416,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     Context *bitmap_ctx = CTX(bitmap_did);
     Context *nonref_ctx = bitmap_ctx + 1;
 
-    ASSERT (recursion_level < 4, "excess recursion recursion_level=%u seq_len=%u level_0_cigar=%s", // this would mean a read of about 4M bases... in 2020, this looks unlikely
+    ASSERT (recursion_level < 500, "excess recursion recursion_level=%u seq_len=%u level_0_cigar=%s", // a large number of recursion calls can happen if CIGAR=9M10910N86M3274690N30M1S as observed with the STAR aligner https://physiology.med.cornell.edu/faculty/skrabanek/lab/angsd/lecture_notes/STARmanual.pdf
             recursion_level, seq_len, level_0_cigar);
 
     bitmap_ctx->txt_len += add_bytes; // byte counts for --show-sections
@@ -430,16 +430,12 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
 
     if (!recursion_level) {
-        // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite nbits that overlays it
-        //buf_alloc_old (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-        //        buf_is_alloc (&bitmap_ctx->local) ? NULL : "contexts->local", 0); 
-        
+
         ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspeciously high and might indicate a bug", seq_len);
         
-        buf_alloc_old (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-                   "contexts->local"); 
-        
-        buf_alloc_old (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "contexts->local"); 
+        buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8, uint8_t, CTX_GROWTH, "contexts->local"); 
+
+        buf_alloc (vb, &nonref_ctx->local, seq_len + 3, vb->lines.len * seq_len / 4, uint8_t, CTX_GROWTH, "contexts->local"); 
 
         buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
     }

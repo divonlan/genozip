@@ -255,7 +255,7 @@ Examples:
                      | Example: ``0.006351`` -> ``0.0064``
                      |
 
-**Other actions - uses other than compressing a file**
+**General options**
 
 .. option:: -d, --decompress  Same as running genounzip.
     

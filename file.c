@@ -26,6 +26,7 @@
 #include "flags.h"
 #include "progress.h"
 #include "endianness.h"
+#include "tar.h"
 
 // globals
 File *z_file   = NULL;
@@ -333,9 +334,18 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
 { 
     if (file->data_type == DT_NONE) { 
 
-        if (flag.multiple_files) {
-            RETURNW (!file_has_ext (file->name, ".genozip"), true,
-                    "Skipping %s - it is already compressed", file_printname(file));
+        if (flag.multiple_files || tar_is_tar()) {
+            if (file_has_ext (file->name, ".genozip")) {
+            
+                // case: compressing into a tar file - include .genozip files verbatim
+                if (tar_is_tar()) {
+                    tar_copy_file (file->name);
+                    RETURNW (false, true, "Copied %s to tar file", file_printname(file));
+                }    
+                else
+                    RETURNW (false, true, "Skipping %s - it is already compressed", file_printname(file));
+
+            }
 
             RETURNW (false, true, "Skipping %s - genozip doesn't know how to compress this file type (use --input to tell it)", 
                     file_printname (file));
@@ -368,7 +378,7 @@ static bool file_open_txt_read (File *file)
     if (file_open_txt_read_test_valid_dt (file)) return true; // skip this file
 
     if (file->data_type == DT_GENERIC && !stdin_type) 
-        WARN_ONCE ("%s: FYI: genozip can't recognize this file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
+        WARN_ONCE ("FYI: genozip can't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
     
     // open the file, based on the codec
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type);
@@ -801,7 +811,9 @@ static bool file_open_z (File *file)
 
         if (flag.force) unlink (file->name); // delete file if it already exists (needed in weird cases, eg symlink to non-existing file)
 
-        file->file = fopen (file->name, file->mode);
+        // if we're writing to a tar file, we get the already-openned tar file
+        file->file = tar_is_tar() ? tar_open_file (file->name) 
+                                  : fopen (file->name, file->mode);
 
         if (chain_is_loaded)
             file->z_flags.dual_coords = true;
@@ -981,8 +993,12 @@ void file_close (File **file_p,
             FCLOSE (file->file, file_printname (file));
     }
 
-    else if (file->file && file->supertype == Z_FILE) 
-        FCLOSE (file->file, file_printname (file));
+    else if (file->file && file->supertype == Z_FILE) {
+        if (tar_is_tar())
+            tar_close_file (&file->file);
+        else
+            FCLOSE (file->file, file_printname (file));
+    }
 
     // in case the unlinking didn't work (eg NTFS) - remove the rejects file now that its closed
     if (file->supertype == TXT_FILE && flag.rejects_coord) 
@@ -1133,11 +1149,11 @@ bool file_seek (File *file, int64_t offset,
     ASSERTNOTNULL (file);
     ASSERTNOTNULL (file->file);
     
-#ifdef __APPLE__
-    int ret = fseeko ((FILE *)file->file, offset, whence);
-#else
+    // in SEEK_SET of a z_file that is being tarred, update the offset to the beginning of the file data in the tar file
+    if (file->supertype == Z_FILE && whence == SEEK_SET)
+        offset += tar_file_offset(); // 0 if not using tar
+
     int ret = fseeko64 ((FILE *)file->file, offset, whence);
-#endif
 
     if (soft_fail) {
         if (!flag.to_stdout && soft_fail==1) {
@@ -1153,19 +1169,24 @@ bool file_seek (File *file, int64_t offset,
     return !ret;
 }
 
-uint64_t file_tell (File *file)
+uint64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned line)
 {
-    if (command == ZIP && file == txt_file && file->codec == CODEC_GZ)
-        return gzconsumed64 ((gzFile)txt_file->file); 
+    if (command == ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
+        return gzconsumed64 ((gzFile)file->file); 
     
-    if (command == ZIP && file == txt_file && file->codec == CODEC_BZ2)
-        return BZ2_consumed ((BZFILE *)txt_file->file); 
+    if (command == ZIP && file->supertype == TXT_FILE && file->codec == CODEC_BZ2)
+        return BZ2_consumed ((BZFILE *)file->file); 
 
-#ifdef __APPLE__
-    return ftello ((FILE *)file->file);
-#else
-    return ftello64 ((FILE *)file->file);
-#endif
+    int64_t offset = ftello64 ((FILE *)file->file);
+    ASSERT (offset >= 0 || soft_fail, "called from %s:%u: ftello64 failed for %s: %s", func, line, file->name, strerror (errno));
+
+    if (offset < 0) return (uint64_t)-1; // soft fail
+
+    // in in z_file that is being tarred, update the offset to the beginning of the file data in the tar file
+    if (file->supertype == Z_FILE)
+        offset -= tar_file_offset(); // 0 if not using tar
+
+    return offset;    
 }
 
 uint64_t file_get_size (const char *filename)
@@ -1186,22 +1207,26 @@ bool file_is_dir (const char *filename)
     return !ret && S_ISDIR (st.st_mode);
 }
 
+// reads an entire file into a buffer. if filename is "-", reads from stdin
 void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name,
                     bool add_string_terminator)
 {
-    uint64_t size = file_get_size (filename);
+    #define MAX_STDIN_DATA_SIZE 10000000
+    bool is_stdin = !strcmp (filename, "-");
+
+    uint64_t size = is_stdin ? MAX_STDIN_DATA_SIZE : file_get_size (filename);
 
     buf_alloc (vb, buf, 0, size + add_string_terminator, char, 1, buf_name);
 
-    FILE *file = fopen (filename, "rb");
+    FILE *file = is_stdin ? stdin : fopen (filename, "rb");
     ASSINP (file, "cannot open \"%s\": %s", filename, strerror (errno));
 
-    size_t bytes_read = fread (buf->data, 1, size, file);
-    ASSERT (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));
+    buf->len = fread (buf->data, 1, size, file);
+    ASSERT (is_stdin || buf->len == size, "Error reading file %s: %s", filename, strerror (errno));
+    ASSERT (!is_stdin || buf->len < MAX_STDIN_DATA_SIZE, "Error reading from stdin: too much data for stdin (beyond maximum of %u bytes). Try placing the data in a file instead.", MAX_STDIN_DATA_SIZE-1);
 
-    buf->len = size;
-
-    if (add_string_terminator) buf->data[size] = 0;
+    if (add_string_terminator) 
+        *AFTERENT (char, *buf) = 0;
 
     FCLOSE (file, filename);
 }
@@ -1343,3 +1368,4 @@ char *file_make_unix_filename (char *filename)
 
     return full_fn;
 }
+

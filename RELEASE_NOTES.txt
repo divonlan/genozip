@@ -463,3 +463,8 @@ g. Much improved website genozip.com
 
 12.0.5 9/July/2021
 - Compressing low-coverage SAM/BAM files without a reference: better compression ratio, better decompression performance
+
+12.0.6 15/July/2021
+- new option: --tar to archive with genozip. See: http://genozip.com/archiving.html
+- new option: --files-from/-T - An alternative to providing input file names on the command line
+- bug fixes

@@ -1,3 +1,7 @@
+.. option:: -T, --files-from filename.  An alternative to providing input file names on the command line. filename it a textual file containing a newline-separated list of files. If filename is - (a hyphen) data is taken from stdin rather than a file.
+
+                     |
+
 .. option:: --log filename.  Send non-file output to a log file instead of the terminal.
 
                      |

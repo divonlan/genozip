@@ -70,7 +70,7 @@ typedef struct {
         test,        // implies md5
         index_txt,   // create an index
         list;        // a genols option
-    const char *threads_str, *out_filename;
+    const char *threads_str, *out_filename, *files_from;
 
     ReferenceType reference;
 

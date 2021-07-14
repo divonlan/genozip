@@ -528,7 +528,8 @@ batch_iupac()
     batch_print_header
 
     # SAM
-    test_count_genocat_lines ${TESTDIR}/basic.sam "-H --bases=AGCTN" 7
+    non_iupac_lines=$(( `grep -v "^@" ${TESTDIR}/basic.sam | wc -l` - 1 ))
+    test_count_genocat_lines ${TESTDIR}/basic.sam "-H --bases=AGCTN" $non_iupac_lines
     test_count_genocat_lines ${TESTDIR}/basic.sam "-H --bases=^AGCTN" 1
 
     # BAM
@@ -536,7 +537,7 @@ batch_iupac()
     local count=`$genocat $output --echo -H --bam --bases AGCTN --count -q`
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
-    if [ "$count" -ne 7 ]; then echo "bad count = $count"; exit 1; fi
+    if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count"; exit 1; fi
 
     test_header "genocat --bases ^AGCTN --count --bam"
     local count=`$genocat $output --echo -H --bam --bases ^AGCTN --count -q`
@@ -881,6 +882,21 @@ batch_genols()
     rm -f $output
 }
 
+batch_tar_files_from()
+{
+    batch_print_header
+
+    local tar=${OUTDIR}/output.tar
+
+    $genozip -T ${TESTDIR}/basic-files-from -f --tar $tar  || exit 1
+    tar xvf $tar || exit 1
+    
+    cat ${TESTDIR}/basic-files-from-genozip | $genounzip --files-from - -t || exit 1
+    $genols --files-from ${TESTDIR}/basic-files-from-genozip || exit 1
+    $genocat --files-from ${TESTDIR}/basic-files-from-genozip -fo $output || exit 1
+    rm -fR $tar
+}
+
 output=${OUTDIR}/output.genozip
 output2=${OUTDIR}/output2.genozip
 recon=${OUTDIR}/recon.txt
@@ -998,7 +1014,9 @@ if (( $1 <= 24 )) ; then  batch_external_unzip         ; fi
 if (( $1 <= 25 )) ; then  batch_reference              ; fi
 if (( $1 <= 26 )) ; then  batch_make_reference         ; fi
 if (( $1 <= 27 )) ; then  batch_genols                 ; fi
+if (( $1 <= 28 )) ; then  batch_tar_files_from         ; fi
 
 printf "\nALL GOOD!\n"
 
 
+``

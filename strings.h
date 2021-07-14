@@ -102,12 +102,13 @@ extern unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_it
 #define str_split(str,str_len,max_items,sep,name,exactly) str_split_enforce((str),(str_len),(max_items),(sep),name,(exactly),NULL)
 
 #define str_split_enforce(str,str_len,max_items,sep,name,exactly,enforce) \
-    unsigned n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
-    const char *name##s[n_##name##s]; \
-    unsigned name##_lens[n_##name##s]; \
+    unsigned n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; /* 0 if str is NULL */ \
+    const char *name##s[MAX (n_##name##s, 1)]; \
+    unsigned name##_lens[MAX (n_##name##s, 1)]; \
     n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), name##s, name##_lens, (exactly), (enforce)); 
 
 extern void str_remove_window_r (unsigned n_lines, const char **lines, unsigned *line_lens);
+extern void str_nul_separate (unsigned n_items, const char **items, unsigned *item_lens);
 
 extern unsigned str_split_ints_do (const char *str, unsigned str_len, uint32_t max_items, char sep, _Bool exactly, int64_t *items);
 #define str_split_ints(str,str_len,max_items,sep,name,exactly) \

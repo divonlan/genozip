@@ -3,10 +3,6 @@
 //   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <errno.h>
 #include "genozip.h"
 #include "regions.h"
 #include "buffer.h"
@@ -15,6 +11,7 @@
 #include "file.h"
 #include "strings.h"
 #include "vcf.h"
+#include "file.h"
 
 // region as parsed from the --regions option
 typedef struct {
@@ -181,23 +178,8 @@ void regions_add_by_file (const char *regions_filename)
         ASSINP0 (regions_filename[0], "bad --regions-file argument");
     }
     
-    char *data = NULL;
-    FILE *fp = fopen  (regions_filename, "r"); // textual (no "b") - removes the \r
-    ASSINP (fp, "cannot open file %s: %s", regions_filename, strerror (errno));
-
-    struct stat st;
-    ASSINP (!fstat (fileno (fp), &st), "fstat failed on %s: %s", regions_filename, strerror (errno));
-    if (!st.st_size) { fclose (fp); return; }; // empty file, nothing to do
-    
-    data = MALLOC (st.st_size); // might be smaller if file contains Windows-style \r
-    size_t size;
-    ASSINP ((size = fread (data, 1, st.st_size, fp)) > 0, "failed to read %u bytes from %s", (unsigned)st.st_size, regions_filename);
-
-    str_split_enforce (data, size, 0, '\n', line, true, "regions"); 
-    str_remove_window_r (n_lines, lines, line_lens);
-    
-    ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", regions_filename);
-    n_lines--;
+    file_split_lines (regions_filename, "regions");
+    if (!n_lines) return; 
 
     buf_alloc (evb, &regions_buf, 0, n_lines, Region, 0, "regions_buf");
 
@@ -210,18 +192,18 @@ void regions_add_by_file (const char *regions_filename)
         str_split_enforce (lines[i], line_lens[i], num_fields, '\t', field, true, "fields");
 
         ((char**)fields)[0][field_lens[0]] = 0; // nul-terminate chrom
-        ASSINP (regions_is_valid_chrom (fields[0]), "Invalid chrom in %s line %i: \"%s\"", regions_filename, i+1, fields[0]);
+        ASSINP (regions_is_valid_chrom (fields[0]), "Invalid chrom (column 1 in a tab-separated file) in %s line %i: \"%s\"", regions_filename, i+1, fields[0]);
         
         bool has_len = num_fields == 3 && fields[2][0] == '+';
         
         PosType start_pos, end_pos, len;
-        ASSINP (str_get_int (fields[1], field_lens[1], &start_pos), "Invalid start pos (column 2) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[1], fields[1]);
+        ASSINP (str_get_int (fields[1], field_lens[1], &start_pos), "Invalid start pos (column 2 in a tab-separated file) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[1], fields[1]);
         
         ASSINP (has_len || num_fields == 2 || str_get_int_range64 (fields[2], field_lens[2], start_pos, MAX_POS, &end_pos), 
-                "Invalid end pos (column 3) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[2], fields[2]);
+                "Invalid end pos (column 3 in a tab-separated file) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[2], fields[2]);
 
         ASSINP (!has_len || str_get_int_range64 (fields[2]+1, field_lens[2]-1, 0, MAX_POS, &len), 
-                "Invalid len (column 3) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[2], fields[2]);
+                "Invalid len (column 3 in a tab-separated file) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[2], fields[2]);
 
         NEXTENT (Region, regions_buf) = (Region){ 
             .chrom     = fields[0], 
@@ -233,7 +215,6 @@ void regions_add_by_file (const char *regions_filename)
     }
 
     // note: we don't free data, as chrom of each region points into it
-    fclose (fp);
 }
 
 // convert the list of regions as parsed from --regions, to an array of chregs - one for each chromosome.

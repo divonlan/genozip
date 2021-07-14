@@ -1166,7 +1166,7 @@ static void ref_prepare_range_for_compress (VBlockP vb)
             bit_array_free (&r->is_set);            
         }
     }
-}
+  }
 
 static int ref_contigs_range_sorter (const void *a, const void *b)
 {

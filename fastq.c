@@ -272,7 +272,7 @@ bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
 bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
-    uint64_t save_offset = file_tell (z_file);
+    uint64_t save_offset = file_tell (z_file, false);
     uint64_t save_disk_so_far = z_file->disk_so_far;
 
     vb->pair_vb_i = pair_vb_i;

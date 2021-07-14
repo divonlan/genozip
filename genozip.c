@@ -27,6 +27,7 @@
 #include "linesorter.h"
 #include "bases_filter.h"
 #include "genols.h"
+#include "tar.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -438,6 +439,35 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
     return fn1 - fn2;
 }
 
+static char **main_get_filename_list (unsigned *num_files /* in/out */, char **filenames /* in */, unsigned *num_z_files /* out */) 
+{
+    ASSINP (!flag.files_from || ! *num_files, "when option %s is used, files cannot also be listed on the command line", OT("files-from", "T"));
+
+    // set argv to file names
+    if (flag.files_from) {
+        file_split_lines (flag.files_from, "files-from");
+        str_nul_separate (n_lines, lines, line_lens);
+        
+        filenames = MALLOC (n_lines * sizeof (char *));
+        memcpy (filenames, lines, n_lines * sizeof (char *)); // pointers into "data" defined in file_split_lines
+        *num_files = n_lines;
+    }
+
+    *num_z_files = command != ZIP          ? *num_files     :
+                   flag.bind == BIND_ALL   ? 1              :  // flag.bind was set by flags_update
+                   flag.bind == BIND_PAIRS ? *num_files / 2 :
+                                             *num_files;
+
+    flags_update (*num_files, (const char **)filenames);
+
+    // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
+    SET_FLAG (quiet); // suppress warnings
+    qsort (filenames, *num_files, sizeof (filenames[0]), main_sort_input_filenames);
+    RESTORE_FLAG (quiet);
+
+    return filenames;
+}
+
 static void main_load_reference (const char *filename, bool is_first_file, bool is_last_z_file)
 {
     if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE) return;
@@ -520,7 +550,7 @@ int main (int argc, char **argv)
         // genozip with no input filename, no output filename, and no input redirection 
         // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
         // coming from a pipe. the user must use "-" to redirect from stdin
-        else if (command == -1 && optind == argc && !flag.out_filename && 
+        else if (command == -1 && optind == argc && !flag.out_filename && !flag.files_from &&
                  (isatty(0) || arch_am_i_in_docker())) {
             // case: --register
             if (flag.do_register) {
@@ -545,18 +575,8 @@ int main (int argc, char **argv)
     }
 
     unsigned num_files = argc - optind;
-
-    flags_update (num_files, (const char **)&argv[optind]);
-
-    unsigned num_z_files = command != ZIP          ? num_files     :
-                           flag.bind == BIND_ALL   ? 1             :  // flag.bind was set by flags_update
-                           flag.bind == BIND_PAIRS ? num_files / 2 :
-                                                     num_files;
-
-    // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
-    SET_FLAG (quiet); // suppress warnings
-    qsort (&argv[optind], num_files, sizeof (argv[0]), main_sort_input_filenames);
-    RESTORE_FLAG (quiet);
+    unsigned num_z_files;
+    char **input_files = main_get_filename_list (&num_files, &argv[optind], &num_z_files);
     
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (flag.threads_str) 
@@ -590,10 +610,13 @@ int main (int argc, char **argv)
 
     if (flag.reading_kraken) kraken_load();
 
+    // if we're genozipping with tar, initialize tar file
+    if (tar_is_tar()) tar_initialize();
+
     for (unsigned file_i=0, z_file_i=0; file_i < MAX (num_files, 1); file_i++) {
 
         // get file name
-        char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
+        const char *next_input_file = num_files ? input_files[file_i] : NULL;  // NULL means stdin
 
         if (flag.show_filename) iprintf ("%s:\n", next_input_file ? next_input_file : "(standard input)");
 
@@ -628,6 +651,9 @@ int main (int argc, char **argv)
 
     // if this is "list", finalize
     if (command == LIST) genols (NULL, true, NULL, false);
+
+    // if we're genozipping with tar, finalize tar file
+    if (tar_is_tar()) tar_finalize();
 
     if (flag.multiple_files && flag.validate==VLD_REPORT_INVALID /* reporting invalid files, and none found */) 
         WARN0 ("All files are valid genozip files");

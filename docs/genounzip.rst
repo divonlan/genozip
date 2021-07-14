@@ -52,7 +52,7 @@ One or more file names must be given
 
 .. option:: --no-PG.  (SAM BAM) When translating the file Genozip normally adds information in a @PG header line. With this option it doesn't.
 
-**Other actions - uses other than uncompressing a file**
+**General options**
 
 .. include:: opt-help.rst
 

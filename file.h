@@ -418,7 +418,8 @@ extern File *file_open (const char *filename, FileMode mode, FileSupertype super
 extern void file_close (FileP *file_p, bool index_txt, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
-extern uint64_t file_tell (File *file);
+extern uint64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned line);
+#define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCTION__, __LINE__) 
 extern void file_set_input_type (const char *type_str);
 extern void file_set_input_size (const char *size_str);
 extern FileType file_get_type (const char *filename);
@@ -465,13 +466,31 @@ extern char *file_make_unix_filename (char *filename);
 #define CLOSE(fd,name,quiet) do { ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));} while (0)
 #define FCLOSE(fp,name) do { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; } } while (0)
  
-// Windows compatibility stuff
+// read the contents and a newline-separated text file and split into lines - creating char **lines, unsigned *line_lens and unsigned n_lines
+#define file_split_lines(fn, name) \
+    static Buffer data = EMPTY_BUFFER; \
+    ASSINP0 (!data.len, "only one instance of a " name " option can be used"); \
+    file_get_file (evb, fn, &data, name "_data", false); \
+    \
+    str_split_enforce (data.data, data.len, 0, '\n', line, true, (name)); \
+    str_remove_window_r (n_lines, lines, line_lens); /* note: fopen with non-binary mode (no "b") doesn't help, because it won't remove Windows-created \r when running on Unix */ \
+    \
+    ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", (fn)); \
+    n_lines--; /* remove final empty line */\
+    /* note: its up to the caller to free data */
+
+// platform compatibility stuff
 #ifdef _WIN32
 #define stat64  _stat64
 #define fstat64 _fstat64
 #else // this needs more work - there are more cases, depending if gcc is 32 or 64
 #define stat64  stat
 #define fstat64 fstat
+#endif
+
+#ifdef __APPLE__
+#define fseeko64 fseeko
+#define ftello64 ftello
 #endif
 
 #endif

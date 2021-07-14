@@ -7,7 +7,7 @@ See also:
 
     | :ref:`Rendering a DVCF <dvcf-rendering>`
     |
-    | :ref:`Dual-coordinates VCF Specification <dvcf-spec>`
+    | `Dual-coordinates VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_
     |
     | :ref:`Chain files <dvcf-chain-files>`
 
@@ -15,7 +15,6 @@ See also:
     :hidden:
  
     Rendering a DVCF <dvcf-rendering>
-    Dual-coordinates VCF Specification <dvcf-spec>
     Chain files <dvcf-chain-files>
 
 **At a glance**

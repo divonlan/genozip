@@ -30,7 +30,7 @@ endif
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
 MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
-		  data_types.c bit_array.c progress.c coords.c writer.c\
+		  data_types.c bit_array.c progress.c coords.c writer.c tar.c\
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
 		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c\
@@ -62,7 +62,7 @@ CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h  \
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
 			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
@@ -178,7 +178,7 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 private/test/%.bam : private/test/%.sam
 ifeq ($(OS),Windows_NT)
 	@echo "Generating $@ from $<"
-	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools  view $< -OBAM -o $@"
+	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools  view $< -OBAM | gunzip -c > $@"
 endif
 
 private/test/%.cram : private/test/%.sam
@@ -227,7 +227,8 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
 	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst \
 	   docs/sam2fq.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst docs/using-on-hpc.rst \
-	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-spec.rst docs/dvcf-chain-files.rst 
+	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-chain-files.rst \
+	   docs/archiving.rst
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 

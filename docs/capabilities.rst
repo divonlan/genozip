@@ -5,6 +5,7 @@ Capabilities
    :maxdepth: 1
 
    Compression <compression>
+   Archiving <archiving>
    Dual-coordinate VCF (DVCF) <dvcf>
    Downsampling <downsampling>
    Viewing SAM/BAM as FASTQ <sam2fq>

@@ -433,8 +433,8 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     ASSERT_DT_FUNC (txt_file, unconsumed);
 
     uint64_t pos_before = 0;
-    if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file))
-        pos_before = file_tell (txt_file);
+    if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file) && !testing_memory)
+        pos_before = file_tell (txt_file, true);
 
     buf_alloc (vb, &vb->txt_data, 0, flag.vblock_memory, char, 1, "txt_data");    
 
@@ -535,7 +535,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
         // update vb1_txt_data_comp_len used by txtfile_estimate_txt_data_size(). Note: it already includes
         // the part of vb=1 passed up from txtfile_read_header()
         if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file)) {
-            vb1_txt_data_comp_len += file_tell (txt_file) - pos_before; // bgzf/gz/bz2 compressed bytes read
+            vb1_txt_data_comp_len += file_tell (txt_file, true) - pos_before; // bgzf/gz/bz2 compressed bytes read (note: if this isn't a disk file, then both file_tells will be -1, resulting in vb1_txt_data_comp_len=0)
 
             // deduct the amount of compressed data due to passed up data that actually belongs to vb>=2
             // assume the same compression ratio for the passup part as the (vb data + passed up)
