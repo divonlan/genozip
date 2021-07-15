@@ -7,28 +7,27 @@ Genozip has two separate capabilities of aggregating files, each with its pros a
 
 **1. tar with --tar**
 
-Using the ``genozip --tar`` option, genozip compresses files directly into a standard tar file. The list of files to archive can also include already-compressed genozip files. 
+Using the ``genozip --tar`` option, genozip compresses files directly into a standard tar file. 
 
 Each file is compressed independently and written directly into a standard tar file as it is being formed. This is faster and consumes less disk space than first genozipping files and then packaging them into a tar file, since no separate .genozip files are created - just the tar file. 
 
-The following simple example creates a tar file consisting of 4 files: 3 of them will be compressed and one that will just be copied as it is already compressed:
+Example 1:
 
 ::
 
     > # Compressing
-    > genozip --tar mydata.tar sample1.bam sample2.bam variants.vcf data.fq.genozip
+    > genozip --tar mydata.tar sample1.bam sample2.bam variants.vcf
 
     > # Listing the contents of the tar file
     > tar tvf mydata.tar
     -rw-rw-rw- USER/USER   3424847 2021-06-01 11:34 sample1.bam.genozip
     -rw-rw-rw- USER/USER   6765323 2021-03-04 22:04 sample2.bam.genozip
     -rw-rw-rw- USER/USER    765323 2021-03-04 22:08 variants.vcf.genozip
-    -rw-rw-rw- USER/USER   5013124 2021-03-04 22:08 data.fq.genozip
     
     > # Unarchiving and decompressing all files
     > tar xvf mydata.tar | genounzip --files-from - --replace
 
-In the following example, we compress and archive all BAM files in the current directory and its sub-directories, preserving the directory struture:
+Example 2: here, we compress and archive all BAM files in the current directory and its sub-directories, preserving the directory struture:
 
 ::
 
