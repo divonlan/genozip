@@ -353,7 +353,7 @@ void license_display (void)
     const char *filename = get_license_filename (false);
     static Buffer license_data = {};
     
-    if (file_exists (filename)) 
+    if (file_exists (filename) && !flag.force) 
         file_get_file (evb, filename, &license_data, "license_data", true);
 
     // case: user has already accepted the license and it is new style license - display the license file

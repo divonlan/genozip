@@ -235,7 +235,7 @@ docs/conf.py: docs/conf.template.py version.h
 	@git commit -m "generate conf.py" docs/conf.py
 
 docs/LICENSE.for-docs.txt: genozip$(EXE)
-	@./genozip$(EXE) --license=74 > $@
+	@./genozip$(EXE) --license=74 --force > $@
 
 docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/conf.py $(DOCS)
 	@echo Building HTML docs

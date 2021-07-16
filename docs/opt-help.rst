@@ -14,7 +14,7 @@
 
                      |
 
-.. option:: -L, --license, --licence  Show the license terms and conditions for this product.
+.. option:: -L, --license, --licence  Show the license terms and conditions for this product as accepted. Combine with --force to see the most up-do-date version of the license. If you wish to change your license to the most recent one - re-register with genozip --register. 
 
                      |
 
