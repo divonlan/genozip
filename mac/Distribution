@@ -2,7 +2,7 @@
 <installer-script minSpecVersion="1.000000">
     <title>genozip</title>
     <welcome file="welcome.html" mime-type="text/html" />
-    <license file="LICENSE.non-commercial.txt" />
+    <license file="LICENSE.txt" />
     <conclusion file="README.html" />
     <options customize="never" allow-external-scripts="no"/>
     <domains enable_localSystem="true" />

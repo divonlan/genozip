@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   bases_filter.h
-//   Copyright (C) 2021-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2021-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 #ifndef IUPAC_INCLUDED
 #define IUPAC_INCLUDED

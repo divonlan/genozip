@@ -1,14 +1,8 @@
-This program, "Genozip", and all associated, source code, object code,
-documentation and other files, are copyright (C) 2019-2021 Divon M Lan (
-"Copyright Owner"). All rights reserved.
-
-This license is limited in scope, and covers NON-COMMERCIAL and some
-other limited use cases as described below.
-
-For a commercial license, please contact sales@genozip.com
-
-Acknowledgement: portions of the text of this license are based on Apache
-License 2.0, however it differs from it substantially
+This program, "Genozip", which includes four tools (genozip, genounzip,
+genocat and genols), source code, object code, executables, documentation
+and other files, was developed by Divon Lan ("Developer") and is
+copyright (C) 2019-2021 Black Paw Ventures Limited ("Licensor"). All
+rights reserved.
 
 TERMS AND CONDITIONS FOR USE
 
@@ -16,9 +10,6 @@ TERMS AND CONDITIONS FOR USE
 
 "License" shall mean the terms and conditions for use as defined by
 Sections 1 through 7 of this document.
-
-"Licensor" shall mean Copyright Owner or entity authorized by Copyright
-Owner that is granting the License.
 
 "Legal Entity" shall mean the union of the acting entity and all other
 entities that control, are controlled by, or are under common control
@@ -31,120 +22,111 @@ ownership of such entity.
 "You" (or "Your") shall mean an individual or Legal Entity exercising
 permissions granted by this License.
 
-"Source" form shall mean the preferred form for making modifications,
-including but not limited to software source code, documentation source,
-and configuration files.
+"Derivative Works" shall mean any work that is based on (or derived from)
+Genozip and for which the editorial revisions, annotations, elaborations,
+or other modifications represent, as a whole, an original work of
+authorship. For the purposes of this License, Derivative Works shall not
+include works that remain separable from Genozip and Derivative Works
+thereof.
 
-"Object" form shall mean any form resulting from mechanical
-transformation or translation of a Source form, including but not limited
-to compiled object code, generated documentation, and conversions to
-other media types.
+Other words and terms in this License shall be interpreted as their usual
+meaning in the context of a software product.
 
-"Executable" shall mean a type of Object, for which there exists an
-operating system of a computing device, for which said operating system
-is capable of running said Object as an operating system process.
+2. Grant of copyright license. Licensor hereby grants to You a limited
+non-exclusive copyright license to use Genozip for any the following
+limited purposes subject to the conditions attached to each purpose, and
+subject to the terms and conditions of this License:
 
-"Work" shall mean the work of authorship, whether in Source or Object
-form, made available under the License, as indicated by a copyright
-notice that is included in or attached to the work.
+   a. For any legal purpose, if a Commercial License was purchased and
+paid for, and for the duration that it is in effect. For details, see
+http://genozip.com/commercial.html or email sales@genozip.com.
 
-"Derivative Works" shall mean any work, whether in Source or Object form,
-that is based on (or derived from) the Work and for which the editorial
-revisions, annotations, elaborations, or other modifications represent,
-as a whole, an original work of authorship. For the purposes of this
-License, Derivative Works shall not include works that remain separable
-from, or merely link (or bind by name) to the interfaces of, the Work and
-Derivative Works thereof.
+   b. For any legal purpose, if use is limited to the three tools:
+genounzip, genocat, genols.
 
-2. Grant of Copyright License. Subject to the terms and conditions of
-this License, Licensor hereby grants to You a perpetual, worldwide, non
--exclusive, no-charge, royalty-free, revocable copyright license to
-reproduce, publicly display, publicly perform, and distribute the Work in
-Source or Object form (together: "Using"), subject to the following
-details:
+   c. For academic research purpose, if the research does not have
+commercial goals.
 
-   a. This license does NOT permit creation of Derivative Works, and does
-not permit distributing modified Source or Object based on modified
-Source
+   d. For educational or training purposes.
 
-   b. This license does NOT permit Using the features of the Work
-intended for compressing data, including the genozip Executable, for any
-purpose except b1,b2,b3,b4 hereinafter if (i) You are a commercial entity
-or Your work involving using Genozip is on behalf or for the benefit of a
-commercial entity; and/or (ii) the use of the Work is in the context of
-work that has ultimate commerical goals; and/or (iii) a client is paying
-You for the work that includes the usage of Genozip. If you are uncertain
-about whether your case would fall into these categories, please enquire
-with register@genozip.com.
+   e. For the purpose of evaluating Genozip, for a duration of 30 days.
 
-      b1. This license DOES permit Using the Work for academic research
-that lacks ultimate commercial goals, and/or for educational purposes and
-/or for training purposes, including by a commerical entity.
+   f. For the purpose of distributing it to others in unmodified form,
+including this license, via a platform that is both publicly accessible
+and free of charge, including but not limited to an Internet website.
 
-      b2. This license DOES permit Using the Work for the purpose of
-evaluating it for a duration of 30 days, including by a commerical entity
-.
+   g. For any other non-commercial purpose, if it has been pre-approved
+by Licensor in writing. Email register@genozip.com to seek such an
+approval. Note: Clinical use or other use in which You are getting paid
+for a service which involves data that is then compressed with Genozip,
+is not considered non-commercial.
 
-      b3. This license DOES permit Using the Work for the purpose of
-distributing it to others in unmodified Source form or Object derived
-from unmodified Source, and including this License via a platform that is
-both publicly accessible and free of charge, including but not limited to
-an Internet website
+3. Additional Terms and conditions
 
-      b4. This license DOES permit Using, including reproducing and
-distributing, the three Executables genounzip, genocat and genols for any
-purpose including commercial.
+   a. You must fully and accurately complete the registration, either by
+completing the registeration as prompted by the genozip tool or by
+receiving registration confirmation after registering by emailing
+register@genozip.com.
 
-   c. This license DOES NOT permit compressing a file, unless the file is
+   b. Using Genozip to compress a file is only permitted if the file is
 retained in its original form as well or the potential loss of data due
 to Genozip not being able to uncompress the compressed file would not
 cause any harm.
 
-   d. This license is conditional on You fully and accurately completing
-the registration, either by completing the registeration flow as prompted
-by an Executable of the Work, or by receiving registration confirmation
-after registering by emailing register@genozip.com.
+   c. Creation of Derivative Works is not permitted, unless prior written
+permission is obtained from Licensor.
 
-3. Severe non-compliance. Violation of section 2.b. and/or 2.d. is
-considered severe non-compliance with this non-commercial license. In
-this case, Licensor claims, and You hereby agree to, equally shared
-ownership with Licensor of any revenue generated and/or any intellectual
-property created that involved the non-compliant use of Genozip. If you
-are reviewing this license and concerned that this section might apply to
-you, please review our commercial license options at http://genozip.com
-/commercial.html
+   d. Any software source code intentionally submitted for inclusion in
+Genozip by You to the Licensor shall imply complete and irrevocable
+assignment by You to Licensor of all copyright in the submitted source
+code.
 
-4. Submission of Contributions. Unless You explicitly state otherwise,
-any software source code intentionally submitted for inclusion in the
-Work by You to the Licensor shall imply complete and irrevocable
-assignment by You to Copyright Owner of all copyright in the submitted
-source code.
+4. Unauthorized use of Genozip. Use for a purpose other than as permitted
+in section 2 or failing to register as required by section 3a shall be
+considered unauthorized use of Genozip. In this case, You agree that
+Licensor shall be eligible to 20% ownership of any revenue generated and
+intellectual property created that involved the unauthorized use of
+Genozip.
 
 5. Trademarks. This License does not grant permission to use the trade
 names, trademarks, service marks, or product names of the Licensor,
 except as required for reasonable and customary use in describing the
-origin of the Work
+origin of the Genozip
 
 6. Disclaimer of Warranty. Unless required by applicable law or agreed to
-in writing, Licensor provides the Work on an "AS IS" BASIS, WITHOUT
+in writing, Licensor provides Genozip on an "AS IS" BASIS, WITHOUT
 WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied,
 including, without limitation, any warranties or conditions of TITLE, NON
 -INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You
 are solely responsible for determining the appropriateness of using or
-redistributing the Work and assume any risks associated with Your
+redistributing the Genozip and assume any risks associated with Your
 exercise of permissions under this License.
 
 7. Limitation of Liability. In no event and under no legal theory,
 whether in tort (including negligence), contract, or otherwise, unless
 required by applicable law (such as deliberate and grossly negligent acts
-) or agreed to in writing, shall Licensor or Copyright Owner be liable to
-You for damages, including any direct, indirect, special, incidental, or
+) or agreed to in writing, shall Licensor or Developer be liable to You
+for damages, including any direct, indirect, special, incidental, or
 consequential damages of any character arising as a result of this
-License or out of the use or inability to use the Work (including but not
+License or out of the use or inability to use Genozip (including but not
 limited to damages for loss of goodwill, work stoppage, computer failure
 or malfunction, file corruption, data loss, or any and all other
-commercial damages or losses), even if Licensor or Copyright Owner has
-been advised of the possibility of such damages.
+commercial damages or losses), even if Licensor or Developer have been
+advised of the possibility of such damages.
 
 END OF TERMS AND CONDITIONS
+
+Genozip license version: 12.0.6
+
+License granted to: asdf
+
+Accepted by (name): asdf asdf
+
+Accepted by (email): asdf@dasf.com
+
+Timestamp of acceptance: 2021-07-16 20:08:34 Cen. Australia Daylight Time
+
+IP address of acceptance: 49.178.46.112
+
+License number: 3204151125
 

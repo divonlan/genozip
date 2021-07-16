@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   vcf_vblock.c
-//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
 // it means a block of lines from the text file. 

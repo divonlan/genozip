@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   stats.c
-//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 #include <stdarg.h>
 #include "genozip.h"
@@ -18,6 +18,7 @@
 #include "version.h"
 #include "arch.h"
 #include "codec.h"
+#include "license.h"
 
 static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
@@ -107,6 +108,9 @@ static void stats_output_file_metadata (Buffer *buf)
 
     bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
+
+    if (license_has_details())
+        bufprintf (evb, buf, "%s\n", license_get_one_line());
 }
 
 typedef struct {

@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------
 #   Makefile
-#   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
-#   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+#   Copyright (C) 2019-2021 Black Paw Ventures Limited
+#   Please see terms and conditions in the file LICENSE.txt
 
 # Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):
 # Mingw: http://mingw-w64.org/doku.php 
@@ -57,7 +57,7 @@ DEFLATE_SRCS = libdeflate/deflate_compress.c libdeflate/deflate_decompress.c lib
 
 CONDA_DEVS = Makefile .gitignore 
 
-CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
+CONDA_DOCS = LICENSE.txt AUTHORS README.md
 
 CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
@@ -144,7 +144,7 @@ else
 endif
 
 all   : CFLAGS += $(OPTFLAGS) 
-all   : $(OBJDIR) $(EXECUTABLES) LICENSE.non-commercial.txt
+all   : $(OBJDIR) $(EXECUTABLES) LICENSE.txt
 	@chmod +x test.sh
 
 debug : CFLAGS += $(DEBUGFLAGS)
@@ -214,7 +214,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
-LICENSE.non-commercial.txt: text_license.h # not dependent on genozip.exe, so we don't generate it every compilation
+LICENSE.txt: text_license.h # not dependent on genozip.exe, so we don't generate it every compilation
 	@make ./genozip$(EXE) # recursive call 
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 > $@
@@ -359,7 +359,7 @@ WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genoc
                          windows/LICENSE.for-installer.txt windows/readme.txt
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LICENSE.non-commercial.txt 
+docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.txt 
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'WINDOWS: Using the UI:'
@@ -419,7 +419,7 @@ $(MACLIBDIR)/uninstall.sh: mac/uninstall.template.sh
 $(MACRSSDIR)/README.html: README.md
 	@cp -f $< $@
 
-$(MACRSSDIR)/LICENSE.non-commercial.txt: LICENSE.non-commercial.txt
+$(MACRSSDIR)/LICENSE.txt: LICENSE.txt
 	@cp -f $< $@
 
 $(MACLIBDIR)/%: %
@@ -441,7 +441,7 @@ mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genoca
 	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg > /dev/null
 
 mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
-                                    $(MACRSSDIR)/welcome.html $(MACRSSDIR)/README.html $(MACRSSDIR)/LICENSE.non-commercial.txt
+                                    $(MACRSSDIR)/welcome.html $(MACRSSDIR)/README.html $(MACRSSDIR)/LICENSE.txt
 	@echo "Building Mac product $@"
 	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@ > /dev/null
 

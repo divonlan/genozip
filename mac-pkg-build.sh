@@ -2,8 +2,8 @@
 
 # ------------------------------------------------------------------
 #   mac-pkg-build.sh
-#   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com> where applies
-#   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+#   Copyright (C) 2020-2021 Black Paw Ventures Limited where applies
+#   Please see terms and conditions in the file LICENSE.txt
 
 # loosely based on https://github.com/KosalaHerath/macos-installer-builder which is licensed under Apache 2.0 license
 
@@ -32,7 +32,7 @@ cp ${MAC_DIR}/Distribution ${TARGET_DIR} || exit 1
 cp ${MAC_DIR}/uninstall.sh ${TARGET_DIR}/Resources || exit 1
 sed -e "s/__VERSION__/${VERSION}/g" ${MAC_DIR}/welcome.html > ${TARGET_DIR}/Resources/welcome.html || exit 1
 cp README.md ${TARGET_DIR}/Resources/README.html || exit 1
-cp LICENSE.non-commercial.txt ${TARGET_DIR}/Resources/ || exit 1
+cp LICENSE.txt ${TARGET_DIR}/Resources/ || exit 1
 sed -e "s/__FILES__/${FILES_STR}/g" ${MAC_DIR}/postinstall > ${TARGET_DIR}/scripts/postinstall || exit 1
 sed -e "s/__VERSION__/${VERSION}/g" ${MAC_DIR}/uninstall.sh | sed -e "s/__FILES__/${FILES_STR}/g" > ${TARGET_DIR}/darwinpkg/Library/genozip/uninstall.sh || exit 1
 

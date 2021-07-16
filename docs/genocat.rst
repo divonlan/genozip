@@ -1,3 +1,5 @@
+.. highlight:: none
+
 genocat
 =======
 Display contents or metadata of a file compressed with ``genozip``.

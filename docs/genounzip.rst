@@ -1,3 +1,5 @@
+.. highlight:: none
+
 genounzip
 =========
 Uncompress files compressed with ``genozip``.

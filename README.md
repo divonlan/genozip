@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--                                                                                                      -->
 <!-- README.md                                                                                            -->
-<!-- Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>                                                -->
-<!-- Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt   -->
+<!-- Copyright (C) 2019-2021 Black Paw Ventures Limited                                                -->
+<!-- Please see terms and conditions in the file LICENSE.txt   -->
 <!--                                                                                                      -->
 <!-- This file needs to be compliant to both Markdown and HTML. It is:                                    -->
 <!-- 1. rendered as README.md by github                                                                   -->
@@ -32,8 +32,8 @@ The compression is <b>lossless</b> - the decompressed file is 100% identical to 
 <br>
 The command line options are similar to gzip and samtools/bcftools, so if you are familiar with these, it works pretty much the same. To get started, see: http://genozip.com<br>
 <br>
-<b>Genozip</b> is free for non-commercial use. For a commercial license, please contact <b>sales@genozip.com</b> <br>
+<b>Genozip</b> is free for non-commercial use (as defined in the license). For a commercial license, please contact <b>sales@genozip.com</b> <br>
 <br>
-Usage is subject to terms and conditions. The non-commercial license can be viewed on http://genozip.com/license.html<br>
+Usage is subject to terms and conditions. The license can be viewed on http://genozip.com/license.html<br>
 <br>
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.<br>

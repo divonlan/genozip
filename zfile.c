@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   zfile.c
-//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 #include <errno.h>
 #include <time.h>
@@ -840,7 +840,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
 #endif
     }
 
-    uint32_t license_num_bgen = BGEN32 (license_get());
+    uint32_t license_num_bgen = BGEN32 (license_get_number());
     header.license_hash = md5_do (&license_num_bgen, sizeof (int32_t));
     
     header.digest_bound = flag.data_modified ? DIGEST_NONE

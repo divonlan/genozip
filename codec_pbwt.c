@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   codec_pbwt.c
-//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2020-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 // The codec implements a modified version of the PBWT algorithm. The permutation logic is loosely based on the logic in
 // Durbin R. Efficient haplotype matching and storage using the positional Burrows-Wheeler transform (PBWT). Bioinformatics. 2014 

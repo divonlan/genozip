@@ -13,7 +13,7 @@ Genozip
    Algorithms <algorithms>
    Source code <source>
    Publications & Citing <publications>
-   Non-commercial license <license>
+   License <license>
    Contact <contact>
   
 |

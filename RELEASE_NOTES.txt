@@ -468,3 +468,6 @@ g. Much improved website genozip.com
 - new option: --tar to archive with genozip. See: http://genozip.com/archiving.html
 - new option: --files-from/-T - An alternative to providing input file names on the command line
 - bug fixes
+
+12.0.7
+- license and copyright update

@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------
 #   meta.template.yaml
-#   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
-#   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+#   Copyright (C) 2020-2021 Black Paw Ventures Limited
+#   Please see terms and conditions in the file LICENSE.txt
 #
 # See: https://docs.conda.io/projects/conda-build/en/latest/resources/build-scripts.html
 # See: https://docs.ligo.org/lscsoft/conda/packaging/
@@ -66,8 +66,7 @@ about:
   license: CUSTOM
   license_family: OTHER
   license_file: 
-    - LICENSE.non-commercial.txt
-    - LICENSE.commercial.txt
+    - LICENSE.txt
   summary: Compressor for genomic files (FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, 23andMe), up to 5x better than gzip and faster too
   description: |
 __README_MD__

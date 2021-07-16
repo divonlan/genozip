@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   arch.c
-//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2020-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 #include <fcntl.h>
 #include <dirent.h>
@@ -174,7 +174,7 @@ const char *arch_get_os (void)
 
 const char *arch_get_ip_addr (const char *reason) // optional text in case curl execution fails
 {
-    static char ip_str[50] = "0.0.0.0"; // default in case of failure
+    static char ip_str[ARCH_IP_LEN] = "0.0.0.0"; // default in case of failure
 
     url_read_string ("https://api.ipify.org", ip_str, sizeof(ip_str)); // ignore failure
 

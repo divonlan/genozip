@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   genozip.c
-//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 #include <getopt.h>
 
@@ -446,7 +446,6 @@ static char **main_get_filename_list (unsigned *num_files /* in/out */, char **f
     // set argv to file names
     if (flag.files_from) {
         file_split_lines (flag.files_from, "files-from");
-        str_nul_separate (n_lines, lines, line_lens);
         
         filenames = MALLOC (n_lines * sizeof (char *));
         memcpy (filenames, lines, n_lines * sizeof (char *)); // pointers into "data" defined in file_split_lines
@@ -554,7 +553,7 @@ int main (int argc, char **argv)
                  (isatty(0) || arch_am_i_in_docker())) {
             // case: --register
             if (flag.do_register) {
-                license_get();
+                license_register();
                 exit (EXIT_OK);
             }
 
@@ -598,10 +597,9 @@ int main (int argc, char **argv)
     primary_command = command; 
 
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
-    // and might put you personally as well as your organization at legal and financial risk - Genozip copyright holders
-    // view themselves as entitled to any or all of the financial gains you and your organization make while using an 
-    // unlicensed copy of Genozip. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
-    if (command == ZIP) license_get(); 
+    // and might put you personally as well as your organization at legal and financial risk - see "Unauthorized use of Genozip"
+    // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
+    if (command == ZIP) license_get_number(); 
 
     if (flag.reading_chain) {
         chain_load();

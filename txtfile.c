@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   txtfile.c
-//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
  
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for for conda mac - otherwise zlib.h throws compilation errors

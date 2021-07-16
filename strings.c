@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   strings.c
-//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 #include <time.h>
 #include "genozip.h"
@@ -550,7 +550,7 @@ int str_print_text (const char **text, unsigned num_lines,
         bool wrapped = false;
         while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
             int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); 
-                        c>=0 && (IS_LETTER(line[c]) || IS_DIGIT (line[c])); // wrap lines at - and | too, so we can break very long regex strings like in genocat
+                        c>=0 && (IS_LETTER(line[c]) || IS_DIGIT (line[c]) || line[c]==','); // wrap lines at - and | too, so we can break very long regex strings like in genocat
                         c--); // find 
             iprintf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
             line += c + (line[c]==' '); // skip space too

@@ -3,7 +3,7 @@
 I can't register Genozip's license
 ==================================
 
-Genozip requires registration prior to use, and its a violation of Genozip's non-commercial license to use Genozip without registration.
+Genozip requires registration prior to use, and its a violation of Genozip's license to use Genozip without registration.
 
 However, in some environments, interactive registration is not possible. For example, when submitting a batch job to an HPC.
 

@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   chain.c
-//   Copyright (C) 2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 //
 // handle UCSC Chain format: https://genome.ucsc.edu/goldenPath/help/chain.html
 // also here: http://genomewiki.ucsc.edu/index.php/Chains_Nets#:~:text=5%20FAQs%3F-,Basic%20definitions,and%20mouse%20is%20the%20dst.

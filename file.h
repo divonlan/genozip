@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   file.h
-//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 #ifndef FILE_INCLUDED
 #define FILE_INCLUDED
@@ -443,7 +443,7 @@ extern char *file_get_fastq_pair_filename (const char *fn1, const char *fn2, boo
 
 // wrapper operations for operating system files
 extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, bool add_string_terminator);
-extern bool file_put_data (const char *filename, void *data, uint64_t len);
+extern bool file_put_data (const char *filename, const void *data, uint64_t len);
 extern bool file_exists (const char *filename);
 extern bool file_is_fifo (const char *filename);
 extern bool file_is_dir (const char *filename);
@@ -474,6 +474,7 @@ extern char *file_make_unix_filename (char *filename);
     \
     str_split_enforce (data.data, data.len, 0, '\n', line, true, (name)); \
     str_remove_window_r (n_lines, lines, line_lens); /* note: fopen with non-binary mode (no "b") doesn't help, because it won't remove Windows-created \r when running on Unix */ \
+    str_nul_separate (n_lines, lines, line_lens); \
     \
     ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", (fn)); \
     n_lines--; /* remove final empty line */\

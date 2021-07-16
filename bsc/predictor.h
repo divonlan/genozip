@@ -32,8 +32,8 @@ See also the bsc and libbsc web site:
 
 // ------------------------------------------------------------------
 //   This file was extensively modified to adapt it to genozip. All modifications:
-//   Copyright (C) 2020-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2020-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 #ifndef _LIBBSC_CODER_PREDICTOR_H
 #define _LIBBSC_CODER_PREDICTOR_H

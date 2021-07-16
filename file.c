@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   file.c
-//   Copyright (C) 2019-2021 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Please see terms and conditions in the file LICENSE.txt
 
 #include <errno.h>
 #include <sys/types.h>
@@ -1232,7 +1232,7 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
 }
 
 // writes data to a file and flushes it, returns true if successful
-bool file_put_data (const char *filename, void *data, uint64_t len)
+bool file_put_data (const char *filename, const void *data, uint64_t len)
 {
     // we first write to tmp_filename, and after we complete and flush, we rename to the final name
     // this is important, eg for the reference cache files - if a file exists (in its final name) - then it is fully written
@@ -1247,9 +1247,8 @@ bool file_put_data (const char *filename, void *data, uint64_t len)
     
     size_t written = fwrite (data, 1, len, file);
     
-    fflush (file);
-    
     SAVE_VALUE (errno);
+    fflush (file);    
     FCLOSE (file, tmp_filename); 
     RESTORE_VALUE (errno); // in cases caller wants to print fwrite error
 
