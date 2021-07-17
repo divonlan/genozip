@@ -233,7 +233,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
 
-docs/LICENSE.for-docs.txt: genozip$(EXE)
+docs/LICENSE.for-docs.txt: genozip$(EXE) version.h
 	@./genozip$(EXE) --license=74 --force > $@
 
 docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/conf.py $(DOCS)
@@ -353,7 +353,7 @@ windows/readme.txt: $(EXECUTABLES)
 	@printf '%.s-' {1..120}   >> $@
 	@./genocat$(EXE)   --help >> $@
 
-windows/LICENSE.for-installer.txt: genozip$(EXE)
+windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 	@echo Generating $@
 	@./genozip$(EXE) --license=60 --force > $@
 
