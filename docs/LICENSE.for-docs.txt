@@ -37,29 +37,24 @@ non-exclusive copyright license to use Genozip for any the following
 limited purposes subject to the conditions attached to each purpose, and
 subject to the terms and conditions of this License:
 
-   a. For any legal purpose, if a Commercial License was purchased and
+   a. For academic research, educational or training purposes.
+
+   b. For another non-commercial purpose, if it has been pre-approved by
+Licensor in writing. Email register@genozip.com to seek such an approval.
+
+   c. For any legal purpose, if a Commercial License was purchased and
 paid for, and for the duration that it is in effect. For details, see
 http://genozip.com/commercial.html or email sales@genozip.com.
 
-   b. For any legal purpose, if use is limited to the three tools:
+   d. For any legal purpose, if use is limited to the three tools:
 genounzip, genocat, genols.
-
-   c. For academic research purpose, if the research does not have
-commercial goals.
-
-   d. For educational or training purposes.
 
    e. For the purpose of evaluating Genozip, for a duration of 30 days.
 
-   f. For the purpose of distributing it to others in unmodified form,
-including this license, via a platform that is both publicly accessible
-and free of charge, including but not limited to an Internet website.
-
-   g. For any other non-commercial purpose, if it has been pre-approved
-by Licensor in writing. Email register@genozip.com to seek such an
-approval. Note: Clinical use or other use in which You are getting paid
-for a service which involves data that is then compressed with Genozip,
-is not considered non-commercial.
+   f. For the purpose of distributing Genozip to others in unmodified
+form, including this license, via a platform that is both publicly
+accessible and free of charge, including but not limited to an Internet
+website.
 
 3. Additional Terms and conditions
 
