@@ -473,8 +473,8 @@ extern char *file_make_unix_filename (char *filename);
     file_get_file (evb, fn, &data, name "_data", false); \
     \
     str_split_enforce (data.data, data.len, 0, '\n', line, true, (name)); \
-    str_remove_window_r (n_lines, lines, line_lens); /* note: fopen with non-binary mode (no "b") doesn't help, because it won't remove Windows-created \r when running on Unix */ \
-    str_nul_separate (n_lines, lines, line_lens); \
+    str_remove_CR (line); /* note: fopen with non-binary mode (no "b") doesn't help, because it won't remove Windows-created \r when running on Unix */ \
+    str_nul_separate (line); \
     \
     ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", (fn)); \
     n_lines--; /* remove final empty line */\

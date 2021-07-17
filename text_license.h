@@ -20,14 +20,13 @@ static const char *license[] = {
     "Other words and terms in this License shall be interpreted as their usual meaning in the context of a software product.",
 
     "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive copyright license to use Genozip for any the following limited purposes subject to the conditions attached to each purpose, and subject to the terms and conditions of this License:",
-    "   a. For any legal purpose, if a Commercial License was purchased and paid for, and for the duration that it is in effect. For details, see http://genozip.com/commercial.html or email sales@genozip.com.",
-    "   b. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols.",
-    "   c. For academic research purpose, if the research does not have commercial goals.",
-    "   d. For educational or training purposes.",
+    "   a. For academic research, educational or training purposes.",
+    "   b. For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email register@genozip.com to seek such an approval.",
+    "   c. For any legal purpose, if a Commercial License was purchased and paid for, and for the duration that it is in effect. For details, see http://genozip.com/commercial.html or email sales@genozip.com.",
+    "   d. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols.",
     "   e. For the purpose of evaluating Genozip, for a duration of 30 days.",
-    "   f. For the purpose of distributing it to others in unmodified form, including this license, via a platform that is both publicly accessible and free of charge, including but not limited to an Internet website.",
-    "   g. For any other non-commercial purpose, if it has been pre-approved by Licensor in writing. Email register@genozip.com to seek such an approval. Note: Clinical use or other use in which You are getting paid for a service which involves data that is then compressed with Genozip, is not considered non-commercial.",
-
+    "   f. For the purpose of distributing Genozip to others in unmodified form, including this license, via a platform that is both publicly accessible and free of charge, including but not limited to an Internet website.",
+    
     "3. Additional Terms and conditions",
     "   a. You must fully and accurately complete the registration, either by completing the registeration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing register@genozip.com.",
     "   b. Using Genozip to compress a file is only permitted if the file is retained in its original form as well or the potential loss of data due to Genozip not being able to uncompress the compressed file would not cause any harm.",
@@ -45,3 +44,4 @@ static const char *license[] = {
 
     LIC_FIELD_VERSION ": " GENOZIP_CODE_VERSION 
 };
+ 

@@ -65,12 +65,11 @@ typedef struct {
     int force, quiet, show_filename,
         to_stdout,   // set implicitly if genocat without --output
         replace, 
-        do_register,
         lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
         test,        // implies md5
         index_txt,   // create an index
         list;        // a genols option
-    const char *threads_str, *out_filename, *files_from;
+    const char *threads_str, *out_filename, *files_from, *do_register;
 
     ReferenceType reference;
 

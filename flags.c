@@ -392,7 +392,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _PG {"no-PG",         no_argument,       &flag.no_pg,            1 }
         #define _pg {"no-pg",         no_argument,       &flag.no_pg,            1 }
         #define _fs {"sequential",    no_argument,       &flag.sequential,       1 }  
-        #define _rg {"register",      no_argument,       &flag.do_register,      1 }
+        #define _rg {"register",      optional_argument, 0, 28                     }
         #define _sl {"show-lifts",    no_argument,       &flag.show_lift,        1 } 
         #define _ss {"stats",         no_argument,       &flag.show_stats,       1 } 
         #define _SS {"STATS",         no_argument,       &flag.show_stats,       2 } 
@@ -569,7 +569,8 @@ verify_command:
             case 24  : iupac_set (optarg)           ; break;
             case 26  : license_set_filename (optarg); break;
             case 27  : tar_set_tar_name (optarg)    ; break;
-
+            case 28  : flag.do_register = optarg ? optarg : ""; break;
+            
             case 0   : break; // a long option that doesn't have short version will land here - already handled so nothing to do
                  
             default  : // unrecognized option 

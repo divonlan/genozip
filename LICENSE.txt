@@ -31,26 +31,22 @@ a software product.
 license to use Genozip for any the following limited purposes subject to the conditions attached to
 each purpose, and subject to the terms and conditions of this License:
 
-   a. For any legal purpose, if a Commercial License was purchased and paid for, and for the
+   a. For academic research, educational or training purposes.
+
+   b. For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email
+register@genozip.com to seek such an approval.
+
+   c. For any legal purpose, if a Commercial License was purchased and paid for, and for the
 duration that it is in effect. For details, see http://genozip.com/commercial.html or email sales
 @genozip.com.
 
-   b. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols.
-
-   c. For academic research purpose, if the research does not have commercial goals.
-
-   d. For educational or training purposes.
+   d. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols.
 
    e. For the purpose of evaluating Genozip, for a duration of 30 days.
 
-   f. For the purpose of distributing it to others in unmodified form, including this license, via
-a platform that is both publicly accessible and free of charge, including but not limited to an
+   f. For the purpose of distributing Genozip to others in unmodified form, including this license,
+via a platform that is both publicly accessible and free of charge, including but not limited to an
 Internet website.
-
-   g. For any other non-commercial purpose, if it has been pre-approved by Licensor in writing.
-Email register@genozip.com to seek such an approval. Note: Clinical use or other use in which You
-are getting paid for a service which involves data that is then compressed with Genozip, is not
-considered non-commercial.
 
 3. Additional Terms and conditions
 
@@ -96,17 +92,5 @@ if Licensor or Developer have been advised of the possibility of such damages.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 12.0.6
-
-License granted to: asdf
-
-Accepted by (name): asdf asdf
-
-Accepted by (email): asdf@dasf.com
-
-Timestamp of acceptance: 2021-07-16 20:08:34 Cen. Australia Daylight Time
-
-IP address of acceptance: 49.178.46.112
-
-License number: 3204151125
+Genozip license version: 12.0.7
 

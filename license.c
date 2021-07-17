@@ -48,6 +48,14 @@ static struct {
     uint32_t license_num;
 } rec = {};
 
+static uint32_t license_calc_number (const Buffer *license_data)
+{
+    char data_no_ws[license_data->len];
+    unsigned data_no_ws_len = str_remove_whitespace (license_data->data, license_data->len, data_no_ws);        
+
+    return md5_do (data_no_ws, data_no_ws_len).words[0];
+}
+
 static void license_generate (Buffer *license_data)
 {
     for (unsigned i=0; i < sizeof(license) / sizeof(char*); i++) {
@@ -65,7 +73,7 @@ static void license_generate (Buffer *license_data)
     
     rec.initialized = true;
     rec.has_details = true;
-    rec.license_num = md5_do (license_data->data, license_data->len).words[0];
+    rec.license_num = license_calc_number (license_data);
     strcpy (rec.version, GENOZIP_CODE_VERSION);
 
     bufprintf (evb, license_data, LIC_FIELD_NUMBER": %u\n", rec.license_num);
@@ -153,6 +161,9 @@ static void license_load (void)
         ASSINP (strlen (license_num_str) >= 1 && IS_DIGIT (license_num_str[0]), "failed to parse license file %s, please re-register with genozip --register", filename);
         rec.license_num = atoi (license_num_str);
         rec.has_details = true;
+
+        data.len -= line_lens[n_lines-1] + 2;
+        ASSINP0 (rec.license_num == license_calc_number (&data), "Invalid license. Please re-register with genozip --register");
     }
 
     rec.initialized = true;
@@ -240,72 +251,100 @@ static void license_exit_if_not_confirmed (const char *response)
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 void license_register (void)
 {
+    char confirm[100], commercial[100], update[100];
+    const char *os, *dist, *endianity, *user_host;
+    unsigned cores;
+
+    str_split (flag.do_register, strlen (flag.do_register), 11, '|', field, true);
+    str_nul_separate (field);
+
     // if stdin or stderr is redirected - we cannot ask the user an interactive question
     ASSINP0 (isatty(0) && isatty(2), "Use of genozip is free for non-commercial purposes, but requires registration. Please run: genozip --register.\n"
                                      "If you are unable to register (for example because this is a batch-job machine) please see: " WEBSITE_USING_ON_HPC);
 
-    fprintf (stderr, "Welcome to genozip!\n\n"
-                     "The use of genozip for non-commercial purposes (as defined in the license: "WEBSITE_LICENSE") is FREE, but requires registration.\n"
-                     "If you are not sure whether your usage is considered non-commercial, please email register@genozip.com\n\n");
 
-    char confirm[100], commercial[100], update[100];
+    if (!n_fields) {
+        fprintf (stderr, "Welcome to genozip!\n\n"
+                         "The use of genozip for non-commercial purposes (as defined in the license: "WEBSITE_LICENSE") is FREE, but requires registration.\n"
+                         "If you are not sure whether your usage is considered non-commercial, please email register@genozip.com\n\n");
 
-    str_query_user ("Would you like to register now? ([y] or n)", confirm, sizeof(confirm), str_verify_y_n, "Y");
-    license_exit_if_not_confirmed (confirm);
+        str_query_user ("Would you like to register now? ([y] or n)", confirm, sizeof(confirm), str_verify_y_n, "Y");
+        license_exit_if_not_confirmed (confirm);
+    }
 
     const char *filename = get_license_filename (true);
     file_remove (filename, true); // remove old license, if one exists
 
-    fprintf (stderr, "\nDetails of the person to be granted the license -\n");
-    str_query_user ("\nInstitution / Company name: ", rec.institution, sizeof(rec.institution), str_verify_not_empty, NULL);
+    if (n_fields) {
+        strncpy (rec.institution, fields[0], sizeof(rec.institution)-1);
+        strncpy (rec.name,        fields[1], sizeof(rec.name)-1);
+        strncpy (rec.email,       fields[2], sizeof(rec.email)-1);
+        strncpy (commercial,      fields[3], sizeof(commercial)-1);
+        strncpy (update,          fields[4], sizeof(update)-1);
+        strncpy (rec.ip,          fields[5], sizeof(rec.ip)-1);
+        os        = fields[6];
+        dist      = fields[7]; 
+        endianity = fields[8];
+        user_host = fields[9];
+        cores     = atoi(fields[10]);
+    }
+    else {
+        fprintf (stderr, "\nLicense details -\n");
     
-    str_query_user ("\nYour name: ", rec.name, sizeof(rec.name), license_verify_name, NULL);
-    
-    str_query_user ("\nYour email address: ", rec.email, sizeof(rec.email), license_verify_email, NULL);
-    
-    str_query_user ("\nDo you require a commercial license? If yes, we will contact you (this will not stop the registration now) (y or [n]) ", 
-                    commercial, sizeof(commercial), str_verify_y_n, "N");
+        str_query_user ("\nInstitution / Company name: ", rec.institution, sizeof(rec.institution), str_verify_not_empty, NULL);
 
-    str_query_user ("\nShall we update you by email when new features are added to genozip? ([y] or n) ", 
-                    update, sizeof(update), str_verify_y_n, "Y");
+        str_query_user ("\nYour name: ", rec.name, sizeof(rec.name), license_verify_name, NULL);
+        
+        str_query_user ("\nYour email address: ", rec.email, sizeof(rec.email), license_verify_email, NULL);
+        
+        str_query_user ("\nDo you require a commercial license? If yes, we will contact you (this will not stop the registration now) (y or [n]) ", 
+                        commercial, sizeof(commercial), str_verify_y_n, "N");
 
-    fprintf (stderr, "\n\nPlease read the terms and conditions of the license:\n\n"); 
-    license_display(); 
-    fprintf (stderr, "\n"); 
+        str_query_user ("\nShall we update you by email when new features are added to genozip? ([y] or n) ", 
+                        update, sizeof(update), str_verify_y_n, "Y");
 
-    str_query_user ("Do you accept the terms and conditions of the license? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);
-    license_exit_if_not_confirmed (confirm);
+        fprintf (stderr, "\n\nPlease read the terms and conditions of the license:\n\n"); 
+        license_display(); 
+        fprintf (stderr, "\n"); 
 
-    const char *os        = arch_get_os();
-    const char *dist      = arch_get_distribution();
-    unsigned cores        = arch_get_num_cores();
-    const char *endianity = arch_get_endianity();
-    const char *user_host = arch_get_user_host();
-    rec.timestamp         = str_time();
-    memcpy (rec.ip, arch_get_ip_addr ("Failed to register the license"), ARCH_IP_LEN);
-    
+        str_query_user ("Do you accept the terms and conditions of the license? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);
+        license_exit_if_not_confirmed (confirm);
+
+        os        = arch_get_os();
+        dist      = arch_get_distribution();
+        cores     = arch_get_num_cores();
+        endianity = arch_get_endianity();
+        user_host = arch_get_user_host();
+        memcpy (rec.ip, arch_get_ip_addr ("Failed to register the license"), ARCH_IP_LEN);
+    }
+
+    rec.timestamp = str_time();
+
     static Buffer license_data = EMPTY_BUFFER;
     license_generate (&license_data);
 
-    fprintf (stderr, "\nThank you. To complete your license registration, genozip will now submit the following information to the genozip licensing server:\n\n");
+    if (!n_fields) {
 
-    // note: text needs to match scripts/register.sh
-    fprintf (stderr, "=====================================================================\n");
-    fprintf (stderr, LIC_FIELD_INSTITUTION": %s\n", rec.institution);
-    fprintf (stderr, LIC_FIELD_NAME": %s\n", rec.name);
-    fprintf (stderr, LIC_FIELD_EMAIL": %s\n", rec.email);
-    fprintf (stderr, "Commercial: %s\n", commercial[0]=='Y' ? "Yes" : "No");
-    fprintf (stderr, "Send new feature updates: %s\n", update[0]=='Y' ? "Yes" : "No");
-    fprintf (stderr, "System info: OS=%s cores=%u endianity=%s IP=%s\n", os, cores, endianity, rec.ip);
-    fprintf (stderr, "Username: %s\n", user_host);
-    fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
-    fprintf (stderr, "Genozip license number: %u\n", rec.license_num);
-    fprintf (stderr, "I accept the terms and conditions of the Genozip license\n");
-    fprintf (stderr, "=====================================================================\n\n");
-    
-    str_query_user ("Proceed with completing the registration? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
-    license_exit_if_not_confirmed (confirm);
-    
+        fprintf (stderr, "\nThank you. To complete your license registration, genozip will now submit the following information to the genozip licensing server:\n\n");
+
+        // note: text needs to match scripts/register.sh
+        fprintf (stderr, "=====================================================================\n");
+        fprintf (stderr, LIC_FIELD_INSTITUTION": %s\n", rec.institution);
+        fprintf (stderr, LIC_FIELD_NAME": %s\n", rec.name);
+        fprintf (stderr, LIC_FIELD_EMAIL": %s\n", rec.email);
+        fprintf (stderr, "Commercial: %s\n", commercial[0]=='Y' ? "Yes" : "No");
+        fprintf (stderr, "Send new feature updates: %s\n", update[0]=='Y' ? "Yes" : "No");
+        fprintf (stderr, "System info: OS=%s cores=%u endianity=%s IP=%s\n", os, cores, endianity, rec.ip);
+        fprintf (stderr, "Username: %s\n", user_host);
+        fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
+        fprintf (stderr, "Genozip license number: %u\n", rec.license_num);
+        fprintf (stderr, "I accept the terms and conditions of the Genozip license\n");
+        fprintf (stderr, "=====================================================================\n\n");
+        
+        str_query_user ("Proceed with completing the registration? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
+        license_exit_if_not_confirmed (confirm);
+    }
+        
     bool submitted = license_submit (commercial[0], update[0], os, cores, endianity, user_host, dist);
 
     ASSINP0 (submitted,
@@ -316,9 +355,10 @@ void license_register (void)
     ASSINP (file_put_data (filename, license_data.data, license_data.len), 
             "Failed to write license file %s: %s. Please email register@genozip.com for help.", filename, strerror (errno));
 
-    fprintf (stderr, "\nCongratulations! Your Genozip license has been granted.\n\n"
-                     "Documentation: " GENOZIP_URL "\n\n"
-                     "Citing: " WEBSITE_PUBLICATIONS "\n\n");
+    if (!n_fields) 
+        fprintf (stderr, "\nCongratulations! Your Genozip license has been granted.\n\n"
+                         "Documentation: " GENOZIP_URL "\n\n"
+                         "Citing: " WEBSITE_PUBLICATIONS "\n\n");
 
     buf_destroy (&license_data);
 }
@@ -359,7 +399,7 @@ void license_display (void)
     // case: user has already accepted the license and it is new style license - display the license file
     if (license_data.len > 100) {
         str_split (license_data.data, license_data.len, 0, '\n', line, false);
-        str_nul_separate (n_lines, lines, line_lens);
+        str_nul_separate (line);
         str_print_text (lines, n_lines-1, "", "\n\n", flag.lic_width);
     }
     

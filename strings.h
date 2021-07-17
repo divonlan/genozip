@@ -107,8 +107,13 @@ extern unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_it
     unsigned name##_lens[MAX (n_##name##s, 1)]; \
     n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), name##s, name##_lens, (exactly), (enforce)); 
 
-extern void str_remove_window_r (unsigned n_lines, const char **lines, unsigned *line_lens);
-extern void str_nul_separate (unsigned n_items, const char **items, unsigned *item_lens);
+extern void str_remove_CR_do (unsigned n_lines, const char **lines, unsigned *line_lens);
+#define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)
+
+extern void str_nul_separate_do (unsigned n_items, const char **items, unsigned *item_lens);
+#define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)
+
+extern unsigned str_remove_whitespace (const char *in, unsigned in_len, char *out);
 
 extern unsigned str_split_ints_do (const char *str, unsigned str_len, uint32_t max_items, char sep, _Bool exactly, int64_t *items);
 #define str_split_ints(str,str_len,max_items,sep,name,exactly) \

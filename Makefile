@@ -217,7 +217,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 LICENSE.txt: text_license.h # not dependent on genozip.exe, so we don't generate it every compilation
 	@make ./genozip$(EXE) # recursive call 
 	@echo Generating $@
-	@./genozip$(EXE) --license=100 > $@
+	@./genozip$(EXE) --license=100 --force > $@
 
 SPHINX = /home/divon/miniconda3/bin/sphinx-build
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/advanced.rst docs/index.rst docs/license.rst \
@@ -232,7 +232,6 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
-	@git commit -m "generate conf.py" docs/conf.py
 
 docs/LICENSE.for-docs.txt: genozip$(EXE)
 	@./genozip$(EXE) --license=74 --force > $@
@@ -242,6 +241,9 @@ docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/conf.py $(DOCS)
 	@wsl $(SPHINX) -M html docs docs/_build -q -a 
 
 docs: docs/_build/html/.buildinfo 
+	@git commit -m "build docs" docs/conf.py docs/LICENSE.for-docs.txt
+	@$(SH_VERIFY_ALL_COMMITTED)
+	@git push > /dev/null
 
 docs-debug: docs/_build/html/.buildinfo
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe file:///C:/Users/USER/projects/genozip/docs/_build/html/index.html; exit 0)
@@ -353,7 +355,7 @@ windows/readme.txt: $(EXECUTABLES)
 
 windows/LICENSE.for-installer.txt: genozip$(EXE)
 	@echo Generating $@
-	@./genozip$(EXE) --license=60 > $@
+	@./genozip$(EXE) --license=60 --force > $@
 
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe \
                          windows/LICENSE.for-installer.txt windows/readme.txt
@@ -391,7 +393,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@touch $@
 
 distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
-distribution: docs testfiles conda/.conda-timestamp docs/genozip-installer.exe # mac/.remote_mac_timestamp
+distribution: testfiles conda/.conda-timestamp docs/genozip-installer.exe docs # docs last, after version incremented # mac/.remote_mac_timestamp
 	
 test-backup: genozip.exe
 	@echo "Compresing test/ files for in preparation for backup (except cram and bcf)"
