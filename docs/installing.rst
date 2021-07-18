@@ -9,7 +9,7 @@ Installing
    **Using a Windows installer**: :download:`genozip-installer.exe <genozip-installer.exe>` 
 
    **From Github** (tested on Linux, Mac and Windows):
-      | Download from `latest release on github <https://github.com/divonlan/genozip/releases/latest>`_
+      | Download `latest release <https://github.com/divonlan/genozip/releases/latest>`_
       | ``make``
 
    **From Docker Hub** `here <https://hub.docker.com/r/divonlan/genozip>`_
