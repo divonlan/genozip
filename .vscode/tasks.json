@@ -131,10 +131,31 @@
         },
         {
             "type": "shell",
-            "label": "Make Docs",
+            "label": "Test Docs",
             "command": "make",
             "args": [
                 "docs-debug"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Deploy Docs",
+            "command": "make",
+            "args": [
+                "docs"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"

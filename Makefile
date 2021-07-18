@@ -264,7 +264,7 @@ endif
 
 version = $(shell head -n1 version.h |cut -d\" -f2)
 
-SH_VERIFY_ALL_COMMITTED = (( `git status|grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l ` == 0 )) || \
+SH_VERIFY_ALL_COMMITTED = (( `git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l ` == 0 )) || \
                           (echo ERROR: there are some uncommitted changes: ; echo ; git status ; exit 1)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
@@ -296,6 +296,7 @@ decrement-version:
 	@echo GITHUB: go to here: https://github.com/divonlan/genozip/releases/new
 	@echo "1. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
 	@echo "2. Copy the notes for the version from RELEASE NOTES"
+	@echo "3. Update 'latest' release to new tag"
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz README.md
 	@echo "Generating conda/meta.yaml"
