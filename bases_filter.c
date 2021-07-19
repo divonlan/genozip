@@ -29,7 +29,7 @@ void iupac_set (const char *optarg)
         static const uint8_t sam2bam_seq_map[256] = { ['=']=0x80, ['A']=0x81, ['C']=0x82, ['M']=0x83, ['G']=0x84, ['R']=0x85, ['S']=0x86, ['V']=0x87, 
                                                       ['T']=0x88, ['W']=0x89, ['Y']=0x8a, ['H']=0x8b, ['K']=0x8c, ['D']=0x8d, ['B']=0x8e, ['N']=0x8f };
         uint8_t bam_value = sam2bam_seq_map[(int)*c]; 
-        ASSINP (bam_value & 0x80, "Invalid --bases argument \"%s\": each charcters should be a valid IUPAC character, one of \"=ACMGRSVTWYHKDBN\". See: https://www.bioinformatics.org/sms/bases.html",
+        ASSINP (bam_value & 0x80, "Invalid --bases argument \"%s\": each charcters should be a valid IUPAC character, one of \"=ACMGRSVTWYHKDBN\". See: https://www.bioinformatics.org/sms/iupac.html",
                 optarg);
         iupac_bam_mask[(int)(bam_value & 0xf)] = 1;
     }

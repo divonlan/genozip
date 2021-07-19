@@ -230,7 +230,7 @@ One or more file names must be given.
    ========================== ===============================================================================
 
    | Note: In SAM/BAM, all lines missing a sequence (i.e. SEQ=*) are included in positive --bases filters (the first example above) and excluded in negative ones.
-   | Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/bases.html>`_
+   | Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
    |
 
 .. option:: --bam  Output as BAM. Note: this option is implicit if --output specifies a filename ending with .bam

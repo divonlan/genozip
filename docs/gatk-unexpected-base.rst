@@ -39,7 +39,7 @@ Step 2: Filter it:
 
 | This also works for SAM and FASTQ files.
 |
-| The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/bases.html>`_
+| The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
 
 
 
