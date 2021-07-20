@@ -113,9 +113,9 @@ When cross-rendering (either in ``genocat --luft`` or when executing ``genozip``
 |           |                   | for these 4-value fields                   |                 | FORMAT/MB      |
 |           |                   |                                            |                 | FORMAT/SAC     |
 +-----------+-------------------+--------------------------------------------+-----------------+----------------+
-| A_1       | REF⇆ALT switch    | Applied to AF-like fields:                 | Value ∉ [0,1]   | INFO/AF        |
+| A_1       | REF⇆ALT switch    | Applied to AF-like fields:                 | Not bi-allelic  | INFO/AF        |
 |           |                   | new value is (1.0-value)                   |                 | INFO/AF\_\*    |
-|           |                   |                                            |                 | INFO/\*_AF     |
+|           |                   |                                            | Value ∉ [0,1]   | INFO/\*_AF     |
 |           |                   |                                            |                 | (not MAX_AF)   |
 |           |                   |                                            |                 | INFO/MLEAF     |
 |           |                   |                                            |                 | INFO/LDAF      |
