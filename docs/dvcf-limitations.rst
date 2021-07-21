@@ -23,7 +23,7 @@ Here is a list of the current limitations of Genozip DVCF lifting:
     |
     | c. Complex re-arrangement variants (as defined in section 5.4 of the `VCF specification <https://samtools.github.io/hts-specs/VCFv4.3.pdf>`_).
     | 
-    | d. Variants with a symbolic ALT allele (eg <DEL>) where the Luft reference and Primary reference differ and/or there is a strand reversal
+    | d. Variants with a symbolic ALT allele (eg <DEL>) where the Luft reference and Primary reference differ and/or there is a strand reversal.
     | 
     | e. An indel variant that is not left-anchored (example: in "A ACCT", 'A' is the *anchor base* and it appears on the left, hence the variant is left-anchored, while "G CTTG" is not left-anchored).
     | 
