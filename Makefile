@@ -394,6 +394,9 @@ docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 	@git push > /dev/null
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 
+docs/genozip-linux-x86_64.tar.gz.build:
+	@wsl bash -c "make docs/genozip-linux-x86_64.tar.gz"
+
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
 	@$(SH_VERIFY_ALL_COMMITTED)
@@ -407,7 +410,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@touch $@
 
 distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
-distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz docs/genozip-installer.exe docs # docs last, after version incremented # mac/.remote_mac_timestamp
+distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe docs # docs last, after version incremented # mac/.remote_mac_timestamp
 	
 test-backup: genozip.exe
 	@echo "Compresing test/ files for in preparation for backup (except cram and bcf)"
