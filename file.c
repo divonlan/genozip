@@ -1157,9 +1157,9 @@ bool file_seek (File *file, int64_t offset,
 
     if (soft_fail) {
         if (!flag.to_stdout && soft_fail==1) {
-            ASSERTW (!ret, errno == EINVAL ? "Warning: Error while reading file %s: it is too small%s" 
-                                           : "Warning: fseeko failed on file %s: %s", 
-                    file_printname (file),  errno == EINVAL ? "" : strerror (errno));
+            ASSERTW (!ret, errno == EINVAL ? "Warning: Error while reading file %s (fseeko64 (whence=%d offset=%"PRId64")): it is too small%s" 
+                                           : "Warning: fseeko failed on file %s (whence=%d offset=%"PRId64"): %s", 
+                     file_printname (file), whence, offset, errno == EINVAL ? "" : strerror (errno));
         }
     } 
     else

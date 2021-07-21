@@ -708,8 +708,8 @@ batch_real_world_1()
     fi
 
     # without reference
-    local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* \
-                   test.*fq* test.*fa* test.*fasta* \
+    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam* \
+                   test.*fq* test.*fa* \ 
                    basic.phy* test.*gvf* \
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v .genozip` )
@@ -755,7 +755,7 @@ batch_real_world_small_vbs()
     fi
 
     # lots of small VBs
-    local files=( `cd test; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* | \
+    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* | \
                    grep -v "$filter_out" | grep -v .genozip` )
 
     echo "subsets of real world files (lots of small VBs -B1)"
