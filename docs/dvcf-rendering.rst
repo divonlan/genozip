@@ -5,9 +5,9 @@ Rendering a DVCF
 
 See also:
 
-    | :ref:`Dual-coordinates VCF files <dvcf>`
+    | :ref:`Dual-coordinate VCF files <dvcf>`
     |
-    | `Dual-coordinates VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_
+    | `Dual-coordinate VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_
     |
     | :ref:`Chain files <dvcf-chain-files>`
 
@@ -76,7 +76,7 @@ The ALT field is not *lifted*, rather, it is *cross-rendered* - its value is cal
 
 Like ALT, the INFO and FORMAT subfields are not *lifted*, they are only *cross-rendered*.
 
-Genozip implements the 10 Rendering Algorithms (or *RendAlgs*) listed in the table below. They are similar to those defined in the `Dual-coordinates VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_, with the following refinements:
+Genozip implements the 10 Rendering Algorithms (or *RendAlgs*) listed in the table below. They are similar to those defined in the `Dual-coordinate VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_, with the following refinements:
   - The trigger defined as *REF Change* in the DVCF specification is implemented in Genozip only in the case of a REF⇆ALT switch in a bi-allelic variant. 
   - The A_tag RendAlg defined in the DVCF specification is implemented only for AN and is hence defined as A_AN in the table below.
   - All Genozip's RendAlgs are not only losslessly invertible (as required by the DVCF specification), but they are involutions - i.e. they are the inverse of themselves - applying them twice on the intended INFO or FORMAT value, results in getting the same value back. Hence, the same algorithm is applied to convert a field from Primary to Luft, and from Luft to Primary.

@@ -1,22 +1,25 @@
 .. _dvcf:
 
-Dual-coordinates VCF files
+Dual-coordinate VCF files
 ==========================
 
 See also:
 
     | :ref:`Rendering a DVCF <dvcf-rendering>`
     |
-    | `Dual-coordinates VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_
+    | `Dual-coordinate VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_
     |
     | :ref:`Chain files <dvcf-chain-files>`
+    |
+    | :ref:`Genozip DVCF lifting limitations <dvcf-limitations>`
 
 .. toctree::
     :hidden:
  
     Rendering a DVCF <dvcf-rendering>
     Chain files <dvcf-chain-files>
-
+    Genozip DVCF lifting limitations <dvcf-limitations>
+    
 **At a glance**
 
 Dual coordinates VCF files (or DVCFs), are VCF files that contain coordinates in two coordinate systems concurrently, for example, GRCh37 and GRCh38. A DVCF can be *rendered* in either *Primary* coordinates or *Luft* coordinates (*Luft* being our made-up past particile of *Lift*). 
@@ -52,7 +55,7 @@ Consider this small VCF file, called ``mydata.vcf.gz``, which is in the coordina
     1	366042	.	TA	A	100	PASS	.	GT	1|0	0|0
     1	20159588	.	C	A	100	PASS	.	GT:AD:AF:PL	0/1:28,9:0.3:36,0,0	1/1
                     
-We shall now convert this file to a Dual-coordinates VCF, containing both GRCh37 coordinates, as well as coordinates from another popular reference, GRCh38. This process is called *lifting*. We shall call GRCh37 the *Primary* coordinates, and GRCh38 the *Luft* coordinates.
+We shall now convert this file to a Dual-coordinate VCF, containing both GRCh37 coordinates, as well as coordinates from another popular reference, GRCh38. This process is called *lifting*. We shall call GRCh37 the *Primary* coordinates, and GRCh38 the *Luft* coordinates.
 
 Steps:
 
@@ -399,7 +402,7 @@ The option ``--show-lifts`` in combination with ``genozip --chain`` causes all l
     OkRefSameSNP CHROM=1 POS=10285 REF=T SNP: REF unchanged
     OkRefSameSNP CHROM=1 POS=329162 REF=A SNP: REF unchanged
     RefNewAlleleIndel CHROM=1 POS=366042 REF=TA ALT=A Genozip limitation: new INDEL allele: PRIM=TAA LUFT(453295)=TAAAA
-    OkRefAltSwitchSNP CHROM=1 POS=20159588 REF=C ALT=A SNP: REF<>ALT switch
+    OkRefAltSwitchSNP CHROM=1 POS=20159588 REF=C ALT=A SNP: REF⇆ALT switch
     
 |
 
