@@ -13,7 +13,7 @@ See also:
     |
     | :ref:`Chain files <dvcf-chain-files>`
 
-Here is a list of the currently known limitations of Genozip DVCF lifting:
+Here is a list of the current limitations of Genozip DVCF lifting:
 
 1. Cases in which variants won't be lifted and will remain primary-only, despite it being theoretically possible (yet complicated) to lift the variant:
 
