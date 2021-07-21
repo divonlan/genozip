@@ -19,7 +19,7 @@ Here is a list of the current limitations of Genozip DVCF lifting:
 
     | a. Bi-allelic variants in which the sequence in the Luft reference genome represents an allele that is neither the REF allele nor the ALT one. However, if this variant is a SNP in which AF=1 or AC=AN the variant is nevertheless lifted.
     |
-    | b. Variants with more than 2 alleles, in which the sequence in the Luft reference and Primary reference differ.
+    | b. Variants with more than 2 alleles (i.e. more than one ALT allele), in which the sequence in the Luft reference and Primary reference differ.
     |
     | c. Complex re-arrangement variants (as defined in section 5.4 of the `VCF specification <https://samtools.github.io/hts-specs/VCFv4.3.pdf>`_).
     | 
