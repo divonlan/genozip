@@ -16,7 +16,8 @@ launch.json
 *.xz
 *.exe
 *.new
-!windows/genozip-installer.exe
+windows
+genozip-linux-x86_64
 genozip
 genounzip*
 genocat*
@@ -29,7 +30,6 @@ data/*
 benchmark.txt
 notes.txt
 to do.txt
-windows/readme.txt
 junk*
 meta.yaml
 windows/LICENSE.for-installer.txt
@@ -73,9 +73,9 @@ genome_*Full*
 unix-nl.*
 windows-nl.*
 test.*
-internal-docs
 docs/_build
 !docs/*.rst
+!docs/genozip-linux-x86_64.tar.gz
 utils/*
 conda/README.md
 *.local

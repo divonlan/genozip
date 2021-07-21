@@ -72,12 +72,6 @@ RunProgs = 0
 Execdlls = 0
 [Languages]
 [Files/Dirs]
-C:\Users\USER\projects\genozip\LICENSE.commercial.txt
-60 Byte
-txt
-C:\Users\USER\projects\genozip\LICENSE.non-commercial.txt
-9.9 KB
-txt
 C:\Users\USER\projects\genozip\windows\genocat.exe
 1.6 MB
 exe
@@ -90,8 +84,8 @@ exe
 C:\Users\USER\projects\genozip\windows\genozip.exe
 1.6 MB
 exe
-C:\Users\USER\projects\genozip\windows\readme.txt
-30 KB
+C:\Users\USER\projects\genozip\LICENSE.txt
+5.3 KB
 txt
 [Licence_Begin]
 6683

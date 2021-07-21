@@ -214,7 +214,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
-LICENSE.txt: text_license.h # not dependent on genozip.exe, so we don't generate it every compilation
+LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
 	@make ./genozip$(EXE) # recursive call 
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
@@ -227,7 +227,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
 	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst \
 	   docs/sam2fq.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst docs/using-on-hpc.rst \
-	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-chain-files.rst \
+	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-chain-files.rst docs/dvcf-limitations.rst \
 	   docs/archiving.rst
 
 docs/conf.py: docs/conf.template.py version.h
@@ -247,7 +247,11 @@ docs: docs/_build/html/.buildinfo
 
 docs-debug: docs/_build/html/.buildinfo
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe file:///C:/Users/USER/projects/genozip/docs/_build/html/index.html; exit 0)
-	
+
+delete-arch:
+	@echo Deleting $(OBJDIR)/arch.o
+	@rm -f $(OBJDIR)/arch.o
+
 testfiles : $(GENERATED_TEST_FILES)
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
@@ -266,6 +270,29 @@ version = $(shell head -n1 version.h |cut -d\" -f2)
 
 SH_VERIFY_ALL_COMMITTED = (( `git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l ` == 0 )) || \
                           (echo ERROR: there are some uncommitted changes: ; echo ; git status ; exit 1)
+
+test:
+	@cat test.sh | tr -d "\r" | bash -
+
+clean-docs:
+	@rm -fR docs/_build/*
+
+clean-debug:
+	@echo Cleaning up debug
+	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o
+	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) $(OBJDIR)/*.opt-o
+
+clean-optimized:
+	@echo Cleaning up optimized
+	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
+
+clean:
+	@echo Cleaning up
+	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) docs/_build/*
+	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
+	@rm -Rf $(OBJDIR)
+
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup $(LINUXDIR)/clean
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
@@ -336,33 +363,19 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (7) In ~30 minutes users will be able to 'conda update genozip'"
 
 # Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
-delete-arch: 
-	@rm -f arch.o
-
 windows/%.exe: CFLAGS += -DDISTRIBUTION=\"InstallForge\"
 windows/%.exe: delete-arch $(OBJS) %.exe
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 
-windows/readme.txt: $(EXECUTABLES)
-	@echo Generating $@
-	@./genozip$(EXE)   --help  > $@
-	@printf '%.s-' {1..120}   >> $@
-	@./genounzip$(EXE) --help >> $@
-	@printf '%.s-' {1..120}   >> $@
-	@./genols$(EXE)    --help >> $@
-	@printf '%.s-' {1..120}   >> $@
-	@./genocat$(EXE)   --help >> $@
-
 windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 	@echo Generating $@
 	@./genozip$(EXE) --license=60 --force > $@
 
-WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe \
-                         windows/LICENSE.for-installer.txt windows/readme.txt
+WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt LICENSE.txt
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.txt 
+docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) 
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'WINDOWS: Using the UI:'
@@ -379,7 +392,7 @@ docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.txt
 	@(git stage genozip-installer.ifp $@ ; exit 0) > /dev/null
 	@(git commit -m windows_files_for_version_$(version) genozip-installer.ifp $@ ; exit 0) > /dev/null
 	@git push > /dev/null
-	@rm -f arch.o # remove this arch.o which contains DISTRIBUTION
+	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
@@ -394,7 +407,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@touch $@
 
 distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
-distribution: testfiles conda/.conda-timestamp docs/genozip-installer.exe docs # docs last, after version incremented # mac/.remote_mac_timestamp
+distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz docs/genozip-installer.exe docs # docs last, after version incremented # mac/.remote_mac_timestamp
 	
 test-backup: genozip.exe
 	@echo "Compresing test/ files for in preparation for backup (except cram and bcf)"
@@ -402,6 +415,39 @@ test-backup: genozip.exe
 	@(cd test; genozip.exe -f `ls -1d *|grep -v / |grep -v cram | grep -v bcf`)
 
 endif # Windows
+
+# Building Linux pre-compiled binaries: we delete arch.o to force it to re-compile with DISTRIBUTION=linux-x86_64.
+ifeq ($(uname),Linux)
+
+LINUXDIR=genozip-linux-x86_64
+$(LINUXDIR)/clean:
+	@rm -fR $(LINUXDIR)
+	@mkdir $(LINUXDIR)
+
+$(LINUXDIR)/genozip: CFLAGS += -DDISTRIBUTION=\"linux-x86_64\"
+
+# note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
+$(LINUXDIR)/genozip: delete-arch $(OBJS) 
+	@echo Linking $@
+	@$(CC) -static -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
+
+$(LINUXDIR)/genounzip $(LINUXDIR)/genocat $(LINUXDIR)/genols: $(LINUXDIR)/genozip 
+	@echo Generating $@
+	@ln -f $< $@
+
+$(LINUXDIR)/LICENSE.txt: LICENSE.txt
+	@echo Generating $@
+	@cp -f $< $@
+
+LINUX_TARGZ_OBJS = $(LINUXDIR)/clean $(LINUXDIR)/genozip $(LINUXDIR)/genounzip $(LINUXDIR)/genocat $(LINUXDIR)/genols $(LINUXDIR)/LICENSE.txt
+
+# this must be run ONLY has part of "make distribution" or else versions will be out of sync
+docs/genozip-linux-x86_64.tar.gz: version.h $(LINUX_TARGZ_OBJS)
+	@echo "Creating $@"
+	@tar cf $@ $(LINUXDIR) -z
+	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
+
+endif # Linux
 
 ifeq ($(uname),Darwin)
 
@@ -471,27 +517,3 @@ mac/.from_remote_timestamp: mac/genozip_installer.pkg
 	@touch $@
 
 endif # Darwin
-
-test:
-	@cat test.sh | tr -d "\r" | bash -
-
-clean-docs:
-	@rm -fR docs/_build/*
-
-clean-debug:
-	@echo Cleaning up debug
-	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o
-	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) $(OBJDIR)/*.opt-o
-
-clean-optimized:
-	@echo Cleaning up optimized
-	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
-
-clean:
-	@echo Cleaning up
-	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) docs/_build/*
-	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
-	@rm -Rf $(OBJDIR)
-
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup
-

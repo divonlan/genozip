@@ -125,7 +125,7 @@ static void main_print_help (bool explicit)
 
 static void main_print_version()
 {
-    iprintf ("version=%s\n", GENOZIP_CODE_VERSION);  
+    iprintf ("version=%s distribution=%s\n", GENOZIP_CODE_VERSION, arch_get_distribution());  
 }
 
 static void main_genounzip (const char *z_filename, const char *txt_filename, int z_file_i, bool is_last_z_file)
