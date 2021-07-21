@@ -395,7 +395,7 @@ docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 
 docs/genozip-linux-x86_64.tar.gz.build:
-	@wsl bash -c "make docs/genozip-linux-x86_64.tar.gz"
+	@wsl make docs/genozip-linux-x86_64.tar.gz
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
