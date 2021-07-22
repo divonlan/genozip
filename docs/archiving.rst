@@ -7,7 +7,7 @@ Genozip has two separate capabilities of aggregating files, each with its pros a
 
 **1. tar with --tar**
 
-Using the ``genozip --tar`` option, genozip compresses files directly into a standard tar file. 
+Using the ``genozip --tar`` option, genozip compresses files directly into a standard `tar file <https://en.wikipedia.org/wiki/Tar_(computing)>`_. 
 
 Each file is compressed independently and written directly into a standard tar file as it is being formed. This is faster and consumes less disk space than first genozipping files and then packaging them into a tar file, since no separate .genozip files are created - just the tar file. 
 
