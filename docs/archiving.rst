@@ -78,5 +78,7 @@ In the following example, we bind all the BAM files in the current directory:
     > # unbinding back to the original files
     > genounzip mydata.bam.genozip
 
+    > # unbinding into a different directory
+    > genounzip mydata.bam.genozip --prefix=mydir/
 
      
