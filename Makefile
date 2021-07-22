@@ -218,6 +218,7 @@ LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don'
 	@make ./genozip$(EXE) # recursive call 
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
+	@(git commit -m license_version_$(version) $@ ; exit 0) > /dev/null
 
 SPHINX = /home/divon/miniconda3/bin/sphinx-build
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/advanced.rst docs/index.rst docs/license.rst \
@@ -313,7 +314,7 @@ decrement-version:
 	@echo "Remove tag: git push --delete origin genozip-a.b.c"
 	@echo "Change version.h to the last version that still has a tag"
 
-.archive.tar.gz : increment-version $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
+.archive.tar.gz : increment-version $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
@@ -396,7 +397,7 @@ docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 
 docs/genozip-linux-x86_64.tar.gz.build:
 	@wsl make docs/genozip-linux-x86_64.tar.gz
-	@(git commit -m linux_files_for_version_$(version) LICENSE.txt docs/genozip-linux-x86_64.tar.gz ; exit 0) > /dev/null
+	@(git commit -m linux_files_for_version_$(version) docs/genozip-linux-x86_64.tar.gz ; exit 0) > /dev/null
 	@git push > /dev/null
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
