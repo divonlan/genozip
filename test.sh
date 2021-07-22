@@ -768,6 +768,10 @@ batch_multifasta()
 {
     batch_print_header
     test_standard "--multifasta" " " test.coronavirus.fasta
+
+    # regions
+    test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions MW362225.1" 22
+    test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions ^MW362225.1" 99978
 }
 
 batch_misc_cases()
