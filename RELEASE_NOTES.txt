@@ -472,5 +472,5 @@ g. Much improved website genozip.com
 12.0.7 + 12.0.8 16/July/2021
 - license and copyright update
 
-12.0.9
+12.0.10
 - bug fixes
