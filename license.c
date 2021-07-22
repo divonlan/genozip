@@ -134,6 +134,7 @@ static void license_load (void)
     const char *filename = get_license_filename (true);
     
     if (!file_exists (filename)) {
+        flag.do_register = "";
         license_register ();
         return;
     }
