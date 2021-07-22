@@ -349,7 +349,7 @@ One or more file names must be given.
 
 **Analysis options**
 
-.. option:: --show-chroms.  (VCF SAM BAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file. Altnernative option names: --show-contigs --list-chroms --list-contigs.
+.. option:: --contigs.  (VCF SAM BAM FASTA GVF 23andMe) List the names of the chromosomes (or contigs) included in the file. Altnernative option names: --list-chroms --chroms.
     
           |
 
