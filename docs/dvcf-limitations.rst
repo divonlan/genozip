@@ -29,9 +29,9 @@ Here is a list of the current limitations of Genozip DVCF lifting:
     | 
     | Note: When running ``genozip --chain``, a human-readable *rejects file*, eg ``mydata.d.vcf.genozip.rejects.txt`` will describe the cause of each rejected variant.
     
-2. Genozip does not yet implement the ``MAX_tag`` *RendAlg* defined in the `DVCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_, so it can't cross-render INFO/MAX_AF
+2. Genozip does not yet implement the ``MAX_tag`` *RendAlg* defined in section 6.3 of the `DVCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_, so it can't cross-render INFO/MAX_AF
 
-3. Genozip does not yet implement *Tag Renaming* defined in the `DVCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_, so can't get handle tag switching (for example ``ADF`` ⇆ ``ADR``) in case of strand reversal.
+3. Genozip does not yet implement *Tag Renaming* defined in section 6.4 of the `DVCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_, so can't get handle tag switching (for example ``ADF`` ⇆ ``ADR``) in case of strand reversal.
 
 
     
