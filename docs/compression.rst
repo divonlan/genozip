@@ -23,9 +23,13 @@ Genozip can run on any type of file, but it is optimized to compress genomic fil
     |
     | ``genozip --reference myfasta.ref.genozip mysample1.fq mysample2.fq mysample3.fq``
     |
+    | Second, compress your file(s) using the reference:
+    |
     | ``genozip --reference myfasta.ref.genozip mysample.bam``
     |
     | ``genozip --reference myfasta.ref.genozip mysamples.vcf.gz``
+    |
+    | ``genozip --reference myfasta.ref.genozip myread.fq``
     |
     | ``genozip --reference myfasta.ref.genozip *``
     | compresses all files in the current directory
@@ -42,7 +46,7 @@ Genozip can run on any type of file, but it is optimized to compress genomic fil
     |
     | 5. Use ``--REFERENCE`` instead of ``--reference`` to store the relevant parts of the reference file as part of the compressed file itself, which will then allow decompression with ``genounzip`` or ``genocat`` without need of the reference file.
 
-**Compressing and uncompressing paired-end reads with --pair** 
+**Compressing and uncompressing FASTQ with paired-end reads with --pair** 
 
     | ``genozip --reference myfasta.ref.genozip --pair mysample-R1.fastq.gz mysample-R2.fastq.gz``
     |
