@@ -565,7 +565,7 @@ SPECIAL_RECONSTRUCTOR (fasta_piz_special_DESC)
             (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTA_TAXID, false)) ||
             ( kraken_is_loaded && !kraken_is_included_loaded (vb, desc_start + 1, chrom_name_len));
     
-    vb->chrom_node_index = ctx_search_for_word_index (CTX(CHROM), desc_start + 1, chrom_name_len);
+    vb->chrom_node_index = vb->last_index(CHROM) = ctx_search_for_word_index (CTX(CHROM), desc_start + 1, chrom_name_len);
 
     // note: this logic allows the to grep contigs even if --no-header 
     if (fasta_vb->contig_grepped_out)
