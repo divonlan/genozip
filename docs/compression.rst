@@ -3,6 +3,8 @@
 Compression
 ===========
 
+Genozip can run on any type of file, but it is optimized to compress genomic file formats.
+
 **Simple compression and uncompression**
 
     | ``genozip sample.bam``
