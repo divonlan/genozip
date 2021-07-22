@@ -396,6 +396,8 @@ docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 
 docs/genozip-linux-x86_64.tar.gz.build:
 	@wsl make docs/genozip-linux-x86_64.tar.gz
+	@(git commit -m linux_files_for_version_$(version) LICENSE.txt docs/genozip-linux-x86_64.tar.gz ; exit 0) > /dev/null
+	@git push > /dev/null
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
