@@ -278,7 +278,7 @@
         },
        {
             "type": "shell",
-            "label": "Distribution - conda + windows installer + mac store",
+            "label": "Distribution - conda + windows installer + linux binaries",
             "command": "make.exe",
             "args": [
                 "distribution"
