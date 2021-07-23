@@ -4,7 +4,7 @@ genozip
 =======
 Compress files. 
 
-``genozip`` can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF, PHYLIP, Chain, Kraken and 23andMe
+``genozip`` can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GFF3/GVF, PHYLIP, Chain, Kraken and 23andMe
 
 Usage: ``genozip`` [options]... [files or urls]...
 
@@ -22,7 +22,7 @@ Supported input file types, as recognized by their listed filename extension(s):
    CRAM     cram
    VCF      vcf (possibly .gz .bgz .bz2 .xz)
    BCF      bcf (possibly .gz .bgz)
-   GVF      gvf (possibly .gz .bgz .bz2 .xz)
+   GFF3     gff3, gvf (possibly .gz .bgz .bz2 .xz)
    PHYLIP   phy (possibly .gz .bgz .bz2 .xz)
    Chain    chain (possibly .gz .bgz .bz2 .xz)
    Kraken   kraken (possibly .gz .bgz .bz2 .xz)
@@ -243,9 +243,9 @@ Examples:
 
                      |
 
-**GVF-specific options (ignored for other file types):**
+**GVF/GFF3-specific options (ignored for other file types):**
 
-*GVF optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
+*GVF/GFF3 optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
    
 .. option:: --optimize-sort  Attributes are sorted alphabetically.
                      

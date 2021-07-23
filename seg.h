@@ -150,6 +150,17 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
     GET_MAYBE_LAST_ITEM_SP (f); \
     seg_by_did_i (vb, field_start, field_len, f, field_len+1)
 
+// NEWLINE separator
+
+#define GET_NEXT_ITEM_NL(f) \
+    field_start = next_field; \
+    next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &field_len, &separator, has_13, #f); \
+    FIELD (f)
+
+#define SEG_NEXT_ITEM_NL(f)  \
+    GET_NEXT_ITEM_NL (f); \
+    seg_by_did_i (vb, field_start, field_len, f, field_len+1);
+
 #define SEG_EOL(f,account_for_ascii10) seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); 
 
 #define ASSSEG(condition, p_into_txt, format, ...) \

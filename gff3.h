@@ -20,6 +20,9 @@ extern void gff3_vb_release_vb();
 extern void gff3_vb_destroy_vb();
 extern unsigned gff3_vb_size (DataType dt);
 
+// PIZ stuff
+CONTAINER_FILTER_FUNC (gff3_piz_filter);
+
 #define GFF3_DICT_ID_ALIASES \
     /*          alias                           maps to this ctx          */  \
     { DT_GFF3, &dict_id_ATTR_Variant_seq  ,    &dict_id_ATTR_Reference_seq }, \

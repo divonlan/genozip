@@ -35,7 +35,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
 		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c\
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
-		  fasta.c fastq.c gff3_seg.c me23.c phylip.c chain.c kraken.c generic.c \
+		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_pbwt.c codec_none.c \

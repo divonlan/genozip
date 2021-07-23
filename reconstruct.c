@@ -150,12 +150,19 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
                            const char *snip, unsigned snip_len,
                            bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
 {
-    if (!snip_len) return; // nothing to do
-    
     LastValueType new_value = {0};
     bool have_new_value = false;
     Context *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
     StoreType store_type = snip_ctx->flags.store;
+
+    // case: empty snip
+    if (!snip_len) {
+        if (store_type == STORE_INDEX && word_index != WORD_INDEX_NONE) {
+            new_value.i = word_index;
+            have_new_value = true;
+        }
+        goto done;
+    }
 
     switch (snip[0]) {
 
@@ -293,6 +300,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     }
     }
 
+done:
     // update last_value if needed
     if (have_new_value && store_type) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
         ctx_set_last_value (vb, snip_ctx, new_value);
@@ -327,6 +335,10 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 
         if (!snip) {
             ctx->last_txt_len = 0;
+
+            if (ctx->flags.store == STORE_INDEX) 
+                ctx_set_last_value (vb, ctx, (LastValueType){ .i = WORD_INDEX_MISSING_SF } );
+
             return reconstruct ? -1 : 0; // -1 if WORD_INDEX_MISSING_SF - remove preceding separator
         }
 

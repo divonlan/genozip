@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   seg_gff3.c
+//   seg.c
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
@@ -21,11 +21,13 @@
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlock *vb)
 {
-    CTX(GFF3_SEQID)->flags.store = STORE_INDEX; // since v12
-    CTX(GFF3_START)->flags.store = STORE_INT;   // since v12
-    CTX(GFF3_SEQID)->no_stons    = true; // needs b250 node_index for random access
-    CTX(GFF3_ATTRS)->no_stons    = true;
-    CTX(GFF3_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(GFF3_SEQID)->flags.store   = STORE_INDEX; // since v12
+    CTX(GFF3_START)->flags.store   = STORE_INT;   // since v12
+    CTX(GFF3_COMMENT)->flags.store = STORE_INDEX; // COMMENT introduced in 12.0.12
+    CTX(GFF3_COMMENT)->no_stons    = true; // required by STORE_INDEX (otherwise singletons don't get their index stored)
+    CTX(GFF3_SEQID)->no_stons      = true; // needs b250 node_index for random access
+    CTX(GFF3_ATTRS)->no_stons      = true;
+    CTX(GFF3_TOPLEVEL)->no_stons   = true; // keep in b250 so it can be eliminated as all_the_same
 }
 
 void gff3_seg_finalize (VBlockP vb)
@@ -33,9 +35,11 @@ void gff3_seg_finalize (VBlockP vb)
     // top level snip
     SmallContainer top_level = { 
         .repeats   = vb->lines.len,
-        .is_toplevel = true,
-        .nitems_lo = 10,
-        .items     = { { .dict_id = (DictId)dict_id_fields[GFF3_SEQID],  .seperator = "\t" },
+        .is_toplevel  = true,
+        .filter_items = true,
+        .nitems_lo = 11,
+        .items     = { { .dict_id = (DictId)dict_id_fields[GFF3_COMMENT],                  },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_SEQID],  .seperator = "\t" },
                        { .dict_id = (DictId)dict_id_fields[GFF3_SOURCE], .seperator = "\t" },
                        { .dict_id = (DictId)dict_id_fields[GFF3_TYPE],   .seperator = "\t" },
                        { .dict_id = (DictId)dict_id_fields[GFF3_START],  .seperator = "\t" },
@@ -43,8 +47,8 @@ void gff3_seg_finalize (VBlockP vb)
                        { .dict_id = (DictId)dict_id_fields[GFF3_SCORE],  .seperator = "\t" },
                        { .dict_id = (DictId)dict_id_fields[GFF3_STRAND], .seperator = "\t" },
                        { .dict_id = (DictId)dict_id_fields[GFF3_PHASE],  .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[GFF3_ATTRS],  .seperator = ""   },
-                       { .dict_id = (DictId)dict_id_fields[GFF3_EOL],    .seperator = ""   } }
+                       { .dict_id = (DictId)dict_id_fields[GFF3_ATTRS],                    },
+                       { .dict_id = (DictId)dict_id_fields[GFF3_EOL],                      } }
     };
 
     container_seg_by_ctx (vb, CTX(GFF3_TOPLEVEL), (Container *)&top_level, 0, 0, 0);
@@ -361,14 +365,25 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned inf
     container_seg_by_ctx (vb, CTX(GFF3_ATTRS), &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
 }
 
-
+// GFF3 file format: https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
 const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;
     char separator;
+    int32_t len = (int32_t)remaining_txt_len;
 
-    int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
+    // handle a comment (#), directive (##) or empty line 
+    if (next_field[0] == '#' || next_field[0] == '\n' || next_field[0] == '\r') {
+        SEG_NEXT_ITEM_NL (GFF3_COMMENT);
+
+        // TO DO: support embedded FASTA, bug 392
+        ASSINP (GFF3_COMMENT_len != 7 || memcmp (GFF3_COMMENT_str, "##FASTA", 7), "%s contains a ##FASTA directive. To compress it use --input=generic", txt_name);
+        
+        goto eol; // if we have a comment, then during piz, the other fields will be filtered out
+    }
+    else 
+        seg_by_did_i (vb, NULL, 0, GFF3_COMMENT, 0); // missing comment field
 
     GET_NEXT_ITEM (GFF3_SEQID);
     seg_chrom_field (vb, field_start, field_len);
@@ -393,9 +408,21 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     }
     else
         seg_by_did_i (vb, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed
-             
+
+eol:             
     SEG_EOL (GFF3_EOL, false);
 
     return next_field;
 }
 
+//----------
+// PIZ stuff
+//----------
+
+// filter is called before reconstruction of a repeat or an item, and returns true if item should be reconstructed. if not reconstructed, contexts are not consumed.
+CONTAINER_FILTER_FUNC (gff3_piz_filter)
+{
+    if (item < 1 || item == 10) return true; // we filter all items except COMMENT and EOL
+
+    return vb->last_index (GFF3_COMMENT) == WORD_INDEX_MISSING_SF; // reconstruct non-comment contexts only if this isn't a comment line
+}
