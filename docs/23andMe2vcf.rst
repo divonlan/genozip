@@ -7,7 +7,7 @@ Data Types: 23andMe
 
 `23andMe <https://www.23andme.com>`_ customers can download their raw genetic data, following these `instructions <https://customercare.23andme.com/hc/en-us/articles/212196868-Accessing-Your-Raw-Genetic-Data>`_.
 
-However, this data comes in propietary 23andMe format. 
+However, this data comes in a propietary 23andMe format. 
 
 The 23andMe file is called something like `genome_John_Doe_v3_Full_20190101201010.zip` (the exact file name format may vary). 
 
@@ -33,4 +33,4 @@ Step 4: Convert the file to VCF:
 
     genocat --reference hs37d5.ref.genozip --vcf genome_John_Doe_v3_Full_20190101201010.genozip --output mydata.vcf
 
-Note: INDEL genotypes ('DD' 'DI' 'II') as well as uncalled sites ('--') are discarded
+Note: INDEL variants ('DD' 'DI' 'II') as well as uncalled sites ('--') are discarded
