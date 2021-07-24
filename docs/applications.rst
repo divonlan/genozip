@@ -6,6 +6,6 @@ Applications
  
     FASTQ to BAM pipeline <fastq-to-bam-pipeline>
     Handling GATK's "Unexpected base in allele bases" error <gatk-unexpected-base>
-    I can't register Genozip's license <using-on-hpc>
+    Using Genozip on an HPC <using-on-hpc>
 
     

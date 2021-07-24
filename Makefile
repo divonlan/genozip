@@ -227,7 +227,8 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
 	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst \
-	   docs/sam2fq.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst docs/using-on-hpc.rst \
+	   docs/sam2fq.rst docs/23andMe2vcf.rst docs/multifasta2phylip.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst \
+	   docs/using-on-hpc.rst \
 	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-chain-files.rst docs/dvcf-limitations.rst \
 	   docs/archiving.rst
 
@@ -293,7 +294,7 @@ clean:
 	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup $(LINUXDIR)/clean
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup $(LINUXDIR)/clean prod
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
@@ -412,8 +413,11 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
+prod:
+	@(cd ../genozip-prod ; git pull ; make)
+
 distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
-distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe docs # docs last, after version incremented # mac/.remote_mac_timestamp
+distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe docs prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
 	
 test-backup: genozip.exe
 	@echo "Compresing test/ files for in preparation for backup (except cram and bcf)"

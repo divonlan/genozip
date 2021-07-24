@@ -15,7 +15,7 @@ See also:
 
 Here is a non-exhaustive list of chain files (also called LiftOver files). The creators of these chain files are not associated with Genozip in any way, and Genozip does not endorse, recommend or warrant the correctness of any particular file.
 
-`From Ensembl <http://ftp.ensembl.org/pub/assembly_mapping/>`_
+`From Ensembl <https://ftp.ensembl.org/pub/assembly_mapping/>`_
 
 `From UCSC <https://hgdownload.soe.ucsc.edu/downloads.html>`_
 

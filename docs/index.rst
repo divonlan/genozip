@@ -21,7 +21,7 @@ Genozip
 About Genozip
 =============
 
-`Sign up <http://tiny.cc/genozip>`_ to receive low-frequency updates related to Genozip.
+`Sign up <https://tiny.cc/genozip>`_ to receive low-frequency updates related to Genozip.
 
 Genozip is a universal compressor for genomic files - it is optimized to compress FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GFF3/GVF, PHYLIP, Chain, Kraken and 23andMe files, but it can also compress any other file (including non-genomic files). 
 

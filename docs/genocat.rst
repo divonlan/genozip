@@ -44,7 +44,7 @@ One or more file names must be given.
 
           |
 
-.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (VCF SAM/BAM GVF FASTA 23andMe Chain Reference) Show one or more regions of the file. 
+.. option:: -r, --regions [^]chr|chr:pos|pos|chr:from-to|chr:from-|chr:-to|from-to|from-|-to|from+len[,...].  (VCF SAM/BAM GFF3/GVF FASTA 23andMe Chain Reference) Show one or more regions of the file. 
 
    |
    | *Examples*: 
@@ -72,7 +72,7 @@ One or more file names must be given.
    | *Note*: For Chain files this applies to the Primary contig (qName).
    |
 
-.. option:: -R, --regions-file [^]filename.  (VCF SAM/BAM GVF FASTA 23andMe Chain Reference) Show regions from a list in tab-separated file. To include all regions EXCEPT those in the file٫ prefix the filename with ^. If filename is - (or ^-) data is taken from stdin rather than a file.
+.. option:: -R, --regions-file [^]filename.  (VCF SAM/BAM GFF3/GVF FASTA 23andMe Chain Reference) Show regions from a list in tab-separated file. To include all regions EXCEPT those in the file٫ prefix the filename with ^. If filename is - (or ^-) data is taken from stdin rather than a file.
 
 |
 | *Example of a valid file: The first two rows produce the same 100-base region, and the third row is a single base*:
@@ -82,8 +82,6 @@ One or more file names must be given.
    chr22	17000000	17000099
    chr22	17000000	+100
    chr22	17000000
-
-          |
 
 .. option:: --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads ; CHAIN: sets) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
 

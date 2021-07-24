@@ -7,9 +7,11 @@ Capabilities
    Compression <compression>
    Archiving <archiving>
    Dual-coordinate VCF (DVCF) <dvcf>
-   Downsampling <downsampling>
-   Viewing SAM/BAM as FASTQ <sam2fq>
-   Filtering by species using kraken2 <kraken>
+   Filtering BAM or FASTQ reads by species using kraken2 <kraken>
+   Downsampling and sharding <downsampling>
+   Converting SAM/BAM to FASTQ <sam2fq>
+   Converting a 23andMe 'Raw Genetic File' to VCF <23andMe2vcf> 
+   Converting MultiFASTA to Phylip and back <multifasta2phylip>
    Per-contig coverage <coverage>
    Sex assignment <sex-assignment>
    idxstats <idxstats>

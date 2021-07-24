@@ -1,7 +1,7 @@
 .. _kraken:
 
-Filtering by species using kraken2
-==================================
+Filtering BAM or FASTQ reads by species using kraken2
+=====================================================
 
 `kraken2 <https://github.com/DerrickWood/kraken2>`_ is a tool (not associated with Genozip) that analyzes a FASTQ or FASTA file against a database typically derived from reference sequences of a large number of species (for example: human plus bacteria) and assigns an `NCBI Taxonomy ID <https://www.ncbi.nlm.nih.gov/taxonomy>`_ (taxid) to each read - generating a `kraken output file <https://github.com/DerrickWood/kraken2/wiki/Manual#output-formats>`_ containing these assignments.
 

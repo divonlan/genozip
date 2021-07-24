@@ -1,7 +1,7 @@
 .. _using-on-hpc:
 
-I can't register Genozip's license
-==================================
+Using Genozip on an HPC
+=======================
 
 Genozip requires registration prior to use, and its a violation of Genozip's license to use Genozip without registration.
 

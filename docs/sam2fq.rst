@@ -1,7 +1,7 @@
 .. _sam2fq:
 
-Viewing SAM/BAM as FASTQ
-========================
+Converting SAM/BAM to FASTQ
+===========================
 
 Data Types: SAM, BAM
 

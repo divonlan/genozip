@@ -22,7 +22,7 @@ static const char *license[] = {
     "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive copyright license to use Genozip for any the following limited purposes subject to the conditions attached to each purpose, and subject to the terms and conditions of this License:",
     "   a. For academic research, educational or training purposes.",
     "   b. For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email register@genozip.com to seek such an approval.",
-    "   c. For any legal purpose, if a Commercial License was purchased and paid for, and for the duration that it is in effect. For details, see http://genozip.com/commercial.html or email sales@genozip.com.",
+    "   c. For any legal purpose, if a Commercial License was purchased and paid for, and for the duration that it is in effect. For details, see https://genozip.com/commercial.html or email sales@genozip.com.",
     "   d. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols.",
     "   e. For the purpose of evaluating Genozip, for a duration of 30 days.",
     "   f. For the purpose of distributing Genozip to others in unmodified form, including this license, via a platform that is both publicly accessible and free of charge, including but not limited to an Internet website.",

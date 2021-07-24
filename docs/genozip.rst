@@ -243,9 +243,9 @@ Examples:
 
                      |
 
-**GVF/GFF3-specific options (ignored for other file types):**
+**GFF3/GVF-specific options (ignored for other file types):**
 
-*GVF/GFF3 optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
+*GFF3/GVF optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
    
 .. option:: --optimize-sort  Attributes are sorted alphabetically.
                      

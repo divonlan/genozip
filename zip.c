@@ -799,7 +799,7 @@ void zip_one_file (const char *txt_basename,
                                  txt_file->redirected ? PROGRESS_MESSAGE : PROGRESS_PERCENT,
                                  txt_file->redirected ? "Compressing..." : NULL, 
                                  false, *is_last_file, z_closes_after_me, 
-                                 flag.xthreads, prev_file_last_vb_i, 100,
+                                 flag.xthreads, prev_file_last_vb_i, 300,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);
