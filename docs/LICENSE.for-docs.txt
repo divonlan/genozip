@@ -44,7 +44,7 @@ Licensor in writing. Email register@genozip.com to seek such an approval.
 
    c. For any legal purpose, if a Commercial License was purchased and
 paid for, and for the duration that it is in effect. For details, see
-http://genozip.com/commercial.html or email sales@genozip.com.
+https://genozip.com/commercial.html or email sales@genozip.com.
 
    d. For any legal purpose, if use is limited to the three tools:
 genounzip, genocat, genols.
@@ -111,5 +111,5 @@ advised of the possibility of such damages.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 12.0.11
+Genozip license version: 12.0.12
 
