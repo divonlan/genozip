@@ -37,7 +37,7 @@ each purpose, and subject to the terms and conditions of this License:
 register@genozip.com to seek such an approval.
 
    c. For any legal purpose, if a Commercial License was purchased and paid for, and for the
-duration that it is in effect. For details, see http://genozip.com/commercial.html or email sales
+duration that it is in effect. For details, see https://genozip.com/commercial.html or email sales
 @genozip.com.
 
    d. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols.
