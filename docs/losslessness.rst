@@ -14,6 +14,7 @@ When uncompressing with ``genounzip`` or ``genocat``, these tools verify that th
 1. There are some cases in which you may request ``genozip`` to change the source data before compressing it. In these cases, the digest is not calculated. These cases are:
 
 - Using ``--optimize`` or any of the ``--optimize-*`` options 
+- Using ``--GL-to-PL`` or ``--GP-to-PP``
 - Generating a dual-coordinates file with ``--chain``
 - Compressing a Luft file (a lifted-over dual-coordinates file)
 - Compressing a SAM or BAM file with ``--taxid``
