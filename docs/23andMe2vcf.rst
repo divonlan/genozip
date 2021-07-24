@@ -33,4 +33,4 @@ Step 4: Convert the file to VCF:
 
     genocat --reference hs37d5.ref.genozip --vcf genome_John_Doe_v3_Full_20190101201010.genozip --output mydata.vcf
 
-Note: INDEL variants ('DD' 'DI' 'II') as well as uncalled sites ('--') are discarded
+Note: Indel variants ('DD' 'DI' 'II') as well as uncalled sites ('--') are discarded

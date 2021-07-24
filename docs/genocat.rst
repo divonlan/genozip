@@ -325,7 +325,7 @@ One or more file names must be given.
 
 **23andMe options**
 
-.. option:: --vcf  Output as VCF. --vcf must be used in combination with --reference to specify the reference file as listed in the header of the 23andMe file (usually this is GRCh37). Note: INDEL genotypes ('DD' 'DI' 'II') as well as uncalled sites ('--') are discarded.
+.. option:: --vcf  Output as VCF. --vcf must be used in combination with --reference to specify the reference file as listed in the header of the 23andMe file (usually this is GRCh37). Note: Indel variants ('DD' 'DI' 'II') as well as uncalled sites ('--') are discarded.
 
           |
 
