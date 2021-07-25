@@ -158,9 +158,12 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         iprintf ("VB=%u Container: %s repeats=%u items=%u\n", 
                  vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con));
 
-    if (con->is_toplevel) 
+    if (con->is_toplevel) {
         buf_alloc (vb, &vb->lines, 0, con->repeats+1, char *, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
-    
+        buf_alloc_bitarr (vb, &vb->is_dropped, con->repeats, "is_dropped");
+        buf_zero (&vb->is_dropped);
+    }
+
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip
@@ -300,8 +303,10 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                     vb->txt_data.len = vb->line_start;
                     
                      // skip to the end - no need to reconstruct any further lines
-                    for (rep_i=rep_i+1; rep_i < con->repeats; rep_i++)
+                    for (rep_i=rep_i+1; rep_i < con->repeats; rep_i++) { 
+                        bit_array_set (buf_get_bitarray (&vb->is_dropped), rep_i);
                         *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); 
+                    }
                 }
             }
 
@@ -311,44 +316,22 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                 vb->drop_curr_line = "tail";
 
             // filter by --grep (but not for FASTQ or FASTA - they implement their own logic)
-            if (!vb->drop_curr_line && flag.grep && txt_file->data_type != DT_FASTA && txt_file->data_type != DT_FASTQ
+            if (!vb->drop_curr_line && flag.grep && txt_file->data_type != DT_FASTA /*&& txt_file->data_type != DT_FASTQ*/
                 && !piz_grep_match (rep_reconstruction_start, AFTERENT (char, vb->txt_data)))
                 vb->drop_curr_line = "grep";
-                /*
-                //SAFE_NUL (&rep_reconstruction_start[AFTERENT (char, vb->txt_data) - rep_reconstruction_start]);
-                SAFE_NUL (AFTERENT (char, vb->txt_data));
 
-                if (!flag.grepw && strstr (rep_reconstruction_start, flag.grep))
-                    vb->drop_curr_line = "grep";
-
-                // case: --grepw - grep whole word
-                else if (flag.grepw) { 
-                    const char *s = rep_reconstruction_start;
-                    while (s <= AFTERENT (char, vb->txt_data) - flag.grep_len) {
-                        if (!(s = strstr (s, flag.grep))) break;
-
-                        char before = (s == rep_reconstruction_start ? ' ' : s[-1]);
-                        char after  = s[flag.grep_len];
-                    
-                        if (!IS_LETTER(before) && !IS_DIGIT(before) &&
-                            !IS_LETTER(after) && !IS_DIGIT(after)) {
-                            
-                            vb->drop_curr_line = "grep";
-                            break;
-                        }
-
-                        s += flag.grep_len;
-                    }
-                }
-                            
-                SAFE_RESTORE;
-            }*/
+            // in FASTQ --header-only - remove the 3 non-header lines only after --grep
+            if (!vb->drop_curr_line && txt_file->data_type == DT_FASTQ && flag.header_only_fast) 
+                vb->txt_data.len = ENTNUM (vb->txt_data, strchr (rep_reconstruction_start, '\n') + 1);
 
             if (vb->drop_curr_line) {
                 ASSERT (flag.maybe_vb_modified_by_reconstructor, "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code. vb_i=%u line_i=%"PRIu64, 
                         vb->drop_curr_line, vb->vblock_i, vb->line_i);
 
-                vb->txt_data.len = vb->line_start;
+                // remove reconstructed text (to allow writer_flush_vb()), except if interleave, as we might un-drop the line in 
+                if (!flag.interleave) vb->txt_data.len = vb->line_start;
+
+                bit_array_set (buf_get_bitarray (&vb->is_dropped), rep_i);
             }
             else
                 vb->num_nondrop_lines++;

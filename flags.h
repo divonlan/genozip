@@ -46,7 +46,7 @@ typedef struct {
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, gpos, samples, 
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
-        sequential, no_pg, interleave, 
+        sequential, no_pg, 
         kraken_taxid, with_chr;
     const char *regions_file;
     int64_t lines_first, lines_last, tail; // set by --lines 
@@ -54,6 +54,7 @@ typedef struct {
     uint32_t one_vb, one_component, downsample, shard ;
     enum { SAM_FLAG_INCLUDE_IF_ALL=1, SAM_FLAG_INCLUDE_IF_NONE, SAM_FLAG_EXCLUDE_IF_ALL } sam_flag_filter;
     enum { SAM_MAPQ_INCLUDE_IF_AT_LEAST=1, SAM_MAPQ_EXCLUDE_IF_AT_LEAST } sam_mapq_filter;
+    enum { INTERLEAVE_NONE, INTERLEAVE_EITHER, INTERLEAVE_BOTH } interleave;
     uint16_t FLAG; // the value for sam_flag_filter
     uint8_t MAPQ;  // the value for sam_mapq_filter
     enum { IUP_NONE, IUP_POSITIVE, IUP_NEGATIVE } bases;
@@ -160,10 +161,11 @@ extern Flags flag;
 #define SAVE_FLAGS_AUX Flags save_flag = flag; \
     flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf =\
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =  \
-    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.interleave = flag.count = \
+    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.count = \
     flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads = \
     flag.show_sex = flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */ \
     flag.bases = IUP_NONE; \
+    flag.interleave = INTERLEAVE_NONE; \
     flag.grep = flag.show_time = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */ \
     flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE; /* DictId */ 
     

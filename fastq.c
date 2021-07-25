@@ -312,7 +312,7 @@ bool fastq_piz_read_one_vb (VBlockP vb_, Section sl)
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint32_t pair_vb_i=0;
     bool i_am_pair_2 = vb && writer_get_pair (vb->vblock_i, &pair_vb_i) == 2;
-
+/*
     if (flag.grep) {
         // in case of this is a paired fastq file, get just the pair_1 data that is needed to resolve the grep
         if (i_am_pair_2) {
@@ -323,7 +323,7 @@ bool fastq_piz_read_one_vb (VBlockP vb_, Section sl)
         // if we're grepping we we uncompress and reconstruct the DESC from the main thread, and terminate here if this VB is to be skipped
         if (!piz_test_grep (vb_)) return false; // also updates vb->grep_stages
     }
-
+*/
     // in case of this is a paired fastq file, get all the pair_1 data not already fetched for the grep above
     if (i_am_pair_2) 
         fastq_read_pair_1_data (vb_, pair_vb_i, true);
@@ -467,22 +467,12 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     if (!vb) return false; // we don't skip reading any SEC_DICT/SEC_COUNTS sections
 
-    // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L
-    if (flag.header_only_fast && 
+    // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
+    if (flag.header_only_fast && !flag.grep &&
         (dict_id.num == dict_id_fields[FASTQ_E2L]    || dict_id.num == dict_id_fields[FASTQ_SQBITMAP] || 
          dict_id.num == dict_id_fields[FASTQ_NONREF] || dict_id.num == dict_id_fields[FASTQ_NONREF_X] || 
          dict_id.num == dict_id_fields[FASTQ_GPOS]   || dict_id.num == dict_id_fields[FASTQ_STRAND]   || 
          dict_id.num == dict_id_fields[FASTQ_QUAL]   || dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] ))
-        return true;
-        
-    // when grepping by main thread - skipping all sections but DESC
-    if (flag.grep && (vb->grep_stages == GS_TEST) && 
-        dict_id.num != dict_id_fields[FASTQ_DESC] && !dict_id_is_fastq_desc_sf (dict_id))
-        return true;
-
-    // if grepping, compute thread doesn't need to decompressed DESC again
-    if (flag.grep && (vb->grep_stages == GS_UNCOMPRESS) && 
-        (dict_id.num == dict_id_fields[FASTQ_DESC] || dict_id_is_fastq_desc_sf (dict_id)))
         return true;
 
     // if we're doing --show-sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
@@ -503,13 +493,15 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     if (flag.count && sections_has_dict_id (st) &&
          (dict_id.num != dict_id_fields[FASTQ_TOPLEVEL] && 
          (dict_id.num != dict_id_fields[FASTQ_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
-         (dict_id.num != dict_id_fields[FASTQ_DESC]     || (!kraken_is_loaded && !flag.grep)) && 
+//         (dict_id.num != dict_id_fields[FASTQ_DESC]     || (!kraken_is_loaded && !flag.grep)) && 
+         (dict_id.num != dict_id_fields[FASTQ_DESC]     || !kraken_is_loaded) && 
          (dict_id.num != dict_id_fields[FASTQ_SQBITMAP] || !flag.bases) && 
          (dict_id.num != dict_id_fields[FASTQ_NONREF]   || !flag.bases) && 
          (dict_id.num != dict_id_fields[FASTQ_NONREF_X] || !flag.bases) && 
          (dict_id.num != dict_id_fields[FASTQ_GPOS]     || !flag.bases) && 
          (dict_id.num != dict_id_fields[FASTQ_STRAND]   || !flag.bases) && 
-         (!dict_id_is_fastq_desc_sf(dict_id)            || (!kraken_is_loaded && !flag.grep)))) 
+         (!dict_id_is_fastq_desc_sf(dict_id)            || !kraken_is_loaded))) 
+//         (!dict_id_is_fastq_desc_sf(dict_id)            || (!kraken_is_loaded && !flag.grep)))) 
         return true;
 
     return false;
@@ -549,17 +541,8 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
             vb->line_i = 4 * (vb->first_line + rep); // each vb line is a fastq record which is 4 txt lines (needed for --pair)
 
         else { // filter for item
-
-            // case: --grep (note: appears before --header-only filter below, so both can be used together)
-            if (flag.grep && item == 2 /* first EOL */) {
-                *AFTERENT (char, vb->txt_data) = 0; // for strstr
-                
-                if (!vb->drop_curr_line && !strstr (ENT (char, vb->txt_data, vb->line_start), flag.grep))
-                    vb->drop_curr_line = "grep";
-            }
-
             // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
-            if (flag.header_only_fast && item >= 2) 
+            if (flag.header_only_fast && !flag.grep && item >= 2) 
                 return false; // don't reconstruct this item (non-header textual)
         }
     }

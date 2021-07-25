@@ -83,7 +83,7 @@ One or more file names must be given.
    chr22	17000000	+100
    chr22	17000000
 
-.. option:: --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads ; CHAIN: sets) in which <string> is a case-sensitive substring of the lines (FASTA and FASTQ: description). This does not affect showing the file header.
+.. option:: --grep string.  Show only lines (FASTA: sequences ; FASTQ: reads ; CHAIN: sets) in which <string> is a case-sensitive substring of the lines (FASTA: description). This does not affect showing the file header.
 
           |
 
@@ -250,7 +250,7 @@ One or more file names must be given.
 
 **FASTQ options**
 
-.. option:: --interleaved  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file ; then a read from the second file ; then the next read from the first file and so on.
+.. option:: --interleaved[=both|either]  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file ; then a read from the second file ; then the next read from the first file and so on. Optional argument 'both' (default) or 'either' determines whether both reads of a pair or only one is required for the pair to survive when combining with a subsetting option such as --grep.
 
           |
 

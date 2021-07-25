@@ -77,9 +77,9 @@ void kraken_set_show_kraken (const char *optarg)
 {
     if (!optarg) 
         flag.show_kraken = KRK_ALL;
-    else if (str_case_compare (optarg, "included", 8, NULL)) 
+    else if (str_case_compare (optarg, "included", NULL)) 
         flag.show_kraken = KRK_INCLUDED;
-    else if (str_case_compare (optarg, "excluded", 8, NULL)) 
+    else if (str_case_compare (optarg, "excluded", NULL)) 
         flag.show_kraken = KRK_EXCLUDED;
     else
         ASSINP0 (false, "--show-kraken argument error: see "WEBSITE_KRAKEN" for valid options");

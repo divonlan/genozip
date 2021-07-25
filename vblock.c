@@ -25,6 +25,7 @@ VBlock *evb = NULL;
 
 #define FINALIZE_VB_BUFS(func, ctx_func, vb_func) \
     func (&vb->lines);               \
+    func (&vb->is_dropped);          \
     func (&vb->ra_buf[0]);           \
     func (&vb->ra_buf[1]);           \
     func (&vb->compressed);          \

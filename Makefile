@@ -396,7 +396,7 @@ docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 	@git push > /dev/null
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 
-docs/genozip-linux-x86_64.tar.gz.build:
+docs/genozip-linux-x86_64.tar.gz.build: $(LINUXDIR)/LICENSE.txt # license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed
 	@wsl make docs/genozip-linux-x86_64.tar.gz
 	@(git commit -m linux_files_for_version_$(version) docs/genozip-linux-x86_64.tar.gz ; exit 0) > /dev/null
 	@git push > /dev/null
@@ -449,7 +449,7 @@ $(LINUXDIR)/LICENSE.txt: LICENSE.txt
 	@echo Generating $@
 	@cp -f $< $@
 
-LINUX_TARGZ_OBJS = $(LINUXDIR)/clean $(LINUXDIR)/genozip $(LINUXDIR)/genounzip $(LINUXDIR)/genocat $(LINUXDIR)/genols $(LINUXDIR)/LICENSE.txt
+LINUX_TARGZ_OBJS = $(LINUXDIR)/clean $(LINUXDIR)/genozip $(LINUXDIR)/genounzip $(LINUXDIR)/genocat $(LINUXDIR)/genols 
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
 docs/genozip-linux-x86_64.tar.gz: version.h $(LINUX_TARGZ_OBJS)

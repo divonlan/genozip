@@ -91,7 +91,7 @@ static void flags_show_flags (void)
     iprintf ("indels_only=%s\n", flag.indels_only ? "true" : "false");
     iprintf ("sequential=%s\n", flag.sequential ? "true" : "false");
     iprintf ("no_pg=%s\n", flag.no_pg ? "true" : "false");
-    iprintf ("interleave=%s\n", flag.interleave ? "true" : "false");
+    iprintf ("interleave=%s\n", flag.interleave==INTERLEAVE_NONE ? "none" : flag.interleave==INTERLEAVE_BOTH ? "both" : flag.interleave==INTERLEAVE_EITHER ? "either" : "invalid value");
     iprintf ("luft=%s\n", flag.luft ? "true" : "false");
     iprintf ("sort=%s\n", flag.sort ? "true" : "false");
     iprintf ("unsorted=%s\n", flag.unsorted ? "true" : "false");
@@ -292,6 +292,16 @@ static void flags_set_file_from (const char *optarg)
     flag.files_from = optarg;
 }
 
+static void flag_set_interleaved (const char *optarg)
+{
+    ASSINP0 (!flag.interleave, "--interleave can be only be used once on the command line");
+
+    if (!optarg || str_case_compare (optarg, "both", NULL)) flag.interleave = INTERLEAVE_BOTH; // default
+    else if (str_case_compare (optarg, "either", NULL))     flag.interleave = INTERLEAVE_EITHER;
+    else ABORTINP0 ("Invalid value for --interleave : accepted values are 'either' or 'both' (default: 'both')");
+}
+
+
 void flags_init_from_command_line (int argc, char **argv)
 {
     // process command line options
@@ -359,7 +369,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _s  {"samples",       required_argument, 0, 's'                    }
         #define _sf {"FLAG",          required_argument, 0, 17                     }
         #define _sq {"MAPQ",          required_argument, 0, 18                     }
-        #define _il {"interleaved",   no_argument,       &flag.interleave,       1 }
+        #define _il {"interleaved",   optional_argument, 0, 29                     } // both --interleave and --interleaved will be accepted
         #define _e  {"reference",     required_argument, 0, 'e'                    }
         #define _E  {"REFERENCE",     required_argument, 0, 'E'                    }
         #define _lo {"luft",          no_argument,       &flag.luft,             1 }
@@ -570,6 +580,7 @@ verify_command:
             case 26  : license_set_filename (optarg); break;
             case 27  : tar_set_tar_name (optarg)    ; break;
             case 28  : flag.do_register = optarg ? optarg : ""; break;
+            case 29  : flag_set_interleaved (optarg); break;
             
             case 0   : break; // a long option that doesn't have short version will land here - already handled so nothing to do
                  
@@ -803,7 +814,7 @@ void flags_update (unsigned num_files, const char **filenames)
          flag.show_index || flag.dump_section || flag.show_one_counts.num ||
          flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_recon_plan || 
          (flag.count && !flag.bases) ||
-         flag.collect_coverage || (flag.header_only && !flag.luft));
+         flag.collect_coverage); // note: this is updated in flags_update_piz_one_file
 }
 
 // ZIP: called for each file, after opening txt and z files, but before calling zip_one_file 
@@ -946,6 +957,10 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         flag.header_only      = false;
         flag.header_only_fast = true;
     }
+
+    // this affects reading an implicit reference specified in the file's SEC_GENOZIP_HEADER. We do it here instead of flags_update because
+    // we first need to unset header_only for FASTA and FASTQ
+    flag.genocat_no_ref_file |= (exe_type == EXE_GENOCAT && flag.header_only && !flag.luft);
 
     // genocat quits after reading global area - it doesn't read TXT_HEADER or VBs
     flag.genocat_global_area_only = exe_type == EXE_GENOCAT &&

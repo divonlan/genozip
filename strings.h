@@ -26,7 +26,7 @@ extern StrText char_to_printable (char c);
 extern char *str_to_single_line_printable (const char *in, unsigned in_len, char *out);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (const char *in, char *out);
-extern _Bool str_case_compare (const char *str1, const char *str2, unsigned len, _Bool *identical);
+extern _Bool str_case_compare (const char *str1, const char *str2, _Bool *identical); // similar to stricmp that doesn't exist on all platforms
 
 static inline char *str_tolower_(const char *in, char *out, unsigned len)
 {

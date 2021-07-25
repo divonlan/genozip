@@ -21,6 +21,7 @@
 #include "mutex.h"
 #include "codec.h" 
 #include "endianness.h"
+#include "bit_array.h"
 
 // ---------------
 // Data structures
@@ -568,11 +569,12 @@ static void writer_write_line_range (VBlock *wvb, VbInfo *v, uint32_t start_line
         const char *start = lines[line_i];
         const char *after = lines[line_i+1];  // note: lines has one extra entry so this is always correct
         uint32_t line_len = (uint32_t)(after - start);
+        bool is_dropped = bit_array_get (buf_get_bitarray (&v->vb->is_dropped), line_i);
 
         ASSERT (after >= start, "vb_i=%u Writing line %i (start_line=%u num_lines=%u): expecting start=%p <= after=%p", 
                 ENTNUM (vb_info, v), line_i, start_line, num_lines, start, after);
 
-        if (line_len) { // don't output lines dropped in container_reconstruct_do due to vb->drop_curr_line
+        if (!is_dropped) { // don't output lines dropped in container_reconstruct_do due to vb->drop_curr_line
             
             if (writer_line_survived_downsampling(v))
                 buf_add_more (wvb, &wvb->txt_data, start, line_len, "txt_data");
@@ -618,13 +620,16 @@ static void writer_write_lines_interleaves (VBlock *wvb, VbInfo *v1, VbInfo *v2)
         const char **start2 = ENT (const char *, v2->vb->lines, line_i);
         unsigned len1 = (unsigned)(*(start1+1) - *start1);
         unsigned len2 = (unsigned)(*(start2+1) - *start2);
+        bool is_dropped1 = bit_array_get (buf_get_bitarray (&v1->vb->is_dropped), line_i);
+        bool is_dropped2 = bit_array_get (buf_get_bitarray (&v2->vb->is_dropped), line_i);
 
         // skip lines dropped in container_reconstruct_do due to vb->drop_curr_line for either leaf
-        if (len1 && len2) {
-
+        if ((flag.interleave == INTERLEAVE_BOTH && !is_dropped1 && !is_dropped2) || 
+            (flag.interleave == INTERLEAVE_EITHER && (!is_dropped1 || !is_dropped2))) {
+            // TODO - INTERLEAVE_EITHER doesn't work yet, bug 396
             if (writer_line_survived_downsampling(v1)) { 
-                writer_write_lines_add_pair (wvb, v1, *start1, len1, 1); // also adds /1 and /2 if paired
-                writer_write_lines_add_pair (wvb, v2, *start2, len2, 2);
+                if (len1) writer_write_lines_add_pair (wvb, v1, *start1, len1, 1); // also adds /1 and /2 if paired
+                if (len2) writer_write_lines_add_pair (wvb, v2, *start2, len2, 2);
             }
 
             txt_file->lines_written_so_far += 2; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)

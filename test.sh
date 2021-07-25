@@ -640,6 +640,13 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--downsample 2" $(( 4 * `grep @ $file | wc -l` / 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave" $(( 4 * `grep @ $file | wc -l` * 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave --downsample=5,4" $(( 4 * `grep @ $file | wc -l` / 5 * 2 )) 
+    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--grep PRFX --header-only" 2
+
+    # test --interleave and with --grep
+    sed "s/PRFX/prfx/g" $file > $OUTDIR/prfx.fq
+    test_count_genocat_lines "--pair -E $GRCh38 $file $OUTDIR/prfx.fq" "--interleave=either --grep PRFX" 8
+    test_count_genocat_lines "--pair -E $GRCh38 $file $OUTDIR/prfx.fq" "--interleave=both --grep PRFX" 0
+
     test_count_genocat_lines $file "--grep line5 --header-only" 1
 }
 
@@ -755,8 +762,10 @@ batch_real_world_small_vbs()
     fi
 
     # lots of small VBs
-    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam* test.*fq* | \
-                   grep -v "$filter_out" | grep -v .genozip` )
+    local files=( test.HG002_NA24385_SRR1767406_IonXpress_020_rawlib_24028.30k.sam \
+                  test.human.fq.gz test.human2.bam test.human2.sam \
+                  test.human2-R1.100K.fq.bz2 test.m64136_200621_234916.ccs.10k.bam \
+                  test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq )
 
     echo "subsets of real world files (lots of small VBs -B1)"
     test_standard "-mf $1 -B1" " " ${files[*]}

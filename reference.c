@@ -47,6 +47,8 @@ ConstBufferP ref_get_contigs (const Reference ref) { return &ref->loaded_contigs
 
 void ref_get_genome (Reference ref, const BitArray **genome, const BitArray **emoneg, PosType *genome_nbases)
 {
+    ASSERT0 (ref->genome, "Reference file not loaded");
+    
     *genome = ref->genome;
     *emoneg = ref->emoneg;
     *genome_nbases = ref->genome_nbases;
