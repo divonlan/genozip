@@ -296,7 +296,7 @@ clean:
 	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup $(LINUXDIR)/clean prod
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean prod
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
@@ -436,27 +436,27 @@ endif # Windows
 # Building Linux pre-compiled binaries: we delete arch.o to force it to re-compile with DISTRIBUTION=linux-x86_64.
 ifeq ($(uname),Linux)
 
-$(LINUXDIR)/clean:
-	@rm -fR $(LINUXDIR)
-	@mkdir $(LINUXDIR)
+genozip-linux-x86_64/clean:
+	@rm -fR genozip-linux-x86_64
+	@mkdir genozip-linux-x86_64
 
-$(LINUXDIR)/genozip: CFLAGS += -DDISTRIBUTION=\"linux-x86_64\"
+genozip-linux-x86_64/genozip: CFLAGS += -DDISTRIBUTION=\"linux-x86_64\"
 
 # note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
-$(LINUXDIR)/genozip: delete-arch $(OBJS) 
+genozip-linux-x86_64/genozip: delete-arch $(OBJS) 
 	@echo Linking $@
 	@$(CC) -static -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 
-$(LINUXDIR)/genounzip $(LINUXDIR)/genocat $(LINUXDIR)/genols: $(LINUXDIR)/genozip 
+genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols: genozip-linux-x86_64/genozip 
 	@echo Generating $@
 	@ln -f $< $@
 
-LINUX_TARGZ_OBJS = $(LINUXDIR)/clean $(LINUXDIR)/genozip $(LINUXDIR)/genounzip $(LINUXDIR)/genocat $(LINUXDIR)/genols 
+LINUX_TARGZ_OBJS = genozip-linux-x86_64/clean genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols 
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
 docs/genozip-linux-x86_64.tar.gz: version.h $(LINUX_TARGZ_OBJS)
 	@echo "Creating $@"
-	@tar cf $@ $(LINUXDIR) -z
+	@tar cf $@ genozip-linux-x86_64 -z
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 
 endif # Linux
