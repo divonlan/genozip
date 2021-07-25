@@ -308,7 +308,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                         *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); 
                     }
                 }
-            }
+            } 
 
             // filter by --tail
             if (!vb->drop_curr_line && flag.tail && vb->vblock_i == txt_file->tail_1st_vb &&

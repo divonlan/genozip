@@ -209,7 +209,7 @@ extern void LTEN_bit_array (BitArray* bitarr); // divon
 //
 
 #define bit_array_get(arr,i)      bitset_get((arr)->words, i)
-#define bit_array_set(arr,i)      bitset_set((arr)->words, i)
+#define bit_array_set(arr,i)      do { BitArray *arr2=arr; /* avoid aliasing */ ; bitset_set((arr2)->words, i); } while(0)
 #define bit_array_clear(arr,i)    bitset_del((arr)->words, i)
 #define bit_array_toggle(arr,i)   bitset_tgl((arr)->words, i)
 // c must be 0 or 1

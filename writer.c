@@ -569,12 +569,14 @@ static void writer_write_line_range (VBlock *wvb, VbInfo *v, uint32_t start_line
         const char *start = lines[line_i];
         const char *after = lines[line_i+1];  // note: lines has one extra entry so this is always correct
         uint32_t line_len = (uint32_t)(after - start);
-        bool is_dropped = bit_array_get (buf_get_bitarray (&v->vb->is_dropped), line_i);
+        
+        const BitArray *ba = buf_get_bitarray (&v->vb->is_dropped); // prevent compiler aliasing warning
+        bool is_dropped = bit_array_get (ba, line_i);
 
         ASSERT (after >= start, "vb_i=%u Writing line %i (start_line=%u num_lines=%u): expecting start=%p <= after=%p", 
                 ENTNUM (vb_info, v), line_i, start_line, num_lines, start, after);
-
-        if (!is_dropped) { // don't output lines dropped in container_reconstruct_do due to vb->drop_curr_line
+ 
+        if (!is_dropped) { // don't output lines dropped in container_  reconstruct_do due to vb->drop_curr_line
             
             if (writer_line_survived_downsampling(v))
                 buf_add_more (wvb, &wvb->txt_data, start, line_len, "txt_data");
@@ -620,8 +622,10 @@ static void writer_write_lines_interleaves (VBlock *wvb, VbInfo *v1, VbInfo *v2)
         const char **start2 = ENT (const char *, v2->vb->lines, line_i);
         unsigned len1 = (unsigned)(*(start1+1) - *start1);
         unsigned len2 = (unsigned)(*(start2+1) - *start2);
-        bool is_dropped1 = bit_array_get (buf_get_bitarray (&v1->vb->is_dropped), line_i);
-        bool is_dropped2 = bit_array_get (buf_get_bitarray (&v2->vb->is_dropped), line_i);
+        const BitArray *ba1 = buf_get_bitarray (&v1->vb->is_dropped); // prevent compiler aliasing warning
+        const BitArray *ba2 = buf_get_bitarray (&v2->vb->is_dropped); 
+        bool is_dropped1 = bit_array_get (ba1, line_i);
+        bool is_dropped2 = bit_array_get (ba2, line_i);
 
         // skip lines dropped in container_reconstruct_do due to vb->drop_curr_line for either leaf
         if ((flag.interleave == INTERLEAVE_BOTH && !is_dropped1 && !is_dropped2) || 
