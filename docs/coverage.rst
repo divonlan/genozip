@@ -71,7 +71,7 @@ Output is space-seperated if sent to a terminal, and tab-seperated if redirected
 
   *Contig* includes all contigs present in the file if run with ``--coverage=all``, or if not, just contigs with a name of up to 5 characters, and all other contigs are summed up in the *Other contings* line. The *All contigs* line sums up the values for all contigs present in the file.
 
-  *Unmapped*, *Failed filters*, *Duplicate*, *Secondary*, *Supplementary* (together: *Excluded reads*) and reads with the appropriate SAM FLAG set (i.e. 0x4, 0x200, 0x400, 0x100, 0x800 respectively). Reads missing an RNAME are also counted as unmapped irrespective of their FLAG. Reads can count in only one category even if multiple flags are set, with this order of precedence.
+  *Unmapped*, *Failed filters*, *Duplicate*, *Secondary*, *Supplementary* (together: *Excluded reads*) are reads with the appropriate SAM FLAG set (i.e. 0x4, 0x200, 0x400, 0x100, 0x800 respectively). Reads missing an RNAME are also counted as unmapped irrespective of their FLAG. Reads can count in only one category even if multiple flags are set, with this order of precedence.
 
   *Soft clip* are bases with an ``S`` (Soft Clip) CIGAR (see 1.4.6 `here <https://samtools.github.io/hts-specs/SAMv1.pdf>`_), but not counting those on *Excluded reads*.
 
