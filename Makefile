@@ -86,12 +86,13 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 
 GENERATED_TEST_FILES = private/test/basic.bam private/test/minimal.bam # test/basic.cram test/minimal.cram (our test files don't fit a reference - which is required to make a CRAM)
 
+LINUXDIR = genozip-linux-x86_64 # directory for creating the Linux binaries distribution
+
 ifeq ($(CC),cl) # Microsoft Visual C
 	$(error Only the gcc compiler is currently supported)
 endif
 
 OBJDIR=objdir # fallback if not win, linux, mac
-LINUXDIR=genozip-linux-x86_64 # directory for creating the Linux binaries distribution
 
 ifeq ($(OS),Windows_NT)
 # Windows
@@ -397,7 +398,7 @@ docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 	@git push > /dev/null
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 
-docs/genozip-linux-x86_64.tar.gz.build: $(LINUXDIR)/LICENSE.txt # license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed
+docs/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt 
 	@wsl make docs/genozip-linux-x86_64.tar.gz
 	@(git commit -m linux_files_for_version_$(version) docs/genozip-linux-x86_64.tar.gz ; exit 0) > /dev/null
 	@git push > /dev/null
@@ -425,8 +426,8 @@ test-backup: genozip.exe
 	@rm -f test/*.genozip
 	@(cd test; genozip.exe -f `ls -1d *|grep -v / |grep -v cram | grep -v bcf`)
 
-# this is run in Windows, now Linux
-$(LINUXDIR)/LICENSE.txt: LICENSE.txt
+# license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed
+genozip-linux-x86_64/LICENSE.txt: LICENSE.txt
 	@echo Generating $@
 	@cp -f $< $@
 
