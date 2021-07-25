@@ -91,6 +91,7 @@ ifeq ($(CC),cl) # Microsoft Visual C
 endif
 
 OBJDIR=objdir # fallback if not win, linux, mac
+LINUXDIR=genozip-linux-x86_64 # directory for creating the Linux binaries distribution
 
 ifeq ($(OS),Windows_NT)
 # Windows
@@ -424,12 +425,16 @@ test-backup: genozip.exe
 	@rm -f test/*.genozip
 	@(cd test; genozip.exe -f `ls -1d *|grep -v / |grep -v cram | grep -v bcf`)
 
+# this is run in Windows, now Linux
+$(LINUXDIR)/LICENSE.txt: LICENSE.txt
+	@echo Generating $@
+	@cp -f $< $@
+
 endif # Windows
 
 # Building Linux pre-compiled binaries: we delete arch.o to force it to re-compile with DISTRIBUTION=linux-x86_64.
 ifeq ($(uname),Linux)
 
-LINUXDIR=genozip-linux-x86_64
 $(LINUXDIR)/clean:
 	@rm -fR $(LINUXDIR)
 	@mkdir $(LINUXDIR)
@@ -444,10 +449,6 @@ $(LINUXDIR)/genozip: delete-arch $(OBJS)
 $(LINUXDIR)/genounzip $(LINUXDIR)/genocat $(LINUXDIR)/genols: $(LINUXDIR)/genozip 
 	@echo Generating $@
 	@ln -f $< $@
-
-$(LINUXDIR)/LICENSE.txt: LICENSE.txt
-	@echo Generating $@
-	@cp -f $< $@
 
 LINUX_TARGZ_OBJS = $(LINUXDIR)/clean $(LINUXDIR)/genozip $(LINUXDIR)/genounzip $(LINUXDIR)/genocat $(LINUXDIR)/genols 
 
