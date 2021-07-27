@@ -38,11 +38,13 @@ Displays the contents of the SAM / BAM data in FASTQ format:
 - If --output specifies a filename ending with .fq[.gz] or .fastq[.gz] then --fastq is activated implicitly.
     |
 
-*Example*:
+**Example**:
 
 Consider a simple paired-end SAM file with three alignments, all with the same QNAME. The first two are the primary alignments of R1 and R2, and the third is a secondary alignment of R1:
 
 ::
+
+    $ genozip myfile.sam  # compress with genozip
 
     $ genocat myfile.sam.genozip
     ST-E00185:547:HCNMNCCX2:5:1118:17269:28593	99	chr1	33656	0	14M1D136M	=	33901	386	CCTAATGCTATCCCCCCCCCGCCCCCCACGCCCTGACAAGCCCCCGTGTGTGATGTTTTCCGCCCCCTGTCCAAGCCTTCCCATTGTTCAATTCCCCCCTGTGAGTGAGAACATGCAGGGTTTGGGTTTCTGTCTTTGTGATAGTTTGCT	AAAFFJJJJJJJJJJJJJJ-AAJJFJJ-77F-77FFJ----AJJ---7-77-A-<FJ-FF-7-AJJ---7-A-F-A-<FJ-7<<JJFJ-AF-<7AJ-<<-7--7A----<7-A-77-77A-AF-A7FJJ7J<FJ7J<-A--AA7-AA--7	NM:i:16	MD:Z:0T13^T5A9C1A6G5A4A7C2T5A9G3T15A21T6T24	AS:i:72	XS:i:72	MQ:i:0	ms:i:5286	mc:i:34049	MC:Z:141M8S
