@@ -600,14 +600,14 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
         if (flag.reading_chain && !flag.explicit_ref && z_file->genozip_version >= 12) {
             if (file_exists (header->ref_filename) && file_exists (header->dt_specific.chain.prim_filename)) {
                 WARN_ONCE ("Note: using the reference file PRIMARY=%s LUFT=%s. You can override this with --reference, see: " WEBSITE_DVCF,
-                      header->dt_specific.chain.prim_filename, header->ref_filename);
+                           header->dt_specific.chain.prim_filename, header->ref_filename);
                 
                 ref_set_reference (gref, header->ref_filename, REF_LIFTOVER, false);
                 ref_set_reference (prim_ref, header->dt_specific.chain.prim_filename, REF_LIFTOVER, false);
             }
             else 
-                ASSINP (flag.genocat_no_ref_file, "Please use --reference to specify the path to the LUFT (target) coordinates reference file. Original path was %s",
-                        header->ref_filename);
+                ASSINP (flag.genocat_no_ref_file, "Please use two --reference arguments to specify the paths to the PRIMAY and LUFT coordinates reference file. Original path was PRIMARY=%s LUFT=%s",
+                        header->dt_specific.chain.prim_filename, header->ref_filename);
         }
 
         // case: this file requires an external reference, but command line doesn't include --reference - attempt to use the
