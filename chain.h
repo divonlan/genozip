@@ -27,7 +27,7 @@ extern void chain_load (void);
 extern void chain_destroy (void);
 extern const char *chain_get_luft_contig (uint32_t contig_i, PosType *length);
 extern void chain_copy_contigs_to_z_file (DidIType luft_contig_did_i);
-extern WordIndex chain_get_prim_contig_index_by_name (const char *contig, unsigned contig_len);
+extern WordIndex chain_get_prim_contig_index_by_name (const char *contig, unsigned contig_len, bool recursive);
 extern uint64_t chain_get_num_prim_contigs (void);
 extern void chain_append_all_luft_contig_index (const char *prim_contig_name, unsigned prim_contig_name_len, Buffer *luft_contigs);
 extern bool chain_get_liftover_coords (WordIndex prim_contig_index,  PosType prim_1pos, 

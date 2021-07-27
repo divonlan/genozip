@@ -825,8 +825,8 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, Reference ref, WordIn
     // note: in SAM, if a read starts within the valid range, it is allowed to overflow beyond it - and we will circle
     // around to the beginning of the range assuming its a circular chromosome (see in sam_seg_seq_field)
     ASSSEG ((pos >= range->first_pos && pos <= range->last_pos), field,
-            "POS=%"PRId64" for contig \"%.*s\", but this contig's range is %"PRId64" - %"PRId64". Likely this is because %s was created using a reference file other than %s.",
-            pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, txt_name, ref->filename);
+            "POS=%"PRId64" for contig \"%.*s\" (mapped to reference contig \"%.*s\" ref_index=%d), but this contig's range is %"PRId64" - %"PRId64". Likely this is because %s was created using a reference file other than %s.",
+            pos, vb->chrom_name_len, vb->chrom_name, range->chrom_name_len, range->chrom_name, ref_index, range->first_pos, range->last_pos, txt_name, ref->filename);
 
     vb->prev_range[ref==prim_ref] = range;
     vb->prev_range_chrom_node_index[ref==prim_ref] = chrom; // the chrom that started this search, leading to this range

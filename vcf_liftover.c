@@ -199,7 +199,7 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex
     // if chrom is not yet mapped to src_contig, map it now:
     // map from chrom_node_index (not word index!) to entry in chain_index
     if (map[vb->chrom_node_index] == WORD_INDEX_MISSING) {
-        map[vb->chrom_node_index] = chain_get_prim_contig_index_by_name (vb->chrom_name, vb->chrom_name_len);
+        map[vb->chrom_node_index] = chain_get_prim_contig_index_by_name (vb->chrom_name, vb->chrom_name_len, false);
 
         // check if the error is due to missing contig in primary reference, or only chain file
         if (map[vb->chrom_node_index] == WORD_INDEX_NONE &&

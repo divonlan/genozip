@@ -636,7 +636,7 @@ uint64_t chain_get_num_prim_contigs (void)
 }
 
 // returns the contig index in prim_contigs, word WORD_INDEX_NONE if there is none
-WordIndex chain_get_prim_contig_index_by_name (const char *contig, unsigned contig_len)
+WordIndex chain_get_prim_contig_index_by_name (const char *contig, unsigned contig_len, bool recursive)
 {
     WordIndex ctg_i;
     ARRAY (RefContig, prim_ctgs, prim_contigs);
@@ -648,8 +648,40 @@ WordIndex chain_get_prim_contig_index_by_name (const char *contig, unsigned cont
             !memcmp (contig, prim_contig, contig_len)) break; // found
     }
 
+    // case: not found (this can happen if VCF file doesn't have contigs in its header), check for alternative names.
+    // similar logic to ref_alt_chroms_get_alt_index
+    if (ctg_i == prim_ctgs_len && !recursive) {
+
+        // 22 -> chr22 (1->22, X, Y, M, MT chromosomes)
+        if ((contig_len == 1 && (IS_DIGIT (contig[0]) || contig[0]=='X' || contig[0]=='Y')) ||
+            (contig_len == 2 && ((IS_DIGIT (contig[0]) && IS_DIGIT (contig[1]))))) {
+
+            char chr_chrom[5] = "chr";
+            chr_chrom[3] = contig[0];
+            chr_chrom[4] = (contig_len == 2 ? contig[1] : 0);
+
+            ctg_i = chain_get_prim_contig_index_by_name (chr_chrom, contig_len+3, true); 
+        }
+
+        // M, MT, chrM, chrMT 
+        else if ((contig_len==4 && contig[0]=='c' && contig[1]=='h' && contig[2]=='r' && contig[3]=='M') || 
+                 (contig_len==5 && contig[0]=='c' && contig[1]=='h' && contig[2]=='r' && contig[3]=='M' && contig[4]=='T') || 
+                 (contig_len==1 && contig[0]=='M') ||
+                 (contig_len==2 && contig[0]=='M' && contig[1]=='T')) {
+
+                                          ctg_i = chain_get_prim_contig_index_by_name ("chrMT", 5, true); 
+            if (ctg_i == WORD_INDEX_NONE) ctg_i = chain_get_prim_contig_index_by_name ("chrM",  4, true); 
+            if (ctg_i == WORD_INDEX_NONE) ctg_i = chain_get_prim_contig_index_by_name ("MT",    2, true); 
+            if (ctg_i == WORD_INDEX_NONE) ctg_i = chain_get_prim_contig_index_by_name ("M",     1, true); 
+        }
+        
+        // Chr? or Chr?? -> ? or ??
+        else if ((contig_len == 4 || contig_len == 5) && !memcmp (contig, "chr", 3))
+            ctg_i = chain_get_prim_contig_index_by_name (&contig[3], contig_len-3, true); 
+    }
+
     // note: PRIMNAME contains all contigs, copied from the primary reference. We check counts, to verify that the contig is actually used in the chain file.
-    if (ctg_i < prim_ctgs_len && *ENT (int64_t, prim_contig_counts, ctg_i) > 0)
+    if (ctg_i != WORD_INDEX_NONE && ctg_i < prim_ctgs_len && *ENT (int64_t, prim_contig_counts, ctg_i) > 0)
         return ctg_i;
     else
         return WORD_INDEX_NONE;
@@ -787,7 +819,7 @@ static ChainAlignment *chain_get_first_aln (WordIndex prim_contig_index, int32_t
 // append luft_contigs buffer with all dst chroms indicies for which there exists alignment with prim_chrom
 void chain_append_all_luft_contig_index (const char *prim_contig_name, unsigned prim_contig_name_len, Buffer *luft_contigs)
 {
-    WordIndex prim_contig_index = chain_get_prim_contig_index_by_name (prim_contig_name, prim_contig_name_len);
+    WordIndex prim_contig_index = chain_get_prim_contig_index_by_name (prim_contig_name, prim_contig_name_len, false);
     WordIndex prev_dst = WORD_INDEX_NONE;
 
     if (prim_contig_index == WORD_INDEX_NONE) return; // this contig is not in the chain file

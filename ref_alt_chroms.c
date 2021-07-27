@@ -125,6 +125,7 @@ void ref_alt_chroms_load (Reference ref)
 
 // Used in ZIP and in PIZ - only in regions_make_chregs. In PIZ, alternative chroms found in the file data are already mapped in SEC_REF_ALT_CHROMS
 // looks in Reference contigs if ref is provided, or in CHROM if ref=NULL
+// note: similar logic appears in chain_get_prim_contig_index_by_name
 WordIndex ref_alt_chroms_get_alt_index (Reference ref, const char *chrom, unsigned chrom_len, PosType chrom_LN, WordIndex fallback_index)
 {
     if (!ref_is_external_loaded (ref)) return WORD_INDEX_NONE;
@@ -137,7 +138,7 @@ WordIndex ref_alt_chroms_get_alt_index (Reference ref, const char *chrom, unsign
 
     // 22 -> chr22 (1->22, X, Y, M, MT chromosomes)
     else if ((chrom_len == 1 && (IS_DIGIT (chrom[0]) || chrom[0]=='X' || chrom[0]=='Y')) ||
-        (chrom_len == 2 && ((IS_DIGIT (chrom[0]) && IS_DIGIT (chrom[1]))))) {
+             (chrom_len == 2 && ((IS_DIGIT (chrom[0]) && IS_DIGIT (chrom[1]))))) {
 
         char chr_chrom[5] = "chr";
         chr_chrom[3] = chrom[0];

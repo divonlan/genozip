@@ -554,8 +554,17 @@ WordIndex ref_contig_get_by_chrom (ConstVBlockP vb, const Reference ref, WordInd
     WordIndex contig_index = WORD_INDEX_NONE;
 
     // case: chrom is part of the reference (same index)
-    if (txt_chrom_index < ref->loaded_contigs.len) 
+    const RefContig *ctg;
+    if (txt_chrom_index < ref->loaded_contigs.len &&
+           (!chrom_name_len ||
+              ((ctg = ENT (RefContig, ref->loaded_contigs, txt_chrom_index))->snip_len == chrom_name_len &&
+                !memcmp (ENT (char, ref->loaded_contigs_dict, ctg->char_index), chrom_name, chrom_name_len))))  {
+        
+        // note: we compare the name too, because txt_chrom isn't always the same as ref_chrom. example: VCF file in --chain, where VCF_CHROM is populated
+        // from chain file, but if VCF variant is an alt name, and VCF has no header contigs, txt_chrom_index will be a new snip after the chain contigs - not
+        // matching the reference 
         contig_index = txt_chrom_index; 
+    }
 
     // case: chrom is not in the reference as is, test if it is in the reference using an alternative name (eg "22"->"chr22")
     else if (chrom_name) 
