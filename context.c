@@ -1113,7 +1113,7 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
             frag_size = 1<<20; // 1MB
             for (const CtxNode *node=FIRSTENT (CtxNode, frag_ctx->nodes); node <= LASTENT (CtxNode, frag_ctx->nodes); node++)
                 if (node->snip_len * 2 > frag_size)
-                    frag_size = roundup2pow (node->snip_len); // must be power of 2 for ctx_dict_read_one_vb
+                    frag_size = roundup2pow (2 * node->snip_len); // must be power of 2 for ctx_dict_read_one_vb
         }
 
         vb->fragment_ctx   = frag_ctx;
