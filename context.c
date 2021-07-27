@@ -1090,15 +1090,12 @@ void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, fals
 static Context *frag_ctx;
 static const CtxNode *frag_next_node;
 static Codec frag_codec = CODEC_UNKNOWN;
+static unsigned frag_size = 0;
 
 // compress the dictionary fragment - either an entire dict, or divide it to fragments if large to allow multi-threaded
 // compression and decompression
 static void ctx_prepare_for_dict_compress (VBlockP vb)
 {
-    // max fragment size - 1MB - a relatively small size to enable utilization of more cores, as only a handful of dictionaries
-    // are expected to be big enough to have multiple fragments
-    #define FRAGMENT_SIZE (1<<20)
-
     while (frag_ctx < &z_file->contexts[z_file->num_contexts]) {
 
         if (!frag_next_node) {
@@ -1110,6 +1107,13 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
 
             ASSERT (frag_next_node->char_index + frag_next_node->snip_len <= frag_ctx->dict.len, 
                     "Corrupt nodes in ctx=%.8s did_i=%u", frag_ctx->name, (int)(frag_ctx - z_file->contexts));
+
+            // frag_size is set by default 1MB, but must be at least double the longest snip, or it will cause
+            // mis-calculation of size_upper_bound in ctx_dict_read_one_vb
+            frag_size = 1<<20; // 1MB
+            for (const CtxNode *node=FIRSTENT (CtxNode, frag_ctx->nodes); node <= LASTENT (CtxNode, frag_ctx->nodes); node++)
+                if (node->snip_len * 2 > frag_size)
+                    frag_size = roundup2pow (node->snip_len); // must be power of 2 for ctx_dict_read_one_vb
         }
 
         vb->fragment_ctx   = frag_ctx;
@@ -1117,13 +1121,7 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
         vb->fragment_codec = frag_codec;
 
         while (frag_next_node < AFTERENT (CtxNode, frag_ctx->nodes) && 
-               vb->fragment_len + frag_next_node->snip_len < FRAGMENT_SIZE) {
-
-            // we allow snips to be so large that it will cause the fragment to be FRAGMENT_SIZE/2 or less, which will cause
-            // mis-calculation of size_upper_bound in ctx_dict_read_one_vb (if this ever becomes a problem, we can set FRAGMENT_SIZE
-            // dynamically based on the largest snip in the dictionary)
-            ASSERT (frag_next_node->snip_len < FRAGMENT_SIZE/2,
-                    "found a word in dict=%s that is larger than %u, the maximum supported by genozip", frag_ctx->name, FRAGMENT_SIZE/2);
+               vb->fragment_len + frag_next_node->snip_len < frag_size) {
 
             vb->fragment_len += frag_next_node->snip_len + 1;
             vb->fragment_num_words++;
@@ -1134,6 +1132,7 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
             frag_ctx++;
             frag_next_node = NULL;
             frag_codec = CODEC_UNKNOWN;
+            frag_size = 0;
         }
 
         if (vb->fragment_len) {
@@ -1222,13 +1221,13 @@ static void ctx_dict_read_one_vb (VBlockP vb)
             dis_dict_id (dict_sl->dict_id).s, dis_dict_id (header->dict_id).s);
 
     // new context
-    // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are FRAGMENT_SIZE or a bit less, allowing pre-allocation
+    // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are DICT_FRAG_SIZE or a bit less, allowing pre-allocation
     if (header && new_ctx && z_file->genozip_version >= 9) {
         unsigned num_fragments=0; 
         for (Section sl=dict_sl; sl->dict_id.num == dict_ctx->dict_id.num; sl++) num_fragments++;
 
-        // get size: for multi-fragment dictionaries, first fragment will be at or slightly less than FRAGMENT_SIZE, which is a power of 2.
-        // this allows us to calculate the FRAGMENT_SIZE with which this file was compressed and hence an upper bound on the size
+        // get size: for multi-fragment dictionaries, first fragment will be at or less than a power of 2, but more than the previous power of two.
+        // this allows us to calculate the frag_size with which this dictionary was compressed and hence an upper bound on the size
         uint32_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : roundup2pow (vb->fragment_len) * num_fragments;
         
         buf_alloc (evb, &dict_ctx->dict, 0, size_upper_bound, char, 0, "contexts->dict");
