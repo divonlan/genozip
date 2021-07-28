@@ -1113,7 +1113,7 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
             frag_size = 1<<20; // 1MB
             for (const CtxNode *node=FIRSTENT (CtxNode, frag_ctx->nodes); node <= LASTENT (CtxNode, frag_ctx->nodes); node++)
                 if (node->snip_len * 2 > frag_size)
-                    frag_size = roundup2pow (2 * node->snip_len); // must be power of 2 for ctx_dict_read_one_vb
+                    frag_size = 2 * roundup2pow (node->snip_len); // must be power of 2 for ctx_dict_read_one_vb
         }
 
         vb->fragment_ctx   = frag_ctx;
@@ -1221,7 +1221,7 @@ static void ctx_dict_read_one_vb (VBlockP vb)
             dis_dict_id (dict_sl->dict_id).s, dis_dict_id (header->dict_id).s);
 
     // new context
-    // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are DICT_FRAG_SIZE or a bit less, allowing pre-allocation
+    // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are frag_size or a bit less, allowing pre-allocation
     if (header && new_ctx && z_file->genozip_version >= 9) {
         unsigned num_fragments=0; 
         for (Section sl=dict_sl; sl->dict_id.num == dict_ctx->dict_id.num; sl++) num_fragments++;
