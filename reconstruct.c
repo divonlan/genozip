@@ -337,9 +337,9 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
             ctx->last_txt_len = 0;
 
             if (ctx->flags.store == STORE_INDEX) 
-                ctx_set_last_value (vb, ctx, (LastValueType){ .i = WORD_INDEX_MISSING_SF } );
+                ctx_set_last_value (vb, ctx, (LastValueType){ .i = WORD_INDEX_MISSING } );
 
-            return reconstruct ? -1 : 0; // -1 if WORD_INDEX_MISSING_SF - remove preceding separator
+            return reconstruct ? -1 : 0; // -1 if WORD_INDEX_MISSING - remove preceding separator
         }
 
         reconstruct_one_snip (vb, ctx, word_index, snip, snip_len, reconstruct);        

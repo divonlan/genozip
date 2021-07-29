@@ -21,8 +21,8 @@
 // trailing_zeros is number of least significant zeros
 // leading_zeros is number of most significant zeros
 #ifndef __GNUC__
-  #define trailing_zeros(x) ({ __typeof(x) _r; _BitScanReverse64(&_r, x); _r; })
-  #define leading_zeros(x) ({ __typeof(x) _r; _BitScanForward64(&_r, x); _r; })
+  #define trailing_zeros(x) ({ __typeof(x) _r; _BitScanReverse64(&_r, (x)); _r; })
+  #define leading_zeros(x) ({ __typeof(x) _r; _BitScanForward64(&_r, (x)); _r; })
 #else
   #define trailing_zeros(x) ((x) ? (__typeof(x))__builtin_ctzll(x) : (__typeof(x))sizeof(x)*8)
   #define leading_zeros(x) ((x) ? (__typeof(x))__builtin_clzll(x) : (__typeof(x))sizeof(x)*8)

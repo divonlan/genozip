@@ -75,7 +75,7 @@ typedef struct VBlockVCF {
 
     // DVCF stuff
     Buffer rejects_report;          // human readable report about rejects
-    char new_ref;                   // new REF that is neither REF nor ALT
+    char new_ref;                   // SNP: new REF that is neither REF nor ALT; left-anchored INDEL with XSTRAND: new anchor
     bool is_del_sv;                 // is ALT == "<DEL>"
 } VBlockVCF;
 
@@ -83,7 +83,7 @@ typedef VBlockVCF *VBlockVCFP;
 
 // Liftover stuff
 
-// this is part of the file format (in the oSTATUS context) and CANNOT BE CHANGED (but can be extended)
+// The file format contains the string values. The numeric values or order can be changed.
 typedef enum {
     // Algorithm interim statuses not outputed to the genozip file
     LO_NA                        = -1, // not a Liftover item - never written z_file
@@ -93,50 +93,54 @@ typedef enum {
     LO_OK                        = 1,  // internal progress step in ZIP - never written z_file
     LO_OK_REF_SAME_SNP           = 2,  // REF and ALT are the same for a SNP
     LO_OK_REF_SAME_INDEL         = 3,  // REF and ALT are the same for an INDEL, and confirmed not to be a REF<>ALT switch
-    LO_OK_REF_SAME_SV            = 4,  // REF and ALT are the same for a variant with a symbolic ALT allele
-    LO_OK_REF_ALT_SWITCH_SNP     = 5,  // REF and ALT are switched, and INFO and FORMAT subfields updated
-    LO_OK_REF_ALT_SWITCH_INDEL   = 6,  // REF and ALT are switched, and INFO and FORMAT subfields updated
-    LO_OK_REF_NEW_SNP            = 7,  // REF in a SNP was replaced with a new REF - can only happen if AF=1
+    LO_OK_REF_SAME_NLA           = 4,  // REF and ALT are the same for a non-left-aligned, not SNP variant
+    LO_OK_REF_SAME_SV            = 5,  // REF and ALT are the same for a variant with a symbolic ALT allele
+    LO_OK_REF_ALT_SWITCH_SNP     = 6,  // REF and ALT are switched, and INFO and FORMAT subfields updated
+    LO_OK_REF_ALT_SWITCH_INDEL   = 7,  // REF and ALT are switched, and INFO and FORMAT subfields updated
+    LO_OK_REF_ALT_SWITCH_NLA     = 8,  // REF and ALT are switched, and INFO and FORMAT subfields updated
+    LO_OK_REF_NEW_SNP            = 9,  // REF in a SNP was replaced with a new REF - can only happen if AF=1
 
     // Rejection reasons - MUST BE AFTER LO_REJECTED (see LO_IS_REJECTED) 
-    LO_REJECTED                  = 8,  // generic rejection status
+    LO_REJECTED                  = 10,  // generic rejection status
 
     // Reasons due to data (any tool should reject)
-    LO_CHROM_NOT_IN_PRIM_REF     = 9,  // Primary reference doesn't contain CHROM
-    LO_CHROM_NOT_IN_CHAIN        = 10, // chain file doesn't contain a qName which has CHROM  
-    LO_NO_MAPPING_IN_CHAIN       = 11, // chain file doesn't contain a mapping for the primary POS
-    LO_REF_MISMATCHES_REFERENCE  = 12, // REF different than reference 
+    LO_CHROM_NOT_IN_PRIM_REF     = 11,  // Primary reference doesn't contain CHROM
+    LO_CHROM_NOT_IN_CHAIN        = 12, // chain file doesn't contain a qName which has CHROM  
+    LO_NO_MAPPING_IN_CHAIN       = 13, // chain file doesn't contain a mapping for the primary POS
+    LO_REF_MISMATCHES_REFERENCE  = 14, // REF different than reference 
 
     // Reasons due to Genozip limitations (more sophisticated tools might lift)
-    LO_REF_MULTIALT_SWITCH_SNP   = 13, // REF changes for a multi-allelic SNP, or REF change would make a bi-allelic into a tri-allelic SNP
-    LO_NEW_ALLELE_SNP            = 14, // The Luft reference represents an allele that is neither REF or ALT
-    LO_REF_MULTIALT_SWITCH_INDEL = 15, // REF changes for a multi-allelic INDEL, or REF change would make a bi-allelic into a tri-allelic INDEL
-    LO_NEW_ALLELE_INDEL          = 16, // The Luft reference represents an allele that is neither REF or ALT
-    LO_NEW_ALLELE_SV             = 17, // Genozip limiation: The Luft reference is different than REF for a variant with a symbolic ALT allele
-    LO_XSTRAND_SV                = 18, // Genozip limiation: A variant with a symbolic ALT allele mapped to the reverse strand
-    LO_COMPLEX_REARRANGEMENTS    = 19, // Genozip limiation: Variant contains VCF 4.2 "complex rearrangements"
-    LO_NOT_LEFT_ANCHORED         = 20, // Genozip limiation: We require non-SNP variants to be left anchored (i.e. A AG, not G AG)
+    LO_REF_MULTIALT_SWITCH_SNP   = 15, // REF changes for a multi-allelic SNP, or REF change would make a bi-allelic into a tri-allelic SNP
+    LO_NEW_ALLELE_SNP            = 16, // The Luft reference represents an allele that is neither REF or ALT
+    LO_REF_MULTIALT_SWITCH_INDEL = 17, // REF changes for a multi-allelic INDEL, or REF change would make a bi-allelic into a tri-allelic INDEL
+    LO_NEW_ALLELE_INDEL          = 18, // The Luft reference represents an allele that is neither REF or ALT
+    LO_XSTRAND_NLA               = 19, // Genozip limiation: A complex indel variant mapped to the reverse strand
+    LO_NEW_ALLELE_NLA            = 20, // The Luft reference represents an allele that is neither REF or ALT
+    LO_NEW_ALLELE_SV             = 21, // Genozip limiation: The Luft reference is different than REF for a variant with a symbolic ALT allele
+    LO_XSTRAND_SV                = 22, // Genozip limiation: A variant with a symbolic ALT allele mapped to the reverse strand
+    LO_COMPLEX_REARRANGEMENTS    = 23, // Genozip limiation: Variant contains "complex rearrangements" (see VCF spec)
 
     // Reasons when genozipping a DVCF file (without --chain)
-    LO_ADDED_VARIANT             = 21, // Variant was added to file after it was already lifted over
-    LO_UNSUPPORTED_REFALT        = 22, // INFO/DVCF fields indicate an unsupported REF/ALT configuration - perhaps other tool, perhaps later version of Genozip
+    LO_ADDED_VARIANT             = 24, // Variant was added to file after it was already lifted over
+    LO_UNSUPPORTED_REFALT        = 25, // INFO/DVCF fields indicate an unsupported REF/ALT configuration - perhaps other tool, perhaps later version of Genozip
 
-    LO_INFO                      = 23, // An error cross-rending an INFO subfield (including INFO/END)
-    LO_FORMAT                    = 24, // An error cross-rending an FORMAT subfield
+    LO_INFO                      = 26, // An error cross-rending an INFO subfield (including INFO/END)
+    LO_FORMAT                    = 27, // An error cross-rending an FORMAT subfield
     
     NUM_LO_STATUSES
 } LiftOverStatus;
 
 // NOTE: The rejection strings should not change or vcf_lo_seg_INFO_REJX won't identify oStatus in rejected lines when parsing old dual coordinate files (it will fallback to LO_REJECTED)
-// It *IS OK* to add more statuses, change their order or change their numeric values.
+// It *IS OK* to add more statuses, change their order or change their numeric values, it is *NOT OK* to modify the names as they are part of the file format
 extern const char *dvcf_status_names[];
 #define DVCF_STATUS_NAMES { /* for display esthetics - max 25 characters - note: these strings are defined in the dual-coordinate specification */\
     "UNKNOWN", \
-    "OK", "OkRefSameSNP", "OkRefSameIndel", "OkRefSameStructVariant", "OkRefAltSwitchSNP", "OkRefAltSwitchIndel", "OkNewRefSNP", \
+    "OK", "OkRefSameSNP", "OkRefSameIndel", "OkRefSameNotLeftAnc", "OkRefSameStructVariant", \
+    "OkRefAltSwitchSNP", "OkRefAltSwitchIndel", "OkRefAltSwitchNotLeftAnc", "OkNewRefSNP", \
     "Rejected", "ChromNotInPrimReference", "ChromNotInChainFile", "NoMappingInChainFile", "REFMismatchesReference", \
     "RefMultiAltSwitchSNP", "RefNewAlleleSNP", \
-    "RefMultiAltSwitchIndel", "RefNewAlleleIndel", \
-    "RefNewAlleleSV", "XstrandSV", "ComplexRearrangements", "NotLeftAnchored", \
+    "RefMultiAltSwitchIndel", "RefNewAlleleIndel", "XstrandNotLeftAnc", "RefNewAlleleNotLeftAnc",\
+    "RefNewAlleleSV", "XstrandSV", "ComplexRearrangements", \
     "AddedVariant", "UnsupportedRefAlt", \
     "INFO", "FORMAT" \
 }
@@ -145,7 +149,8 @@ extern const char *dvcf_status_names[];
 #define LO_IS_OK(ost) ((ost) >= LO_OK && (ost) < LO_REJECTED)
 #define LO_IS_OK_SNP(ost) ((ost)==LO_OK_REF_SAME_SNP || (ost)==LO_OK_REF_ALT_SWITCH_SNP || (ost)==LO_OK_REF_NEW_SNP)
 #define LO_IS_OK_INDEL(ost) ((ost)==LO_OK_REF_SAME_INDEL || (ost)==LO_OK_REF_ALT_SWITCH_INDEL)
-#define LO_IS_OK_SWITCH(ost) ((ost)==LO_OK_REF_ALT_SWITCH_SNP || (ost)==LO_OK_REF_ALT_SWITCH_INDEL)
+#define LO_IS_OK_COMPLEX(ost) ((ost)==LO_OK_REF_SAME_NLA || (ost)==LO_OK_REF_ALT_SWITCH_NLA)
+#define LO_IS_OK_SWITCH(ost) ((ost)==LO_OK_REF_ALT_SWITCH_SNP || (ost)==LO_OK_REF_ALT_SWITCH_INDEL || (ost)==LO_OK_REF_ALT_SWITCH_NLA)
 
 #define last_ostatus (ctx_has_value_in_line_(vb, CTX(VCF_oSTATUS)) ? (LiftOverStatus)vb->last_index (VCF_oSTATUS) : LO_UNKNOWN)
 #define last_ostatus_name_piz (last_ostatus < CTX(VCF_oSTATUS)->word_list.len ? ctx_get_words_snip (CTX(VCF_oSTATUS), last_ostatus) : "Invalid oStatus")
@@ -202,11 +207,12 @@ extern void vcf_finalize_seg_info (VBlockVCF *vb);
 // Refalt stuff
 extern void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len);
 extern void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus ostatus, bool is_xstrand, unsigned add_bytes);
-extern LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool xstrand);
+extern LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool xstrand, bool *is_left_anchored);
 typedef enum { EQUALS_NEITHER, EQUALS_REF, EQUALS_ALT, EQUALS_MISSING } RefAltEquals;
 RefAltEquals vcf_refalt_oref_equals_ref_or_alt (char oref, char ref, const char *alt, unsigned alt_len, bool is_xstrand);
 extern bool vcf_refalt_piz_is_variant_snp (VBlockP vb);
 extern bool vcf_refalt_piz_is_variant_indel (VBlockP vb);
+extern void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus);
 
 // Liftover Zip
 extern void vcf_lo_zip_initialize (void);

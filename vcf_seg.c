@@ -13,6 +13,7 @@
 #include "codec.h"
 #include "strings.h"
 #include "coords.h"
+#include "libdeflate/libdeflate.h"
 
 static MiniContainer line_number_container = {};
 
@@ -174,8 +175,8 @@ void vcf_seg_finalize (VBlockP vb_)
         .callback     = (vb->use_special_sf == USE_SF_YES) || z_dual_coords, // cases where we need a callback
         .filter_items = true,
         .nitems_lo    = 12,                                                                 
-        .items        = { { .dict_id = (DictId)dict_id_fields[VCF_COORDS],  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-ostatus                                   
-                          { .dict_id = (DictId)dict_id_fields[VCF_oSTATUS], .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-ostatus                                   
+        .items        = { { .dict_id = (DictId)dict_id_fields[VCF_COORDS],  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = (DictId)dict_id_fields[VCF_oSTATUS], .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
                           { .dict_id = (DictId)dict_id_fields[VCF_CHROM],   .seperator = "\t" },
                           { .dict_id = (DictId)dict_id_fields[VCF_POS],     .seperator = "\t" },
                           { .dict_id = (DictId)dict_id_fields[VCF_ID],      .seperator = "\t" },
@@ -209,8 +210,8 @@ void vcf_seg_finalize (VBlockP vb_)
         .callback     = (vb->use_special_sf == USE_SF_YES) || z_dual_coords, // cases where we need a callback
         .filter_items = true,
         .nitems_lo    = 13,                                                                 
-        .items        = { { .dict_id = (DictId)dict_id_fields[VCF_COORDS],  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-ostatus                                   
-                          { .dict_id = (DictId)dict_id_fields[VCF_oSTATUS], .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-ostatus                                   
+        .items        = { { .dict_id = (DictId)dict_id_fields[VCF_COORDS],  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = (DictId)dict_id_fields[VCF_oSTATUS], .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
                           { .dict_id = (DictId)dict_id_fields[VCF_oCHROM],  .seperator = "\t" },
                           { .dict_id = (DictId)dict_id_fields[VCF_oPOS],    .seperator = "\t" },
                           { .dict_id = (DictId)dict_id_fields[VCF_ID],      .seperator = "\t" },
@@ -414,16 +415,21 @@ static inline void vcf_seg_assign_dl_sorted (VBlockVCF *vb, ZipDataLineVCF *dl, 
 
     if (!vb->is_unsorted[is_luft] && vb->line_i > 0) {
         // cases where we have evidence this VB is NOT sorted:
+        int cmp_chrom = dl->chrom[is_luft] - (dl-1)->chrom[is_luft];
+        int cmp_pos   = dl->pos[is_luft]   - (dl-1)->pos[is_luft];
 
         // 1. pos is out of order
-        if( (dl->chrom_index[is_luft] == (dl-1)->chrom_index[is_luft] && dl->pos[is_luft] < (dl-1)->pos[is_luft])
+        if( (cmp_chrom == 0 && cmp_pos < 0)
 
         // 2. rejected lift-over 
-        ||  (is_luft && dl->chrom_index[is_luft] == WORD_INDEX_NONE)
+        ||  (is_luft && dl->chrom[is_luft] == WORD_INDEX_NONE)
 
         // 3. chrom os out of order (if chroms are in header, then this is by the header, otherwise by first appearance in file)
-        ||  (dl->chrom_index[is_luft] < (dl-1)->chrom_index[is_luft]))
-           
+        ||  cmp_chrom < 0
+
+        // 4. chrom and pos are the same, but tie_breaker is out of order           
+        ||  (cmp_chrom == 0 && cmp_pos == 0 && dl->tie_breaker < (dl-1)->tie_breaker))
+
             vb->is_unsorted[is_luft] = true;
     }
 }
@@ -438,6 +444,18 @@ static void vcf_seg_add_line_number (VBlockVCFP vb, unsigned VCF_ID_len)
     int shrinkage = (int)VCF_ID_len - line_num_len - LN_PREFIX_LEN;
     vb->recon_size -= shrinkage;
     vb->recon_size_luft -= shrinkage;
+}
+
+// calculate tie-breaker for sorting 
+static void vcf_seg_assign_tie_breaker (VBlockVCFP vb, ZipDataLineVCF *dl)
+{
+    // if this is a dual-coord line, and it is a LUFT line, convert REF\tALT to PRIMARY
+    LiftOverStatus ostatus = last_ostatus;
+    if (vb->line_coords == DC_LUFT && LO_IS_OK (ostatus))
+        vcf_refalt_seg_convert_to_primary (vb, ostatus);
+
+    // tie breaker is Adler32 of the Primary REF\tALT, except for Luft-only lines, where it is the Adler32 of the Luft REF\tALT
+    dl->tie_breaker = libdeflate_adler32 (1, vb->main_refalt, vb->main_ref_len + 1 + vb->main_alt_len);
 }
 
 /* segment a VCF line into its fields:
@@ -483,11 +501,11 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     GET_NEXT_ITEM (VCF_CHROM);
     if (vb->line_coords == DC_PRIMARY) 
-        dl->chrom_index[0] = seg_chrom_field (vb_, VCF_CHROM_str, VCF_CHROM_len);
+        dl->chrom[0] = seg_chrom_field (vb_, VCF_CHROM_str, VCF_CHROM_len);
     
     else { // LUFT
-        dl->chrom_index[1] = seg_by_did_i (vb_, VCF_CHROM_str, VCF_CHROM_len, VCF_oCHROM, VCF_CHROM_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
-        random_access_update_chrom (vb_, DC_LUFT, dl->chrom_index[1], VCF_CHROM_str, VCF_CHROM_len); // also sets vb->chrom_name
+        dl->chrom[1] = seg_by_did_i (vb_, VCF_CHROM_str, VCF_CHROM_len, VCF_oCHROM, VCF_CHROM_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
+        random_access_update_chrom (vb_, DC_LUFT, dl->chrom[1], VCF_CHROM_str, VCF_CHROM_len); // also sets vb->chrom_name
         CTX(vb->vb_coords==DC_LUFT ? VCF_oCHROM : VCF_CHROM)->txt_len++; // account for the tab - in oCHROM in the ##luft_only VB and in CHROM (on behalf on the primary CHROM) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
 
@@ -581,7 +599,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         }
         else {
             has_samples = false;
-            seg_by_did_i (vb, NULL, 0, VCF_SAMPLES, 0); // case no samples: WORD_INDEX_MISSING_SF
+            seg_by_did_i (vb, NULL, 0, VCF_SAMPLES, 0); // case no samples: WORD_INDEX_MISSING
         }
     }
 
@@ -594,6 +612,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     // Adds DVCF items according to ostatus, finalizes INFO/SF and segs the INFO container
     vcf_finalize_seg_info (vb);
+
+    // calculate tie-breaker for sorting - do after INFO before segging the samples as GT data can overwrite REF ALT
+    if (flag.sort) vcf_seg_assign_tie_breaker (vb, dl);
 
     if (!has_samples && vcf_num_samples)
         WARN_ONCE ("FYI: variant CHROM=%.*s POS=%"PRId64" has no samples", vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS));

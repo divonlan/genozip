@@ -459,32 +459,35 @@ To see summary statistics of how variants were handled, we can use --show-counts
 
 The oSTATUSes produced are as follows:
 
-======================= ==================================
-oSTATUS                 Occurs when...
-======================= ==================================
-OkRefSameSNP            Lift succeeded - REF unchanged for a SNP variant
-OkRefSameIndel          Lift succeeded - REF unchanged for an INDEL variant
-OkRefSameStructVariant  Lift succeeded - REF unchanged for a variant with a symbolic ALT allele
-OkRefAltSwitchSNP       Lift succeeded - REF⇆ALT switch for a SNP variant
-OkRefAltSwitchIndel     Lift succeeded - REF⇆ALT switch for an INDEL variant
-OkNewRefSNP             Lift succeeded - REF changed (not to ALT) for a SNP variant with AF=1 or AC=AN
-ChromNotInPrimReference Lift failed - Primary coordinates reference file doesn't contain CHROM 
-ChromNotInChainFile     Lift failed - chain file doesn't have a mapping for CHROM 
-NoMappingInChainFile    Lift failed - chain file doesn't have a mapping for (CHROM,POS), or a multi-base REF is not entirely in the same chain file alignment
-REFMismatchesReference  Lift failed - REF in VCF file mismatches the Primary coordinates reference file. There is an error in the VCF file, or the wrong reference file is provided
-RefMultiAltSwitchSNP    Lift failed - A REF⇆ALT switch for a multi-allelic SNP (Genozip can't handle it)
-RefMultiAltSwitchIndel  Lift failed - A REF⇆ALT switch for a multi-allelic INDEL (Genozip can't handle it)
-RefNewAlleleSNP         Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT (Genozip can't handle it)
-RefNewAlleleIndel       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT (Genozip can't handle it)
-RefNewAlleleSV          Lift failed - The Luft reference is different than REF for a variant with a symbolic ALT allele
-XstrandSV               Lift failed - A variant with a symbolic ALT allele mapped to the reverse strand (Genozip can't handle it)
-ComplexRearrangements   Lift failed - Variant is a VCF 4.2 Complex Rearrangement (Genozip can't handle it)
-NotLeftAnchored         Lift failed - For non-SNP variants, Genozip requires that the first base of REF and all ALTs is identical (case-insensitive)
-INFO/END                Lift failed - POS and INFO/END are not on the same chain file alignment
-AddedVariant            Failed to cross-render a variant - Non-dual-coordinate variant added to a DVCF 
-UnsupportedRefAlt       Failed to cross-render a variant - Combination of REF/ALT in Primary and Luft coordinates not supported by Genozip
-INFO/AC                 Failed to cross-render AC: INFO/AN is missing for this variant 
-INFO/*tag*              Failed to cross-render this INFO tag
-FORMAT/*tag*            Failed to cross-render this FORMAT tag
-======================= ==================================
+======================== ==================================
+oSTATUS                  Occurs when...
+======================== ==================================
+OkRefSameSNP             Lift succeeded - REF unchanged for a SNP variant
+OkRefSameIndel           Lift succeeded - REF unchanged for an INDEL variant
+OkRefSameNotLeftAnc      Lift succeeded - REF unchanged for a variant that is neither a SNP nor left-anchored
+OkRefSameStructVariant   Lift succeeded - REF unchanged for a variant with a symbolic ALT allele
+OkRefAltSwitchSNP        Lift succeeded - REF⇆ALT switch for a SNP variant
+OkRefAltSwitchIndel      Lift succeeded - REF⇆ALT switch for an left-anchored INDEL variant
+OkRefAltSwitchNotLeftAnc Lift succeeded - REF⇆ALT switch for a variant that is neither a SNP nor left-anchored
+OkNewRefSNP              Lift succeeded - REF changed (not to ALT) for a SNP variant with AF=1 or AC=AN
+ChromNotInPrimReference  Lift failed - Primary coordinates reference file doesn't contain CHROM 
+ChromNotInChainFile      Lift failed - chain file doesn't have a mapping for CHROM 
+NoMappingInChainFile     Lift failed - chain file doesn't have a mapping for (CHROM,POS), or a multi-base REF is not entirely in the same chain file alignment
+REFMismatchesReference   Lift failed - REF in VCF file mismatches the Primary coordinates reference file. There is an error in the VCF file, or the wrong reference file is provided
+RefMultiAltSwitchSNP     Lift failed - A REF⇆ALT switch for a multi-allelic SNP (Genozip can't handle it)
+RefMultiAltSwitchIndel   Lift failed - A REF⇆ALT switch for a multi-allelic INDEL (Genozip can't handle it)
+RefNewAlleleSNP          Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT (Genozip can't handle it)
+RefNewAlleleIndel        Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT (Genozip can't handle it)
+RefNewAlleleNotLeftAnc   Lift failed - The Luft reference would introduce a new allele for a variant that is neither a SNP nor left-anchored (Genozip can't handle it)
+RefNewAlleleSV           Lift failed - The Luft reference is different than REF for a variant with a symbolic ALT allele
+XstrandNotLeftAnc        Lift failed - A variant that is neither a SNP nor left-anchored mapped to the reverse strand (Genozip can't handle it)
+XstrandSV                Lift failed - A variant with a symbolic ALT allele mapped to the reverse strand (Genozip can't handle it)
+ComplexRearrangements    Lift failed - Variant is a Complex Rearrangement (Genozip can't handle it)
+INFO/END                 Lift failed - POS and INFO/END are not on the same chain file alignment
+AddedVariant             Failed to cross-render a variant - Non-dual-coordinate variant added to a DVCF 
+UnsupportedRefAlt        Failed to cross-render a variant - Combination of REF/ALT in Primary and Luft coordinates not supported by Genozip
+INFO/AC                  Failed to cross-render AC: INFO/AN is missing for this variant 
+INFO/*tag*               Failed to cross-render this INFO tag
+FORMAT/*tag*             Failed to cross-render this FORMAT tag
+======================== ==================================
 

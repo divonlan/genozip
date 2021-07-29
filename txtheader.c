@@ -193,8 +193,11 @@ void txtheader_zip_prepopulate_contig_ctxs (void)
         this_contigs_dict = &contigs_dict;
     }
     
-    else if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER) 
+    else if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
         ref_contigs_get (gref, &this_contigs_dict, &this_contigs);
+
+    else if (flag.reference == REF_LIFTOVER) 
+        ref_contigs_get (prim_ref, &this_contigs_dict, &this_contigs);
 
     if (this_contigs && this_contigs->len) {
         ctx_build_zf_ctx_from_contigs (CHROM, this_contigs, this_contigs_dict); 
@@ -202,9 +205,12 @@ void txtheader_zip_prepopulate_contig_ctxs (void)
         if (z_file->data_type == DT_SAM || z_file->data_type == DT_BAM)
             ctx_build_zf_ctx_from_contigs (SAM_RNEXT, this_contigs, this_contigs_dict);
     }
+    else
+        ASSERT (!flag.sort, "Cannot --sort, because there are not contigs: %s has no contigs in its header, and a reference file was not provided", txt_name);
 
     if (ocontigs.len)
         ctx_build_zf_ctx_from_contigs (DTFT (ochrom), &ocontigs, &ocontigs_dict);
+
 }
 
 //----------

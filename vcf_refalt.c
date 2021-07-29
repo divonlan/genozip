@@ -91,7 +91,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, const char *ref, unsigned ref_l
 
         seg_by_did_i (vb, ref_alt, ref_len + alt_len + 1, SEL (VCF_REFALT, VCF_oREFALT), 0);
     }
-
+        
     if (vb->line_coords == DC_PRIMARY) // in the default reconstruction, this REFALT is in the main fields along with 2 tabs
         CTX(VCF_REFALT)->txt_len += ref_len + alt_len + 2;
 
@@ -109,7 +109,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, const char *ref, unsigned ref_l
 // Lifting with genozip --chain
 // ----------------------------
 
-// we accept an INDEL for REF<>ALT switch if (1) it is short enough (2) flanking regions are the same
+// we accept an INDEL or complex variant for REF⇄ALT switch if (1) it is short enough (2) flanking regions are the same
 #define FLANKING_SEQ_LEN 4
 #define MAX_LEN_REF_ALT_SWITCH_INDEL_BASED_ON_FLANKING 16
 
@@ -203,13 +203,13 @@ static unsigned vcf_refalt_lift_get_repeats (const Range *range, const char *pay
     return num_reps;
 }
 
-// we accept an INDEL for REF<>ALT switch if (1) it is short enough (2) flanking regions are the same
+// we accept an INDEL for REF⇄ALT switch if (1) it is short enough (2) flanking regions are the same
 static bool vcf_refalt_lift_same_flanking_regions (bool is_xstrand,
                                                    const Range *prim_range, PosType pos, PosType ref_len,
                                                    const Range *luft_range, PosType opos, PosType alt_len)
 {
     if (ref_len > MAX_LEN_REF_ALT_SWITCH_INDEL_BASED_ON_FLANKING || alt_len > MAX_LEN_REF_ALT_SWITCH_INDEL_BASED_ON_FLANKING)
-        return false; // INDEL too long to be considered for REF<>ALT switch on basis of flanking regions
+        return false; // INDEL too long to be considered for REF⇄ALT switch on basis of flanking regions
         
     if (!is_xstrand) 
         return is_same_refs (prim_range, pos + ref_len, luft_range, opos + alt_len, FLANKING_SEQ_LEN, false) &&
@@ -250,7 +250,7 @@ static inline LiftOverStatus vcf_refalt_lift_report_indel_outcome (VBlockVCFP vb
                                                                    int rep_len_prim, int rep_len_luft, bool all_same, int switch_alt_i, int maybe_switch_alt_i,
                                                                    PosType ref_len, PosType switch_alt_len, PosType maybe_switch_alt_len)
 {    
-    // we can lift a Insertion IF: either - all ALTs agree that it is REF_SAME ; or - single ALT and REF<>ALT switch
+    // we can lift a Insertion IF: either - all ALTs agree that it is REF_SAME ; or - single ALT and REF⇄ALT switch
     if (all_same) {
         IF_XSTRAND_FLIP_ANCHOR;
         LIFTOK (LO_OK_REF_SAME_INDEL, "INDEL REF unchanged " XSTRANDF, XSTRAND);
@@ -268,7 +268,7 @@ static inline LiftOverStatus vcf_refalt_lift_report_indel_outcome (VBlockVCFP vb
     REJECTIF (switch_alt_i >= 0, LO_REF_MULTIALT_SWITCH_INDEL, ALTF "Genozip limitation: " PRIMF " and ALT[%d] matches " LUFTF ", but can't switch in multi-allelic INDEL variant", 
               ALT, PRIM, switch_alt_i+1, LUFT);
 
-    // case: possibly a REF<>ALT switch, call based on flanking regions
+    // case: possibly a REF⇄ALT switch, call based on flanking regions
     if (maybe_switch_alt_i >= 0) {
         bool same_flanking_regions = vcf_refalt_lift_same_flanking_regions (is_xstrand, prim_range, pos, ref_len, luft_range, opos, maybe_switch_alt_len);
 
@@ -300,7 +300,7 @@ static bool vcf_refalt_is_REF_same_in_luft (VBlockVCFP vb, const char *ref, unsi
                                             const Range *luft_range, PosType opos)
 {
     // if LUFT and PRIMARY is not the same for ref_len bases: example: "GAC G" Primary: "GAC" 
-    // Luft=GTT: REF<>ALT switch: "G GAC"
+    // Luft=GTT: REF⇄ALT switch: "G GAC"
     char anchor = is_xstrand ? ref_base_by_pos (prim_range, pos + ref_len) : ref[0]; // if is_xstrand, we re-anchor REF to be right-anchored
     PosType anchor_opos = is_xstrand ? opos - ref_len : opos; 
 
@@ -325,7 +325,7 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, const char *ref, 
                     ALTF "Genozip limitation: REF changed in Deletion variant, but not to ALT. " PRIMF LUFTF, ALT, PRIM, LUFT); }
 
         // if the REF is not in the Luft range, we check if the flanking regions of the ALT in Luft are the same as REF's to decide
-        // whether this is a REF<>ALT switch
+        // whether this is a REF⇄ALT switch
         bool same_flanking_regions = vcf_refalt_lift_same_flanking_regions (is_xstrand, prim_range, pos, ref_len, luft_range, opos, 1);
 
         DEF_PRIM (ref_len + FLANKING_SEQ_LEN*2); 
@@ -335,7 +335,7 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, const char *ref, 
                   ALT, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN);
 
         LIFTOK (LO_OK_REF_ALT_SWITCH_INDEL, ALTF "REF<>ALT INDEL switch with matching flanking region: " PRIMF LUFTF "(shown with flanking %d on either side)", 
-                ALT, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN); // simple REF<>ALT switch - deletion already included in Luft
+                ALT, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN); // simple REF⇄ALT switch - deletion already included in Luft
     }
 
     // now we know that REF is stringwise the same as the reference, but we need to test for repeats
@@ -365,9 +365,9 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, const char *ref, 
         
         if (rep_len_luft == rep_len_prim - payload_len) {
             if (rep_len_luft >= payload_len)  // this is a region with repeats 
-                switch_alt_i = alt_i; // an ALT that is definitely an REF<>ALT switch
+                switch_alt_i = alt_i; // an ALT that is definitely an REF⇄ALT switch
             else
-                maybe_switch_alt_i = alt_i; // possible REF<>ALT switch without repeats - need more evidence by comparing flanking regions
+                maybe_switch_alt_i = alt_i; // possible REF⇄ALT switch without repeats - need more evidence by comparing flanking regions
         } 
     }
 
@@ -387,7 +387,7 @@ static LiftOverStatus vcf_refalt_lift_insertion (VBlockVCFP vb, const char *ref,
     unsigned rep_len_prim=0, rep_len_luft=0; 
 
     bool all_same=true;
-    int switch_alt_i=-1, maybe_switch_alt_i=-1; // the ALT number that is a REF<>ALT switch
+    int switch_alt_i=-1, maybe_switch_alt_i=-1; // the ALT number that is a REF⇄ALT switch
     for (unsigned alt_i=0; alt_i < num_alts; alt_i++) {
 
         rep_len_prim = rep_len_luft = 0; 
@@ -415,9 +415,9 @@ static LiftOverStatus vcf_refalt_lift_insertion (VBlockVCFP vb, const char *ref,
         
         if (rep_len_luft == rep_len_prim + payload_len) {
             if (rep_len_prim >= payload_len) // this is a region with repeats            
-                switch_alt_i = alt_i; // found an ALT that is definitely a REF<>ALT switch
+                switch_alt_i = alt_i; // found an ALT that is definitely a REF⇄ALT switch
             else
-                maybe_switch_alt_i = alt_i; // possible REF<>ALT switch without repeats - need more evidence by comparing flanking regions
+                maybe_switch_alt_i = alt_i; // possible REF⇄ALT switch without repeats - need more evidence by comparing flanking regions
         } 
     }
 
@@ -447,28 +447,44 @@ static LiftOverStatus vcf_refalt_lift_with_sym_allele (VBlockVCFP vb, const char
     return 0; // never reaches here
 }
 
-// when --chain: handle a complex variant - REF and at least one of the ALTs is longer than 1 base
+// when --chain: handle a complex variant (anything either than SNPs, left-anchored indels, complex rearrangements or symbolic ALTs)
 static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, const char *ref, unsigned ref_len, 
                                                unsigned num_alts, const char **alts, const unsigned *alt_lens, const char *alt, unsigned alt_len,
-                                               bool is_xstrand,
+                                               bool is_xstrand, bool is_left_anchored,
                                                const Range *prim_range, PosType pos, 
                                                const Range *luft_range, PosType opos)
 {
-    // case: complex variant - but REF unchanged 
+    // rejecting a non-left-anchored complex with xstrand, because vcf_lo_seg_ostatus_from_LUFT_or_PRIM can't tell if its a
+    // left-anchored indel vs a non-left-anchored complex
+    //
+    { DEF_LUFT (ref_len);
+      REJECTIF (is_xstrand && !is_left_anchored, LO_XSTRAND_NLA, 
+                ALTF "Genozip limitation: " LUFTF "strand reversal not supported for non-left-anchored indels", ALT, LUFT); }
+
+    // case: complex variant - but REF is unchanged (note: we don't check flanking regions, it is debatable if we should)
     if (vcf_refalt_is_REF_same_in_luft (vb, ref, ref_len, is_xstrand, prim_range, pos, luft_range, opos)) {
-        IF_XSTRAND_FLIP_ANCHOR;
-        LIFTOK0 (LO_OK_REF_SAME_INDEL, "REF unchanged - complex INDEL");
+        if (is_left_anchored) {
+            IF_XSTRAND_FLIP_ANCHOR;
+            LIFTOK0 (LO_OK_REF_SAME_INDEL, "REF unchanged - left-anchored complex INDEL");
+        }
+        else 
+            LIFTOK0 (LO_OK_REF_SAME_NLA, "REF unchanged - non-left-anchored COMPLEX variant");
     }
 
-    // case: complex variant - REF<>ALT switch - supported only if bi-allelic and not SV
-    if (num_alts==1) {
+    // case: complex variant - REF⇄ALT switch - supported only if bi-allelic and not SV
+    else if (num_alts==1) {
         if (is_same_seq (luft_range, opos, alts[0], alt_lens[0], is_xstrand) &&
             vcf_refalt_lift_same_flanking_regions (is_xstrand, prim_range, pos, ref_len, luft_range, opos, alt_lens[0])) {
-            IF_XSTRAND_FLIP_ANCHOR;
-            LIFTOK (LO_OK_REF_ALT_SWITCH_INDEL, ALTF "REF<>ALT switch, complex INDEL", ALT);
+            if (is_left_anchored) {
+                IF_XSTRAND_FLIP_ANCHOR;
+                LIFTOK (LO_OK_REF_ALT_SWITCH_INDEL, ALTF "REF<>ALT switch, left-anchored complex INDEL", ALT);
+            }
+            else
+                LIFTOK (LO_OK_REF_ALT_SWITCH_NLA, ALTF "REF<>ALT switch, non-left-anchored COMPLEX variant", ALT);
         }
     }
 
+    // case: complex variant - multiallelic REF⇄ALT switch - detect, but unsupported 
     else
         for (unsigned alt_i=0; alt_i < num_alts; alt_i++)
             if (is_same_seq (luft_range, opos, alts[alt_i], alt_lens[alt_i], is_xstrand) &&
@@ -479,7 +495,7 @@ static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, const char *ref, u
             }
 
     DEF_LUFT (ref_len);
-    REJECTIF (true, LO_NEW_ALLELE_INDEL, ALTF "Genozip limitation: " LUFTF "is a new allele", ALT, LUFT);
+    REJECTIF (true, is_left_anchored ? LO_NEW_ALLELE_INDEL : LO_NEW_ALLELE_NLA, ALTF "Genozip limitation: " LUFTF "is a new allele", ALT, LUFT);
 
     return 0; // never reaches here
 }
@@ -557,7 +573,8 @@ static inline bool vcf_refalt_is_left_anchored (const char *ref, const char **al
 // --chain: set oref and update ostatus
 // Analyzes the variant's REF, ALT relative to the Primary and Luft references and the chain file data
 // and returns ostatus, possibly also updating the rejects report. It doesn't seg.
-LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is_xstrand)
+LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is_xstrand,
+                                bool *is_left_anchored) // out - only relevant is return value is LO_IS_OK_INDEL()
 {
     PosType pos  = dl->pos[0];
     PosType opos = dl->pos[1];
@@ -568,11 +585,11 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     if (!opos) return LO_OK_REF_SAME_SNP; // POS==oPOS==0 and REF==oREF=='.'
 
     // note: as we're using external references, the range is always the entire contig, and range->first_pos is always 1.
-    const Range *prim_range = ref_seg_get_locked_range ((VBlockP)vb, prim_ref, dl->chrom_index[0], vb->chrom_name, vb->chrom_name_len, pos, 1, ENT (char, vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
+    const Range *prim_range = ref_seg_get_locked_range ((VBlockP)vb, prim_ref, dl->chrom[0], vb->chrom_name, vb->chrom_name_len, pos, 1, ENT (char, vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
     ASSVCF (prim_range, "Failed to find PRIM range for chrom=\"%.*s\"", vb->chrom_name_len, vb->chrom_name);
 
-    const Range *luft_range = ref_seg_get_locked_range ((VBlockP)vb, gref, dl->chrom_index[1], NULL, 0, opos, 1, ENT (char, vb->txt_data, vb->line_start), NULL);
-    ASSVCF (luft_range, "Failed to find LUFT range for chrom=%d", dl->chrom_index[1]);
+    const Range *luft_range = ref_seg_get_locked_range ((VBlockP)vb, gref, dl->chrom[1], NULL, 0, opos, 1, ENT (char, vb->txt_data, vb->line_start), NULL);
+    ASSVCF (luft_range, "Failed to find LUFT range for chrom=%d", dl->chrom[1]);
 
     str_toupper_(vb->main_refalt, ref, ref_len);
     str_toupper_(&vb->main_refalt[ref_len + 1], alt, alt_len); // +1 for \t
@@ -585,10 +602,6 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     bool is_single_base_alts = IS_SINGLE_BASE_ALTS (n_alts, alt_len); // All ALTs are a single character - SNPs or deletions
     bool is_snp = (ref_len == 1 && is_single_base_alts);
 
-    // verify that non-SNP variants are left-anchored (e.g. "A AG" is ok, "G AG" is not ok (since anchor base G is on the right)) 
-    REJECTIF (!is_snp && !vcf_refalt_is_left_anchored (ref, alts, n_alts), 
-              LO_NOT_LEFT_ANCHORED, ALTF "Genozip limitation: in non-SNP variants the first base must be the same for REF and all ALTs", ALT);
-
     // check that the whole REF is mapped in LUFT to the same alignment
     if (ref_len > 1) {
         uint32_t last_ref_aln_i;
@@ -596,14 +609,14 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
         LiftOverStatus last_ref_ostatus = vcf_lo_get_liftover_coords (vb, last_pos_in_ref, NULL, NULL, NULL, &last_ref_aln_i); // uses vb->chrom_node_index and POS->last_int
 
         // Exception: a Deletion that has the anchor base on the alignment, and the rest of REF entirely in the gap after the alignment - 
-        // is a REF<>ALT switch (currently handled only for the non-xstrand case)
+        // is a REF⇄ALT switch (currently handled only for the non-xstrand case)
         if (last_ref_ostatus == LO_NO_MAPPING_IN_CHAIN && 
             n_alts == 1 && alt_lens[0] == 1 && // a simple Deletion
             SAME_AS_LUFT_REF (ref[0]) && !is_xstrand &&
             chain_get_aln_last_pos (vb->pos_aln_i) == pos && 
             chain_get_aln_gap_after (vb->pos_aln_i) >= (ref_len-1)) 
-                return LO_OK_REF_ALT_SWITCH_INDEL;
-            // TO DO: handle this case (    
+                return LO_OK_REF_ALT_SWITCH_INDEL;   
+            // TO DO: 1. right-anchor on second aligntmnet 2. xstrand - anchor base on opposite alignments
 
         REJECTIF0 (LO_IS_REJECTED (last_ref_ostatus) || last_ref_aln_i != vb->pos_aln_i,
                    LO_NO_MAPPING_IN_CHAIN, "REF is not fully within a single alignment in the chain file");
@@ -620,7 +633,7 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     if (is_snp) 
         return vcf_refalt_lift_snp (vb, ref, 1, n_alts, alts, alt_lens, alt, alt_len, is_xstrand, prim_range, pos, luft_range, opos);
 
-    // case: VCF 4.2 complex rearrangements (i.e. with [ or ])) - Genozip cannot lift these
+    // case: complex rearrangements (i.e. with [ or ])) (see VCF spec) - Genozip cannot lift these
     REJECTIF (memchr (alt, '[', alt_len) || memchr (alt, ']', alt_len), 
               LO_COMPLEX_REARRANGEMENTS, ALTF "Genozip limitation: Rearrangements with breakends", ALT);
 
@@ -631,27 +644,24 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
         return vcf_refalt_lift_with_sym_allele (vb, ref, ref_len, n_alts, alts, alt_lens, alt, alt_len, is_xstrand, prim_range, pos, luft_range, opos);
     }
 
-    // case: deletion - defined as single-base ALTs - eg GAC G / GAC C / GAC A / GAC T / GAC A,G
-    if (ref_len > 1 && is_single_base_alts) 
+    *is_left_anchored = vcf_refalt_is_left_anchored (ref, alts, n_alts);
+
+    // case: deletion - defined as single-base ALTs - eg GAC G 
+    if (ref_len > 1 && is_single_base_alts && *is_left_anchored) 
         return vcf_refalt_lift_deletion (vb, ref, ref_len, n_alts, alts, alt, alt_len, is_xstrand, prim_range, pos, luft_range, opos); 
 
-    // case insertion - defined as single-base REF, and ALTs that are not all SNPs, eg. "A ACAG"  "A AC,ACA" "A GT,TC"
-    if (ref_len == 1 && !is_single_base_alts)
+    // case insertion - defined as single-base REF, and ALTs that are not all SNPs, eg. "A ACAG"  "A AC,ACA"
+    if (ref_len == 1 && !is_single_base_alts && *is_left_anchored)
         return vcf_refalt_lift_insertion (vb, ref, 1, n_alts, alts, alt_lens, alt, alt_len, is_xstrand, prim_range, pos, luft_range, opos);
     
-    // case: complex variant - REF *and* at least one of the ALTs are multi-base
-    if (ref_len > 1 && !is_single_base_alts)
-        return vcf_refalt_lift_complex (vb, ref, ref_len, n_alts, alts, alt_lens, alt, alt_len, is_xstrand, prim_range, pos, luft_range, opos);
-
-    ASSVCF (false, "unidentified variant type REF=%.*s ALT=%.*s", ref_len, ref, alt_len, alt);
-
-    return 0; // never reaches here
+    // case: complex variant - anything else 
+    return vcf_refalt_lift_complex (vb, ref, ref_len, n_alts, alts, alt_lens, alt, alt_len, is_xstrand, *is_left_anchored, prim_range, pos, luft_range, opos);
 }
 
 // other_REFALT special (other to main REF/ALT fields when segging --chain/primary/luft) snip consists of an integer followed by an optional nucleotide sequence:
 // -1 means "new REF" - sequence is new REF
 // 0  means - same REF - followed by an optional sequence of reanchoring / left-alignment (left alignment is implemented not implemented yet)
-// 1-(MAX_ALLELES-1) - REF<>ALT switch with these allele. likewise followed by an optional sequence of reanchoring / left-alignment
+// 1-(MAX_ALLELES-1) - REF⇄ALT switch with these allele. likewise followed by an optional sequence of reanchoring / left-alignment
 void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus ostatus, bool is_xstrand, unsigned add_bytes)
 {
     char snip[5] = { SNIP_SPECIAL, VCF_SPECIAL_other_REFALT };
@@ -667,7 +677,7 @@ void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus 
     else {        
         snip[snip_len++] = LO_IS_OK_SWITCH (ostatus) ? '1' : '0'; // currently, --chain only supports switch with the first ALT, but vcf_piz_special_other_REFALT has no such limit
 
-        // add re-anchoring for xstrand INDELS
+        // add re-anchoring for xstrand INDELS 
         if (is_xstrand && LO_IS_OK_INDEL(ostatus)) 
             snip[snip_len++] = vb->new_ref;
     }
@@ -688,6 +698,66 @@ static inline void vcf_refalt_shift_right (char *seq, unsigned seq_len, char *an
         memcpy (seq + anchor_len, seq, seq_len - anchor_len);
     
     memcpy (seq, anchor, MIN (seq_len, anchor_len));
+}
+
+// actuall reconstruct other REFALT
+static void vcf_reconstruct_other_REFALT_do (VBlockP vb, const char *snip, unsigned snip_len, bool is_xstrand,
+                                             const char *other_refalt, unsigned refalt_len, const char *other_refalt_ctx_name)
+{
+    // short-circuit the most common case of a "same" bi-allelic SNP
+    if (refalt_len == 3 && *snip == '0' && snip_len == 1 && !is_xstrand) {
+        RECONSTRUCT (other_refalt, refalt_len);
+        return;
+    }
+
+    char refalt[refalt_len]; // make private copy as ref_alt is in txt_data and will be overwritten
+    memcpy (refalt, other_refalt, refalt_len);
+
+    str_split (refalt, refalt_len, 2, '\t', ref_alt, true);
+    ASSPIZ (n_ref_alts, "expecting one tab in the %s snip: \"%.*s\"", other_refalt_ctx_name, refalt_len, other_refalt);
+
+    const char *ref = (char *)ref_alts[0]; unsigned ref_len = ref_alt_lens[0];  // assignments for code readability
+    const char *alt = (char *)ref_alts[1]; unsigned alt_len = ref_alt_lens[1]; 
+
+    str_split (alt, alt_len, alt_len == 1 ? 1 : 0, ',', alt, false); 
+
+    // case: we need to rev-comp
+    if (is_xstrand) {
+        str_revcomp ((char*)ref, ref_len);
+        for (unsigned alt_i = 0; alt_i < n_alts; alt_i++)
+            str_revcomp ((char*)alts[alt_i], alt_lens[alt_i]);
+    }
+
+    // parse snip - an integer followed by an optional nucleotide sequence
+    char *seq;
+    long allele = strtol (snip, &seq, 10);
+    unsigned seq_len = &snip[snip_len] - seq;
+
+    // case: we need to reanchor - right-shift and insert new left-anchor for all REF, ALTs 
+    if (seq_len && allele >= 0) {
+        vcf_refalt_shift_right ((char*)ref, ref_len, seq, seq_len); // snip contains new anchor
+        for (unsigned alt_i = 0; alt_i < n_alts; alt_i++)
+            vcf_refalt_shift_right ((char *)alts[alt_i], alt_lens[alt_i], seq, seq_len); // alts are pointers into alt
+    }
+
+    // case: REF⇄ALT switch. 
+    if (allele >= 1) {
+        SWAP (ref, alts[allele-1]);
+        SWAP (ref_len, alt_lens[allele-1]);
+    }
+
+    // case: new REF
+    else if (allele == -1) {
+        ref = seq;
+        ref_len = seq_len;
+    }
+
+    RECONSTRUCT_TABBED (ref, ref_len);
+    
+    for (unsigned alt_i = 0; alt_i < n_alts-1; alt_i++)
+        RECONSTRUCT_SEP (alts[alt_i], alt_lens[alt_i], ',');
+    
+    RECONSTRUCT (alts[n_alts-1], alt_lens[n_alts-1]); // last ALT
 }
 
 // Always called for reconstructing the "other" REFALT ("other" coordinates AT THE TIME OF SEGGING) (i.e. oREFALT if we segged a PRIMARY
@@ -714,62 +784,24 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_other_REFALT)
     unsigned refalt_len;
     reconstruct_peek (vb, other_refalt_ctx, &other_refalt, &refalt_len);
     
-    // short-circuit the most common case of a "same" bi-allelic SNP
-    if (refalt_len == 3 && *snip == '0' && snip_len == 1 && !is_xstrand) {
-        RECONSTRUCT (other_refalt, refalt_len);
-        return 0;
-    }
+    vcf_reconstruct_other_REFALT_do (vb, snip, snip_len, is_xstrand, other_refalt, refalt_len, other_refalt_ctx->name);
 
-    char refalt[refalt_len]; // make private copy as ref_alt is in txt_data and will be overwritten
-    memcpy (refalt, other_refalt, refalt_len);
-
-    str_split (refalt, refalt_len, 2, '\t', ref_alt, true);
-    ASSPIZ (n_ref_alts, "expecting one tab in the %s snip: \"%.*s\"", other_refalt_ctx->name, refalt_len, other_refalt);
-
-    const char *ref = (char *)ref_alts[0]; unsigned ref_len = ref_alt_lens[0];  // assignments for code readability
-    const char *alt = (char *)ref_alts[1]; unsigned alt_len = ref_alt_lens[1]; 
-
-    str_split (alt, alt_len, alt_len == 1 ? 1 : 0, ',', alt, false); 
-
-    // case: we need to rev-comp
-    if (is_xstrand) {
-        str_revcomp ((char*)ref, ref_len);
-        for (unsigned alt_i = 0; alt_i < n_alts; alt_i++)
-            str_revcomp ((char*)alts[alt_i], alt_lens[alt_i]);
-    }
-
-    // parse snip - an integer followed by an optional nucleotide sequence
-    char *seq;
-    long allele = strtol (snip, &seq, 10);
-    unsigned seq_len = &snip[snip_len] - seq;
-
-    // case: we need to reanchor - right-shift and insert new left-anchor for all REF, ALTs 
-    if (seq_len && allele >= 0) {
-        vcf_refalt_shift_right ((char*)ref, ref_len, seq, seq_len); // snip contains new anchor
-        for (unsigned alt_i = 0; alt_i < n_alts; alt_i++)
-            vcf_refalt_shift_right ((char *)alts[alt_i], alt_lens[alt_i], seq, seq_len); // alts are pointers into alt
-    }
-
-    // case: REF<>ALT switch. 
-    if (allele >= 1) {
-        SWAP (ref, alts[allele-1]);
-        SWAP (ref_len, alt_lens[allele-1]);
-    }
-
-    // case: new REF
-    else if (allele == -1) {
-        ref = seq;
-        ref_len = seq_len;
-    }
-
-    RECONSTRUCT_TABBED (ref, ref_len);
-    
-    for (unsigned alt_i = 0; alt_i < n_alts-1; alt_i++)
-        RECONSTRUCT_SEP (alts[alt_i], alt_lens[alt_i], ',');
-    
-    RECONSTRUCT (alts[n_alts-1], alt_lens[n_alts-1]); // last ALT
-    
     return false; // no new value
+}
+
+// When segging Luft line: convert REF\tALT from Luft to Primary, in-place, based on ostatus -
+// so we can calculate the tie-breaker. Called from vcf_seg_txt_line
+void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus)
+{
+    // "reconstruct" to vb->txt_data, overwriting current REF\tALT
+    uint64_t save_txt_len = vb->txt_data.len;
+    vb->txt_data.len = ENTNUM (vb->txt_data, vb->main_refalt);
+
+    vcf_reconstruct_other_REFALT_do ((VBlockP)vb, CTX(VCF_REFALT)->last_snip + 2, CTX(VCF_REFALT)->last_snip_len - 2, 
+                                     *CTX(VCF_oXSTRAND)->last_snip == 'X', 
+                                     vb->main_refalt, vb->main_ref_len+1+vb->main_alt_len, CTX(VCF_oREFALT)->name);
+
+    vb->txt_data.len = save_txt_len; // restore
 }
 
 // called for reconstructing the REF field of the INFO/LIFTOVER and INFO/LIFTBACK fields. It reconstructs the full REFALT and then discards the ALT.

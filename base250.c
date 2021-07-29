@@ -36,8 +36,8 @@ WordIndex base250_decode (const uint8_t **str, bool advance, const char *ctx_nam
         case BASE250_MOST_FREQ1: ADVANCE(1); return 1;
         case BASE250_MOST_FREQ2: ADVANCE(1); return 2;
         case BASE250_ONE_UP:     ADVANCE(1); return WORD_INDEX_ONE_UP;
-        case BASE250_EMPTY_SF:   ADVANCE(1); return WORD_INDEX_EMPTY_SF;
-        case BASE250_MISSING_SF: ADVANCE(1); return WORD_INDEX_MISSING_SF;
+        case BASE250_EMPTY_SF:   ADVANCE(1); return WORD_INDEX_EMPTY;
+        case BASE250_MISSING_SF: ADVANCE(1); return WORD_INDEX_MISSING;
         default : {
             WordIndex value = (*str)[0] * 16777216 + (*str)[1] * 65536 + (*str)[2] * 256 + (*str)[3]; // careful not to use BGEN32 as string might not be aligned to word boundary
             ADVANCE(4);

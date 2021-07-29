@@ -30,7 +30,7 @@ typedef struct {
 static Buffer regions_buf = EMPTY_BUFFER; // all regions together
 static Buffer *chregs = NULL;     // one entry per chrom
 
-static uint32_t num_chroms;
+static WordIndex num_chroms; // signed value as its compared to chrom
 
 static bool is_negative_regions = false; // true if the user used ^ to negate the regions
 
@@ -390,7 +390,8 @@ bool regions_is_site_included (VBlockP vb)
     if (chrom == WORD_INDEX_NONE ||  
         (z_dual_coords && ((vb->vb_coords==DC_LUFT) != flag.luft))) return true; // always include all rejected variants in the vcf header
 
-    ASSERT (chrom >= 0 && chrom < num_chroms, "chrom=%d out of range", chrom);
+    ASSERT (chrom >= 0 && chrom < num_chroms, "chrom=%d is out of range: chrom_did_i=%u vb_i=%u vb->line_i=%"PRIu64, 
+            chrom, chrom_did_i, vb->vblock_i, vb->line_i);
 
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom];
@@ -404,7 +405,7 @@ bool regions_is_site_included (VBlockP vb)
 // PIZ: check if a range (chrom,start_pos,end_pos) overlaps with an included region. used when loading reference ranges.
 bool regions_is_range_included (WordIndex chrom_word_index, PosType start_pos, PosType end_pos, bool completely_included)
 {
-    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
+    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d is out of range", chrom_word_index);
 
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];

@@ -33,7 +33,7 @@ WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Contex
     
     WordIndex node_index = ctx_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
-    ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
+    ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY || node_index == WORD_INDEX_MISSING, 
             "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u",  
             ctx->name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_nodes.len);
     

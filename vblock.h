@@ -169,8 +169,9 @@ typedef struct VBlock {
 
 // VBLOCK_COMMON_LINES_ZIP needs to be at the begining of *ZipDataLine of data types that support dual-coordinates.
 #define VBLOCK_COMMON_LINES_ZIP \
-    WordIndex chrom_index[2];   /* Seg: enter as node_index ; Merge: convert to word_index */ \
-    PosType pos[2];             /* arrays of [2] - { primary-coord, luft-coord } */ \
+    WordIndex chrom[2];   /* Seg: enter as node_index ; Merge: convert to word_index */ \
+    PosType pos[2], end;  /* arrays of [2] - { primary-coord, luft-coord } */ \
+    uint32_t tie_breaker; /* tie-breaker in case chrom_idnex and pos are the same */ 
 
 typedef struct ZipDataLine {
     VBLOCK_COMMON_LINES_ZIP

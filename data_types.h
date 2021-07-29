@@ -179,7 +179,7 @@ typedef enum { KRAKEN_CU, KRAKEN_QNAME, KRAKEN_TAXID, KRAKEN_SEQLEN, KRAKEN_KMER
 
 typedef struct DataTypeFields {
     const unsigned num_fields;
-    const DidIType pos, test_regions, nonref, ochrom, eol, toplevel; // the fields, or DID_I_NONE if this data type doesn't have them
+    const DidIType pos, nonref, ochrom, eol, toplevel; // the fields, or DID_I_NONE if this data type doesn't have them
     const char *names[MAX_NUM_FIELDS_PER_DATA_TYPE]; // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed (names are not longer than 8=DICT_ID_LEN as the code assumes it)
 } DataTypeFields;
 
@@ -187,20 +187,20 @@ typedef struct DataTypeFields {
 
 #define TOPLEVEL "TOPLEVEL"
 #define DATA_TYPE_FIELDS { \
-/* num_fields        pos         test_regions    nonref        ochrom,     eol          toplevel names (including extend fields) - max 8 characters - 2 first chars must be unique within each data type (for dict_id_to_did_i_map) */ \
-  {NUM_REF_FIELDS,   DID_I_NONE, DID_I_NONE,     DID_I_NONE,   DID_I_NONE, DID_I_NONE,  DID_I_NONE,       { "CONTIG", }, }, \
-  {NUM_VCF_FIELDS,   VCF_POS,    VCF_POS,        DID_I_NONE,   VCF_oCHROM, VCF_EOL,     VCF_TOPLEVEL,     { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL, "oCHROM", "oPOS", "oREFALT", "oXSTRAND", "COORDS", "o$TATUS", "C0PYPOS", "LIFT_REF", "CoPYSTAT", "ToPLUFT", "LINE_NUM", } }, \
-  {NUM_SAM_FIELDS,   SAM_POS,    SAM_POS,        SAM_NONREF,   DID_I_NONE, SAM_EOL,     SAM_TOPLEVEL,     { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "QUAL", "DOMQRUNS", "EOL", "BAM_BIN", TOPLEVEL, "TOP2BAM", "TOP2FQ", "E2:Z", "2NONREF", "N2ONREFX", "2GPOS", "S2TRAND", "U2:Z", "D2OMQRUN", "TAXID" } }, \
-  {NUM_FASTQ_FIELDS, DID_I_NONE, DID_I_NONE,     FASTQ_NONREF, DID_I_NONE, FASTQ_E1L,   FASTQ_TOPLEVEL,   { "CONTIG", "DESC", "E1L", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "E2L", "QUAL", "DOMQRUNS", TOPLEVEL, "TAXID" } }, \
-  {NUM_FASTA_FIELDS, DID_I_NONE, FASTA_LINEMETA, FASTA_NONREF, DID_I_NONE, FASTA_EOL,   FASTA_TOPLEVEL,   { "CONTIG", "LINEMETA", "EOL", "DESC", "COMMENT", "NONREF", "NONREF_X", TOPLEVEL, "TAXID" } }, \
-  {NUM_GFF3_FIELDS,  GFF3_START, GFF3_START,     DID_I_NONE,   DID_I_NONE, GFF3_EOL,    GFF3_TOPLEVEL,    { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "EOL", TOPLEVEL, "COMMENT" } }, \
-  {NUM_ME23_FIELDS,  ME23_POS,   ME23_POS,       DID_I_NONE,   DID_I_NONE, ME23_EOL,    ME23_TOPLEVEL,    { "CHROM", "POS", "ID", "GENOTYPE", "EOL", TOPLEVEL, "TOP2VCF" } }, \
-  {NUM_SAM_FIELDS,   SAM_POS,    SAM_POS,        SAM_NONREF,   DID_I_NONE, SAM_EOL,     SAM_TOP2BAM,      { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "QUAL", "DOMQRUNS", "EOL", "BAM_BIN", TOPLEVEL, "TOP2BAM", "TOP2FQ", "E2:Z", "2NONREF", "N2ONREFX", "2GPOS", "S2TRAND", "U2:Z", "D2OMQRUN", "TAXID" } }, \
-  {NUM_VCF_FIELDS,   VCF_POS,    VCF_POS,        DID_I_NONE,   VCF_oCHROM, VCF_EOL,     VCF_TOPLEVEL,     { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL, "oCHROM", "oPOS", "oREFALT", "oXSTRAND", "COORDS", "o$TATUS", "C0PYPOS", "LIFT_REF", "CoPYSTAT", "ToPLUFT", "LINE_NUM", } }, \
-  {NUM_GNRIC_FIELDS, DID_I_NONE, DID_I_NONE,     DID_I_NONE,   DID_I_NONE, DID_I_NONE,  GNRIC_TOPLEVEL,   { "DATA", TOPLEVEL } }, \
-  {NUM_PHY_FIELDS,   DID_I_NONE, DID_I_NONE,     DID_I_NONE,   DID_I_NONE, PHY_EOL,     PHY_TOPLEVEL,     { "ID", "SEQ", "EOL", TOPLEVEL, "TOP2FA" } }, \
-  {NUM_CHAIN_FIELDS, DID_I_NONE, CHAIN_NAMELUFT, DID_I_NONE,   DID_I_NONE, CHAIN_EOL,   CHAIN_TOPLEVEL,   { "NaMELUFT", "SrNDLUFT", "StRTLUFT", "EnDLUFT", "SiZELUFT", "NAMEPRIM", "SRNDPRIM", "STRTPRIM", "ENDPRIM", "SIZEPRIM", "CHAIN", "SCORE", "ID", "VERIFIED", "SET", "SIZE", "GAPS", "EOL", TOPLEVEL, "SEP" } }, /* unique first 2 letters */ \
-  {NUM_KRAKEN_FIELDS,DID_I_NONE, DID_I_NONE,     DID_I_NONE,   DID_I_NONE, KRAKEN_EOL,  KRAKEN_TOPLEVEL,  { "CU", "QNAME", "TAXID", "SEQLEN", "KMERS", "KMERTAX", "KMERLEN", "EOL", TOPLEVEL, "TOP2HASH" } }, \
+/* num_fields        pos         nonref        ochrom,     eol          toplevel names (including extend fields) - max 8 characters - 2 first chars must be unique within each data type (for dict_id_to_did_i_map) */ \
+  {NUM_REF_FIELDS,   DID_I_NONE, DID_I_NONE,   DID_I_NONE, DID_I_NONE,  DID_I_NONE,       { "CONTIG", }, }, \
+  {NUM_VCF_FIELDS,   VCF_POS,    DID_I_NONE,   VCF_oCHROM, VCF_EOL,     VCF_TOPLEVEL,     { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL, "oCHROM", "oPOS", "oREFALT", "oXSTRAND", "COORDS", "o$TATUS", "C0PYPOS", "LIFT_REF", "CoPYSTAT", "ToPLUFT", "LINE_NUM", } }, \
+  {NUM_SAM_FIELDS,   SAM_POS,    SAM_NONREF,   DID_I_NONE, SAM_EOL,     SAM_TOPLEVEL,     { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "QUAL", "DOMQRUNS", "EOL", "BAM_BIN", TOPLEVEL, "TOP2BAM", "TOP2FQ", "E2:Z", "2NONREF", "N2ONREFX", "2GPOS", "S2TRAND", "U2:Z", "D2OMQRUN", "TAXID" } }, \
+  {NUM_FASTQ_FIELDS, DID_I_NONE, FASTQ_NONREF, DID_I_NONE, FASTQ_E1L,   FASTQ_TOPLEVEL,   { "CONTIG", "DESC", "E1L", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "E2L", "QUAL", "DOMQRUNS", TOPLEVEL, "TAXID" } }, \
+  {NUM_FASTA_FIELDS, DID_I_NONE, FASTA_NONREF, DID_I_NONE, FASTA_EOL,   FASTA_TOPLEVEL,   { "CONTIG", "LINEMETA", "EOL", "DESC", "COMMENT", "NONREF", "NONREF_X", TOPLEVEL, "TAXID" } }, \
+  {NUM_GFF3_FIELDS,  GFF3_START, DID_I_NONE,   DID_I_NONE, GFF3_EOL,    GFF3_TOPLEVEL,    { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "EOL", TOPLEVEL, "COMMENT" } }, \
+  {NUM_ME23_FIELDS,  ME23_POS,   DID_I_NONE,   DID_I_NONE, ME23_EOL,    ME23_TOPLEVEL,    { "CHROM", "POS", "ID", "GENOTYPE", "EOL", TOPLEVEL, "TOP2VCF" } }, \
+  {NUM_SAM_FIELDS,   SAM_POS,    SAM_NONREF,   DID_I_NONE, SAM_EOL,     SAM_TOP2BAM,      { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "NONREF_X", "GPOS", "STRAND", "QUAL", "DOMQRUNS", "EOL", "BAM_BIN", TOPLEVEL, "TOP2BAM", "TOP2FQ", "E2:Z", "2NONREF", "N2ONREFX", "2GPOS", "S2TRAND", "U2:Z", "D2OMQRUN", "TAXID" } }, \
+  {NUM_VCF_FIELDS,   VCF_POS,    DID_I_NONE,   VCF_oCHROM, VCF_EOL,     VCF_TOPLEVEL,     { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL, "oCHROM", "oPOS", "oREFALT", "oXSTRAND", "COORDS", "o$TATUS", "C0PYPOS", "LIFT_REF", "CoPYSTAT", "ToPLUFT", "LINE_NUM", } }, \
+  {NUM_GNRIC_FIELDS, DID_I_NONE, DID_I_NONE,   DID_I_NONE, DID_I_NONE,  GNRIC_TOPLEVEL,   { "DATA", TOPLEVEL } }, \
+  {NUM_PHY_FIELDS,   DID_I_NONE, DID_I_NONE,   DID_I_NONE, PHY_EOL,     PHY_TOPLEVEL,     { "ID", "SEQ", "EOL", TOPLEVEL, "TOP2FA" } }, \
+  {NUM_CHAIN_FIELDS, DID_I_NONE, DID_I_NONE,   DID_I_NONE, CHAIN_EOL,   CHAIN_TOPLEVEL,   { "NaMELUFT", "SrNDLUFT", "StRTLUFT", "EnDLUFT", "SiZELUFT", "NAMEPRIM", "SRNDPRIM", "STRTPRIM", "ENDPRIM", "SIZEPRIM", "CHAIN", "SCORE", "ID", "VERIFIED", "SET", "SIZE", "GAPS", "EOL", TOPLEVEL, "SEP" } }, /* unique first 2 letters */ \
+  {NUM_KRAKEN_FIELDS,DID_I_NONE, DID_I_NONE,   DID_I_NONE, KRAKEN_EOL,  KRAKEN_TOPLEVEL,  { "CU", "QNAME", "TAXID", "SEQLEN", "KMERS", "KMERTAX", "KMERLEN", "EOL", TOPLEVEL, "TOP2HASH" } }, \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)

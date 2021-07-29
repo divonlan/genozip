@@ -917,7 +917,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         }
 
         if (!sf_lens[i])
-            seg_by_ctx (vb, "", 0, ctx, 0); // generates WORD_INDEX_EMPTY_SF
+            seg_by_ctx (vb, "", 0, ctx, 0); // generates WORD_INDEX_EMPTY
 
         // note: cannot use switch bc dict_id_* are variables, not constants
 
@@ -1024,7 +1024,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
 
     // missing subfields - defined in FORMAT but missing (not merely empty) in sample
     for (unsigned i=n_sfs; i < con_nitems (*samples); i++)  
-        seg_by_ctx (vb, NULL, 0, ctxs[i], 0); // generates WORD_INDEX_MISSING_SF
+        seg_by_ctx (vb, NULL, 0, ctxs[i], 0); // generates WORD_INDEX_MISSING
 
     return n_sfs - 1; // number of colons
 }

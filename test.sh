@@ -396,7 +396,7 @@ batch_dvcf()
 {
     batch_print_header
 
-    local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.chr22.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz test.NA12878.sorted.vcf)
+    local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.clinvar37.vcf.gz test.chr22.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
     local file
 
     # prepare chain file
@@ -1025,9 +1025,9 @@ if (( $1 <= 22 )) ; then  batch_external_cram          ; fi
 if (( $1 <= 23 )) ; then  batch_external_bcf           ; fi
 if (( $1 <= 24 )) ; then  batch_external_unzip         ; fi
 if (( $1 <= 25 )) ; then  batch_reference              ; fi
-if (( $1 <= 26 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 27 )) ; then  batch_genols                 ; fi
-if (( $1 <= 28 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 26 )) ; then  batch_genols                 ; fi
+if (( $1 <= 27 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 28 )) ; then  batch_make_reference         ; fi
 
 printf "\nALL GOOD!\n"
 

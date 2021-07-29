@@ -240,13 +240,13 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
         *prev_word_index = n;
     }
 
-    else if (node_index == WORD_INDEX_MISSING_SF) {
+    else if (node_index == WORD_INDEX_MISSING) {
         NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_MISSING_SF;
         *prev_word_index = node_index;
         if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", word_i);
     }
     
-    else if (node_index == WORD_INDEX_EMPTY_SF) {
+    else if (node_index == WORD_INDEX_EMPTY) {
         NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_EMPTY_SF;
         *prev_word_index = node_index;
         if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", word_i);

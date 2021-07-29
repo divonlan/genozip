@@ -424,5 +424,5 @@ CONTAINER_FILTER_FUNC (gff3_piz_filter)
 {
     if (item < 1 || item == 10) return true; // we filter all items except COMMENT and EOL
 
-    return vb->last_index (GFF3_COMMENT) == WORD_INDEX_MISSING_SF; // reconstruct non-comment contexts only if this isn't a comment line
+    return vb->last_index (GFF3_COMMENT) == WORD_INDEX_MISSING; // reconstruct non-comment contexts only if this isn't a comment line
 }

@@ -14,6 +14,7 @@ typedef struct {
     uint32_t start_line, num_lines;
     WordIndex chrom_wi;
     PosType start_pos, end_pos;
+    uint32_t tie_breaker;
 } LineInfo;
 
 // --------

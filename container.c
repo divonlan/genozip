@@ -218,7 +218,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                                   (  !vb->translation.trans_containers ||   // not translating OR... 
                                      !IS_CI_SET (CI_TRANS_NOR)); // no prohibition on reconstructing when translating
 
-                recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING_SF
+                recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING
 
                 // sum up items' values if needed
                 if (ctx->flags.store == STORE_INT)
@@ -234,7 +234,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                     DT_FUNC(vb, translator)[item->translator](vb, item_ctx, reconstruction_start, recon_len, false);  
             }            
 
-            // case: WORD_INDEX_MISSING_SF - delete previous item's separator if it has one (used by SAM_OPTIONAL - sam_seg_optional_all)
+            // case: WORD_INDEX_MISSING - delete previous item's separator if it has one (used by SAM_OPTIONAL - sam_seg_optional_all)
             if (recon_len == -1 && i > 0 && !con->keep_empty_item_sep && !CI_ITEM_HAS_FLAG(item-1))  
                 vb->txt_data.len -= num_preceding_seps;
 
@@ -264,10 +264,6 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             if (vb->translation.trans_containers && IS_CI_SET (CI_TRANS_MOVE))
                 vb->txt_data.len += (uint8_t)item->seperator[1];
 
-            // test for exclusion of the line due to --regions
-            if (flag.regions && con->is_toplevel && item_ctx->did_i == DTF(test_regions) && 
-                !regions_is_site_included (vb))
-                vb->drop_curr_line = "regions";
         } // items loop
 
         // remove final seperator, if we need to (introduced v12)
@@ -291,6 +287,10 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
         if (con->is_toplevel) {
+
+            // filter by --regions
+            if (!vb->drop_curr_line && flag.regions && !regions_is_site_included (vb))
+                vb->drop_curr_line = "regions";
 
             // filter by --lines
             if (flag.lines_first >= 0) {

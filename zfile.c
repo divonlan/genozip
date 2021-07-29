@@ -198,8 +198,8 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
         WordIndex word_index = base250_decode (&data, true, "zfile_show_b250_section");
         switch (word_index) {
             case WORD_INDEX_ONE_UP     : iprint0 ("ONE_UP "); break;
-            case WORD_INDEX_EMPTY_SF   : iprint0 ("EMPTY "); break;
-            case WORD_INDEX_MISSING_SF : iprint0 ("MISSING "); break;
+            case WORD_INDEX_EMPTY   : iprint0 ("EMPTY "); break;
+            case WORD_INDEX_MISSING : iprint0 ("MISSING "); break;
             default: iprintf ("%u ", word_index);
         }
     }

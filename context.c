@@ -173,7 +173,7 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool i
             vb->line_i, vb->vblock_i, ctx->name, is_pair ? "(PAIR) ": "", b250->len);
 
     // case: a Container item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
-    if (word_index == WORD_INDEX_MISSING_SF) {
+    if (word_index == WORD_INDEX_MISSING) {
         if (snip) {
             *snip = NULL; // ignore this dict_id - don't even output a separator
             *snip_len = 0;
@@ -181,7 +181,7 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool i
     }
 
     // case: a subfield snip is empty, eg "AB::CD" (VCF GT Data) or "OA:Z:chr13,52863337,-,56S25M70S,0,;" (SAM OA optional field)
-    else if (word_index == WORD_INDEX_EMPTY_SF) { 
+    else if (word_index == WORD_INDEX_EMPTY) { 
         if (snip) {
             *snip = ""; // pointer to static empty string
             *snip_len = 0;
@@ -287,7 +287,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vctx,
     if (!snip_len) {
         if (is_new) *is_new = false;
         return (!snip || (segging_vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (vctx->dict_id) && *snip != ':')) 
-                ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
+                ? WORD_INDEX_MISSING : WORD_INDEX_EMPTY;
     }
 
     WordIndex node_index_if_new = vctx->ol_nodes.len + vctx->nodes.len;
@@ -354,7 +354,7 @@ int64_t ctx_decrement_count (VBlock *vb, Context *ctx, WordIndex node_index)
 
     int64_t *count_p = ENT (int64_t, ctx->counts, node_index);
 
-    if (node_index < 0) return 0; // WORD_INDEX_EMPTY_SF or WORD_INDEX_MISSING_SF
+    if (node_index < 0) return 0; // WORD_INDEX_EMPTY or WORD_INDEX_MISSING
      
     ASSERT (*count_p >= 1, "count[%s]=%"PRId64" too low to be decremented", ctx->name, *count_p);
     (*count_p)--;

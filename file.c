@@ -741,11 +741,11 @@ static bool file_open_z (File *file)
             struct stat sb;
             int cause=0, stat_errno=0;
             if (stat (file->name, &sb)) {
-                cause = 5; // stat failed
+                cause = 6; // stat failed
                 stat_errno = errno;
             }
 
-            if ((sb.st_mode & S_IFMT) != S_IFREG) cause=6; // not regular file
+            if ((sb.st_mode & S_IFMT) != S_IFREG) cause=7; // not regular file
 
             if (!cause)
                 file->file = fopen (file->name, READ);
@@ -755,20 +755,22 @@ static bool file_open_z (File *file)
             uint32_t magic;
             if (  cause ||
                   (cause = 1 * !file->file) ||
-                  (cause = 2 * !file_seek (file, -(int)sizeof (magic), SEEK_END, true)) || 
-                  (cause = 3 * !fread (&magic, sizeof (magic), 1, file->file)) ||
-                  (cause = 4 * (BGEN32 (magic) != GENOZIP_MAGIC))) {
+                  (cause = 2 * !sb.st_size) ||
+                  (cause = 3 * !file_seek (file, -(int)sizeof (magic), SEEK_END, true)) || 
+                  (cause = 4 * !fread (&magic, sizeof (magic), 1, file->file)) ||
+                  (cause = 5 * (BGEN32 (magic) != GENOZIP_MAGIC))) {
 
                 FCLOSE (file->file, file_printname (file));
 
                 if (flag.validate == VLD_REPORT_INVALID) flag.validate = VLD_INVALID_FOUND; 
 
                 const char *cause_str = cause==1 ? strerror (errno)
-                                      : cause==2 ? "file_seek failed"
-                                      : cause==3 ? "fread failed"
-                                      : cause==4 ? "Not a valid genozip file (bad magic)"
-                                      : cause==5 ? strerror (stat_errno)
-                                      : cause==6 ? "Not a regular file"
+                                      : cause==2 ? "file is empty"
+                                      : cause==3 ? "file_seek failed"
+                                      : cause==4 ? "fread failed"
+                                      : cause==5 ? "Not a valid genozip file (bad magic)"
+                                      : cause==6 ? strerror (stat_errno)
+                                      : cause==7 ? "Not a regular file"
                                       :            "no error";
 
                 if (flag.multiple_files) {

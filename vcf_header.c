@@ -146,9 +146,9 @@ static void vcf_header_consume_contig (const char *contig_name, unsigned contig_
 
 static bool vcf_header_extract_contigs (const char *line, unsigned line_len, void *dst_contigs_buf, void *unused2, unsigned unused3)
 {
-    bool is_contig    = LINEIS ("##contig=");
-    bool is_lo_contig = LINEIS (HK_LUFT_CONTIG);
-    bool is_lb_contig = LINEIS (HK_PRIM_CONTIG);
+    const bool is_contig    = LINEIS ("##contig=");
+    const bool is_lo_contig = LINEIS (HK_LUFT_CONTIG);
+    const bool is_lb_contig = LINEIS (HK_PRIM_CONTIG);
 
     if (!is_contig && !is_lo_contig && !is_lb_contig) goto done;
 
@@ -174,7 +174,7 @@ static bool vcf_header_extract_contigs (const char *line, unsigned line_len, voi
         vcf_header_consume_contig (contig_name, contig_name_len, length, false);
 
     // case: --chain: collect all vcf_header_liftover_dst_contigs. non sorted/unique buf for now, will fix in vcf_header_zip_update_to_dual_coords
-    if (chain_is_loaded && !flag.rejects_coord && LINEIS ("##contig="))
+    if (chain_is_loaded && !flag.rejects_coord && is_contig)
         chain_append_all_luft_contig_index (contig_name, contig_name_len, (Buffer *)dst_contigs_buf);
 
 done:
@@ -538,6 +538,25 @@ static void vcf_header_add_FORMAT_lines (Buffer *txt_header)
     buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_data");
 }
 
+static void vcf_add_all_primary_ref_contigs_to_header (Buffer *txt_header)
+{
+    txt_header->len -= vcf_field_name_line.len; // remove field name line
+
+    ConstBufferP prim_contigs_buf, prim_contigs_dict;
+    ref_contigs_get (prim_ref, &prim_contigs_dict, &prim_contigs_buf);
+    ARRAY (const RefContig, ctgs, (*prim_contigs_buf));
+
+    for (uint64_t i=0; i < ctgs_len; i++) {
+        const char *contig_name = ENT (char, *prim_contigs_dict, ctgs[i].char_index);
+        bufprintf (evb, txt_header, VCF_CONTIG_FMT"\n", ctgs[i].snip_len, contig_name, ctgs[i].max_pos);
+
+        chain_append_all_luft_contig_index (contig_name, ctgs[i].snip_len, &vcf_header_liftover_dst_contigs);
+    }
+
+    // add back the field name (#CHROM) line
+    buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_data");
+}
+
 static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
 {
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
@@ -547,6 +566,10 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     
     // handle contig lines
     vcf_header_handle_contigs (txt_header);
+
+    // in liftover, if header has no contigs, add reference contigs and derived ocontigs
+    if (chain_is_loaded && !flag.rejects_coord && !txtheader_get_contigs()) 
+        vcf_add_all_primary_ref_contigs_to_header (txt_header);
 
     // add PP and/or PL INFO lines if needed
     if ((flag.GP_to_PP || flag.GL_to_PL) && !flag.rejects_coord)

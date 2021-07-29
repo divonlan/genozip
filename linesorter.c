@@ -69,27 +69,18 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
     for (uint32_t line_i=0 ; line_i < vb->lines.len ; line_i++) {
         ZipDataLine *dl = (ZipDataLine *)(&vb->lines.data[dl_size * line_i]);
         PosType pos = dl->pos[is_luft];
-        WordIndex chrom_word_index = node_word_index (vb, chrom_did_i, dl->chrom_index[is_luft]);
+        WordIndex chrom_word_index = node_word_index (vb, chrom_did_i, dl->chrom[is_luft]);
 
-        if (chrom_word_index == WORD_INDEX_NONE) {
-            // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_filter_line if not sorted)
-        }
-
-        // special case (eg GVCF) - this line is exactly one position after previous line - just add to previous record
-        else if (last_pos >= 1 && chrom_word_index == last_chrom_word_index && pos == last_pos+1) {
-            LineInfo *last = LASTENT (LineInfo, txt_file->line_info[is_luft]);
-            last->end_pos  = pos;
-            last->num_lines++; 
-        }
-
-        else
+        // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_filter_line if not sorted)
+        if (chrom_word_index != WORD_INDEX_NONE) 
             NEXTENT (LineInfo, txt_file->line_info[is_luft]) = (LineInfo){
-                .vblock_i   = vb->vblock_i,
-                .start_line = line_i,
-                .num_lines  = 1,
-                .chrom_wi   = chrom_word_index,
-                .start_pos  = pos,
-                .end_pos    = pos
+                .vblock_i    = vb->vblock_i,
+                .start_line  = line_i,
+                .num_lines   = 1,
+                .chrom_wi    = chrom_word_index,
+                .start_pos   = pos,
+                .end_pos     = dl->end > pos ? dl->end : pos,
+                .tie_breaker = dl->tie_breaker
             };
         
         last_pos = pos;
@@ -160,22 +151,21 @@ static int linesorter_line_cmp (const void *a_, const void *b_)
     // case: different chrome: order by chrom
     if (a->chrom_wi != b->chrom_wi) return a->chrom_wi - b->chrom_wi;
 
-    // case: same chrom, different pos - order by pos (note: at this point pos ranges are gapless)
-    if (a->end_pos < b->start_pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
-    if (b->end_pos < a->start_pos) return +1; // b is smaller
+    // case: same chrom, different pos - order by start_pos
+    if (a->start_pos < b->start_pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
+    if (b->start_pos < a->start_pos) return +1; // b is smaller
 
-    // case: either has multiple pos values
-    // eg {chrom=2,pos=207237509-207237510,nlines=2} vs {chrom=2,pos=207237510-207237510,nlines=1} no order by ^ but yes by:
-    if (a->start_pos != a->end_pos || b->start_pos != b->end_pos) {
-        if (a->end_pos == b->start_pos) return -1; // a is smaller (the last item of a overlaps with the first item of b)
-        if (b->end_pos == a->start_pos) return +1; // b is smaller
-    }
+    // case: same chrom, same start_pos - order by end pos
+    if (a->end_pos < b->end_pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
+    if (b->end_pos < a->end_pos) return +1; // b is smaller
 
-    // same chrom and pos ranges overlap (not expected in normal VCFs) - sort by vb then line number
-    if (a->vblock_i != b->vblock_i)
-        return a->vblock_i - b->vblock_i;
+    // same chrom and pos ranges - sort by tie_breaker
+    if (a->tie_breaker < b->tie_breaker) return -1; // a is smaller (don't use substraction as its unsigned 32b)
+    if (b->tie_breaker < a->tie_breaker) return +1; // b is smaller
 
-    return (int32_t)a->start_line - (int32_t)b->start_line;
+    WARN_ONCE("FYI: Some lines have identical chrom_index=%d, overlapping POS=[%"PRId64",%"PRId64"] and identical tie-breaker - they may appear in inconsistent order",
+               a->chrom_wi, MAX (a->start_pos, b->start_pos), MIN (a->end_pos, b->end_pos));
+    return 0; // undeterministic sorting, hopefully this doesn't happen too often
 }
 
 static void linesorter_get_final_index_i (Buffer *line_info, Buffer *vb_info, Buffer *index_buf)
