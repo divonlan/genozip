@@ -34,6 +34,10 @@ typedef struct {
     uint32_t seq_len;                         // length of SEQ and QUAL within vb->txt_data (they are identical per FASTQ spec)
 } ZipDataLineFASTQ;
 
+// Used by Seg
+static char copy_desc_snip[30];
+static unsigned copy_desc_snip_len;
+
 // IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb 
 typedef struct VBlockFASTQ {
     VBLOCK_COMMON_FIELDS
@@ -65,25 +69,23 @@ void fastq_vb_destroy_vb (VBlockFASTQ *vb)
 // TXTFILE stuff
 //-----------------------
 
-// returns true if txt_data[txt_i] is the end of a FASTQ line (= block of 4 lines in the file); -1 if out of data
+// returns true if txt_data[txt_i] (which is a \n) is the end of a FASTQ record (= block of 4 lines in the file); -1 if out of data
 static inline int fastq_is_end_of_line (VBlock *vb, uint32_t first_i, int32_t txt_i) // index of a \n in txt_data
 {
-#   define IS_NL_BEFORE_QUAL_LINE(i) \
-        ((i > 3) && ((txt[i-2] == '\n' && txt[i-1] == '+') || /* \n line ending case */ \
-                     (txt[i-3] == '\n' && txt[i-2] == '+' && txt[i-1] == '\r'))) /* \r\n line ending case */
-    
     ARRAY (char, txt, vb->txt_data);
 
-    // if we're not at the end of the data - we can just look at the next character
-    // if it is a @ then that @ is a new record EXCEPT if the previous character is + and then
-    // @ is actually a quality value... (we check two previous characters, as the previous one might be \r)
-    if (txt_i < vb->txt_data.len-1)
-        return txt[txt_i+1] == '@' && !IS_NL_BEFORE_QUAL_LINE(txt_i);
+    // if we are not at the EOF and the next char is not '@', then this is for sure not the end of the FASTQ record
+    if (txt_i < vb->txt_data.len-1 && txt[txt_i+1] != '@') return false; 
 
-    // if we're at the end of the line, we scan back to the previous \n and check if it is at the +
-    for (int32_t i=txt_i-1; i >= first_i; i--) 
-        if (txt[i] == '\n') 
-            return IS_NL_BEFORE_QUAL_LINE(i);
+    // if at the end of the data or at the end of a line where the next char is '@'. Verify that the previous line
+    // is the '+' line, to prevent the '@' we're seeing actually the first quality score in QUAL, or the file not ending after the quality line
+ 
+    // move two \n's back - the char after is expected to be a '+'
+    unsigned count_nl = 0;
+    for (int32_t i=txt_i-1; i >= first_i; i--) {
+        if (txt[i] == '\n') count_nl++;
+        if (count_nl == 2) return txt[i+1] == '+';
+    }
 
     return -1; 
 }
@@ -98,7 +100,7 @@ int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
         if (vb->txt_data.data[*i] == '\n')
             switch (fastq_is_end_of_line (vb, first_i, *i)) {
                 case true  : return vb->txt_data.len-1 - *i; // end of line
-                case false : continue;                      // not end of line, continue searching
+                case false : continue;                       // not end of line, continue searching
                 default    : goto out_of_data;  
             }
     }
@@ -155,10 +157,9 @@ void fastq_zip_read_one_vb (VBlockP vb)
 static void fastq_get_optimized_desc_read_name (VBlockFASTQ *vb)
 {
     vb->optimized_desc = MALLOC (strlen (txt_file->basename) + 30); // leave room for the line number to follow
-    vb->optimized_desc[0] = '@';
-    strcpy (&vb->optimized_desc[1], txt_file->basename);
-    file_get_raw_name_and_type (&vb->optimized_desc[1], NULL, NULL); // remove file type extension
-    vb->optimized_desc_len = strlen (vb->optimized_desc) + 1; // +1 :
+    strcpy (vb->optimized_desc, txt_file->basename);
+    file_get_raw_name_and_type (vb->optimized_desc, NULL, NULL); // remove file type extension
+    vb->optimized_desc_len = strlen (vb->optimized_desc) + 1; // +1 for ':'
     vb->optimized_desc[vb->optimized_desc_len-1] = ':';
 
     // replace '.' in the filename with '-' as '.' is a separator in seg_compound_field and would needless inflate the number of contexts
@@ -172,6 +173,9 @@ void fastq_zip_initialize (void)
     // reset lcodec for STRAND and GPOS, as these may change between PAIR_1 and PAIR_2 files
     ZCTX(FASTQ_STRAND)->lcodec = CODEC_UNKNOWN;
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;
+
+    copy_desc_snip_len = sizeof copy_desc_snip;
+    seg_prepare_snip_other (SNIP_OTHER_COPY, dict_id_fields[FASTQ_DESC], 0, 0, copy_desc_snip, &copy_desc_snip_len);
 }
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
@@ -243,19 +247,30 @@ void fastq_seg_finalize (VBlockP vb)
         .filter_items   = true,
         .filter_repeats = true,
         .callback       = true,
-        .nitems_lo      = 7,
+        .nitems_lo      = 8,
         .items          = { 
             { .dict_id = (DictId)dict_id_fields[FASTQ_DESC],     },
             { .dict_id = (DictId)dict_id_fields[FASTQ_E1L],      }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
             { .dict_id = (DictId)dict_id_fields[FASTQ_SQBITMAP], },
-            { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      .seperator = "+" }, // + is the "separator" after the 2nd end-of-line
+            { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      },
+            { .dict_id = (DictId)dict_id_fields[FASTQ_LINE3],    }, // added in 12.0.14, before '+' was a separator of the previous E2L
             { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      },
             { .dict_id = (DictId)dict_id_fields[FASTQ_QUAL],     },
             { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      } 
         }
     };
 
-    container_seg_by_ctx (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
+    // prefixes in this container were added in 12.0.14, before, '@' was part of DESC and '+' was a separator
+    static char prefixes[] = { CON_PREFIX_SEP,        // initial
+                               CON_PREFIX_SEP,        // terminator for empty container-wide prefix
+                               '@', CON_PREFIX_SEP,   // DESC prefix
+                               CON_PREFIX_SEP,        // empty E1L line prefix
+                               CON_PREFIX_SEP,        // empty SQBITMAP line prefix
+                               CON_PREFIX_SEP,        // empty E2L line prefix
+                               '+', CON_PREFIX_SEP,   // third line prefix
+                               CON_PREFIX_SEP      }; // END of prefixes
+
+    container_seg_by_ctx (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, sizeof (prefixes), 2 * vb->lines.len); // account for the '@' and '+' - one of each for each line
 }
 
 bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -312,18 +327,7 @@ bool fastq_piz_read_one_vb (VBlockP vb_, Section sl)
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint32_t pair_vb_i=0;
     bool i_am_pair_2 = vb && writer_get_pair (vb->vblock_i, &pair_vb_i) == 2;
-/*
-    if (flag.grep) {
-        // in case of this is a paired fastq file, get just the pair_1 data that is needed to resolve the grep
-        if (i_am_pair_2) {
-            vb->grep_stages = GS_TEST; // tell piz_is_skip_section to skip decompressing sections not needed for determining the grep
-            fastq_read_pair_1_data (vb_, pair_vb_i, true);
-        }
 
-        // if we're grepping we we uncompress and reconstruct the DESC from the main thread, and terminate here if this VB is to be skipped
-        if (!piz_test_grep (vb_)) return false; // also updates vb->grep_stages
-    }
-*/
     // in case of this is a paired fastq file, get all the pair_1 data not already fetched for the grep above
     if (i_am_pair_2) 
         fastq_read_pair_1_data (vb_, pair_vb_i, true);
@@ -343,66 +347,65 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb->line_i);
 
-    const char *next_field, *field_start=line_start;
-    unsigned field_len=0;
+    // the leading @ - just verify it (it will be included in D0ESC subfield)
+    ASSSEG0 (*line_start != '\n', line_start, "Invalid FASTQ file format: unexpected newline");
+
+    ASSSEG (*line_start == '@', line_start, "Invalid FASTQ file format: expecting description line to start with @ but it starts with %c",
+            *line_start);
+
+    const char *FASTQ_DESC_str = line_start + 1; // skip the '@' - its already included in the container prefix
     char separator;
 
-    int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - line_start);
-
-    // the leading @ - just verify it (it will be included in D0ESC subfield)
-    ASSSEG0 (*field_start != '\n', field_start, "Invalid FASTQ file format: unexpected newline");
-
-    ASSSEG (*field_start == '@', field_start, "Invalid FASTQ file format: expecting description line to start with @ but it starts with %c",
-            *field_start);
-
+    int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - FASTQ_DESC_str);
+    
     // DESC - the description/id line is vendor-specific. example:
     // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG (<-- this is Illumina format)
     // See here for details of Illumina subfields: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
-    next_field = seg_get_next_line (vb, field_start, &len, &field_len, has_13, "DESC");
+    unsigned FASTQ_DESC_len;
+    const char *FASTQ_SEQ_str = seg_get_next_line (vb, FASTQ_DESC_str, &len, &FASTQ_DESC_len, has_13, "DESC");
  
     if (kraken_is_loaded) {
-        unsigned qname_len = strcspn (field_start + 1, " \t\r\n"); // +1 to skip the '@'
+        unsigned qname_len = strcspn (FASTQ_DESC_str, " \t\r\n"); 
 
-        unsigned taxid_found = kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, field_start + 1, qname_len, false);
+        unsigned taxid_found = kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, FASTQ_DESC_str, qname_len, false);
 
         // if not found tax id for this read, try again, perhaps removing /1 or /2
         if (!taxid_found) {
-            if (qname_len > 2 && field_start[qname_len-2] == '/' &&
-                (field_start[qname_len-1] == '1' ||field_start[qname_len-1] == '2'))
+            if (qname_len > 2 && FASTQ_DESC_str[qname_len-2] == '/' &&
+                (FASTQ_DESC_str[qname_len-1] == '1' || FASTQ_DESC_str[qname_len-1] == '2'))
                 qname_len -= 2;
 
-            kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, field_start + 1, qname_len, true); // this fail if missing
+            kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, FASTQ_DESC_str, qname_len, true); // this fails if missing
         }
     }
 
     // if flag.optimize_DESC is on, we replace the description with filename:line_i 
-    unsigned unoptimized_len = 0; // 0 unless optimized
+    unsigned optimized_len = 0; 
     if (flag.optimize_DESC) {
-        unoptimized_len = field_len;
-        field_start = vb->optimized_desc;
-        field_len = vb->optimized_desc_len + str_int (vb->first_line + vb->line_i, &vb->optimized_desc[vb->optimized_desc_len]);   
-
-        vb->recon_size -= unoptimized_len - field_len;
+        optimized_len  = vb->optimized_desc_len + str_int (vb->first_line + vb->line_i, &vb->optimized_desc[vb->optimized_desc_len]);   
+        vb->recon_size -= FASTQ_DESC_len - optimized_len;
     }
 
     // we segment it using / | : and " " as separators. 
     static SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
-    seg_compound_field ((VBlockP)vb, CTX(FASTQ_DESC), field_start, field_len, arg, 0, 0);
+    seg_compound_field ((VBlockP)vb, CTX(FASTQ_DESC), 
+                        flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
+                        flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len, 
+                        arg, 0, 0);
     SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line
-    const char *seq_start = next_field;
-    dl->seq_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (vb, next_field, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &dl->seq_len, &separator, has_13, "SEQ");
+    dl->seq_data_start = ENTNUM (vb->txt_data, FASTQ_SEQ_str);
+    const char *FASTQ_LINE3_str = seg_get_next_item (vb, FASTQ_SEQ_str, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &dl->seq_len, &separator, has_13, "SEQ");
 
     // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
     if (flag.ref_use_aligner) 
-        aligner_seg_seq ((VBlockP)vb, CTX(FASTQ_SQBITMAP), seq_start, dl->seq_len);
+        aligner_seg_seq ((VBlockP)vb, CTX(FASTQ_SQBITMAP), FASTQ_SEQ_str, dl->seq_len);
 
     else {
         Context *nonref_ctx = CTX(FASTQ_NONREF);
-        buf_alloc_old ((VBlockP)vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), CTX_GROWTH, "contexts->local"); 
-        buf_add (&nonref_ctx->local, seq_start, dl->seq_len);
+        buf_alloc ((VBlockP)vb, &nonref_ctx->local, 0, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), char, CTX_GROWTH, "contexts->local"); 
+        buf_add (&nonref_ctx->local, FASTQ_SEQ_str, dl->seq_len);
     }
 
     // Add LOOKUP snip with seq_len
@@ -414,29 +417,53 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 
     SEG_EOL (FASTQ_E2L, true);
 
-    // PLUS - next line is expected to be a "+" (note: we don't seg the +, it is recorded a separator in the top level Container)
-    GET_LAST_ITEM (plus);
-    ASSSEG (*field_start=='+' && field_len==1, field_start, "Invalid FASTQ file format: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\"",
-            field_len, field_start);
+    // PLUS - next line is expected to be a "+", and be either empty or a copy of the DESC line (except for the '@' / '+' prefix)
+    ASSSEG (*FASTQ_LINE3_str == '+', FASTQ_LINE3_str, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it starts with a '%c'", *FASTQ_LINE3_str);
+    FASTQ_LINE3_str++; len--; // skip the prefix
+
+    unsigned FASTQ_LINE3_len;
+    const char *FASTQ_QUAL_str = seg_get_next_line (vb, FASTQ_LINE3_str, &len, &FASTQ_LINE3_len, has_13, "LINE3");
+
+    // line3 can be either empty, or a copy of DESC.
+    if (!FASTQ_LINE3_len) 
+        seg_by_did_i (vb, "", 0, FASTQ_LINE3, 0);
+
+    else if (FASTQ_LINE3_len == FASTQ_DESC_len && !memcmp (FASTQ_LINE3_str, FASTQ_DESC_str, FASTQ_DESC_len)) {
+
+        // if --optimize-DESC, we always produce an empty line.
+        if (flag.optimize_DESC) {
+            seg_by_did_i (vb, "", 0, FASTQ_LINE3, 0);
+            vb->recon_size -= FASTQ_DESC_len;
+        }
+        else 
+            seg_by_did_i (vb, copy_desc_snip, copy_desc_snip_len, FASTQ_LINE3, (flag.optimize_DESC ? optimized_len : FASTQ_LINE3_len));
+    }
+
+    else 
+        ASSSEG (false, FASTQ_LINE3_str, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
+                FASTQ_LINE3_len+1, FASTQ_QUAL_str-1);
 
     SEG_EOL (FASTQ_E2L, true); // account for ascii-10
 
     // QUAL - just get the whole line and make sure its length is the same as SEQ
-    dl->qual_data_start = next_field - vb->txt_data.data;
-    GET_LAST_ITEM (SAM_QUAL);
+    dl->qual_data_start = ENTNUM (vb->txt_data, FASTQ_QUAL_str);
+
+    unsigned FASTQ_QUAL_len;
+    const char *after = seg_get_next_item (vb, FASTQ_QUAL_str, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &FASTQ_QUAL_len, &separator, has_13, "QUAL"); \
+
     CTX(FASTQ_QUAL)->local.len += dl->seq_len;
     CTX(FASTQ_QUAL)->txt_len   += dl->seq_len;
 
     // End Of Line    
     SEG_EOL (FASTQ_E2L, true);
 
-    ASSSEG (str_is_in_range (field_start, field_len, 33, 126), field_start, "Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
-            field_len, field_start);
+    ASSSEG (str_is_in_range (FASTQ_QUAL_str, FASTQ_QUAL_len, 33, 126), FASTQ_QUAL_str, "Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
+            FASTQ_QUAL_len, FASTQ_QUAL_str);
 
-    ASSSEG (field_len == dl->seq_len, field_start, "Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
-            dl->seq_len, field_len, dl->seq_len, seq_start, field_len, field_start);
+    ASSSEG (FASTQ_QUAL_len == dl->seq_len, FASTQ_QUAL_str, "Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
+            dl->seq_len, FASTQ_QUAL_len, dl->seq_len, FASTQ_SEQ_str, FASTQ_QUAL_len, FASTQ_QUAL_str);
  
-    return next_field;
+    return after;
 }
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
@@ -493,7 +520,6 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     if (flag.count && sections_has_dict_id (st) &&
          (dict_id.num != dict_id_fields[FASTQ_TOPLEVEL] && 
          (dict_id.num != dict_id_fields[FASTQ_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
-//         (dict_id.num != dict_id_fields[FASTQ_DESC]     || (!kraken_is_loaded && !flag.grep)) && 
          (dict_id.num != dict_id_fields[FASTQ_DESC]     || !kraken_is_loaded) && 
          (dict_id.num != dict_id_fields[FASTQ_SQBITMAP] || !flag.bases) && 
          (dict_id.num != dict_id_fields[FASTQ_NONREF]   || !flag.bases) && 
@@ -501,7 +527,6 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
          (dict_id.num != dict_id_fields[FASTQ_GPOS]     || !flag.bases) && 
          (dict_id.num != dict_id_fields[FASTQ_STRAND]   || !flag.bases) && 
          (!dict_id_is_fastq_desc_sf(dict_id)            || !kraken_is_loaded))) 
-//         (!dict_id_is_fastq_desc_sf(dict_id)            || (!kraken_is_loaded && !flag.grep)))) 
         return true;
 
     return false;
@@ -614,7 +639,7 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
             vb->drop_curr_line = "taxid";
         
         else if (kraken_is_loaded && flag.kraken_taxid >= 0) {
-            const char *qname = last_txt (vb, FASTQ_DESC) + 1; // +1 to skip the "@"
+            const char *qname = last_txt (vb, FASTQ_DESC) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
             unsigned qname_len = strcspn (qname, " \t\n\r");
 
             if (!kraken_is_included_loaded (vb, qname, qname_len)) 

@@ -636,10 +636,10 @@ batch_genocat_tests()
 
     # FASTQ genocat tests
     file=$TESTDIR/basic.fq
-    test_count_genocat_lines $file "--header-only" `grep @ $file | wc -l` 
-    test_count_genocat_lines $file "--downsample 2" $(( 4 * `grep @ $file | wc -l` / 2 )) 
-    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave" $(( 4 * `grep @ $file | wc -l` * 2 )) 
-    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave --downsample=5,4" $(( 4 * `grep @ $file | wc -l` / 5 * 2 )) 
+    test_count_genocat_lines $file "--header-only" `grep + $file | wc -l` 
+    test_count_genocat_lines $file "--downsample 2" $(( 4 * `grep + $file | wc -l` / 2 )) 
+    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave" $(( 4 * `grep + $file | wc -l` * 2 )) 
+    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave --downsample=5,4" $(( 4 * `grep + $file | wc -l` / 5 * 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--grep PRFX --header-only" 2
 
     # test --interleave and with --grep

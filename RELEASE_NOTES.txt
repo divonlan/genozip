@@ -481,3 +481,8 @@ g. Much improved website genozip.com
 12.0.13
 - Option change: --grep for fastq now tests the entire read, not just the description
 - Option change: --interleaved now has an optional paramter --interleave=either or --interleave=both (default: both) describing how to handle in case of subsetting with eg --grep
+
+12.0.14
+- FASTQ: support files where the 3rd line is a copy of the 1st line, except with '+' prefix instead of '@'
+- DVCF: a. lift-over of complex indels ; b. consistent sorting of lines that have the same CHROM/POS c. alt chrom names also if VCF has no contigs in header
+- snips with len > 512K (technical improvement)

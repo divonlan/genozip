@@ -283,7 +283,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         // call callback if needed now that repeat reconstruction is done (always callback for top level)
         if (con->callback || (con->is_toplevel && DTP (container_cb)))
             DT_FUNC(vb, container_cb)(vb, ctx->dict_id, con->is_toplevel, rep_i, con->repeats, rep_reconstruction_start, 
-                    AFTERENT (char, vb->txt_data) - rep_reconstruction_start);
+                    AFTERENT (char, vb->txt_data) - rep_reconstruction_start, prefixes, prefixes_len);
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
         if (con->is_toplevel) {

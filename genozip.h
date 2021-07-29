@@ -174,7 +174,8 @@ typedef uint8_t TranslatorId;
 #define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item, bool *reconstruct)
 
 // called after reconstruction of each repeat, IF Container.callback or Container.is_top_level is set
-#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, unsigned num_reps, char *recon, int32_t recon_len)
+#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, unsigned num_reps, \
+                                           char *recon, int32_t recon_len, const char *prefixes, uint32_t prefixes_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 

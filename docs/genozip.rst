@@ -221,7 +221,7 @@ Examples:
                      
 *FASTQ optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
 
-.. option:: --optimize-DESC  Replaces the description line with @filename:read_number.
+.. option:: --optimize-DESC  Replaces the description line with @filename:read_number. Also - if the 3rd line (the '+' line) contains a copy of the description it is shorten to just '+'.
                      
                      | Example: ``@A00488:61:HMLGNDSXX:4:1101:1561:1000 2:N:0:CTGAAGCT+ATAGAGGC`` -> ``@sample.fq.gz:100`` (100 is the read sequential number within this fastq file)
                      |
