@@ -595,9 +595,8 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
     // END is an alias of POS
     seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | SPF_UNLIMIED_DELTA, 0, end_str, end_len, 0, end_len);
 
-    // add END to dl for sorting. it is used only in case chrom and pos are identical
-    PosType end = vb->last_int (VCF_POS); 
-    DATA_LINE (vb->line_i)->end = end;
+    // add end_delta to dl for sorting. it is used only in case chrom and pos are identical
+    DATA_LINE (vb->line_i)->end_delta = vb->last_delta (VCF_POS);
 
     // case --chain: if we have lifted-over POS (as primary POS field or in INFO/LIFTBACK), 
     // check that lifting-over of END is delta-encoded and is lifted over to the same, non-xstrand, Chain alignment, and reject if not
@@ -605,6 +604,7 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
 
         bool is_xstrand = vb->last_index (VCF_oXSTRAND); // set in vcf_lo_seg_generate_INFO_DVCF
         PosType aln_last_pos = chain_get_aln_last_pos (vb->pos_aln_i); 
+        PosType end = vb->last_int (VCF_POS); 
 
         // case: we don't yet handle END translation in case of a reverse strand
         if (is_xstrand)            

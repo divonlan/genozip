@@ -79,7 +79,7 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
                 .num_lines   = 1,
                 .chrom_wi    = chrom_word_index,
                 .start_pos   = pos,
-                .end_pos     = dl->end > pos ? dl->end : pos,
+                .end_pos     = pos + MAX (0, dl->end_delta),
                 .tie_breaker = dl->tie_breaker
             };
         
