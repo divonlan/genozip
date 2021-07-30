@@ -45,7 +45,7 @@ static void vcf_seg_prepare_minus_snip (DictId dict_id_a, DictId dict_id_b, char
     *snip_len = 2 + base64_encode ((uint8_t *)two_dicts, sizeof (two_dicts), &snip[2]);
 }
 
-void vcf_seg_samples_initialize (void) 
+void vcf_samples_zip_initialize (void) 
 {
     static bool done = false;
     if (done) return; // already initialized (in previous files)

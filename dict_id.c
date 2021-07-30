@@ -34,7 +34,11 @@ uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_
 
          // tags from VEP (Varient Effect Predictor) and similar tools
          dict_id_INFO_CSQ=0, dict_id_INFO_vep=0, dict_id_INFO_DP_HIST=0, dict_id_INFO_GQ_HIST=0, 
-         dict_id_INFO_AGE_HISTOGRAM_HET=0, dict_id_INFO_AGE_HISTOGRAM_HOM=0; 
+         dict_id_INFO_AGE_HISTOGRAM_HET=0, dict_id_INFO_AGE_HISTOGRAM_HOM=0,
+
+         // tags from clinvar
+         dict_id_INFO_CLNDN=0, dict_id_INFO_CLNHGVS=0, dict_id_INFO_CLNHGVS_pos=0, dict_id_INFO_CLNHGVS_refalt=0, dict_id_INFO_ALLELEID=0,
+         dict_id_INFO_RS=0;
    
 // SAM stuff
 uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
@@ -153,6 +157,14 @@ void dict_id_initialize (DataType data_type)
         dict_id_INFO_CSQ      = dict_id_make ("CSQ",      3, DTYPE_VCF_INFO).num;   // "Consequences" 
         dict_id_INFO_MAX_AF   = dict_id_make ("MAX_AF",   6, DTYPE_VCF_INFO).num;   // highest allele frequency observed in any population from 1000 genomes, ESP or gnomAD
         
+        // clinvar
+        dict_id_INFO_ALLELEID = dict_id_make ("ALLELEID", 8, DTYPE_VCF_INFO).num;   // <ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
+        dict_id_INFO_CLNDN    = dict_id_make ("CLNDN",    5, DTYPE_VCF_INFO).num;   // <ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
+        dict_id_INFO_RS       = dict_id_make ("RS",       2, DTYPE_VCF_INFO).num;   // <ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
+        dict_id_INFO_CLNHGVS  = dict_id_make ("CLNHGVS",  7, DTYPE_VCF_INFO).num;   // <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
+        dict_id_INFO_CLNHGVS_pos    = dict_id_make ("CpLNHGVS", 8, DTYPE_VCF_INFO).num;
+        dict_id_INFO_CLNHGVS_refalt = dict_id_make ("CrLNHGVS", 8, DTYPE_VCF_INFO).num;
+
         // ExAC fields
         dict_id_INFO_DP_HIST  = dict_id_make ("DP_HIST",  7, DTYPE_VCF_INFO).num;   // from ExAC: Depth (DP) histogram in 20 equal intervals between 0-100 : See https://www.biorxiv.org/content/biorxiv/suppl/2015/10/30/030338.DC1/030338-1.pdf
         dict_id_INFO_GQ_HIST  = dict_id_make ("GQ_HIST",  7, DTYPE_VCF_INFO).num;   // from ExAC: Genotype Quality (GQ) histogram in 20 equal intervals between 0-100

@@ -54,6 +54,9 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_INFO_CSQ, dict_id_INFO_vep, dict_id_INFO_DP_HIST, dict_id_INFO_GQ_HIST, 
                 dict_id_INFO_AGE_HISTOGRAM_HET, dict_id_INFO_AGE_HISTOGRAM_HOM,
 
+                // tags from clinvar
+                dict_id_INFO_ALLELEID, dict_id_INFO_CLNDN, dict_id_INFO_CLNHGVS, dict_id_INFO_CLNHGVS_pos, dict_id_INFO_CLNHGVS_refalt, dict_id_INFO_RS,
+
                 // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
                 dict_id_OPTION_AM, dict_id_OPTION_AS, dict_id_OPTION_CM, dict_id_OPTION_E2, dict_id_OPTION_LB, dict_id_OPTION_FI, 
                 dict_id_OPTION_H0, dict_id_OPTION_H1, dict_id_OPTION_H2, dict_id_OPTION_MQ, dict_id_OPTION_NH, dict_id_OPTION_NM, 

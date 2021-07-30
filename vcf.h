@@ -68,7 +68,8 @@ extern void vcf_samples_add  (const char *samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_INFO_SVLEN, \
                       vcf_piz_special_FORMAT_DS, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, vcf_piz_special_MINUS,  \
-                      vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE }
+                      vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE, \
+                      vcf_piz_special_INFO_HGVS_POS, vcf_piz_special_INFO_HGVS_REFALT }
 SPECIAL (VCF, 0,  main_REFALT,  vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,       vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2,  AC,           vcf_piz_special_INFO_AC);
@@ -76,13 +77,15 @@ SPECIAL (VCF, 3,  SVLEN,        vcf_piz_special_INFO_SVLEN);
 SPECIAL (VCF, 4,  DS,           vcf_piz_special_FORMAT_DS);
 SPECIAL (VCF, 5,  BaseCounts,   vcf_piz_special_INFO_BaseCounts);
 SPECIAL (VCF, 6,  SF,           vcf_piz_special_INFO_SF);
-SPECIAL (VCF, 7,  MINUS,        vcf_piz_special_MINUS);        // added v12
-SPECIAL (VCF, 8,  LIFT_REF,     vcf_piz_special_LIFT_REF);     // added v12
-SPECIAL (VCF, 9,  COPYSTAT,     vcf_piz_special_COPYSTAT);     // added v12
-SPECIAL (VCF, 10, other_REFALT, vcf_piz_special_other_REFALT); // added v12
-SPECIAL (VCF, 11, COPYPOS,      vcf_piz_special_COPYPOS);      // added v12
-SPECIAL (VCF, 12, ALLELE,       vcf_piz_special_ALLELE);       // added v12
-#define NUM_VCF_SPECIAL 13
+SPECIAL (VCF, 7,  MINUS,        vcf_piz_special_MINUS);            // added v12.0.0
+SPECIAL (VCF, 8,  LIFT_REF,     vcf_piz_special_LIFT_REF);         // added v12.0.0
+SPECIAL (VCF, 9,  COPYSTAT,     vcf_piz_special_COPYSTAT);         // added v12.0.0
+SPECIAL (VCF, 10, other_REFALT, vcf_piz_special_other_REFALT);     // added v12.0.0
+SPECIAL (VCF, 11, COPYPOS,      vcf_piz_special_COPYPOS);          // added v12.0.0
+SPECIAL (VCF, 12, ALLELE,       vcf_piz_special_ALLELE);           // added v12.0.0
+SPECIAL (VCF, 13, HGVS_POS,     vcf_piz_special_INFO_HGVS_POS);    // added v12.0.15
+SPECIAL (VCF, 14, HGVS_REFALT,  vcf_piz_special_INFO_HGVS_REFALT); // added v12.0.15
+#define NUM_VCF_SPECIAL 15
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

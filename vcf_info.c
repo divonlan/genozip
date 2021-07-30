@@ -22,6 +22,10 @@ typedef struct { char name[64];
                  unsigned name_len, value_len; 
                  DictId dict_id;   } InfoItem;
 
+void vcf_info_zip_initialize (void) 
+{
+}
+
 //--------
 // INFO/DP
 // -------
@@ -718,6 +722,88 @@ done:
     return false; // no new value
 }
 
+// ------------
+// INFO/CLNHGVS
+// ------------
+
+// <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
+// handles the common case of SNPs: "NC_000023.10:g.154507173T>G"
+static bool vcf_seg_INFO_CLNHGVS (VBlockVCF *vb, ContextP ctx, const char *value, unsigned value_len)
+{
+    if (vb->main_ref_len != 1 || vb->main_alt_len != 1)
+        goto fail; // not a SNP
+
+    if (ctx_encountered_in_line (vb, dict_id_INFO_END, NULL)) 
+        goto fail; // we can't use this if there is an END before CLNHGVS, as it will change last_int(VCF_POS) during reconstruction
+
+    // data in variant
+    PosType pos = DATA_LINE (vb->line_i)->pos[0];
+    char pos_str[30];
+    unsigned pos_str_len = str_int (pos, pos_str);
+
+    if (value_len < 3 + pos_str_len) goto fail;
+
+    const char *v = &value[value_len - 3];
+    if (v[0] != vb->main_refalt[0] || v[1] != '>' || v[2] != vb->main_refalt[2]) goto fail; // REF/ALT differs
+
+    v -= pos_str_len;
+    if (memcmp (v, pos_str, pos_str_len)) goto fail; // POS differs
+
+    SmallContainer con = { 
+        .repeats   = 1,
+        .nitems_lo = 2,
+        .items = { { .dict_id = (DictId)dict_id_INFO_CLNHGVS_pos    },
+                   { .dict_id = (DictId)dict_id_INFO_CLNHGVS_refalt } }
+     }; 
+
+    // temporarily surround prefix by separators, and seg container with prefix
+    SAFE_ASSIGNx (&value[-1], CON_PREFIX_SEP, 1);
+    SAFE_ASSIGNx (v,          CON_PREFIX_SEP, 2);
+
+    container_seg_by_ctx (vb, ctx, (ContainerP)&con, &value[-1], v - value + 2, value_len);
+
+    SAFE_RESTOREx(1);
+    SAFE_RESTOREx(2);
+
+    // seg special snips
+    Context *hgvs_pos_ctx    = ctx_get_ctx (vb, dict_id_INFO_CLNHGVS_pos);
+    Context *hgvs_refalt_ctx = ctx_get_ctx (vb, dict_id_INFO_CLNHGVS_refalt);
+    
+    hgvs_pos_ctx->st_did_i = hgvs_refalt_ctx->st_did_i = ctx->did_i; // consolidate stats
+
+    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_POS    }), 2, hgvs_pos_ctx,    0);
+    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_REFALT }), 2, hgvs_refalt_ctx, 0);
+    
+    return false;
+
+fail:
+    return true; // not yet segged
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_POS)
+{
+    if (vb->vb_coords == DC_PRIMARY)
+        RECONSTRUCT (last_txt (vb, VCF_POS), vb->last_txt_len (VCF_POS)); // faster than RECONSTRUCT_INT
+    
+    else { // if reconstructing Luft, VCF_POS just consumed and last_int set if in Luft coords (see top_luft container)
+        RECONSTRUCT_INT (vb->last_int (VCF_POS));
+    }
+    
+    return false; // no new value
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_REFALT)
+{
+    const char *refalt;
+    reconstruct_peek (vb, CTX(VCF_REFALT), &refalt, NULL); // this special works only on SNPs, so length is always 3
+
+    RECONSTRUCT1 (refalt[0]); // this might overwrite the "peeked" data, but that's ok
+    RECONSTRUCT1 ('>');
+    RECONSTRUCT1 (refalt[2]);
+
+    return false; // no new value
+}
+
 // --------------
 // INFO container
 // --------------
@@ -922,6 +1008,19 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
 
     else if (dict_id.num == dict_id_INFO_DP4) 
         CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', 0, false, true));
+
+    // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
+    else if (dict_id.num == dict_id_INFO_CLNDN) 
+        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, '|', 0, false, false));
+
+    // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
+    else if (dict_id.num == dict_id_INFO_CLNHGVS)
+        not_yet_segged = vcf_seg_INFO_CLNHGVS (vb, ctx, value, value_len);
+
+    // ##INFO=<ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
+    // ##INFO=<ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
+    else if (dict_id.num == dict_id_INFO_ALLELEID || dict_id.num == dict_id_INFO_RS)
+        CALL (seg_integer_or_not (vb, ctx, value, value_len, value_len));
 
     if (not_yet_segged) 
         seg_by_ctx (vb, value, value_len, ctx, value_len);

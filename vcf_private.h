@@ -151,6 +151,7 @@ extern const char *dvcf_status_names[];
 #define LO_IS_OK_INDEL(ost) ((ost)==LO_OK_REF_SAME_INDEL || (ost)==LO_OK_REF_ALT_SWITCH_INDEL)
 #define LO_IS_OK_COMPLEX(ost) ((ost)==LO_OK_REF_SAME_NLA || (ost)==LO_OK_REF_ALT_SWITCH_NLA)
 #define LO_IS_OK_SWITCH(ost) ((ost)==LO_OK_REF_ALT_SWITCH_SNP || (ost)==LO_OK_REF_ALT_SWITCH_INDEL || (ost)==LO_OK_REF_ALT_SWITCH_NLA)
+#define LO_IS_OK_SAME(ost) ((ost)==LO_OK_REF_SAME_SNP || (ost)==LO_OK_REF_SAME_INDEL || (ost)==LO_OK_REF_SAME_NLA)
 
 #define last_ostatus (ctx_has_value_in_line_(vb, CTX(VCF_oSTATUS)) ? (LiftOverStatus)vb->last_index (VCF_oSTATUS) : LO_UNKNOWN)
 #define last_ostatus_name_piz (last_ostatus < CTX(VCF_oSTATUS)->word_list.len ? ctx_get_words_snip (CTX(VCF_oSTATUS), last_ostatus) : "Invalid oStatus")
@@ -192,12 +193,13 @@ extern const char *vcf_header_get_VCF_ID_by_dict_id (DictId dict_id, bool must_e
 extern VcfVersion vcf_header_get_version (void);
 
 // Samples stuff
-extern void vcf_seg_samples_initialize (void);
+extern void vcf_samples_zip_initialize (void);
 extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
 
-// INFO/SF stuff
+// INFO stuff
+extern void vcf_info_zip_initialize (void);
 extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
 extern void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb);
 extern void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb);

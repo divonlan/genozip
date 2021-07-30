@@ -21,7 +21,8 @@ static MiniContainer line_number_container = {};
 void vcf_zip_initialize (void)
 {
     vcf_lo_zip_initialize ();
-    vcf_seg_samples_initialize ();
+    vcf_samples_zip_initialize ();
+    vcf_info_zip_initialize ();
 
     // container just for adding a prefix to the delta-encoded line number (the container is all_the_same)
     if (flag.add_line_numbers && !line_number_container.repeats) { // possibly already initialized by previous files
