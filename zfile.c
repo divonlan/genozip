@@ -579,6 +579,27 @@ SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset,
     return header;
 }
 
+// check if reference filename exists in the absolute or relative path from the chain header, and if not, 
+// check the relative path from the chain file
+static const char *zfile_read_genozip_header_get_ref_filename (const char *header_fn)
+{
+    // if header_filename exists, use it
+    if (file_exists (header_fn)) return header_fn;
+
+    // case absolute path and it doesn't exist 
+    if (header_fn[0] == '/' || header_fn[0] == '\\') return NULL;
+
+    const char *slash = strrchr (z_name, '/');
+    if (!slash && flag.is_windows) slash = strrchr (z_name, '\\');
+    if (!slash) return NULL; // chain file is in the current dir
+
+    unsigned dirname_len = slash - z_name + 1; // including slash
+    char *fn = MALLOC (strlen (header_fn) + dirname_len + 1); // we're going to leak this memory (+1 for \0)
+    sprintf (fn, "%.*s%s", dirname_len, z_name, header_fn);
+
+    return file_exists (fn) ? fn :NULL;
+}
+
 // reference data when NOT reading a reference file
 static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozipHeader *header)
 {
@@ -598,12 +619,16 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
 
         // case --chain which requires the prim_ref, but an external reference isn't provided (these fields didn't exist before v12)
         if (flag.reading_chain && !flag.explicit_ref && z_file->genozip_version >= 12) {
-            if (file_exists (header->ref_filename) && file_exists (header->dt_specific.chain.prim_filename)) {
+
+            const char *prim_ref_filename = zfile_read_genozip_header_get_ref_filename (header->dt_specific.chain.prim_filename);
+            const char *luft_ref_filename = zfile_read_genozip_header_get_ref_filename (header->ref_filename);
+
+            if (file_exists (prim_ref_filename) && file_exists (luft_ref_filename)) {
                 WARN_ONCE ("Note: using the reference file PRIMARY=%s LUFT=%s. You can override this with --reference, see: " WEBSITE_DVCF,
-                           header->dt_specific.chain.prim_filename, header->ref_filename);
+                           prim_ref_filename, luft_ref_filename);
                 
-                ref_set_reference (gref, header->ref_filename, REF_LIFTOVER, false);
-                ref_set_reference (prim_ref, header->dt_specific.chain.prim_filename, REF_LIFTOVER, false);
+                ref_set_reference (gref, luft_ref_filename, REF_LIFTOVER, false);
+                ref_set_reference (prim_ref, prim_ref_filename, REF_LIFTOVER, false);
             }
             else 
                 ASSINP (flag.genocat_no_ref_file, "Please use two --reference arguments to specify the paths to the PRIMAY and LUFT coordinates reference file. Original path was PRIMARY=%s LUFT=%s",
@@ -616,13 +641,15 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
         else if (!flag.explicit_ref && // reference NOT was specified on command line
             !(gref_fn && !strcmp (gref_fn, header->ref_filename))) { // ref_filename already set from a previous file with the same reference
 
-            if (!flag.genocat_no_ref_file && file_exists (header->ref_filename)) {
-                WARN ("Note: using the reference file %s. You can override this with --reference", header->ref_filename);
-                ref_set_reference (gref, header->ref_filename, REF_EXTERNAL, false);
+            const char *ref_filename = zfile_read_genozip_header_get_ref_filename (header->ref_filename);
+
+            if (!flag.genocat_no_ref_file && ref_filename) {
+                WARN ("Note: using the reference file %s. You can override this with --reference", ref_filename);
+                ref_set_reference (gref, ref_filename, REF_EXTERNAL, false);
             }
             else 
                 ASSINP (flag.genocat_no_ref_file, "Please use --reference to specify the path to the LUFT (target) coordinates reference file. Original path was %s",
-                        header->ref_filename);
+                        ref_filename);
         }
 
         // test for matching MD5 between specified external reference and reference in the header
