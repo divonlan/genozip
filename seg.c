@@ -670,7 +670,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
                                         ((id[1]+1) % 256) | 128, // different IDs for top array, subarray and items
                                         id[2], id[3], id[4], id[5], id[6], id[7] } };
         
-        buf_alloc_old (vb, &container_ctx->con_cache, sizeof (MiniContainer), 1, "contexts->con_cache");
+        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, "contexts->con_cache");
 
         con = FIRSTENT (MiniContainer, container_ctx->con_cache);
         *con = (MiniContainer){ .nitems_lo = 1, 
@@ -863,13 +863,10 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 // double the number of lines if we've run out of lines
 static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 {
-    uint32_t num_old_lines = vb->lines.len;
+    uint64_t num_old_lines = vb->lines.len;
     
     // note: sadly, we cannot use the normal Buffer macros here because each data_type has its own line type
-    buf_alloc_old (vb, &vb->lines, (vb->lines.len + 1) * sizeof_line, 2, "lines");
-    
-    memset (&vb->lines.data[num_old_lines * sizeof_line], 0, vb->lines.size - num_old_lines * sizeof_line);
-    
+    buf_alloc_zero (vb, &vb->lines, 0, (vb->lines.len + 1) * sizeof_line, char, 2, "lines");    
     vb->lines.len = vb->lines.size / sizeof_line;
 
     // allocate more to the b250 buffer of the fields, which each have num_lines entries

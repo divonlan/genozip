@@ -187,9 +187,6 @@ typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFie
 extern uint32_t vcf_num_samples; // ZIP
 extern char *vcf_samples_is_included;
 #define samples_am_i_included(sample_i) (!flag.samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
-
-#define MAX_VCF_ID_LEN 100 // including terminating nul
-extern const char *vcf_header_get_VCF_ID_by_dict_id (DictId dict_id, bool must_exist);
 extern VcfVersion vcf_header_get_version (void);
 
 // Samples stuff
@@ -215,6 +212,12 @@ RefAltEquals vcf_refalt_oref_equals_ref_or_alt (char oref, char ref, const char 
 extern bool vcf_refalt_piz_is_variant_snp (VBlockP vb);
 extern bool vcf_refalt_piz_is_variant_indel (VBlockP vb);
 extern void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus);
+
+// Tags stuff
+#define MAX_VCF_TAG_LEN 127 // including terminating nul
+extern void vcf_tags_add_tag (const char *id, unsigned id_len, DictId dict_id);
+extern void vcf_tags_finalize (void);
+extern const char *vcf_tags_get_id (DictId dict_id, bool must_exist);
 
 // Liftover Zip
 extern void vcf_lo_zip_initialize (void);

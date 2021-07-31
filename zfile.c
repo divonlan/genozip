@@ -900,13 +900,9 @@ void zfile_compress_genozip_header (Digest single_component_digest)
 
     // add a footer to this section - this footer appears AFTER the genozip header data, 
     // facilitating reading the genozip header in reverse from the end of the file
-    SectionFooterGenozipHeader footer;
-    footer.magic                 = BGEN32 (GENOZIP_MAGIC);
-    footer.genozip_header_offset = BGEN64 (genozip_header_offset);
-
-    buf_alloc_old (evb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data");
-    memcpy (&z_data->data[z_data->len], &footer, sizeof(SectionFooterGenozipHeader));
-    z_data->len += sizeof(SectionFooterGenozipHeader);
+    SectionFooterGenozipHeader footer = { .magic                 = BGEN32 (GENOZIP_MAGIC),
+                                          .genozip_header_offset = BGEN64 (genozip_header_offset) };
+    buf_add_more (evb, z_data, &footer, sizeof(SectionFooterGenozipHeader), "z_data");
 
     zfile_output_processed_vb (evb); // write footer
 }
@@ -938,8 +934,8 @@ void zfile_write_txt_header (Buffer *txt_header,
     
     static Buffer txt_header_buf = EMPTY_BUFFER;
 
-    buf_alloc_old (evb, &txt_header_buf, sizeof (SectionHeaderTxtHeader) + txt_header->len / 3, // generous guess of compressed size
-               1, "txt_header_buf"); 
+    buf_alloc (evb, &txt_header_buf, 0, sizeof (SectionHeaderTxtHeader) + txt_header->len / 3, // generous guess of compressed size
+               char, 1, "txt_header_buf"); 
 
     comp_compress (evb, &txt_header_buf, (SectionHeader*)&header, 
                    txt_header->len ? txt_header->data : NULL, // actual header may be missing (eg in SAM it is permitted to not have a header)

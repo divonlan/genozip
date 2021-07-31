@@ -652,7 +652,7 @@ static bool file_open_txt_write (File *file)
 // without our pre-allocation, some of these buffers will be first allocated by a compute threads 
 // when the first vb containing a certain did_i is merged in (for the contexts buffers) or
 // ra is merged (for ra_buf). while these operations 
-// are done while holding a mutex, so that compute threads don't run over each over, buf_alloc_old 
+// are done while holding a mutex, so that compute threads don't run over each over, buf_alloc 
 // may change buf_lists in evb buffers, while the main thread might be doing so concurrently
 // resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
 // of the execution.
@@ -1042,6 +1042,7 @@ void file_close (File **file_p,
         buf_destroy (&file->comp_info);
         buf_destroy (&file->txt_file_info);
         buf_destroy (&file->rejects_report);
+        buf_destroy (&file->tags);
 
         FREE (file->name);
         FREE (file->basename);

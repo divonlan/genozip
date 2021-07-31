@@ -80,15 +80,11 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                               const char *func, uint32_t code_line,
                               const char *name);
 
-// efficient wrapper
-#define buf_alloc_old(vb, buf, requested_size, grow_at_least_factor, name) do { \
-    uint64_t new_req_size = (requested_size); /* make copy to allow ++ */ \
-    ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name)) \
+#define buf_alloc(alloc_vb, buf, more, at_least, type, grow_at_least_factor, name) do {\
+    uint64_t new_req_size = MAX((at_least), ((buf)->len+(more)))*sizeof(type); /* make copy to allow ++ */ \
+    ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf)->vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name)) \
                                                     : (buf)->size); \
 } while(0)
-
-#define buf_alloc(alloc_vb, buf, more, at_least, type, grow_at_least_factor,name) \
-    buf_alloc_old (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf)->vb), (buf), MAX((at_least), ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (name))
 
 #define buf_alloc_zero(vb, buf, more, at_least, element_type, grow_at_least_factor,name) do { \
     uint64_t size_before = (buf)->data ? (buf)->size : 0; /* always zero the whole buffer in an initial allocation */ \

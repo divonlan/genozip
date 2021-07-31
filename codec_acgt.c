@@ -203,7 +203,7 @@ void codec_acgt_uncompress (VBlock *vb, Codec codec, uint8_t param,
     ASSERT0 (!vb->compressed.len && !vb->compressed.param, "expected vb->compressed to be free, but its not");
 
     uint64_t bitmap_num_bytes = roundup_bits2bytes64 (num_bases * 2); // 4 nucleotides per byte, rounded up to whole 64b words
-    buf_alloc_old (vb, &vb->compressed, bitmap_num_bytes, 1, "compressed");    
+    buf_alloc (vb, &vb->compressed, 0, bitmap_num_bytes, char, 1, "compressed");    
 
     // uncompress bitmap using CODEC_ACGT.sub_codec (passed to us as sub_codec) into vb->compressed
     codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, &vb->compressed, bitmap_num_bytes, CODEC_NONE);

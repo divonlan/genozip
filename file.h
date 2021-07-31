@@ -399,10 +399,11 @@ typedef struct File {
     uint32_t tail_1st_vb;              // TXT_FILE PIZ: in case of --tail: first vblock_i needed
     uint32_t tail_1st_line_1st_vb;     // TXT_FILE PIZ: in case of --tail: first line (0-based) in tail_1st_vb needed
     
-    // Z_FILE: stats data
-    Buffer stats_buf, STATS_buf;       // Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)
-    Buffer bound_txt_names;            // ZIP: a concatenation of all bound txt_names that contributed to this genozip file
-
+    // Z_FILE 
+    Buffer stats_buf, STATS_buf;       // Stats data: Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)
+    Buffer bound_txt_names;            // ZIP: Stats data: a concatenation of all bound txt_names that contributed to this genozip file
+    Buffer tags;                       // ZIP: data-type-specific data read from file header
+    
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;
     uint32_t max_conc_writing_vbs;     // PIZ z_file: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in the file

@@ -364,7 +364,7 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
     if      (largest < 0xfe)   ctx->ltype = LT_UINT8_TR;  // -1 is reserved for "missing"
     else if (largest < 0xfffe) ctx->ltype = LT_UINT16_TR;
     
-    buf_alloc_old (vb, &vb->compressed, ctx->local.len * lt_desc[ctx->ltype].width, 1, "compressed");
+    buf_alloc (vb, &vb->compressed, 0, ctx->local.len * lt_desc[ctx->ltype].width, char, 1, "compressed");
 
     uint32_t cols = ctx->local.param;
     // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param

@@ -173,13 +173,11 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SF)
         snip_i        = 0;
 
         // temporary place for SF
-        buf_alloc_old (vb, &vcf_vb->sf_txt, 5 * vcf_header_get_num_samples(), 1, "sf_txt" ); // initial estimate, we may further grow it later
+        buf_alloc (vb, &vcf_vb->sf_txt, 0, 5 * vcf_header_get_num_samples(), char, 1, "sf_txt"); // initial estimate, we may further grow it later
         vcf_vb->sf_txt.len = 0;
 
         // copy snip to sf_snip (note: the SNIP_SPECIAL+code are already removed)
-        buf_alloc_old (vb, &vcf_vb->sf_snip, snip_len, 2, "sf_snip");
-        vcf_vb->sf_snip.len = snip_len; 
-        memcpy (vcf_vb->sf_snip.data, snip, snip_len); 
+        buf_add_more (vb, &vcf_vb->sf_snip, snip, snip_len, "sf_snip");
     }
 
     return false; // no new value

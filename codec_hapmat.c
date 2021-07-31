@@ -141,7 +141,7 @@ bool codec_hapmat_compress (VBlock *vb_,
     qsort (helper_index, vb->ht_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
 
     vb->hapmat_one_array.len = vb->lines.len;
-    buf_alloc_old (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array");
+    buf_alloc (vb, &vb->hapmat_one_array, 0, vb->hapmat_one_array.len, char, 1, "hapmat_one_array");
     
     if (flag.show_alleles) 
         iprint0 ("\nAfter transpose and sorting:\n");
@@ -189,8 +189,8 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb_)
     uint32_t ht_per_line = vb->ht_per_line = (uint32_t)(vb->ht_matrix_ctx->local.len / vb->lines.len);
 
     vb->hapmat_one_array.len = ht_per_line + 7; // +7 because depermuting_loop works on a word (32/64 bit) boundary
-    buf_alloc_old (vb, &vb->hapmat_one_array, vb->hapmat_one_array.len, 1, "hapmat_one_array");
-    buf_alloc_old (vb, &vb->hapmat_columns_data, sizeof (char *) * vb->hapmat_one_array.len, 1, "hapmat_columns_data"); // realloc for exact size (+15 is padding for 64b operations)
+    buf_alloc (vb, &vb->hapmat_one_array, 0, vb->hapmat_one_array.len, char, 1, "hapmat_one_array");
+    buf_alloc (vb, &vb->hapmat_columns_data, 0, vb->hapmat_one_array.len, char*, 1, "hapmat_columns_data"); // realloc for exact size (+15 is padding for 64b operations)
 
     // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
     // note: haplotype columns are permuted only within their own sample block
@@ -201,7 +201,7 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb_)
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
     // note: txt_file->max_lines_per_vb will be zero if genozip file was created by redirecting output
-    buf_alloc_old (vb, &vb->hapmat_column_of_zeros, MAX (txt_file->max_lines_per_vb, vb->lines.len), 1, "hapmat_column_of_zeros");
+    buf_alloc (vb, &vb->hapmat_column_of_zeros, 0, MAX (txt_file->max_lines_per_vb, vb->lines.len), char, 1, "hapmat_column_of_zeros");
     buf_zero (&vb->hapmat_column_of_zeros);
 
     for (uint32_t ht_i = 0; ht_i < ht_per_line; ht_i++) 

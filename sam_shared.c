@@ -72,7 +72,7 @@ void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len,
 
     // if we're reconstructing a BAM, we will create the BAM cigar data in textual_cigar. 
     bool bam_piz = (command == PIZ && flag.out_dt == DT_BAM);
-    if (bam_piz) buf_alloc_old (vb, &vb->textual_cigar, cigar_len/2 /* max possible n_cigar_op */ * sizeof(uint32_t), 2, "textual_cigar");
+    if (bam_piz) buf_alloc (vb, &vb->textual_cigar, 0, cigar_len/2 /* max possible n_cigar_op */, uint32_t, 2, "textual_cigar");
 
     unsigned n=0;
     for (unsigned i=0; i < cigar_len; i++) {

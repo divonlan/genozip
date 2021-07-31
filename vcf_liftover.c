@@ -337,8 +337,8 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
     seg_rollback ((VBlockP)vb, ctx_get_ctx (vb, dict_id_INFO_PRIM));
 
     // seg Xrej and empty values for the fields of the rejected coord
-    char str[MAX_VCF_ID_LEN + 20];
-    const char *id = ctx ? vcf_header_get_VCF_ID_by_dict_id (ctx->dict_id, false) : NULL;
+    char str[MAX_VCF_TAG_LEN + 20];
+    const char *id = ctx ? vcf_tags_get_id (ctx->dict_id, false) : NULL;
     sprintf (str, "%s%s%s", dvcf_status_names[ostatus], ctx ? "/" : "", 
              id ? id : ctx ? dis_dict_id (ctx->dict_id).s : "");
     unsigned str_len = strlen (str);

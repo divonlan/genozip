@@ -54,7 +54,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
     uint32_t est_compressed_len = codec_args[est_size_codec].est_size (header->codec, data_uncompressed_len); 
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
-    buf_alloc_old (vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, 
+    buf_alloc (vb, z_data, compressed_offset + est_compressed_len + encryption_padding_reserve, 0, char, 1.5, 
                z_data->name ? z_data->name : "z_data");
 
     // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec instead
@@ -77,8 +77,8 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
 
         // if output buffer is too small, increase it, and try again
         if (!success) {
-            buf_alloc_old (vb, z_data, z_data->len + compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 50 /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */, 1,
-                       z_data->name ? z_data->name : "z_data");
+            buf_alloc (vb, z_data, compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 50, /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */
+                       0, char, 1, z_data->name ? z_data->name : "z_data");
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
             data_uncompressed_len = BGEN32 (header->data_uncompressed_len); // reset

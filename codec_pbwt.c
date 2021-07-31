@@ -253,8 +253,8 @@ bool codec_pbwt_compress (VBlock *vb,
 
     PbwtState state = codec_pbwt_initialize_state (vb, &vb->runs_ctx->local, &vb->fgrc_ctx->local); 
  
-    buf_alloc_old (vb, &vb->runs_ctx->local, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 5 ), CTX_GROWTH, "contexts->local"); // initial allocation
-    buf_alloc_old (vb, &vb->fgrc_ctx->local, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 30), CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &vb->runs_ctx->local, 0, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 5 ), char, CTX_GROWTH, "contexts->local"); // initial allocation
+    buf_alloc (vb, &vb->fgrc_ctx->local, 0, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 30), char, CTX_GROWTH, "contexts->local");
         
     ARRAY (Allele, ht_data, vb->ht_matrix_ctx->local);
     
@@ -319,7 +319,7 @@ static void codec_pbwt_decode_init_ht_matrix (VBlock *vb, const uint32_t *rc_dat
     ASSERT (vb->lines.len && uncompressed_len, 
             "Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", (uint32_t)vb->lines.len, uncompressed_len);
 
-    buf_alloc_old (vb, &vb->ht_matrix_ctx->local, uncompressed_len, 1, "contexts->local");
+    buf_alloc (vb, &vb->ht_matrix_ctx->local, 0, uncompressed_len, char, 1, "contexts->local");
 
     vb->ht_matrix_ctx->local.len = uncompressed_len;
     vb->ht_matrix_ctx->lcodec    = CODEC_PBWT;
