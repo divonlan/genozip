@@ -237,7 +237,7 @@ extern bool is_info_stream_terminal; // is info_stream going to a terminal
 static inline void iputc(char c) { fputc ((c), info_stream); } // no flushing
 
 #define iprintf(format, ...)     do { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); } while(0)
-static inline void iprint0 (const char *str) { fprintf (info_stream, str); fflush (info_stream); } 
+static inline void iprint0 (const char *str) { fprintf (info_stream, "%s", str); fflush (info_stream); } 
 
 // bring the cursor down to a newline, if needed
 extern bool progress_newline_since_update;

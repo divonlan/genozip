@@ -649,7 +649,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
             }
             else 
                 ASSINP (flag.genocat_no_ref_file, "Please use --reference to specify the path to the LUFT (target) coordinates reference file. Original path was %s",
-                        ref_filename);
+                        ref_filename ? ref_filename : "<unknown>");
         }
 
         // test for matching MD5 between specified external reference and reference in the header
