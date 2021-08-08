@@ -7,6 +7,8 @@
 # Mingw: http://mingw-w64.org/doku.php 
 # Cygwin: https://www.cygwin.com/
 
+uname := $(shell uname -s)
+
 ifdef BUILD_PREFIX
 IS_CONDA=1
 endif
@@ -22,15 +24,23 @@ ifdef IS_CONDA
 		LDFLAGS += -L$(PREFIX)/Library/lib
 		CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
+
+	ifeq ($(uname),Linux)
+		MY_SRCS += data_types.conda.c 
+	else
+		MY_SRCS += data_types.c 
+	endif
+
 else
 	CC=gcc
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -Ilibdeflate -D_LARGEFILE64_SOURCE=1 -march=native 
+	MY_SRCS += data_types.c 
 endif 
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
-MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
-		  data_types.c bit_array.c progress.c coords.c writer.c tar.c\
+MY_SRCS += genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
+		  bit_array.c progress.c coords.c writer.c tar.c\
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
 		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c \
@@ -102,7 +112,6 @@ ifeq ($(OS),Windows_NT)
 	OBJDIR=objdir.windows
 else
 	CFLAGS += -D_7ZIP_ST
-    uname := $(shell uname -s)
     ifeq ($(uname),Linux)
 # Linux
         LDFLAGS += -lrt # required by pthreads
