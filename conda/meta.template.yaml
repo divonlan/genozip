@@ -67,7 +67,7 @@ about:
   license_family: OTHER
   license_file: 
     - LICENSE.txt
-  summary: Compressor for genomic files (FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, 23andMe), up to 5x better than gzip and faster too
+  summary: Compressor for genomic files (FASTQ, BAM, VCF, FASTA and more), up to 5x better than gzip and faster too
   description: |
 __README_MD__
 

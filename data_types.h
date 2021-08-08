@@ -6,6 +6,7 @@
 #ifndef DATA_TYPES_INCLUDED
 #define DATA_TYPES_INCLUDED
 
+#include "dict_id.h"
 #include "genozip.h"
 #include "digest.h"
 #include "sections.h"
