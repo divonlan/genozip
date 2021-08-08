@@ -314,7 +314,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
     bool possible_conditional_renaming = possibly_rename && (vb->last_index (VCF_oXSTRAND) || LO_IS_OK_SWITCH (last_ostatus));
 
     // case: FORMAT is the same as previous line - just use the same node_index, but only if there is no chance of conditional renaming
-    if (fmt_len == vb->last_format.len && !memcmp (vb->last_format.data, STRa(fmt)) && !possible_conditional_renaming) {
+    if (fmt_len == vb->last_format.len && !memcmp (vb->last_format.data, fmt, fmt_len) && !possible_conditional_renaming) {
         seg_duplicate_last ((VBlockP)vb, CTX(VCF_FORMAT), fmt_len + 1 /* \t or \n */);
         dl->format_node_i = (dl-1)->format_node_i;
         return;
@@ -379,15 +379,15 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
         snip[0] = snip[3+fmt_len] = SNIP_DUAL;
         snip[1] = snip[4+fmt_len] = SNIP_SPECIAL;
         snip[2] = snip[5+fmt_len] = VCF_SPECIAL_FORMAT;
-        memcpy (&snip[3], STRa(fmt));
-        memcpy (&snip[6+fmt_len], STRa(renamed));
+        memcpy (&snip[3], fmt, fmt_len);
+        memcpy (&snip[6+fmt_len], renamed, renamed_len);
     }
 
     // case: not tag renaming
     else {
         snip[0] = SNIP_SPECIAL;
         snip[1] = VCF_SPECIAL_FORMAT;
-        memcpy (&snip[2], STRa(fmt));
+        memcpy (&snip[2], fmt, fmt_len);
         snip_len = 2 + fmt_len;
     }
 
