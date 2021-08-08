@@ -12,6 +12,9 @@
 <!-- 5. converted to Markdown and embedded in conda/README.template.md to generate conda feedstock README -->
 <!--                                                                                                      -->
 <!-- To preview in Visual Studio Code: Ctrl+Shift+V with the "HTML Preview" extension                     -->
+
+9/Aug/2021 MASTER IS CURRENTLY BROKEN, PLEASE INSTALL FROM https://github.com/divonlan/genozip/releases/latest
+
 <h1>Genozip</h1><br>
 <br>
 (available on <b>Conda</b>, <b>Docker Hub</b> See: https://genozip.com)<br>
