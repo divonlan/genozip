@@ -182,8 +182,8 @@ void vcf_tags_cmdline_drop_option (void)
         // destination is DROP_*
         unsigned drop_tag_len = DROP_PREFIX_LEN + tag_name_len;
         char drop_tag[drop_tag_len];
-        memcpy (drop_tag, cSTR (DROP_PREFIX));
-        memcpy (drop_tag + DROP_PREFIX_LEN, STRa(tag_name));
+        memcpy (drop_tag, DROP_PREFIX, DROP_PREFIX_LEN);
+        memcpy (drop_tag + DROP_PREFIX_LEN, tag_name, tag_name_len);
 
         foreach_dtype(dtype) {
             // add to tag
