@@ -162,7 +162,7 @@ typedef struct DataTypeFields {
 
 #define TOPLEVEL "TOPLEVEL"
 
-#define V(did_i) [did_i]={ _##did_i }
+#define V(did_i) [did_i]={ .num = _##did_i }
 #define DATA_TYPE_FIELDS { \
 /* num_fields        pos         nonref        ochrom,     eol             toplevel             did_i to dict_id mapping */ \
   {NUM_REF_FIELDS,   DID_I_NONE, DID_I_NONE,   DID_I_NONE, {0},            {0},                 REF_MAPPING }, \
