@@ -465,7 +465,7 @@ static void vcf_header_update_INFO_FORMAT (STRp(line), bool is_info, Buffer *new
                                          .value_len = value_len };
 
             if (line != new_line) {
-                memcpy (new_line, STRa(line));
+                memcpy (new_line, line, line_len);
                 line = new_line;
             }
 
