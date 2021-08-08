@@ -241,7 +241,7 @@ void ref_contigs_load_contigs (Reference ref)
 
     if (flag.show_ref_contigs) {
         ref_contigs_show (&ref->loaded_contigs, false);
-        if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
+        if (exe_type == EXE_GENOCAT) exit_ok();  // in genocat this, not the data
     }
 }
 

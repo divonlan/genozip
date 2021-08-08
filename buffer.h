@@ -148,10 +148,13 @@ extern void buf_grab_do (VBlockP dst_vb, Buffer *dst_buf, const char *dst_name, 
     uint64_t new_len = (uint64_t)(new_data_len); /* copy in case caller uses ++ */ \
     if (new_len) { \
         buf_alloc ((vb_) ? (VBlockP)(vb_) : (buf)->vb, (buf), (new_len), (buf)->len+(new_len)+1 /* +1 - room for \0 or seperator */, char, 1.5, (name)); \
-        memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
+        memcpy (&(buf)->data[(buf)->len], new_data, new_len);   \
         (buf)->len += new_len; \
     } \
 } while(0)
+
+#define buf_add_moreC(vb_, buf, literal_str, name) buf_add_more ((vb_), (buf), literal_str, sizeof literal_str-1, (name))
+#define buf_add_moreS(vb_, buf, str, name) buf_add_more ((vb_), (buf), str, str##_len, (name))
 
 #define buf_add_buf(vb_,dst_buf,src_buf,type,name) do { \
     buf_alloc ((vb_) ? (vb_) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, CTX_GROWTH, (name)); \

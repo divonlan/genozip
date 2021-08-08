@@ -26,6 +26,13 @@ extern StrText char_to_printable (char c);
 extern char *str_to_single_line_printable (const char *in, unsigned in_len, char *out);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (const char *in, char *out);
+
+static _Bool inline str_issame_ (const char *str1, unsigned str1_len, const char *str2, unsigned str2_len) // true if the same
+{
+    return (str1_len == str2_len) && !memcmp (str1, str2, str1_len);
+}
+#define str_issame(str1,str2) str_issame_ (str1, str1##_len, str2, str2##_len)
+
 extern _Bool str_case_compare (const char *str1, const char *str2, _Bool *identical); // similar to stricmp that doesn't exist on all platforms
 
 static inline char *str_tolower_(const char *in, char *out, unsigned len)

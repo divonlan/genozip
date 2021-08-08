@@ -262,34 +262,18 @@ extern const char *file_exts[];
                      { SAM_GENOZIP, BAM_GENOZIP, 0 },       \
                      { FASTQ_GENOZIP, FQ_GENOZIP, 0 },      \
                      { FASTA_GENOZIP, FA_GENOZIP, FAA_GENOZIP, FFN_GENOZIP, FNN_GENOZIP, FNA_GENOZIP, 0 }, \
-                     { GFF3_GENOZIP, GVF_GENOZIP, 0  }, \
+                     { GFF3_GENOZIP, GVF_GENOZIP, 0  },     \
                      { ME23_GENOZIP, 0 },                   \
                      { 0 }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
                      { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
                      { GNRIC_GENOZIP, 0 },                  \
                      { PHY_GENOZIP, 0 },                    \
                      { CHAIN_GENOZIP, 0 },                  \
-                     { KRAKEN_GENOZIP, 0 },                \
+                     { KRAKEN_GENOZIP, 0 },                 \
                    } 
 
 typedef const char *FileMode;
 extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
-
-// ---------------------------
-// tests for compression types
-// ---------------------------
-
-#define file_is_read_via_ext_decompressor(file) (file->supertype == TXT_FILE && \
-  (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_CRAM))
-
-#define file_is_read_via_int_decompressor(file) (file->supertype == TXT_FILE && \
-  (file->codec == CODEC_GZ || file->codec == CODEC_BGZF || file->codec == CODEC_BZ2))
-
-#define file_is_written_via_ext_compressor(file) (file->supertype == TXT_FILE && \
-  (file->codec == CODEC_BCF || file->codec == CODEC_GZ))
-
-#define file_is_plain_or_ext_decompressor(file) (file->supertype == TXT_FILE && \
-  (file->codec == CODEC_NONE || file_is_read_via_ext_decompressor(file)))
 
 typedef struct File {
     void *file;
@@ -381,7 +365,8 @@ typedef struct File {
     FILE *rejects_file[2];             // ZIP: rejects txt file
     uint64_t rejects_disk_size[2];     // ZIP
     Buffer rejects_report;             // ZIP --chain: human readable report about rejects
-
+    Buffer apriori_tags;               // ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF
+    
     // TXT_FILE: DVCF stuff
     Coords coords;                     // TXT FILE ZIP: Set from ##dual_coordinates and immutable thereafter
     uint64_t reject_bytes;             // ZIP of a dual coordinate file: number of bytes in lines originating from ##primary_only/##luft_only, not yet assigned to a VB
@@ -402,7 +387,6 @@ typedef struct File {
     // Z_FILE 
     Buffer stats_buf, STATS_buf;       // Stats data: Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)
     Buffer bound_txt_names;            // ZIP: Stats data: a concatenation of all bound txt_names that contributed to this genozip file
-    Buffer tags;                       // ZIP: data-type-specific data read from file header
     
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;
@@ -467,6 +451,26 @@ extern char *file_make_unix_filename (char *filename);
 #define CLOSE(fd,name,quiet) do { ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));} while (0)
 #define FCLOSE(fp,name) do { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; } } while (0)
  
+ // ---------------------------
+// tests for compression types
+// ---------------------------
+
+static inline bool file_is_read_via_ext_decompressor(ConstFileP file) { 
+    return file->supertype == TXT_FILE && (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_CRAM);
+}
+
+static inline bool file_is_read_via_int_decompressor(ConstFileP file) {
+    return file->supertype == TXT_FILE && (file->codec == CODEC_GZ || file->codec == CODEC_BGZF || file->codec == CODEC_BZ2);
+}
+
+static inline bool file_is_written_via_ext_compressor(ConstFileP file) {
+    return file->supertype == TXT_FILE && (file->codec == CODEC_BCF || file->codec == CODEC_GZ);
+}
+
+static inline bool file_is_plain_or_ext_decompressor(ConstFileP file) {
+    return file->supertype == TXT_FILE && (file->codec == CODEC_NONE || file_is_read_via_ext_decompressor(file));
+}
+
 // read the contents and a newline-separated text file and split into lines - creating char **lines, unsigned *line_lens and unsigned n_lines
 #define file_split_lines(fn, name) \
     static Buffer data = EMPTY_BUFFER; \

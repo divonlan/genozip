@@ -8,12 +8,21 @@
 
 #include "genozip.h"
 
+#define _PHY_ID         DICT_ID_MAKEF_2 ("ID")  
+#define _PHY_SEQ        DICT_ID_MAKEF_3 ("SEQ") 
+#define _PHY_EOL        DICT_ID_MAKEF_3 ("EOL")
+#define _PHY_TOPLEVEL   DICT_ID_MAKEF_L (TOPLEVEL)
+#define _PHY_TOP2FASTA  DICT_ID_MAKEF_6 ("TOP2FA")
+
+typedef enum { PHY_ID, PHY_SEQ, PHY_EOL, PHY_TOPLEVEL, PHY_TOP2FASTA, NUM_PHY_FIELDS } PhyFields;
+#define PHY_MAPPING { V(PHY_ID), V(PHY_SEQ), V(PHY_EOL), V(PHY_TOPLEVEL), V(PHY_TOP2FASTA) }
+
 // ZIP side
 COMPRESSOR_CALLBACK(phy_zip_id)
 COMPRESSOR_CALLBACK(phy_zip_seq)
 #define PHY_LOCAL_GET_LINE_CALLBACKS  \
-    { DT_PHYLIP, &dict_id_fields[PHY_ID],  phy_zip_id  }, \
-    { DT_PHYLIP, &dict_id_fields[PHY_SEQ], phy_zip_seq }, 
+    { DT_PHYLIP, _PHY_ID,  phy_zip_id  }, \
+    { DT_PHYLIP, _PHY_SEQ, phy_zip_seq }, 
 
 extern unsigned phy_vb_zip_dl_size (void);
 extern int32_t phy_is_header_done (bool is_eof);

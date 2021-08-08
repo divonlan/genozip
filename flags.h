@@ -30,6 +30,8 @@ typedef struct {
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
         allow_ambiguous, add_line_numbers;
     
+    char *dvcf_rename, *dvcf_drop;
+    
     #define NOT_PAIRED_END 0 
     #define PAIR_READ_1    1
     #define PAIR_READ_2    2
@@ -91,7 +93,7 @@ typedef struct {
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         show_vblocks, show_threads, show_uncompress,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_allthesame, debug_recon_size,
-        seg_only, xthreads, show_flags,
+        seg_only, xthreads, show_flags, show_rename_tags,
         echo,    // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     const char *help, *dump_section, *show_is_set, *show_time, *show_mutex;

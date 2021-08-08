@@ -100,26 +100,26 @@ void phy_seg_finalize (VBlockP vb)
         .repeats     = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo   = 3,
-        .items       = { { .dict_id = (DictId)dict_id_fields[PHY_ID]  },
-                         { .dict_id = (DictId)dict_id_fields[PHY_SEQ] },
-                         { .dict_id = (DictId)dict_id_fields[PHY_EOL] } }
+        .items       = { { .dict_id = { _PHY_ID }  },
+                         { .dict_id = { _PHY_SEQ } },
+                         { .dict_id = { _PHY_EOL } } }
     };
 
-    container_seg_by_ctx (vb, CTX(PHY_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+    container_seg (vb, CTX(PHY_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 
     SmallContainer top_level_to_fasta = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 2,
-        .items     = { { .dict_id = (DictId)dict_id_fields[PHY_ID],  .seperator = "\n", .translator = PHYLIP2FASTA_ID },
-                       { .dict_id = (DictId)dict_id_fields[PHY_SEQ], .seperator = "\n\n" } }
+        .items     = { { .dict_id = { _PHY_ID },  .seperator = "\n", .translator = PHYLIP2FASTA_ID },
+                       { .dict_id = { _PHY_SEQ }, .seperator = "\n\n" } }
     };
 
     static const char fasta_prefix[] = { CON_PREFIX_SEP,        // has prefix 
                                          CON_PREFIX_SEP,        // end of (empty) container-wide prefix
                                          '>', CON_PREFIX_SEP }; // sequence ID prefix in fasta
 
-    container_seg_by_ctx (vb, CTX(PHY_TOP2FASTA), (ContainerP)&top_level_to_fasta, fasta_prefix, sizeof (fasta_prefix), 0);
+    container_seg (vb, CTX(PHY_TOP2FASTA), (ContainerP)&top_level_to_fasta, fasta_prefix, sizeof (fasta_prefix), 0);
 }
 
 bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id)

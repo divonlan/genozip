@@ -264,7 +264,7 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
 static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
 {
     bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
-    if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
+    if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->tag_name);
 
     // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
     ctx->b250.num_b250_words = (int64_t)ctx->b250.len;
@@ -291,13 +291,13 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
         // 2) it has flags that need to be passed to piz (unless its vb_i>1 and flags are same as vb_i=1)
         // 3) the one snip is SELF_DELTA
         uint8_t flags = ((SectionFlags)ctx->flags).flags;
-        if (base250_decode ((const uint8_t **)&ctx->b250.data, false, ctx->name) == 0  
+        if (base250_decode ((const uint8_t **)&ctx->b250.data, false, ctx->tag_name) == 0  
         &&  !ctx->local.len 
         &&  ((vb->vblock_i==1 && !flags) || (vb->vblock_i > 1 && flags == ((SectionFlags)ctx_get_zf_ctx_flags (ctx->dict_id)).flags)) // vb_i=1 with flags / vb_i>1 with flags different than vb_i=1 will fail this condition
         &&  !ctx->pair_b250 && !ctx->pair_local // pair_b250/local will causes zfile_compress_b250/local_data to set flags.paired, which will be different than vb_i=1 flags
         &&  *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) { // word_index=0 is the first word in the dictionary
          
-            if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - dropped b250 section\n", ctx->name, vb->vblock_i);
+            if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - dropped b250 section\n", ctx->tag_name, vb->vblock_i);
         
             return true; 
         }
@@ -306,7 +306,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
         ctx->b250.len = base250_len (ctx->b250.data);
         ctx->flags.all_the_same = true; 
 
-        if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - shortened b250 section to 1 element\n", ctx->name, vb->vblock_i);
+        if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - shortened b250 section to 1 element\n", ctx->tag_name, vb->vblock_i);
     }
     else
         ctx->flags.all_the_same = false;
@@ -368,7 +368,7 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
 
     uint32_t cols = ctx->local.param;
     // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
-    ASSERT (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->name);
+    ASSERT (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->tag_name);
 
     if (!cols) cols = vcf_header_get_num_samples(); // 0 if not vcf/bcf (not restricted to 255)
     
@@ -501,7 +501,7 @@ static void zip_compress_ctxs (VBlock *vb)
             if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
                 ctx_dump_binary (vb, ctx, false);
 
-            if (flag.show_time) codec_show_time (vb, "B250", ctx->name, ctx->bcodec);
+            if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
             zfile_compress_b250_data (vb, ctx);
         }
 
@@ -511,7 +511,7 @@ static void zip_compress_ctxs (VBlock *vb)
             if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
                 ctx_dump_binary (vb, ctx, true);
 
-            if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->name, ctx->lcodec);
+            if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
 
             zfile_compress_local_data (vb, ctx, 0);
         }
@@ -771,10 +771,8 @@ void zip_one_file (const char *txt_basename,
 
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
-    dict_id_initialize (z_file->data_type);
-
     if (!z_file->num_txt_components_so_far)  // first component of this z_file 
-        ctx_initialize_primary_field_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+        ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
 
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;

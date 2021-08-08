@@ -35,7 +35,7 @@ WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Contex
 
     ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY || node_index == WORD_INDEX_MISSING, 
             "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u",  
-            ctx->name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_nodes.len);
+            ctx->tag_name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_nodes.len);
     
     NEXTENT (uint32_t, ctx->b250) = node_index;
     ctx->txt_len += add_bytes;
@@ -46,6 +46,18 @@ WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Contex
 
     return node_index;
 } 
+
+// segs the same node as previous seg
+WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes) 
+{ 
+    buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, NULL);
+
+    WordIndex node_index = *LASTENT (uint32_t, ctx->b250); 
+    NEXTENT (uint32_t, ctx->b250) = node_index; 
+    ctx->txt_len += add_bytes;
+
+    return node_index;
+}
 
 // called before seg, to store the point to which we might roll back
 void seg_create_rollback_point (Context *ctx)
@@ -271,7 +283,7 @@ PosType seg_pos_field (VBlock *vb,
         else {
             this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, IS_FLAG (opt, SPF_ZERO_IS_BAD), &err);
             ASSERT (IS_FLAG (opt, SPF_BAD_SNIPS_TOO) || !err, "invalid value %.*s in %s vb=%u line_i=%"PRIu64, 
-                    pos_len, pos_str, CTX(snip_did_i)->name, vb->vblock_i, vb->line_i);
+                    pos_len, pos_str, CTX(snip_did_i)->tag_name, vb->vblock_i, vb->line_i);
         }
 
         // we accept out-of-range integer values for non-self-delta
@@ -365,7 +377,7 @@ PosType seg_pos_field (VBlock *vb,
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field_do (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator)
+void seg_id_field_do (VBlock *vb, DidIType did_i, const char *id_snip, unsigned id_snip_len, bool account_for_separator)
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
@@ -379,13 +391,14 @@ void seg_id_field_do (VBlock *vb, DictId dict_id, const char *id_snip, unsigned 
         else 
             break;
 
+    Context *ctx = CTX(did_i);
+
     // added to local if we have a trailing number
     if (num_digits) {
         uint32_t id_num = atoi (&id_snip[id_snip_len - num_digits]);
-        seg_add_to_local_uint32 (vb, ctx_get_ctx (vb, dict_id), id_num, 0);
+        seg_add_to_local_uint32 (vb, ctx, id_num, 0);
     }
 
-    Context *ctx = ctx_get_ctx (vb, dict_id);
     ctx->no_stons = true;
     ctx->ltype  = LT_UINT32;
 
@@ -595,7 +608,7 @@ void seg_compound_field (VBlock *vb,
                     // inequality - we stop the pairing going forward till the end of this VB
                     !sf_ctx->stop_pairing) {
                     
-                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250, !sf_ctx->pair_flags.all_the_same, sf_ctx->name);  
+                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250, !sf_ctx->pair_flags.all_the_same, sf_ctx->tag_name);  
                     
                     if (pair_word_index == WORD_INDEX_ONE_UP) 
                         pair_word_index = sf_ctx->pair_b250_iter.prev_word_index + 1;
@@ -646,7 +659,7 @@ void seg_compound_field (VBlock *vb,
         else snip_len++;
     }
 
-    container_seg_by_ctx (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con_nitems(con) + num_double_sep - 1) + add_for_eol);
+    container_seg (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con_nitems(con) + num_double_sep - 1) + add_for_eol);
 }
 
 // an array or array of arrays
@@ -757,7 +770,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
         value++;
     }
 
-    return container_seg_by_ctx (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes);
+    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes);
 }
 
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 
@@ -892,7 +905,7 @@ static void seg_verify_file_size (VBlock *vb)
         fprintf (stderr, "context.txt_len for vb=%u:\n", vb->vblock_i);
         for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
             Context *ctx = CTX(sf_i);
-            fprintf (stderr, "%s: %u\n", dis_dict_id_ex (ctx->dict_id, true).s, (uint32_t)ctx->txt_len);
+            fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
         }
 
         fprintf (stderr, "vb=%u reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
@@ -911,9 +924,7 @@ void seg_all_data_lines (VBlock *vb)
 {
     START_TIMER;
 
-    ctx_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
-
-    ctx_verify_field_ctxs (vb);
+    ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
  
     // allocate the b250 for the fields which each have num_lines entries
     for (DidIType f=0; f < DTF(num_fields); f++) 

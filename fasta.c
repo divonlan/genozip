@@ -192,25 +192,25 @@ void fasta_seg_finalize (VBlockP vb)
         .is_toplevel  = true,
         .callback     = true,
         .nitems_lo    = 2,
-        .items        = { { .dict_id = (DictId)dict_id_fields[FASTA_LINEMETA]  },
-                          { .dict_id = (DictId)dict_id_fields[FASTA_EOL], .translator = FASTA2PHYLIP_EOL } }
+        .items        = { { .dict_id = { _FASTA_LINEMETA }  },
+                          { .dict_id = { _FASTA_EOL }, .translator = FASTA2PHYLIP_EOL } }
     };
 
-    container_seg_by_ctx (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+    container_seg (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 }
 
 bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
-    return dict_id.num == dict_id_fields[FASTA_TOPLEVEL] ||
-           dict_id.num == dict_id_fields[FASTA_DESC]     ||
-           dict_id.num == dict_id_fields[FASTA_LINEMETA] ||
-           dict_id.num == dict_id_fields[FASTA_TAXID]    ||
-           dict_id.num == dict_id_fields[FASTA_EOL];
+    return dict_id.num == _FASTA_TOPLEVEL ||
+           dict_id.num == _FASTA_DESC     ||
+           dict_id.num == _FASTA_LINEMETA ||
+           dict_id.num == _FASTA_TAXID    ||
+           dict_id.num == _FASTA_EOL;
 }
 
 // description line - we segment it to its components
 // note: we store the DESC container in its own ctx rather than just directly in LINEMETA, to make it easier to grep
-static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool *has_13)
+static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool *has_13)
 {
     SAFE_NUL (&line_start[line_len]);
     
@@ -225,7 +225,7 @@ static void fast_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32_
         seg_compound_field ((VBlockP)vb, CTX(FASTA_DESC), line_start, line_len, arg, 0, 0);
         
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
-        seg_prepare_snip_other (SNIP_REDIRECTION, dict_id_fields[FASTA_DESC], false, 0, &special_snip[2], &special_snip_len);
+        seg_prepare_snip_other (SNIP_REDIRECTION, _FASTA_DESC, false, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_DESC;
@@ -263,7 +263,7 @@ static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint
         seg_add_to_local_text ((VBlockP)vb, CTX(FASTA_COMMENT), line_start, line_len, line_len); 
 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
-        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, dict_id_fields[FASTA_COMMENT], false, 0, &special_snip[2], &special_snip_len);
+        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, _FASTA_COMMENT, false, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_COMMENT;
@@ -288,7 +288,7 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
 
     else { // not cached
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
-        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, dict_id_fields[FASTA_NONREF], 
+        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, _FASTA_NONREF, 
                                 true, (int32_t)line_len, &special_snip[3], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
@@ -359,7 +359,7 @@ const char *fasta_seg_txt_line (VBlockFASTA *vb, const char *line_start, uint32_
 
     // case: description line - we segment it to its components
     if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
-        fast_seg_desc_line (vb, line_start, line_len, has_13);
+        fasta_seg_desc_line (vb, line_start, line_len, has_13);
 
         if (kraken_is_loaded) {
             unsigned qname_len = strcspn (line_start + 1, " \t\r\n"); // +1 to skip the '>' or ';'
@@ -401,21 +401,21 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
     if (flag.header_only_fast && 
-        (dict_id.num == dict_id_fields[FASTA_NONREF] || dict_id.num == dict_id_fields[FASTA_NONREF_X] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
+        (dict_id.num == _FASTA_NONREF || dict_id.num == _FASTA_NONREF_X || dict_id.num == _FASTA_COMMENT))
         return true;
 
     // when grepping by main thread - skipping all sections but DESC
     if ((flag.grep || flag.regions) && (vb->grep_stages == GS_TEST) && 
-        dict_id.num != dict_id_fields[FASTA_DESC] && !dict_id_is_fasta_desc_sf (dict_id))
+        dict_id.num != _FASTA_DESC && !dict_id_is_fasta_desc_sf (dict_id))
         return true;
 
     // if grepping, compute thread doesn't need to decompressed DESC again
     if ((flag.grep || flag.regions) && (vb->grep_stages == GS_UNCOMPRESS) && 
-        (dict_id.num == dict_id_fields[FASTA_DESC] || dict_id_is_fasta_desc_sf (dict_id)))
+        (dict_id.num == _FASTA_DESC || dict_id_is_fasta_desc_sf (dict_id)))
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
-    if (flag.kraken_taxid==TAXID_NONE && dict_id.num == dict_id_fields[FASTA_TAXID])
+    if (flag.kraken_taxid==TAXID_NONE && dict_id.num == _FASTA_TAXID)
         return true;
 
     return false;

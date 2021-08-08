@@ -695,6 +695,8 @@ static void file_initialize_z_file_data (File *file)
     INIT (txt_file_info);
     INIT (vb_info[0]);
     INIT (vb_info[1]);
+    INIT (rejects_report);
+    INIT (apriori_tags);
 }
 
 static void file_initialize_txt_file_data (File *file)
@@ -1042,7 +1044,7 @@ void file_close (File **file_p,
         buf_destroy (&file->comp_info);
         buf_destroy (&file->txt_file_info);
         buf_destroy (&file->rejects_report);
-        buf_destroy (&file->tags);
+        buf_destroy (&file->apriori_tags);
 
         FREE (file->name);
         FREE (file->basename);

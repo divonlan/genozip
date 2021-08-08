@@ -48,30 +48,45 @@ void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned
     *snip_len = 1 + b64_len + prefixes_len;
 }
 
-WordIndex container_seg_by_ctx_do (VBlock *vb, Context *ctx, ConstContainerP con, 
-                                  // prefixes may be NULL or may be contain a container-wide prefix and per-item prefixes.
-                                  // The "container-wide prefix" is reconstructed once, at the beginning of the Container.
-                                  // The per-item prefixes are reconstructed once per repeat, before their respective items. 
-                                  // - prefixes (if not NULL) starts with a CON_PREFIX_SEP
-                                  // - then the container-wide prefix terminated by CON_PREFIX_SEP 
-                                  // - then one prefix per item terminated by CON_PREFIX_SEP
-                                  // all prefixes may be empty; empty prefixes at the end of the prefix string maybe omitted.
-                                  const char *prefixes, unsigned prefixes_len, 
-                                  unsigned add_bytes)
+WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con, 
+                            // prefixes may be NULL or may be contain a container-wide prefix and per-item prefixes.
+                            // The "container-wide prefix" is reconstructed once, at the beginning of the Container.
+                            // The per-item prefixes are reconstructed once per repeat, before their respective items. 
+                            // - prefixes (if not NULL) starts with a CON_PREFIX_SEP
+                            // - then the container-wide prefix terminated by CON_PREFIX_SEP 
+                            // - then one prefix per item terminated by CON_PREFIX_SEP
+                            // all prefixes may be empty; empty prefixes at the end of the prefix string maybe omitted.
+                            const char *prefixes, unsigned prefixes_len, 
+                            const char *ren_prefixes, unsigned ren_prefixes_len, 
+                            unsigned add_bytes,
+                            bool *is_new) // optional out
 {
     ctx->no_stons = true; // we need the word index to for container caching
 
     // con=NULL means MISSING Container (see container_reconstruct_do)
     if (!con) return seg_by_ctx (vb, NULL, 0, ctx, 0); 
+    
+    unsigned con_b64_size = base64_size(con_sizeof (*con));
+    unsigned con1_snip_len = 1 + con_b64_size + prefixes_len;
+    unsigned con2_snip_len = 1 + con_b64_size + ren_prefixes_len;
 
-    unsigned snip_len = 1 + base64_size(con_sizeof (*con)) + prefixes_len;
+    unsigned snip_len = ren_prefixes_len ? 1 + con1_snip_len + con2_snip_len : con1_snip_len;
     char snip[snip_len];
 
-    container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
+    // case: we have renamed prefixes due to dual-coordinates with tag renaming
+    if (ren_prefixes_len) {
+        snip[0] = SNIP_DUAL;
+        container_prepare_snip (con, prefixes, prefixes_len, &snip[1], &con1_snip_len);
+        snip[1 + con1_snip_len] = SNIP_DUAL;
+        container_prepare_snip (con, ren_prefixes, ren_prefixes_len, &snip[2+con1_snip_len], &con2_snip_len);
+        snip_len = 2 + con1_snip_len + con2_snip_len;
+    }
+    else 
+        container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
 
     if (flag.show_containers) { 
         iprintf ("VB=%u Line=%"PRIu64" Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
-                 vb->vblock_i, vb->line_i, ctx->did_i, ctx->name, con->repeats, con->repsep[0], con->repsep[1]);
+                 vb->vblock_i, vb->line_i, ctx->did_i, ctx->tag_name, con->repeats, con->repsep[0], con->repsep[1]);
         for (unsigned i=0; i < con_nitems (*con); i++) {
             const ContainerItem *item = &con->items[i];
             if (item->dict_id.num) 
@@ -80,8 +95,7 @@ WordIndex container_seg_by_ctx_do (VBlock *vb, Context *ctx, ConstContainerP con
         iprint0 ("\n");
     }
 
-    // store in struct cache
-    return seg_by_ctx (vb, snip, snip_len, ctx, add_bytes); 
+    return seg_by_ctx_do (vb, snip, snip_len, ctx, add_bytes, is_new); 
 }
 
 //----------------------
@@ -149,7 +163,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
     for (unsigned i=0; i < num_items; i++) 
         item_ctxs[i] = !con->items[i].dict_id.num      ? NULL 
                      : con->items[i].did_i_small < 255 ? CTX(con->items[i].did_i_small)
-                     :                                   ctx_get_existing_ctx (vb, con->items[i].dict_id);
+                     :                                   ECTX (con->items[i].dict_id);
 
     // for containers, new_value is the some of all its items, all repeats last_value (either int or float)
     LastValueType new_value = {};
@@ -205,7 +219,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
             if (flag.show_containers && item_ctx) // show container reconstruction 
                 iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s->%s trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
-                         vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctx->name,
+                         vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctx->tag_name,
                          vb->translation.trans_containers ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 
@@ -391,14 +405,14 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
         con.repeats = BGEN24 (con.repeats);
 
         ASSERT (con_nitems (con) <= MAX_FIELDS, "A container of %s has %u items which is beyond MAX_FIELDS=%u. Please upgrade to latest version of genozip to access this file.",
-                ctx->name, con_nitems (con), MAX_FIELDS);
+                ctx->tag_name, con_nitems (con), MAX_FIELDS);
 
         // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
         for (uint32_t item_i=0; item_i < con_nitems (con); item_i++)
             if (con.items[item_i].dict_id.num) { // not a prefix-only item
                 DidIType did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
-                ASSERT (did_i != DID_I_NONE, "analyzing a %s container: unable to find did_i for item %s",
-                        ctx->name, dis_dict_id (con.items[item_i].dict_id).s);
+                ASSERT (did_i != DID_I_NONE, "analyzing a %s container: unable to find did_i for item %s/%s",
+                        ctx->tag_name, dtype_name_z(con.items[item_i].dict_id), dis_dict_id (con.items[item_i].dict_id).s);
 
                 con.items[item_i].did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
             }
@@ -412,17 +426,17 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
         prefixes_len = (b64_len < snip_len) ? snip_len - (b64_len+1) : 0;
 
         ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "ctx=%s: prefixes_len=%u longer than CONTAINER_MAX_PREFIXES_LEN=%u", 
-                ctx->name, prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
+                ctx->tag_name, prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
 
         ASSERT (!prefixes_len || prefixes[prefixes_len-1] == CON_PREFIX_SEP, 
-                "ctx=%s: prefixes array does end with a CON_PREFIX_SEP: %.*s", ctx->name, prefixes_len, prefixes);
+                "ctx=%s: prefixes array does end with a CON_PREFIX_SEP: %.*s", ctx->tag_name, prefixes_len, prefixes);
 
         // condition testing needed only for backward compatability with 8.0.x: prior to version 8.1 containers didn't have NO_STONS 
         // so singletons were in ctx.local without a word_index)
         if (word_index != WORD_INDEX_NONE) {
 
             ASSERT (st_size + prefixes_len <= 65535, "ctx=%s: st_size=%u + prefixes_len=%u too large", 
-                    ctx->name, st_size, prefixes_len);
+                    ctx->tag_name, st_size, prefixes_len);
 
             // first encounter with Container for this context - allocate the cache
             if (!cache_exists) {
@@ -449,7 +463,7 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
                 int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len, false));  
                 ASSERT (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
                         "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", 
-                        ctx->name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
+                        ctx->tag_name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
                 
                 prefixes_len       += prefixes_len_change;
                 ctx->con_cache.len += prefixes_len_change;
@@ -485,7 +499,7 @@ void container_display (ConstContainerP con)
 #define SET_n(type,mn,mx) type n = (type)ctx->last_value.i; \
                            ASSINP (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx), "Error: Failed to convert %s to %s because of bad data in line %"PRIu64" of the %s file: value of %s=%"PRId64" is out of range [%"PRId64"-%"PRId64"]",\
                                    dt_name (z_file->data_type), dt_name (flag.out_dt), vb->line_i, dt_name (z_file->data_type), \
-                                   ctx->name, (int64_t)(ctx->last_value.i), (int64_t)(mn), (int64_t)(mx))
+                                   ctx->tag_name, (int64_t)(ctx->last_value.i), (int64_t)(mn), (int64_t)(mx))
 
 TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );              RECONSTRUCT1(n);       return 0; }
 TRANSLATOR_FUNC (container_translate_U8)       { SET_n (uint8_t,  0,         UINT8_MAX );              RECONSTRUCT1((char)n); return 0; }

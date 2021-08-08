@@ -198,14 +198,14 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
         iprintf ("  genozip_version: %u\n",         header->genozip_version);
         iprintf ("  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
         iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
-        iprintf ("  recon_size_prim: %s\n",  str_uint_commas (BGEN64 (header->recon_size_prim)).s);
+        iprintf ("  recon_size_prim: %s\n",         str_uint_commas (BGEN64 (header->recon_size_prim)).s);
         iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
         iprintf ("  num_sections: %u\n",            (unsigned)ents_len);
         iprintf ("  num_components: %u\n",          BGEN32 (header->num_components));
         iprintf ("  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
         iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);
         iprintf ("  license_hash: %s\n",            digest_display (header->license_hash).s);
-        iprintf ("  reference filename: %s\n",     header->ref_filename);
+        iprintf ("  reference filename: %s\n",      header->ref_filename);
         iprintf ("  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
 
         switch (BGEN16 (header->data_type)) {
@@ -228,9 +228,9 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
                              : header               ? this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader) // we're at the last section genozip header+footer
                              :                        this_offset; // without the GenozipHeader, we can't know its length
 
-        iprintf ("    %3u. %-24.24s %s vb_i=%u offset=%"PRIu64" size=%"PRId64" flags=%u\n", 
+        iprintf ("    %3u. %-24.24s %s/%s vb_i=%u offset=%"PRIu64" size=%"PRId64" flags=%u\n", 
                  i, st_name(ents[i].st), 
-                 dis_dict_id (ents[i].dict_id.num ? ents[i].dict_id : ents[i].dict_id).s, 
+                 dtype_name_z(ents[i].dict_id), dis_dict_id (ents[i].dict_id).s, 
                  ents[i].vblock_i, this_offset, next_offset - this_offset, ents[i].flags.flags);
     }
 }

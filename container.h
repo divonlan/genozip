@@ -69,9 +69,10 @@ typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) 
 #define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
 
 extern void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned prefixes_len, char *snip, unsigned *snip_len);
-extern WordIndex container_seg_by_ctx_do (VBlockP vb, ContextP ctx, ConstContainerP con, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
-#define container_seg_by_ctx(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_by_ctx_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), (add_bytes))
-#define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg_by_ctx (vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
+extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, const char *prefixes, unsigned prefixes_len, const char *ren_prefixes, unsigned ren_prefixes_len, unsigned add_bytes, bool *is_new);
+#define container_seg(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), 0, 0, (add_bytes), NULL)
+#define container_seg_with_rename(vb, ctx, con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, add_bytes, is_new) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), (ren_prefixes), (ren_prefixes_len), (add_bytes), (is_new))
+#define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg (vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
 
 extern LastValueType container_reconstruct (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len);
 

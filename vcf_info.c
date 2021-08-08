@@ -17,11 +17,6 @@
 #include "gff3.h"
 #include "coords.h"
 
-typedef struct { char name[64];
-                 const char *value; 
-                 unsigned name_len, value_len; 
-                 DictId dict_id;   } InfoItem;
-
 void vcf_info_zip_initialize (void) 
 {
 }
@@ -31,11 +26,11 @@ void vcf_info_zip_initialize (void)
 // -------
 
 // return true if caller still needs to seg 
-static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, const char *value, int value_len)
+static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, STRp(value))
 {
     // also tried delta vs DP4, but it made it worse
     Context *ctx_basecounts;
-    if (ctx_has_value_in_line (vb, dict_id_INFO_BaseCounts, &ctx_basecounts)) {
+    if (ctx_has_value_in_line (vb, _INFO_BaseCounts, &ctx_basecounts)) {
         seg_delta_vs_other (vb, ctx_dp, ctx_basecounts, value, value_len, -1);
         return false; // caller needn't seg
     }
@@ -50,7 +45,7 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, const char *value, 
 // INFO/SF
 // -------
 
-#define adjustment vb->sf_ctx->last_delta
+#define adjustment CTX(INFO_SF)->last_delta
 #define next param
 
 // INFO/SF contains a comma-seperated list of the 0-based index of the samples that are NOT '.'
@@ -58,7 +53,7 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, const char *value, 
 // Algorithm: SF is segged either as an as-is string, or as a SPECIAL that includes the index of all the non-'.' samples. 
 // if use_special_sf=YES, we use SNIP_SPECIAL and we validate the correctness during vcf_seg_FORMAT_GT -
 // if it is wrong we set use_special_sf=NO. The assumption is that normally, it is either true for all lines or false.
-static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, Context *sf_ctx, const char *value, int value_len)
+static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, Context *sf_ctx, STRp(value))
 {
     switch (vb->use_special_sf) {
 
@@ -67,7 +62,6 @@ static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, Context *sf_ctx, const char *va
 
         case USE_SF_UNKNOWN: 
             vb->use_special_sf = USE_SF_YES; // first call to this function, after finding that we have an INFO/SF field - set and fall through
-            vb->sf_ctx = sf_ctx;
 
         case USE_SF_YES: 
             // we store the SF value in a buffer, since seg_FORMAT_GT overlays the haplotype buffer onto txt_data and may override the SF field
@@ -145,10 +139,10 @@ static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
     }
 
     if (vb->use_special_sf == USE_SF_YES) 
-        seg_by_ctx (vb, vb->sf_snip.data, vb->sf_snip.len, vb->sf_ctx, vb->sf_txt.len);
+        seg_by_ctx (vb, vb->sf_snip.data, vb->sf_snip.len, CTX(INFO_SF), vb->sf_txt.len);
     
     else if (vb->use_special_sf == USE_SF_NO)
-        seg_by_ctx (vb, vb->sf_txt.data, vb->sf_txt.len, vb->sf_ctx, vb->sf_txt.len);
+        seg_by_ctx (vb, vb->sf_txt.data, vb->sf_txt.len, CTX(INFO_SF), vb->sf_txt.len);
 
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);
@@ -157,8 +151,8 @@ static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
 #undef adjustment
 #undef param
 
-#define adjustment vcf_vb->sf_ctx->last_delta
-#define sample_i   vcf_vb->sf_ctx->last_value.i
+#define adjustment vcf_vb->contexts[INFO_SF].last_delta
+#define sample_i   vcf_vb->contexts[INFO_SF].last_value.i
 #define snip_i     vcf_vb->sf_snip.param
 
 // leave space for reconstructing SF - actual reconstruction will be in vcf_piz_container_cb
@@ -167,7 +161,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SF)
     VBlockVCFP vcf_vb = (VBlockVCFP)vb;
 
     if (reconstruct) {
-        vcf_vb->sf_ctx = ctx;
         adjustment    = 0;
         sample_i      = 0; 
         snip_i        = 0;
@@ -247,7 +240,7 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
     }
 
     // make room for the SF txt and copy it to its final location
-    char *sf_txt = last_txt (vcf_vb, vcf_vb->sf_ctx->did_i);
+    char *sf_txt = last_txt (vcf_vb, INFO_SF);
     memmove (sf_txt + vcf_vb->sf_txt.len, sf_txt, AFTERENT (char, vcf_vb->txt_data) - sf_txt); // make room
     memcpy (sf_txt, vcf_vb->sf_txt.data, vcf_vb->sf_txt.len); // copy
 
@@ -266,7 +259,7 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
 // -------
 
 // checks if value is identifcal to the REF or one of the ALT alleles, and if so segs a SPECIAL snip
-static bool vcf_seg_INFO_allele (VBlockVCF *vb, Context *ctx, const char *value, int value_len) // returns true if caller still needs to seg 
+static bool vcf_seg_INFO_allele (VBlockVCF *vb, Context *ctx, STRp(value)) // returns true if caller still needs to seg 
 {
     // short circuit in common case of '.'
     if (value_len == 1 && *value == '.') return true; // caller should seg
@@ -307,9 +300,10 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
         allele = 1 - allele;
     }
 
-    DidIType refalt_did = (vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT); // we need the one that was already reconstructed in REF/ALT
-    const char *refalt = last_txt (vb, refalt_did);
-    unsigned refalt_len = vb->last_txt_len (refalt_did);
+    ContextP refalt_ctx = vb->vb_coords == DC_PRIMARY ? CTX (VCF_REFALT) : CTX (VCF_oREFALT); // note: we can't rely on the constants VCF_* in PIZ
+
+    const char *refalt = last_txtx (vb, refalt_ctx);
+    unsigned refalt_len = refalt_ctx->last_txt_len;
 
     if (!refalt_len) goto done; // variant is single coordinate in the other coordinate
 
@@ -348,7 +342,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
 
 // ##INFO=<ID=genozip BugP.vcf -ft ,Number=4,Type=Integer,Description="Counts of each base">
 // Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
-static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, const char *value, int value_len) // returns true if caller still needs to seg 
+static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, STRp(value)) // returns true if caller still needs to seg 
 {
     if (CTX(VCF_REFALT)->last_snip_len != 3 || vb->line_coords == DC_LUFT) 
         return true; // not a bi-allelic SNP or line is a luft line without easy access to REFALT - caller should seg
@@ -401,8 +395,8 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, con
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 {
-    const char *refalt; unsigned refalt_len;
-    reconstruct_peek (vb, CTX(VCF_REFALT), &refalt, &refalt_len);
+    STR (refalt);
+    reconstruct_peek (vb, CTX (VCF_REFALT), &refalt, &refalt_len);
 
     uint32_t counts[4], sorted_counts[4] = {}; // counts of A, C, G, T
 
@@ -463,7 +457,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_XREV)
 
 // INFO fields with a format originating from the VEP software, eg
 // vep=T|intergenic_variant|MODIFIER|||Intergenic||||||||||||1|||SNV||||||||||||||||||||||||
-static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, const char *field, unsigned field_len)
+static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, STRp(field))
 {
     Container con = { .repsep = { ',' }, 
                       .drop_final_repeat_sep = true,
@@ -478,13 +472,13 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, const char
             if (item_i == con_nitems(con)) {
                 ASSVCF (!con.repeats, 
                         "expecting all repeats of %s to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has more: %.*s", 
-                        vep_ctx->name, con_nitems(con), con.repeats, field_len, field);
+                        vep_ctx->tag_name, con_nitems(con), con.repeats, field_len, field);
 
                 ASSVCF (item_i < MIN (126, MAX_FIELDS), "exceeded the max number of %s items=%u", 
-                        vep_ctx->name, MIN (126, MAX_FIELDS)); // the 126 constraint is just the context naming scheme
+                        vep_ctx->tag_name, MIN (126, MAX_FIELDS)); // the 126 constraint is just the context naming scheme
                 
                 char name[8];
-                sprintf (name, "%c%c_%.3s", item_i < 63 ? '_' : '`', '@' + (item_i % 63), vep_ctx->name);
+                sprintf (name, "%c%c_%.3s", item_i < 63 ? '_' : '`', '@' + (item_i % 63), vep_ctx->tag_name);
                 DictId dict_id = dict_id_make (name, 6, DTYPE_VCF_INFO);
 
                 sf_ctxs[item_i] = ctx_get_ctx (vb, dict_id);
@@ -504,7 +498,7 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, const char
             if (field[i] != '|') { // end of repeat
                 ASSVCF (!con.repeats || item_i == con_nitems(con), 
                         "expecting all repeats of %s to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has only %u items: %.*s", 
-                        vep_ctx->name, con_nitems(con), con.repeats, item_i, field_len, field);
+                        vep_ctx->tag_name, con_nitems(con), con.repeats, item_i, field_len, field);
             
                 con.repeats++;
                 item_i=0;
@@ -512,7 +506,7 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, const char
         }
     }
 
-    container_seg_by_ctx (vb, vep_ctx, &con, 0, 0, 0);
+    container_seg (vb, vep_ctx, &con, 0, 0, 0);
 
     // TODO: recover and seg just the field as-is, rather than throw an error, if its not the CSQ format we expect
     // (need to roll back all changes to subfields)
@@ -522,17 +516,17 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, const char
 // INFO/AC
 // -------
 
-static void vcf_seg_INFO_AC (VBlockVCF *vb, Context *ac_ctx, const char *field, unsigned field_len)
+static void vcf_seg_INFO_AC (VBlockVCF *vb, Context *ac_ctx, STRp(field))
 {
     Context *af_ctx, *an_ctx;
     int64_t ac;
     bool ac_has_value_in_line = str_get_int (field, field_len, &ac);
-    bool an_has_value_in_line = ctx_has_value_in_line (vb, dict_id_INFO_AN, &an_ctx);
+    bool an_has_value_in_line = ctx_has_value_in_line (vb, _INFO_AN, &an_ctx);
 
     // case: AC = AN * AF (might not be, due to rounding errors, esp if AF is a very small fraction)
     if (ac_has_value_in_line &&                                 // AC exists and is a valid int
         an_has_value_in_line &&                                 // AN exists and is a valid int
-        ctx_has_value_in_line (vb, dict_id_INFO_AF, &af_ctx) && // AF exists and is a valid float
+        ctx_has_value_in_line (vb, _INFO_AF, &af_ctx) && // AF exists and is a valid float
         (int64_t)round (af_ctx->last_value.f * an_ctx->last_value.i) == ac) { // AF * AN == AC
 
         ac_ctx->no_stons = true;
@@ -554,7 +548,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
     // Backward compatability note: In files v6->11, snip has 2 bytes for AN, AF which mean: '0'=appears after AC, '1'=appears before AC. We ignore them.
 
     // note: update last_value too, so its available to vcf_piz_luft_A_AN, which is called becore last_value is updated
-    ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek_(vb, dict_id_INFO_AN, 0, 0).i * reconstruct_peek_(vb, dict_id_INFO_AF, 0, 0).f);
+    ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek_(vb, _INFO_AN, 0, 0).i * reconstruct_peek_(vb, _INFO_AF, 0, 0).f);
     RECONSTRUCT_INT (new_value->i); 
 
     return true;
@@ -570,7 +564,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
 
     if (command == ZIP) {
         Context *an_ctx;
-        if (!ctx_has_value_in_line (vb, dict_id_INFO_AN, &an_ctx) ||
+        if (!ctx_has_value_in_line (vb, _INFO_AN, &an_ctx) ||
             !str_get_int_range64 (recon, recon_len, 0, (an = an_ctx->last_value.i), &ac))
             return false; // in Seg, AC is always segged last, so this means there is no AN in the line for sure
         
@@ -578,7 +572,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
     }
     else {
         ac = ctx->last_value.i;
-        an = reconstruct_peek_(vb, dict_id_INFO_AN, 0, 0).i;
+        an = reconstruct_peek_(vb, _INFO_AN, 0, 0).i;
     }
 
     // re-reconstruct: AN-AC
@@ -647,19 +641,21 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
     if (validate_only) return true; 
 
     PosType translated_end;
-
+    ContextP pos_ctx  = CTX (VCF_POS);
+    ContextP opos_ctx = CTX (VCF_oPOS);
+    
     // ZIP liftback (POS is always before END, because we seg INFO/LIFTOVER first)
     if (command == ZIP && vb->line_coords == DC_LUFT) { // liftback
         PosType oend;
         if (!str_get_int_range64 (recon, recon_len, 0, MAX_POS, &oend))
             return false;
 
-        translated_end = vb->last_int (VCF_POS) + (oend - vb->last_int (VCF_oPOS));
+        translated_end = pos_ctx->last_value.i + (oend - opos_ctx->last_value.i);
     }
 
     // PIZ liftover: we have already reconstructed oPOS and POS (as an item in VCF_TOPLUFT)
     else {
-        translated_end = vb->last_int (VCF_oPOS) + vb->last_delta (VCF_POS); // delta for generated this END value (END - POS)
+        translated_end = opos_ctx->last_value.i + pos_ctx->last_delta; ; // delta for generated this END value (END - POS)
 
         ((VBlockVCFP)vb)->last_end_line_i = vb->line_i; // so vcf_piz_special_COPYPOS knows that END was reconstructed
     }
@@ -678,7 +674,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
     
     bool has_end = ((VBlockVCFP)vb)->last_end_line_i == vb->line_i; // true if INFO/END was encountered
 
-    Context *pos_ctx = CTX(VCF_POS);
+    Context *pos_ctx = CTX (VCF_POS);
     int64_t pos;
 
     if (has_end) {
@@ -697,12 +693,12 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
 // INFO/SVLEN
 // ----------
 
-static inline bool vcf_seg_test_SVLEN (VBlockVCF *vb, const char *svlen_str, unsigned svlen_str_len)
+static inline bool vcf_seg_test_SVLEN (VBlockVCF *vb, STRp(svlen_str))
 {
     int64_t svlen;
     if (!str_get_int (svlen_str, svlen_str_len, &svlen)) return false;
 
-    int64_t last_delta = CTX(VCF_POS)->last_delta; // INFO_END is an alias of POS - so the last delta would be between END and POS
+    int64_t last_delta = CTX (VCF_POS)->last_delta; // INFO_END is an alias of POS - so the last delta would be between END and POS
     return last_delta == -svlen;
 }
 
@@ -711,7 +707,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SVLEN)
 {
     if (!reconstruct) goto done;
 
-    int64_t value = -CTX(VCF_POS)->last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
+    int64_t value = -CTX (VCF_POS)->last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
     char str[30];
     unsigned str_len = str_int (value, str);
     RECONSTRUCT (str, str_len);
@@ -726,12 +722,12 @@ done:
 
 // <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
 // handles the common case of SNPs: "NC_000023.10:g.154507173T>G"
-static bool vcf_seg_INFO_CLNHGVS (VBlockVCF *vb, ContextP ctx, const char *value, unsigned value_len)
+static bool vcf_seg_INFO_CLNHGVS (VBlockVCF *vb, ContextP ctx, STRp(value))
 {
     if (vb->main_ref_len != 1 || vb->main_alt_len != 1)
         goto fail; // not a SNP
 
-    if (ctx_encountered_in_line (vb, dict_id_INFO_END, NULL)) 
+    if (ctx_encountered_in_line (vb, _INFO_END, NULL)) 
         goto fail; // we can't use this if there is an END before CLNHGVS, as it will change last_int(VCF_POS) during reconstruction
 
     // data in variant
@@ -750,27 +746,24 @@ static bool vcf_seg_INFO_CLNHGVS (VBlockVCF *vb, ContextP ctx, const char *value
     SmallContainer con = { 
         .repeats   = 1,
         .nitems_lo = 2,
-        .items = { { .dict_id = (DictId)dict_id_INFO_CLNHGVS_pos    },
-                   { .dict_id = (DictId)dict_id_INFO_CLNHGVS_refalt } }
+        .items = { { .dict_id = (DictId)_INFO_CLNHGVS_pos    },
+                   { .dict_id = (DictId)_INFO_CLNHGVS_refalt } }
      }; 
 
     // temporarily surround prefix by separators, and seg container with prefix
     SAFE_ASSIGNx (&value[-1], CON_PREFIX_SEP, 1);
     SAFE_ASSIGNx (v,          CON_PREFIX_SEP, 2);
 
-    container_seg_by_ctx (vb, ctx, (ContainerP)&con, &value[-1], v - value + 2, value_len);
+    container_seg (vb, ctx, (ContainerP)&con, &value[-1], v - value + 2, value_len);
 
     SAFE_RESTOREx(1);
     SAFE_RESTOREx(2);
 
     // seg special snips
-    Context *hgvs_pos_ctx    = ctx_get_ctx (vb, dict_id_INFO_CLNHGVS_pos);
-    Context *hgvs_refalt_ctx = ctx_get_ctx (vb, dict_id_INFO_CLNHGVS_refalt);
-    
-    hgvs_pos_ctx->st_did_i = hgvs_refalt_ctx->st_did_i = ctx->did_i; // consolidate stats
+    CTX(INFO_CLNHGVS_pos)->st_did_i = CTX(INFO_CLNHGVS_refalt)->st_did_i = ctx->did_i; // consolidate stats
 
-    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_POS    }), 2, hgvs_pos_ctx,    0);
-    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_REFALT }), 2, hgvs_refalt_ctx, 0);
+    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_POS    }), 2, CTX(INFO_CLNHGVS_pos),    0);
+    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_REFALT }), 2, CTX(INFO_CLNHGVS_refalt), 0);
     
     return false;
 
@@ -780,11 +773,13 @@ fail:
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_POS)
 {
+    ContextP pos_ctx = CTX (VCF_POS);
+    
     if (vb->vb_coords == DC_PRIMARY)
-        RECONSTRUCT (last_txt (vb, VCF_POS), vb->last_txt_len (VCF_POS)); // faster than RECONSTRUCT_INT
+        RECONSTRUCT (last_txtx (vb, pos_ctx), pos_ctx->last_txt_len); // faster than RECONSTRUCT_INT
     
     else { // if reconstructing Luft, VCF_POS just consumed and last_int set if in Luft coords (see top_luft container)
-        RECONSTRUCT_INT (vb->last_int (VCF_POS));
+        RECONSTRUCT_INT (pos_ctx->last_value.i);
     }
     
     return false; // no new value
@@ -793,7 +788,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_POS)
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_REFALT)
 {
     const char *refalt;
-    reconstruct_peek (vb, CTX(VCF_REFALT), &refalt, NULL); // this special works only on SNPs, so length is always 3
+    reconstruct_peek (vb, CTX (VCF_REFALT), &refalt, NULL); // this special works only on SNPs, so length is always 3
 
     RECONSTRUCT1 (refalt[0]); // this might overwrite the "peeked" data, but that's ok
     RECONSTRUCT1 ('>');
@@ -813,18 +808,18 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
     // case: Dual coordinates file line has no PRIM, Lrej or Prej - this can happen if variants were added to the file,
     // for example, as a result of a "bcftools merge" with a non-DVCF file
     bool added_variant = false;
-    if (!ctx_encountered_in_line (vb, dict_id_INFO_LUFT, NULL) && // note: no need to chech PRIM because LUFT and PRIM always appear together
-        !ctx_encountered_in_line (vb, dict_id_INFO_LREJ, NULL) &&
-        !ctx_encountered_in_line (vb, dict_id_INFO_PREJ, NULL)) {
+    if (!ctx_encountered_in_line (vb, _INFO_LUFT, NULL) && // note: no need to chech PRIM because LUFT and PRIM always appear together
+        !ctx_encountered_in_line (vb, _INFO_LREJ, NULL) &&
+        !ctx_encountered_in_line (vb, _INFO_PREJ, NULL)) {
         vcf_lo_seg_rollback_and_reject (vb, LO_ADDED_VARIANT, NULL); // note: we don't report this reject because it doesn't happen during --chain
         added_variant = true; // we added a REJX field in a variant that will be reconstructed in the current coordintes
     }
 
     // case: line originally had LIFTOVER or LIFTBACK. These can be fields from the txt files, or created by --chain
-    bool has_luft    = ctx_encountered_in_line (vb, dict_id_INFO_LUFT, NULL);
-    bool has_prim    = ctx_encountered_in_line (vb, dict_id_INFO_PRIM, NULL);
-    bool has_lrej    = ctx_encountered_in_line (vb, dict_id_INFO_LREJ, NULL);
-    bool has_prej    = ctx_encountered_in_line (vb, dict_id_INFO_PREJ, NULL);
+    bool has_luft    = ctx_encountered_in_line (vb, _INFO_LUFT, NULL);
+    bool has_prim    = ctx_encountered_in_line (vb, _INFO_PRIM, NULL);
+    bool has_lrej    = ctx_encountered_in_line (vb, _INFO_LREJ, NULL);
+    bool has_prej    = ctx_encountered_in_line (vb, _INFO_PREJ, NULL);
     bool rolled_back = LO_IS_REJECTED (last_ostatus) && (has_luft || has_prim); // rejected in the Seg process
            
     // make sure we have either both LIFT/PRIM or both Lrej/Prej subfields in Primary and Luft
@@ -842,17 +837,18 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
     if (LO_IS_OK (last_ostatus)) {
 
         NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
-            .name     = INFO_LUFT"=", 
-            .name_len = INFO_DVCF_LEN + 1, // +1 for the '='
-            .dict_id  = (DictId)dict_id_INFO_LUFT 
+            .name      = INFO_LUFT_NAME"=", 
+            .name_len  = INFO_DVCF_LEN + 1, // +1 for the '='
+            .ctx       = CTX (INFO_LUFT),
+            .value     = "" // non-zero means value exists
         };  
         
         NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
-            .name     = INFO_PRIM"=", 
-            .name_len = INFO_DVCF_LEN + 1, // +1 for the '='
-            .dict_id  = (DictId)dict_id_INFO_PRIM 
+            .name      = INFO_PRIM_NAME"=", 
+            .name_len  = INFO_DVCF_LEN + 1, // +1 for the '='
+            .ctx       = CTX (INFO_PRIM),
+            .value     = "" // non-zero means value exists
         };  
-
 
         // case: --chain - we're adding ONE of these subfields to each of Primary and Luft reconstructions
         if (chain_is_loaded) {
@@ -864,15 +860,17 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
 
     else { 
         NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
-            .name     = INFO_LREJ"=", 
-            .name_len = INFO_DVCF_LEN + 1, 
-            .dict_id  = (DictId)dict_id_INFO_LREJ
+            .name      = INFO_LREJ_NAME"=", 
+            .name_len  = INFO_DVCF_LEN + 1, 
+            .ctx       = CTX (INFO_LREJ),
+            .value     = "" // non-zero means value exists
         };
 
         NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
-            .name     = INFO_PREJ"=", 
-            .name_len = INFO_DVCF_LEN + 1, 
-            .dict_id  = (DictId)dict_id_INFO_PREJ
+            .name      = INFO_PREJ_NAME"=", 
+            .name_len  = INFO_DVCF_LEN + 1, 
+            .ctx       = CTX (INFO_PREJ),
+            .value     = "" // non-zero means value exists
         };
 
         // case: we added a REJX INFO field that wasn't in the TXT data: --chain or rolled back (see vcf_lo_seg_rollback_and_reject) or an added variant
@@ -883,9 +881,16 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
             else vb->recon_size_luft += growth;
         }
     }
+
+    // add tags for the DVCF info items
+    if (!vb->is_rejects_vb) {
+        InfoItem *ii = LASTENT (InfoItem, vb->info_items) - 1;
+        vcf_tags_add_tag (vb, ii[0].ctx, DTYPE_VCF_INFO, ii[0].ctx->tag_name, ii[0].name_len-1);
+        vcf_tags_add_tag (vb, ii[1].ctx, DTYPE_VCF_INFO, ii[1].ctx->tag_name, ii[1].name_len-1);
+    }
 }
 
-static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char *value, unsigned value_len)
+static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
 {
     #define CALL(f) do { (f); not_yet_segged = false; } while(0) 
     #define CALL_WITH_FALLBACK(f) do { if (f (vb, ctx, value, value_len)) seg_by_ctx ((VBlockP)vb, value, value_len, ctx, value_len); \
@@ -894,7 +899,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
     unsigned modified_len = value_len + 20;
     char modified[modified_len]; // used for 1. fields that are optimized 2. fields translated luft->primary. A_1 transformed 4.321e-03->0.004321
     
-    Context *ctx = ctx_get_ctx (vb, dict_id), *other_ctx = NULL;
+    Context *other_ctx = NULL;
+    uint64_t dnum = ctx->dict_id.num;
     bool not_yet_segged = true;
     
     // note: since we use modified for both optimization and luft_back - we currently don't support
@@ -938,86 +944,86 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, DictId dict_id, const char
         if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, true)) 
             ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
         else 
-            REJECT_SUBFIELD (LO_INFO, ctx, "Cannot cross-render INFO subfield %s: \"%.*s\"", ctx->name, value_len, value);            
+            REJECT_SUBFIELD (LO_INFO, ctx, "Cannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            
     }
 
     // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
     // Optimize VQSLOD
-    if (dict_id.num == dict_id_INFO_VQSLOD && flag.optimize_VQSLOD && optimize_float_2_sig_dig (value, value_len, 0, modified, &modified_len)) 
+    if (dnum == _INFO_VQSLOD && flag.optimize_VQSLOD && optimize_float_2_sig_dig (value, value_len, 0, modified, &modified_len)) 
         ADJUST_FOR_MODIFIED;
     
     // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
     // END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
-    else if (dict_id.num == dict_id_INFO_END)
+    else if (dnum == _INFO_END)
         CALL (vcf_seg_INFO_END (vb, ctx, value, value_len));
 
     // if SVLEN is negative, it is expected to be minus the delta between END and POS
-    else if (dict_id.num == dict_id_INFO_SVLEN && vcf_seg_test_SVLEN (vb, value, value_len)) 
+    else if (dnum == _INFO_SVLEN && vcf_seg_test_SVLEN (vb, value, value_len)) 
         CALL (seg_by_ctx (vb, ((char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, value_len));
 
     // ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
-    else if (dict_id.num == dict_id_INFO_BaseCounts) 
+    else if (dnum == _INFO_BaseCounts) 
         CALL_WITH_FALLBACK (vcf_seg_INFO_BaseCounts);
     
     // ##INFO=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
-    else if (dict_id.num == dict_id_INFO_DP) 
+    else if (dnum == _INFO_DP) 
         CALL_WITH_FALLBACK (vcf_seg_INFO_DP);
 
     // Source File
-    else if (dict_id.num == dict_id_INFO_SF) 
+    else if (dnum == _INFO_SF) 
         CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init);
 
     //##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
-    else if (dict_id.num == dict_id_INFO_AN) 
+    else if (dnum == _INFO_AN) 
         seg_set_last_txt (vb, ctx, value, value_len, STORE_INT);
 
     // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
-    else if (dict_id.num == dict_id_INFO_AF) {
+    else if (dnum == _INFO_AF) {
         seg_set_last_txt (vb, ctx, value, value_len, STORE_FLOAT);
         ctx->keep_snip = true; // consumed by vcf_seg_FORMAT_AF
     }
 
     // ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
-    else if (dict_id.num == dict_id_INFO_AC)
+    else if (dnum == _INFO_AC)
         CALL (vcf_seg_INFO_AC (vb, ctx, value, value_len)); 
 
-    else if (dict_id.num == dict_id_INFO_MLEAC && ctx_has_value_in_line (vb, dict_id_INFO_AC, &other_ctx)) 
+    else if (dnum == _INFO_MLEAC && ctx_has_value_in_line (vb, _INFO_AC, &other_ctx)) 
         CALL (seg_delta_vs_other (vb, ctx, other_ctx, value, value_len, -1));
 
     // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
     else if ((z_dual_coords  && ctx->luft_trans == VCF2VCF_ALLELE) || // if DVCF - apply to all fields (perhaps including AA) with RendAlg=ALLELE
-             (!z_dual_coords && dict_id.num == dict_id_INFO_AA)) // apply to INFO/AA if not DVCF
+             (!z_dual_coords && dnum == _INFO_AA)) // apply to INFO/AA if not DVCF
         CALL_WITH_FALLBACK (vcf_seg_INFO_allele);
 
     // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
-    else if (dict_id.num == dict_id_INFO_CSQ) 
+    else if (dnum == _INFO_CSQ) 
         CALL (vcf_seg_INFO_CSQ (vb, ctx, value, value_len));
     
     // ##INFO=<ID=DP_HIST,Number=R,Type=String,Description="Histogram for DP; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
     // ##INFO=<ID=GQ_HIST,Number=R,Type=String,Description="Histogram for GQ; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
     // ##INFO=<ID=AGE_HISTOGRAM_HET,Number=A,Type=String,Description="Histogram of ages of allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
     // ##INFO=<ID=AGE_HISTOGRAM_HOM,Number=A,Type=String,Description="Histogram of ages of homozygous allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
-    else if (dict_id.num == dict_id_INFO_vep ||
-             dict_id.num == dict_id_INFO_DP_HIST ||
-             dict_id.num == dict_id_INFO_GQ_HIST ||
-             dict_id.num == dict_id_INFO_AGE_HISTOGRAM_HET ||
-             dict_id.num == dict_id_INFO_AGE_HISTOGRAM_HOM) 
+    else if (dnum == _INFO_vep ||
+             dnum == _INFO_DP_HIST ||
+             dnum == _INFO_GQ_HIST ||
+             dnum == _INFO_AGE_HISTOGRAM_HET ||
+             dnum == _INFO_AGE_HISTOGRAM_HOM) 
         CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', '|', false, true));
 
-    else if (dict_id.num == dict_id_INFO_DP4) 
+    else if (dnum == _INFO_DP4) 
         CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', 0, false, true));
 
     // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
-    else if (dict_id.num == dict_id_INFO_CLNDN) 
+    else if (dnum == _INFO_CLNDN) 
         CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, '|', 0, false, false));
 
     // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
-    else if (dict_id.num == dict_id_INFO_CLNHGVS)
+    else if (dnum == _INFO_CLNHGVS)
         not_yet_segged = vcf_seg_INFO_CLNHGVS (vb, ctx, value, value_len);
 
     // ##INFO=<ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
     // ##INFO=<ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
-    else if (dict_id.num == dict_id_INFO_ALLELEID || dict_id.num == dict_id_INFO_RS)
+    else if (dnum == _INFO_ALLELEID || dnum == _INFO_RS)
         CALL (seg_integer_or_not (vb, ctx, value, value_len, value_len));
 
     if (not_yet_segged) 
@@ -1039,12 +1045,19 @@ static int sort_by_subfield_name (const void *a, const void *b)
 
 void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_len)
 {
+    vb->info_items.len = 0; // reset from previous line
+
+    // case: INFO field is '.' (empty) (but not in DVCF as we will need to deal with DVCF items)
+    if (!z_dual_coords && info_len == 1 && *info_str == '.') {
+        seg_by_did_i (vb, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
+        return;
+    }
+
     // parse the info string
     str_split (info_str, info_len, MAX_FIELDS-2, ';', pair, false); // -2 - leave room for LUFT + PRIM
     ASSVCF (n_pairs, "Too many INFO subfields, Genozip supports up to %u", MAX_FIELDS-2);
 
     buf_alloc (vb, &vb->info_items, 0, n_pairs + 2, InfoItem, CTX_GROWTH, "info_items");
-    vb->info_items.len = 0; // reset from previous line
 
     int ac_i = -1; 
     InfoItem lift_ii = {}, rejt_ii = {};
@@ -1053,40 +1066,43 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
     for (unsigned i=0; i < n_pairs; i++) {
         const char *equal_sign = memchr (pairs[i], '=', pair_lens[i]);
         unsigned name_len = (unsigned)(equal_sign - pairs[i]); // nonsense if no equal sign
+        unsigned tag_name_len = equal_sign ? name_len : pair_lens[i];
 
         InfoItem ii = { .name_len  = equal_sign ? name_len + 1 : pair_lens[i], // including the '=' if there is one
                         .value     = equal_sign ? equal_sign + 1 : NULL,
-                        .value_len = equal_sign ? pair_lens[i] - name_len - 1 : 0,
-                        .dict_id   = equal_sign ? dict_id_make (pairs[i], name_len, DTYPE_1) : DICT_ID_NONE };
+                        .value_len = equal_sign ? pair_lens[i] - name_len - 1 : 0  };
+        memcpy (ii.name, pairs[i], ii.name_len); // note: we make a copy the name, because vcf_seg_FORMAT_GT might overwrite the INFO field
         
-        // we make a copy the name, because vcf_seg_FORMAT_GT might overwrite the INFO field
-        ASSVCF (ii.name_len <= sizeof (ii.name)-1, "INFO tag \"%s\" exceeds the maximum tag length supported by Genozip = %u", pairs[i], (int)sizeof (ii.name)-1);
-        memcpy (ii.name, pairs[i], ii.name_len);
+        // create context if it doesn't already exist (also verifies tag is not too long)
+        DictId dict_id = dict_id_make (pairs[i], tag_name_len, DTYPE_1);
+        ii.ctx = ctx_get_ctx_tag (vb, dict_id, pairs[i], tag_name_len); // create if it doesn't already exist
+        
+        if (z_dual_coords && !vb->is_rejects_vb) vcf_tags_add_tag (vb, ii.ctx, DTYPE_VCF_INFO, pairs[i], tag_name_len);
 
         ASSVCF (!z_dual_coords || 
-                  (((ii.dict_id.num != dict_id_INFO_LUFT && ii.dict_id.num != dict_id_INFO_LREJ) || vb->line_coords == DC_PRIMARY) && 
-                   ((ii.dict_id.num != dict_id_INFO_PRIM && ii.dict_id.num != dict_id_INFO_PREJ) || vb->line_coords == DC_LUFT)),
-                "Not expecting %s in a %s-coordinate line", dis_dict_id_ex (ii.dict_id, true).s, coords_name (vb->line_coords));
+                  (((dict_id.num != _INFO_LUFT && dict_id.num != _INFO_LREJ) || vb->line_coords == DC_PRIMARY) && 
+                   ((dict_id.num != _INFO_PRIM && dict_id.num != _INFO_PREJ) || vb->line_coords == DC_LUFT)),
+                "Not expecting INFO/%.*s in a %s-coordinate line", tag_name_len, pairs[i], coords_name (vb->line_coords));
 
-        if (ii.dict_id.num == dict_id_INFO_AC) 
+        if (dict_id.num == _INFO_AC) 
             ac_i = vb->info_items.len;
 
-        else if (ii.dict_id.num == dict_id_INFO_LUFT || ii.dict_id.num == dict_id_INFO_PRIM) 
+        else if (dict_id.num == _INFO_LUFT || dict_id.num == _INFO_PRIM) 
             { lift_ii = ii; continue; } // dont add LUFT and PRIM to Items yet
 
-        else if (ii.dict_id.num == dict_id_INFO_LREJ || ii.dict_id.num == dict_id_INFO_PREJ) 
+        else if (dict_id.num == _INFO_LREJ || dict_id.num == _INFO_PREJ) 
             { rejt_ii = ii; continue; } // dont add Lrej and Prej to Items yet
 
         NEXTENT (InfoItem, vb->info_items) = ii;
     }
 
     // case: we have a LUFT or PRIM item - Seg it now, but don't add it yet to InfoItems
-    if (lift_ii.dict_id.num) { 
-        vcf_lo_seg_INFO_LUFT_and_PRIM (vb, lift_ii.dict_id, lift_ii.value, lift_ii.value_len); 
+    if (lift_ii.value) { 
+        vcf_lo_seg_INFO_LUFT_and_PRIM (vb, lift_ii.ctx, lift_ii.value, lift_ii.value_len); 
 
         // case: we have both LIFT and REJT - could happen as a result of bcftools merge - discard the REJT for now, and let our Seg
         // decide if to reject it
-        if (rejt_ii.dict_id.num) {
+        if (rejt_ii.value) {
             uint32_t shrinkage = rejt_ii.name_len + rejt_ii.value_len + 1; // unaccount for name, value and  
             vb->recon_size      -= shrinkage;
             vb->recon_size_luft -= shrinkage; // since its read from TXT, it is accounted for initialially in both recon_size and recon_size_luft
@@ -1100,27 +1116,26 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
     }
         
     // case: we have a *rej item - Seg it now, but don't add it yet to InfoItems
-    else if (rejt_ii.dict_id.num)
-        vcf_lo_seg_INFO_REJX (vb, rejt_ii.dict_id, rejt_ii.value, rejt_ii.value_len); 
+    else if (rejt_ii.value)
+        vcf_lo_seg_INFO_REJX (vb, rejt_ii.ctx, rejt_ii.value, rejt_ii.value_len); 
+
+    ARRAY (InfoItem, ii, vb->info_items);
 
     // pass 2: seg all subfields except AC (and PRIM/LUFT that weren't added)
-    for (unsigned i=0; i < vb->info_items.len; i++) {
-        InfoItem *ii = ENT (InfoItem, vb->info_items, i);
-     
-        if (ii->dict_id.num != dict_id_INFO_AC && ii->value)
-            vcf_seg_info_one_subfield (vb, ii->dict_id, ii->value, ii->value_len);
-    }
+    for (unsigned i=0; i < ii_len; i++) 
+        if (ii[i].ctx->dict_id.num != _INFO_AC)
+            vcf_seg_info_one_subfield (vb, ii[i].ctx, ii[i].value, ii[i].value_len);
     
     // last, seg AC (delayed, as we needed to seg AN and AF before)
-    if (ac_i >= 0) {
-        InfoItem *ii = ENT (InfoItem, vb->info_items, ac_i);
-        vcf_seg_info_one_subfield (vb, ii->dict_id, ii->value, ii->value_len);
-    }
+    if (ac_i >= 0) 
+        vcf_seg_info_one_subfield (vb, ii[ac_i].ctx, ii[ac_i].value, ii[ac_i].value_len);
 }
 
 // Adds the DVCF items according to ostatus, finalizes INFO/SF and segs the INFO container
 void vcf_finalize_seg_info (VBlockVCF *vb)
 {
+    if (!vb->info_items.len && !z_dual_coords) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
+
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true,
                       .filter_items        = z_dual_coords,   // vcf_piz_filter chooses which DVCF item to show based on flag.luft 
@@ -1133,12 +1148,14 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
     if (z_dual_coords)
         vcf_seg_info_add_DVCF_to_InfoItems (vb);
 
-    con_set_nitems (con, vb->info_items.len);
+    ARRAY (InfoItem, ii, vb->info_items);
+
+    con_set_nitems (con, ii_len);
 
     // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
     // thereby both improving compression and improving --regions speed. 
-    if (flag.optimize_sort && con_nitems(con) > 1) 
-        qsort (vb->info_items.data, vb->info_items.len, sizeof(InfoItem), sort_by_subfield_name);
+    if (flag.optimize_sort && ii_len > 1) 
+        qsort (ii, ii_len, sizeof(InfoItem), sort_by_subfield_name);
 
     char prefixes[CONTAINER_MAX_PREFIXES_LEN];  // these are the Container prefixes
     prefixes[0] = prefixes[1] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix
@@ -1146,36 +1163,44 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
 
     // Populate the Container 
     uint32_t total_names_len=0;
-    for (unsigned i=0; i < con_nitems(con); i++) {
+    for (unsigned i=0; i < ii_len; i++) {
         // Set the Container item and find (or create) a context for this name
-        InfoItem *ii = ENT (InfoItem, vb->info_items, i);
-        con.items[i] = (ContainerItem){ .dict_id   = (ii->dict_id.num == dict_id_INFO_END) ? (DictId)dict_id_fields[VCF_POS] : ii->dict_id,
+        con.items[i] = (ContainerItem){ .dict_id   = !ii[i].value                               ? DICT_ID_NONE 
+                                                   : ii[i].ctx->dict_id.num == _INFO_END ? (DictId)_VCF_POS
+                                                   :                                              ii[i].ctx->dict_id,
                                         .seperator = { ';' } }; 
 
-        // if we're preparing a dual-coordinate VCF and this line as a REF-ALT switch - assign the liftover-translator for this item,
-        // which was calculated in vcf_header_set_translators
-        Context *ii_ctx = ctx_get_existing_ctx (vb, ii->dict_id);
-        if (ii_ctx && ii_ctx->line_is_luft_trans) { // item was segged in Primary coords and needs a luft translator to be reconstruced in --luft
-            con.items[i].translator = ii_ctx->luft_trans;
+        // if we're preparing a dual-coordinate VCF and this line needs translation to Luft - assign the liftover-translator for this item,
+        if (ii[i].ctx && ii[i].ctx->line_is_luft_trans) { // item was segged in Primary coords and needs a luft translator to be reconstruced in --luft
+            con.items[i].translator = ii[i].ctx->luft_trans;
 
-            if (ii_ctx->luft_trans == VCF2VCF_A_AN)
-                ii_ctx->flags.store = STORE_INT; // consumed by vcf_piz_luft_A_AN
+            if (ii[i].ctx->luft_trans == VCF2VCF_A_AN)
+                ii[i].ctx->flags.store = STORE_INT; // consumed by vcf_piz_luft_A_AN
         }
             
         // add to the prefixes
-        ASSVCF (prefixes_len + ii->name_len + 1 <= CONTAINER_MAX_PREFIXES_LEN, 
+        ASSVCF (prefixes_len + ii[i].name_len + 1 <= CONTAINER_MAX_PREFIXES_LEN, 
                 "INFO contains tag names that, combined (including the '='), exceed the maximum of %u characters", CONTAINER_MAX_PREFIXES_LEN);
 
-        memcpy (&prefixes[prefixes_len], ii->name, ii->name_len);
-        prefixes_len += ii->name_len;
+        memcpy (&prefixes[prefixes_len], ii[i].name, ii[i].name_len);
+        prefixes_len += ii[i].name_len;
         prefixes[prefixes_len++] = CON_PREFIX_SEP;
 
         // don't include LIFTBACK or LIFTREJT because they are not reconstructed by default (genounzip) 
         // note: vcf_lo_seg_INFO_REJX / vcf_lo_seg_INFO_LUFT_and_PRIM already verified that this is a dual-coord file
-        if (ii->dict_id.num != dict_id_INFO_PRIM && ii->dict_id.num != dict_id_INFO_PREJ)
-            total_names_len += ii->name_len + 1; // +1 for ; \t or \n separator
+        if (!ii[i].ctx || (ii[i].ctx->dict_id.num != _INFO_PRIM && ii[i].ctx->dict_id.num != _INFO_PREJ))
+            total_names_len += ii[i].name_len + 1; // +1 for ; \t or \n separator
     }
 
-    container_seg_by_ctx (vb, CTX(VCF_INFO), &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
+    // --chain: if any tags need renaming we create a second, renames, prefixes string
+    char ren_prefixes[con_nitems(con) * MAX_TAG_LEN]; 
+    unsigned ren_prefixes_len = z_dual_coords && !vb->is_rejects_vb ? vcf_tags_rename (vb, con_nitems(con), 0, 0, 0, FIRSTENT (InfoItem, vb->info_items), ren_prefixes) : 0;
+
+    // if we're compressing a Luft rendition, swap the prefixes
+    if (vb->line_coords == DC_LUFT && ren_prefixes_len) 
+        container_seg_with_rename (vb, CTX(VCF_INFO), &con, ren_prefixes, ren_prefixes_len, prefixes, prefixes_len, total_names_len /* names inc. = and separator */, NULL);
+    
+    else
+        container_seg_with_rename (vb, CTX(VCF_INFO), &con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, total_names_len /* names inc. = and separator */, NULL);
 }
 

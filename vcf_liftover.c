@@ -66,32 +66,32 @@ static bool lo_snip_initialized = false;
 // ZIP: called by the main thread from *_zip_initialize 
 void vcf_lo_zip_initialize (void)
 {
-    if (lo_snip_initialized) return;
-    lo_snip_initialized = true;
-
     // case: --chain : create SRCNAME context from liftover contigs and dict
     if (chain_is_loaded && z_file->num_txt_components_so_far == 1)  // copy only once
         chain_copy_contigs_to_z_file (DTFZ (ochrom));
+
+    if (lo_snip_initialized) return;
+    lo_snip_initialized = true;
 
     // prepare (constant) snips. note: we need these snips both for --chain and when zipping dual-coord files
     SmallContainer con = {
         .repeats     = 1,
         .nitems_lo   = NUM_IL_FIELDS,
         .drop_final_item_sep = true,
-        .items       = { [IL_CHROM  ]={ .dict_id = (DictId)dict_id_fields[VCF_oCHROM],   .seperator = ","  },
-                         [IL_POS    ]={ .dict_id = (DictId)dict_id_fields[VCF_oPOS],     .seperator = ","  },
-                         [IL_REF    ]={ .dict_id = (DictId)dict_id_fields[VCF_LIFT_REF], .seperator = ","  },
-                         [IL_XSTRAND]={ .dict_id = (DictId)dict_id_fields[VCF_oXSTRAND], .seperator = ","  } } };
+        .items       = { [IL_CHROM  ]={ .dict_id = { _VCF_oCHROM },   .seperator = ","  },
+                         [IL_POS    ]={ .dict_id = { _VCF_oPOS },     .seperator = ","  },
+                         [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .seperator = ","  },
+                         [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .seperator = ","  } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_luft_snip, &info_luft_snip_len);
 
     con = (SmallContainer){
         .repeats     = 1,
         .nitems_lo   = NUM_IL_FIELDS,
         .drop_final_item_sep = true,
-        .items       = { [IL_CHROM  ]={ .dict_id = (DictId)dict_id_fields[VCF_CHROM],    .seperator = ","  },
-                         [IL_POS    ]={ .dict_id = (DictId)dict_id_fields[VCF_COPYPOS],  .seperator = ","  },
-                         [IL_REF    ]={ .dict_id = (DictId)dict_id_fields[VCF_LIFT_REF], .seperator = ","  },
-                         [IL_XSTRAND]={ .dict_id = (DictId)dict_id_fields[VCF_oXSTRAND], .seperator = ","  } } };
+        .items       = { [IL_CHROM  ]={ .dict_id = { _VCF_CHROM },    .seperator = ","  },
+                         [IL_POS    ]={ .dict_id = { _VCF_COPYPOS },  .seperator = ","  },
+                         [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .seperator = ","  },
+                         [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .seperator = ","  } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_prim_snip, &info_prim_snip_len);
 
     // for REJTOVER, appearing a line that has only PRIMARY coordinates, we include oCHROM, oPOS and oREFALT which will 
@@ -101,19 +101,19 @@ void vcf_lo_zip_initialize (void)
     con = (SmallContainer){
         .repeats     = 1,
         .nitems_lo   = 4,
-        .items       = { { .dict_id = (DictId)dict_id_fields[VCF_COPYSTAT] },
-                         { .dict_id = (DictId)dict_id_fields[VCF_oCHROM]   },
-                         { .dict_id = (DictId)dict_id_fields[VCF_oPOS]     },
-                         { .dict_id = (DictId)dict_id_fields[VCF_oREFALT]  } } };
+        .items       = { { .dict_id = { _VCF_COPYSTAT } },
+                         { .dict_id = { _VCF_oCHROM }   },
+                         { .dict_id = { _VCF_oPOS }     },
+                         { .dict_id = { _VCF_oREFALT }  } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_rejt_luft_snip, &info_rejt_luft_snip_len);
 
     con = (SmallContainer){
         .repeats     = 1,
         .nitems_lo   = 4,
-        .items       = { { .dict_id = (DictId)dict_id_fields[VCF_COPYSTAT] },
-                         { .dict_id = (DictId)dict_id_fields[VCF_CHROM]    },
-                         { .dict_id = (DictId)dict_id_fields[VCF_COPYPOS], .seperator = { CI_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
-                         { .dict_id = (DictId)dict_id_fields[VCF_REFALT]   } } };
+        .items       = { { .dict_id = { _VCF_COPYSTAT } },
+                         { .dict_id = { _VCF_CHROM }    },
+                         { .dict_id = { _VCF_COPYPOS }, .seperator = { CI_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
+                         { .dict_id = { _VCF_REFALT }   } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_rejt_prim_snip, &info_rejt_prim_snip_len);
 }
 
@@ -133,7 +133,7 @@ static inline bool vcf_lo_is_INFO_AF_type (DictId dict_id)
     // note: we exclude MAX_AF as it is the maximum of all population AFs - it will not be correct after flipping
     if (len > 3 && dict_id_is_vcf_info_sf (dict_id) &&  
         dict_id.id[len-3] == '_' && dict_id.id[len-2] == 'A' && dict_id.id[len-1] == 'F' && 
-        dict_id.num != dict_id_INFO_MAX_AF)
+        dict_id.num != _INFO_MAX_AF)
         return true;
 
     return false;
@@ -146,31 +146,31 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
     // note: in VCF 4.1 many files specified A,G and R fields as Number=. ; 'R' was introduced in 4.2. We set some common fields
     // regardless of their "Number" in the header.
     
-    if (number == 'R' || dict_id.num == dict_id_FORMAT_AD || dict_id.num == dict_id_FORMAT_ADR || dict_id.num == dict_id_FORMAT_ADF || 
-        dict_id.num == dict_id_FORMAT_ADALL || dict_id.num == dict_id_FORMAT_F2R1 || dict_id.num == dict_id_FORMAT_F1R2 ||
-        dict_id.num == dict_id_INFO_DP_HIST || dict_id.num == dict_id_INFO_GQ_HIST) 
+    if (number == 'R' || dict_id.num == _FORMAT_AD || dict_id.num == _FORMAT_ADR || dict_id.num == _FORMAT_ADF || 
+        dict_id.num == _FORMAT_ADALL || dict_id.num == _FORMAT_F2R1 || dict_id.num == _FORMAT_F1R2 ||
+        dict_id.num == _INFO_DP_HIST || dict_id.num == _INFO_GQ_HIST) 
         return VCF2VCF_R;
 
-    else if (number == 'G' || dict_id.num == dict_id_FORMAT_GL || dict_id.num == dict_id_FORMAT_PL || dict_id.num == dict_id_FORMAT_PRI ||
-             dict_id.num == dict_id_FORMAT_GP || dict_id.num == dict_id_FORMAT_PP)
+    else if (number == 'G' || dict_id.num == _FORMAT_GL || dict_id.num == _FORMAT_PL || dict_id.num == _FORMAT_PRI ||
+             dict_id.num == _FORMAT_GP || dict_id.num == _FORMAT_PP)
         return VCF2VCF_G;
 
-    else if (dict_id.num == dict_id_FORMAT_GT)       return VCF2VCF_GT;
-    else if (dict_id.num == dict_id_INFO_END )       return VCF2VCF_END;
-    else if (dict_id.num == dict_id_INFO_AC
-    ||       dict_id.num == dict_id_INFO_MLEAC)      return VCF2VCF_A_AN;
-    else if (dict_id.num == dict_id_INFO_AF 
-    ||       dict_id.num == dict_id_INFO_MLEAF  
-    ||       dict_id.num == dict_id_INFO_LDAF  
-    ||       dict_id.num == dict_id_FORMAT_AF  
+    else if (dict_id.num == _FORMAT_GT)       return VCF2VCF_GT;
+    else if (dict_id.num == _INFO_END )       return VCF2VCF_END;
+    else if (dict_id.num == _INFO_AC
+    ||       dict_id.num == _INFO_MLEAC)      return VCF2VCF_A_AN;
+    else if (dict_id.num == _INFO_AF 
+    ||       dict_id.num == _INFO_MLEAF  
+    ||       dict_id.num == _INFO_LDAF  
+    ||       dict_id.num == _FORMAT_AF  
     ||       vcf_lo_is_INFO_AF_type (dict_id))
           return VCF2VCF_A_1; // eg 0.150 -> 0.850 (upon REF⇄ALT SWITCH)
-    else if (dict_id.num == dict_id_FORMAT_DS)       return VCF2VCF_PLOIDY; // eg (if ploidy=2): 1.25 -> 0.75 
-    else if (dict_id.num == dict_id_INFO_AA)         return VCF2VCF_ALLELE; 
-    else if (dict_id.num == dict_id_FORMAT_SAC       // eg 25,1,6,2 --> 6,2,25,1 (upon REF⇄ALT SWITCH)
-    ||       dict_id.num == dict_id_FORMAT_SB        // SB and MB - I don't fully understand these, but at least for bi-allelic variants, empirically the sum of the first two values equals first value of AD and the sum of last two values adds up to the second value of AD
-    ||       dict_id.num == dict_id_FORMAT_MB)       return VCF2VCF_R2;   
-    else if (dict_id.num == dict_id_INFO_BaseCounts) return VCF2VCF_XREV; // eg 10,6,3,4 -> 4,3,6,10  (upon XSTRAND)
+    else if (dict_id.num == _FORMAT_DS)       return VCF2VCF_PLOIDY; // eg (if ploidy=2): 1.25 -> 0.75 
+    else if (dict_id.num == _INFO_AA)         return VCF2VCF_ALLELE; 
+    else if (dict_id.num == _FORMAT_SAC       // eg 25,1,6,2 --> 6,2,25,1 (upon REF⇄ALT SWITCH)
+    ||       dict_id.num == _FORMAT_SB        // SB and MB - I don't fully understand these, but at least for bi-allelic variants, empirically the sum of the first two values equals first value of AD and the sum of last two values adds up to the second value of AD
+    ||       dict_id.num == _FORMAT_MB)       return VCF2VCF_R2;   
+    else if (dict_id.num == _INFO_BaseCounts) return VCF2VCF_XREV; // eg 10,6,3,4 -> 4,3,6,10  (upon XSTRAND)
     
     return TRANS_ID_NONE;
 }
@@ -244,12 +244,12 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx,
 
         int len_diff = (int)vb->txt_data.len - (int)len_before;
         
-        ASSERT (!len_diff || modified_snip, "len_diff=%d, but translation in place of %s is only allowed if len_diff=0", len_diff, ctx->name);
+        ASSERT (!len_diff || modified_snip, "len_diff=%d, but translation in place of %s is only allowed if len_diff=0", len_diff, ctx->tag_name);
 
         // length only changes for AC and END - and since they are 32 bit ints in the VCF spec - they change by at most 9 
         // characters (1 character -> 10 characters)
         ASSERT (len_diff <= TXTFILE_READ_VB_PADDING, "When translating luft->primary of %s, length grew by %d - that's too much",
-                ctx->name, len_diff);
+                ctx->tag_name, len_diff);
 
         // copy result
         if (modified_snip) {
@@ -273,9 +273,9 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx,
     }
 }
 
-static inline Context *vcf_lo_seg_lo_snip (VBlockVCFP vb, const char *snip, unsigned snip_len, uint64_t dict_id_num, unsigned add_bytes)
+static inline Context *vcf_lo_seg_lo_snip (VBlockVCFP vb, const char *snip, unsigned snip_len, uint64_t dnum, unsigned add_bytes)
 {
-    Context *ctx = ctx_get_ctx (vb, dict_id_num);
+    Context *ctx = ctx_get_ctx (vb, dnum);
     ctx_set_encountered_in_line (ctx);
     ctx->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
     ctx->st_did_i = VCF_oSTATUS;
@@ -295,8 +295,8 @@ static void vcf_lo_seg_REJX_do (VBlockVCFP vb, unsigned add_bytes)
     // whether user views the file primary or luft coordinates, and whether this line is primary-only or luft-only:
     // each rejected line consumes all contexts exactly once, either in the main field, or in INFO/*rej
     // note: rejected lines are still reconstructed in their unsupported coordinates to consume all contexts, and then dropped.
-    vcf_lo_seg_lo_snip (vb, info_rejt_luft_snip, info_rejt_luft_snip_len, dict_id_INFO_LREJ, 0); 
-    vcf_lo_seg_lo_snip (vb, info_rejt_prim_snip, info_rejt_prim_snip_len, dict_id_INFO_PREJ, 0);
+    vcf_lo_seg_lo_snip (vb, info_rejt_luft_snip, info_rejt_luft_snip_len, _INFO_LREJ, 0); 
+    vcf_lo_seg_lo_snip (vb, info_rejt_prim_snip, info_rejt_prim_snip_len, _INFO_PREJ, 0);
     
     // case: primary-only line: CHROM, POS and REFALT were segged in the main fields, trivial oCHROM, oPOS, oREFLT segged here
     // case: luft-only line: oCHROM, oPOS and oREFALT were segged in the main fields, trivial CHROM, POS, REFLT segged here
@@ -325,22 +325,20 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
 
     // unaccount for INFO/LUFT (in primary reconstruction) and INFO/PRIM (in Luft reconstruction)
     Context *luft_ctx; 
-    if (ctx_encountered_in_line (vb, dict_id_INFO_LUFT, &luft_ctx)) { // we always have both LUFT and PRIM, or neither
+    if (ctx_encountered_in_line (vb, _INFO_LUFT, &luft_ctx)) { // we always have both LUFT and PRIM, or neither
         vb->recon_size      -= luft_ctx->last_txt_len;
-        vb->recon_size_luft -= ctx_get_existing_ctx (vb, dict_id_INFO_PRIM)->last_txt_len;
+        vb->recon_size_luft -= CTX(INFO_PRIM)->last_txt_len;
     }
 
     for (unsigned i=0; i < NUM_ROLLBACK_CTXS; i++) 
         seg_rollback ((VBlockP)vb, &vb->contexts[line_rollback_did_i[SEL(0,1)][i]]);
 
-    seg_rollback ((VBlockP)vb, ctx_get_ctx (vb, dict_id_INFO_LUFT));
-    seg_rollback ((VBlockP)vb, ctx_get_ctx (vb, dict_id_INFO_PRIM));
+    seg_rollback ((VBlockP)vb, CTX(INFO_LUFT));
+    seg_rollback ((VBlockP)vb, CTX(INFO_PRIM));
 
     // seg Xrej and empty values for the fields of the rejected coord
-    char str[MAX_VCF_TAG_LEN + 20];
-    const char *id = ctx ? vcf_tags_get_id (ctx->dict_id, false) : NULL;
-    sprintf (str, "%s%s%s", dvcf_status_names[ostatus], ctx ? "/" : "", 
-             id ? id : ctx ? dis_dict_id (ctx->dict_id).s : "");
+    char str[MAX_TAG_LEN + 20];
+    sprintf (str, "%s%s%s", dvcf_status_names[ostatus], ctx ? "/" : "", ctx ? ctx->tag_name : "");
     unsigned str_len = strlen (str);
 
     vcf_lo_seg_REJX_do (vb, str_len); 
@@ -355,8 +353,8 @@ void vcf_lo_set_rollback_point (VBlockVCFP vb)
     for (unsigned i=0; i < NUM_ROLLBACK_CTXS; i++) 
         seg_create_rollback_point (&vb->contexts[line_rollback_did_i[SEL(0,1)][i]]);
 
-    seg_create_rollback_point (ctx_get_ctx (vb, dict_id_INFO_LUFT));
-    seg_create_rollback_point (ctx_get_ctx (vb, dict_id_INFO_PRIM));
+    seg_create_rollback_point (CTX(INFO_LUFT));
+    seg_create_rollback_point (CTX(INFO_PRIM));
 }
 
 // --chain: Create:
@@ -428,12 +426,12 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     vb->last_index(VCF_oXSTRAND) = seg_by_did_i (vb, is_xstrand ? "X" : "-", 1, VCF_oXSTRAND, 1); // index used by vcf_seg_INFO_END
 
     // Add LUFT container - we modified the txt by adding these 4 fields to INFO/LUFT. We account for them now, and we will account for the INFO name etc in vcf_seg_info_field
-    Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, dict_id_INFO_LUFT, 3);
+    Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, _INFO_LUFT, 3);
     luft_ctx->last_txt_len = opos_len + ochrom_len + oref_len + 4; // used for rollback: 4 = 3 commas + xstrand (the "PRIM="/"LUFT=" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
     vb->recon_size += luft_ctx->last_txt_len; // We added INFO/LUFT to the Primary coordinates reconstruction
 
     // Do the same for PRIM. 
-    Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, dict_id_INFO_PRIM, 0);
+    Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, _INFO_PRIM, 0);
     prim_ctx->last_txt_len = 0; // 0 as not added to recon_size (txt_len is used only for Primary coordinates)
     vb->recon_size_luft += vb->last_txt_len (VCF_POS) + vb->chrom_name_len + vb->main_ref_len + 4; // 4=3 commas + xstrand. We added INFO/PRIM to the Luft coordinates reconstruction
 
@@ -545,21 +543,22 @@ finalize:
 
 // Segging a Primary line, INFO/LUFT field ; or Luft line, INFO/PRIM field:
 // parse the of LUFT/PRIM record, seg the contained fields, and seg the LUFT and PRIM snips
-void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *value, int value_len)
+void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
 {
-    ASSVCF (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains INFO/"INFO_LUFT" or INFO/"INFO_PRIM" fields", txt_name);
-    ASSVCF (txt_file->coords, "Found an %s subfield, but this is not a dual-coordinates VCF because it is missing \"" HK_DC_PRIMARY "\" or \"" HK_DC_LUFT "\" in the VCF header", dis_dict_id_ex (dict_id, true).s);
+    TagNameEx tag_name_ex = ctx_tag_name_ex (ctx);
 
-    Coords coord = (dict_id.num == dict_id_INFO_LUFT ? DC_PRIMARY : DC_LUFT);
-    const char *field_name = dis_dict_id_ex (dict_id, true).s; // hopefully the returned-by-value structure stays in scope despite not assigning it...
+    ASSVCF (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains INFO/"INFO_LUFT_NAME" or INFO/"INFO_PRIM_NAME" fields", txt_name);
+    ASSVCF (txt_file->coords, "Found an %s subfield, but this is not a dual-coordinates VCF because it is missing \"" HK_DC_PRIMARY "\" or \"" HK_DC_LUFT "\" in the VCF header", tag_name_ex.s);
 
-    ASSVCF (vb->line_coords == coord, "Found an %s subfield, not expecting because this is a %s line", field_name, coords_name (vb->line_coords));
+    Coords coord = (ctx->dict_id.num == _INFO_LUFT ? DC_PRIMARY : DC_LUFT);
+
+    ASSVCF (vb->line_coords == coord, "Found an %s subfield, not expecting because this is a %s line", tag_name_ex.s, coords_name (vb->line_coords));
 
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
         
     // parse and verify PRIM or LUFT record
     str_split (value, value_len, NUM_IL_FIELDS + 1, ',', str, false); // possibly oSTATUS in addition from --show-ostatus which we shall ignore
-    ASSVCF (n_strs == 4, "Invalid %s field: \"%.*s\"", field_name, value_len, value);
+    ASSVCF (n_strs == 4, "Invalid %s field: \"%.*s\"", tag_name_ex.s, value_len, value);
 
     const char *info_chrom  = strs[IL_CHROM]; 
     unsigned info_chrom_len = str_lens[IL_CHROM];
@@ -568,13 +567,14 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
     unsigned info_alt_len;
     int64_t info_pos_value;
     unsigned info_pos_len   = str_lens[IL_POS];
-    ASSVCF (str_get_int_range64 (strs[IL_POS], str_lens[IL_POS], 0, MAX_POS, &info_pos_value), "Invalid POS value in %s: \"%.*s\"", field_name, str_lens[IL_POS], strs[IL_POS]);
+    ASSVCF (str_get_int_range64 (strs[IL_POS], str_lens[IL_POS], 0, MAX_POS, &info_pos_value), "Invalid POS value in %s: \"%.*s\"", tag_name_ex.s, str_lens[IL_POS], strs[IL_POS]);
     ASSVCF ((strs[IL_XSTRAND][0] == 'X' || strs[IL_XSTRAND][0] == '-') && str_lens[IL_XSTRAND] ==1,
-            "%s has an invalid XSTRAND=\"%.*s\" - expected \"-\" or \"X\"", field_name, str_lens[IL_XSTRAND], strs[IL_XSTRAND]);
+            "%s has an invalid XSTRAND=\"%.*s\" - expected \"-\" or \"X\"", tag_name_ex.s, str_lens[IL_XSTRAND], strs[IL_XSTRAND]);
     bool is_xstrand = (strs[IL_XSTRAND][0] == 'X');
+    ctx_set_last_value (vb, CTX(VCF_oXSTRAND), (int64_t)is_xstrand);
 
     LiftOverStatus ostatus = 
-        vcf_lo_seg_ostatus_from_LUFT_or_PRIM (vb, field_name, is_xstrand,
+        vcf_lo_seg_ostatus_from_LUFT_or_PRIM (vb, tag_name_ex.s, is_xstrand,
                                               vb->main_refalt, vb->main_ref_len, 
                                               info_ref, info_ref_len, 
                                               vb->main_refalt + vb->main_ref_len + 1, vb->main_alt_len,
@@ -609,21 +609,21 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *v
     seg_by_did_i (vb, strs[IL_XSTRAND], str_lens[IL_XSTRAND], VCF_oXSTRAND, str_lens[IL_XSTRAND]);
 
     // LUFT and PRIM container snips (INFO container filter will determine which is reconstructed)
-    Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, dict_id_INFO_LUFT, 3); // account for 3 commas
-    Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, dict_id_INFO_PRIM, 0); // 0 as this container is not reconstructed in Primary coords
+    Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, _INFO_LUFT, 3); // account for 3 commas
+    Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, _INFO_PRIM, 0); // 0 as this container is not reconstructed in Primary coords
     
-    if (dict_id.num == dict_id_INFO_LUFT) luft_ctx->last_txt_len = value_len;
-    else                                  prim_ctx->last_txt_len = value_len;
+    if (ctx->dict_id.num == _INFO_LUFT) luft_ctx->last_txt_len = value_len;
+    else                                       prim_ctx->last_txt_len = value_len;
 }
 
 // Segging a Primary or Luft dual-coordinates VCF file, INFO/Prej or Lrej field:
-void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, DictId dict_id, const char *value, int value_len)
+void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    ASSVCF (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains INFO/"INFO_LREJ" or INFO/"INFO_PREJ" fields", txt_name);
-    ASSVCF (txt_file->coords, "Found an %s subfield, but this is not a dual-coordinates VCF because it is missing \"" HK_DC_PRIMARY "\" or \"" HK_DC_LUFT "\" in the VCF header", dis_dict_id_ex (dict_id, true).s);
+    ASSVCF (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains INFO/"INFO_LREJ_NAME" or INFO/"INFO_PREJ_NAME" fields", txt_name);
+    ASSVCF (txt_file->coords, "Found an %s subfield, but this is not a dual-coordinates VCF because it is missing \"" HK_DC_PRIMARY "\" or \"" HK_DC_LUFT "\" in the VCF header", ctx_tag_name_ex (ctx).s);
 
-    Coords coord = (dict_id.num == dict_id_INFO_LREJ ? DC_PRIMARY : DC_LUFT);
-    ASSVCF (vb->line_coords == coord, "Found an %s subfield, not expecting because this is a %s line", dis_dict_id_ex (dict_id, true).s, coords_name (vb->line_coords));
+    Coords coord = (ctx->dict_id.num == _INFO_LREJ ? DC_PRIMARY : DC_LUFT);
+    ASSVCF (vb->line_coords == coord, "Found an %s subfield, not expecting because this is a %s line", ctx_tag_name_ex (ctx).s, coords_name (vb->line_coords));
 
     // value may be with or without a string eg "INFO/AC" ; "NO_MAPPING". We take the value up to the comma.
     const char *slash = memchr (value, '/', value_len);
@@ -655,7 +655,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYSTAT)
     if (!reconstruct) return false; // no new_value
     
     // note: we can't use last_txt because oStatus is not reconstructed
-    ctx_get_snip_by_word_index (&vb->contexts[VCF_oSTATUS], vb->last_index(VCF_oSTATUS), &snip, &snip_len); 
+    ctx_get_snip_by_word_index (&vb->contexts[VCF_oSTATUS], CTX (VCF_oSTATUS)->last_value.i, pSTRa (snip)); 
     RECONSTRUCT (snip, snip_len); // works for unrecognized reject statuses too
     return false; // new_value was not set
 }
@@ -663,7 +663,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYSTAT)
 // Callback at the end of reconstructing a VCF line of a dual-coordinates file, drops lines in some cases
 void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlock *vb)
 {
-    Coords line_coord = vb->last_index (VCF_COORDS);
+    Coords line_coord = CTX (VCF_COORDS)->last_value.i;
 
     // Case 1: lines can be PRIMARY, LUFT or BOTH. vb rendering can be PRIMARY or LUFT. Drop line if there is a mismatch.
     if (!(vb->vb_coords & line_coord))  // note: for sorted files, rejects are already excluded from the reconstruction plan in linesorter_merge_vb_do

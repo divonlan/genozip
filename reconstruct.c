@@ -28,7 +28,7 @@ static int64_t reconstruct_from_delta (VBlock *vb,
 {
     ASSERT (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
     ASSERT (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. vb_i=%u line_in_vb=%"PRIu64,
-            my_ctx->name, delta_snip_len, delta_snip, base_ctx->name, base_ctx->name, vb->vblock_i, vb->line_i - vb->first_line);
+            my_ctx->tag_name, delta_snip_len, delta_snip, base_ctx->tag_name, base_ctx->tag_name, vb->vblock_i, vb->line_i - vb->first_line);
 
     if (delta_snip_len == 1 && delta_snip[0] == '-')
         my_ctx->last_delta = -2 * base_ctx->last_value.i; // negated previous value
@@ -48,7 +48,7 @@ static int64_t reconstruct_from_delta (VBlock *vb,
 #define ASSERT_IN_BOUNDS \
     ASSERT (ctx->next_local < ctx->local.len, \
             "reconstructing txt_line=%"PRIu64" vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s)", \
-            vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec))
+            vb->line_i, vb->vblock_i, ctx->tag_name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec))
 
 static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reconstruct)
 {
@@ -120,7 +120,7 @@ static void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const cha
     else {
         len = vb->seq_len;
         ASSERT (ctx->next_local + len <= ctx->local.len, "reading txt_line=%"PRIu64" vb_i=%u: unexpected end of %s data", 
-                vb->line_i, vb->vblock_i, ctx->name);
+                vb->line_i, vb->vblock_i, ctx->tag_name);
 
         if (reconstruct) RECONSTRUCT (&ctx->local.data[ctx->next_local], len);
     }
@@ -137,7 +137,7 @@ static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsi
     DictId dict_id;
     base64_decode ((*snip)+1, &b64_len, dict_id.id);
 
-    Context *other_ctx = ctx_get_existing_ctx (vb, dict_id);
+    Context *other_ctx = ECTX (dict_id);
 
     *snip     += b64_len + 1;
     *snip_len -= b64_len + 1;
@@ -209,7 +209,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     }
     case SNIP_PAIR_LOOKUP: {
-        ASSERT (snip_ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->name, vb->vblock_i);
+        ASSERT (snip_ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->tag_name, vb->vblock_i);
         ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags.all_the_same, true, &snip, &snip_len);
         reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len, reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
         break;
@@ -226,7 +226,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
 
     case SNIP_PAIR_DELTA: { // used for FASTQ_GPOS - uint32_t stored in originating in the pair's local
-        ASSERT (snip_ctx->pair_local, "no pair_1 local data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->name, vb->vblock_i);
+        ASSERT (snip_ctx->pair_local, "no pair_1 local data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->tag_name, vb->vblock_i);
         uint32_t fastq_line_i = vb->line_i / 4 - vb->first_line; // see fastq_piz_filter for calculation
         int64_t pair_value = (int64_t) *ENT (uint32_t, snip_ctx->pair, fastq_line_i);  
         int64_t delta = (int64_t)strtoull (snip+1, NULL, 10 /* base 10 */); 
@@ -250,7 +250,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 
     case SNIP_SPECIAL:
         ASSERT (snip_len >= 2, "SNIP_SPECIAL expects snip_len=%u >= 2. ctx=%s vb_i=%u line_i=%"PRIu64, 
-                snip_len, snip_ctx->name, vb->vblock_i, vb->line_i);
+                snip_len, snip_ctx->tag_name, vb->vblock_i, vb->line_i);
                 
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
 
@@ -265,6 +265,17 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         reconstruct_from_ctx (vb, base_ctx->did_i, 0, reconstruct);
         break;
     
+    case SNIP_DUAL: {
+        str_split (&snip[1], snip_len-1, 2, SNIP_DUAL, subsnip, true);
+        ASSPIZ (n_subsnips==2, "Invalid SNIP_DUAL snip in ctx=%s", snip_ctx->tag_name);
+
+        if (vb->vb_coords == DC_PRIMARY)
+            reconstruct_one_snip (vb, snip_ctx, word_index, STRi(subsnip,0), reconstruct);
+        else
+            reconstruct_one_snip (vb, snip_ctx, word_index, STRi(subsnip,1), reconstruct);
+        return;
+    }
+
     case SNIP_DONT_STORE:
         store_type = STORE_NONE; // override store and fall through
         snip++; snip_len--;
@@ -330,14 +341,14 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     // case: we have b250 data
     if (ctx->b250.len ||
         (!ctx->b250.len && !ctx->local.len && ctx->dict.len)) {  // all_the_same case - no b250 or local, but have dict      
-        DECLARE_SNIP;
+        STR0(snip);
         WordIndex word_index = LOAD_SNIP(ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
 
         if (!snip) {
             ctx->last_txt_len = 0;
 
             if (ctx->flags.store == STORE_INDEX) 
-                ctx_set_last_value (vb, ctx, (LastValueType){ .i = WORD_INDEX_MISSING } );
+                ctx_set_last_value (vb, ctx, (int64_t)WORD_INDEX_MISSING);
 
             return reconstruct ? -1 : 0; // -1 if WORD_INDEX_MISSING - remove preceding separator
         }
@@ -378,7 +389,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
             reconstruct_from_local_text (vb, ctx, reconstruct); break;
 
         default:
-            ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%"PRIu64, ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
+            ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%"PRIu64, ctx->ltype, ctx->tag_name, vb->vblock_i, vb->line_i);
         }
     }
 
@@ -390,13 +401,13 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 
     // case: the entire VB was just \n - so seg dropped the ctx
     // note: for backward compatability with 8.0. for files compressed by 8.1+, it will be handled via the all_the_same mechanism
-    else if (ctx->did_i == DTF(eol)) {
+    else if (ctx->dict_id.num == DTF(eol).num) {
         if (reconstruct) { RECONSTRUCT1('\n'); }
     }
 
     else ASSERT (flag.missing_contexts_allowed,
                  "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%"PRIu64" did_i=%u ctx->did=%u ctx->dict_id=%s", 
-                 ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
+                 ctx->tag_name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 
@@ -428,7 +439,7 @@ LastValueType reconstruct_peek (VBlock *vb, Context *ctx,
     // since we are reconstructing unaccounted for data, make sure we didn't go beyond the end of txt_data (this can happen if we are close to the end
     // of the VB, and reconstructed more than OVERFLOW_SIZE allocated in piz_reconstruct_one_vb)
     ASSERT (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow while peeking %s in vb_i=%u: len=%"PRIu64" size=%"PRIu64" last_txt_len=%u", 
-            ctx->name, vb->vblock_i, vb->txt_data.len, vb->txt_data.size, ctx->last_txt_len);
+            ctx->tag_name, vb->vblock_i, vb->txt_data.len, vb->txt_data.size, ctx->last_txt_len);
 
     if (txt) *txt = last_txtx (vb, ctx);
     if (txt_len) *txt_len = ctx->last_txt_len;
@@ -443,7 +454,7 @@ LastValueType reconstruct_peek (VBlock *vb, Context *ctx,
 
 LastValueType reconstruct_peek__do (VBlockP vb, DictId dict_id, const char **txt, unsigned *txt_len) 
 {
-    Context *ctx = ctx_get_existing_ctx (vb, dict_id); 
+    Context *ctx = ECTX (dict_id); 
     ASSPIZ (ctx, "context doesn't exist for dict_id=%s", dis_dict_id (dict_id).s);
 
     return reconstruct_peek (vb, ctx, txt, txt_len);

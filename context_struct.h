@@ -20,7 +20,8 @@ typedef struct Context {
     // ----------------------------
     // common fields for ZIP & PIZ
     // ----------------------------
-    const char name[DICT_ID_LEN+8]; // nul-terminated printable dict_id (+8 for "FORMAT/" and \0)
+    #define MAX_TAG_LEN 64     // including terminating nul (must be divisible by 8 for Tag struct)
+    const char tag_name[MAX_TAG_LEN]; // nul-terminated tag name 
     DidIType did_i;            // the index of this ctx within the array vb->contexts
     DidIType st_did_i;         // in --stats, consolidate this context into st_did_i
     LocalType ltype;           // LT_* - type of local data - included in the section header
@@ -57,7 +58,8 @@ typedef struct Context {
     
     const char *last_snip;     // Seg: point into dict or ol_dict of the last snip evaluated, used only if keep_snip=true
     unsigned last_snip_len;
-    
+    int tag_i;                 // ZIP dual-coordinates, VB only: index into vb->tags for tag renaming 
+
     // settings
     Codec lcodec, bcodec;      // codec used to compress local and b250
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec

@@ -26,39 +26,39 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     // in collect_coverage, we need only these four contexts (+ others, if combined with other filters)
     if (flag.collect_coverage && sections_has_dict_id (st) &&
-        (     dict_id.num != dict_id_fields[SAM_TOPLEVEL] && 
-              dict_id.num != dict_id_fields[SAM_RNAME] && 
-              dict_id.num != dict_id_fields[SAM_FLAG] && 
-              dict_id.num != dict_id_fields[SAM_CIGAR] && 
-            !(dict_id.num == dict_id_fields[SAM_MAPQ]     && flag.sam_mapq_filter) && 
-            !(dict_id.num == dict_id_fields[SAM_SQBITMAP] && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_NONREF]   && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_NONREF_X] && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_GPOS]     && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_STRAND]   && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_TAXID]    && flag.kraken_taxid != TAXID_NONE) && 
-            !(dict_id.num != dict_id_fields[SAM_QNAME]    && kraken_is_loaded) && 
-            !(dict_id_is_sam_qname_sf(dict_id)            && kraken_is_loaded) && 
-            !(dict_id.num == dict_id_fields[SAM_POS]      && flag.regions))) return true;
+        (     dict_id.num != _SAM_TOPLEVEL && 
+              dict_id.num != _SAM_RNAME    && 
+              dict_id.num != _SAM_FLAG     && 
+              dict_id.num != _SAM_CIGAR    &&
+            !(dict_id.num == _SAM_MAPQ     && flag.sam_mapq_filter) && 
+            !(dict_id.num == _SAM_SQBITMAP && flag.bases) && 
+            !(dict_id.num == _SAM_NONREF   && flag.bases) && 
+            !(dict_id.num == _SAM_NONREF_X && flag.bases) && 
+            !(dict_id.num == _SAM_GPOS     && flag.bases) && 
+            !(dict_id.num == _SAM_STRAND   && flag.bases) && 
+            !(dict_id.num == _SAM_TAXID    && flag.kraken_taxid != TAXID_NONE) && 
+            !(dict_id.num != _SAM_QNAME    && kraken_is_loaded) && 
+            !(dict_id_is_sam_qname_sf(dict_id)    && kraken_is_loaded) && 
+            !(dict_id.num == _SAM_POS      && flag.regions))) return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--regions, --FLAG, --MAPQ, --kraken, --taxid)
-    if (flag.count && sections_has_dict_id (st) && 
-        (     dict_id.num != dict_id_fields[SAM_TOPLEVEL] && 
-              dict_id.num != dict_id_fields[SAM_TOP2BAM]  && 
-              dict_id.num != dict_id_fields[SAM_TOP2FQ]   && 
-              dict_id.num != dict_id_fields[SAM_RNAME]    && // easier to always have RNAME
-            !(flag.out_dt == DT_BAM && flag.bases) &&        // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
-            !(dict_id.num == dict_id_fields[SAM_FLAG]     && flag.sam_flag_filter) &&
-            !(dict_id.num == dict_id_fields[SAM_MAPQ]     && flag.sam_mapq_filter) && 
-            !(dict_id.num == dict_id_fields[SAM_SQBITMAP] && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_NONREF]   && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_NONREF_X] && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_GPOS]     && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_STRAND]   && flag.bases) && 
-            !(dict_id.num == dict_id_fields[SAM_TAXID]    && flag.kraken_taxid != TAXID_NONE) && 
-            !(dict_id.num == dict_id_fields[SAM_QNAME]    && kraken_is_loaded) && 
-            !(dict_id_is_sam_qname_sf(dict_id)            && kraken_is_loaded) && 
-            !(dict_id.num == dict_id_fields[SAM_POS]      && flag.regions))) return true;
+    if (flag.count && sections_has_dict_id (st)   && 
+        (     dict_id.num != _SAM_TOPLEVEL && 
+              dict_id.num != _SAM_TOP2BAM  && 
+              dict_id.num != _SAM_TOP2FQ   && 
+              dict_id.num != _SAM_RNAME    &&  // easier to always have RNAME
+            !(flag.out_dt == DT_BAM && flag.bases)&&  // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
+            !(dict_id.num == _SAM_FLAG     && flag.sam_flag_filter) &&
+            !(dict_id.num == _SAM_MAPQ     && flag.sam_mapq_filter) && 
+            !(dict_id.num == _SAM_SQBITMAP && flag.bases) && 
+            !(dict_id.num == _SAM_NONREF   && flag.bases) && 
+            !(dict_id.num == _SAM_NONREF_X && flag.bases) && 
+            !(dict_id.num == _SAM_GPOS     && flag.bases) && 
+            !(dict_id.num == _SAM_STRAND   && flag.bases) && 
+            !(dict_id.num == _SAM_TAXID    && flag.kraken_taxid != TAXID_NONE) && 
+            !(dict_id.num == _SAM_QNAME    && kraken_is_loaded) && 
+            !(dict_id_is_sam_qname_sf(dict_id)    && kraken_is_loaded) && 
+            !(dict_id.num == _SAM_POS      && flag.regions))) return true;
 
     return false;
 }
@@ -239,10 +239,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
         buf_free (&vb_sam->textual_cigar);
 
         // if BIN is SAM_SPECIAL_BIN, inst.semaphone is set by bam_piz_special_BIN - a signal to us to calculate
-        if (CTX(SAM_BAM_BIN)->semaphore) {
-            CTX(SAM_BAM_BIN)->semaphore = false;
+        ContextP sam_bam_bin_ctx = CTX(SAM_BAM_BIN);
+        if (sam_bam_bin_ctx->semaphore) {
+            sam_bam_bin_ctx->semaphore = false;
 
-            PosType pos = vb->last_int(SAM_POS);
+            PosType pos = CTX(SAM_POS)->last_value.i;
             bool segment_unmapped = (sam_flag & SAM_FLAG_UNMAPPED);
             PosType last_pos = segment_unmapped ? pos : (pos + vb_sam->ref_consumed - 1);
             
@@ -310,7 +311,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
 {
     if (!vb->seq_len || !reconstruct) goto done;
 
-    Context *bdbi_ctx = ctx_get_existing_ctx (vb, dict_id_OPTION_BD_BI);
+    Context *bdbi_ctx = CTX(OPTION_BD_BI);
 
     // note: bd and bi use their own next_local to retrieve data from bdbi_ctx. the actual index
     // in bdbi_ctx.local is calculated given the interlacing
@@ -320,7 +321,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
     const char *src  = ENT (char, bdbi_ctx->local, ctx->next_local * 2);
     uint32_t seq_len = vb->seq_len; // automatic var for effeciency
 
-    if (ctx->dict_id.num == dict_id_OPTION_BD)
+    if (ctx->dict_id.num == _OPTION_BD)
         for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src;
     else
         for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src + *(src+1);
@@ -341,7 +342,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 {
     // get Little Endian n
     int64_t n;
-    ASSERT (str_get_int (snip, snip_len, &n), "failed to read integer in %s", ctx->name);
+    ASSERT (str_get_int (snip, snip_len, &n), "failed to read integer in %s", ctx->tag_name);
 
     uint32_t lten_n = (uint32_t)n;         // n is now little endian, uint32 
     
@@ -392,7 +393,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_XA_POS)
 {
     if (!reconstruct) goto done;
     
-    Context *xa_rname_ctx = ctx_get_existing_ctx (vb, dict_id_OPTION_XA_RNAME);
+    Context *xa_rname_ctx = CTX(OPTION_XA_RNAME);
 
     const char *xa_rname = last_txtx (vb, xa_rname_ctx);
 
@@ -483,7 +484,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
 // to be the same as the reference id 
 TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
 {
-    DECLARE_SNIP;
+    STR0(snip);
     ctx_get_snip_by_word_index (ctx, ctx->last_value.i, &snip, &snip_len);
 
     // if it is '*', reconstruct -1
@@ -491,8 +492,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
         RECONSTRUCT_BIN32 (-1);
 
     // if its RNEXT and =, emit the last index of RNAME
-    else if (ctx->did_i != CHROM && snip_len == 1 && *snip == '=') 
-        RECONSTRUCT_BIN32 (vb->last_index (CHROM));
+    else if (ctx->dict_id.num == _SAM_RNEXT && snip_len == 1 && *snip == '=') 
+        RECONSTRUCT_BIN32 (CTX(SAM_RNAME)->last_value.i);
 
     // otherwise - output the word_index which was stored here because of flags.store=STORE_INDEX set in seg 
     else     
@@ -566,14 +567,14 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 CONTAINER_CALLBACK (sam_piz_container_cb)
 {
     // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_OPTIONAL until v11)
-    if (dict_id.num == dict_id_fields[SAM_TOP2BAM]) { 
+    if (dict_id.num == _SAM_TOP2BAM) { 
         BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
         alignment->block_size = vb->txt_data.len - vb->line_start - sizeof (uint32_t); // block_size doesn't include the block_size field itself
         alignment->block_size = LTEN32 (alignment->block_size);
     }
     
     // case SAM to FASTQ translation: drop line if this is not a primary alignment (don't show its secondary or supplamentary alignments)
-    else if (dict_id.num == dict_id_fields[SAM_TOP2FQ] 
+    else if (dict_id.num == _SAM_TOP2FQ 
     && ((uint16_t)vb->last_int(SAM_FLAG) & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLEMENTARY)))
         vb->drop_curr_line = "not_primary";
 
@@ -599,7 +600,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
     // --MAPQ
     if (flag.sam_mapq_filter && is_top_level && !vb->drop_curr_line) {
         
-        if (dict_id.num == dict_id_fields[SAM_TOP2FQ])
+        if (dict_id.num == _SAM_TOP2FQ)
             reconstruct_from_ctx (vb, SAM_MAPQ, 0, false); // when translating to FASTQ, MAPQ is normally not reconstructed
 
         uint8_t this_mapq = (uint8_t)vb->last_int (SAM_MAPQ);

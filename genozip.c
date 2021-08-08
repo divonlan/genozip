@@ -517,10 +517,13 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 void TEST(char *str) {
 }
 
-
+#include "dict_id.h"
 int main (int argc, char **argv)
 {    
     //TEST ("3.2E-003");
+
+    // sometimes the last 3 args are "2>CON", "1>CON", "<CON", not sure where is this from, perhaps the debugger?
+    if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;
 
     info_stream = stdout; // may be changed during intialization
     profiler_initialize();
@@ -602,6 +605,9 @@ int main (int argc, char **argv)
     if (command == ZIP) license_get_number(); 
 
     if (flag.reading_chain) {
+        vcf_tags_cmdline_rename_option(); 
+        vcf_tags_cmdline_drop_option();
+        
         chain_load();
         if (exe_type == EXE_GENOCAT) exit(0);
     }
@@ -661,6 +667,6 @@ int main (int argc, char **argv)
     ref_create_cache_join (prim_ref);
     refhash_create_cache_join();
 
-    exit_ok;
+    exit_ok();
     return 0;
 }

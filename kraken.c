@@ -92,7 +92,7 @@ void kraken_set_show_kraken (const char *optarg)
 void kraken_zip_initialize (void)
 {
     copy_taxid_snip_len = sizeof (copy_taxid_snip);
-    seg_prepare_snip_other (SNIP_OTHER_COPY, dict_id_fields[KRAKEN_TAXID], 0, 0, copy_taxid_snip, &copy_taxid_snip_len);
+    seg_prepare_snip_other (SNIP_OTHER_COPY, _KRAKEN_TAXID, 0, 0, copy_taxid_snip, &copy_taxid_snip_len);
 }
 
 void kraken_seg_initialize (VBlock *vb)
@@ -120,15 +120,15 @@ void kraken_seg_finalize (VBlockP vb)
         .is_toplevel  = true,
         .callback     = true,
         .nitems_lo    = 6,
-        .items        = { { .dict_id = (DictId)dict_id_fields[KRAKEN_CU],     .seperator = {'\t'} },
-                          { .dict_id = (DictId)dict_id_fields[KRAKEN_QNAME],  .seperator = {'\t'} },
-                          { .dict_id = (DictId)dict_id_fields[KRAKEN_TAXID],  .seperator = {'\t'} },
-                          { .dict_id = (DictId)dict_id_fields[KRAKEN_SEQLEN], .seperator = {'\t'} },
-                          { .dict_id = (DictId)dict_id_fields[KRAKEN_KMERS],                      },
-                          { .dict_id = (DictId)dict_id_fields[KRAKEN_EOL],                        } }
+        .items        = { { .dict_id = { _KRAKEN_CU },     .seperator = {'\t'} },
+                          { .dict_id = { _KRAKEN_QNAME },  .seperator = {'\t'} },
+                          { .dict_id = { _KRAKEN_TAXID },  .seperator = {'\t'} },
+                          { .dict_id = { _KRAKEN_SEQLEN }, .seperator = {'\t'} },
+                          { .dict_id = { _KRAKEN_KMERS },                      },
+                          { .dict_id = { _KRAKEN_EOL },                        } }
     };
 
-    container_seg_by_ctx (vb, CTX(KRAKEN_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+    container_seg (vb, CTX(KRAKEN_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 
     // top level container when loading a kraken file with --kraken
     SmallContainer top2taxid = { 
@@ -136,11 +136,11 @@ void kraken_seg_finalize (VBlockP vb)
         .is_toplevel    = true,
         .callback       = true,
         .nitems_lo      = 2,
-        .items          = { { .dict_id = (DictId)dict_id_fields[KRAKEN_QNAME],  .seperator = { CI_TRANS_NUL /* '\0' */} },
-                            { .dict_id = (DictId)dict_id_fields[KRAKEN_TAXID],  .seperator = { CI_TRANS_NOR /* no reconstruct */ } } },
+        .items          = { { .dict_id = { _KRAKEN_QNAME },  .seperator = { CI_TRANS_NUL /* '\0' */} },
+                            { .dict_id = { _KRAKEN_TAXID },  .seperator = { CI_TRANS_NOR /* no reconstruct */ } } },
     };
 
-    container_seg_by_ctx (vb, CTX(KRAKEN_TOP2TAXID), (ContainerP)&top2taxid, 0, 0, 0);
+    container_seg (vb, CTX(KRAKEN_TOP2TAXID), (ContainerP)&top2taxid, 0, 0, 0);
 }
 
 // ZIP: called by main thread after compute has finished. 
@@ -154,14 +154,14 @@ bool kraken_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return 
         // typically small 
-        dict_id.num == dict_id_fields[KRAKEN_CU]       ||
-        dict_id.num == dict_id_fields[KRAKEN_QNAME]    || // container
-        dict_id.num == dict_id_fields[KRAKEN_TAXID]    || // usually a few thousand species
-        dict_id.num == dict_id_fields[KRAKEN_SEQLEN]   ||
-        dict_id.num == dict_id_fields[KRAKEN_KMERS]    || // container
-        dict_id.num == dict_id_fields[KRAKEN_EOL]      ||
-        dict_id.num == dict_id_fields[KRAKEN_TOPLEVEL] ||
-        dict_id.num == dict_id_fields[KRAKEN_TOP2TAXID];
+        dict_id.num == _KRAKEN_CU       ||
+        dict_id.num == _KRAKEN_QNAME    || // container
+        dict_id.num == _KRAKEN_TAXID    || // usually a few thousand species
+        dict_id.num == _KRAKEN_SEQLEN   ||
+        dict_id.num == _KRAKEN_KMERS    || // container
+        dict_id.num == _KRAKEN_EOL      ||
+        dict_id.num == _KRAKEN_TOPLEVEL ||
+        dict_id.num == _KRAKEN_TOP2TAXID;
 }
 
 static void kraken_seg_kmers (VBlock *vb, const char *value, int32_t value_len, const char *taxid, unsigned taxid_len) // must be signed
@@ -183,8 +183,8 @@ static void kraken_seg_kmers (VBlock *vb, const char *value, int32_t value_len, 
         .repeats   = num_kmers, 
         .nitems_lo = 2,
         .repsep    = {' '},
-        .items     = { { .dict_id = (DictId)dict_id_fields[KRAKEN_KMERTAX], .seperator = {':'} },
-                       { .dict_id = (DictId)dict_id_fields[KRAKEN_KMERLEN]                     } },
+        .items     = { { .dict_id = { _KRAKEN_KMERTAX }, .seperator = {':'} },
+                       { .dict_id = { _KRAKEN_KMERLEN }                     } },
         .drop_final_repeat_sep = !final_space
     };
 
@@ -204,7 +204,7 @@ static void kraken_seg_kmers (VBlock *vb, const char *value, int32_t value_len, 
         seg_by_did_i (vb, items[1], item_lens[1], KRAKEN_KMERLEN, item_lens[1]);
     }
 
-    container_seg_by_ctx (vb, CTX(KRAKEN_KMERS), (ContainerP)&kmers_con, 0, 0, num_kmers*2-1 + final_space); // account for ':' within kmers and ' ' betweem them
+    container_seg (vb, CTX(KRAKEN_KMERS), (ContainerP)&kmers_con, 0, 0, num_kmers*2-1 + final_space); // account for ':' within kmers and ' ' betweem them
 }
 
 // example: "C       ST-E00180:535:HCNW2CCX2:8:1101:16183:1221       570     150|150 A:1 570:21 543:5 91347:8 0:81 |:| A:1 543:4 570:25 0:32 28384:5 0:49"
@@ -262,10 +262,10 @@ bool kraken_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     if (!dict_id.num) return false; // only attempt to skip B250/LOCAL/COUNT sections
 
     if (flag.reading_kraken && // note: we only need some of the fields when ingesting loading kraken data
-        dict_id.num != dict_id_fields[KRAKEN_QNAME]     &&
-        dict_id.num != dict_id_fields[KRAKEN_TAXID]     &&
-        dict_id.num != dict_id_fields[KRAKEN_EOL]       &&
-        dict_id.num != dict_id_fields[KRAKEN_TOP2TAXID] &&
+        dict_id.num != _KRAKEN_QNAME     &&
+        dict_id.num != _KRAKEN_TAXID     &&
+        dict_id.num != _KRAKEN_EOL       &&
+        dict_id.num != _KRAKEN_TOP2TAXID &&
         dict_id_typeless (dict_id).id[0] != 'Q') // array item and compound items of QNAME  
         return true;
 
@@ -289,7 +289,7 @@ void kraken_piz_handover_data (VBlockP vb)
 CONTAINER_CALLBACK (kraken_piz_container_cb)
 {
     // when loading kraken to filter another file, remove lines according to the requested filter
-    if (dict_id.num == dict_id_fields[KRAKEN_TOP2TAXID]) {
+    if (dict_id.num == _KRAKEN_TOP2TAXID) {
 
         uint32_t this_taxid = vb->last_int (KRAKEN_TAXID);
 
@@ -327,7 +327,7 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
 
     // when pizzing a kraken to be filtered by itself (loaded or stored) (useful only for testing) - apply :kraken_is_included_loaded" filter 
     else if (flag.kraken_taxid && 
-             dict_id.num == dict_id_fields[KRAKEN_TOPLEVEL] && 
+             dict_id.num == _KRAKEN_TOPLEVEL && 
              (   ( kraken_is_loaded && !kraken_is_included_loaded (vb, last_txt (vb, KRAKEN_QNAME), vb->last_txt_len (KRAKEN_QNAME)))
               || (!kraken_is_loaded && !kraken_is_included_stored (vb, KRAKEN_TAXID, true)))) // TAXID was recon in the TOPLEVEL container
         

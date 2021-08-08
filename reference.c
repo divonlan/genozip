@@ -314,7 +314,7 @@ static void ref_show_sequence (Reference ref)
         }
     }
 
-    if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
+    if (exe_type == EXE_GENOCAT) exit_ok();  // in genocat this, not the data
 }
 
 // entry point of compute thread of reference decompression. this is called when pizzing a file with a stored reference,

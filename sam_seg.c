@@ -135,7 +135,7 @@ bool sam_zip_dts_flag (void)
 void sam_zip_initialize (void)
 {
     taxid_redirection_snip_len = sizeof (taxid_redirection_snip);
-    seg_prepare_snip_other (SNIP_REDIRECTION, dict_id_fields[SAM_TAXID], false, 0, 
+    seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_TAXID, false, 0, 
                             taxid_redirection_snip, &taxid_redirection_snip_len);
 }
 
@@ -197,21 +197,21 @@ void sam_seg_finalize (VBlockP vb)
         .is_toplevel = true,
         .callback  = true,
         .nitems_lo = 13,
-        .items     = { { .dict_id = (DictId)dict_id_fields[SAM_QNAME],    .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_FLAG],     .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_RNAME],    .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_POS],      .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_MAPQ],     .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_CIGAR],    .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_RNEXT],    .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_PNEXT],    .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_TLEN],     .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_SQBITMAP], .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_QUAL],     .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[SAM_OPTIONAL],                   },
-                       { .dict_id = (DictId)dict_id_fields[SAM_EOL],                        } }
+        .items     = { { .dict_id = { _SAM_QNAME },    .seperator = "\t" },
+                       { .dict_id = { _SAM_FLAG },     .seperator = "\t" },
+                       { .dict_id = { _SAM_RNAME },    .seperator = "\t" },
+                       { .dict_id = { _SAM_POS },      .seperator = "\t" },
+                       { .dict_id = { _SAM_MAPQ },     .seperator = "\t" },
+                       { .dict_id = { _SAM_CIGAR },    .seperator = "\t" },
+                       { .dict_id = { _SAM_RNEXT },    .seperator = "\t" },
+                       { .dict_id = { _SAM_PNEXT },    .seperator = "\t" },
+                       { .dict_id = { _SAM_TLEN },     .seperator = "\t" },
+                       { .dict_id = { _SAM_SQBITMAP }, .seperator = "\t" },
+                       { .dict_id = { _SAM_QUAL },     .seperator = "\t" },
+                       { .dict_id = { _SAM_OPTIONAL },                   },
+                       { .dict_id = { _SAM_EOL },                        } }
     };
-    container_seg_by_ctx (vb, CTX(SAM_TOPLEVEL), (ContainerP)&top_level_sam, 0, 0, 0);
+    container_seg (vb, CTX(SAM_TOPLEVEL), (ContainerP)&top_level_sam, 0, 0, 0);
 
     // top level snip - reconstruction as BAM
     // strategy: we start by reconstructing the variable-length fields first (after a prefix that sets them in place) 
@@ -222,19 +222,19 @@ void sam_seg_finalize (VBlockP vb)
         .is_toplevel = true,
         .callback  = true,
         .nitems_lo = 13,
-        .items     = { { .dict_id = (DictId)dict_id_fields[SAM_RNAME],    .seperator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
-                       { .dict_id = (DictId)dict_id_fields[SAM_POS],      .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                       { .dict_id = (DictId)dict_id_fields[SAM_MAPQ],     .seperator = { CI_TRANS_NOR                    }, SAM2BAM_U8       }, // Translate - textual to binary number
-                       { .dict_id = (DictId)dict_id_fields[SAM_BAM_BIN],  .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 2 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
-                       { .dict_id = (DictId)dict_id_fields[SAM_FLAG],     .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
-                       { .dict_id = (DictId)dict_id_fields[SAM_RNEXT],    .seperator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
-                       { .dict_id = (DictId)dict_id_fields[SAM_PNEXT],    .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                       { .dict_id = (DictId)dict_id_fields[SAM_QNAME],    .seperator = { CI_TRANS_NUL                    }                   }, // normal 
-                       { .dict_id = (DictId)dict_id_fields[SAM_CIGAR],    .seperator = ""                                                    }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
-                       { .dict_id = (DictId)dict_id_fields[SAM_TLEN],     .seperator = { CI_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN needs vb->seq_num
-                       { .dict_id = (DictId)dict_id_fields[SAM_SQBITMAP], .seperator = "",                                  SAM2BAM_SEQ      }, // Translate - textual format to BAM format
-                       { .dict_id = (DictId)dict_id_fields[SAM_QUAL],     .seperator = "",                                  SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
-                       { .dict_id = (DictId)dict_id_fields[SAM_OPTIONAL], .seperator = { CI_TRANS_NOR                    }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
+        .items     = { { .dict_id = { _SAM_RNAME },    .seperator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+                       { .dict_id = { _SAM_POS },      .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
+                       { .dict_id = { _SAM_MAPQ },     .seperator = { CI_TRANS_NOR                    }, SAM2BAM_U8       }, // Translate - textual to binary number
+                       { .dict_id = { _SAM_BAM_BIN },  .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 2 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
+                       { .dict_id = { _SAM_FLAG },     .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
+                       { .dict_id = { _SAM_RNEXT },    .seperator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+                       { .dict_id = { _SAM_PNEXT },    .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
+                       { .dict_id = { _SAM_QNAME },    .seperator = { CI_TRANS_NUL                    }                   }, // normal 
+                       { .dict_id = { _SAM_CIGAR },    .seperator = ""                                                    }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
+                       { .dict_id = { _SAM_TLEN },     .seperator = { CI_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN needs vb->seq_num
+                       { .dict_id = { _SAM_SQBITMAP }, .seperator = "",                                  SAM2BAM_SEQ      }, // Translate - textual format to BAM format
+                       { .dict_id = { _SAM_QUAL },     .seperator = "",                                  SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
+                       { .dict_id = { _SAM_OPTIONAL }, .seperator = { CI_TRANS_NOR                    }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
                      }
     };
 
@@ -243,7 +243,7 @@ void sam_seg_finalize (VBlockP vb)
                                             CON_PREFIX_SEP, // end of (empty) container-wide prefix
                                             ' ',' ',' ',' ', CON_PREFIX_SEP }; // first item prefix - 4 spaces (place holder for block_size)
 
-    container_seg_by_ctx (vb, CTX(SAM_TOP2BAM), (ContainerP)&top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
+    container_seg (vb, CTX(SAM_TOP2BAM), (ContainerP)&top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
                           IS_BAM ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
 
     // top level snip - reconstruction as FASTQ
@@ -252,13 +252,13 @@ void sam_seg_finalize (VBlockP vb)
         .is_toplevel = true,
         .callback    = true,  // drop non-primary chimeric reads and reads without QUAL data
         .nitems_lo   = 7,
-        .items       = { { .dict_id = (DictId)dict_id_fields[SAM_QNAME],    .seperator = "\n"                 }, 
-                         { .dict_id = (DictId)dict_id_fields[SAM_RNAME],    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq 
-                         { .dict_id = (DictId)dict_id_fields[SAM_POS],      .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
-                         { .dict_id = (DictId)dict_id_fields[SAM_FLAG],     .seperator = { CI_TRANS_NOR }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-                         { .dict_id = (DictId)dict_id_fields[SAM_CIGAR],    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
-                         { .dict_id = (DictId)dict_id_fields[SAM_SQBITMAP], .seperator = "\n",             .translator =SAM2FASTQ_SEQ  }, 
-                         { .dict_id = (DictId)dict_id_fields[SAM_QUAL],     .seperator = "\n",             .translator =SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
+        .items       = { { .dict_id = { _SAM_QNAME },    .seperator = "\n"                 }, 
+                         { .dict_id = { _SAM_RNAME },    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq 
+                         { .dict_id = { _SAM_POS },      .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
+                         { .dict_id = { _SAM_FLAG },     .seperator = { CI_TRANS_NOR }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
+                         { .dict_id = { _SAM_CIGAR },    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
+                         { .dict_id = { _SAM_SQBITMAP }, .seperator = "\n",             .translator =SAM2FASTQ_SEQ  }, 
+                         { .dict_id = { _SAM_QUAL },     .seperator = "\n",             .translator =SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
                        }
     };
 
@@ -266,65 +266,65 @@ void sam_seg_finalize (VBlockP vb)
     static const char fastq_line_prefix[] = { CON_PREFIX_SEP, CON_PREFIX_SEP, '@', CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, 
                                               CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, '+', '\n', CON_PREFIX_SEP };
 
-    container_seg_by_ctx (vb, CTX(SAM_TOP2FQ), (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
+    container_seg (vb, CTX(SAM_TOP2FQ), (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return 
         // typically small 
-        dict_id.num == dict_id_fields[SAM_TOPLEVEL]  ||
-        dict_id.num == dict_id_fields[SAM_TOP2BAM]   ||
-        dict_id.num == dict_id_fields[SAM_TOP2FQ]    ||
-        dict_id.num == dict_id_fields[SAM_FLAG]      ||
-        dict_id.num == dict_id_fields[SAM_MAPQ]      ||
-        dict_id.num == dict_id_OPTION_MAPQ           ||
-        dict_id.num == dict_id_fields[SAM_QNAME]     ||
-        dict_id.num == dict_id_fields[SAM_OPTIONAL]  ||
-        dict_id.num == dict_id_fields[SAM_EOL]       ||
-        dict_id.num == dict_id_fields[SAM_TAXID]     ||
+        dict_id.num == _SAM_TOPLEVEL  ||
+        dict_id.num == _SAM_TOP2BAM   ||
+        dict_id.num == _SAM_TOP2FQ    ||
+        dict_id.num == _SAM_FLAG      ||
+        dict_id.num == _SAM_MAPQ      ||
+        dict_id.num == _OPTION_MAPQ           ||
+        dict_id.num == _SAM_QNAME     ||
+        dict_id.num == _SAM_OPTIONAL  ||
+        dict_id.num == _SAM_EOL       ||
+        dict_id.num == _SAM_TAXID     ||
 
         // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
-        dict_id.num == dict_id_OPTION_AM ||
-        dict_id.num == dict_id_OPTION_AS ||
-        dict_id.num == dict_id_OPTION_CM ||
-        dict_id.num == dict_id_OPTION_LB ||
-        dict_id.num == dict_id_OPTION_FI ||
-        dict_id.num == dict_id_OPTION_H0 ||
-        dict_id.num == dict_id_OPTION_H1 ||
-        dict_id.num == dict_id_OPTION_H2 ||
-        dict_id.num == dict_id_OPTION_MQ ||
-        dict_id.num == dict_id_OPTION_NH ||
-        dict_id.num == dict_id_OPTION_NM ||
-        dict_id.num == dict_id_OPTION_OC ||
-        dict_id.num == dict_id_OPTION_PG ||
-        dict_id.num == dict_id_OPTION_PQ ||
-        dict_id.num == dict_id_OPTION_PU ||
-        dict_id.num == dict_id_OPTION_RG ||
-        dict_id.num == dict_id_OPTION_SA ||
-        dict_id.num == dict_id_OPTION_SM ||
-        dict_id.num == dict_id_OPTION_TC ||
-        dict_id.num == dict_id_OPTION_UQ ||
+        dict_id.num == _OPTION_AM ||
+        dict_id.num == _OPTION_AS ||
+        dict_id.num == _OPTION_CM ||
+        dict_id.num == _OPTION_LB ||
+        dict_id.num == _OPTION_FI ||
+        dict_id.num == _OPTION_H0 ||
+        dict_id.num == _OPTION_H1 ||
+        dict_id.num == _OPTION_H2 ||
+        dict_id.num == _OPTION_MQ ||
+        dict_id.num == _OPTION_NH ||
+        dict_id.num == _OPTION_NM ||
+        dict_id.num == _OPTION_OC ||
+        dict_id.num == _OPTION_PG ||
+        dict_id.num == _OPTION_PQ ||
+        dict_id.num == _OPTION_PU ||
+        dict_id.num == _OPTION_RG ||
+        dict_id.num == _OPTION_SA ||
+        dict_id.num == _OPTION_SM ||
+        dict_id.num == _OPTION_TC ||
+        dict_id.num == _OPTION_UQ ||
         
         // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
-        dict_id.num == dict_id_OPTION_X0 ||
-        dict_id.num == dict_id_OPTION_X1 ||
-        dict_id.num == dict_id_OPTION_XA ||
-        dict_id.num == dict_id_OPTION_XN ||
-        dict_id.num == dict_id_OPTION_XM ||
-        dict_id.num == dict_id_OPTION_XO ||
-        dict_id.num == dict_id_OPTION_XG ||
-        dict_id.num == dict_id_OPTION_XS ||
-        dict_id.num == dict_id_OPTION_XE ||
+        dict_id.num == _OPTION_X0 ||
+        dict_id.num == _OPTION_X1 ||
+        dict_id.num == _OPTION_XA ||
+        dict_id.num == _OPTION_XN ||
+        dict_id.num == _OPTION_XM ||
+        dict_id.num == _OPTION_XO ||
+        dict_id.num == _OPTION_XG ||
+        dict_id.num == _OPTION_XS ||
+        dict_id.num == _OPTION_XE ||
         
         // biobambam tags        
-        dict_id.num == dict_id_OPTION_STRAND     ||            
+        dict_id.num == _OPTION_STRAND     ||            
 
         // typically smallish - a few thousands
-        dict_id.num == dict_id_fields[SAM_RNAME] ||
-        dict_id.num == dict_id_fields[SAM_RNEXT] ||
-        dict_id.num == dict_id_OPTION_RNAME      ||
-        dict_id.num == dict_id_OPTION_CC;
+        dict_id.num == _SAM_RNAME ||
+        dict_id.num == _SAM_RNEXT ||
+        dict_id.num == _OPTION_RNAME      ||
+        dict_id.num == _OPTION_CC;
 }
 
 void sam_seg_verify_rname_pos (VBlock *vb, const char *p_into_txt, PosType this_pos)
@@ -663,7 +663,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
     }
     static const SmallContainer container_SA = CONTAINER_SA_OA("S"), container_OA = CONTAINER_SA_OA("O");
 
-    SmallContainer con = (subfield_dict_id.num == dict_id_OPTION_SA) ? container_SA : container_OA; // make a copy
+    SmallContainer con = (subfield_dict_id.num == _OPTION_SA) ? container_SA : container_OA; // make a copy
     Context *ctx = ctx_get_ctx (vb, subfield_dict_id);
 
     unsigned item_i=0;
@@ -724,7 +724,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
                          { .dict_id = {.id="X4ANM"    }, .seperator = {';'} } }     
     };
 
-    Context *ctx = ctx_get_ctx (vb, dict_id_OPTION_XA);
+    Context *ctx = CTX(OPTION_XA);
 
     SmallContainer con = container_XA;
 
@@ -755,7 +755,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         seg_integer_or_not ((VBlockP)vb, pos_ctx, pos, pos_len, 1+pos_len);
     }
 
-    container_seg_by_dict_id (vb, dict_id_OPTION_XA, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);
+    container_seg_by_dict_id (vb, _OPTION_XA, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);
     return;
 
 error:
@@ -764,7 +764,7 @@ error:
     // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
     ASSSEG (!con.repeats, field, "Invalid format in repeat #%u of field XA. snip: %.*s", con.repeats+1, field_len, field);
 
-    seg_by_dict_id (vb, field, field_len, dict_id_OPTION_XA, field_len + 1 /* 1 for \t in SAM and \0 in BAM */); 
+    seg_by_dict_id (vb, field, field_len, _OPTION_XA, field_len + 1 /* 1 for \t in SAM and \0 in BAM */); 
 }
 
 uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len)
@@ -914,7 +914,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
 {   
     // get optimization function, if there is one
     SegOptimize optimize = NULL;
-    if (flag.optimize_ZM && dict_id.num == dict_id_OPTION_ZM && value_len > 3 && value[0] == 's')  // XM:B:s,
+    if (flag.optimize_ZM && dict_id.num == _OPTION_ZM && value_len > 3 && value[0] == 's')  // XM:B:s,
         optimize = sam_optimize_ZM;
 
     // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
@@ -973,7 +973,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
     else 
         container_add_bytes = 2; // type - eg "i,"
 
-    container_seg_by_ctx (vb, container_ctx, (ContainerP)&con, prefixes, sizeof(prefixes), container_add_bytes);
+    container_seg (vb, container_ctx, (ContainerP)&con, prefixes, sizeof(prefixes), container_add_bytes);
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
@@ -987,20 +987,20 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 
     unsigned add_bytes = sam_seg_optional_add_bytes (bam_type, value_len, is_bam);
 
-    if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA)
-        sam_seg_SA_or_OA_field (vb, dict_id, value, value_len, dict_id.num == dict_id_OPTION_SA ? "SA" : "OA");
+    if (dict_id.num == _OPTION_SA || dict_id.num == _OPTION_OA)
+        sam_seg_SA_or_OA_field (vb, dict_id, value, value_len, dict_id.num == _OPTION_SA ? "SA" : "OA");
 
-    else if (dict_id.num == dict_id_OPTION_XA) 
+    else if (dict_id.num == _OPTION_XA) 
         sam_seg_XA_field (vb, value, value_len);
 
-    // fields containing CIGAR format data - aliases of dict_id_OPTION_CIGAR (not the main CIGAR field that all snips have SNIP_SPECIAL)
+    // fields containing CIGAR format data - aliases of _OPTION_CIGAR (not the main CIGAR field that all snips have SNIP_SPECIAL)
     // MC: "Mate Cigar", added by eg https://manpages.debian.org/unstable/biobambam2/bamsort.1.en.html  
-    else if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
-        seg_by_dict_id (vb, value, value_len, dict_id_OPTION_CIGAR, add_bytes); 
+    else if (dict_id.num == _OPTION_MC || dict_id.num == _OPTION_OC) 
+        seg_by_dict_id (vb, value, value_len, _OPTION_CIGAR, add_bytes); 
 
     // MD's logical length is normally the same as seq_len, we use this to optimize it.
     // In the common case that it is just a number equal the seq_len, we replace it with an empty string.
-    else if (dict_id.num == dict_id_OPTION_MD) {
+    else if (dict_id.num == _OPTION_MD) {
         // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
 
 #define MAX_SAM_MD_LEN 1000 // maximum length of MD that is shortened.
@@ -1019,12 +1019,12 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
     }
 
     // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)
-    else if ((dict_id.num == dict_id_OPTION_BD || dict_id.num == dict_id_OPTION_BI) && value_len == dl->seq_len) {
+    else if ((dict_id.num == _OPTION_BD || dict_id.num == _OPTION_BI) && value_len == dl->seq_len) {
         
-        bool is_bi = (dict_id.num == dict_id_OPTION_BI);
+        bool is_bi = (dict_id.num == _OPTION_BI);
         dl->bdbi_data_start[is_bi] = value - vb->txt_data.data;
 
-        Context *ctx = ctx_get_ctx (vb, dict_id_OPTION_BD_BI);
+        Context *ctx = CTX(OPTION_BD_BI);
         ctx->txt_len += add_bytes; 
         ctx->ltype   = LT_SEQUENCE;
 
@@ -1042,20 +1042,20 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 
     // AS is a value (at least as set by BWA) at most the seq_len, and often equal to it. we modify
     // it to be new_AS=(AS-seq_len) 
-    else if (dict_id.num == dict_id_OPTION_AS) 
+    else if (dict_id.num == _OPTION_AS) 
         sam_seg_AS_field (vb, dl, dict_id, value, value_len, add_bytes);
     
     // mc:i: (output of bamsormadup and other biobambam tools - mc in small letters) 
     // appears to be a pos value usually close to PNEXT, but it is -1 is POS=PNEXT.
-    else if (dict_id.num == dict_id_OPTION_mc) 
+    else if (dict_id.num == _OPTION_mc) 
         sam_seg_mc_field (vb, dict_id, value, value_len, add_bytes);
 
     // TX:i: - we seg this as a primary field SAM_TAX_ID
-    else if (dict_id.num == dict_id_OPTION_TX) 
+    else if (dict_id.num == _OPTION_TX) 
         seg_by_dict_id (vb, taxid_redirection_snip, taxid_redirection_snip_len, dict_id, add_bytes); 
 
     // E2 - SEQ data (note: E2 doesn't have a context - it shares with SEQ)
-    else if (dict_id.num == dict_id_fields[SAM_E2_Z]) {
+    else if (dict_id.num == _SAM_E2_Z) {
         ASSSEG0 (dl->seq_len, value, "E2 tag without a SEQ"); 
         ASSINP (value_len == dl->seq_len, 
                 "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
@@ -1067,7 +1067,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
     }
 
     // U2 - QUAL data (note: U2 doesn't have a context - it shares with QUAL)
-    else if (dict_id.num == dict_id_fields[SAM_U2_Z]) {
+    else if (dict_id.num == _SAM_U2_Z) {
         ASSSEG0 (dl->seq_len, value, "U2 tag without a SEQ"); 
         ASSINP (value_len == dl->seq_len, 
                 "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
@@ -1090,7 +1090,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
     // integer and float fields need to be STORE_INT/FLOAT to be reconstructable as BAM
     if (optional_field_store_flag[(uint8_t)sam_type]) {
         Context *ctx;
-        if ((ctx = ctx_get_existing_ctx (vb, dict_id)))
+        if ((ctx = ECTX (dict_id)))
             ctx->flags.store = optional_field_store_flag[(uint8_t)sam_type];
     }
  
@@ -1188,12 +1188,12 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         if (con.items[num_items-1].seperator[0] & 0x80) // is a flag
             con.items[num_items-1].seperator[0] &= ~(CI_NATIVE_NEXT & ~(uint8_t)0x80); // last Optional field has no tab
         con.items[num_items-1].seperator[1] = 0;
-        container_seg_by_ctx (vb, CTX(SAM_OPTIONAL), &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * (num_items-1)); // account for : SAM: "MX:i:" BAM: "MXi"
+        container_seg (vb, CTX(SAM_OPTIONAL), &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * (num_items-1)); // account for : SAM: "MX:i:" BAM: "MXi"
     }
     else
         // NULL means MISSING Container item (of the toplevel container) - will cause container_reconstruct_do of 
         // the toplevel container to delete of previous separator (\t)
-        container_seg_by_ctx (vb, CTX(SAM_OPTIONAL), 0, 0, 0, 0); 
+        container_seg (vb, CTX(SAM_OPTIONAL), 0, 0, 0, 0); 
 
     return next_field;        
 }

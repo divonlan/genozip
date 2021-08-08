@@ -145,29 +145,29 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         SectionHeaderCtx *h = (SectionHeaderCtx *)header;
         static const char *store[4] = { [STORE_NONE]="NONE", [STORE_INT]="INT", [STORE_FLOAT]="FLOAT", [STORE_INDEX]="INDEX"};
 
-        sprintf (str, SEC_TAB "%s param=%u store=%s paired=%u copy_param=%u all_the_same=%u ctx_specific=%u\n",
-                 dis_dict_id_name (h->dict_id).s, h->param, store[h->h.flags.ctx.store], 
+        sprintf (str, SEC_TAB "%d/%s param=%u store=%s paired=%u copy_param=%u all_the_same=%u ctx_specific=%u\n",
+                 dict_id_type (h->dict_id), dis_dict_id (h->dict_id).s, h->param, store[h->h.flags.ctx.store], 
                  h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.all_the_same, h->h.flags.ctx.ctx_specific); 
         break;
     }
 
     case SEC_LOCAL: {
         SectionHeaderCtx *h = (SectionHeaderCtx *)header;
-        sprintf (str, SEC_TAB "%s ltype=%s param=%u paired=%u copy_param=%u ctx_specific=%u\n",
-                 dis_dict_id_name (h->dict_id).s, lt_name (h->ltype), h->param, 
+        sprintf (str, SEC_TAB "%d/%sltype=%s param=%u paired=%u copy_param=%u ctx_specific=%u\n",
+                 dict_id_type (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, 
                  h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.ctx_specific); 
         break;
     }
 
     case SEC_DICT: {
         SectionHeaderDictionary *h = (SectionHeaderDictionary *)header;
-        sprintf (str, SEC_TAB "%s num_snips=%u\n", dis_dict_id_name (h->dict_id).s, BGEN32 (h->num_snips)); 
+        sprintf (str, SEC_TAB "%d/%s num_snips=%u\n", dict_id_type (h->dict_id), dis_dict_id (h->dict_id).s, BGEN32 (h->num_snips)); 
         break;
     }
 
     case SEC_COUNTS: {
         SectionHeaderCounts *h = (SectionHeaderCounts *)header;
-        sprintf (str, SEC_TAB "%s\n", dis_dict_id_name (h->dict_id).s); 
+        sprintf (str, SEC_TAB "%d/%s\n", dict_id_type (h->dict_id), dis_dict_id (h->dict_id).s); 
         break;
     }
 
@@ -342,10 +342,10 @@ uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
 
 LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
 {
-    static struct { DataType dt; const uint64_t *dict_id_num; LocalGetLineCB *func; } callbacks[] = LOCAL_GET_LINE_CALLBACKS;
+    static struct { DataType dt; const uint64_t dict_id_num; LocalGetLineCB *func; } callbacks[] = LOCAL_GET_LINE_CALLBACKS;
 
     for (unsigned i=0; i < sizeof(callbacks)/sizeof(callbacks[0]); i++)
-        if (callbacks[i].dt == dt && *callbacks[i].dict_id_num == ctx->dict_id.num && !ctx->no_callback) 
+        if (callbacks[i].dt == dt && callbacks[i].dict_id_num == ctx->dict_id.num && !ctx->no_callback) 
             return callbacks[i].func;
 
     return NULL;
@@ -610,7 +610,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
     if (flag.show_reference) {
         iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
                     z_name, header->ref_filename, digest_display (header->ref_file_md5).s);
-        if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
+        if (exe_type == EXE_GENOCAT) exit_ok(); // in genocat --show-reference, we only show the reference, not the data
     }
 
     if (exe_type != EXE_GENOLS) { // note: we don't need the reference for genols
@@ -773,7 +773,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
 
     if (flag.show_gheader) {
         sections_show_gheader (header);
-        if (exe_type == EXE_GENOCAT) exit_ok; // in genocat, exit after showing the requested data
+        if (exe_type == EXE_GENOCAT) exit_ok(); // in genocat, exit after showing the requested data
     }
 
     // case: we are reading a file expected to be the reference file itself

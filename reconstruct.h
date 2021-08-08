@@ -10,6 +10,7 @@
 
 extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bool reconstruct, const char *func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
+#define reconstruct_from_dict_id(vb,dict_id,sep,reconstruct) reconstruct_from_ctx ((vb), ctx_get_existing_did_i((vb),(dict_id)),(sep),(reconstruct))
 
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len, bool reconstruct);
 

@@ -486,7 +486,7 @@ unsigned copy;
     } while (0)
 
 /* Restore state from registers in inflate() */
-#define RESTORE() \
+#define zRESTORE() \
     do { \
         strm->next_out = put; \
         strm->avail_out = left; \
@@ -843,7 +843,7 @@ int flush;
             state->mode = DICT;
         case DICT:
             if (state->havedict == 0) {
-                RESTORE();
+                zRESTORE();
                 return Z_NEED_DICT;
             }
             strm->adler = state->check = libdeflate_adler32(0L, Z_NULL, 0);
@@ -1045,7 +1045,7 @@ int flush;
             state->mode = LEN;
         case LEN:
             if (have >= 6 && left >= 258) {
-                RESTORE();
+                zRESTORE();
                 inflate_fast(strm, out);
                 LOAD();
                 if (state->mode == TYPE)
@@ -1253,7 +1253,7 @@ int flush;
        Note: a memory error from inflate() is non-recoverable.
      */
   inf_leave:
-    RESTORE();
+    zRESTORE();
     if (state->wsize || (out != strm->avail_out && state->mode < BAD &&
             (state->mode < CHECK || flush != Z_FINISH)))
         if (updatewindow(strm, strm->next_out, out - strm->avail_out)) {

@@ -31,7 +31,7 @@ const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the tx
             translations[i].src_z_non_bin_dt , z_file->data_type ,
             translations[i].src_z_is_binary  , i_am_binary ,
             translations[i].dst_txt_dt       , flag.out_dt ,
-            translations[i].is_translation , *translations[i].is_translation); exit_ok;}
+            translations[i].is_translation , *translations[i].is_translation); exit_ok();}
 */
         if (translations[i].src_z_non_bin_dt == z_file->data_type &&
             translations[i].src_z_is_binary  == i_am_binary &&

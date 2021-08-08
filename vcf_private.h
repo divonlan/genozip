@@ -39,7 +39,6 @@ typedef struct VBlockVCF {
     uint32_t sample_i;         // ZIP: current sample in line (0-based) being segmented 
 
     // used for segging FORMAT/GT
-    Context *gt_ctx;
     uint32_t gt_prev_ploidy;
     char gt_prev_phase;
     
@@ -50,7 +49,6 @@ typedef struct VBlockVCF {
     unsigned main_ref_len, main_alt_len;
 
     // INFO/SF stuff
-    Context *sf_ctx;
     enum { USE_SF_UNKNOWN, USE_SF_YES, USE_SF_NO } use_special_sf;
     Buffer sf_txt, sf_snip; // INFO/SF data as it appears in the snip being constructed
 
@@ -60,26 +58,28 @@ typedef struct VBlockVCF {
     // FORMAT/AD
     #define MAX_ARG_ARRAY_ITEMS 36  // same as MAX_COMPOUND_COMPONENTS
     int64_t ad_values[MAX_ARG_ARRAY_ITEMS];
-    Context *adall_ctx;             // save FORMAT/ADALL context, to avoid searching for ADALL if it does not exist, since it will conflict in the map with AD
 
-    // dictionaries stuff 
+    // FORMAT stuff 
     Buffer format_mapper_buf;       // ZIP only: an array of type Container - one entry per entry in CTX(VCF_FORMAT)->nodes   
-    Buffer format_contexts;         // ZIP only: an array of MAX_FIELDS * format_mapper_buf.len of ContextP
+    Buffer format_contexts;         // ZIP only: an array of format_mapper_buf.len of ContextBlock
+    Buffer last_format;             // ZIP only: cache previous line's FORMAT string
 
     // used by CODEC_HAPM (for VCF haplotype matrix) 
-    Context *hapmat_index_ctx; 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
     Buffer hapmat_columns_data;     // used by codec_hapmat_piz_get_one_line 
     Buffer hapmat_column_of_zeros;  // used by codec_hapmat_piz_calculate_columns   
     Buffer hapmat_one_array;        // one line or column 
 
     // DVCF stuff
+    Buffer tags;                    // Seg: used for FORMAT and INFO tag renaming.
     Buffer rejects_report;          // human readable report about rejects
     char new_ref;                   // SNP: new REF that is neither REF nor ALT; left-anchored INDEL with XSTRAND: new anchor
     bool is_del_sv;                 // is ALT == "<DEL>"
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;
+
+typedef ContextP ContextPBlock[MAX_FIELDS];
 
 // Liftover stuff
 
@@ -166,12 +166,18 @@ typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFie
 #define HK_ORIGINAL_REF "##original_reference="
 #define HK_DC_PRIMARY  HK_DC"=PRIMARY"
 #define HK_DC_LUFT     HK_DC"=LUFT"
-#define HK_RENDERALG_ATTR "RendAlg"
-#define KH_INFO_LUFT    "##INFO=<ID=" INFO_LUFT ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_COORDS "\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
-#define KH_INFO_PRIM    "##INFO=<ID=" INFO_PRIM ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
-#define KH_INFO_LREJ    "##INFO=<ID=" INFO_LREJ ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
-#define KH_INFO_PREJ    "##INFO=<ID=" INFO_PREJ ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
-#define KH_INFO_oSTATUS "##INFO=<ID=oSTATUS,Number=1,Type=String,Description=\"Lift status\",Source=\"genozip\",Version=\"%s\"," HK_RENDERALG_ATTR "=NONE>"
+#define HK_RENDALG            "RendAlg"
+#define HK_RENDALG_ATTR       HK_RENDALG"="
+#define HK_RENAME_REFALT_ATTR "RenameRefalt="
+#define HK_RENAME_STRAND_ATTR "RenameStrand="
+#define HK_RENAME_TLAFER_ATTR "RenameTlafer="
+#define HK_RENAME_ALWAYS_ATTR "RenameAlways="
+#define TAG_SOURCE      "Source=\""GENOZIP_URL"\""
+#define KH_INFO_LUFT    "##INFO=<ID=" INFO_LUFT_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_COORDS "\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_PRIM    "##INFO=<ID=" INFO_PRIM_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_LREJ    "##INFO=<ID=" INFO_LREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_PREJ    "##INFO=<ID=" INFO_PREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_oSTATUS "##INFO=<ID=oSTATUS,Number=1,Type=String,Description=\"Lift status\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
 
 // header keys that appear only in a Primary VCF file
 #define HK_LUFT_CONTIG "##luft_contig="     
@@ -184,6 +190,10 @@ typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFie
 #define HK_PRIM_ONLY   "##primary_only="
 
 // Header stuff
+typedef enum { RA_REFALT=0, RA_STRAND, RA_TLAFER, RA_ALWAYS, NUM_RENAME_ATTRS } RenameAttr;
+extern const char *vcf_header_rename_attrs[NUM_RENAME_ATTRS];
+extern const unsigned vcf_header_rename_attr_lens[NUM_RENAME_ATTRS];
+
 extern uint32_t vcf_num_samples; // ZIP
 extern char *vcf_samples_is_included;
 #define samples_am_i_included(sample_i) (!flag.samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
@@ -196,6 +206,12 @@ extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
 
 // INFO stuff
+
+typedef struct { char name[MAX_TAG_LEN]; // not nul-terminated, including '=' if there is one
+                 const char *value; 
+                 unsigned name_len, value_len; 
+                 ContextP ctx; } InfoItem;
+
 extern void vcf_info_zip_initialize (void);
 extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
 extern void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb);
@@ -204,20 +220,41 @@ extern void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigne
 extern void vcf_finalize_seg_info (VBlockVCF *vb);
 
 // Refalt stuff
-extern void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, const char *ref, unsigned ref_len, const char *alt, unsigned alt_len);
+extern void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt));
 extern void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus ostatus, bool is_xstrand, unsigned add_bytes);
 extern LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool xstrand, bool *is_left_anchored);
 typedef enum { EQUALS_NEITHER, EQUALS_REF, EQUALS_ALT, EQUALS_MISSING } RefAltEquals;
-RefAltEquals vcf_refalt_oref_equals_ref_or_alt (char oref, char ref, const char *alt, unsigned alt_len, bool is_xstrand);
+RefAltEquals vcf_refalt_oref_equals_ref_or_alt (char oref, char ref, STRp(alt), bool is_xstrand);
 extern bool vcf_refalt_piz_is_variant_snp (VBlockP vb);
 extern bool vcf_refalt_piz_is_variant_indel (VBlockP vb);
 extern void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus);
 
 // Tags stuff
-#define MAX_VCF_TAG_LEN 127 // including terminating nul
-extern void vcf_tags_add_tag (const char *id, unsigned id_len, DictId dict_id);
-extern void vcf_tags_finalize (void);
-extern const char *vcf_tags_get_id (DictId dict_id, bool must_exist);
+
+// tag sources - ordered from least authorative to most 
+typedef enum { TAG_NO_SRC, TAG_GENOZIP, TAG_HEADER_DST, TAG_HEADER, TAG_CMDLINE_DST, TAG_CMDLINE } VcfTagSource;
+#define TAG_SOURCE_NAMES { "NoSrc", "Genozip", "HeaderDst", "Header", "CmdLineDst", "CmdLine" }
+
+#define MAX_NUMBER_LEN 8 // maximum length of Number attribute 
+#define MAX_TYPE_LEN 12
+#define MAX_RENDALG_LEN (MAX_TAG_LEN+16)
+typedef struct { 
+    char tag_name[MAX_TAG_LEN]; // this can also be refered to as dests[RA_NAME] since MAX_TAG_LEN is word-aligned
+    char dests[NUM_RENAME_ATTRS][MAX_TAG_LEN];
+    unsigned tag_name_len, dest_lens[NUM_RENAME_ATTRS];
+    DictIdType dtype;
+    char number[MAX_NUMBER_LEN];   unsigned number_len;  // Number attribute  (only used in --chain)
+    char type[MAX_TYPE_LEN];       unsigned type_len;    // Type attribute    (only used in --chain)
+    char rendalg[MAX_RENDALG_LEN]; unsigned rendalg_len; // RendAlg attribute (only used in --chain)
+    VcfTagSource source; // where did this tag originate
+} Tag;
+
+extern void vcf_tags_populate_tags_from_command_line (void);
+extern void vcf_tags_add_tag (VBlockVCFP vb, ContextP ctx, DictIdType dtype, STRp(tag_name));
+extern unsigned vcf_tags_rename (VBlockVCFP vb, unsigned num_tags, const ContextPBlock ctxs, const char *sf_names[], const unsigned sf_name_lens[], const InfoItem *info_items, char *renamed);
+extern void vcf_tags_finalize_tags_from_vcf_header (void);
+extern bool vcf_tags_add_attr_from_header (DictIdType dtype, STRp(tag_name), RenameAttr attr, STRp(number), STRp (type), STRp (rendalg), pSTRp(dest), bool recursive);
+extern Tag *vcf_tags_get_next_missing_tag (Tag *tag);
 
 // Liftover Zip
 extern void vcf_lo_zip_initialize (void);
@@ -226,16 +263,16 @@ extern void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl);
 extern void vcf_lo_set_rollback_point (VBlockVCFP vb);
 extern void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Context *ctx);
 extern LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i); // out
-extern void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, DictId dict_id, const char *value, int value_len);
-extern void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, DictId dict_id, const char *value, int value_len);
-extern bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, const char *this_value, unsigned this_value_len, char *modified_snip, unsigned *modified_snip_len);
+extern void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp (this_value), char *modified_snip, unsigned *modified_snip_len);
 
 #define vcf_set_ostatus(ostatus) ctx_set_last_value ((VBlockP)(vb), &(vb)->contexts[VCF_oSTATUS], (int64_t)(ostatus))
 
 // Liftover Piz
 extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockP vb);
 
-#define VCF_ERR_PREFIX { progress_newline; fprintf (stderr, "Error %s:%u in variant %s=%.*s %s=%"PRId64": ", __FUNCTION__, __LINE__, (vb->line_coords == DC_PRIMARY ? "CHROM" : "oCHROM"), vb->chrom_name_len, vb->chrom_name, (vb->line_coords == DC_PRIMARY ? "POS" : "oPOS"), vb->last_int (vb->line_coords == DC_PRIMARY ? VCF_POS : VCF_oPOS)); }
+#define VCF_ERR_PREFIX { progress_newline(); fprintf (stderr, "Error %s:%u in variant %s=%.*s %s=%"PRId64": ", __FUNCTION__, __LINE__, (vb->line_coords == DC_PRIMARY ? "CHROM" : "oCHROM"), vb->chrom_name_len, vb->chrom_name, (vb->line_coords == DC_PRIMARY ? "POS" : "oPOS"), vb->last_int (vb->line_coords == DC_PRIMARY ? VCF_POS : VCF_oPOS)); }
 #define ASSVCF(condition, format, ...) do { if (!(condition)) { VCF_ERR_PREFIX; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
 #define ASSVCF0(condition, msg)        ASSVCF ((condition), msg "%s", "")
 #define WARNVCF(format, ...)           do { if (!flag.quiet)  { VCF_ERR_PREFIX; fprintf (stderr, format "\n", __VA_ARGS__); } } while(0)

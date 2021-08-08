@@ -499,7 +499,7 @@ void writer_create_plan (void)
 
     if (flag.show_recon_plan) {
         linesorter_show_recon_plan (z_file, flag.luft, conc_writing_vbs, vblock_mb);    
-        if (exe_type == EXE_GENOCAT) exit_ok;
+        if (exe_type == EXE_GENOCAT) exit_ok();
     }
 
 #if defined _WIN32 || defined APPLE

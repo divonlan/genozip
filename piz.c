@@ -150,7 +150,7 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     if (!vb) return false; // we don't skip reading any SEC_DICT / SEC_COUNTS sections
 
     // B250, LOCAL, COUNT sections
-    bool skip = exe_type == EXE_GENOCAT && dict_id.num && dict_id.num != dict_id_fields[CHROM] && (!flag.luft || dict_id.num != dict_id_fields[ODID(oCHROM)]) && (
+    bool skip = exe_type == EXE_GENOCAT && dict_id.num && dict_id.num != DTF(dict_id)[CHROM].num && (!flag.luft || dict_id.num != DTF(dict_id)[ODID(oCHROM)].num) && (
     
     // sometimes we don't need dictionaries. but we always load CHROM.
         (flag.genocat_no_dicts && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
@@ -160,7 +160,7 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     ||  (flag.show_one_counts.num && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
 
     // if --counts, we filter here - TOPLEVEL only - unless there's a skip_section function which will do the filtering
-    ||  (flag.count && !DTPZ(is_skip_section) && dict_id.num != dict_id_fields[DTFZ(toplevel)]) 
+    ||  (flag.count && !DTPZ(is_skip_section) && dict_id.num != DTFZ(toplevel).num) 
     );
 
     skip |= flag.genocat_no_ref_file && (st == SEC_REFERENCE || st == SEC_REF_HASH || st == SEC_REF_IS_SET);
@@ -284,7 +284,7 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     piz_uncompress_all_ctxs (vb, 0);
 
     // reconstruct from top level snip
-    reconstruct_from_ctx (vb, vb->translation.toplevel, 0, true);
+    reconstruct_from_dict_id (vb, vb->translation.toplevel, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
     if (txt_file && txt_file->codec == CODEC_BGZF && !flag.no_writer &&
@@ -302,11 +302,11 @@ static void piz_reconstruct_one_vb (VBlock *vb)
 static void piz_read_all_ctxs (VBlock *vb, Section *next_sl)
 {
     // ctxs that have dictionaries are already initialized, but others (eg local data only) are not
-    ctx_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts);
+    ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts);
 
     // ctx.flags defaults to vb_i=1 flags, overridden if a b250 or local section is read. this will not be overridden if all_the_same, i.e. no b250/local sections.
     for (Section sec = sections_vb_first (1, false) + 1; sec->st == SEC_B250 || sec->st == SEC_LOCAL; sec++) {
-        ContextP ctx = ctx_get_existing_ctx (vb, sec->dict_id); // will exist if it has a dict (all_the_same sections always have a dict)
+        ContextP ctx = ECTX (sec->dict_id); // will exist if it has a dict (all_the_same sections always have a dict)
         if (ctx) ctx->flags = sec->flags.ctx;
     }
 
@@ -315,7 +315,7 @@ static void piz_read_all_ctxs (VBlock *vb, Section *next_sl)
         *ENT (uint32_t, vb->z_section_headers, vb->z_section_headers.len) = section_start; 
 
         // create a context even if section is skipped, for containers to work (skipping a section should be mirrored in a container filter)
-        ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, (*next_sl)->dict_id);
+        ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, (*next_sl)->dict_id, 0, 0);
         int32_t offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", (*next_sl)->st, *next_sl); // returns 0 if section is skipped
         if (offset != SECTION_SKIPPED) vb->z_section_headers.len++;
         
@@ -332,8 +332,6 @@ DataType piz_read_global_area (Reference ref)
 
     if (!success) return DT_NONE;
 
-    dict_id_initialize (z_file->data_type); // must run after zfile_read_genozip_header that sets z_file->data_type
-    
     // check if the genozip file includes a reference
     bool has_ref_sections = !!sections_last_sec (SEC_REFERENCE, true);
 
@@ -419,7 +417,7 @@ DataType piz_read_global_area (Reference ref)
             }
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
-            if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok;
+            if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok();
 
             if (dispatcher_invoked) progress_finalize_component ("Done");
         }
@@ -430,7 +428,7 @@ DataType piz_read_global_area (Reference ref)
                 ref_load_stored_reference (gref);
 
                 // exit now if all we wanted was just to see the reference (we've already shown it)
-                if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok;
+                if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok();
             }
             else
                 z_file->disk_size_minus_skips -= sections_get_ref_size();    

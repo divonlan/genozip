@@ -123,7 +123,7 @@ static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, i
             vb->vblock_i, vb->line_i, ref_id, (uint32_t)txtheader_get_contigs()->len);
 
     // get snip and snip_len
-    DECLARE_SNIP;
+    STR0(snip);
     if (ref_id >= 0) {
         if (ref_id == compare_to_ref_i) {
             snip = "=";

@@ -82,6 +82,16 @@
 #  endif
 #endif
 
+#define CONST_BSWAP64(x) \
+               ((( x & 0xff00000000000000ull ) >> 56 ) | \
+                (( x & 0x00ff000000000000ull ) >> 40 ) | \
+                (( x & 0x0000ff0000000000ull ) >> 24 ) | \
+                (( x & 0x000000ff00000000ull ) >> 8  ) | \
+                (( x & 0x00000000ff000000ull ) << 8  ) | \
+                (( x & 0x0000000000ff0000ull ) << 24 ) | \
+                (( x & 0x000000000000ff00ull ) << 40 ) | \
+                (( x & 0x00000000000000ffull ) << 56 ))
+
 #ifndef bswap64 
     /* even in this case, compilers often optimize by using native instructions */
     static inline uint16_t bswap16(uint16_t x) {
@@ -94,14 +104,7 @@
                 (( x & 0x000000ffu ) << 24 ));
     }
     static inline uint64_t bswap64(uint64_t x) {
-        return ((( x & 0xff00000000000000ull ) >> 56 ) |
-                (( x & 0x00ff000000000000ull ) >> 40 ) |
-                (( x & 0x0000ff0000000000ull ) >> 24 ) |
-                (( x & 0x000000ff00000000ull ) >> 8  ) |
-                (( x & 0x00000000ff000000ull ) << 8  ) |
-                (( x & 0x0000000000ff0000ull ) << 24 ) |
-                (( x & 0x000000000000ff00ull ) << 40 ) |
-                (( x & 0x00000000000000ffull ) << 56 ));
+        return CONST_BSWAP64(x);
     }
 #endif
 
@@ -110,17 +113,21 @@
 #define BGEN24(x) (bswap32(x) >> 8)
 #define BGEN32(x) bswap32(x)
 #define BGEN64(x) bswap64(x)
+#define CONST_BGEN64(x) CONST_BSWAP64(x) // when applied to a constant, it is computed in compilation time
 #define LTEN16(x) (x)
 #define LTEN32(x) (x)
 #define LTEN64(x) (x)
+#define CONST_LTEN64(x) (x)
 #else
 #define LTEN16(x) bswap16(x))
 #define LTEN32(x) bswap32(x))
 #define LTEN64(x) bswap64(x))
+#define CONST_LTEN64(x) CONST_BSWAP64(x) // when applied to a constant, it is computed in compilation time
 #define BGEN16(x) (x)
 #define BGEN24(x) (x)
 #define BGEN32(x) (x)
 #define BGEN64(x) (x)
+#define CONST_BGEN64(x) (x)
 #endif
 
 #endif //_ENDIANNESS_H

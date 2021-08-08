@@ -419,7 +419,7 @@ batch_dvcf()
         if [ "$file" == basic-dvcf-luft.vcf ]; then # this file is already a Luft rendition
             $genozip ${TESTDIR}/$file -fo ${primary}.genozip || exit 1
         else
-            $genozip -C $chain ${TESTDIR}/$file -fo ${primary}.genozip || exit 1
+            $genozip -C $chain ${TESTDIR}/$file -fo ${primary}.genozip --dvcf-rename="FORMAT/QDF:STRAND>QDR,QDR:STRAND>QDF" --dvcf-drop="INFO/CLN:REFALT" || exit 1
         fi
 
         echo -n "Step 2: make ${primary} from ${primary}.genozip : " 
@@ -969,7 +969,7 @@ genounzip="$genounzip_exe --echo $2 $piz_threads"
 genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
-basics=(basic.chain basic.bam basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
+basics=(basic.vcf basic.chain basic.bam basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
         basic.kraken basic.phy basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)

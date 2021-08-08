@@ -9,6 +9,20 @@
 #include "genozip.h"
 #include "sections.h"
 
+#define _FASTA_CONTIG   DICT_ID_MAKEF_6 ("CONTIG")
+#define _FASTA_LINEMETA DICT_ID_MAKEF_L ("LINEMETA")
+#define _FASTA_EOL      DICT_ID_MAKEF_3 ("EOL")
+#define _FASTA_DESC     DICT_ID_MAKEF_4 ("DESC")
+#define _FASTA_COMMENT  DICT_ID_MAKEF_7 ("COMMENT")
+#define _FASTA_NONREF   DICT_ID_MAKEF_6 ("NONREF") 
+#define _FASTA_NONREF_X DICT_ID_MAKEF_L ("NONREF_X")
+#define _FASTA_TOPLEVEL DICT_ID_MAKEF_L (TOPLEVEL)
+#define _FASTA_TAXID    DICT_ID_MAKEF_5 ("TAXID")
+
+typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_DESC, FASTA_COMMENT, FASTA_NONREF, FASTA_NONREF_X, FASTA_TOPLEVEL, FASTA_TAXID, NUM_FASTA_FIELDS } FastaFields;
+
+#define FASTA_MAPPING { V(FASTA_CONTIG), V(FASTA_LINEMETA), V(FASTA_EOL), V(FASTA_DESC), V(FASTA_COMMENT), V(FASTA_NONREF), V(FASTA_NONREF_X), V(FASTA_TOPLEVEL), V(FASTA_TAXID) }
+
 // Txtfile stuff
 extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 
@@ -45,7 +59,7 @@ SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
 #define FASTA_DICT_ID_ALIASES 
 
 #define FASTA_LOCAL_GET_LINE_CALLBACKS  \
-    { DT_FASTA, &dict_id_fields[FASTA_NONREF], fasta_zip_seq }, 
+    { DT_FASTA, _FASTA_NONREF, fasta_zip_seq }, 
 
 // Multifasta to Phylip translation stuff
 

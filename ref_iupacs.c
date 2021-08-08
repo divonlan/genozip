@@ -97,7 +97,7 @@ void ref_iupacs_load (Reference ref)
             iprintf ("GPOS=%"PRIu64" IUPAC=%c\n", iupacs[i].gpos, iupacs[i].iupac);
     }
 
-    if (exe_type == EXE_GENOCAT && flag.show_ref_iupacs) exit_ok;
+    if (exe_type == EXE_GENOCAT && flag.show_ref_iupacs) exit_ok();
 }
 
 static const Iupac *ref_iupacs_find (Iupac *iupacs, int64_t first, int64_t last, PosType gpos)

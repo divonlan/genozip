@@ -141,7 +141,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     else
         foreach_SQ_line (txtheader_add_contig, (void*)false);
 
-    if (flag.show_txt_contigs && exe_type == EXE_GENOCAT) exit_ok;
+    if (flag.show_txt_contigs && exe_type == EXE_GENOCAT) exit_ok();
 
     // If we have a header with SQ lines in SAM, and always in BAM, all RNAME values must be defined in the header
     flag.const_chroms = (command == ZIP) && has_header_contigs; 

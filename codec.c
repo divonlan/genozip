@@ -206,7 +206,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     for (unsigned t=0; t < num_tests; t++) {
         *selected_codec = tests[t].codec;
 
-        if (flag.show_time) codec_show_time (vb, "Assign", ctx->name, *selected_codec);
+        if (flag.show_time) codec_show_time (vb, "Assign", ctx->tag_name, *selected_codec);
 
         clock_t start_time = clock();
 
@@ -227,7 +227,7 @@ Codec codec_assign_best_codec (VBlockP vb,
 
     if (flag.show_codec) {
         iprintf ("vb_i=%-2u %-12s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
-                 vb->vblock_i, ctx ? ctx->name : "", &st_name (st)[4],
+                 vb->vblock_i, ctx ? ctx->tag_name : "", &st_name (st)[4],
                  codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
                  codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
                  codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,

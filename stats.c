@@ -212,26 +212,26 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double src_c
                                 int64_t all_txt_len, int64_t all_txt_len_0, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
 {
     bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &z_file->stats_buf, "NAME              GENOZIP      %%      TXT       %%   RATIO\n%s", "");
+    bufprintf (evb, &z_file->stats_buf, "NAME                   GENOZIP      %%      TXT       %%   RATIO\n%s", "");
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &z_file->stats_buf, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+            bufprintf (evb, &z_file->stats_buf, "%-20.20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                        s->name, 
                        str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
                        str_size ((double)s->txt_len).s, s->pc_of_txt, // txt size and % of total txt which is in this line
                        (double)s->txt_len / (double)s->z_size); // ratio z vs txt
-                       
+
     if (src_comp_ratio != 1)
         bufprintf (evb, &z_file->stats_buf, 
-                   "TOTAL vs %-6s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                   "TOTAL vs %-11s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                    codec_name (codec),
                    str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
                    str_size (all_txt_len_0 / src_comp_ratio).s, all_pc_of_txt, // total txt fize and ratio z vs txt
                    all_comp_ratio / src_comp_ratio);
     
     bufprintf (evb, &z_file->stats_buf, 
-               "%-15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+               "%-20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                src_comp_ratio != 1 ? "TOTAL vs TXT" : "TOTAL",
                str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
                str_size (all_txt_len_0).s, all_pc_of_txt, // total txt fize and ratio z vs txt
@@ -316,7 +316,7 @@ void stats_compress (void)
         all_z_size      += s->z_size;
         all_txt_len     += s->txt_len;
 
-        s->name = ctx ? ctx->name : ST_NAME (SEC(i)); 
+        s->name = ctx ? ctx->tag_name : ST_NAME (SEC(i)); 
         strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
 
         if (ctx) {
@@ -431,7 +431,7 @@ void stats_read_and_display (void)
     
     stats_display();
 
-    if (exe_type == EXE_GENOCAT) exit_ok; // if this is genocat - we're done
+    if (exe_type == EXE_GENOCAT) exit_ok(); // if this is genocat - we're done
 }
 
 // concatenate txt names of bound files so we can show them all

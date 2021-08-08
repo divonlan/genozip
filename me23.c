@@ -56,34 +56,34 @@ void me23_seg_finalize (VBlockP vb)
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 5,
-        .items     = { { .dict_id = (DictId)dict_id_fields[ME23_ID],       .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[ME23_CHROM],    .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[ME23_POS],      .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[ME23_GENOTYPE]                    },
-                       { .dict_id = (DictId)dict_id_fields[ME23_EOL],                        } }
+        .items     = { { .dict_id = { _ME23_ID },       .seperator = "\t" },
+                       { .dict_id = { _ME23_CHROM },    .seperator = "\t" },
+                       { .dict_id = { _ME23_POS },      .seperator = "\t" },
+                       { .dict_id = { _ME23_GENOTYPE }                    },
+                       { .dict_id = { _ME23_EOL },                        } }
     };
 
-    container_seg_by_ctx (vb, CTX(ME23_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+    container_seg (vb, CTX(ME23_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 
     SmallContainer top_level_to_vcf = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 5,
-        .items     = { { .dict_id = (DictId)dict_id_fields[ME23_CHROM],    .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[ME23_POS],      .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[ME23_ID],       .seperator = "\t" },
-                       { .dict_id = (DictId)dict_id_fields[ME23_GENOTYPE], .seperator = "\n", .translator = ME232VCF_GENOTYPE } }
+        .items     = { { .dict_id = { _ME23_CHROM },    .seperator = "\t" },
+                       { .dict_id = { _ME23_POS },      .seperator = "\t" },
+                       { .dict_id = { _ME23_ID },       .seperator = "\t" },
+                       { .dict_id = { _ME23_GENOTYPE }, .seperator = "\n", .translator = ME232VCF_GENOTYPE } }
     };
 
-    container_seg_by_ctx (vb, CTX(ME23_TOP2VCF), (ContainerP)&top_level_to_vcf, 0, 0, 0);
+    container_seg (vb, CTX(ME23_TOP2VCF), (ContainerP)&top_level_to_vcf, 0, 0, 0);
 }
 
 bool me23_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
-    return dict_id.num == dict_id_fields[ME23_TOPLEVEL] ||
-           dict_id.num == dict_id_fields[ME23_TOP2VCF]  ||
-           dict_id.num == dict_id_fields[ME23_CHROM]    ||
-           dict_id.num == dict_id_fields[ME23_EOL];
+    return dict_id.num == _ME23_TOPLEVEL ||
+           dict_id.num == _ME23_TOP2VCF  ||
+           dict_id.num == _ME23_CHROM    ||
+           dict_id.num == _ME23_EOL;
 }
 
 const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
@@ -95,7 +95,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
     GET_NEXT_ITEM (ME23_ID);
-    seg_id_field (vb, dict_id_fields[ME23_ID], field_start, field_len, true);
+    seg_id_field (vb, ME23_ID, field_start, field_len, true);
 
     GET_NEXT_ITEM (ME2_CHROM);
     seg_chrom_field (vb, field_start, field_len);
@@ -204,7 +204,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     // Genotype length expected to be 2 or 1 (for MT, Y)
     ASSERT (recon_len==1 || recon_len==2, "bad recon_len=%u", recon_len);
 
-    PosType pos = vb->last_int(ME23_POS);
+    PosType pos = CTX(ME23_POS)->last_value.i;
 
     // chroms don't have the same index in the ME23 z_file and in the reference file - we need to translate chrom_index
     WordIndex save_chrom_node_index = vb->chrom_node_index;

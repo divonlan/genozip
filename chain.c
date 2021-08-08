@@ -137,25 +137,25 @@ void chain_seg_finalize (VBlockP vb)
         .is_toplevel  = true,
         .filter_items = true,
         .nitems_lo    = 16,
-        .items        = { { .dict_id = (DictId)dict_id_fields[CHAIN_CHAIN],     .seperator = {' '} },  // 0
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_SCORE],     .seperator = {' '} },  // 1
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_NAMEPRIM],  .seperator = {' '} },  // 2
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_SIZEPRIM],  .seperator = {' '} },  // 3
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_STRNDPRIM], .seperator = {' '} },  // 4
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_STARTPRIM], .seperator = {' '} },  // 5
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_ENDPRIM],   .seperator = {' '} },  // 6
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_NAMELUFT],  .seperator = {' '} },  // 7
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_SIZELUFT],  .seperator = {' '} },  // 8
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_STRNDLUFT], .seperator = {' '} },  // 9
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_STARTLUFT], .seperator = {' '} },  // 10
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_ENDLUFT],   .seperator = {' '} },  // 11
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_ID]                            },  // 12
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_EOL]                           },  // 13
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_SET]                           },  // 14
-                          { .dict_id = (DictId)dict_id_fields[CHAIN_EOL]                           } },// 15
+        .items        = { { .dict_id = { _CHAIN_CHAIN },     .seperator = {' '} },  // 0
+                          { .dict_id = { _CHAIN_SCORE },     .seperator = {' '} },  // 1
+                          { .dict_id = { _CHAIN_NAMEPRIM },  .seperator = {' '} },  // 2
+                          { .dict_id = { _CHAIN_SIZEPRIM },  .seperator = {' '} },  // 3
+                          { .dict_id = { _CHAIN_STRNDPRIM }, .seperator = {' '} },  // 4
+                          { .dict_id = { _CHAIN_STARTPRIM }, .seperator = {' '} },  // 5
+                          { .dict_id = { _CHAIN_ENDPRIM },   .seperator = {' '} },  // 6
+                          { .dict_id = { _CHAIN_NAMELUFT },  .seperator = {' '} },  // 7
+                          { .dict_id = { _CHAIN_SIZELUFT },  .seperator = {' '} },  // 8
+                          { .dict_id = { _CHAIN_STRNDLUFT }, .seperator = {' '} },  // 9
+                          { .dict_id = { _CHAIN_STARTLUFT }, .seperator = {' '} },  // 10
+                          { .dict_id = { _CHAIN_ENDLUFT },   .seperator = {' '} },  // 11
+                          { .dict_id = { _CHAIN_ID }                            },  // 12
+                          { .dict_id = { _CHAIN_EOL }                           },  // 13
+                          { .dict_id = { _CHAIN_SET }                           },  // 14
+                          { .dict_id = { _CHAIN_EOL }                           } },// 15
     };
 
-    container_seg_by_ctx (vb, CTX(CHAIN_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+    container_seg (vb, CTX(CHAIN_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 }
 
 bool chain_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -227,7 +227,7 @@ static bool chain_seg_verify_contig (VBlock *vb, Reference ref, WordIndex name_i
 
     if (size_according_to_chain != size_according_to_ref) {
         // output error in the first alignment of this contig
-        ASSERTW (name_len==last_name_len && !memcmp (name, last_name, name_len),
+        ASSERTW (str_issame (name, last_name),
                 "Size of \"%.*s\" in chain file is %"PRId64", but in %s it is %"PRId64". Excluding it.",
                 name_len, name, size_according_to_chain, ref_get_filename (ref), size_according_to_ref);
         return false;
@@ -337,15 +337,15 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
         .nitems_lo           = 6,
         .keep_empty_item_sep = true, // avoid double-deleting the space - only chain_piz_special_BACKSPACE should delete it, not container_reconstruct_do
         .filter_items        = true,
-        .items               = { { .dict_id = (DictId)dict_id_fields[CHAIN_SIZE] },
-                                 { .dict_id = (DictId)dict_id_fields[CHAIN_SEP]  }, 
-                                 { .dict_id = (DictId)dict_id_fields[CHAIN_GAPS] }, // prim_gap
-                                 { .dict_id = (DictId)dict_id_fields[CHAIN_SEP]  }, 
-                                 { .dict_id = (DictId)dict_id_fields[CHAIN_GAPS] }, // luft_gap
-                                 { .dict_id = (DictId)dict_id_fields[CHAIN_EOL]  } }
+        .items               = { { .dict_id = { _CHAIN_SIZE } },
+                                 { .dict_id = { _CHAIN_SEP }  }, 
+                                 { .dict_id = { _CHAIN_GAPS } }, // prim_gap
+                                 { .dict_id = { _CHAIN_SEP }  }, 
+                                 { .dict_id = { _CHAIN_GAPS } }, // luft_gap
+                                 { .dict_id = { _CHAIN_EOL }  } }
     };
 
-    container_seg_by_ctx (vb, CTX(CHAIN_SET), (ContainerP)&alignment_set, 0, 0, 0);
+    container_seg (vb, CTX(CHAIN_SET), (ContainerP)&alignment_set, 0, 0, 0);
 
     // Empty line after alignment set
     GET_LAST_ITEM (EmptyLine);
@@ -408,7 +408,7 @@ SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
     ASSERT0 (vb->txt_data.len, "vb->txt_data.len is 0");
     vb->txt_data.len--;
 
-    Context *gaps_ctx = CTX(CHAIN_GAPS);
+    Context *gaps_ctx = CTX(CHAIN_GAPS); // note: we can't rely on the constants CHAIN_* in PIZ
     gaps_ctx->last_value.i = gaps_ctx->local.param = 0; // no prim_gap and luft_gap
 
     return false;
@@ -416,15 +416,17 @@ SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_ENDLUFT)
 {
-    new_value->i = vb->last_int(CHAIN_STARTLUFT) + 
-                   vb->last_int(CHAIN_ENDPRIM) - vb->last_int(CHAIN_STARTPRIM);
+    new_value->i = CTX(CHAIN_STARTLUFT)->last_value.i +
+                   CTX(CHAIN_ENDPRIM)  ->last_value.i -
+                   CTX(CHAIN_STARTPRIM)->last_value.i;
+                   
     RECONSTRUCT_INT (new_value->i);
     return true; // new_value has been set
 }
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_SIZE)
 {
-    new_value->i = vb->last_int(CHAIN_ENDPRIM) - vb->last_int(CHAIN_STARTPRIM);
+    new_value->i = CTX(CHAIN_ENDPRIM)->last_value.i - CTX(CHAIN_STARTPRIM)->last_value.i;
     RECONSTRUCT_INT (new_value->i);
     return true; // new_value has been set
 }
@@ -580,19 +582,19 @@ CONTAINER_FILTER_FUNC (chain_piz_filter)
     if (flag.reading_chain) { 
 
         // before alignment-set first EOL and before alignments - initialize next_luft_0pos and next_prim_0pos
-        if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 13) 
+        if (dict_id.num == _CHAIN_TOPLEVEL && item == 13) 
             chain_piz_filter_init_alignment_set (vb);
 
         // save prim_gap before reconstructing luft_gap (prim_gap was just processed)
-        else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 4) 
+        else if (dict_id.num == _CHAIN_SET && item == 4) 
             chain_piz_filter_save_prim_gap (vb);
 
         // before EOF of each alignment, ingest alignment (only if it passed verification during Seg)
-        else if (dict_id.num == dict_id_fields[CHAIN_SET] && item == 5) 
+        else if (dict_id.num == _CHAIN_SET && item == 5) 
             chain_piz_filter_ingest_alignmet (vb);
 
         // before alignment-set second EOL and after alignments - verify that numbers add up, and also set contigs
-        else if (dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 15 && vb->last_int (CHAIN_VERIFIED)) {
+        else if (dict_id.num == _CHAIN_TOPLEVEL && item == 15 && vb->last_int (CHAIN_VERIFIED)) {
             chain_piz_filter_verify_alignment_set (vb);
             chain_piz_filter_add_contig_length (vb);
         }
@@ -601,7 +603,7 @@ CONTAINER_FILTER_FUNC (chain_piz_filter)
     // genocat of a chain file (not --chain)
     else {
         // rewrite NAMELUFT 1,...,Y -> chr1,...,chrY ; MT -> chrM
-        if (flag.with_chr && dict_id.num == dict_id_fields[CHAIN_TOPLEVEL] && item == 8) 
+        if (flag.with_chr && dict_id.num == _CHAIN_TOPLEVEL && item == 8) 
             chain_piz_filter_add_qName_chr (vb);
     }
     
@@ -757,7 +759,7 @@ void chain_load (void)
     if (flag.show_chain_contigs) {
         chain_contigs_show (&prim_contigs, &prim_contig_dict, "PRIMARY", ref_get_filename (prim_ref));
         chain_contigs_show (&luft_contigs, &luft_contig_dict, "LUFT",    ref_get_filename (gref));
-        if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
+        if (exe_type == EXE_GENOCAT) exit_ok();  // in genocat this, not the data
     }
 
     // sort the alignmants by (luft_contig_index, qstart)
@@ -771,7 +773,7 @@ void chain_load (void)
 
     if (flag.show_chain) {
         chain_display_alignments();
-        exit_ok;
+        exit_ok();
     }
 
     chain_filename = file_make_unix_filename (z_name); // full-path unix-style filename, allocates memory

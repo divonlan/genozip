@@ -17,6 +17,7 @@
 #include "dict_id.h"
 #include "crypt.h"
 #include "strings.h"
+#include "vcf.h"
 #include "fastq.h"
 #include "stream.h"
 #include "bgzf.h"
@@ -206,6 +207,8 @@ static void flags_show_flags (void)
     iprintf ("explicit_ref=%s\n", flag.explicit_ref ? "true" : "false");
     iprintf ("dyn_set_mem=%s\n", flag.dyn_set_mem ? "true" : "false");
     iprintf ("collect_coverage=%s\n", flag.collect_coverage ? "true" : "false");
+    iprintf ("dvcf_rename=%s\n", flag.dvcf_rename ? flag.dvcf_rename : "(none)");
+    iprintf ("dvcf_drop=%s\n", flag.dvcf_drop ? flag.dvcf_drop : "(none)");
     iprintf ("reading_chain=%s\n", flag.reading_chain ? flag.reading_chain : "(none)");
     iprintf ("reading_kraken=%s\n", flag.reading_kraken ? flag.reading_kraken : "(none)");
     iprintf ("unbind=%s\n", flag.unbind ? flag.unbind : "(none)");
@@ -300,7 +303,6 @@ static void flag_set_interleaved (const char *optarg)
     else if (str_case_compare (optarg, "either", NULL))     flag.interleave = INTERLEAVE_EITHER;
     else ABORTINP0 ("Invalid value for --interleave : accepted values are 'either' or 'both' (default: 'both')");
 }
-
 
 void flags_init_from_command_line (int argc, char **argv)
 {
@@ -419,6 +421,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _st {"show-time",     optional_argument, 0, 1                      } 
         #define _sm {"show-memory",   no_argument,       &flag.show_memory,      1 } 
         #define _sS {"show-dvcf",     no_argument,       &flag.show_dvcf,        1 } 
+        #define _XS {"show-rename-tags", no_argument,    &flag.show_rename_tags,        1 } 
         #define _sY {"show-ostatus",  no_argument,       &flag.show_ostatus,     1 } 
         #define _sh {"show-headers",  optional_argument, 0, 10                     } 
         #define _si {"show-index",    no_argument,       &flag.show_index,       1 } 
@@ -465,13 +468,15 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _ix {"idxstats",      no_argument,       &flag.idxstats,         1 }
         #define _vl {"validate",      optional_argument, 0, 19                     }  
         #define _lg {"log",           required_argument, 0, 15                     }  
+        #define _Xr {"dvcf-rename",   required_argument, 0, 128,                   }
+        #define _Xd {"dvcf-drop",     required_argument, 0, 129,                   }
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                      _sl, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM, _dr,              _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,                                  _rg, _sR,      _sC,      _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,              _oe, _aa, _al, _Lf, _T, _TT, _00 };
-        static Option genounzip_lo[]  = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                    _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                                                                 _sR,      _sC,      _hC, _rA,      _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,                   _oe,                _T,      _00 };
-        static Option genocat_lo[]    = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _Gt, _So, _Io, _IU, _iu, _GT,      _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _oc,    _xt, _dm, _dp, _dt,                _ds, _sS, _sY,                                                                                   _fs, _g, _gw, _n, _nt, _nh,     _sR,      _sC, _cC, _hC, _rA, _rI, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR, _wc,    _oe,                _T,      _00 };
-        static Option genols_lo[]     = { _lg,             _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                                        _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                                                 _sM,                                                                                     _b, _oe,                _T,      _00 };
+        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                      _sl, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM, _dr,              _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,                                  _rg, _sR,      _sC,      _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,              _oe, _aa, _al, _Lf, _T, _TT, _Xr, _Xd, _XS, _00 };
+        static Option genounzip_lo[]  = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                    _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                                                                 _sR,      _sC,      _hC, _rA,      _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,                   _oe,                _T,                     _00 };
+        static Option genocat_lo[]    = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _Gt, _So, _Io, _IU, _iu, _GT,      _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _oc,    _xt, _dm, _dp, _dt,                _ds, _sS, _sY,                                                                                   _fs, _g, _gw, _n, _nt, _nh,     _sR,      _sC, _cC, _hC, _rA, _rI, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR, _wc,    _oe,                _T,                     _00 };
+        static Option genols_lo[]     = { _lg,             _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                                        _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                                                 _sM,                                                                                     _b, _oe,                _T,                     _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -581,6 +586,10 @@ verify_command:
             case 27  : tar_set_tar_name (optarg)    ; break;
             case 28  : flag.do_register = optarg ? optarg : ""; break;
             case 29  : flag_set_interleaved (optarg); break;
+            case 128 : ABORTINP0_ONCE ("--dvcf-rename option can only appear once, see:  " WEBSITE_DVCF);
+                       flag.dvcf_rename = optarg    ; break;
+            case 129 : ABORTINP0_ONCE ("--dvcf-drop option can only appear once, see:  " WEBSITE_DVCF);
+                       flag.dvcf_drop = optarg      ; break;
             
             case 0   : break; // a long option that doesn't have short version will land here - already handled so nothing to do
                  
@@ -700,6 +709,9 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     if (num_files) {
         ASSINP0 (num_files==1 || !flag.out_filename || !flag.reading_chain, "it is not possible to concatenate multiple files to a single output file with --output when using --chain");
     }
+
+    ASSINP0 (flag.reading_chain || !flag.dvcf_rename, "--dvcf-rename can only be used in combination with --chain. See: " WEBSITE_DVCF);
+    ASSINP0 (flag.reading_chain || !flag.dvcf_drop, "--dvcf-drop can only be used in combination with --chain. See: " WEBSITE_DVCF);
 }
 
 // --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
@@ -877,7 +889,7 @@ void flags_update_zip_one_file (void)
         flag.sort = true;
 
     if (chain_is_loaded && dt == DT_VCF && !flag.show_one_counts.num && !flag.quiet)
-        flag.show_one_counts = dict_id_make (DTFZ (names)[VCF_oSTATUS], 0, DTYPE_PLAIN); // note: dict_id_fields is not initialized yet here
+        flag.show_one_counts = (DictId)_VCF_oSTATUS;
 
     info_stream = stdout; // always stdout in zip
     is_info_stream_terminal = isatty (fileno (info_stream)); 
@@ -1217,9 +1229,11 @@ void flags_store_command_line (int argc, char **argv)
     if (command == ZIP && !isatty(0))
         flags_store_piped_in_details();    
 
-    if (flag.echo || getenv ("GENOZIP_TEST") || flag.debug) 
+    if (flag.echo || getenv ("GENOZIP_TEST") || flag.debug) {
         fprintf (stderr, "\n%s: %s\n", str_time().s, command_line.data);
-        
+        flag.echo = 2; // done
+    }
+
     if (getenv ("GENOZIP_TEST") || flag.debug) 
         flags_display_debugger_params();
 }

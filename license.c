@@ -241,7 +241,7 @@ static void license_exit_if_not_confirmed (const char *response)
 {
     if (response[0] == 'N') {
         fprintf (stderr, "\nYou have not registered. You may register at any time in the future.\n\nWishing you a wonderful day from the Genozip team! https://genozip.com\n");
-        exit_ok;
+        exit_ok();
     }
 }
 

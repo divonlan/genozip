@@ -110,7 +110,7 @@ bool codec_domq_compress (VBlock *vb,
     ASSERT0 (!uncompressed && callback, "only callback option is supported");
 
     SectionHeaderCtx *local_header = (SectionHeaderCtx *)header;
-    Context *qual_ctx = ctx_get_existing_ctx (vb, local_header->dict_id);
+    Context *qual_ctx = ECTX (local_header->dict_id);
     Context *qdomruns_ctx = qual_ctx + 1;
 
     const char dom = qual_ctx->local.param;

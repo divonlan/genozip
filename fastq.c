@@ -175,7 +175,7 @@ void fastq_zip_initialize (void)
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;
 
     copy_desc_snip_len = sizeof copy_desc_snip;
-    seg_prepare_snip_other (SNIP_OTHER_COPY, dict_id_fields[FASTQ_DESC], 0, 0, copy_desc_snip, &copy_desc_snip_len);
+    seg_prepare_snip_other (SNIP_OTHER_COPY, _FASTQ_DESC, 0, 0, copy_desc_snip, &copy_desc_snip_len);
 }
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
@@ -249,14 +249,14 @@ void fastq_seg_finalize (VBlockP vb)
         .callback       = true,
         .nitems_lo      = 8,
         .items          = { 
-            { .dict_id = (DictId)dict_id_fields[FASTQ_DESC],     },
-            { .dict_id = (DictId)dict_id_fields[FASTQ_E1L],      }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
-            { .dict_id = (DictId)dict_id_fields[FASTQ_SQBITMAP], },
-            { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      },
-            { .dict_id = (DictId)dict_id_fields[FASTQ_LINE3],    }, // added in 12.0.14, before '+' was a separator of the previous E2L
-            { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      },
-            { .dict_id = (DictId)dict_id_fields[FASTQ_QUAL],     },
-            { .dict_id = (DictId)dict_id_fields[FASTQ_E2L],      } 
+            { .dict_id = { _FASTQ_DESC },     },
+            { .dict_id = { _FASTQ_E1L },      }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
+            { .dict_id = { _FASTQ_SQBITMAP }, },
+            { .dict_id = { _FASTQ_E2L },      },
+            { .dict_id = { _FASTQ_LINE3 },    }, // added in 12.0.14, before '+' was a separator of the previous E2L
+            { .dict_id = { _FASTQ_E2L },      },
+            { .dict_id = { _FASTQ_QUAL },     },
+            { .dict_id = { _FASTQ_E2L },      } 
         }
     };
 
@@ -270,16 +270,16 @@ void fastq_seg_finalize (VBlockP vb)
                                '+', CON_PREFIX_SEP,   // third line prefix
                                CON_PREFIX_SEP      }; // END of prefixes
 
-    container_seg_by_ctx (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, sizeof (prefixes), 2 * vb->lines.len); // account for the '@' and '+' - one of each for each line
+    container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, sizeof (prefixes), 2 * vb->lines.len); // account for the '@' and '+' - one of each for each line
 }
 
 bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
-    return dict_id.num == dict_id_fields[FASTQ_TOPLEVEL] ||
-           dict_id.num == dict_id_fields[FASTQ_DESC]     ||
-           dict_id.num == dict_id_fields[FASTQ_TAXID]    ||
-           dict_id.num == dict_id_fields[FASTQ_E1L]      ||
-           dict_id.num == dict_id_fields[FASTQ_E2L];
+    return dict_id.num == _FASTQ_TOPLEVEL ||
+           dict_id.num == _FASTQ_DESC     ||
+           dict_id.num == _FASTQ_TAXID    ||
+           dict_id.num == _FASTQ_E1L      ||
+           dict_id.num == _FASTQ_E2L;
 }
 
 // ZIP/PIZ main thread: called ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
@@ -305,8 +305,8 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 
     for (sl++; sl->st == SEC_B250 || sl->st == SEC_LOCAL; sl++) {
         
-        if (dict_id_is_fastq_desc_sf (sl->dict_id) || sl->dict_id.num == dict_id_fields[FASTQ_DESC] ||
-            sl->dict_id.num == dict_id_fields[FASTQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_STRAND]) { 
+        if (dict_id_is_fastq_desc_sf (sl->dict_id) || sl->dict_id.num == _FASTQ_DESC ||
+            sl->dict_id.num == _FASTQ_GPOS || sl->dict_id.num == _FASTQ_STRAND) { 
             
             NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
             int32_t offset = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "z_data", sl->st, sl); // returns 0 if section is skipped
@@ -428,7 +428,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     if (!FASTQ_LINE3_len) 
         seg_by_did_i (vb, "", 0, FASTQ_LINE3, 0);
 
-    else if (FASTQ_LINE3_len == FASTQ_DESC_len && !memcmp (FASTQ_LINE3_str, FASTQ_DESC_str, FASTQ_DESC_len)) {
+    else if (str_issame_ (FASTQ_LINE3_str, FASTQ_LINE3_len, FASTQ_DESC_str, FASTQ_DESC_len)) {
 
         // if --optimize-DESC, we always produce an empty line.
         if (flag.optimize_DESC) {
@@ -496,36 +496,36 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
     if (flag.header_only_fast && !flag.grep &&
-        (dict_id.num == dict_id_fields[FASTQ_E2L]    || dict_id.num == dict_id_fields[FASTQ_SQBITMAP] || 
-         dict_id.num == dict_id_fields[FASTQ_NONREF] || dict_id.num == dict_id_fields[FASTQ_NONREF_X] || 
-         dict_id.num == dict_id_fields[FASTQ_GPOS]   || dict_id.num == dict_id_fields[FASTQ_STRAND]   || 
-         dict_id.num == dict_id_fields[FASTQ_QUAL]   || dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] ))
+        (dict_id.num == _FASTQ_E2L    || dict_id.num == _FASTQ_SQBITMAP || 
+         dict_id.num == _FASTQ_NONREF || dict_id.num == _FASTQ_NONREF_X || 
+         dict_id.num == _FASTQ_GPOS   || dict_id.num == _FASTQ_STRAND   || 
+         dict_id.num == _FASTQ_QUAL   || dict_id.num == _FASTQ_DOMQRUNS ))
         return true;
 
     // if we're doing --show-sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
     if (flag.collect_coverage && 
-        (dict_id.num == dict_id_fields[FASTQ_DESC]     || 
-         dict_id.num == dict_id_fields[FASTQ_QUAL]     || 
-         dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] || 
-         (dict_id.num == dict_id_fields[FASTQ_STRAND]   && !flag.bases)  ||
-         (dict_id.num == dict_id_fields[FASTQ_NONREF]   && !flag.bases)   || 
-         (dict_id.num == dict_id_fields[FASTQ_NONREF_X] && !flag.bases))) 
+        (dict_id.num == _FASTQ_DESC     || 
+         dict_id.num == _FASTQ_QUAL     || 
+         dict_id.num == _FASTQ_DOMQRUNS || 
+         (dict_id.num == _FASTQ_STRAND   && !flag.bases)  ||
+         (dict_id.num == _FASTQ_NONREF   && !flag.bases)   || 
+         (dict_id.num == _FASTQ_NONREF_X && !flag.bases))) 
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
-    if (flag.kraken_taxid==TAXID_NONE && dict_id.num == dict_id_fields[FASTQ_TAXID])
+    if (flag.kraken_taxid==TAXID_NONE && dict_id.num == _FASTQ_TAXID)
         return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep, --bases)
     if (flag.count && sections_has_dict_id (st) &&
-         (dict_id.num != dict_id_fields[FASTQ_TOPLEVEL] && 
-         (dict_id.num != dict_id_fields[FASTQ_TAXID]    || flag.kraken_taxid == TAXID_NONE) && 
-         (dict_id.num != dict_id_fields[FASTQ_DESC]     || !kraken_is_loaded) && 
-         (dict_id.num != dict_id_fields[FASTQ_SQBITMAP] || !flag.bases) && 
-         (dict_id.num != dict_id_fields[FASTQ_NONREF]   || !flag.bases) && 
-         (dict_id.num != dict_id_fields[FASTQ_NONREF_X] || !flag.bases) && 
-         (dict_id.num != dict_id_fields[FASTQ_GPOS]     || !flag.bases) && 
-         (dict_id.num != dict_id_fields[FASTQ_STRAND]   || !flag.bases) && 
+         (dict_id.num != _FASTQ_TOPLEVEL && 
+         (dict_id.num != _FASTQ_TAXID    || flag.kraken_taxid == TAXID_NONE) && 
+         (dict_id.num != _FASTQ_DESC     || !kraken_is_loaded) && 
+         (dict_id.num != _FASTQ_SQBITMAP || !flag.bases) && 
+         (dict_id.num != _FASTQ_NONREF   || !flag.bases) && 
+         (dict_id.num != _FASTQ_NONREF_X || !flag.bases) && 
+         (dict_id.num != _FASTQ_GPOS     || !flag.bases) && 
+         (dict_id.num != _FASTQ_STRAND   || !flag.bases) && 
          (!dict_id_is_fastq_desc_sf(dict_id)            || !kraken_is_loaded))) 
         return true;
 
@@ -561,7 +561,7 @@ bool fastq_piz_is_paired (void)
 // filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat) and each toplevel item
 CONTAINER_FILTER_FUNC (fastq_piz_filter)
 {
-    if (dict_id.num == dict_id_fields[FASTQ_TOPLEVEL]) {
+    if (dict_id.num == _FASTQ_TOPLEVEL) {
         if (item < 0)   // filter for repeat (FASTQ record)
             vb->line_i = 4 * (vb->first_line + rep); // each vb line is a fastq record which is 4 txt lines (needed for --pair)
 

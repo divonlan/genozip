@@ -161,7 +161,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Context *ht_matrix_ctx; \
     \
     /* used by CODEC_PBWT */ \
-    Context *runs_ctx, *fgrc_ctx;
+    Context *runs_ctx, *fgrc_ctx; /* possibly diffrent did_i for different data types */\
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS

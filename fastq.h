@@ -9,6 +9,25 @@
 #include "genozip.h"
 #include "sections.h"
 
+#define _FASTQ_CONTIG   DICT_ID_MAKEF_6 ("CONTIG")
+#define _FASTQ_DESC     DICT_ID_MAKEF_4 ("DESC")
+#define _FASTQ_E1L      DICT_ID_MAKEF_3 ("E1L")
+#define _FASTQ_SQBITMAP DICT_ID_MAKEF_L ("SQBITMAP")
+#define _FASTQ_NONREF   DICT_ID_MAKEF_6 ("NONREF")
+#define _FASTQ_NONREF_X DICT_ID_MAKEF_L ("NONREF_X")
+#define _FASTQ_GPOS     DICT_ID_MAKEF_4 ("GPOS")
+#define _FASTQ_STRAND   DICT_ID_MAKEF_6 ("STRAND")
+#define _FASTQ_E2L      DICT_ID_MAKEF_3 ("E2L")
+#define _FASTQ_QUAL     DICT_ID_MAKEF_4 ("QUAL") 
+#define _FASTQ_DOMQRUNS DICT_ID_MAKEF_L ("DOMQRUNS")
+#define _FASTQ_TOPLEVEL DICT_ID_MAKEF_L (TOPLEVEL)
+#define _FASTQ_TAXID    DICT_ID_MAKEF_5 ("TAXID")
+#define _FASTQ_LINE3    DICT_ID_MAKEF_5 ("LINE3")
+
+typedef enum { FASTQ_CONTIG /* copied from reference */, FASTQ_DESC, FASTQ_E1L, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_E2L, FASTQ_QUAL, FASTQ_DOMQRUNS, FASTQ_TOPLEVEL, FASTQ_TAXID, FASTQ_LINE3, NUM_FASTQ_FIELDS } FastqFields;
+
+#define FASTQ_MAPPING { V(FASTQ_CONTIG), V(FASTQ_DESC), V(FASTQ_E1L), V(FASTQ_SQBITMAP), V(FASTQ_NONREF), V(FASTQ_NONREF_X), V(FASTQ_GPOS), V(FASTQ_STRAND), V(FASTQ_E2L), V(FASTQ_QUAL), V(FASTQ_DOMQRUNS), V(FASTQ_TOPLEVEL), V(FASTQ_TAXID), V(FASTQ_LINE3) }
+
 // Txtfile stuff
 extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_len, uint32_t *my_lines, uint32_t *her_lines);
@@ -46,6 +65,6 @@ extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
 #define FASTQ_DICT_ID_ALIASES 
 
 #define FASTQ_LOCAL_GET_LINE_CALLBACKS  \
-    { DT_FASTQ, &dict_id_fields[FASTQ_QUAL], fastq_zip_qual },
+    { DT_FASTQ, _FASTQ_QUAL, fastq_zip_qual },
 
 #endif

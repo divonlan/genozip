@@ -309,7 +309,7 @@ bool codec_pbwt_compress (VBlock *vb,
 
 static void codec_pbwt_decode_init_ht_matrix (VBlock *vb, const uint32_t *rc_data, uint32_t *rc_data_len)
 {
-    vb->ht_matrix_ctx = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT); // create new context - it doesn't exist in the genozip file
+    vb->ht_matrix_ctx = ECTX (_PBWT_HT_MATRIX);
 
     // extract the HT matrix size from the last 2 words (64 bits) of rc_data
     *rc_data_len -= 2;
@@ -381,7 +381,7 @@ static inline void pbwt_decode_one_line (VBlockP vb, PbwtState *state, uint32_t 
     ASSERT (state->runs->next <= state->runs->len, "state.runs->next=%u is out of range", (uint32_t)state->runs->next);
 }
 
-// this function is called for the PBWT_FGRC section - after the PBWT_RUNS was already decompressed
+// this function is called for the FORMAT_PBWT_FGRC section - after the FORMAT_PBWT_RUNS was already decompressed
 void codec_pbwt_uncompress (VBlock *vb, Codec codec, uint8_t unused /* param */,
                             const char *compressed, uint32_t compressed_len,
                             Buffer *uncompressed_buf, uint64_t uncompressed_len,
@@ -398,7 +398,7 @@ void codec_pbwt_uncompress (VBlock *vb, Codec codec, uint8_t unused /* param */,
     // retrieve uncompressed_len stored at the end of the compressed data, initiatlize ht_matrix_ctx
     codec_pbwt_decode_init_ht_matrix (vb, rc_data, &rc_data_len);
 
-    Context *runs_ctx = ctx_get_existing_ctx (vb, dict_id_PBWT_RUNS);
+    Context *runs_ctx = ECTX (_PBWT_RUNS); // might be different did_i for different data types
     ASSERT0 (runs_ctx, "Cannot find context for PBWT_RUNS");
 
     PbwtState state = codec_pbwt_initialize_state (vb, &runs_ctx->local, &vb->compressed); // background allele is provided to us in param ; this is a subcodec, so vb->compressed.data == compressed

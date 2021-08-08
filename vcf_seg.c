@@ -29,7 +29,7 @@ void vcf_zip_initialize (void)
         line_number_container = (MiniContainer) {
             .repeats   = 1,
             .nitems_lo = 1,
-            .items     = { { .dict_id = (DictId)dict_id_fields[VCF_LINE_NUM] } }
+            .items     = { { .dict_id = { _VCF_LINE_NUM } } }
         };
     }
 }
@@ -103,21 +103,18 @@ void vcf_seg_initialize (VBlock *vb_)
     CTX(VCF_oPOS)->st_did_i = CTX(VCF_COPYPOS)->st_did_i = VCF_POS;
     CTX(VCF_oCHROM)->st_did_i = VCF_CHROM;
     CTX(VCF_COPYSTAT)->st_did_i = CTX(VCF_oSTATUS)->st_did_i = VCF_COORDS; // dual-coordinate non-reconstruted stuff goes here
-    
-    Context *gt_gtx   = ctx_get_ctx (vb, dict_id_FORMAT_GT);
-    gt_gtx->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
-    vb->ht_matrix_ctx = ctx_get_ctx (vb, dict_id_FORMAT_GT_HT);
+    CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
+
+    vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
 
     // room for already existing FORMATs from previous VBs
-    vb->format_mapper_buf.len = CTX(VCF_FORMAT)->ol_nodes.len;
-    buf_alloc_zero (vb, &vb->format_mapper_buf, 0, vb->format_mapper_buf.len, Container, 1.2, "format_mapper_buf");
+    vb->format_mapper_buf.len = vb->format_contexts.len = CTX(VCF_FORMAT)->ol_nodes.len;
+    buf_alloc_zero (vb, &vb->format_mapper_buf, 0, vb->format_mapper_buf.len, Container, CTX_GROWTH, "format_mapper_buf");
+    buf_alloc_zero (vb, &vb->format_contexts, 0, vb->format_contexts.len, ContextPBlock, CTX_GROWTH, "format_contexts");
     
     // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
-    if (vcf_num_samples) {
-        Context *runs_ctx = ctx_get_ctx (vb, dict_id_PBWT_RUNS); // must be created before FGRC so it is emitted in the file in this order
-        Context *fgrc_ctx = ctx_get_ctx (vb, dict_id_PBWT_FGRC);
-        codec_pbwt_seg_init (vb_, runs_ctx, fgrc_ctx, gt_gtx->did_i);
-    }
+    if (vcf_num_samples) 
+        codec_pbwt_seg_init (vb_, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC), FORMAT_GT);
 
     if (flag.add_line_numbers) {
         // create a b250 and dict entry for VCF_LINE_NUM, VCF_ID - these become "all_the_same" so no need to seg them explicitly hereinafter        
@@ -126,7 +123,7 @@ void vcf_seg_initialize (VBlock *vb_)
                                        CON_PREFIX_SEP, // end of (empty) container-wide prefix
                                        'L', 'N', '=', CON_PREFIX_SEP };  // NOTE: if changing prefix, update LN_PREFIX_LEN
 
-        container_seg_by_ctx (vb, CTX(VCF_ID), (Container *)&line_number_container, prefix, sizeof prefix, 0); 
+        container_seg (vb, CTX(VCF_ID), (Container *)&line_number_container, prefix, sizeof prefix, 0); 
         ctx_decrement_count (vb_, CTX(VCF_ID), 0);
         CTX(VCF_ID)->no_stons = true;
     }
@@ -176,30 +173,30 @@ void vcf_seg_finalize (VBlockP vb_)
         .callback     = (vb->use_special_sf == USE_SF_YES) || z_dual_coords, // cases where we need a callback
         .filter_items = true,
         .nitems_lo    = 12,                                                                 
-        .items        = { { .dict_id = (DictId)dict_id_fields[VCF_COORDS],  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
-                          { .dict_id = (DictId)dict_id_fields[VCF_oSTATUS], .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
-                          { .dict_id = (DictId)dict_id_fields[VCF_CHROM],   .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_POS],     .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_ID],      .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_REFALT],  .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_QUAL],    .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_FILTER],  .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_INFO],    .seperator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
-                          { .dict_id = (DictId)dict_id_fields[VCF_FORMAT],  .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_SAMPLES], .seperator = ""   },
-                          { .dict_id = (DictId)dict_id_fields[VCF_EOL],     .seperator = ""   } },
+        .items        = { { .dict_id = { _VCF_COORDS },  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = { _VCF_oSTATUS }, .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = { _VCF_CHROM },   .seperator = "\t" },
+                          { .dict_id = { _VCF_POS },     .seperator = "\t" },
+                          { .dict_id = { _VCF_ID },      .seperator = "\t" },
+                          { .dict_id = { _VCF_REFALT },  .seperator = "\t" },
+                          { .dict_id = { _VCF_QUAL },    .seperator = "\t" },
+                          { .dict_id = { _VCF_FILTER },  .seperator = "\t" },
+                          { .dict_id = { _VCF_INFO },    .seperator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
+                          { .dict_id = { _VCF_FORMAT },  .seperator = "\t" },
+                          { .dict_id = { _VCF_SAMPLES }, .seperator = ""   },
+                          { .dict_id = { _VCF_EOL },     .seperator = ""   } },
     };
 
     Context *ctx = CTX(VCF_TOPLEVEL);
 
     if (vb->vb_coords == DC_BOTH || !z_dual_coords)
-        container_seg_by_ctx (vb_, ctx, (ContainerP)&top_level, 0, 0, 0); 
+        container_seg (vb_, ctx, (ContainerP)&top_level, 0, 0, 0); 
 
     // when processing the rejects file containing variants that are primary-only, we add a "##primary_only=" prefix to 
     // first item of each line, so that it reconstructs as part of the VCF header 
     else if (vb->vb_coords == DC_PRIMARY) { // primary-only variants 
         static const char primary_only_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HK_PRIM_ONLY CON_PREFIX_SEP_;
-        container_seg_by_ctx (vb_, ctx, (ContainerP)&top_level, primary_only_prefix, strlen (primary_only_prefix), 0);
+        container_seg (vb_, ctx, (ContainerP)&top_level, primary_only_prefix, strlen (primary_only_prefix), 0);
         vb->recon_size += (sizeof HK_PRIM_ONLY - 1) * vb->lines.len; // when reconstructing primary-only rejects, we also reconstruct a prefix for each line
         ctx->txt_len += (sizeof HK_PRIM_ONLY - 1) * vb->lines.len;
     }
@@ -211,71 +208,71 @@ void vcf_seg_finalize (VBlockP vb_)
         .callback     = (vb->use_special_sf == USE_SF_YES) || z_dual_coords, // cases where we need a callback
         .filter_items = true,
         .nitems_lo    = 13,                                                                 
-        .items        = { { .dict_id = (DictId)dict_id_fields[VCF_COORDS],  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
-                          { .dict_id = (DictId)dict_id_fields[VCF_oSTATUS], .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
-                          { .dict_id = (DictId)dict_id_fields[VCF_oCHROM],  .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_oPOS],    .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_ID],      .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_oREFALT], .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_QUAL],    .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_FILTER],  .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_POS],     .seperator = { CI_TRANS_NOR } }, // consume POS before INFO, in case we have INFO/END
-                          { .dict_id = (DictId)dict_id_fields[VCF_INFO],    .seperator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
-                          { .dict_id = (DictId)dict_id_fields[VCF_FORMAT],  .seperator = "\t" },
-                          { .dict_id = (DictId)dict_id_fields[VCF_SAMPLES], .seperator = ""   },
-                          { .dict_id = (DictId)dict_id_fields[VCF_EOL],     .seperator = ""   } }
+        .items        = { { .dict_id = { _VCF_COORDS },  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = { _VCF_oSTATUS }, .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = { _VCF_oCHROM },  .seperator = "\t" },
+                          { .dict_id = { _VCF_oPOS },    .seperator = "\t" },
+                          { .dict_id = { _VCF_ID },      .seperator = "\t" },
+                          { .dict_id = { _VCF_oREFALT }, .seperator = "\t" },
+                          { .dict_id = { _VCF_QUAL },    .seperator = "\t" },
+                          { .dict_id = { _VCF_FILTER },  .seperator = "\t" },
+                          { .dict_id = { _VCF_POS },     .seperator = { CI_TRANS_NOR } }, // consume POS before INFO, in case we have INFO/END
+                          { .dict_id = { _VCF_INFO },    .seperator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
+                          { .dict_id = { _VCF_FORMAT },  .seperator = "\t" },
+                          { .dict_id = { _VCF_SAMPLES }, .seperator = ""   },
+                          { .dict_id = { _VCF_EOL },     .seperator = ""   } }
     };
 
     if (vb->vb_coords == DC_BOTH)
-        container_seg_by_ctx (vb_, CTX(VCF_TOPLUFT), (ContainerP)&top_luft, 0, 0, 0);
+        container_seg (vb_, CTX(VCF_TOPLUFT), (ContainerP)&top_luft, 0, 0, 0);
 
     // similarly, when processing the rejects file containing variants that are luft-only, we add a "##luft_only=" prefix
     else if (vb->vb_coords == DC_LUFT) { // luft-only variants 
         static const char luft_only_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HK_LUFT_ONLY CON_PREFIX_SEP_;
-        container_seg_by_ctx (vb_, CTX(VCF_TOPLUFT), (ContainerP)&top_luft, luft_only_prefix, strlen (luft_only_prefix), (sizeof HK_LUFT_ONLY - 1) * vb->lines.len);
+        container_seg (vb_, CTX(VCF_TOPLUFT), (ContainerP)&top_luft, luft_only_prefix, strlen (luft_only_prefix), (sizeof HK_LUFT_ONLY - 1) * vb->lines.len);
         vb->recon_size_luft += (sizeof HK_LUFT_ONLY - 1) * vb->lines.len; // when reconstructing luft-only rejects, we also reconstruct a prefix for each line
         // note: there is no equivalent of ctx->txt_len for Luft coordinates
     }
 
     // consolidate DVCF info fields to VCF_COORDS (just the container, not the values)
-    if ((ctx = ctx_get_existing_ctx (vb, dict_id_INFO_PRIM))) ctx->st_did_i = VCF_COORDS;
-    if ((ctx = ctx_get_existing_ctx (vb, dict_id_INFO_PREJ))) ctx->st_did_i = VCF_COORDS;
-    if ((ctx = ctx_get_existing_ctx (vb, dict_id_INFO_LUFT))) ctx->st_did_i = VCF_COORDS;
-    if ((ctx = ctx_get_existing_ctx (vb, dict_id_INFO_LREJ))) ctx->st_did_i = VCF_COORDS;
+    if ((ctx = CTX (INFO_PRIM))) ctx->st_did_i = VCF_COORDS;
+    if ((ctx = CTX (INFO_PREJ))) ctx->st_did_i = VCF_COORDS;
+    if ((ctx = CTX (INFO_LUFT))) ctx->st_did_i = VCF_COORDS;
+    if ((ctx = CTX (INFO_LREJ))) ctx->st_did_i = VCF_COORDS;
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return 
-        dict_id.num == dict_id_fields[VCF_TOPLEVEL] ||
-        dict_id.num == dict_id_fields[VCF_TOPLUFT]  ||
-        dict_id.num == dict_id_fields[VCF_CHROM]    ||
-        dict_id.num == dict_id_fields[VCF_oCHROM]   ||
-        dict_id.num == dict_id_fields[VCF_FORMAT]   ||
-        dict_id.num == dict_id_fields[VCF_INFO]     ||
-        dict_id.num == dict_id_fields[VCF_REFALT]   ||
-        dict_id.num == dict_id_fields[VCF_oREFALT]  ||
-        dict_id.num == dict_id_fields[VCF_FILTER]   ||
-        dict_id.num == dict_id_fields[VCF_EOL]      ||
-        dict_id.num == dict_id_fields[VCF_SAMPLES]  ||
-        dict_id.num == dict_id_fields[VCF_oCHROM]   ||
-        dict_id.num == dict_id_fields[VCF_oXSTRAND] ||
-        dict_id.num == dict_id_fields[VCF_oSTATUS]  ||
-        dict_id.num == dict_id_fields[VCF_COORDS]   ||
-        dict_id.num == dict_id_fields[VCF_LIFT_REF] ||
-        dict_id.num == dict_id_INFO_AC              ||
-        dict_id.num == dict_id_INFO_AF              ||
-        dict_id.num == dict_id_INFO_AN              ||
-        dict_id.num == dict_id_INFO_DP              ||
-        dict_id.num == dict_id_INFO_AA              || // stored as a SPECIAL snip
-        dict_id.num == dict_id_INFO_MLEAC           ||
-        dict_id.num == dict_id_INFO_MLEAF           ||
-        dict_id.num == dict_id_INFO_LDAF            ||
-        dict_id.num == dict_id_INFO_MQ0             ||
-        dict_id.num == dict_id_INFO_LUFT            ||
-        dict_id.num == dict_id_INFO_PRIM            ||
-        dict_id.num == dict_id_INFO_LREJ            ||
-        dict_id.num == dict_id_INFO_PREJ            ||
+        dict_id.num == _VCF_TOPLEVEL ||
+        dict_id.num == _VCF_TOPLUFT  ||
+        dict_id.num == _VCF_CHROM    ||
+        dict_id.num == _VCF_oCHROM   ||
+        dict_id.num == _VCF_FORMAT   ||
+        dict_id.num == _VCF_INFO     ||
+        dict_id.num == _VCF_REFALT   ||
+        dict_id.num == _VCF_oREFALT  ||
+        dict_id.num == _VCF_FILTER   ||
+        dict_id.num == _VCF_EOL      ||
+        dict_id.num == _VCF_SAMPLES  ||
+        dict_id.num == _VCF_oCHROM   ||
+        dict_id.num == _VCF_oXSTRAND ||
+        dict_id.num == _VCF_oSTATUS  ||
+        dict_id.num == _VCF_COORDS   ||
+        dict_id.num == _VCF_LIFT_REF ||
+        dict_id.num == _INFO_AC              ||
+        dict_id.num == _INFO_AF              ||
+        dict_id.num == _INFO_AN              ||
+        dict_id.num == _INFO_DP              ||
+        dict_id.num == _INFO_AA              || // stored as a SPECIAL snip
+        dict_id.num == _INFO_MLEAC           ||
+        dict_id.num == _INFO_MLEAF           ||
+        dict_id.num == _INFO_LDAF            ||
+        dict_id.num == _INFO_MQ0             ||
+        dict_id.num == _INFO_LUFT            ||
+        dict_id.num == _INFO_PRIM            ||
+        dict_id.num == _INFO_LREJ            ||
+        dict_id.num == _INFO_PREJ            ||
 
         // INFO/ AC_* AN_* AF_* and ???_AF are small
         ((dict_id.id[0] == ('A' | 0xc0)) && (dict_id.id[1] == 'C' || dict_id.id[1] == 'F' || dict_id.id[1] == 'N') && dict_id.id[2] == '_') ||
@@ -283,54 +280,52 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
 }
 
 
-// traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
-static DictId vcf_seg_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
+// converts a FORMAT field name to a dict_id
+static DictId vcf_seg_get_format_sf_dict_id (STRp (sf_name)) 
 {
-    unsigned i=0; for (; i < *len && (*str)[i] != ':' && (*str)[i] != '\t' && (*str)[i] != '\n'; i++);
-    
     DictId dict_id;
     // case: normal field - starts with a letter or another character in the range
-    if ((*str)[0] >= 64 && (*str)[0] <= 127) 
-        dict_id = dict_id_make (*str, i, DTYPE_VCF_FORMAT);
+    if (sf_name[0] >= 64 && sf_name[0] <= 127) 
+        dict_id = dict_id_make (sf_name, sf_name_len, DTYPE_VCF_FORMAT);
     
     // case: unusual field - starts with an out-of-range character, eg a digit - prefix with @ so its a legal FORMAT dict_id
     else {
-        SAFE_ASSIGN (*str - 1, '@');
-        dict_id = dict_id_make (*str-1, i+1, DTYPE_VCF_FORMAT);
+        SAFE_ASSIGN (sf_name - 1, '@');
+        dict_id = dict_id_make (sf_name-1, sf_name_len+1, DTYPE_VCF_FORMAT);
         SAFE_RESTORE;
     }
 
-    *str += i+1;
-    *len -= i+1;
     return dict_id; 
 }
 
-
-// assign contexts to a format mapper, if not already assigned
-static void vcf_seg_format_get_contexts (VBlockVCF *vb, ZipDataLineVCF *dl)
+static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
 {
-    ContainerP format_mapper = ENT (Container, vb->format_mapper_buf, dl->format_node_i);
-
-    // an array of blocks of MAX_FIELDS of ContextP. The number of such blocks is format_contexts.len
-    buf_alloc_zero (vb, &vb->format_contexts, 0, vb->format_mapper_buf.len * MAX_FIELDS, ContextP, CTX_GROWTH, "format_contexts");
-    ContextP *ctxs = ENT (ContextP, vb->format_contexts, dl->format_node_i * MAX_FIELDS);
-
-    for (unsigned i=0; i < con_nitems (*format_mapper); i++) 
-        if (!ctxs[i])
-            ctxs[i] = ctx_get_ctx (vb, format_mapper->items[i].dict_id);
-}
-
-static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char *field_start, int field_len)
-{
-    const char *str = field_start;
-    int len = field_len;
+    ASSVCF0 (fmt_len >= 1, "missing or invalid FORMAT field");
 
     if (!vcf_num_samples) {
-        seg_by_did_i_ex (vb, field_start, field_len, VCF_FORMAT, field_len + 1 /* \n */, NULL);
+        seg_by_did_i_ex (vb, fmt, fmt_len, VCF_FORMAT, fmt_len + 1 /* \n */, NULL);
         return; // if we're not expecting any samples, no need to analyze the FORMAT field
     }
 
-    ASSVCF0 (field_len >= 2, "missing or invalid FORMAT field");
+    dl->has_haplotype_data = (fmt[0] == 'G' && fmt[1] == 'T' && (fmt[2] == ':' || fmt_len==2)); // GT tag in FORMAT field - must always appear first per VCF spec (if it appears)
+    dl->has_genotype_data  = (fmt_len > 2 || !dl->has_haplotype_data);
+
+    bool possibly_rename = z_dual_coords && !vb->is_rejects_vb;
+    bool possible_conditional_renaming = possibly_rename && (vb->last_index (VCF_oXSTRAND) || LO_IS_OK_SWITCH (last_ostatus));
+
+    // case: FORMAT is the same as previous line - just use the same node_index, but only if there is no chance of conditional renaming
+    if (fmt_len == vb->last_format.len && !memcmp (vb->last_format.data, STRa(fmt)) && !possible_conditional_renaming) {
+        seg_duplicate_last ((VBlockP)vb, CTX(VCF_FORMAT), fmt_len + 1 /* \t or \n */);
+        dl->format_node_i = (dl-1)->format_node_i;
+        return;
+    }   
+
+    // save FORMAT field for potential duplication on the next line - only if we are certain there is no conditional renaming
+    vb->last_format.len = 0; // reset 
+    if (!possible_conditional_renaming)
+        buf_add_moreS (vb, &vb->last_format, fmt, "last_format");
+
+    str_split (fmt, fmt_len, 0, ':', sf_name, false);
 
     Container format_mapper = (Container){ 
         .drop_final_repeat_sep = true,
@@ -341,61 +336,80 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         .repsep                = "\t"
     };
 
-    dl->has_haplotype_data = (str[0] == 'G' && str[1] == 'T' && (str[2] == ':' || field_len==2)); // GT tag in FORMAT field - must always appear first per VCF spec (if it appears)
-    dl->has_genotype_data  = (field_len > 2 || (!dl->has_haplotype_data && field_len > 0));
+    ASSVCF (n_sf_names < MAX_FIELDS,
+            "FORMAT field has too many subfields, the maximum allowed is %u: \"%.*s\"", MAX_FIELDS, STRf(fmt));
 
-    bool last_item = false;
-    do {
-        ASSVCF (con_nitems (format_mapper) < MAX_FIELDS,
-                "FORMAT field has too many subfields, the maximum allowed is %u: \"%.*s\"",  
-                MAX_FIELDS, field_len, field_start);
+    con_set_nitems (format_mapper, n_sf_names);
 
-        DictId dict_id = vcf_seg_get_format_subfield (&str, (unsigned *)&len);
-        last_item = (str[-1] == '\t' || str[-1] == '\n');
+    ContextPBlock ctxs;
 
-        format_mapper.items[con_nitems (format_mapper)] = (ContainerItem) {
-            .dict_id   = dict_id,
-            .seperator = {':'}
-        };
-        con_inc_nitems (format_mapper);
+    for (unsigned i=0; i < n_sf_names; i++) {
 
-        ASSVCF (dict_id_is_vcf_format_sf (dict_id),
-                "string %.*s in the FORMAT field \"%.*s\" is not a legal subfield", 
-                DICT_ID_LEN, dict_id.id, field_len, field_start);
+        DictId dict_id = vcf_seg_get_format_sf_dict_id (sf_names[i], sf_name_lens[i]);
+        ctxs[i] = ctx_get_ctx_tag (vb, dict_id, sf_names[i], sf_name_lens[i]);
 
-        // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains dict_id_FORMAT_GL.
+        if (possibly_rename) vcf_tags_add_tag (vb, ctxs[i], DTYPE_VCF_FORMAT, sf_names[i], sf_name_lens[i]);
+
+        format_mapper.items[i] = (ContainerItem) { .dict_id = dict_id, .seperator = {':'} };
+
+        // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains _FORMAT_GL.
         // so that vcf_seg_one_sample treats it as GL, and converts it to PL.
-        if (dict_id.num == dict_id_FORMAT_GL && flag.GL_to_PL)
-            ((char *)str)[-3] = 'P'; // change GL to GP (note: FORMAT changes and field changes, but still stored in dict_id=GL)
+        if (dict_id.num == _FORMAT_GL && flag.GL_to_PL)
+            ((char *)fmt)[-3] = 'P'; // change GL to GP (note: FORMAT changes and field changes, but still stored in dict_id=GL)
 
-        // case: optimize_GP - only relevant to VCF 4.3 where GP is probabilities and PP is Phred values (up to 4.2 GP was Phred values)
-        if (dict_id.num == dict_id_FORMAT_GP && flag.GP_to_PP && vb->vcf_version >= VCF_v4_3)
-            ((char *)str)[-3] = 'P'; // change GP to PP (note: FORMAT changes and field changes, but still stored in dict_id=GP)
+        // case: GP_to_PP - only relevant to VCF 4.3 where GP is probabilities and PP is Phred values (up to 4.2 GP was Phred values)
+        if (dict_id.num == _FORMAT_GP && flag.GP_to_PP && vb->vcf_version >= VCF_v4_3)
+            ((char *)fmt)[-3] = 'P'; // change GP to PP (note: FORMAT changes and field changes, but still stored in dict_id=GP)
     } 
-
-    while (!last_item && len > 0);
     
+    char renamed_data[n_sf_names * MAX_TAG_LEN];
+    const char *renamed = renamed_data;
+    unsigned renamed_len = possibly_rename ? vcf_tags_rename (vb, n_sf_names, ctxs, sf_names, sf_name_lens, NULL, renamed_data) : 0;
+
+    SNIP(6 + fmt_len + renamed_len); // maximum length in case of dual-snip with renaming
+
+    if (renamed_len) {
+
+        if (vb->line_coords == DC_LUFT) {
+            vb->recon_size += renamed_len - fmt_len;
+            SWAP (fmt, renamed);
+            SWAP (fmt_len, renamed_len);
+        }
+
+        snip[0] = snip[3+fmt_len] = SNIP_DUAL;
+        snip[1] = snip[4+fmt_len] = SNIP_SPECIAL;
+        snip[2] = snip[5+fmt_len] = VCF_SPECIAL_FORMAT;
+        memcpy (&snip[3], STRa(fmt));
+        memcpy (&snip[6+fmt_len], STRa(renamed));
+    }
+
+    // case: not tag renaming
+    else {
+        snip[0] = SNIP_SPECIAL;
+        snip[1] = VCF_SPECIAL_FORMAT;
+        memcpy (&snip[2], STRa(fmt));
+        snip_len = 2 + fmt_len;
+    }
+
     bool is_new;
-    char snip[field_len+2];
-    snip[0] = SNIP_SPECIAL;
-    snip[1] = VCF_SPECIAL_FORMAT;
-    memcpy (&snip[2], field_start, field_len);
-
-    uint32_t node_index = seg_by_did_i_ex (vb, snip, field_len+2, VCF_FORMAT, field_len + 1 /* \t or \n */, &is_new);
-
+    uint32_t node_index = seg_by_did_i_ex (vb, snip, snip_len, VCF_FORMAT, fmt_len + 1 /* \t or \n */, &is_new);
+    
     dl->format_node_i = node_index;
 
     if (is_new) {
         ASSVCF (node_index == vb->format_mapper_buf.len, 
                 "node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
-        vb->format_mapper_buf.len++;
-        buf_alloc (vb, &vb->format_mapper_buf, 0, vb->format_mapper_buf.len, Container, 2, "format_mapper_buf");
+        buf_alloc (vb, &vb->format_mapper_buf, 1, 0, Container, CTX_GROWTH, "format_mapper_buf");
+        buf_alloc (vb, &vb->format_contexts, 1, 0, ContextPBlock, CTX_GROWTH, "format_contexts");
+        vb->format_contexts.len =vb->format_mapper_buf.len = vb->format_mapper_buf.len + 1;
     }    
 
     ContainerP con = ENT (Container, vb->format_mapper_buf, node_index);
-    if (is_new || !con_nitems (*con)) // assign if not already assigned. 
+    if (is_new || !con_nitems (*con)) { // assign if not already assigned (con->nitem=0 if format_mapper was already segged in another VB (so it is in ol_nodes), but not yet this VB) 
         *con = format_mapper; 
+        memcpy (ENT (ContextPBlock, vb->format_contexts, node_index), ctxs, sizeof (ctxs));
+    }
 }
 
 // returns length of lo_rejects before the copying
@@ -534,7 +548,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     if (flag.add_line_numbers) 
         vcf_seg_add_line_number (vb, VCF_ID_len);
     else
-        seg_id_field (vb_, dict_id_fields[VCF_ID], VCF_ID_str, VCF_ID_len, true);
+        seg_id_field (vb_, VCF_ID, VCF_ID_str, VCF_ID_len, true);
 
     // REF + ALT 
     GET_NEXT_ITEM (VCF_REF);
@@ -571,7 +585,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     vcf_seg_info_subfields (vb, field_start, field_len);
 
-    bool has_samples = true;
+    bool has_samples = false;
     if (separator != '\n') { // has a FORMAT field
 
         // FORMAT
@@ -583,12 +597,10 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
         vcf_seg_format_field (vb, dl, field_start, field_len);
 
-        if (separator != '\n') { // has samples
+        if ((has_samples = (separator != '\n'))) { 
 
             ASSVCF0 (dl->has_genotype_data || dl->has_haplotype_data, "expecting line to end as it has no sample data, but it has not");
             
-            vcf_seg_format_get_contexts (vb, dl);
-
             const char *backup_luft_samples = NULL; uint32_t backup_luft_samples_len=0;
             if (vb->line_coords == DC_LUFT) {
                  backup_luft_samples = ENT (char, vb->lo_rejects[DC_LUFT-1], save_lo_rejects_len + (next_field - field_start_line));
@@ -598,15 +610,12 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
             // seg all samples. note that this is destructive: 1. Samples are first lift-back to PRIMARY if needed ; 2. FORMAT/GT overwrite txt_data 
             next_field = vcf_seg_samples (vb, dl, &len, (char*)next_field, has_13, backup_luft_samples, backup_luft_samples_len); 
         }
-        else {
-            has_samples = false;
+        else 
             seg_by_did_i (vb, NULL, 0, VCF_SAMPLES, 0); // case no samples: WORD_INDEX_MISSING
-        }
     }
 
     // case no format or samples
     else {
-        has_samples = false;
         seg_by_did_i (vb, NULL, 0, VCF_FORMAT, 0); 
         seg_by_did_i (vb, NULL, 0, VCF_SAMPLES, 0);
     }
