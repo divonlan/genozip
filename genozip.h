@@ -157,7 +157,7 @@ typedef _Bool bool;
 #define cSTR(x) x, sizeof x-1 // a constant string and its length
 #define STRcpy(dst,src) do { if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } } while(0)
 #define STRcpyi(dst,i,src) do { if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } } while(0)
-
+   
 #define ARRAYp(name) unsigned n_##name##s, const char *name##s[], unsigned name##_lens[] // function parameters
 #define ARRAYa(name) n_##name##s, name##s, name##_lens // function arguments
 
