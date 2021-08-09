@@ -14,6 +14,7 @@
 #include "dict_id.h"
 #include "reconstruct.h"
 #include "vcf_private.h"
+#include "data_types.h"
 
 //--------------
 // ZIP side
@@ -196,9 +197,11 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb_)
     // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
     // note: haplotype columns are permuted only within their own sample block
     ARRAY (const char *, hapmat_columns_data, vb->hapmat_columns_data); 
-    ARRAY (const unsigned, permutatation_index, ECTX (_PBWT_GT_HT_INDEX)->local);
+
+    ContextP perm_ctx = ECTX (_PBWT_GT_HT_INDEX);
+    ARRAY (const unsigned, permutatation_index, perm_ctx->local);
     
-    ASSERT (permutatation_index, "%s.local is empty", ECTX (_PBWT_GT_HT_INDEX)->tag_name);
+    ASSERT (permutatation_index, "%s.local is empty", perm_ctx->tag_name);
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
     // note: txt_file->max_lines_per_vb will be zero if genozip file was created by redirecting output

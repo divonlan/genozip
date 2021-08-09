@@ -12,116 +12,96 @@
 #define DTYPE_QNAME        DTYPE_1
 #define DTYPE_SAM_OPTIONAL DTYPE_2
 
-// Fields
-#define _SAM_RNAME       DICT_ID_MAKEF_5 ("RNAME")
-#define _SAM_QNAME       DICT_ID_MAKEF_5 ("QNAME")
-#define _SAM_FLAG        DICT_ID_MAKEF_4 ("FLAG")
-#define _SAM_POS         DICT_ID_MAKEF_3 ("POS")
-#define _SAM_MAPQ        DICT_ID_MAKEF_4 ("MAPQ")
-#define _SAM_CIGAR       DICT_ID_MAKEF_5 ("CIGAR")
-#define _SAM_RNEXT       DICT_ID_MAKEF_5 ("RNEXT")
-#define _SAM_PNEXT       DICT_ID_MAKEF_5 ("PNEXT")
-#define _SAM_TLEN        DICT_ID_MAKEF_4 ("TLEN")
-#define _SAM_OPTIONAL    DICT_ID_MAKEF_L ("OPTIONAL")
-#define _SAM_SQBITMAP    DICT_ID_MAKEF_L ("SQBITMAP")
-#define _SAM_NONREF      DICT_ID_MAKEF_6 ("NONREF")
-#define _SAM_NONREF_X    DICT_ID_MAKEF_L ("NONREF_X")
-#define _SAM_GPOS        DICT_ID_MAKEF_4 ("GPOS")
-#define _SAM_STRAND      DICT_ID_MAKEF_6 ("STRAND")
-#define _SAM_QUAL        DICT_ID_MAKEF_4 ("QUAL") 
-#define _SAM_DOMQRUNS    DICT_ID_MAKEF_L ("DOMQRUNS")
-#define _SAM_EOL         DICT_ID_MAKEF_3 ("EOL")
-#define _SAM_BAM_BIN     DICT_ID_MAKEF_7 ("BAM_BIN")
-#define _SAM_TOPLEVEL    DICT_ID_MAKEF_L (TOPLEVEL)
-#define _SAM_TOP2BAM     DICT_ID_MAKEF_7 ("TOP2BAM")
-#define _SAM_TOP2FQ      DICT_ID_MAKEF_6 ("TOP2FQ")
-#define _SAM_E2_Z        DICT_ID_MAKEF_4 ("E2:Z") 
-#define _SAM_2NONREF     DICT_ID_MAKEF_7 ("2NONREF")
-#define _SAM_N2ONREFX    DICT_ID_MAKEF_L ("N2ONREFX")
-#define _SAM_2GPOS       DICT_ID_MAKEF_5 ("2GPOS")
-#define _SAM_S2TRAND     DICT_ID_MAKEF_7 ("S2TRAND")
-#define _SAM_U2_Z        DICT_ID_MAKEF_4 ("U2:Z") 
-#define _SAM_D2OMQRUN    DICT_ID_MAKEF_L ("D2OMQRUN")
-#define _SAM_TAXID       DICT_ID_MAKEF_5 ("TAXID")
+#pragma GENDICT_PREFIX SAM
 
-#define _OPTION_AM       DICT_ID_MAKE2_4 ("AM:i")
-#define _OPTION_AS       DICT_ID_MAKE2_4 ("AS:i")
-#define _OPTION_CC       DICT_ID_MAKE2_4 ("CC:Z")
-#define _OPTION_BD       DICT_ID_MAKE2_4 ("BD:Z")
-#define _OPTION_BI       DICT_ID_MAKE2_4 ("BI:Z")
-#define _OPTION_BD_BI    DICT_ID_MAKE2_5 ("BD_BI")
-#define _OPTION_CM       DICT_ID_MAKE2_4 ("CM:i")
-#define _OPTION_E2       DICT_ID_MAKE2_4 ("E2:Z")
-#define _OPTION_FI       DICT_ID_MAKE2_4 ("FI:i")
-#define _OPTION_H0       DICT_ID_MAKE2_4 ("H0:i")
-#define _OPTION_H1       DICT_ID_MAKE2_4 ("H1:i")
-#define _OPTION_H2       DICT_ID_MAKE2_4 ("H2:i")
-#define _OPTION_LB       DICT_ID_MAKE2_4 ("LB:Z")
-#define _OPTION_MC       DICT_ID_MAKE2_4 ("MC:Z")
-#define _OPTION_MD       DICT_ID_MAKE2_4 ("MD:Z")
-#define _OPTION_MQ       DICT_ID_MAKE2_4 ("MQ:i")
-#define _OPTION_NH       DICT_ID_MAKE2_4 ("NH:i")
-#define _OPTION_NM       DICT_ID_MAKE2_4 ("NM:i")
-#define _OPTION_OA       DICT_ID_MAKE2_4 ("OA:Z")
-#define _OPTION_OC       DICT_ID_MAKE2_4 ("OC:Z")
-#define _OPTION_PG       DICT_ID_MAKE2_4 ("PG:Z")
-#define _OPTION_PQ       DICT_ID_MAKE2_4 ("PQ:i")
-#define _OPTION_PU       DICT_ID_MAKE2_4 ("PU:Z")
-#define _OPTION_RG       DICT_ID_MAKE2_4 ("RG:Z")
-#define _OPTION_SA       DICT_ID_MAKE2_4 ("SA:Z")
-#define _OPTION_SM       DICT_ID_MAKE2_4 ("SM:i")
-#define _OPTION_TC       DICT_ID_MAKE2_4 ("TC:i")
-#define _OPTION_UQ       DICT_ID_MAKE2_4 ("UQ:i")
-#define _OPTION_U2       DICT_ID_MAKE2_4 ("U2:Z")
+// Fields
+#pragma GENDICT SAM_RNAME=DTYPE_FIELD=RNAME // RNAME must be first
+#pragma GENDICT SAM_QNAME=DTYPE_FIELD=QNAME
+#pragma GENDICT SAM_FLAG=DTYPE_FIELD=FLAG
+#pragma GENDICT SAM_POS=DTYPE_FIELD=POS
+#pragma GENDICT SAM_MAPQ=DTYPE_FIELD=MAPQ
+#pragma GENDICT SAM_CIGAR=DTYPE_FIELD=CIGAR
+#pragma GENDICT SAM_RNEXT=DTYPE_FIELD=RNEXT
+#pragma GENDICT SAM_PNEXT=DTYPE_FIELD=PNEXT
+#pragma GENDICT SAM_TLEN=DTYPE_FIELD=TLEN
+#pragma GENDICT SAM_OPTIONAL=DTYPE_FIELD=OPTIONAL
+#pragma GENDICT SAM_SQBITMAP=DTYPE_FIELD=SQBITMAP
+#pragma GENDICT SAM_NONREF=DTYPE_FIELD=NONREF    // these 4 fields must be in this order, right after SAM_SQBITMAP
+#pragma GENDICT SAM_NONREF_X=DTYPE_FIELD=NONREF_X
+#pragma GENDICT SAM_GPOS=DTYPE_FIELD=GPOS
+#pragma GENDICT SAM_STRAND=DTYPE_FIELD=STRAND
+#pragma GENDICT SAM_QUAL=DTYPE_FIELD=QUAL 
+#pragma GENDICT SAM_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // must be right after SAM_QUAL
+#pragma GENDICT SAM_EOL=DTYPE_FIELD=EOL
+#pragma GENDICT SAM_BAM_BIN=DTYPE_FIELD=BAM_BIN
+#pragma GENDICT SAM_TOPLEVEL=DTYPE_FIELD=TOPLEVEL // must be called TOPLEVEL
+#pragma GENDICT SAM_TOP2BAM=DTYPE_FIELD=TOP2BAM
+#pragma GENDICT SAM_TOP2FQ=DTYPE_FIELD=TOP2FQ
+#pragma GENDICT SAM_TAXID=DTYPE_FIELD=TAXID
+
+#pragma GENDICT OPTION_AM=DTYPE_2=AM:i
+#pragma GENDICT OPTION_AS=DTYPE_2=AS:i
+#pragma GENDICT OPTION_CC=DTYPE_2=CC:Z
+#pragma GENDICT OPTION_CM=DTYPE_2=CM:i
+#pragma GENDICT OPTION_E2=DTYPE_2=E2:Z
+#pragma GENDICT OPTION_2NONREF=DTYPE_2=N2ONREF // these 4 fields must be in this order, right after OPTION_E2
+#pragma GENDICT OPTION_N2ONREFX=DTYPE_2=n2ONREFX
+#pragma GENDICT OPTION_2GPOS=DTYPE_FIELD=G2POS
+#pragma GENDICT OPTION_S2TRAND=DTYPE_2=S2TRAND
+#pragma GENDICT OPTION_FI=DTYPE_2=FI:i
+#pragma GENDICT OPTION_H0=DTYPE_2=H0:i
+#pragma GENDICT OPTION_H1=DTYPE_2=H1:i
+#pragma GENDICT OPTION_H2=DTYPE_2=H2:i
+#pragma GENDICT OPTION_LB=DTYPE_2=LB:Z
+#pragma GENDICT OPTION_MC=DTYPE_2=MC:Z
+#pragma GENDICT OPTION_MD=DTYPE_2=MD:Z
+#pragma GENDICT OPTION_MQ=DTYPE_2=MQ:i
+#pragma GENDICT OPTION_NH=DTYPE_2=NH:i
+#pragma GENDICT OPTION_NM=DTYPE_2=NM:i
+#pragma GENDICT OPTION_OA=DTYPE_2=OA:Z
+#pragma GENDICT OPTION_OC=DTYPE_2=OC:Z
+#pragma GENDICT OPTION_PG=DTYPE_2=PG:Z
+#pragma GENDICT OPTION_PQ=DTYPE_2=PQ:i
+#pragma GENDICT OPTION_PU=DTYPE_2=PU:Z
+#pragma GENDICT OPTION_RG=DTYPE_2=RG:Z
+#pragma GENDICT OPTION_SA=DTYPE_2=SA:Z
+#pragma GENDICT OPTION_SM=DTYPE_2=SM:i
+#pragma GENDICT OPTION_TC=DTYPE_2=TC:i
+#pragma GENDICT OPTION_UQ=DTYPE_2=UQ:i
+#pragma GENDICT OPTION_U2=DTYPE_2=U2:Z
+#pragma GENDICT OPTION_D2OMQRUN=DTYPE_2=D2OMQRUN // must be right after OPTION_U2
                 
 // Ion Torrent flow signal array
-#define _OPTION_ZM       DICT_ID_MAKE2_4 ("ZM:B")
+#pragma GENDICT OPTION_ZM=DTYPE_2=ZM:B
 
 // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
-#define _OPTION_X0       DICT_ID_MAKE2_4 ("X0:i") 
-#define _OPTION_X1       DICT_ID_MAKE2_4 ("X1:i") 
-#define _OPTION_XA       DICT_ID_MAKE2_4 ("XA:Z") 
-#define _OPTION_XA_RNAME DICT_ID_MAKE2_L ("X0ARNAME") 
-#define _OPTION_XN       DICT_ID_MAKE2_4 ("XN:i") 
-#define _OPTION_XM       DICT_ID_MAKE2_4 ("XM:i") 
-#define _OPTION_XO       DICT_ID_MAKE2_4 ("XO:i")
-#define _OPTION_XG       DICT_ID_MAKE2_4 ("XG:i") 
-#define _OPTION_XS       DICT_ID_MAKE2_4 ("XS:i") 
-#define _OPTION_XE       DICT_ID_MAKE2_4 ("XE:i")
+#pragma GENDICT OPTION_X0=DTYPE_2=X0:i 
+#pragma GENDICT OPTION_X1=DTYPE_2=X1:i 
+#pragma GENDICT OPTION_XA=DTYPE_2=XA:Z 
+#pragma GENDICT OPTION_XA_RNAME=DTYPE_2=X0ARNAME 
+#pragma GENDICT OPTION_XN=DTYPE_2=XN:i 
+#pragma GENDICT OPTION_XM=DTYPE_2=XM:i 
+#pragma GENDICT OPTION_XO=DTYPE_2=XO:i
+#pragma GENDICT OPTION_XG=DTYPE_2=XG:i 
+#pragma GENDICT OPTION_XS=DTYPE_2=XS:i 
+#pragma GENDICT OPTION_XE=DTYPE_2=XE:i
 
 // biobambam tags
-#define _OPTION_mc       DICT_ID_MAKE2_4 ("mc:i")
-#define _OPTION_ms       DICT_ID_MAKE2_4 ("ms:i")
+#pragma GENDICT OPTION_mc=DTYPE_2=mc:i
+#pragma GENDICT OPTION_ms=DTYPE_2=ms:i
 
 // added by GATK's BQSR (Base Quality Score Recalibration)
-#define _OPTION_BD       DICT_ID_MAKE2_4 ("BD:Z") // not used in newer versions of GATK
-#define _OPTION_BI       DICT_ID_MAKE2_4 ("BI:Z") // not used in newer versions of GATK
+#pragma GENDICT OPTION_BD=DTYPE_2=BD:Z // not used in newer versions of GATK
+#pragma GENDICT OPTION_BI=DTYPE_2=BI:Z // not used in newer versions of GATK
+#pragma GENDICT OPTION_BD_BI=DTYPE_2=BD_BI
 
 // our private dictionary for + or 0 strands
-#define _OPTION_STRAND   DICT_ID_MAKE2_7 ("@STRAND")
-#define _OPTION_RNAME    DICT_ID_MAKE2_6 ("@RNAME")
-#define _OPTION_POS      DICT_ID_MAKE2_4 ("@POS")
-#define _OPTION_CIGAR    DICT_ID_MAKE2_6 ("@CIGAR")
-#define _OPTION_MAPQ     DICT_ID_MAKE2_5 ("@MAPQ")
-#define _OPTION_TX       DICT_ID_MAKE2_4 ("TX:i")
-
-// did_i to dict_i mapping - only needed for did_i's referred to explicitly
-// the CHROM field MUST be the first field (because of ctx_build_zf_ctx_from_contigs)
-typedef enum { SAM_RNAME, SAM_QNAME, SAM_FLAG, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, 
-               SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, 
-               SAM_QUAL, SAM_DOMQRUNS, SAM_EOL, SAM_BAM_BIN,
-               SAM_TOPLEVEL, SAM_TOP2BAM, SAM_TOP2FQ, 
-               SAM_E2_Z, SAM_2NONREF, SAM_N2ONREFX, SAM_2GPOS, SAM_S2TRAND, // This fields need to be sequential. E2 and U2 are in primary fields instead of FORMAT due to historical reasons.
-               SAM_U2_Z, SAM_D2OMQRUN,                                      // This fields need to be sequential
-               SAM_TAXID,
-               OPTION_BD_BI, OPTION_XA, OPTION_XA_RNAME,
-               NUM_SAM_FIELDS } SamFields;
-
-#define SAM_MAPPING { V(SAM_RNAME), V(SAM_QNAME), V(SAM_FLAG), V(SAM_POS), V(SAM_MAPQ), V(SAM_CIGAR), V(SAM_RNEXT), V(SAM_PNEXT), V(SAM_TLEN), \
-                      V(SAM_OPTIONAL), V(SAM_SQBITMAP), V(SAM_NONREF), V(SAM_NONREF_X), V(SAM_GPOS), V(SAM_STRAND), V(SAM_QUAL), V(SAM_DOMQRUNS), V(SAM_EOL), \
-                      V(SAM_BAM_BIN) ,V(SAM_TOPLEVEL), V(SAM_TOP2BAM), V(SAM_TOP2FQ), \
-                      V(SAM_E2_Z), V(SAM_2NONREF), V(SAM_N2ONREFX), V(SAM_2GPOS), V(SAM_S2TRAND), V(SAM_U2_Z), V(SAM_D2OMQRUN), V(SAM_TAXID), \
-                      V(OPTION_BD_BI), V(OPTION_XA), V(OPTION_XA_RNAME) }
+#pragma GENDICT OPTION_STRAND=DTYPE_2=@STRAND
+#pragma GENDICT OPTION_RNAME=DTYPE_2=@RNAME
+#pragma GENDICT OPTION_POS=DTYPE_2=@POS
+#pragma GENDICT OPTION_CIGAR=DTYPE_2=@CIGAR
+#pragma GENDICT OPTION_MAPQ=DTYPE_2=@MAPQ
+#pragma GENDICT OPTION_TX=DTYPE_2=TX:i
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(sam_zip_qual)
@@ -181,27 +161,24 @@ SPECIAL (SAM, 7, XA_POS, sam_piz_special_XA_POS);
 #define NUM_SAM_SPECIAL 8
 
 // note: we can't alias RNEXT to RNAME, because we can't alias to CHROM - see comment in reconstruct_from_ctx_do 
-#define SAM_DICT_ID_ALIASES \
-    /*         alias                       maps to this ctx            */  \
-    { DT_SAM,  _OPTION_MC,          _OPTION_CIGAR         }, \
-    { DT_SAM,  _OPTION_OC,          _OPTION_CIGAR         }, \
-    { DT_SAM,  _OPTION_E2,          _SAM_E2_Z             }, \
-    { DT_SAM,  _OPTION_U2,          _SAM_U2_Z             },
+#define SAM_DICT_ID_ALIASES                               \
+    /*         alias                 maps to this ctx */  \
+    { DT_SAM,  _OPTION_MC,          _OPTION_CIGAR      }, \
+    { DT_SAM,  _OPTION_OC,          _OPTION_CIGAR      }, \
 
-#define SAM_LOCAL_GET_LINE_CALLBACKS  \
-    { DT_SAM,   _OPTION_BD_BI,      sam_zip_bd_bi                }, \
-    { DT_SAM,   _SAM_QUAL,          sam_zip_qual                 }, 
+#define BAM_DICT_ID_ALIASES                               \
+    { DT_BAM,  _OPTION_MC,          _OPTION_CIGAR      }, \
+    { DT_BAM,  _OPTION_OC,          _OPTION_CIGAR      }, \
 
-#define BAM_DICT_ID_ALIASES \
-    /*         alias                       maps to this ctx            */  \
-    { DT_BAM,  _OPTION_MC,          _OPTION_CIGAR         }, \
-    { DT_BAM,  _OPTION_OC,          _OPTION_CIGAR         }, \
-    { DT_BAM,  _OPTION_E2,          _SAM_E2_Z             }, \
-    { DT_BAM,  _OPTION_U2,          _SAM_U2_Z             },
+#define SAM_LOCAL_GET_LINE_CALLBACKS                      \
+    { DT_SAM,  _OPTION_BD_BI,       sam_zip_bd_bi      }, \
+    { DT_SAM,  _SAM_QUAL,           sam_zip_qual       }, \
+    { DT_SAM,  _OPTION_U2,          sam_zip_u2         }, 
 
-#define BAM_LOCAL_GET_LINE_CALLBACKS  \
-    { DT_BAM,  _OPTION_BD_BI,       sam_zip_bd_bi                }, \
-    { DT_BAM,  _SAM_QUAL,           sam_zip_qual                 }, 
+#define BAM_LOCAL_GET_LINE_CALLBACKS                      \
+    { DT_BAM,  _OPTION_BD_BI,       sam_zip_bd_bi      }, \
+    { DT_BAM,  _SAM_QUAL,           sam_zip_qual       }, \
+    { DT_BAM,  _OPTION_U2,          sam_zip_u2         }, 
 
 
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format

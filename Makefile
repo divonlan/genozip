@@ -1,3 +1,4 @@
+
 # ------------------------------------------------------------------
 #   Makefile
 #   Copyright (C) 2019-2021 Black Paw Ventures Limited
@@ -25,22 +26,15 @@ ifdef IS_CONDA
 		CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
 
-	ifeq ($(uname),Linux)
-		MY_SRCS += data_types.conda.c 
-	else
-		MY_SRCS += data_types.c 
-	endif
-
 else
 	CC=gcc
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -Ilibdeflate -D_LARGEFILE64_SOURCE=1 -march=native 
-	MY_SRCS += data_types.c 
 endif 
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
-MY_SRCS += genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
-		  bit_array.c progress.c coords.c writer.c tar.c\
+MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
+		  data_types.c bit_array.c progress.c coords.c writer.c tar.c\
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
 		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c \
@@ -69,7 +63,7 @@ CONDA_DEVS = Makefile .gitignore
 
 CONDA_DOCS = LICENSE.txt AUTHORS README.md
 
-CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
+CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h \
@@ -198,15 +192,26 @@ ifeq ($(OS),Windows_NT)
 	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OCRAM -o $@ -T data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz"
 endif
 
-genozip$(EXE): $(OBJS)
+GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))
+
+# dict_id_gen.h generation:
+# Step 1: dict_id_gen.sh generates dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
+# Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
+# Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
+dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
+	@echo Generating $@
+	@bash dict_id_gen.sh
+	@rm -f dict_id_gen.c
+	
+genozip$(EXE): dict_id_gen.h $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
  
-genozip-debug$(EXE): $(DEBUG_OBJS)
+genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS) 
 
-genozip-opt$(EXE): $(OPT_OBJS)
+genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
@@ -305,7 +310,7 @@ clean:
 	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean prod
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean prod dict_id_gen$(EXE)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)

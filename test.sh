@@ -1,5 +1,10 @@
 #!/bin/bash 
 
+# ------------------------------------------------------------------
+#   test.sh
+#   Copyright (C) 2019-2021 Black Paw Ventures Limited
+#   Please see terms and conditions in the file LICENSE.txt
+
 shopt -s extglob  # Enables extglob - see https://mywiki.wooledge.org/glob
 export GENOZIP_TEST="Yes" # Causes output of debugger arguments
 unset GENOZIP_REFERENCE   # initialize

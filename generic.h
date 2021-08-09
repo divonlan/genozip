@@ -8,11 +8,9 @@
 
 #include "genozip.h"
 
-#define _GNRIC_DATA     DICT_ID_MAKEF_4 ("DATA")
-#define _GNRIC_TOPLEVEL DICT_ID_MAKEF_L (TOPLEVEL)
-
-typedef enum { GNRIC_DATA, GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GenericFields;
-#define GNRIC_MAPPING { V(GNRIC_DATA), V(GNRIC_TOPLEVEL) }
+#pragma GENDICT_PREFIX GNRIC
+#pragma GENDICT GNRIC_DATA=DTYPE_FIELD=DATA
+#pragma GENDICT GNRIC_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 
 extern int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern void generic_seg_finalize (VBlockP vb);

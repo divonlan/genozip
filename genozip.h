@@ -13,6 +13,8 @@
 #include <unistd.h> 
 #include <string.h> // must be after inttypes
 
+#pragma GCC diagnostic ignored "-Wunknown-pragmas"
+
 // -----------------
 // system parameters
 // -----------------

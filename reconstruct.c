@@ -406,8 +406,8 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     }
 
     else ASSERT (flag.missing_contexts_allowed,
-                 "Error in reconstruct_from_ctx_do: ctx %s has no data (dict, b250 or local) in vb_i=%u line_i=%"PRIu64" did_i=%u ctx->did=%u ctx->dict_id=%s", 
-                 ctx->tag_name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
+                 "Error in reconstruct_from_ctx_do: ctx %s/%s has no data (dict, b250 or local) in vb_i=%u line_i=%"PRIu64" did_i=%u ctx->did=%u ctx->dict_id=%s", 
+                 dtype_name_z (ctx->dict_id), ctx->tag_name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 

@@ -169,7 +169,7 @@ void sam_seg_initialize (VBlock *vb)
 
     // in --stats, consolidate stats 
     stats_set_consolidation (vb, SAM_SQBITMAP, 4, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND);
-    stats_set_consolidation (vb, SAM_E2_Z, 4, SAM_2NONREF, SAM_N2ONREFX, SAM_2GPOS, SAM_S2TRAND);
+    stats_set_consolidation (vb, OPTION_E2, 4, OPTION_2NONREF, OPTION_N2ONREFX, OPTION_2GPOS, OPTION_S2TRAND);
 
     codec_acgt_comp_init (vb);
 
@@ -188,8 +188,8 @@ void sam_seg_finalize (VBlockP vb)
     if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) 
         CTX(SAM_QUAL)->ltype  = LT_SEQUENCE; 
 
-    if (!codec_domq_comp_init (vb, SAM_U2_Z, sam_zip_u2)) 
-        CTX(SAM_U2_Z)->ltype  = LT_SEQUENCE; 
+    if (!codec_domq_comp_init (vb, OPTION_U2, sam_zip_u2)) 
+        CTX(OPTION_U2)->ltype  = LT_SEQUENCE; 
 
     // top level snip - reconstruction as SAM
     SmallContainer top_level_sam = { 
@@ -1054,20 +1054,21 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
     else if (dict_id.num == _OPTION_TX) 
         seg_by_dict_id (vb, taxid_redirection_snip, taxid_redirection_snip_len, dict_id, add_bytes); 
 
-    // E2 - SEQ data (note: E2 doesn't have a context - it shares with SEQ)
-    else if (dict_id.num == _SAM_E2_Z) {
+    // E2 - SEQ data. Currently broken. To do: fix.
+/*    else if (dict_id.num == _OPTION_E2) {
         ASSSEG0 (dl->seq_len, value, "E2 tag without a SEQ"); 
         ASSINP (value_len == dl->seq_len, 
                 "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                 txt_name, dl->seq_len, value_len, value_len, value);
 
         PosType this_pos = vb->last_int(SAM_POS);
-        sam_seg_seq_field (vb, SAM_E2_Z, (char *)value, value_len, this_pos, vb->last_cigar, 0, value_len, // remove const bc SEQ data is actually going to be modified
+
+        sam_seg_seq_field (vb, OPTION_E2, (char *)value, value_len, this_pos, vb->last_cigar, 0, value_len, // remove const bc SEQ data is actually going to be modified
                            vb->last_cigar, add_bytes); 
     }
-
+*/
     // U2 - QUAL data (note: U2 doesn't have a context - it shares with QUAL)
-    else if (dict_id.num == _SAM_U2_Z) {
+    else if (dict_id.num == _OPTION_U2) {
         ASSSEG0 (dl->seq_len, value, "U2 tag without a SEQ"); 
         ASSINP (value_len == dl->seq_len, 
                 "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
@@ -1075,8 +1076,8 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 
         dl->u2_data_start = value - vb->txt_data.data;
         dl->u2_data_len   = value_len;
-        CTX(SAM_U2_Z)->txt_len   += add_bytes;
-        CTX(SAM_U2_Z)->local.len += value_len;
+        CTX(OPTION_U2)->txt_len   += add_bytes;
+        CTX(OPTION_U2)->local.len += value_len;
     }
 
     // Numeric array array
@@ -1325,7 +1326,9 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
             vb->last_cigar, dl->seq_len, field_len, field_len, field_start);
 
     // calculate diff vs. reference (denovo or loaded)
+    uint32_t save_ref_and_seq_consumed = vb->ref_and_seq_consumed; // save in case we have E2
     sam_seg_seq_field (vb, SAM_SQBITMAP, field_start, field_len, this_pos, vb->last_cigar, 0, field_len, vb->last_cigar, field_len+1);
+    vb->ref_and_seq_consumed = save_ref_and_seq_consumed; // restore
 
     GET_MAYBE_LAST_ITEM (SAM_QUAL);
     sam_seg_qual_field (vb, dl, field_start, field_len, field_len + 1); 

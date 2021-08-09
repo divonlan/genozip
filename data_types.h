@@ -15,6 +15,7 @@
 #include "txtheader.h"
 #include "txtfile.h"
 #include "container.h"
+#include "dict_id_gen.h"
 
 // data type files
 #include "vcf.h"
@@ -137,18 +138,6 @@ extern DataTypeProperties dt_props[NUM_DATATYPES], dt_props_def;
 // !!WARNING!!: to use DT_FUNC in an expression it MUST be enclosed in parathesis: (DT_FUNC(vb,func)(args))
 #define DT_FUNC(src,prop) DT_FUNC_OPTIONAL (src, prop, 0)
 
-#define MAX_NUM_FIELDS_PER_DATA_TYPE MAX ((int) NUM_REF_FIELDS,     \
-                                     MAX ((int) NUM_VCF_FIELDS,     \
-                                     MAX ((int) NUM_SAM_FIELDS,     \
-                                     MAX ((int) NUM_FASTQ_FIELDS,   \
-                                     MAX ((int) NUM_FASTA_FIELDS,   \
-                                     MAX ((int) NUM_GFF3_FIELDS,    \
-                                     MAX ((int) NUM_ME23_FIELDS,    \
-                                     MAX ((int) NUM_GNRIC_FIELDS,   \
-                                     MAX ((int) NUM_CHAIN_FIELDS,   \
-                                     MAX ((int) NUM_KRAKEN_FIELDS, \
-                                          (int) NUM_PHY_FIELDS ))))))))))
-
 #define MAX_DICTS 2048
 
 typedef struct DataTypeFields {
@@ -162,7 +151,6 @@ typedef struct DataTypeFields {
 
 #define TOPLEVEL "TOPLEVEL"
 
-#define V(did_i) [did_i]={ .num = _##did_i }
 #define DATA_TYPE_FIELDS { \
 /* num_fields        pos         nonref        ochrom,     eol             toplevel             did_i to dict_id mapping */ \
   {NUM_REF_FIELDS,   DID_I_NONE, DID_I_NONE,   DID_I_NONE, {0},            {0},                 REF_MAPPING }, \
