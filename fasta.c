@@ -526,12 +526,12 @@ static inline void fasta_piz_translate_desc_to_phylip (VBlock *vb, char *desc_st
 
     const char *chrom_name = desc_start + 1;
     unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
-    
-    memcpy (desc_start, chrom_name, MIN (chrom_name_len, 10));
+
+    memmove (desc_start, chrom_name, MIN (chrom_name_len, 10));
     if (chrom_name_len < 10) memcpy (desc_start + chrom_name_len, "          ", 10-chrom_name_len); // pad with spaces
 
     if (recon_len > 10) vb->txt_data.len -= recon_len - 10; // we do it this way to avoid signed problems
-    else                        vb->txt_data.len += 10 - recon_len;
+    else                vb->txt_data.len += 10 - recon_len;
 }
 
 // shorten DESC to the first white space

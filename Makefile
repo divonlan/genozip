@@ -209,15 +209,15 @@ endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - 
 
 genozip$(EXE): dict_id_gen.h $(OBJS)
 	@echo Linking $@
-	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
  
 genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS)
 	@echo Linking $@
-	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS) 
+	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) 
 
 genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS)
 	@echo Linking $@
-	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS)
 
 genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@echo Hard linking $@
