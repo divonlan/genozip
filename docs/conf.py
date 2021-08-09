@@ -22,7 +22,7 @@ copyright = '2019-2021, Divon Lan'
 author = 'Divon Lan'
 
 # The full version, including alpha/beta/rc tags
-release = '12.0.13'
+release = '12.0.25'
 
 
 # -- General configuration ---------------------------------------------------
