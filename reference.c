@@ -1702,11 +1702,28 @@ const char *ref_get_cram_ref (Reference ref)
     ASSINP (ref->ref_fasta_name, "cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",
             ref->filename, REF_FILENAME_LEN-1);
 
-    ASSINP (file_exists (ref->ref_fasta_name), "cannot find the fasta file %s. Note: this is the file that was used to create %s, and it needs to exist in this name, in order to be passed to samtools as a reference file (-T option) for reading the CRAM file", 
-            ref->ref_fasta_name, ref->filename);
+    samtools_T_option = MALLOC (MAX (strlen (ref->ref_fasta_name), strlen (ref->filename)) + 10);
 
-    samtools_T_option = MALLOC (strlen (ref->ref_fasta_name) + 10);
-    sprintf (samtools_T_option, "-T%s", ref->ref_fasta_name);
+    // case: fasta file is in its original location
+    if (file_exists (ref->ref_fasta_name)) 
+        sprintf (samtools_T_option, "-T%s", ref->ref_fasta_name);
+
+    // try: fasta file is in directory of reference file
+    else {
+        const char *slash = strrchr (ref->ref_fasta_name, '/');
+        if (!slash) slash = strrchr (ref->ref_fasta_name, '\\'); 
+        const char *basename = slash ? slash+1 : ref->ref_fasta_name;
+
+        slash = strrchr (ref->filename, '/');
+        if (!slash) slash = strrchr (ref->filename, '\\'); 
+        unsigned dirname_len = slash ? ((slash+1) - ref->filename) : 0;
+
+        sprintf (samtools_T_option, "-T%.*s%s", dirname_len, ref->filename, basename);
+
+        ASSINP (file_exists (&samtools_T_option[2]), 
+                "Searching of the fasta file used to create %s. It was not found in %s or %s. Note: it is needed for passing to samtools as a reference file (-T option) for reading the CRAM file", 
+                ref->filename, ref->ref_fasta_name, &samtools_T_option[2]);        
+    }
 
 done:
     return samtools_T_option;

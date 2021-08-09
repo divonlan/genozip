@@ -203,7 +203,6 @@ ifeq ($(OS),Windows_NT)
 dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
 	@echo Generating $@
 	@bash dict_id_gen.sh $(CC)
-	@rm -f dict_id_gen.c
 
 endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate on Windows and check in to github
 

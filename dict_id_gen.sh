@@ -145,3 +145,5 @@ if [ ${#CC} -eq 0 ]; then CC=gcc; fi
 $CC dict_id_gen.c -o $dict_id_gen_exe
 
 generate_dict_id_gen_h 
+
+rm -f dict_id_gen.c
