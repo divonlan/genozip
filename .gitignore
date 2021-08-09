@@ -87,5 +87,4 @@ conda/README.md
 unused-code
 genozip.threads-log.*
 .genozip_license
-dict_id_gen.h
 dict_id_gen.c

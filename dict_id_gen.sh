@@ -100,6 +100,7 @@ generate_dict_id_gen_h()
         prefix=`grep -w "#pragma GENDICT_PREFIX" $f | head -1 | cut -d" " -f3 | tr -d '\15'`
         if [ ${#prefix} -eq 0 ]; then echo "dict_id_gen.sh: Error: no GENDICT_PREFIX in $f"; exit 1; fi
 
+        # note: readarray doesn't work on MacOS :(
         readarray -t vars <<< `grep -w "#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f1 `
 
         # calculate MAX_NUM_FIELDS_PER_DATA_TYPE
@@ -137,6 +138,10 @@ files=(`grep "#pragma GENDICT" *.h | cut -d: -f1 | uniq`)
 
 generate_dict_id_gen_c
 
-gcc dict_id_gen.c -o $dict_id_gen_exe
+# We accept CC as $1, used in conda when called from Makefile
+CC=$1
+if [ ${#CC} -eq 0 ]; then CC=gcc; fi
+    
+$CC dict_id_gen.c -o $dict_id_gen_exe
 
 generate_dict_id_gen_h 

@@ -198,11 +198,15 @@ GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))
 # Step 1: dict_id_gen.sh generates dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
 # Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
 # Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
+ifeq ($(OS),Windows_NT)
+
 dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
 	@echo Generating $@
-	@bash dict_id_gen.sh
+	@bash dict_id_gen.sh $(CC)
 	@rm -f dict_id_gen.c
-	
+
+endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate on Windows and check in to github
+
 genozip$(EXE): dict_id_gen.h $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
