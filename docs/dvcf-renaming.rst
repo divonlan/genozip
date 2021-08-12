@@ -39,9 +39,9 @@ ALT_F2R1      FORMAT ALT_F1R2     Strand reversal
 
 **The --dvcf-rename option**
 
-Annotations may be renamed with the ``--dvcf-rename`` command line option, for example:
+Annotations may be renamed by specifying the ``--dvcf-rename`` command line option, together with ``--chain``, for example:
 
-``--dvcf-rename=FORMAT/ADF:STRAND>ADR|REFALT>DROP_ADF``
+``genozip myfile.vcf --chain mychain.chain.genozip --dvcf-rename=FORMAT/ADF:STRAND>ADR|REFALT>DROP_ADF``
 
 The argument is a comma-separated list of all annotations that need to be renamed (this example contains only one annotation - ``FORMAT/ADF``):
 
@@ -64,7 +64,7 @@ Rule       Rule activated upon
 
 Annotations maybe dropped with the ``--dvcf-drop`` command line option, for example:
 
-``--dvcf-drop=INFO/MAX_AF:REFALT``
+``genozip myfile.vcf --chain mychain.chain.genozip --dvcf-drop=INFO/MAX_AF:REFALT``
 
 This is equivalent of:
 
@@ -72,8 +72,8 @@ This is equivalent of:
 
 To override Genozip's default renaming, just rename the tag to itself, for example:
 
-``--dvcf-rename=INFO/MAX_AF:Always>MAX_AF``
+``--dvcf-rename=INFO/MAX_AF:ALWAYS>MAX_AF``
 
 **The --show-rename-tags option**
 
-Shows the list of tags that are to be renamed.
+The ``--show-rename-tags`` can be used in combination with ``--chain`` or when compressing a DVCF file, to display the list of tags that are to be renamed.
