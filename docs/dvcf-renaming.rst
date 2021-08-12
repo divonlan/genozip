@@ -62,7 +62,7 @@ Rule       Rule activated upon
 
 **The --dvcf-drop option**
 
-Annotations maybe dropped with the ``--dvcf-drop`` command line option, for example:
+Annotations may be dropped with the ``--dvcf-drop`` command line option, for example:
 
 ``genozip myfile.vcf --chain mychain.chain.genozip --dvcf-drop=INFO/MAX_AF:REFALT``
 
@@ -76,4 +76,4 @@ To override Genozip's default renaming, just rename the tag to itself, for examp
 
 **The --show-rename-tags option**
 
-The ``--show-rename-tags`` can be used in combination with ``--chain`` or when compressing a DVCF file, to display the list of tags that are to be renamed.
+The ``--show-rename-tags`` can be used in combination with ``--chain`` or when compressing a DVCF file, to display the list of annotations that are to be renamed.
