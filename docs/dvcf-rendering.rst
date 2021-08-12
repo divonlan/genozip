@@ -3,13 +3,7 @@
 Rendering a DVCF
 ======================
 
-See also:
-
-    | :ref:`Dual-coordinate VCF files <dvcf>`
-    |
-    | `Dual-coordinate VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_
-    |
-    | :ref:`Chain files <dvcf-chain-files>`
+.. include:: dvcf-see-also.rst
 
 This page describes how Genozip *lifts* a VCF file to be a :ref:`dual-coordinates VCF file<dvcf>` (DVCF), and how it *cross-renders* each field between Primary and Luft VCF renditions of a DVCF.
 

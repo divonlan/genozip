@@ -123,28 +123,31 @@ Examples:
 
 .. option:: --chain  chain-file.  Lifts a VCF to be a dual-coordinate VCF (DVCF).
 
-   | See: :ref:`dvcf`
-   |
+| See: :ref:`dvcf`
+
+.. option:: --dvcf-rename, --dvcf-drop.  Used in combination with --chain to specify annotations that should be renamed or dropped when cross rendering Primary➝Luft or Luft➝Primary. 
+
+| See: :ref:`dvcf-renaming`
 
 .. option:: --show-lifts.  Used in combination with --chain - output successful lifts to the rejects file too, not only rejected lifts.
 
-
-   | See: :ref:`dvcf`
-   |
+| See: :ref:`dvcf`
 
 .. option:: --show-counts=o\$TATUS.  Show summary statistics of variant lift outcome. This is set by default when using --chain.
 
-   | See: :ref:`dvcf`
-   |
+| See: :ref:`dvcf`
       
 .. option:: --show-counts=COORDS.  Show summary statistics of variant coordinates.
 
-   | See: :ref:`dvcf`
-   |
+| See: :ref:`dvcf`
 
 .. option:: --show-chain.  Used in combination with --chain - displays all chain file alignments.
 
    |
+
+.. option:: --show-rename-tags.  Show tags that are to be renamed. Used when compressing a DVCF or in combination with --chain.
+
+| See: :ref:`dvcf-renaming`
 
 .. option:: --sort.  Causes genozip to generate a "reconstruction plan" that will allow genocat to show the file sorted. This is designed for mildly-unsorted files. If the file is highly unsorted this might result in genocat loading a big portion of the uncompressed file to memory (genocat --unsorted can be used to prevent sorting). This option is always set for dual-coordinates files unless overridden with --unsorted.
 

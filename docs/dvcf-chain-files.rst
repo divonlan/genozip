@@ -3,15 +3,7 @@
 Chain files
 ===========
 
-See also:
-
-    | :ref:`Dual-coordinate VCF files <dvcf>`
-    |
-    | :ref:`Rendering a DVCF <dvcf-rendering>`
-    |
-    | :ref:`Genozip DVCF lifting limitations <dvcf-limitations>`
-    |
-    | `Dual-coordinate VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_
+.. include:: dvcf-see-also.rst
 
 Here is a non-exhaustive list of chain files (also called LiftOver files). The creators of these chain files are not associated with Genozip in any way, and Genozip does not endorse, recommend or warrant the correctness of any particular file.
 

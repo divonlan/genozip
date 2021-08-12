@@ -3,20 +3,13 @@
 Dual-coordinate VCF files
 ==========================
 
-See also:
-
-    | :ref:`Rendering a DVCF <dvcf-rendering>`
-    |
-    | `Dual-coordinate VCF Specification <https://www.researchgate.net/publication/351904893_The_Variant_Call_Format_Dual_Coordinates_Extension_DVCF_Specification>`_
-    |
-    | :ref:`Chain files <dvcf-chain-files>`
-    |
-    | :ref:`Genozip DVCF lifting limitations <dvcf-limitations>`
+.. include:: dvcf-see-also.rst
 
 .. toctree::
     :hidden:
  
     Rendering a DVCF <dvcf-rendering>
+    Renaming and dropping annotations in a DVCF <dvcf-renaming>
     Chain files <dvcf-chain-files>
     Genozip DVCF lifting limitations <dvcf-limitations>
     
@@ -47,7 +40,7 @@ Consider this small VCF file, called ``mydata.vcf.gz``, which is in the coordina
     ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes">
     ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele">
     ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
-    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg=A_1>
+    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg="A_1"
     ##contig=<ID=1,length=249250621>
     #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Person1	Person2
     1	10285	.	T	C	4.4	PASS	AC=3;AN=4	GT:AD:AF:PL	0/1:31,18:0.367:37,0,46	1/1
@@ -98,22 +91,22 @@ Rendering in Primary coordinates (GRCh37), followed by Luft coordinates (GRCh38)
     ##fileformat=VCFv4.2
     ##original_reference=file:///references/grch37/reference.bin
     ##FILTER=<ID=PASS,Description="All filters passed">
-    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg=R>
-    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg=A_1>
-    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg=GT>
-    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg=G>
-    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg=A_AN>
-    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg=NONE>
-    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg=A_1>
+    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg="R"
+    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg="A_1"
+    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg="GT"
+    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg="G"
+    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg="A_AN"
+    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg="NONE"
+    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg="A_1"
     ##contig=<ID=1,length=249250621>
     ##dual_coordinates=PRIMARY
     ##chain=file:///C/Users/USER/projects/genozip/data/GRCh37_to_GRCh38.chain.genozip
     ##luft_reference=file://data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
     ##reference=file://data/hs37d5.ref.genozip
-    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
+    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
     ##luft_contig=<ID=chr1,length=248956422>
     ##genozip_command="C:\Users\USER\projects\genozip\genocat-debug.exe -o docs/dvcf-example-files/mydata.37.vcf -f docs/dvcf-example-files/mydata.d.vcf.genozip" 2021-06-15 11:36:11 Cen. Australia Daylight Time
     #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Person1	Person2
@@ -128,22 +121,22 @@ Rendering in Primary coordinates (GRCh37), followed by Luft coordinates (GRCh38)
     ##primary_only=1	366042	LN=1	TA	A	100	PASS	Lrej=RefNewAlleleIndel	GT	1|0	0|0
     ##original_reference=file:///references/grch37/reference.bin
     ##FILTER=<ID=PASS,Description="All filters passed">
-    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg=R>
-    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg=A_1>
-    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg=GT>
-    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg=G>
-    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg=A_AN>
-    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg=NONE>
-    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg=A_1>
+    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg="R"
+    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg="A_1"
+    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg="GT"
+    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg="G"
+    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg="A_AN"
+    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg="NONE"
+    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg="A_1"
     ##primary_contig=<ID=1,length=249250621>
     ##dual_coordinates=LUFT
     ##chain=file:///C/Users/USER/projects/genozip/data/GRCh37_to_GRCh38.chain.genozip
     ##reference=file://data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
     ##primary_reference=file://data/hs37d5.ref.genozip
-    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
+    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
     ##contig=<ID=chr1,length=248956422>
     ##genozip_command="C:\Users\USER\projects\genozip\genocat-debug.exe -vo docs/dvcf-example-files/mydata.38.vcf -f docs/dvcf-example-files/mydata.d.vcf.genozip" 2021-06-15 11:36:09 Cen. Australia Daylight Time
     #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Person1	Person2
@@ -205,22 +198,22 @@ The merged file will be a DVCF file looking like this:
     ##FILTER=<ID=PASS,Description="All filters passed">
     ##primary_only=1	366042	LN=1	TA	A	100	PASS	Lrej=RefNewAlleleIndel	GT	1|0	0|0
     ##original_reference=file:///references/grch37/reference.bin
-    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg=R>
-    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg=A_1>
-    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg=GT>
-    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg=G>
-    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg=A_AN>
-    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg=NONE>
-    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg=A_1>
+    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg="R"
+    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg="A_1"
+    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg="GT"
+    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg="G"
+    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg="A_AN"
+    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg="NONE"
+    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg="A_1"
     ##primary_contig=<ID=1,length=249250621>
     ##dual_coordinates=LUFT
     ##chain=file:///C/Users/USER/projects/genozip/data/GRCh37_to_GRCh38.chain.genozip
     ##reference=file://data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
     ##primary_reference=file://data/hs37d5.ref.genozip
-    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
+    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
     ##contig=<ID=chr1,length=248956422>
     ##genozip_command="C:\Users\USER\projects\genozip\genocat-debug.exe -vo docs/dvcf-example-files/mydata.38.vcf -f docs/dvcf-example-files/mydata.d.vcf.genozip" 2021-06-15 11:36:09 Cen. Australia Daylight Time
     ##FORMAT=<ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
@@ -253,25 +246,25 @@ Now let us genozip the merged file and render it first in Luft coordinates:
     ##primary_only=1	366042	LN=1	TA	A	100	PASS	Lrej=RefNewAlleleIndel	GT	1|0	0|0
     ##FILTER=<ID=PASS,Description="All filters passed">
     ##original_reference=file:///references/grch37/reference.bin
-    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg=R>
-    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg=A_1>
-    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg=GT>
-    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg=G>
-    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg=A_AN>
-    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg=NONE>
-    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg=A_1>
+    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg="R"
+    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg="A_1"
+    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg="GT"
+    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg="G"
+    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg="A_AN"
+    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg="NONE"
+    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg="A_1"
     ##primary_contig=<ID=1,length=249250621>
     ##dual_coordinates=LUFT
     ##chain=file:///C/Users/USER/projects/genozip/data/GRCh37_to_GRCh38.chain.genozip
     ##reference=file://data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
     ##primary_reference=file://data/hs37d5.ref.genozip
-    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
+    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
     ##contig=<ID=chr1,length=248956422>
     ##genozip_command="C:\Users\USER\projects\genozip\genocat-debug.exe -vo docs/dvcf-example-files/mydata.38.vcf -f docs/dvcf-example-files/mydata.d.vcf.genozip" 2021-06-15 11:36:09 Cen. Australia Daylight Time
-    ##FORMAT=<ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification",RendAlg=G>
+    ##FORMAT=<ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification",RendAlg="G"
     ##bcftools_mergeVersion=1.11+htslib-1.11
     ##bcftools_mergeCommand=merge mydata.38.vcf.gz person3.vcf.gz; Date=Tue Jun 15 12:13:51 2021
     ##genozip_command="C:\Users\USER\projects\genozip\genocat-debug.exe -vo ../../junk.vcf docs/dvcf-example-files/merged.38.vcf.genozip" 2021-06-15 12:18:35 Cen. Australia Daylight Time
@@ -295,25 +288,25 @@ Let us now take a look at the Primary rendition of the merged file:
     ##luft_only=chr1	22000000	LN=5	A	C	4	PASS	AN=2;AC=0;Prej=AddedVariant	GT:AD:GP	./.:.:.	./.:.:.	0/0:30,3:37.9,14.9,0.14
     ##FILTER=<ID=PASS,Description="All filters passed">
     ##original_reference=file:///references/grch37/reference.bin
-    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg=R>
-    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg=A_1>
-    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg=GT>
-    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg=G>
-    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg=A_AN>
-    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg=NONE>
-    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg=A_1>
+    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles",RendAlg="R"
+    ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed",RendAlg="A_1"
+    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype",RendAlg="GT"
+    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes",RendAlg="G"
+    ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele",RendAlg="A_AN"
+    ##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes",RendAlg="NONE"
+    ##INFO=<ID=OBSCURE,Number=1,Type=Float,Description="Obscure annotation",RendAlg="A_1"
     ##contig=<ID=1,length=249250621>
     ##dual_coordinates=PRIMARY
     ##chain=file:///C/Users/USER/projects/genozip/data/GRCh37_to_GRCh38.chain.genozip
     ##luft_reference=file://data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
     ##reference=file://data/hs37d5.ref.genozip
-    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
-    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.-1",RendAlg=NONE>
+    ##INFO=<ID=LUFT,Number=4,Type=String,Description="Info for rendering variant in LUFT coords. See https://genozip.com/dvcf.html",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=PRIM,Number=4,Type=String,Description="Info for rendering variant in PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Lrej,Number=1,Type=String,Description="Reason variant was rejected for LUFT coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
+    ##INFO=<ID=Prej,Number=1,Type=String,Description="Reason variant was rejected for PRIMARY coords",Source="genozip",Version="12.0.25",RendAlg="NONE"
     ##luft_contig=<ID=chr1,length=248956422>
     ##genozip_command="C:\Users\USER\projects\genozip\genocat-debug.exe -vo docs/dvcf-example-files/mydata.38.vcf -f docs/dvcf-example-files/mydata.d.vcf.genozip" 2021-06-15 11:36:09 Cen. Australia Daylight Time
-    ##FORMAT=<ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification",RendAlg=G>
+    ##FORMAT=<ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification",RendAlg="G"
     ##bcftools_mergeVersion=1.11+htslib-1.11
     ##bcftools_mergeCommand=merge mydata.38.vcf.gz person3.vcf.gz; Date=Tue Jun 15 12:13:51 2021
     ##genozip_command="C:\Users\USER\projects\genozip\genocat-debug.exe -o ../../junk.vcf docs/dvcf-example-files/merged.38.vcf.genozip" 2021-06-15 12:20:53 Cen. Australia Daylight Time
@@ -334,6 +327,16 @@ Also, look at the variant LN=4 - this is the variant with the REF⇆ALT switch. 
   - INFO/AF, INFO/AC and INFO/OBSCURE: The value is (1-value) 
 
 This demonstrates how a VCF file can continue to evolve, adding and dropping variants, adding, removing or modifying INFO and FORMAT fields, all while continuing to maintain both coordinates, renderable in either Primary or Luft coordinates as required by any particular step in an analysis process.
+
+|
+
+**Annotation dropping and renaming**
+
+In some cases, an annotation tag (rather than value) changes between the Primary and Luft rendition, and in other cases it is desireable to drop annotations in the Luft rendition.
+
+Genozip renames and drops certain annotations by default (which may be overridden if needed) and additional renaming or dropping may be specified using the command line options ``--dvcf-rename`` and ``--dvcf-drop``.
+
+See: :ref:`Renaming and dropping annotations in a DVCF <dvcf-renaming>`
 
 |
 

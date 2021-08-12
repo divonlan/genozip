@@ -248,7 +248,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst \
 	   docs/sam2fq.rst docs/23andMe2vcf.rst docs/multifasta2phylip.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst \
 	   docs/using-on-hpc.rst \
-	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-chain-files.rst docs/dvcf-limitations.rst \
+	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-chain-files.rst docs/dvcf-limitations.rst docs/dvcf-renaming.rst docs/dvcf-see-also.rst \
 	   docs/archiving.rst
 
 docs/conf.py: docs/conf.template.py version.h
