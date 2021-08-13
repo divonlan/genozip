@@ -492,5 +492,5 @@ g. Much improved website genozip.com
 - VCF: better compression for INFO/CLNDN, INFO/CLNHGVS, INFO/RS, INFO/ALLELEID
 - When loading implicit reference files with a relative path, first try path relative to current directory, and then relative to file's directory.
 
-12.0.26 13/August/2021
+12.0.27 13/August/2021
 - FASTA improvements: compression improvement for amino acid FASTAs;  support --downsample ; support .fas and .frn filename extensions
