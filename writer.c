@@ -545,7 +545,7 @@ static inline bool writer_line_survived_downsampling (VbInfo *v)
 {
     if (!flag.downsample) return true;
 
-    uint64_t line_i = txt_file->lines_written_so_far / (flag.interleave ? 2ULL : 1ULL); // 2 lines at a time if interleave
+    uint64_t line_i = txt_file->lines_written_so_far / ((flag.interleave || flag.sequential) ? 2ULL : 1ULL); // 2 lines at a time if interleave (FASTQ) or sequential (FASTA)
 
     // show (or not) the line based on our downsampling rate and shard value
     return (line_i % (uint64_t)flag.downsample) == flag.shard;

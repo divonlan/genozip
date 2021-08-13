@@ -44,7 +44,7 @@ const char *WRITEREAD = "wb+"; // only supported for z_file
 
 const char *file_exts[] = FILE_EXTS;
 
-static const struct { FileType in; Codec codec; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][30] = TXT_IN_FT_BY_DT;
+static const struct { FileType in; Codec codec; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][50] = TXT_IN_FT_BY_DT;
 static const FileType txt_out_ft_by_dt[NUM_DATATYPES][20] = TXT_OUT_FT_BY_DT;
 static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 

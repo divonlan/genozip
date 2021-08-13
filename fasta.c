@@ -156,11 +156,9 @@ void fasta_seg_initialize (VBlock *vb)
         if (!flag.multifasta)
             codec_acgt_comp_init ((VBlockP)vb);
 
-        // if the contigs in this FASTA are related, LZMA will do a better job (but it will consume a lot of memory)
-        else {
-            CTX(FASTA_NONREF)->lcodec = CODEC_LZMA;
+        // if the contigs in this FASTA are related, let codec_assign_best_codec assign the bext codec 
+        else 
             CTX(FASTA_NONREF)->ltype  = LT_SEQUENCE;
-        }
   
         if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
             CTX(FASTA_NONREF)->no_callback = true; // override callback if we are segmenting to a reference

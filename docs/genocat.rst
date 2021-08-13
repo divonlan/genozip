@@ -36,7 +36,7 @@ One or more file names must be given.
 
 **Subsetting options (options resulting in modified display of the data)**
 
-.. option:: --downsample rate[,shard].  Show only one in every <rate> lines (or reads in the case of FASTQ). The optional <shard> parameter indicates which of the shards is shown. Other subsetting options (if any) will be applied to the surviving lines only.
+.. option:: --downsample rate[,shard].  Show only one in every <rate> lines (reads in the case of FASTQ, sequences in the case FASTA). The optional <shard> parameter indicates which of the shards is shown. Other subsetting options (if any) will be applied to the surviving lines only.
 
           |
 

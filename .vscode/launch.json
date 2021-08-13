@@ -16,10 +16,8 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             
-//            "args" : ["--echo","-ft@1", "bug.sam" ],
-"args" : ["--echo", "-@1", "-fo", "private/test/tmp/output.genozip", "-C", "data/GRCh37_to_GRCh38.chain.genozip", "-e", "data/hs37d5.ref.genozip", "-e", "data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "private/test/basic-dvcf-source.vcf"],
-            // "args" : ["--echo", "-@3", "-t", "private/test/tmp/output.genozip"],
-
+            "args" : ["--show-codec", "-f", "private/test/example.faa"],
+            
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

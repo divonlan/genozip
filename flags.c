@@ -948,6 +948,10 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         flag.header_one = flag.no_header = flag.header_only = 0;
     }
 
+    // --downsample in FASTA implies --sequential
+    if (dt == DT_FASTA && flag.downsample)
+        flag.sequential = 1;
+
     if (!z_dual_coords && flag.luft) {
         WARN ("%s: ignoring the --luft option, because file was not compressed with --chain", z_name);
         flag.luft = 0;
@@ -1096,9 +1100,14 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     ASSINP (!flag.interleave || is_paired_fastq, 
             "--interleave is not supported for %s because it only works on FASTQ data that was compressed with --pair", z_name);
 
-    // downsample not possible for FASTA or Chain
-    ASSINP (!flag.downsample || (flag.out_dt != DT_FASTA && flag.out_dt != DT_CHAIN && flag.out_dt != DT_GENERIC), 
+    // downsample not possible for Generic or Chain
+    ASSINP (!flag.downsample || (flag.out_dt != DT_CHAIN && flag.out_dt != DT_GENERIC), 
             "%s: --downsample is not supported for %s files", z_name, dt_name (flag.out_dt));
+
+    // --sequential only possible on FASTA
+    ASSINP (!flag.sequential || flag.out_dt == DT_FASTA, 
+            "--sequential is not supported for %s because it only works on FASTA data, but this file has %s data",
+            z_name, dt_name (dt));
 
     // --sex is only possible on SAM/BAM and FASTQ
     ASSINP (!flag.show_sex || flag.out_dt == DT_BAM || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout

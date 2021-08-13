@@ -3,7 +3,7 @@
 Downsampling and sharding
 =========================
 
-Data Types: VCF, SAM, BAM, FASTQ, GFF3/GVF, 23andMe 
+Data Types: VCF, SAM, BAM, FASTQ, FASTA, GFF3/GVF, 23andMe 
 
 **Usage**
 

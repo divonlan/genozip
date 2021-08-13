@@ -491,3 +491,6 @@ g. Much improved website genozip.com
 - DVCF: added tag renaming ; RengAlg attribute of ##INFO and ##FORMAT now enclosed in quotes. 
 - VCF: better compression for INFO/CLNDN, INFO/CLNHGVS, INFO/RS, INFO/ALLELEID
 - When loading implicit reference files with a relative path, first try path relative to current directory, and then relative to file's directory.
+
+12.0.26 13/August/2021
+- FASTA improvements: compression improvement for amino acid FASTAs;  support --downsample ; support .fas and .frn filename extensions
