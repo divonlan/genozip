@@ -46,6 +46,7 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (     dict_id.num != _SAM_TOPLEVEL && 
               dict_id.num != _SAM_TOP2BAM  && 
               dict_id.num != _SAM_TOP2FQ   && 
+              dict_id.num != _SAM_TOP2FQEX && 
               dict_id.num != _SAM_RNAME    &&  // easier to always have RNAME
             !(flag.out_dt == DT_BAM && flag.bases)&&  // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
             !(dict_id.num == _SAM_FLAG     && flag.sam_flag_filter) &&
@@ -216,7 +217,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
     // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar
     sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL, &vb_sam->soft_clip); 
 
-    if (flag.out_dt == DT_SAM && reconstruct) {
+    if ((flag.out_dt == DT_SAM || (flag.out_dt == DT_FASTQ && flag.extended_translation)) 
+    &&  reconstruct) {
         if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
             RECONSTRUCT1 ('*');
         
@@ -523,6 +525,12 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
 {
     ContainerP con = (ContainerP)recon;
 
+    // if this translator is called due to SAM->FASTQEXT, cancel translation for the OPTIONAL container and its items
+    if (flag.out_dt == DT_FASTQ) {
+        con->no_translation = true; // turn off translation for this container and its items
+        return 0; 
+    }
+
     if (recon_len == -1) return 0; // no Optional data in this alignment
 
     char *prefixes_before = &recon[con_sizeof (*con)] + 2; // +2 to skip the empty prefixes of container wide, and item[0]
@@ -554,6 +562,39 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL)
     return 0;
 }
 
+// note of float reconstruction:
+// When compressing SAM, floats are stored as a textual string, reconstruced natively for SAM and via sam_piz_sam2bam_FLOAT for BAM.
+//    Done this way so when reconstructing SAM, the correct number of textual digits is reconstructed.
+// When compressing BAM, floats are stored as 32-bit binaries, encoded as uint32, and stringified to a snip. They are reconstructed,
+//    either as textual for SAM or binary for BAM via bam_piz_special_FLOAT. Done this way so BAM binary float is reconstructd precisely.
+TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
+{
+    union {
+        float f; // 32 bit float
+        uint32_t i;
+    } value;
+    
+    ASSERT0 (sizeof (value)==4, "expecting value to be 32 bits"); // should never happen
+
+    value.f = (float)ctx->last_value.f;
+    RECONSTRUCT_BIN32 (value.i);
+
+    return 0;
+}
+
+// remove the comma from the prefix that contains the type, eg "i,"->"i"
+TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
+{
+    ContainerP con = (ContainerP)recon;
+    char *prefixes = &recon[con_sizeof (*con)];
+
+    // remove the ',' from the prefix, and terminate with CON_PREFIX_SEP_SHOW_REPEATS - this will cause
+    // the number of repeats (in LTEN32) to be outputed after the prefix
+    prefixes[1] = CON_PREFIX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PREFIX_SEP_SHOW_REPEATS }
+    
+    return -1; // change in prefixes length
+}
+
 //------------------------------------------------------------------------------------
 // Translator and filter functions for reconstructing SAM / BAM data into FASTQ format
 //------------------------------------------------------------------------------------
@@ -574,7 +615,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
     }
     
     // case SAM to FASTQ translation: drop line if this is not a primary alignment (don't show its secondary or supplamentary alignments)
-    else if (dict_id.num == _SAM_TOP2FQ 
+    else if ((dict_id.num == _SAM_TOP2FQ || dict_id.num == _SAM_TOP2FQEX)
     && ((uint16_t)vb->last_int(SAM_FLAG) & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLEMENTARY)))
         vb->drop_curr_line = "not_primary";
 
@@ -600,7 +641,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
     // --MAPQ
     if (flag.sam_mapq_filter && is_top_level && !vb->drop_curr_line) {
         
-        if (dict_id.num == _SAM_TOP2FQ)
+        if (dict_id.num == _SAM_TOP2FQ || dict_id.num == _SAM_TOP2FQEX)
             reconstruct_from_ctx (vb, SAM_MAPQ, 0, false); // when translating to FASTQ, MAPQ is normally not reconstructed
 
         uint8_t this_mapq = (uint8_t)vb->last_int (SAM_MAPQ);
@@ -672,43 +713,15 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_FLAG)
     
     uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
 
-    if (sam_flag & (SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST)) vb->txt_data.len--; // remove newline
-
-    if (sam_flag & SAM_FLAG_IS_FIRST) RECONSTRUCT ("/1\n", 3); // usually R1
-    if (sam_flag & SAM_FLAG_IS_LAST)  RECONSTRUCT ("/2\n", 3); // usually R2
-
-    return 0;
-}
-
-// note of float reconstruction:
-// When compressing SAM, floats are stored as a textual string, reconstruced natively for SAM and via sam_piz_sam2bam_FLOAT for BAM.
-//    Done this way so when reconstructing SAM, the correct number of textual digits is reconstructed.
-// When compressing BAM, floats are stored as 32-bit binaries, encoded as uint32, and stringified to a snip. They are reconstructed,
-//    either as textual for SAM or binary for BAM via bam_piz_special_FLOAT. Done this way so BAM binary float is reconstructd precisely.
-TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
-{
-    union {
-        float f; // 32 bit float
-        uint32_t i;
-    } value;
-    
-    ASSERT0 (sizeof (value)==4, "expecting value to be 32 bits"); // should never happen
-
-    value.f = (float)ctx->last_value.f;
-    RECONSTRUCT_BIN32 (value.i);
+    if (sam_flag & (SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST)) {
+        
+        recon -= item_prefix_len + 1; // move to before prefix and previous field's separator (\n for regular fq or \t for extended)
+        memmove (recon+2, recon, recon_len + item_prefix_len + 1); // make room for /1 or /2 
+        recon[0] = '/';
+        recon[1] = (sam_flag & SAM_FLAG_IS_FIRST) ? '1' : '2';
+        vb->txt_data.len += 2; 
+    }
 
     return 0;
 }
 
-// remove the comma from the prefix that contains the type, eg "i,"->"i"
-TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
-{
-    ContainerP con = (ContainerP)recon;
-    char *prefixes = &recon[con_sizeof (*con)];
-
-    // remove the ',' from the prefix, and terminate with CON_PREFIX_SEP_SHOW_REPEATS - this will cause
-    // the number of repeats (in LTEN32) to be outputed after the prefix
-    prefixes[1] = CON_PREFIX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PREFIX_SEP_SHOW_REPEATS }
-    
-    return -1; // change in prefixes length
-}

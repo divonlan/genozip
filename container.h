@@ -40,8 +40,10 @@ typedef struct ContainerItem {
 // by a prefix for each item. Every prefix, if provided, is terminated by CON_PREFIX_SEP.
 // Only the container-wide prefix may alternatively be terminated by CON_PREFIX_SEP_SHOW_REPEATS.
 
-#define CONTAINER_FIELDS(nitems)       \
-    uint32_t nitems_hi            : 8;  /* MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)) */ \
+#define CONTAINER_FIELDS(nitems)        \
+    uint32_t nitems_hi            : 3;  /* nitems_lo+hi=11 bits, matches MAX_DICTS. MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)), until 12.0.27 nitems_hi was 8 bits */ \
+    uint32_t unused               : 4;  \
+    uint32_t no_translation       : 1;  /* Cancel translation for this container and all of its items */\
     uint32_t repeats              : 24; /* number of "repeats" (array elements) */ \
     uint8_t nitems_lo;                  /* LSB of num_items */  \
     /* container flags */               \

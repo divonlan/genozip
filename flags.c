@@ -92,6 +92,7 @@ static void flags_show_flags (void)
     iprintf ("indels_only=%s\n", flag.indels_only ? "true" : "false");
     iprintf ("sequential=%s\n", flag.sequential ? "true" : "false");
     iprintf ("no_pg=%s\n", flag.no_pg ? "true" : "false");
+    iprintf ("extended_translation=%s\n", flag.extended_translation ? "true" : "false");
     iprintf ("interleave=%s\n", flag.interleave==INTERLEAVE_NONE ? "none" : flag.interleave==INTERLEAVE_BOTH ? "both" : flag.interleave==INTERLEAVE_EITHER ? "either" : "invalid value");
     iprintf ("luft=%s\n", flag.luft ? "true" : "false");
     iprintf ("sort=%s\n", flag.sort ? "true" : "false");
@@ -329,10 +330,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _zB {"BAM",           no_argument,       &flag.out_dt,           DT_BAM }
         #define _zs {"sam",           no_argument,       &flag.out_dt,           DT_SAM }
         #define _zS {"SAM",           no_argument,       &flag.out_dt,           DT_SAM }
-        #define _zq {"fastq",         no_argument,       &flag.out_dt,           DT_FASTQ }
-        #define _zQ {"FASTQ",         no_argument,       &flag.out_dt,           DT_FASTQ }
-        #define _zf {"fq",            no_argument,       &flag.out_dt,           DT_FASTQ }
-        #define _zF {"FQ",            no_argument,       &flag.out_dt,           DT_FASTQ }
+        #define _zq {"fastq",         optional_argument, 0, 130                    }
+        #define _zQ {"FASTQ",         optional_argument, 0, 130                    }
+        #define _zf {"fq",            optional_argument, 0, 130                    }
+        #define _zF {"FQ",            optional_argument, 0, 130                    }
         #define _za {"fasta",         no_argument,       &flag.out_dt,           DT_FASTA }
         #define _zA {"FASTA",         no_argument,       &flag.out_dt,           DT_FASTA }
         #define _zc {"bcf",           no_argument,       &flag.out_dt,           DT_BCF }
@@ -590,7 +591,8 @@ verify_command:
                        flag.dvcf_rename = optarg    ; break;
             case 129 : ABORTINP0_ONCE ("--dvcf-drop option can only appear once, see:  " WEBSITE_DVCF);
                        flag.dvcf_drop = optarg      ; break;
-            
+            case 130 : flag.out_dt = DT_FASTQ; flag.extended_translation = !!optarg; break; 
+
             case 0   : break; // a long option that doesn't have short version will land here - already handled so nothing to do
                  
             default  : // unrecognized option 
@@ -1104,8 +1106,8 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     ASSINP (!flag.downsample || (flag.out_dt != DT_CHAIN && flag.out_dt != DT_GENERIC), 
             "%s: --downsample is not supported for %s files", z_name, dt_name (flag.out_dt));
 
-    // --sequential only possible on FASTA
-    ASSINP (!flag.sequential || flag.out_dt == DT_FASTA, 
+    // --sequential only possible on FASTA (including --phylip)
+    ASSINP (!flag.sequential || flag.out_dt == DT_FASTA || flag.out_dt == DT_PHYLIP, 
             "--sequential is not supported for %s because it only works on FASTA data, but this file has %s data",
             z_name, dt_name (dt));
 

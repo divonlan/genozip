@@ -160,6 +160,7 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
     CTX(SAM_TOP2BAM)->no_stons  = true;
     CTX(SAM_TOP2FQ)->no_stons   = true;
+    CTX(SAM_TOP2FQEX)->no_stons = true;
 
     Context *rname_ctx = CTX(SAM_RNAME);
     Context *rnext_ctx = CTX(SAM_RNEXT);
@@ -267,6 +268,46 @@ void sam_seg_finalize (VBlockP vb)
                                               CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, '+', '\n', CON_PREFIX_SEP };
 
     container_seg (vb, CTX(SAM_TOP2FQ), (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
+
+    // top level snip - reconstruction as FASTQ "extended" - with all the SAM fields in the description line
+    SmallContainer top_level_fastq_ext = { 
+        .repeats     = vb->lines.len,
+        .is_toplevel = true,
+        .callback    = true,  // drop non-primary chimeric reads and reads without QUAL data
+        .nitems_lo   = 12,
+        .items       = { { .dict_id = { _SAM_QNAME },    .seperator = "\t" }, 
+                         { .dict_id = { _SAM_FLAG },     .seperator = "\t", .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
+                         { .dict_id = { _SAM_RNAME },    .seperator = "\t" },
+                         { .dict_id = { _SAM_POS },      .seperator = "\t" },
+                         { .dict_id = { _SAM_MAPQ },     .seperator = "\t" },
+                         { .dict_id = { _SAM_CIGAR },    .seperator = "\t" },
+                         { .dict_id = { _SAM_RNEXT },    .seperator = "\t" },
+                         { .dict_id = { _SAM_PNEXT },    .seperator = "\t" },
+                         { .dict_id = { _SAM_TLEN },     .seperator = "\t" },
+                         { .dict_id = { _SAM_OPTIONAL }, .seperator = "\n" },
+                         { .dict_id = { _SAM_SQBITMAP }, .seperator = "\n", .translator =SAM2FASTQ_SEQ  }, 
+                         { .dict_id = { _SAM_QUAL },     .seperator = "\n", .translator =SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
+                       }
+    };
+
+    // add a '@' to the description line, use a prefix to add the + line    
+    static const char fastq_ext_line_prefix[] = { 
+        CON_PREFIX_SEP, CON_PREFIX_SEP, 
+        '@', CON_PREFIX_SEP, 
+        'F','L','A','G',':', CON_PREFIX_SEP, 
+        'R','N','A','M','E',':', CON_PREFIX_SEP, 
+        'P','O','S',':', CON_PREFIX_SEP, 
+        'M','A','P','Q',':', CON_PREFIX_SEP, 
+        'C','I','G','A','R',':', CON_PREFIX_SEP, 
+        'R','N','E','X','T',':', CON_PREFIX_SEP, 
+        'P','N','E','X','T',':', CON_PREFIX_SEP, 
+        'T','L','E','N',':', CON_PREFIX_SEP, 
+        CON_PREFIX_SEP,              // optional
+        CON_PREFIX_SEP,              // SEQ
+        '+', '\n', CON_PREFIX_SEP }; // QUAL
+
+    container_seg (vb, CTX(SAM_TOP2FQEX), (ContainerP)&top_level_fastq_ext, 
+                   fastq_ext_line_prefix, sizeof(fastq_ext_line_prefix), 0);
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -276,9 +317,10 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _SAM_TOPLEVEL  ||
         dict_id.num == _SAM_TOP2BAM   ||
         dict_id.num == _SAM_TOP2FQ    ||
+        dict_id.num == _SAM_TOP2FQEX  ||
         dict_id.num == _SAM_FLAG      ||
         dict_id.num == _SAM_MAPQ      ||
-        dict_id.num == _OPTION_MAPQ           ||
+        dict_id.num == _OPTION_MAPQ   ||
         dict_id.num == _SAM_QNAME     ||
         dict_id.num == _SAM_OPTIONAL  ||
         dict_id.num == _SAM_EOL       ||

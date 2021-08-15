@@ -181,7 +181,7 @@ typedef uint8_t TranslatorId;
 #define TRANS_ID_NONE    ((TranslatorId)0)
 #define TRANS_ID_UNKNOWN ((TranslatorId)255)
 
-#define TRANSLATOR_FUNC(func) int32_t func(VBlockP vb, ContextP ctx, char *recon, int32_t recon_len, bool validate_only)
+#define TRANSLATOR_FUNC(func) int32_t func(VBlockP vb, ContextP ctx, char *recon, int32_t recon_len, uint32_t item_prefix_len, bool validate_only)
 #define TRANSLATOR(src_dt,dst_dt,num,name,func)\
     extern TRANSLATOR_FUNC(func); \
     enum { src_dt##2##dst_dt##_##name = num }; // define constant

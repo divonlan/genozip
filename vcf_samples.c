@@ -829,7 +829,7 @@ static inline Context *vcf_seg_validate_luft_trans_one_sample (VBlockVCF *vb, Co
     for (unsigned i=0; i < n_items; i++) {
         if (needs_translation (ctxs[i]) && item_lens[i]) {
             if ((vb->line_coords == DC_LUFT && !vcf_lo_seg_cross_render_to_primary (vb, ctxs[i], STRi(item,i), NULL, NULL)) ||
-                (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans]((VBlockP)vb, ctxs[i], (char *)STRi(item,i), true)))) {
+                (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans]((VBlockP)vb, ctxs[i], (char *)STRi(item,i), 0, true)))) {
                 failed_ctx = ctxs[i];  // failed translation
                 break;
             }

@@ -37,7 +37,7 @@ const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the tx
             translations[i].src_z_is_binary  == i_am_binary &&
             translations[i].dst_txt_dt       == flag.out_dt &&
             (!translations[i].is_translation || translations[i].is_translation (vb))) // if non-NULL, this flag determines if it is a translation
-            return translations[i];
+            return translations[i + flag.extended_translation]; // get next one if extended
 }
 
     // translation not found - return a non-translation "translation"

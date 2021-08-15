@@ -941,7 +941,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
     // note: looks at snips before optimization, we're counting on the optimization not changing the validation outcome
     if (vb->line_coords == DC_PRIMARY && needs_translation (ctx)) {
 
-        if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, true)) 
+        if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, 0, true)) 
             ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
         else 
             REJECT_SUBFIELD (LO_INFO, ctx, "Cannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            

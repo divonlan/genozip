@@ -240,7 +240,7 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx,
 
     // convert Primary->Luft in place. Note: if untranslatable (because it was an untranslatable Primary value
     // to be begin with), this function will do nothing.
-    if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)this_value, this_value_len, false)) {
+    if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)this_value, this_value_len, 0, false)) {
 
         int len_diff = (int)vb->txt_data.len - (int)len_before;
         

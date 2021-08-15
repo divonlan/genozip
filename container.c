@@ -102,12 +102,12 @@ WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con,
 // Reconstruction
 //----------------------
 
-static inline void container_reconstruct_prefix (VBlockP vb, ConstContainerP con, const char **prefixes, uint32_t *prefixes_len,
-                                                 bool skip, DictId con_dict_id, DictId item_dict_id)
+static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP con, const char **prefixes, uint32_t *prefixes_len,
+                                                     bool skip, DictId con_dict_id, DictId item_dict_id)
 {
     ASSERT (*prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is too big", *prefixes_len);
 
-    if (! (*prefixes_len)) return; // nothing to do
+    if (! (*prefixes_len)) return 0; // nothing to do
     
     const char *start = *prefixes;
     while (**prefixes != CON_PREFIX_SEP && **prefixes != CON_PREFIX_SEP_SHOW_REPEATS) (*prefixes)++; // prefixes are terminated by CON_PREFIX_SEP
@@ -128,6 +128,8 @@ static inline void container_reconstruct_prefix (VBlockP vb, ConstContainerP con
 
     (*prefixes)++; // skip seperator
     (*prefixes_len) -= len + 1;
+
+    return len;
 }
 
 
@@ -149,6 +151,8 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
     
     int32_t last_non_filtered_item_i = -1;
+
+    bool translating = vb->translation.trans_containers && !con->no_translation;
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, con, &prefixes, &prefixes_len, false, ctx->dict_id, DICT_ID_NONE); 
@@ -196,10 +200,11 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         char *rep_reconstruction_start = AFTERENT (char, vb->txt_data);
 
         const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
-        uint32_t item_prefixes_len = prefixes_len;
+        uint32_t remaining_prefix_len = prefixes_len; 
 
         last_non_filtered_item_i = -1;
         unsigned num_preceding_seps = 0;
+
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
             Context *item_ctx = item_ctxs[i];
@@ -211,7 +216,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             if (con->filter_items && 
                 (!(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, i, &reconstruct) || !reconstruct))) {
                 
-                container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len, true, DICT_ID_NONE, DICT_ID_NONE); // skip prefix            
+                container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, true, DICT_ID_NONE, DICT_ID_NONE); // skip prefix            
                 continue; // item is filtered out
             }
 
@@ -220,17 +225,18 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             if (flag.show_containers && item_ctx) // show container reconstruction 
                 iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s->%s trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
                          vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctx->tag_name,
-                         vb->translation.trans_containers ? item->translator : 0, 
+                         translating ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
 
-/*BRKPOINT*/container_reconstruct_prefix (vb, con, &item_prefixes, &item_prefixes_len, false, ctx->dict_id, con->items[i].dict_id); // item prefix (we will have one per item or none at all)
+/*BRKPOINT*/uint32_t item_prefix_len = 
+                container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, con->items[i].dict_id); // item prefix (we will have one per item or none at all)
 
             int32_t recon_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
                 reconstruct = reconstruct && !flag.collect_coverage && // no reconstruction with these flags
-                                  (  !vb->translation.trans_containers ||   // not translating OR... 
-                                     !IS_CI_SET (CI_TRANS_NOR)); // no prohibition on reconstructing when translating
+                                  (  !translating ||                   // not translating OR... 
+                                     !IS_CI_SET (CI_TRANS_NOR));       // no prohibition on reconstructing when translating
 
                 recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING
 
@@ -243,9 +249,9 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
                 // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item
                 // using the designated "translator" function, if one is available
-                if (vb->translation.trans_containers && item->translator && recon_len != -1 &&
+                if (translating && item->translator && recon_len != -1 &&
                     !(flag.missing_contexts_allowed && !item_ctx->dict.len && !item_ctx->local.len)) // skip if missing contexts are allowed, and this context it missing 
-                    DT_FUNC(vb, translator)[item->translator](vb, item_ctx, reconstruction_start, recon_len, false);  
+                    DT_FUNC(vb, translator)[item->translator](vb, item_ctx, reconstruction_start, recon_len, item_prefix_len, false);  
             }            
 
             // case: WORD_INDEX_MISSING - delete previous item's separator if it has one (used by SAM_OPTIONAL - sam_seg_optional_all)
@@ -254,12 +260,12 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
 
             // reconstruct separator(s) as needed
             if (reconstruct) {
-                if (vb->translation.trans_containers && IS_CI_SET (CI_TRANS_NUL)) {
+                if (translating && IS_CI_SET (CI_TRANS_NUL)) {
                     RECONSTRUCT1 (0);
                     num_preceding_seps = 1;
                 }
 
-                else if (!vb->translation.trans_containers && IS_CI_SET (CI_NATIVE_NEXT)) {
+                else if (!translating && IS_CI_SET (CI_NATIVE_NEXT)) {
                     RECONSTRUCT1 (item->seperator[1]);
                     num_preceding_seps = 1;
                 }
@@ -275,7 +281,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             }
 
             // after all reconstruction and translation is done - move if needed
-            if (vb->translation.trans_containers && IS_CI_SET (CI_TRANS_MOVE))
+            if (translating && IS_CI_SET (CI_TRANS_MOVE))
                 vb->txt_data.len += (uint8_t)item->seperator[1];
 
         } // items loop
@@ -284,8 +290,8 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
             const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
-            vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (vb->translation.trans_containers ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
-                                                    : (!!item->seperator[0] + !!item->seperator[1]);
+            vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
+                                                       : (!!item->seperator[0] + !!item->seperator[1]);
         }
 
         // reconstruct repeats separator, if neeeded
@@ -369,7 +375,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
     if (con->drop_final_item_sep_of_final_repeat && last_non_filtered_item_i >= 0) {
         const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
-        vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (vb->translation.trans_containers ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
+        vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
                                                    : (!!item->seperator[0] + !!item->seperator[1]);
     }
      
@@ -459,8 +465,9 @@ LastValueType container_reconstruct (VBlock *vb, Context *ctx, WordIndex word_in
 
             // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_OPTIONAL)
             ContainerItem *item0 = &con.items[0];
+            
             if (vb->translation.trans_containers && !item0->dict_id.num && item0->translator) {
-                int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len, false));  
+                int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len, 0, false));  
                 ASSERT (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
                         "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", 
                         ctx->tag_name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);

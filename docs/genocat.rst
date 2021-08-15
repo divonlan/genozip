@@ -239,7 +239,7 @@ One or more file names must be given.
 
           |
 
-.. option:: --fastq  Output as FASTQ. Note: this option is implicit if --output specifies a filename ending with .fq or .fastq
+.. option:: --fastq[=all]  Output as FASTQ. Note: this option is implicit if --output specifies a filename ending with .fq or .fastq. If --fastq=all is specified all SAM fields are outputted to the FASTQ file.
 
    | see more details: :ref:`sam2fq`
    |

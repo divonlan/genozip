@@ -494,3 +494,6 @@ g. Much improved website genozip.com
 
 12.0.26 13/August/2021
 - FASTA improvements: compression improvement for amino acid FASTAs;  support --downsample ; support .fas and .frn filename extensions
+
+12.0.28 15/August/2021
+- Extended the genocat --fastq option for converting SAM/BAM to FASTQ: now --fastq=all emits all the SAM/BAM fields in the FASTQ description lines.

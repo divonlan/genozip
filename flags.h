@@ -48,7 +48,7 @@ typedef struct {
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         regions, gpos, samples, 
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
-        sequential, no_pg, 
+        sequential, no_pg, extended_translation,
         kraken_taxid, with_chr;
     const char *regions_file;
     int64_t lines_first, lines_last, tail; // set by --lines 

@@ -17,6 +17,10 @@ Viewing only R2 reads:
 
 ``genocat --fastq --FLAG +0x80 [genozip files...]``
 
+Outputting all SAM fields on the FASTQ description line:
+
+``genocat --fastq=all [genozip files...]``
+
 Outputting fq.gz (BGZF-compressed FASTQ):
 
 ``genocat myfile.bam.genozip --output myfile.fq.gz``
@@ -67,7 +71,7 @@ Consider a simple paired-end SAM file with three alignments, all with the same Q
     +
     AAFFFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJFJJJJJJJJJFJJJJJJJ-<<FJJAJFJ<JJJJJJJJF<FJJ<JF7JJJJJFJFJFJF7JJJF7FJJJAJAAAFFJJA<-F--A<JJ<AAJAJ<FJJ-AA<--<7F7-7FAFJJ
 
-| Finally, let's now output only the R1 reads (the first SAM line in this case). Notice that:
+| let's now output only the R1 reads (the first SAM line in this case). Notice that:
 | 1. /1 is not added.
 | 2. --fq is an alternative spelling for activating the --fastq option.
 
@@ -78,3 +82,18 @@ Consider a simple paired-end SAM file with three alignments, all with the same Q
     CCTAATGCTATCCCCCCCCCGCCCCCCACGCCCTGACAAGCCCCCGTGTGTGATGTTTTCCGCCCCCTGTCCAAGCCTTCCCATTGTTCAATTCCCCCCTGTGAGTGAGAACATGCAGGGTTTGGGTTTCTGTCTTTGTGATAGTTTGCT
     +
     AAAFFJJJJJJJJJJJJJJ-AAJJFJJ-77F-77FFJ----AJJ---7-77-A-<FJ-FF-7-AJJ---7-A-F-A-<FJ-7<<JJFJ-AF-<7AJ-<<-7--7A----<7-A-77-77A-AF-A7FJJ7J<FJ7J<-A--AA7-AA--7
+
+| Finally, we can output all SAM fields to the FASTQ description lines with ``--fq=all``:
+
+::
+
+    $ genocat myfile.sam.genozip --fq=all
+    @ST-E00185:547:HCNMNCCX2:5:1118:17269:28593/1   FLAG:99 RNAME:chr1      POS:33656       MAPQ:0  CIGAR:14M1D136M RNEXT:= PNEXT:33901     TLEN:386       NM:i:16 MD:Z:0T13^T5A9C1A6G5A4A7C2T5A9G3T15A21T6T24     AS:i:72 XS:i:72 MQ:i:0  ms:i:5286       mc:i:34049      MC:Z:141M8S
+    CCTAATGCTATCCCCCCCCCGCCCCCCACGCCCTGACAAGCCCCCGTGTGTGATGTTTTCCGCCCCCTGTCCAAGCCTTCCCATTGTTCAATTCCCCCCTGTGAGTGAGAACATGCAGGGTTTGGGTTTCTGTCTTTGTGATAGTTTGCT
+    +
+    AAAFFJJJJJJJJJJJJJJ-AAJJFJJ-77F-77FFJ----AJJ---7-77-A-<FJ-FF-7-AJJ---7-A-F-A-<FJ-7<<JJFJ-AF-<7AJ-<<-7--7A----<7-A-77-77A-AF-A7FJJ7J<FJ7J<-A--AA7-AA--7
+    @ST-E00185:547:HCNMNCCX2:5:1118:17269:28593/2   FLAG:147        RNAME:chr1      POS:33901       MAPQ:0  CIGAR:141M8S    RNEXT:= PNEXT:33656    
+            TLEN:-386       NM:i:3  MD:Z:6C20G42C70 AS:i:126        XS:i:129        MQ:i:0  ms:i:3466       mc:i:33656      MC:Z:14M1D136M
+    CCATTACTGGGTATATACCCAAAGGATTATAAATCGTGCTACTATAAAGACACATGCACATGTATGTTTATTGTGGCACTATTCACAATAGCAAAGACTTTGAACCAACCCAAATGTCCATTAATGACAGACTGGATTAAGAAAATGTG
+    +
+    AAFFFJJ
