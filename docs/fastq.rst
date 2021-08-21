@@ -156,16 +156,15 @@ Show reads with the string "ACCTTAAT" exactly matching a component of the descri
 
 **Filtering non-ACTGN "bases"**
 
-``genocat --bases [^]value myfile.fq.genozip`` 
+``genocat --bases ACGTN myfile.fq.genozip``  
 
-Filter reads based on the IUPAC characters (bases) of the sequence data.
-   
-   ========================== ====================================================================================
-   ``genocat --bases ACGTN``  displays only reads in which all characters of the sequence are one of A,C,G,T,N
-   ``genocat --bases ^ACGTN`` displays only reads in which NOT all characters of the sequence are one of A,C,G,T,N
-   ========================== ====================================================================================
+Displays only reads in which all characters of the sequence are one of A,C,G,T,N
 
-   | Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
+``genocat --bases ^ACGTN myfile.fq.genozip`` 
+
+Displays only reads in which NOT all characters of the sequence are one of A,C,G,T,N
+
+Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
 
 **Filtering reads by species**
 

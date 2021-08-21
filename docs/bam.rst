@@ -169,20 +169,17 @@ The FLAGs are defined in the `SAM specification <https://samtools.github.io/hts-
 
 ``genocat --MAPQ [^]value myfile.bam.genozip`` 
 
-Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
+Filters lines based on the MAPQ value: INCLUDE (or EXCLUDE if *value* is prefixed with ^) lines with a MAPQ greater or equal to *value*. 
 
 **Filtering non-ACTGN "bases"**
 
-``genocat --bases [^]value myfile.bam.genozip`` 
+``genocat --bases ACGTN myfile.bam.genozip``  
 
-Filter lines based on the IUPAC characters (bases) of the sequence data.
-   
-*Examples*: 
+Displays only lines in which all characters of the SEQ are one of A,C,G,T,N
 
-===================================== ===============================================================================
-``genocat --bases ACGTN myfile.bam``  displays only lines in which all characters of the SEQ are one of A,C,G,T,N
-``genocat --bases ^ACGTN myfile.bam`` displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
-===================================== ===============================================================================
+``genocat --bases ^ACGTN myfile.bam.genozip`` 
+
+Displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
 
 | Note: In all lines missing a sequence (i.e. SEQ=*) are included in positive --bases filters (the first example above) and excluded in negative ones.
 | Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
