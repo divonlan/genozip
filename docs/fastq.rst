@@ -132,17 +132,31 @@ In this paritcular example, we observe that the quality line consumes 58.3% of t
 | ``genocat myfile.fq.genozip | my-pipeline                     # not paired-end`` 
 | ``genocat myfile.R1+2.fq.genozip --interleaved | my-pipeline  # paired-end`` 
 
-**Subsetting** (i.e. displaying only a subset of the file) See :ref:`genocat manual<genocat>` for details.
+**Showing only the descripion lines**
 
-``genocat --header-only myfile.fq.genozip`` - show only the description lines
+``genocat --header-only myfile.fq.genozip``
 
-``genocat --downsample 10,0 myfile.fq.genozip`` - show the only the first (#0) read in every 10 reads.
+**Downsampling**
 
-``genocat --grep ACCTTAAT myfile.fq.genozip`` - show reads with the string "ACCTTAAT" anywhere in the read (description, seqeuence or quality lines) - possibly a substring of a longer string
+``genocat --downsample 10,0 myfile.fq.genozip`` 
 
-``genocat --grep-w ACCTTAAT myfile.fq.genozip`` - show reads with the string "ACCTTAAT" exactly matching a component of the description, or the entire sequence line or the entire quality line.
-   
-``genocat --bases [^]value myfile.fq.genozip`` Filter reads based on the IUPAC characters (bases) of the sequence data.
+Shows only the first (#0) read in every 10 reads.
+
+**Grepping**
+
+``genocat --grep ACCTTAAT myfile.fq.genozip`` 
+
+Show reads with the string "ACCTTAAT" anywhere in the read (description, seqeuence or quality lines) - possibly a substring of a longer string
+
+``genocat --grep-w ACCTTAAT myfile.fq.genozip`` 
+
+Show reads with the string "ACCTTAAT" exactly matching a component of the description, or the entire sequence line or the entire quality line.
+
+**Filtering non-ACTGN "bases"**
+
+``genocat --bases [^]value myfile.fq.genozip`` 
+
+Filter reads based on the IUPAC characters (bases) of the sequence data.
    
    ========================== ====================================================================================
    ``genocat --bases ACGTN``  displays only reads in which all characters of the sequence are one of A,C,G,T,N

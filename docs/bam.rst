@@ -84,19 +84,35 @@ Example:
 
 ``genocat --fastq myfile.bam.genozip`` or ``genozip --fastq=all myfile.bam.genozip`` may be used to output the data in FASTQ format. See :ref:`sam2fq` for details.
 
-**Subsetting** (i.e. displaying only a subset of the file) See :ref:`genocat manual<genocat>` for details.
+**Downsampling** 
 
-``genocat --downsample 10,0 myfile.bam.genozip`` - show the only the first (#0) read in every 10 reads.
+``genocat --downsample 10,0 myfile.bam.genozip`` 
 
-``genocat --grep-w MC:Z:151M myfile.bam.genozip`` - show the lines containing "MC:Z:151M" (strings that match exactly)
+Show only the first (#0) read in every 10 reads.
 
-``genocat --grep ACCTTAAT myfile.bam.genozip`` - show the lines containing "ACCTTAAT" (possibly a substring of a longer string)
+**Grepping**
 
-``genocat --header-only myfile.bam.genozip`` - show only the SAM header
+``genocat --grep-w MC:Z:151M myfile.bam.genozip`` 
 
-``genocat --no-header myfile.bam.genozip`` - show the file without the SAM header
+Shows the lines containing "MC:Z:151M" (strings that match exactly)
 
-| Using ``--regions``:
+``genocat --grep ACCTTAAT myfile.bam.genozip`` 
+
+Shows the lines containing "ACCTTAAT" (possibly a substring of a longer string)
+
+**The SAM header**
+
+``genocat --header-only myfile.bam.genozip``
+
+Shows only the SAM header
+
+``genocat --no-header myfile.bam.genozip`` 
+
+Shows the file without the SAM header
+
+**Filtering specific regions of the genome**
+
+Examples of using ``--regions`` (or its shortcut ``-r``):
 
 ============================================== =============================================
 ``genocat myfile.bam.genozip -r 22:1000-2000`` Positions 1000 to 2000 on contig 22
@@ -108,13 +124,17 @@ Example:
 ``genocat myfile.bam.genozip -r chrM``         Contig chrM
 ============================================== =============================================
 
-``genocat --regions-file <filename>`` - get regions from a tab-separated file. An example of a valid file:
+``genocat --regions-file <filename>`` 
+
+Get regions from a tab-separated file. An example of a valid file:
 
 ::
 
    chr22	17000000	17000099
    chr22	17000000	+100
    chr22	17000000
+
+**Filtering reads based on FLAG**
 
 ``genocat --FLAG *{+-^}value* myfile.bam.genozip``.  Filter lines based on the FLAG value: <value> is a decimal or hexadecimal value and should be prefixed by + - or ^: 
 
@@ -124,9 +144,9 @@ Example:
     ^   EXCLUDES lines in which ALL flags in *value* are set in the line's FLAG
     ==  =======================================================================
 
-    | *Example*: ``genocat --FLAG -192`` includes only lines in which neither FLAG 64 nor 128 are set. This can also be expressed as ``--FLAG -0xC0``
-    |
-    | The FLAGs are defined in the `SAM specification <https://samtools.github.io/hts-specs/SAMv1.pdf>`_ as follows:
+*Example*: ``genocat --FLAG -192`` includes only lines in which neither FLAG 64 nor 128 are set. This can also be expressed as ``--FLAG -0xC0``
+
+The FLAGs are defined in the `SAM specification <https://samtools.github.io/hts-specs/SAMv1.pdf>`_ as follows:
 
     ======= ===== =================================================================== 
     Decimal Hex   Meaning
@@ -145,19 +165,27 @@ Example:
     2048    0x800 supplementary alignment
     ======= ===== =================================================================== 
 
-``genocat --MAPQ [^]value myfile.bam.genozip`` - Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
-   
-``genocat --bases [^]value myfile.bam.genozip`` Filter lines based on the IUPAC characters (bases) of the sequence data.
-   
-   | *Examples*: 
+**Filtering reads based on MAPQ**
 
-   ========================== ===============================================================================
-   ``genocat --bases ACGTN``  displays only lines in which all characters of the SEQ are one of A,C,G,T,N
-   ``genocat --bases ^ACGTN`` displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
-   ========================== ===============================================================================
+``genocat --MAPQ [^]value myfile.bam.genozip`` 
 
-   | Note: In all lines missing a sequence (i.e. SEQ=*) are included in positive --bases filters (the first example above) and excluded in negative ones.
-   | Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
+Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
+
+**Filtering non-ACTGN "bases"**
+
+``genocat --bases [^]value myfile.bam.genozip`` 
+
+Filter lines based on the IUPAC characters (bases) of the sequence data.
+   
+*Examples*: 
+
+===================================== ===============================================================================
+``genocat --bases ACGTN myfile.bam``  displays only lines in which all characters of the SEQ are one of A,C,G,T,N
+``genocat --bases ^ACGTN myfile.bam`` displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
+===================================== ===============================================================================
+
+| Note: In all lines missing a sequence (i.e. SEQ=*) are included in positive --bases filters (the first example above) and excluded in negative ones.
+| Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
 
 **Filtering reads by species**
 
