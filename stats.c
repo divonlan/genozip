@@ -6,7 +6,6 @@
 #include <stdarg.h>
 #include "genozip.h"
 #include "buffer.h"
-#include "dict_id.h"
 #include "strings.h"
 #include "stats.h"
 #include "sections.h"
@@ -169,7 +168,8 @@ void stats_set_consolidation (VBlock *vb, DidIType parent, unsigned num_deps, ..
     va_end (args);
 }
 
-static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, unsigned num_deps, ...)
+static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, 
+                                       unsigned num_deps, ...)
 {
     va_list args;
     va_start (args, num_deps);
@@ -178,7 +178,14 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
     for (unsigned d=0; d < num_deps; d++) 
         deps[d] = va_arg (args, const char *);
 
+    // use existing SBL if it matches the consolidated name
     StatsByLine *survivor = NULL;
+    for (unsigned i=0; i < num_stats; i++) 
+        if (sbl[i].name && !strcmp (consolidated_name, sbl[i].name)) {
+            survivor = &sbl[i];
+            break;
+        }
+
     for (unsigned i=0; i < num_stats; i++) {
         
         if (!sbl[i].name) continue; // unused entry
@@ -189,7 +196,7 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
                     survivor = &sbl[i]; // first found gets to be the survivor
                 }
                 else {
-                    survivor->txt_len  += sbl[i].txt_len;
+                    survivor->txt_len   += sbl[i].txt_len;
                     survivor->z_size    += sbl[i].z_size;  
                     survivor->pc_of_txt += sbl[i].pc_of_txt;
                     survivor->pc_of_z   += sbl[i].pc_of_z; 
@@ -278,7 +285,7 @@ void stats_compress (void)
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_len=0;
 
     // prepare data
-    StatsByLine sbl[MAX_DICTS + NUM_SEC_TYPES] = { }, *s = sbl;
+    StatsByLine sbl[NUM_SEC_TYPES + MAX_DICTS] = { }, *s = sbl;
 
     static Buffer count_per_section_buf = EMPTY_BUFFER;
     buf_alloc (evb, &count_per_section_buf, 0, z_file->section_list_buf.len, int, 1, "count_per_section");
@@ -367,7 +374,9 @@ void stats_compress (void)
     // consolidates stats of child contexts into the parent one
     stats_consolidate_ctxs (sbl, num_stats);
     
-    stats_consolidate_non_ctx (sbl, num_stats, "Reference", 6, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
+    stats_consolidate_non_ctx (sbl, num_stats, 
+                               flag.reference == REF_INTERNAL ? "SEQ" : "Reference", // when compressing SAM with REF_INTERNAL, count the internal reference data as part of SEQ
+                               6, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS),
                                ST_NAME (SEC_REF_IUPACS));
 

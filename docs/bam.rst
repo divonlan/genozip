@@ -181,8 +181,9 @@ Displays only lines in which all characters of the SEQ are one of A,C,G,T,N
 
 Displays only lines in which NOT all characters of the SEQ are one of A,C,G,T,N
 
-| Note: In all lines missing a sequence (i.e. SEQ=*) are included in positive --bases filters (the first example above) and excluded in negative ones.
-| Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
+Note: In all lines missing a sequence (i.e. SEQ=*) are included in positive --bases filters (the first example above) and excluded in negative ones.
+
+Note: The list of IUPAC chacacters can be found here: `IUPAC codes <https://www.bioinformatics.org/sms/iupac.html>`_
 
 **Filtering reads by species**
 
@@ -206,11 +207,10 @@ If optimizing the compressed file size is important, the option ``--stats`` can 
     NAME              GENOZIP      %      TXT       %   RATIO
     QUAL             978.8 KB  38.1%   14.1 MB  45.1%   14.8X
     QNAME            606.2 KB  23.6%    3.8 MB  12.0%    6.4X
-    SEQ              281.6 KB  11.0%    7.5 MB  23.9%   27.2X
+    SEQ              357.4 KB  13.9%    7.5 MB  23.9%   21.4X
     MD:Z             131.9 KB   5.1%  598.7 KB   1.9%    4.5X
     TLEN             122.1 KB   4.8%  390.3 KB   1.2%    3.2X
     PNEXT            118.8 KB   4.6%  390.3 KB   1.2%    3.3X
-    Reference         75.8 KB   3.0%         -   0.0%    0.0X
     XS:i              46.5 KB   1.8%   97.4 KB   0.3%    2.1X
     CIGAR             43.8 KB   1.7%  646.3 KB   2.0%   14.7X
     POS               40.1 KB   1.6%  390.3 KB   1.2%    9.7X

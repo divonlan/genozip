@@ -210,9 +210,27 @@ One or more file names must be given.
    ^   EXCLUDES lines in which ALL flags in *value* are set in the line's FLAG
    ==  =======================================================================
 
-   | *Example*: --FLAG -192 includes only lines in which neither FLAG 64 nor 128 are set. This can also be expressed as --FLAG -0xC0 
-   |
-   | More information of FLAGs can be found in section 1.4 of the `SAM specification <https://samtools.github.io/hts-specs/SAMv1.pdf>`_.
+   *Example*: --FLAG -192 includes only lines in which neither FLAG 64 nor 128 are set. This can also be expressed as --FLAG -0xC0 
+
+   The FLAGs are defined in the `SAM specification <https://samtools.github.io/hts-specs/SAMv1.pdf>`_ as follows:
+
+   ======= ===== =================================================================== 
+   Decimal Hex   Meaning
+   ======= ===== =================================================================== 
+   1       0x1   template having multiple segments in sequencing
+   2       0x2   each segment properly aligned according to the aligner
+   4       0x4   segment unmapped
+   8       0x8   next segment in the template unmapped
+   16      0x10  SEQ being reverse complemented
+   32      0x20  SEQ of the next segment in the template being reverse complemented
+   64      0x40  the first segment in the template
+   128     0x80  the last segment in the template
+   256     0x100 secondary alignment
+   512     0x200 not passing filters, such as platform/vendor quality controls
+   1024    0x400 PCR or optical duplicate
+   2048    0x800 supplementary alignment
+   ======= ===== =================================================================== 
+
    |
 
 .. option:: --MAPQ [^]value.  Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
