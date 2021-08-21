@@ -1461,10 +1461,6 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
     // the reference file has no components or VBs - it consists of only a global area including reference sections
     piz_read_global_area (ref);
     
-    // recover globals
-    RESTORE_VALUE (command);
-    RESTORE_FLAGS;
-
     // case: we are requested the chrom context - word_list and dict
     if (chrom_ctx) {
         buf_copy (evb, &chrom_ctx->word_list, &ZCTX(REF_CONTIG)->word_list, CtxWord, 0, 0, "contexts->word_list");
@@ -1475,6 +1471,10 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
     file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtheader_piz_read_and_reconstruct.
 
     ref->external_ref_is_loaded = true;
+
+    // recover globals
+    RESTORE_VALUE (command);
+    RESTORE_FLAGS;
 }
 
 static void ref_initialize_loaded_ranges (Reference ref, RangesType type)

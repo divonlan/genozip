@@ -924,7 +924,7 @@ is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
 
 if [ -n "$is_windows" ]; then
-    make --quiet testfiles
+    make --quiet testfiles || exit 1
 fi
 
 hg19=data/hs37d5.ref.genozip

@@ -1,3 +1,5 @@
+.. _genozip:
+
 .. highlight:: none
 
 genozip
@@ -90,7 +92,7 @@ Examples:
 .. include:: opt-quiet.rst
 .. include:: opt-threads.rst
                      
-.. option:: -B, --vblock number.  Set the maximum size of data (between 1 and 2048 in megabytes) of the textual input data that a thread processes at any given time. By default genozip sets this value dynamically based on the characateristics of the file and it is reported in --stats (but capped at 32MB on Windows and MacOS). Smaller values will result in faster subsetting with genocat --regions and --grep. Larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression.
+.. option:: -B, --vblock megabytes.  Set the maximum size of data (between 1 and 2048 in megabytes) of the textual input data that a thread processes at any given time. By default genozip sets this value dynamically based on the characateristics of the file and it is reported in --stats (but capped at 32MB on Windows and MacOS). Smaller values will result in faster subsetting with genocat --regions and --grep. Larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression.
 
                      |
                      
@@ -224,7 +226,7 @@ Examples:
                      
 *FASTQ optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
 
-.. option:: --optimize-DESC  Replaces the description line with @filename:read_number. Also - if the 3rd line (the '+' line) contains a copy of the description it is shorten to just '+'.
+.. option:: --optimize-DESC  Replaces the description line with @filename:read_number. Also - if the 3rd line (the '+' line) contains a copy of the description it is shortened to just '+'.
                      
                      | Example: ``@A00488:61:HMLGNDSXX:4:1101:1561:1000 2:N:0:CTGAAGCT+ATAGAGGC`` -> ``@sample.fq.gz:100`` (100 is the read sequential number within this fastq file)
                      |

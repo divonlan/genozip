@@ -224,7 +224,7 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double src_c
 
     if (src_comp_ratio != 1)
         bufprintf (evb, &z_file->stats_buf, 
-                   "TOTAL vs %-11s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                   "GENOZIP vs %-9s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                    codec_name (codec),
                    str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
                    str_size (all_txt_len_0 / src_comp_ratio).s, all_pc_of_txt, // total txt fize and ratio z vs txt
@@ -232,7 +232,7 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double src_c
     
     bufprintf (evb, &z_file->stats_buf, 
                "%-20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-               src_comp_ratio != 1 ? "TOTAL vs TXT" : "TOTAL",
+               src_comp_ratio != 1 ? "GENOZIP vs TXT" : "TOTAL",
                str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
                str_size (all_txt_len_0).s, all_pc_of_txt, // total txt fize and ratio z vs txt
                all_comp_ratio);

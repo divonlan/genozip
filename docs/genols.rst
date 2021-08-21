@@ -1,4 +1,6 @@
-.. highlight:: none
+.. _genols:
+
+... highlight:: none
 
 genols
 =======

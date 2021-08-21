@@ -1,4 +1,6 @@
-.. highlight:: none
+.. _genounzip:
+
+... highlight:: none
 
 genounzip
 =========

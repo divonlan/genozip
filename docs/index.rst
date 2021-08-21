@@ -7,6 +7,7 @@ Genozip
    :maxdepth: 3
 
    Installing <installing> 
+   File Types <data-types>
    Manual <manual>
    Capabilities <capabilities>
    Applications <applications> 

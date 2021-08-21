@@ -765,12 +765,6 @@ void chain_load (void)
     // sort the alignmants by (luft_contig_index, qstart)
     qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sorter);
         
-    // recover globals
-    RESTORE_VALUE (command);
-    RESTORE_FLAGS;
-
-    flag.reference = REF_LIFTOVER; // will be needed by the files we are about to compress with --chain
-
     if (flag.show_chain) {
         chain_display_alignments();
         exit_ok();
@@ -781,6 +775,11 @@ void chain_load (void)
     file_close (&z_file, false, false);
     file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtheader_piz_read_and_reconstruct.
     
+    // recover globals
+    RESTORE_VALUE (command);
+    RESTORE_FLAGS;
+
+    flag.reference     = REF_LIFTOVER; // will be needed by the files we are about to compress with --chain
     flag.reading_chain = NULL;
 }
 

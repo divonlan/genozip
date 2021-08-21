@@ -183,13 +183,13 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 private/test/%.bam : private/test/%.sam
 ifeq ($(OS),Windows_NT)
 	@echo "Generating $@ from $<"
-	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools  view $< -OBAM | gunzip -c > $@"
+	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools  view $< -OBAM | gunzip -c > $@ || exit 1"
 endif
 
 private/test/%.cram : private/test/%.sam
 ifeq ($(OS),Windows_NT)
 	@echo "Generating $@ from $<"
-	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OCRAM -o $@ -T data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz"
+	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OCRAM -o $@ -T data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz || exit 1"
 endif
 
 GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))
@@ -249,7 +249,8 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/sam2fq.rst docs/23andMe2vcf.rst docs/multifasta2phylip.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst \
 	   docs/using-on-hpc.rst \
 	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-chain-files.rst docs/dvcf-limitations.rst docs/dvcf-renaming.rst docs/dvcf-see-also.rst \
-	   docs/archiving.rst
+	   docs/archiving.rst \
+	   docs/data-types.rst docs/bam.rst docs/fastq.rst
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 

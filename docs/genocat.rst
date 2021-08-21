@@ -1,4 +1,6 @@
-.. highlight:: none
+.. _genocat:
+
+... highlight:: none
 
 genocat
 =======
@@ -36,7 +38,7 @@ One or more file names must be given.
 
 **Subsetting options (options resulting in modified display of the data)**
 
-.. option:: --downsample rate[,shard].  Show only one in every <rate> lines (reads in the case of FASTQ, sequences in the case FASTA). The optional <shard> parameter indicates which of the shards is shown. Other subsetting options (if any) will be applied to the surviving lines only.
+.. option:: --downsample rate[,shard].  Show only one in every <rate> lines (reads in the case of FASTQ ; sequences in the case FASTA). The optional <shard> parameter indicates which of the shards is shown - it must be a value between 0 and rate-1. Other subsetting options (if any) will be applied to the surviving lines only.
 
           |
 
@@ -210,7 +212,7 @@ One or more file names must be given.
 
    | *Example*: --FLAG -192 includes only lines in which neither FLAG 64 nor 128 are set. This can also be expressed as --FLAG -0xC0 
    |
-   | More information of FLAGs can be found in section 1.4 of the `SAM spec <https://samtools.github.io/hts-specs/SAMv1.pdf>`_.
+   | More information of FLAGs can be found in section 1.4 of the `SAM specification <https://samtools.github.io/hts-specs/SAMv1.pdf>`_.
    |
 
 .. option:: --MAPQ [^]value.  Filter lines based on the MAPQ value: INCLUDE (or EXCLUDE if <value> is prefixed with ^) lines with a MAPQ greater or equal to <value> 
@@ -251,6 +253,10 @@ One or more file names must be given.
 **FASTQ options**
 
 .. option:: --interleaved[=both|either]  For FASTQ data compressed with --pair: Show every pair of paired-end FASTQ files with their reads interleaved: first one read of the first file ; then a read from the second file ; then the next read from the first file and so on. Optional argument 'both' (default) or 'either' determines whether both reads of a pair or only one is required for the pair to survive when combining with a subsetting option such as --grep.
+
+          |
+
+.. option:: --header-only.  Output only the description lines.
 
           |
 

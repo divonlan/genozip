@@ -998,7 +998,7 @@ void file_close (File **file_p,
     }
 
     else if (file->file && file->supertype == Z_FILE) {
-        if (tar_is_tar())
+        if (tar_is_tar() && file->mode != READ)
             tar_close_file (&file->file);
         else
             FCLOSE (file->file, file_printname (file));

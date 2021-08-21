@@ -42,12 +42,14 @@ typedef struct ContainerItem {
 
 #define CONTAINER_FIELDS(nitems)        \
     uint32_t nitems_hi            : 3;  /* nitems_lo+hi=11 bits, matches MAX_DICTS. MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)), until 12.0.27 nitems_hi was 8 bits */ \
-    uint32_t unused               : 4;  \
+    /* container flags set during reconstruction */ \
+    uint32_t unused               : 4;  /* can be used to enlarge nitems_hi or to add flags */ \
     uint32_t no_translation       : 1;  /* Cancel translation for this container and all of its items */\
+    \
     uint32_t repeats              : 24; /* number of "repeats" (array elements) */ \
     uint8_t nitems_lo;                  /* LSB of num_items */  \
-    /* container flags */               \
-    uint8_t drop_final_item_sep_of_final_repeat : 1; /* LEGACY - should not be used in new code. drop separator of final item of FINAL repeat */  \
+    /* container flags set during Seg */               \
+    uint8_t drop_final_item_sep_of_final_repeat : 1; /* Deprecated - should not be used in new code. drop separator of final item of FINAL repeat */  \
     uint8_t drop_final_repeat_sep : 1;  \
     uint8_t filter_repeats        : 1; /* filter called before reconstruction of each repeat to determine if it should be reconstructed */ \
     uint8_t filter_items          : 1; /* filter called before reconstruction of each item to determine if it should be reconstructed */ \
