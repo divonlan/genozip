@@ -88,27 +88,27 @@ Example:
 
 ``genocat --downsample 10,0 myfile.bam.genozip`` 
 
-Show only the first (#0) read in every 10 reads.
+Displays only the first (#0) read in every 10 reads.
 
 **Grepping**
 
 ``genocat --grep-w MC:Z:151M myfile.bam.genozip`` 
 
-Shows the lines containing "MC:Z:151M" (strings that match exactly)
+Displays the lines containing "MC:Z:151M" (strings that match exactly)
 
 ``genocat --grep ACCTTAAT myfile.bam.genozip`` 
 
-Shows the lines containing "ACCTTAAT" (possibly a substring of a longer string)
+Displays the lines containing "ACCTTAAT" (possibly a substring of a longer string)
 
 **The SAM header**
 
 ``genocat --header-only myfile.bam.genozip``
 
-Shows only the SAM header
+Displays only the SAM header
 
 ``genocat --no-header myfile.bam.genozip`` 
 
-Shows the file without the SAM header
+Displays the file without the SAM header
 
 **Filtering specific regions of the genome**
 
@@ -164,6 +164,8 @@ The FLAGs are defined in the `SAM specification <https://samtools.github.io/hts-
     1024    0x400 PCR or optical duplicate
     2048    0x800 supplementary alignment
     ======= ===== =================================================================== 
+ 
+    |
 
 **Filtering reads based on MAPQ**
 
@@ -236,7 +238,7 @@ In this paritcular example, we observe that the QUAL field consumes 38.1% of the
 
 ``genocat --idxstats myfile.bam.genozip``
 
-Calculate idxstats, similar to `samtools idxstats <http://www.htslib.org/doc/samtools-idxstats.html>`_. See :ref:`idxstats`.
+Calculates idxstats, similar to `samtools idxstats <http://www.htslib.org/doc/samtools-idxstats.html>`_. See :ref:`idxstats`.
 
 **Per-contig coverage and depth**
 

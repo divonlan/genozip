@@ -142,17 +142,17 @@ In this paritcular example, we observe that the quality line consumes 58.3% of t
 
 ``genocat --downsample 10,0 myfile.fq.genozip`` 
 
-Shows only the first (#0) read in every 10 reads.
+Displays only the first (#0) read in every 10 reads.
 
 **Grepping**
 
 ``genocat --grep ACCTTAAT myfile.fq.genozip`` 
 
-Show reads with the string "ACCTTAAT" anywhere in the read (description, seqeuence or quality lines) - possibly a substring of a longer string
+Displays reads with the string "ACCTTAAT" anywhere in the read (description, seqeuence or quality lines) - possibly a substring of a longer string
 
 ``genocat --grep-w ACCTTAAT myfile.fq.genozip`` 
 
-Show reads with the string "ACCTTAAT" exactly matching a component of the description, or the entire sequence line or the entire quality line.
+Displays reads with the string "ACCTTAAT" exactly matching a component of the description, or the entire sequence line or the entire quality line.
 
 **Filtering non-ACTGN "bases"**
 
