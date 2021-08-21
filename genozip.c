@@ -637,7 +637,7 @@ int main (int argc, char **argv)
         
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
-                                      optind < argc ? argv[optind] : NULL, // file name of next file, if there is one
+                                      file_i < num_files-1 ? input_files[file_i+1] : NULL, // file name of next file, if there is one
                                       flag.out_filename, file_i, !next_input_file || is_last_txt_file, DC_NONE, argv[0]); 
                         break;
 
