@@ -6,6 +6,7 @@ Capabilities
 
    Compression <compression>
    Archiving <archiving>
+   Encryption <encryption>
    Dual-coordinate VCF (DVCF) <dvcf>
    Filtering BAM or FASTQ reads by species using kraken2 <kraken>
    Downsampling and sharding <downsampling>

@@ -11,6 +11,9 @@
 #include "sections.h"
 #include "mutex.h"
 
+#pragma GENDICT_PREFIX REF
+#pragma GENDICT REF_CONTIG=DTYPE_FIELD=CONTIG 
+
 typedef struct {
     BitArray *is_set;
     PosType first_bit, len;
