@@ -34,6 +34,7 @@ void gff3_seg_initialize (VBlock *vb)
     CTX(GFF3_TOPLEVEL)->no_stons   = true; // keep in b250 so it can be eliminated as all_the_same
 
     CTX(ATTR_Target_ID)->st_did_i = CTX(ATTR_Target_POS)->st_did_i = CTX(ATTR_Target_STRAND)->st_did_i = ATTR_Target;
+
 }
 
 void gff3_seg_finalize (VBlockP vb)
@@ -199,7 +200,6 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **v
 {
     switch (dict_id.num) {
 
-    
     // ID - sometimes this is a sequential number (GRCh37/38)
     // sometimes it is something like this: c5312581-5d6e-4234-89d7-4974581f2993
     case _ATTR_ID: 
@@ -211,7 +211,7 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **v
         return false; // do not add to dictionary/b250 - we already did it
 
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
-    // in a dictionary and the numeric part which store in a NUMERICAL_ID_DATA section
+    // in a dictionary and the numeric part which store in a local
     case _ATTR_Dbxref:
         seg_id_field (vb, ATTR_Dbxref, *value, *value_len, false); // discard the const as seg_id_field modifies
         return false; 
@@ -219,11 +219,13 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **v
     case _ATTR_Target:
         return !gff3_seg_target (vb, *value, *value_len); 
 
-    // To do: remove spaces from Gap string ; replace I1,D1,M1 with I,D,M and return with a SPECIAL
-/*    case _ATTR_Gap: // testing shows that we are be better segging as a single snip
-        seg_array (vb, CTX(ATTR_Gap), ATTR_Gap, *value, *value_len, ' ', 0, false, false);
+    // example: Parent=mRNA00001,mRNA00002,mRNA00003
+    case _ATTR_Parent:
+        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, *value, *value_len, ',', 0, false, false);
         return false; 
-*/
+
+    //case _ATTR_Gap: // I tried: 1. array (no improvement) ; 2. string of op-codes in b250 + integers in local (negligible improvement)
+
     // subfields that are arrays of structs, for example:
     // "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
     case _ATTR_Variant_effect: {
