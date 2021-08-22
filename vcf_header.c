@@ -24,6 +24,9 @@ uint32_t vcf_num_samples = 0; // number of samples in the file
 static uint32_t vcf_num_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that vcf_num_samples if --samples is used
 static Buffer vcf_field_name_line = EMPTY_BUFFER;  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during bound
 
+static bool vcf_has_file_format_vcf = false; 
+bool vcf_header_get_has_fileformat (void) { return vcf_has_file_format_vcf; }
+
 const char *vcf_header_rename_attrs[NUM_RENAME_ATTRS] = { HK_RENAME_REFALT_ATTR, HK_RENAME_STRAND_ATTR, HK_RENAME_TLAFER_ATTR, HK_RENAME_ALWAYS_ATTR };
 const unsigned vcf_header_rename_attr_lens[NUM_RENAME_ATTRS] = { sizeof HK_RENAME_REFALT_ATTR-1, sizeof HK_RENAME_STRAND_ATTR-1, sizeof HK_RENAME_TLAFER_ATTR-1, sizeof HK_RENAME_ALWAYS_ATTR-1 };
 
@@ -722,6 +725,9 @@ bool vcf_inspect_txt_header (VBlockP txt_header_vb, Buffer *txt_header, struct F
 static bool vcf_header_set_globals (const char *filename, Buffer *vcf_header, bool soft_fail)
 {
     static const char *vcf_field_name_line_filename = NULL; // file from which the header line was taken
+
+    // check for ##fileformat=VCF
+    vcf_has_file_format_vcf = vcf_header->len >= 16 && !memcmp (vcf_header->data, "##fileformat=VCF", 16);
 
     // count tabs in last line which should be the field header line
     unsigned tab_count = 0;

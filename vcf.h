@@ -153,6 +153,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb);
 extern void vcf_header_piz_init (void);
 extern bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern uint32_t vcf_header_get_num_samples (void);
+extern bool vcf_header_get_has_fileformat (void);
 
 // VBlock stuff
 extern void vcf_vb_release_vb();
