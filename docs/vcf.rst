@@ -111,12 +111,22 @@ In this paritcular example, we observe that the PL field consumes a whopping 59.
 
 **Uncompressing**
 
-::
+``genounzip myfile.vcf.genozip``
 
-    $ genounzip myfile.vcf.genozip
-    genounzip myfile.vcf.genozip : Done (1 second)
+Uncompresses a file
 
-*A note about BGZF compression*: By default, if the original file was BGZF-compressed (this is usually, but not always, the case for files with a .gz extension) ``genounzip`` attempts re-compress the file back with the same level and parameters of the BGZF compression of the original file, while ``genocat`` uncompresses without BGZF compression. Use ``genocat --bgzf <level>`` or ``genounzip --bgzf <level>`` to set the level BGZF compression.
+``genocat myfile.vcf.genozip``
+
+Uncompresses a file into stdout (i.e. the terminal).
+
+``genounzip --index myfile.vcf.genozip``
+
+Uncompresses a file and also generates a CSI index file, using `bcftools index <http://samtools.github.io/bcftools/bcftools.html#index>`_. bcftools needs to be installed for this option to work. 
+
+``genocat --bgzf 6 myfile.vcf.genozip`` 
+``genounzip --bgzf 6 myfile.vcf.genozip`` 
+
+Sets the level BGZF compression (for .vcf.gz output format) - from 0 (no compression) to 12 (best yet slowest compression). Absent this option, ``genounzip`` attemps to recover the BGZF compression level of the original file, while ``genocat`` uncompresses without BGZF compression. 
     
 **Using in a pipeline**
 
@@ -267,7 +277,7 @@ Lifts a VCF file to a dual-coordinate VCF (DVCF) - this generates ``myfile.d.vcf
 | - ``--show-rename-tags`` -  shows tags that are to be renamed. Used when compressing a DVCF or in combination with --chain.
 | - ``--show-lifts`` - output successful lifts to the rejects file too, not only rejected lifts.
 | - ``--show-counts=o\$TATUS``, ``--show-counts=COORDS`` - see below
-| - ``--show-chain `` - displays all chain file alignments.
+| - ``--show-chain`` - displays all chain file alignments.
 
 
 ``genocat myfile.d.vcf.genozip``
@@ -303,3 +313,4 @@ By default, Genozip attempts to utilize as many cores as available. For that, it
 In ``genozip``, each compute thread is assigned a segment of the input file, known as a VBlock. By default, the size of the VBlock is set automatically to balance memory consumption and compression ratio for the particular input file, however it may be set explicitly with ``genozip --vblock <megabytes>`` (<megabytes> is an integer between 1 and 2048). A larger VBlock usually results in better compression while a smaller VBlock causes ``genozip`` to consume less RAM. The VBlock size can be observed at the top of the ``--stats`` report. ``genozip``'s memory consumption is linear with (VBlock-size X number-of-threads). 
 
 ``genocat`` and ``genounzip`` also consume memory linearly with (VBlock-size X number-of-threads), where VBlock-size is the value used by ``genozip`` of the particular file (it cannot be modified ``genocat`` or ``genounzip``). Usually, ``genocat`` and ``genounzip`` consume significantly less memory compared to ``genozip``.
+

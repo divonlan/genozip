@@ -120,12 +120,26 @@ In this paritcular example, we observe that the quality line consumes 58.3% of t
 
 **Uncompressing**
 
-::
+``genounzip myfile.fq.genozip``
 
-    $ genounzip myfile.fq.genozip
-    genounzip myfile.fq.genozip : Done (1 second)
+Uncompresses a file.
 
-*A note about BGZF compression*: By default, if the original file was BGZF-compressed (this is usually, but not always, the case for files with a .gz extension) ``genounzip`` attempts re-compress the file back with the same level and parameters of the BGZF compression of the original file, while ``genocat`` uncompresses without BGZF compression. Use ``genocat --bgzf <level>`` or ``genounzip --bgzf <level>`` to set the level BGZF compression.
+``genocat myfile.fq.genozip``
+
+Uncompresses a file into stdout (i.e. the terminal).
+
+``genounzip --index myfile.fq.genozip``
+
+Uncompresses a file and also generates a FAI index file, using `samtools faidx <http://www.htslib.org/doc/samtools-faidx.html>`_. samtools needs to be installed for this option to work. 
+
+``genounzip --output newname.fq.gz myfile.fq.genozip``
+
+Uncompressing to a particular name. Whether or not the name has a ``.gz`` extension detemines whether the output file is BGZF-compressed.
+
+``genocat --bgzf 6 myfile.fq.genozip`` 
+``genounzip --bgzf 6 myfile.fq.genozip`` 
+
+Sets the level BGZF compression (for .fq.gz output format) - from 0 (no compression) to 12 (best yet slowest compression). Absent this option, ``genounzip`` attemps to recover the BGZF compression level of the original file, while ``genocat`` uncompresses without BGZF compression. 
     
 **Using in a pipeline**
 

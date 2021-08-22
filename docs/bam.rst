@@ -30,16 +30,32 @@ Some useful command line options (for a full list, see :ref:`genozip manual<geno
 
 **Uncompressing**
 
-::
+``genounzip myfile.bam.genozip``
 
-    $ genounzip myfile.bam.genozip
-    genounzip myfile.bam.genozip : Done (1 second)
+Uncompresses a file.
 
-**Uncompressing to SAM or BAM format, selecting BGZP compression level**
+``genocat myfile.bam.genozip``
 
-By default, ``genocat`` uncompresses to the format of the original file (SAM or BAM), without BGZF compression for SAM and with BGZF compression level 1 for BAM (this is because some popular bioinforamtics tools error on BAM files with BGZF compression level 0). Use ``genocat --sam`` or ``genocat --bam`` to force a SAM or BAM file output. This is implicit if ``--output`` is used (the file type, SAM or BAM, is determined by the output filename's extension). 
+Uncompresses a file into stdout (i.e. the terminal).
 
-Use ``genocat --bgzf <level>`` or ``genounzip --bgzf <level>`` to set the level BGZF compression (for .bam and .sam.gz output format).
+``genounzip --index myfile.bam.genozip``
+
+Uncompresses a file and also generates a BAI index file, using `samtools index <http://www.htslib.org/doc/samtools-index.html>`_. samtools needs to be installed for this option to work. 
+
+``genounzip --output newname.sam.gz myfile.sam.genozip``
+``genocat --output newname.bam myfile.bam.genozip``
+
+Uncompresses to a particular name. The file format produced depends on whether the output file name extension is ``.bam``, ``.sam`` or ``.sam.gz``. Converting between SAM and BAM is possible with ``genocat`` but not ``genounzip``.
+
+``genocat --sam myfile.bam.genozip`` 
+``genocat --bam myfile.sam.genozip`` 
+
+Specifies a SAM or BAM file output (implicit if ``--output`` is used).
+
+``genocat --bgzf 6 myfile.bam.genozip`` 
+``genounzip --bgzf 6 myfile.bam.genozip`` 
+
+Sets the level BGZF compression (for .bam and .sam.gz output format) - from 0 (no compression) to 12 (best yet slowest compression). Absent this option, ``genounzip`` attemps to recover the BGZF compression level of the original file, while ``genocat`` uncompresses without BGZF compression for SAM and with BGZF compression level 1 for BAM (this is because some popular bioinforamtics tools error on BAM files with BGZF compression level 0). 
     
 **Using in a pipeline**
 
