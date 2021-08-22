@@ -1,7 +1,7 @@
 .. _bam:
 
-Genozip BAM or SAM files
-========================
+Genozip BAM, SAM or CRAM files
+==============================
 
 **Compressing a SAM or BAM file**
 
@@ -75,6 +75,18 @@ Compressing against a reference file improves compression:
     $ genozip myfile.bam --reference hs37d5.ref.genozip
     
 Note: the reference file is also needed for uncompressing. Alternatively, use ``--REFERENCE`` to copy the relevant parts of the reference file to myfile.bam.genozip, so that the reference file is not needed for decompression. Compression with a reference file works regardless of whether the SAM/BAM file is aligned.
+
+**Compressing CRAM files**
+
+Genozip does not support CRAM natively - it uses `samtools <https://en.wikipedia.org/wiki/SAMtools>`_ to convert CRAM files to/from the SAM format, and as such it requires samtools to be installed for CRAM compression to work.
+
+``genozip --reference hs37d5.ref.genozip myfile.cram``
+
+Compresses a CRAM file into ``myfile.sam.genozip`` in this case. 
+
+Note: use of a reference is mandatory when compressing a CRAM file.
+
+Note: When decompressing the file, it is decompressed into SAM or BAM format. Genozip does not support decompressing to CRAM format.
 
 **Compressing Ion Torrent BAM files**
 

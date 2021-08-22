@@ -17,14 +17,14 @@ Supported input file types, as recognized by their listed filename extension(s):
    ======== ==========================================================
    *Type*   *Filename extensions*
    ======== ==========================================================
-   FASTA    fasta, fa, faa, ffn, fnn, fna (possibly .gz .bgz .bz2 .xz)
+   FASTA    fasta, fa, fas, faa, ffn, fnn, fna (possibly .gz .bgz .bz2 .xz)
    FASTQ    fastq, fq (possibly .gz .bgz .bz2 .xz)
    SAM      sam (possibly .gz .bgz .bz2 .xz)
    BAM      bam
    CRAM     cram
    VCF      vcf (possibly .gz .bgz .bz2 .xz)
    BCF      bcf (possibly .gz .bgz)
-   GFF3     gff3, gvf (possibly .gz .bgz .bz2 .xz)
+   GFF3     gff3, gff, gvf (possibly .gz .bgz .bz2 .xz)
    PHYLIP   phy (possibly .gz .bgz .bz2 .xz)
    Chain    chain (possibly .gz .bgz .bz2 .xz)
    Kraken   kraken (possibly .gz .bgz .bz2 .xz)
