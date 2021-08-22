@@ -109,13 +109,15 @@ static void zip_dynamically_set_max_memory (void)
 {
     static uint64_t test_vb_sizes[] = { 70000, 250000, 1000000 }; // must be at least BGZF_MAX_BLOCK_SIZE
 
-    if (txt_file->data_type == DT_GENERIC || (txt_file->disk_size && txt_file->disk_size <= VBLOCK_MEMORY_GENERIC)) {
+    if (txt_file->data_type == DT_GENERIC) {
         flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
         return;
     }
 
     bool done = false;
     unsigned num_tests = sizeof (test_vb_sizes) / sizeof (test_vb_sizes[0]);
+    int64_t est_txt_data_size=0;
+
     for (unsigned test_i=0; !done && test_i < num_tests; test_i++) {
 
         flag.vblock_memory = test_vb_sizes[test_i]; // read this amount of data
@@ -125,11 +127,14 @@ static void zip_dynamically_set_max_memory (void)
         //if (flag.vblock_memory < txt_file->reject_bytes && test_i != num_tests-1) 
         //    continue;
 
+
         VBlock *vb = vb_get_vb (DYN_SET_MEM_TASK, 1);
         txtfile_read_vblock (vb, true);
 
         // case: we found at least one full line - we can calculate the memory now
         if (vb->txt_data.len) {
+
+            est_txt_data_size = txtfile_estimate_txt_data_size (vb); 
 
             // make a copy of txt_data as seg may modify it
             static Buffer txt_data_copy = {};
@@ -150,8 +155,14 @@ static void zip_dynamically_set_max_memory (void)
 
             RESTORE_FLAGS;
 
+            // count number of contexts used
+            unsigned num_used_contexts=0;
+            for (DidIType did_i=0; did_i < vb->num_contexts ; did_i++)
+                if (CTX(did_i)->b250.len || CTX(did_i)->local.len)
+                    num_used_contexts++;
+                
             // formula - 1MB for each contexts, 128K for each VCF sample
-            uint64_t bytes = ((uint64_t)vb->num_contexts << 20) + 
+            uint64_t bytes = ((uint64_t)num_used_contexts << 20) + 
                               (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
 
             // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
@@ -160,7 +171,7 @@ static void zip_dynamically_set_max_memory (void)
 
             if (flag.show_memory)
                 iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
-                         (unsigned)(flag.vblock_memory >> 20), vb->num_contexts, vcf_header_get_num_samples());
+                         (unsigned)(flag.vblock_memory >> 20), num_used_contexts, vcf_header_get_num_samples());
 
             // on Windows and Mac - which tend to have less memory in typical configurations, warn if we need a lot
             #if defined _WIN32 || defined APPLE
@@ -197,8 +208,8 @@ static void zip_dynamically_set_max_memory (void)
         vb_release_vb (&vb);
     }
 
-    // if we failed to calculate - use default
-    if (!done)
+    // if we failed to calculate or file is very small - use default
+    if (!done || est_txt_data_size < VBLOCK_MEMORY_GENERIC)
         flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
 
     // restore (used for --optimize-DESC / --add-line-numbers)

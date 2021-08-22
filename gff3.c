@@ -3,6 +3,9 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
+// GFF3 specification and examples: https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
+// Another one: http://gmod.org/wiki/GFF3 and https://ftp.ncbi.nlm.nih.gov/genomes/README_GFF3.txt
+
 #include "genozip.h"
 #include "seg.h"
 #include "vblock.h"
@@ -15,6 +18,7 @@
 #include "dict_id.h"
 #include "codec.h"
 #include "vcf.h"
+#include "dict_id_gen.h"
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
 
@@ -28,6 +32,8 @@ void gff3_seg_initialize (VBlock *vb)
     CTX(GFF3_SEQID)->no_stons      = true; // needs b250 node_index for random access
     CTX(GFF3_ATTRS)->no_stons      = true;
     CTX(GFF3_TOPLEVEL)->no_stons   = true; // keep in b250 so it can be eliminated as all_the_same
+
+    CTX(ATTR_Target_ID)->st_did_i = CTX(ATTR_Target_POS)->st_did_i = CTX(ATTR_Target_STRAND)->st_did_i = ATTR_Target;
 }
 
 void gff3_seg_finalize (VBlockP vb)
@@ -160,24 +166,67 @@ badly_formatted:
     seg_by_dict_id (vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, saved_snip_len); 
 }                           
 
-bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len)
+// returns trus if successful
+static bool gff3_seg_target (VBlockP vb, const char *value, unsigned value_len)
 {
-    // ID - this is a sequential number (at least in GRCh37/38)
-    if (dict_id.num == _ATTR_ID) {
-        seg_pos_field ((VBlockP)vb, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, *this_value, *this_value_len, 0, *this_value_len);
+    str_split (value, value_len, 4, ' ', item, false);
+    if (n_items != 3 && n_items != 4) return false; // not standard Target format
+
+    SmallContainer con = {
+        .repeats   = 1,
+        .nitems_lo = n_items,
+        .drop_final_item_sep = true,
+        .items     = { { .dict_id = { _ATTR_Target_ID     }, .seperator = " " },
+                       { .dict_id = { _ATTR_Target_POS    }, .seperator = " " }, // START
+                       { .dict_id = { _ATTR_Target_POS    }, .seperator = " " }, // END
+                       { .dict_id = { _ATTR_Target_STRAND }, .seperator = " " } }
+    };
+
+    seg_by_did_i (vb, items[0], item_lens[0], ATTR_Target_ID, item_lens[0]);
+    seg_pos_field (vb, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[1], item_lens[1], 0, item_lens[1]);
+    seg_pos_field (vb, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[2], item_lens[2], 0, item_lens[2]);
+
+    if (n_items == 4)
+        seg_by_did_i (vb, items[3], item_lens[3], ATTR_Target_STRAND, item_lens[3]);
+
+    // TO DO: use seg_duplicate_last if n_items hasn't changed
+    container_seg (vb, CTX (ATTR_Target), (ContainerP)&con, NULL, 0, n_items-1); // account for space separators
+
+    return true;
+}
+
+bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **value, unsigned *value_len)
+{
+    switch (dict_id.num) {
+
+    
+    // ID - sometimes this is a sequential number (GRCh37/38)
+    // sometimes it is something like this: c5312581-5d6e-4234-89d7-4974581f2993
+    case _ATTR_ID: 
+        if (str_is_int (*value, *value_len))
+            seg_pos_field (vb, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, *value, *value_len, 0, *value_len);
+        else
+            seg_by_did_i (vb, *value, *value_len, ATTR_ID, *value_len);
+
         return false; // do not add to dictionary/b250 - we already did it
-    }
 
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
     // in a dictionary and the numeric part which store in a NUMERICAL_ID_DATA section
-    if (dict_id.num == _ATTR_Dbxref) {
-        seg_id_field (vb, ATTR_Dbxref, *this_value, *this_value_len, false); // discard the const as seg_id_field modifies
-        return false; // do not add to dictionary/b250 - we already did it
-    }
+    case _ATTR_Dbxref:
+        seg_id_field (vb, ATTR_Dbxref, *value, *value_len, false); // discard the const as seg_id_field modifies
+        return false; 
 
+    case _ATTR_Target:
+        return !gff3_seg_target (vb, *value, *value_len); 
+
+    // To do: remove spaces from Gap string ; replace I1,D1,M1 with I,D,M and return with a SPECIAL
+/*    case _ATTR_Gap: // testing shows that we are be better segging as a single snip
+        seg_array (vb, CTX(ATTR_Gap), ATTR_Gap, *value, *value_len, ' ', 0, false, false);
+        return false; 
+*/
     // subfields that are arrays of structs, for example:
     // "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
-    if (dict_id.num == _ATTR_Variant_effect) {
+    case _ATTR_Variant_effect: {
         static const SmallContainer Variant_effect = {
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
@@ -187,11 +236,11 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **t
                              { .dict_id={.id="V2arEff" }, .seperator = {' '} },
                              { .dict_id={.id="ENSTid"  },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, *value, *value_len);
         return false;
     }
 
-    if (dict_id.num == _ATTR_sift_prediction) {
+    case _ATTR_sift_prediction: {
         static const SmallContainer sift_prediction = {
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
@@ -201,11 +250,11 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **t
                              { .dict_id={.id="S2iftPr" }, .seperator = {' '} },
                              { .dict_id={.id="ENSTid"  },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, *value, *value_len);
         return false;
     }
 
-    if (dict_id.num == _ATTR_polyphen_prediction) {
+    case _ATTR_polyphen_prediction: {
         static const SmallContainer polyphen_prediction = {
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
@@ -215,11 +264,11 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **t
                              { .dict_id={.id="P2olyPhP" }, .seperator = {' '} },
                              { .dict_id={.id="ENSTid"   },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, *value, *value_len);
         return false;
     }
 
-    if (dict_id.num == _ATTR_variant_peptide) {
+    case _ATTR_variant_peptide: {
         static const SmallContainer variant_peptide = {
             .nitems_lo   = 3, 
             .drop_final_repeat_sep = true,
@@ -228,35 +277,35 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **t
                              { .dict_id={.id="v1arPep" }, .seperator = {' '} },
                              { .dict_id={.id="ENSTid"  },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, *value, *value_len);
         return false;
     }
 
     // we store these 3 in one dictionary, as they are correlated and will compress better together
-    if (dict_id.num == _ATTR_Variant_seq   ||
-        dict_id.num == _ATTR_Reference_seq ||
-        dict_id.num == _ATTR_ancestral_allele) {
-
+    case _ATTR_Variant_seq:
+    case _ATTR_Reference_seq:
+    case _ATTR_ancestral_allele: 
         // note: all three are stored together in _ATTR_Reference_seq as they are correlated
-        seg_add_to_local_text (vb, CTX(ATTR_Reference_seq), *this_value, *this_value_len, *this_value_len);
-        
-        return false; // do not add to dictionary/b250 - we already did it
-    }
+        seg_add_to_local_text (vb, CTX(ATTR_Reference_seq), *value, *value_len, *value_len); 
+        return false; 
 
     // Optimize Variant_freq
-    unsigned optimized_snip_len = *this_value_len + 20;
-    char optimized_snip[optimized_snip_len]; // used for 1. fields that are optimized 2. fields translated luft->primary
+    case _ATTR_Variant_freq:
+        if (flag.optimize_Vf) {
+            unsigned optimized_snip_len = *value_len + 20;
+            char optimized_snip[optimized_snip_len]; // used for 1. fields that are optimized 2. fields translated luft->primary
 
-    if (flag.optimize_Vf && (dict_id.num == _ATTR_Variant_freq) &&
-        optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
-        
-        vb->recon_size -= (int)(*this_value_len) - (int)optimized_snip_len;
-        *this_value = optimized_snip;
-        *this_value_len = optimized_snip_len;
+            if (optimize_float_2_sig_dig (*value, *value_len, 0, optimized_snip, &optimized_snip_len)) {        
+                vb->recon_size -= (int)(*value_len) - (int)optimized_snip_len;
+                *value = optimized_snip;
+                *value_len = optimized_snip_len;
+            }            
+        }
         return true; // proceed with adding to dictionary/b250
-    }
 
-    return true; // all other cases -  procedue with adding to dictionary/b250
+    default:
+        return true; // all other cases -  procedue with adding to dictionary/b250
+    }
 }
 
 typedef struct { const char *start; 
@@ -276,8 +325,8 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned inf
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true };
 
-    const char *this_name = info_str, *this_value = NULL;
-    int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
+    const char *this_name = info_str, *value = NULL;
+    int this_name_len = 0, value_len=0; // int and not unsigned as it can go negative
 
     AttrsItem info_items[MAX_FIELDS];
 
@@ -310,8 +359,8 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned inf
                     // create context with tag, if it doesn't already exist
                     if (valueful) ctx_get_ctx_tag (vb, dict_id, this_name, this_name_len);
 
-                    this_value = &info_str[i+1]; 
-                    this_value_len = -valueful; // if there is a '=' to be skipped, start from -1
+                    value = &info_str[i+1]; 
+                    value_len = -valueful; // if there is a '=' to be skipped, start from -1
                     reading_name = false; 
                 }
             }
@@ -323,8 +372,8 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned inf
             if (c == ';') { // end of value
                 // If its a valueful item, seg it (either special or regular)
                 DictId dict_id = info_items[con_nitems(con)].dict_id;
-                if (dict_id.num && gff3_seg_special_info_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len))
-                    seg_by_dict_id (vb, this_value, this_value_len, dict_id, this_value_len);
+                if (dict_id.num && gff3_seg_special_info_subfields (vb, dict_id, &value, (unsigned *)&value_len))
+                    seg_by_dict_id (vb, value, value_len, dict_id, value_len);
 
                 reading_name = true;  // end of value - move to the next item
                 this_name = &info_str[i+1]; // move to next field in info string
@@ -334,7 +383,7 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned inf
                 ASSSEG (con_nitems(con) <= MAX_FIELDS, info_str, 
                         "A line has too many subfields (tags) in ATTRS - the maximum supported is %u", MAX_FIELDS);
             }
-            else this_value_len++;
+            else value_len++;
         }
     }
 

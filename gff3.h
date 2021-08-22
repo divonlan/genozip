@@ -26,14 +26,28 @@
 #pragma GENDICT GFF3_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT GFF3_COMMENT=DTYPE_FIELD=COMMENT
 
-// standard GVF fields (ID is also a standard GFF3 field)
+// standard GFF3 attributes defined in https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
 #pragma GENDICT ATTR_ID=DTYPE_1=ID
+#pragma GENDICT ATTR_Name=DTYPE_1=Name
+#pragma GENDICT ATTR_Alias=DTYPE_1=Alias
+#pragma GENDICT ATTR_Parent=DTYPE_1=Parent
+#pragma GENDICT ATTR_Target=DTYPE_1=Target
+#pragma GENDICT ATTR_Target_ID=DTYPE_1=T1gtID
+#pragma GENDICT ATTR_Target_POS=DTYPE_1=T2gtPOS
+#pragma GENDICT ATTR_Target_STRAND=DTYPE_1=T3gtSTRAND
+#pragma GENDICT ATTR_Gap=DTYPE_1=Gap
+#pragma GENDICT ATTR_Derives_from=DTYPE_1=Derives_from
+#pragma GENDICT ATTR_Note=DTYPE_1=Note
+#pragma GENDICT ATTR_Dbxref=DTYPE_1=Dbxref
+#pragma GENDICT ATTR_Ontology_term=DTYPE_1=Ontology_term
+#pragma GENDICT ATTR_Is_circular=DTYPE_1=Is_circular
+
+// standard GVF fields 
 #pragma GENDICT ATTR_Variant_seq=DTYPE_1=Variant_seq
 #pragma GENDICT ATTR_Reference_seq=DTYPE_1=Reference_seq
 #pragma GENDICT ATTR_Variant_freq=DTYPE_1=Variant_freq
 
 // fields added in the GVFs of GRCh37/38
-#pragma GENDICT ATTR_Dbxref=DTYPE_1=Dbxref
 #pragma GENDICT ATTR_ancestral_allele=DTYPE_1=ancestral_allele
 #pragma GENDICT ATTR_Variant_effect=DTYPE_1=Variant_effect
 #pragma GENDICT ATTR_sift_prediction=DTYPE_1=sift_prediction

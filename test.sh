@@ -722,7 +722,7 @@ batch_real_world_1()
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam* \
                    test.*fq* test.*fa* \ 
-                   basic.phy* test.*gvf* test.*gff3* \
+                   basic.phy* test.*gvf* test.*gff* \
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v .genozip` )
 

@@ -66,10 +66,22 @@
 #define _GFF3_TOPLEVEL ((uint64_t)5495893775908622100)
 #define _GFF3_COMMENT ((uint64_t)23729957600317187)
 #define _ATTR_ID ((uint64_t)17609)
+#define _ATTR_Name ((uint64_t)1701667278)
+#define _ATTR_Alias ((uint64_t)495555538113)
+#define _ATTR_Parent ((uint64_t)128017497219536)
+#define _ATTR_Target ((uint64_t)127978876068308)
+#define _ATTR_Target_ID ((uint64_t)75082276221396)
+#define _ATTR_Target_POS ((uint64_t)23449630035882708)
+#define _ATTR_Target_STRAND ((uint64_t)4921943265158575060)
+#define _ATTR_Gap ((uint64_t)7365063)
+#define _ATTR_Derives_from ((uint64_t)7885647256730363332)
+#define _ATTR_Note ((uint64_t)1702129614)
+#define _ATTR_Dbxref ((uint64_t)112585898222276)
+#define _ATTR_Ontology_term ((uint64_t)7886477448239673039)
+#define _ATTR_Is_circular ((uint64_t)8241988044498891721)
 #define _ATTR_Variant_seq ((uint64_t)8171063952561824214)
 #define _ATTR_Reference_seq ((uint64_t)8171063952493929938)
 #define _ATTR_Variant_freq ((uint64_t)8171062883114967510)
-#define _ATTR_Dbxref ((uint64_t)112585898222276)
 #define _ATTR_ancestral_allele ((uint64_t)7308327811547360993)
 #define _ATTR_Variant_effect ((uint64_t)8386658421624168918)
 #define _ATTR_sift_prediction ((uint64_t)7957695015476947443)
@@ -321,7 +333,7 @@ typedef enum { GNRIC_DATA, GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GNRICFields;
     [GNRIC_TOPLEVEL] = { _GNRIC_TOPLEVEL }, \
 } 
 
-typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, GFF3_COMMENT, ATTR_ID, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_Variant_freq, ATTR_Dbxref, ATTR_ancestral_allele, ATTR_Variant_effect, ATTR_sift_prediction, ATTR_polyphen_prediction, ATTR_variant_peptide, ENSTid, NUM_GFF3_FIELDS } GFF3Fields;
+typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, GFF3_COMMENT, ATTR_ID, ATTR_Name, ATTR_Alias, ATTR_Parent, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, ATTR_Gap, ATTR_Derives_from, ATTR_Note, ATTR_Dbxref, ATTR_Ontology_term, ATTR_Is_circular, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_Variant_freq, ATTR_ancestral_allele, ATTR_Variant_effect, ATTR_sift_prediction, ATTR_polyphen_prediction, ATTR_variant_peptide, ENSTid, NUM_GFF3_FIELDS } GFF3Fields;
 
 #define GFF3_MAPPING { \
     [GFF3_SEQID] = { _GFF3_SEQID }, \
@@ -337,10 +349,22 @@ typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SC
     [GFF3_TOPLEVEL] = { _GFF3_TOPLEVEL }, \
     [GFF3_COMMENT] = { _GFF3_COMMENT }, \
     [ATTR_ID] = { _ATTR_ID }, \
+    [ATTR_Name] = { _ATTR_Name }, \
+    [ATTR_Alias] = { _ATTR_Alias }, \
+    [ATTR_Parent] = { _ATTR_Parent }, \
+    [ATTR_Target] = { _ATTR_Target }, \
+    [ATTR_Target_ID] = { _ATTR_Target_ID }, \
+    [ATTR_Target_POS] = { _ATTR_Target_POS }, \
+    [ATTR_Target_STRAND] = { _ATTR_Target_STRAND }, \
+    [ATTR_Gap] = { _ATTR_Gap }, \
+    [ATTR_Derives_from] = { _ATTR_Derives_from }, \
+    [ATTR_Note] = { _ATTR_Note }, \
+    [ATTR_Dbxref] = { _ATTR_Dbxref }, \
+    [ATTR_Ontology_term] = { _ATTR_Ontology_term }, \
+    [ATTR_Is_circular] = { _ATTR_Is_circular }, \
     [ATTR_Variant_seq] = { _ATTR_Variant_seq }, \
     [ATTR_Reference_seq] = { _ATTR_Reference_seq }, \
     [ATTR_Variant_freq] = { _ATTR_Variant_freq }, \
-    [ATTR_Dbxref] = { _ATTR_Dbxref }, \
     [ATTR_ancestral_allele] = { _ATTR_ancestral_allele }, \
     [ATTR_Variant_effect] = { _ATTR_Variant_effect }, \
     [ATTR_sift_prediction] = { _ATTR_sift_prediction }, \
