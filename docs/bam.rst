@@ -14,7 +14,7 @@ Genozip BAM or SAM files
     -rwxrwxrwx 1 divon divon 5.7M Aug 20 13:59 myfile.bam
     -rwxrwxrwx 1 divon divon 2.6M Aug 20 13:59 myfile.bam.genozip
 
-This creates a compressed file, without modifying the original file. This also works with `.sam`, `.sam.gz`, `.sam.bz2` and `.sam.xz` files.
+This creates a compressed file, without modifying the original file. This also works with ``.sam``, ``.sam.gz``, ``.sam.bz2`` and ``.sam.xz`` files.
 
 Some useful command line options (for a full list, see :ref:`genozip manual<genozip>`):
 
@@ -94,21 +94,21 @@ Displays only the first (#0) read in every 10 reads.
 
 ``genocat --grep-w MC:Z:151M myfile.bam.genozip`` 
 
-Displays the lines containing "MC:Z:151M" (strings that match exactly)
+Displays the lines containing "MC:Z:151M" (strings that match exactly).
 
 ``genocat --grep ACCTTAAT myfile.bam.genozip`` 
 
-Displays the lines containing "ACCTTAAT" (possibly a substring of a longer string)
+Displays the lines containing "ACCTTAAT" (possibly a substring of a longer string).
 
 **The SAM header**
 
 ``genocat --header-only myfile.bam.genozip``
 
-Displays only the SAM header
+Displays only the SAM header.
 
 ``genocat --no-header myfile.bam.genozip`` 
 
-Displays the file without the SAM header
+Displays the file without the SAM header.
 
 **Filtering specific regions of the genome**
 
@@ -203,7 +203,7 @@ If optimizing the compressed file size is important, the option ``--stats`` can 
     Alignment lines: 99,909   Dictionaries: 50   Vblocks: 2 x 16 MB  Sections: 143
     Genozip version: 12.0.11 conda
     Date compressed: 2021-08-20 17:28:44 ACDT
-    License v12.0.11 granted to: ****** accepted by: ******** on 2021-07-23 14:33:51 ACDT from IP=****
+    License v12.0.11 granted to: ***** accepted by: ***** on 2021-07-23 14:33:51 ACDT from IP=*****
     
     Sections (sorted by % of genozip file):
     NAME              GENOZIP      %      TXT       %   RATIO

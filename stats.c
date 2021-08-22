@@ -116,7 +116,7 @@ typedef struct {
     DidIType my_did_i, st_did_i;
     int64_t txt_len, z_size;
     const char *name;
-    char  type[20];
+    char type[20];
     StrText did_i, words, hash, uncomp_dict, comp_dict, comp_b250, comp_data;
     double pc_of_txt, pc_of_z, pc_dict, pc_singletons, pc_failed_singletons, pc_hash_occupancy;
 } StatsByLine;
@@ -285,7 +285,9 @@ void stats_compress (void)
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_len=0;
 
     // prepare data
-    StatsByLine sbl[NUM_SEC_TYPES + MAX_DICTS] = { }, *s = sbl;
+    #define NUM_SBL (NUM_SEC_TYPES + z_file->num_contexts + 2) // 2 for consolidated groups
+    StatsByLine sbl[NUM_SBL], *s = sbl;
+    memset (sbl, 0, NUM_SBL * sizeof (StatsByLine)); // initialize
 
     static Buffer count_per_section_buf = EMPTY_BUFFER;
     buf_alloc (evb, &count_per_section_buf, 0, z_file->section_list_buf.len, int, 1, "count_per_section");

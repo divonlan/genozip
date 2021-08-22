@@ -151,7 +151,7 @@ One or more file names must be given.
 
           |
 
-.. option:: --indels-only.  Drops variants that are not Insertions or Deletions (INDEL).
+.. option:: --indels-only.  Drops variants that are not Insertions or Deletions (indel).
 
           |
 

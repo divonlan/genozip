@@ -250,7 +250,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/using-on-hpc.rst \
 	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-chain-files.rst docs/dvcf-limitations.rst docs/dvcf-renaming.rst docs/dvcf-see-also.rst \
 	   docs/archiving.rst \
-	   docs/data-types.rst docs/bam.rst docs/fastq.rst
+	   docs/data-types.rst docs/bam.rst docs/fastq.rst docs/vcf.rst
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 

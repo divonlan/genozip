@@ -891,6 +891,12 @@ void vcf_samples_add  (const char *samples_str)
 {
     ASSERTNOTNULL (samples_str);
 
+    // --samples 0 is interpreted as --drop-genotypes
+    if (samples_str[0]=='0' && !samples_str[1] && !cmd_samples_buf.len) {
+        flag.drop_genotypes = true;
+        flag.samples = false;
+    }
+
     bool is_negated = samples_str[0] == '^';
 
     bool is_conflicting_negation = (cmd_samples_buf.len && (cmd_is_negative_samples != is_negated));

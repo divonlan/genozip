@@ -32,7 +32,7 @@ Compressing a single FASTQ file:
     -rwxrwxrwx 1 divon divon 1640641 Aug 21 12:28 myfile.fq.genozip
     -rwxrwxrwx 1 divon divon 7338338 Aug 21 12:02 myfile.fq.gz
 
-Note: supported input file extensions include .fq .fq.gz .fq.bz2 .fq.xz and also .fastq .fastq.gz .fastq.bz2 .fastq.xz. For FASTQ files with a different extension, use ``--input fastq`` to inform Genozip that this is FASTQ data. 
+Note: supported input file extensions include ``.fq`` ``.fq.gz`` ``.fq.bz2`` ``.fq.xz`` and also ``.fastq`` ``.fastq.gz`` ``.fastq.bz2`` ``.fastq.xz``. For FASTQ files with a different extension, use ``--input fastq`` to inform Genozip that this is FASTQ data. 
 
 Tip: Use --REFERENCE instead of --reference to store the reference data as part of the compressed file, obliviating the need for a separate reference file when uncompressing. This is in particular beneficial when binding multiple files together with --output, see :ref:`archiving`. 
 
@@ -71,11 +71,13 @@ Some useful command line options (for a full list, see :ref:`genozip manual<geno
 
 These are options that modify the file in ways that improve compression. ``--optimize`` is an umbrella option that activates all optimization options.
 
-| ``genozip myfile.fq.gz --reference hs37d5.ref.genozip --optimize-DESC`` 
-| Replaces the description line with @filename:read_number. Also - if the 3rd line (the '+' line) contains a copy of the description it is shortened to just '+'.
+``genozip myfile.fq.gz --reference hs37d5.ref.genozip --optimize-DESC`` 
 
-| ``genozip myfile.fq.gz --reference hs37d5.ref.genozip --optimize-QUAL`` 
-| The quality data is optimized as follows:
+Replaces the description line with @filename:read_number. Also - if the 3rd line (the '+' line) contains a copy of the description it is shortened to just '+'.
+
+``genozip myfile.fq.gz --reference hs37d5.ref.genozip --optimize-QUAL`` 
+
+The quality data is optimized as follows:
 
     ============ ======
     *Old values* *New value*                 
@@ -100,7 +102,7 @@ The option ``--stats`` can be used in ``genozip``, ``genounzip`` or ``genocat`` 
     Sequences: 200,000   Dictionaries: 25   Vblocks: 6 x 16 MB  Sections: 132
     Genozip version: 12.0.30 github
     Date compressed: 2021-08-21 18:34:02 Cen. Australia Daylight Time
-    License v12.0.29 granted to: Genozip accepted by:***** on 2021-08-18 20:30:56 Cen. Australia Daylight Time from IP=*****
+    License v12.0.29 granted to: ***** accepted by:***** on 2021-08-18 20:30:56 Cen. Australia Daylight Time from IP=*****
     
     Sections (sorted by % of genozip file):
     NAME                   GENOZIP      %      TXT       %   RATIO
@@ -148,7 +150,7 @@ Displays only the first (#0) read in every 10 reads.
 
 ``genocat --grep ACCTTAAT myfile.fq.genozip`` 
 
-Displays reads with the string "ACCTTAAT" anywhere in the read (description, seqeuence or quality lines) - possibly a substring of a longer string
+Displays reads with the string "ACCTTAAT" anywhere in the read (description, seqeuence or quality lines) - possibly a substring of a longer string.
 
 ``genocat --grep-w ACCTTAAT myfile.fq.genozip`` 
 
