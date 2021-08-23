@@ -34,7 +34,7 @@ Compressing a single FASTQ file:
 
 Note: supported input file extensions include ``.fq`` ``.fq.gz`` ``.fq.bz2`` ``.fq.xz`` and also ``.fastq`` ``.fastq.gz`` ``.fastq.bz2`` ``.fastq.xz``. For FASTQ files with a different extension, use ``--input fastq`` to inform Genozip that this is FASTQ data. 
 
-Tip: Use --REFERENCE instead of --reference to store the reference data as part of the compressed file, obliviating the need for a separate reference file when uncompressing. This is in particular beneficial when binding multiple files together with --output, see :ref:`archiving`. 
+Tip: Use ``--REFERENCE`` instead of ``--reference`` to store the reference data as part of the compressed file, obliviating the need for a separate reference file when uncompressing. This is in particular beneficial when binding multiple files together with --output, see :ref:`archiving`. 
 
 **Compressing a paired-end FASTQ files**
 

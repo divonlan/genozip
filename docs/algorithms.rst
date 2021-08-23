@@ -1,6 +1,8 @@
 Algorithms
 ==========
 
+Very partial list - work in progress.
+
 .. toctree::
    :maxdepth: 1
 
