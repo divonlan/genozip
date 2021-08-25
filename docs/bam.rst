@@ -140,7 +140,7 @@ Displays the file without the SAM header.
 
 ``genocat --no-PG myfile.bam.genozip`` 
 
-When modifying the data in a file using genocat Genozip normally adds a @PG line to the header with information about the modification. With this option it doesn't.
+When modifying the data in a file using genocat, Genozip normally adds a @PG line to the header with information about the modification. With this option it doesn't.
 
 **Filtering specific regions of the genome**
 
