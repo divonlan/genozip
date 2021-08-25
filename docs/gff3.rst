@@ -126,7 +126,7 @@ Displays the lines containing "Dbxref=dbSNP_152:rs" (possibly a substring of a l
 
 Examples of using ``--regions`` (or its shortcut ``-r``):
 
-============================================== =============================================
+=============================================== =============================================
 ``genocat myfile.gff3.genozip -r 22:1000-2000`` Positions 1000 to 2000 on contig 22
 ``genocat myfile.gff3.genozip -r 22:1000+151``  151 bases, starting pos 1000, on contig 22
 ``genocat myfile.gff3.genozip -r -2000,2500-``  Two ranges on all contigs
@@ -134,7 +134,7 @@ Examples of using ``--regions`` (or its shortcut ``-r``):
 ``genocat myfile.gff3.genozip -r ^MT,Y``        All contigs, excluding MT and Y
 ``genocat myfile.gff3.genozip -r ^-1000``       All contigs, excluding positions up to 1000
 ``genocat myfile.gff3.genozip -r chrM``         Contig chrM
-============================================== =============================================
+=============================================== =============================================
 
 ``genocat --regions-file <filename> myfile.gff3.genozip`` 
 

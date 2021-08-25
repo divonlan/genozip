@@ -123,8 +123,8 @@ Uncompresses a file into stdout (i.e. the terminal).
 
 Uncompresses a file and also generates a CSI index file, using `bcftools index <http://samtools.github.io/bcftools/bcftools.html#index>`_. bcftools needs to be installed for this option to work. 
 
-``genocat --bgzf 6 myfile.vcf.genozip`` 
-``genounzip --bgzf 6 myfile.vcf.genozip`` 
+| ``genocat --bgzf 6 myfile.vcf.genozip``
+| ``genounzip --bgzf 6 myfile.vcf.genozip`` 
 
 Sets the level BGZF compression (for .vcf.gz output format) - from 0 (no compression) to 12 (best yet slowest compression). Absent this option, ``genounzip`` attemps to recover the BGZF compression level of the original file, while ``genocat`` uncompresses without BGZF compression. 
     
