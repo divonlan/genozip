@@ -164,12 +164,22 @@ void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *even
                         int time_usec /* optional */)
 {
     if (flag.show_threads) {
-        if (time_usec)
-            iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
-                     task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self(), str_uint_commas (time_usec).s);
-        else
-            iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
-                     task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self());
+        unsigned pthread = (unsigned)(((uint64_t)pthread_self()) % 100000); // 5 digits
+        if (time_usec) {
+            if (vb->compute_thread_id >= 0)
+                iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%u compute_thread_time=%s usec\n", 
+                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread, str_uint_commas (time_usec).s);
+            else
+                iprintf ("%s: vb_i=%d vb_id=%d %s compute_thread_time=%s usec\n", 
+                        task_name, vb->vblock_i, vb->id, event, str_uint_commas (time_usec).s);
+        } else {
+            if (vb->compute_thread_id >= 0)
+                iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%u\n", 
+                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread);
+            else
+                iprintf ("%s: vb_i=%d vb_id=%d %s\n", 
+                        task_name, vb->vblock_i, vb->id, event);
+        }
     }
 
     if (flag.debug_threads) {

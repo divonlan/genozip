@@ -624,6 +624,7 @@ static void zip_compress_one_vb (VBlock *vb)
         ctx_clone (vb);
 
     // split each line in this variant block to its components
+    threads_log_by_vb (vb, "zip", "START SEG", 0);
     seg_all_data_lines (vb);
 
     // identify dictionaries that contain almost only unique words (eg a unique id) and move the data from dict to local
@@ -645,6 +646,7 @@ static void zip_compress_one_vb (VBlock *vb)
     // writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
     // note: vb>=2 will block here, until vb=1 is completed
+    threads_log_by_vb (vb, "zip", "START MERGE", 0);
     ctx_merge_in_vb_ctx(vb);
 
     // generate the final local and b250 buffers from their intermediate form
@@ -665,9 +667,11 @@ static void zip_compress_one_vb (VBlock *vb)
         random_access_merge_in_vb (vb, DC_LUFT);
 
     // compress b250 and local data for all ctxs (for reference files we don't output VBs)
-    if (!flag.make_reference && !flag.seg_only)
+    if (!flag.make_reference && !flag.seg_only) {
+        threads_log_by_vb (vb, "zip", "START COMPRESSING CONTEXTS", 0);
         zip_compress_ctxs (vb);
-
+    }
+    
     // compress data-type specific sections
     DT_FUNC (vb, compress)(vb);
 

@@ -501,3 +501,6 @@ g. Much improved website genozip.com
 12.0.31 23/August/2021
 - Better GFF3 compression
 - Many minor bug fixes and cosmetics
+
+12.0.32 26/August/2021
+- Faster loading of reference files
