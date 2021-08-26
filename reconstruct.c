@@ -209,7 +209,10 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     }
     case SNIP_PAIR_LOOKUP: {
-        ASSERT (snip_ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->tag_name, vb->vblock_i);
+        ASSERT (snip_ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2 vb=%u. "
+                "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired flag. "
+                "You can see the Genozip version used to compress it with 'genocat -w %s'", snip_ctx->tag_name, vb->vblock_i, z_name);
+                
         ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags.all_the_same, true, &snip, &snip_len);
         reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len, reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
         break;

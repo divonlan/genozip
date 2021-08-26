@@ -199,7 +199,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         }
         else {
             // overcome bug in ZIP --pair - local sections with junk data created in addition to the expected b250.
-            // we ignore these local sections (or allow b250 to overwrite them)
+            // we ignore these local sections (or allow b250 to overwrite them)    
             if (is_local && ctx->pair_b250) continue;
 
             ctx->pair_flags = header->h.flags.ctx;            

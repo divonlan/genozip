@@ -542,20 +542,10 @@ bool fastq_piz_is_paired (void)
 
     // dts_paired is not set. This flag was introduced in 9.0.13 - if file is compressed with genozip version 10+, then for sure the file is not paired
     if (z_file->genozip_version >= 10) return false;
-
-    // dts_paired is not set, and this is v8 for v9. We proceed to inspect GPOS.local of the 2nd component to see if it is paired
-    Section sl = NULL;
-    sections_next_sec (&sl, SEC_TXT_HEADER); // first component txt header
-    sections_next_sec (&sl, SEC_TXT_HEADER); // second component txt header
-    sections_next_sec (&sl, SEC_VB_HEADER);  // first VB of second component txt header
-    // edge cases not handled well here ^ 1. VB header not found 2. 2nd component has no VBs, and VB header actually belongs to the 3rd component
     
-    // scan all B250 and Local looking for evidence of pairing
-    while ((++sl)->st == SEC_B250 || sl->st == SEC_LOCAL) 
-        if (sl->flags.ctx.paired) 
-            return (z_file->z_flags.dts_paired = true); // assign and return
-   
-    return false; // no evidence of pairing
+    // for v8, and v9 up to 9.0.12 it is paired iff user is tell us explicitly that this is a paired file
+    z_file->z_flags.dts_paired = flag.undocumented_dts_paired;
+    return flag.undocumented_dts_paired; 
 }
 
 // filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat) and each toplevel item

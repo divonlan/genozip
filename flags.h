@@ -36,6 +36,7 @@ typedef struct {
     #define PAIR_READ_1    1
     #define PAIR_READ_2    2
     int pair; // unfortunately we can't rely on enum being sizeof(int)
+    int undocumented_dts_paired; // undocumented flag to uncompress paired files older than 9.0.13 when genozip_header.dts_paired was introduced
 
     // genounzip options
     #define FLAG_BGZF_BY_ZFILE -1
