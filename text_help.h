@@ -41,8 +41,8 @@ static const char *help_footer[] = {
     "Requests for support for compression of additional public or proprietary genomic file formats: sales@genozip.com",
     "",
     "Citing: Do you find Genozip useful? Please cite:",
-    "  Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor. Bioinformatics, btab102, https://doi.org/10.1093/bioinformatics/btab102",
-    "  Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files. Bioinformatics, 36, 4091-4092",
+    "  Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor. Bioinformatics, 37, 2225–2230, https://doi.org/10.1093/bioinformatics/btab102",
+    "  Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files. Bioinformatics, 36, 4091-4092, https://doi.org/10.1093/bioinformatics/btaa290",
     "",
 };
 
