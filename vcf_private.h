@@ -173,11 +173,12 @@ typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFie
 #define HK_RENAME_TLAFER_ATTR "RenameTlafer="
 #define HK_RENAME_ALWAYS_ATTR "RenameAlways="
 #define TAG_SOURCE      "Source=\""GENOZIP_URL"\""
-#define KH_INFO_LUFT    "##INFO=<ID=" INFO_LUFT_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_COORDS "\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
-#define KH_INFO_PRIM    "##INFO=<ID=" INFO_PRIM_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
-#define KH_INFO_LREJ    "##INFO=<ID=" INFO_LREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
-#define KH_INFO_PREJ    "##INFO=<ID=" INFO_PREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
-#define KH_INFO_oSTATUS "##INFO=<ID=oSTATUS,Number=1,Type=String,Description=\"Lift status\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO         "##INFO=<ID="
+#define KH_INFO_LUFT    KH_INFO INFO_LUFT_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_COORDS "\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_PRIM    KH_INFO INFO_PRIM_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_LREJ    KH_INFO INFO_LREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_PREJ    KH_INFO INFO_PREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_oSTATUS KH_INFO "oSTATUS,Number=1,Type=String,Description=\"Lift status\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
 
 // header keys that appear only in a Primary VCF file
 #define HK_LUFT_CONTIG "##luft_contig="     

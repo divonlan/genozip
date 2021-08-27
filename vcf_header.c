@@ -221,8 +221,7 @@ static bool vcf_header_get_dual_coords (STRp(line), void *unused1, void *unused2
 }
 
 // PIZ with --luft - one line: remove fileformat, update *contig, *reference, dual_coordinates keys to Luft format
-static bool vcf_header_piz_liftover_header_one_line (STRp(line), 
-                                                     void *new_txt_header_, void *unused1, unsigned unused2)
+static bool vcf_header_piz_liftover_header (STRp(line), void *new_txt_header_, void *unused1, unsigned unused2)
 {
     Buffer *new_txt_header = (Buffer *)new_txt_header_;
 
@@ -236,14 +235,29 @@ static bool vcf_header_piz_liftover_header_one_line (STRp(line),
     return false; // continue iterating
 }
 
+// used with --single-coord: PIZ remove DVCF related lines
+static bool vcf_header_piz_single_coord (STRp(line), void *new_txt_header_, void *unused1, unsigned unused2)
+{
+    Buffer *new_txt_header = (Buffer *)new_txt_header_;
+
+    if (!LINEIS (HK_LUFT_CONTIG) && !LINEIS (HK_PRIM_CONTIG) &&
+        !LINEIS (HK_LUFT_REF) && !LINEIS (HK_PRIM_REF) &&
+        !LINEIS (HK_DC) && !LINEIS (HK_CHAIN) && !LINEIS (HK_ORIGINAL_REF) &&
+        !LINEIS (KH_INFO INFO_LUFT_NAME) && !LINEIS (KH_INFO INFO_PRIM_NAME) && !LINEIS (KH_INFO INFO_LREJ_NAME) && !LINEIS (KH_INFO INFO_PREJ_NAME))
+    
+        buf_add_more (NULL, new_txt_header, line, line_len, NULL);
+
+    return false; // continue iterating
+}
+
 // PIZ with --luft: remove fileformat, update *contig, *reference, dual_coordinates keys to Luft format
-static void vcf_header_piz_liftover_header (VBlockP txt_header_vb, Buffer *txt_header)
+static void vcf_header_rewrite_header (VBlockP txt_header_vb, Buffer *txt_header, TxtIteratorCallback callback)
 {
     #define new_txt_header txt_header_vb->codec_bufs[0]
 
     buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
 
-    txtfile_foreach_line (txt_header, false, vcf_header_piz_liftover_header_one_line, &new_txt_header, 0, 0, 0);
+    txtfile_foreach_line (txt_header, false, callback, &new_txt_header, 0, 0, 0);
 
     // replace txt_header with lifted back one
     buf_free (txt_header);
@@ -692,7 +706,10 @@ static bool vcf_inspect_txt_header_piz (VBlock *txt_header_vb, Buffer *txt_heade
 
     // if needed, liftover the header
     if (flag.luft && !flag.header_one && !flag.rejects_coord) 
-        vcf_header_piz_liftover_header (txt_header_vb, txt_header);
+        vcf_header_rewrite_header (txt_header_vb, txt_header, vcf_header_piz_liftover_header);
+
+    if (flag.single_coord)
+        vcf_header_rewrite_header (txt_header_vb, txt_header, vcf_header_piz_single_coord);
 
     // if needed, add ##INFO oSTATUS line
     if (flag.show_ostatus)

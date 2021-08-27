@@ -340,6 +340,13 @@ See: :ref:`Renaming and dropping annotations in a DVCF <dvcf-renaming>`
 
 |
 
+**--single-coord: Converting back to a single coordinate (i.e. normal) VCF file**
+
+| ``genocat --single-coord myfile.d.vcf.genozip``
+| ``genocat --single-coord --luft myfile.d.vcf.genozip``
+
+The option ``--single-coord`` removes all DVCF-specific lines from the VCF header, and removes the DVCF INFO annotations, leaving the file as a normal VCF file in single coordinates - either the Primary coordinates, or Luft coordinates (when combined with ``--luft``).
+
 **--show-dvcf and --show-ostatus - variant by variant info**
 
 Now let's look at a interesting analytics tool: ``--show-dvcf`` is a useful tool for getting visibility into how Genozip handled each variant. It may also be used in combination with ``--luft``:

@@ -172,6 +172,11 @@ One or more file names must be given.
    | See: :ref:`dvcf`
    |
 
+.. option:: --single-coord.  Remove all DVCF-specific lines from the VCF header and remove the DVCF INFO annotations. This leave the file as a normal VCF file in single coordinates - either the Luft coordinates (when combined with ``--luft``) or Primary coordinates.
+
+   | See: :ref:`dvcf`
+   |
+
 .. option:: -y, --show-dvcf.  For each variant show its coordinate system (Primary or Luft or Both) and its oStatus. May be used with or without --luft.
    
    | See: :ref:`dvcf`

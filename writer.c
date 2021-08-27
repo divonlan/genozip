@@ -267,6 +267,7 @@ static void writer_init_vb_info (void)
             ||  (flag.tail && sl->vblock_i < txt_file->tail_1st_vb) // --tail: this VB is too early, not needed
             ||  (flag.one_vb && flag.one_vb != sl->vblock_i)        // --one-vb: user only wants to see a single VB, and this is not it
             ||  (flag.no_header && comp->rejects_coord)             // --no-header: this a rejects VB which is displayed as a header
+            ||  (flag.single_coord && comp->rejects_coord)          // --single-coord - we don't need the ##primary_only / ##luft_only lines (we do need the TXT_HEADER tough as it contains the ##fileformat line)
             ||  (flag.header_only && !comp->rejects_coord)          // --header-only (except rejects VB)
             ||  !random_access_is_vb_included (sl->vblock_i);       // --regions: this VB is excluded
 

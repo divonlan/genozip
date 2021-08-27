@@ -288,6 +288,11 @@ Displays the file in the *Primary* coordinates.
 
 Displays the file in the *Luft* coordinates.
 
+| ``genocat --single-coord myfile.d.vcf.genozip``
+| ``genocat --single-coord --luft myfile.d.vcf.genozip``
+
+Removes all DVCF-specific lines from the VCF header, and removes the DVCF INFO annotations, leaving the file as a normal VCF file in single coordinates - either the Primary coordinates, or Luft coordinates (when combined with ``--luft``).
+
 ``genocat --show-ostatus myfile.d.vcf.genozip``
 
 Adds oSTATUS to the INFO field - the status of the variant relative to the lift process. 
