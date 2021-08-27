@@ -502,6 +502,16 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
          dict_id.num == _FASTQ_QUAL   || dict_id.num == _FASTQ_DOMQRUNS ))
         return true;
 
+    if (flag.seq_only && !flag.grep &&
+        (dict_id.num == _FASTQ_E1L    || dict_id.num == _FASTQ_DESC || dict_id_is_fastq_desc_sf(dict_id) || // we don't need the DESC line 
+         dict_id.num == _FASTQ_QUAL   || dict_id.num == _FASTQ_DOMQRUNS )) // we don't need the QUAL line
+        return true;
+
+    if (flag.qual_only && !flag.grep &&
+        (dict_id.num == _FASTQ_E1L || dict_id.num == _FASTQ_DESC || dict_id_is_fastq_desc_sf(dict_id) || // we don't need the DESC line 
+         (!flag.bases && (dict_id.num == _FASTQ_NONREF || dict_id.num == _FASTQ_NONREF_X || dict_id.num == _FASTQ_GPOS || dict_id.num == _FASTQ_STRAND)))) // we don't need the SEQ line        return true;
+        return true;
+
     // if we're doing --show-sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
     if (flag.collect_coverage && 
         (dict_id.num == _FASTQ_DESC     || 
@@ -559,6 +569,14 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
             // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
             if (flag.header_only_fast && !flag.grep && item >= 2) 
                 return false; // don't reconstruct this item (non-header textual)
+
+            // note: for seq_only and qual_only we show a newline from E2L, but we don't consume the other two newlines produced by this
+            // read, so we are going to show a newline from another line. only a potenial but highly unlikely problem if some lines have \n and some \r\n.
+            else if (flag.seq_only && !flag.grep && item != 2 && item != 3) 
+                return false; 
+
+            else if (flag.qual_only && !flag.grep && item != 2 && item != 6 && item != 7) 
+                return false; 
         }
     }
 
@@ -610,13 +628,16 @@ void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_le
     ASSERT (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
     vb->seq_len = (uint32_t)seq_len_64;
 
-    // normal reconstruction
-    if (!flag.collect_coverage) 
-        aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
-
     // just update coverage
-    else
+    if (flag.collect_coverage) 
         fastq_update_coverage (vb);
+
+    // --qual-only: only set vb->seq_len without reconstructing
+    else if (flag.qual_only) {}
+
+    // normal reconstruction
+    else 
+        aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
 }
 
 // filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat)

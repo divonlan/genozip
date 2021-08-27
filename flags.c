@@ -81,9 +81,11 @@ static void flags_show_flags (void)
     iprintf ("bgzf=%d\n", flag.bgzf);
     iprintf ("out_dt=%s\n", dt_name (flag.out_dt));
     iprintf ("header_one=%s\n", flag.header_one ? "true" : "false");
-    iprintf ("header_only_fast=%s\n", flag.header_only_fast ? "true" : "false");
     iprintf ("no_header=%d\n", flag.no_header);
     iprintf ("header_only=%s\n", flag.header_only ? "true" : "false");
+    iprintf ("header_only_fast=%s\n", flag.header_only_fast ? "true" : "false");
+    iprintf ("seq_only=%s\n", flag.seq_only ? "true" : "false");
+    iprintf ("qual_only=%s\n", flag.qual_only ? "true" : "false");
     iprintf ("regions=%s\n", flag.regions ? "true" : "false");
     iprintf ("gpos=%s\n", flag.gpos ? "true" : "false");
     iprintf ("samples=%s\n", flag.samples ? "true" : "false");
@@ -393,8 +395,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _nt {"tail",          required_argument, 0, 23                     }
         #define _G  {"drop-genotypes",no_argument,       &flag.drop_genotypes,   1 }
         #define _H1 {"no-header",     no_argument,       &flag.no_header,        1 }
-        #define _H0 {"header-only",   no_argument,       &flag.header_only,      1 }
         #define _1  {"header-one",    no_argument,       &flag.header_one,       1 }
+        #define _H0 {"header-only",   no_argument,       &flag.header_only,      1 }
+        #define _H2 {"seq-only",      no_argument,       &flag.seq_only,         1 }
+        #define _H3 {"qual-only",     no_argument,       &flag.qual_only,        1 }
         #define _wc {"with-chr",      no_argument,       &flag.with_chr,         1 }
         #define _aa {"allow-ambiguous", no_argument,     &flag.allow_ambiguous,  1 } 
         #define _IU {"IUPAC",         required_argument, 0, 24                     }
@@ -424,7 +428,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _st {"show-time",     optional_argument, 0, 1                      } 
         #define _sm {"show-memory",   no_argument,       &flag.show_memory,      1 } 
         #define _sS {"show-dvcf",     no_argument,       &flag.show_dvcf,        1 } 
-        #define _XS {"show-rename-tags", no_argument,    &flag.show_rename_tags,        1 } 
+        #define _XS {"show-rename-tags", no_argument,    &flag.show_rename_tags, 1 } 
         #define _sY {"show-ostatus",  no_argument,       &flag.show_ostatus,     1 } 
         #define _sh {"show-headers",  optional_argument, 0, 10                     } 
         #define _si {"show-index",    no_argument,       &flag.show_index,       1 } 
@@ -476,10 +480,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                      _sl, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM, _dr,              _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe,      _fa, _bs,                                  _rg, _sR,      _sC,      _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,              _oe, _aa, _al, _Lf, _T, _TT, _Xr, _Xd, _XS, _00 };
-        static Option genounzip_lo[]  = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                    _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                 _pt,                                                 _sR,      _sC,      _hC, _rA,      _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,                   _oe,                _T,                     _00 };
-        static Option genocat_lo[]    = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _Gt, _So, _Io, _IU, _iu, _GT,      _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _oc,    _xt, _dm, _dp, _dt,                _ds, _sS, _sY,                                                                   _pt,                 _fs, _g, _gw, _n, _nt, _nh,     _sR,      _sC, _cC, _hC, _rA, _rI, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR, _wc,    _oe,                _T,                     _00 };
-        static Option genols_lo[]     = { _lg,             _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                                        _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                                                      _sM,                                                                                     _b, _oe,                _T,                     _00 };
+        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                                _sl, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM, _dr,              _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe,      _fa, _bs,                                  _rg, _sR,      _sC,      _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,              _oe, _aa, _al, _Lf, _T, _TT, _Xr, _Xd, _XS, _00 };
+        static Option genounzip_lo[]  = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                              _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                 _pt,                                                 _sR,      _sC,      _hC, _rA,      _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,                   _oe,                _T,                     _00 };
+        static Option genocat_lo[]    = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT,      _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _oc,    _xt, _dm, _dp, _dt,                _ds, _sS, _sY,                                                                   _pt,                 _fs, _g, _gw, _n, _nt, _nh,     _sR,      _sC, _cC, _hC, _rA, _rI, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR, _wc,    _oe,                _T,                     _00 };
+        static Option genols_lo[]     = { _lg,             _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                                                  _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                                                      _sM,                                                                                     _b, _oe,                _T,                     _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -640,6 +644,9 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.one_component, flag.luft,         OT("luft", "v"),      "--component");
     CONFLICT (flag.xthreads,    flag.interleave,     "--interleave",       "--xthreads");
     CONFLICT (flag.snps_only,   flag.indels_only,    "--snps_only",        "--indels-only");
+    CONFLICT (flag.header_only, flag.seq_only,       "--seq-only",         "--header-only");
+    CONFLICT (flag.header_only, flag.qual_only,      "--qual-only",        "--header-only");
+    CONFLICT (flag.seq_only,    flag.qual_only,      "--seq-only",         "--qual-only");
     CONFLICT (flag.header_only, flag.interleave,     "--interleave",       "--header-only");
     CONFLICT (flag.regions,     flag.interleave,     "--interleave",       "--regions");
     CONFLICT (flag.header_only, flag.no_header==1,   OT("no-header", "H"), "header-only");
@@ -1059,7 +1066,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          // FASTA specific modifiers
          (dt == DT_FASTA && (flag.sequential || flag.header_only_fast || flag.header_one || flag.no_header)) || 
          // FASTQ specific modifiers
-         (dt == DT_FASTQ && (flag.header_only_fast || flag.bases)) || 
+         (dt == DT_FASTQ && (flag.header_only_fast || flag.seq_only || flag.qual_only || flag.bases)) || 
          // SAM specific modifiers
          (dt == DT_SAM   && (flag.sam_flag_filter || flag.sam_mapq_filter || flag.bases)) || 
          // CHAIN specific modifiers
@@ -1127,6 +1134,10 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     ASSINP (!flag.idxstats || flag.out_dt == DT_BAM || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ, // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout
             "--idxstats is not supported for %s because it only works on SAM, BAM and FASTQ data, but this file has %s data",
             z_name, dt_name (dt));
+
+    // --seq-only and --qual-only only work on FASTQ
+    ASSINP (!flag.seq_only  || flag.out_dt == DT_FASTQ, "--seq-only is not supported for %s because it only works on FASTQ data, but this file has %s data", z_name, dt_name (dt));
+    ASSINP (!flag.qual_only || flag.out_dt == DT_FASTQ, "--qual-only is not supported for %s because it only works on FASTQ data, but this file has %s data", z_name, dt_name (dt));
 
     // BAM limitations
     if (flag.out_dt == DT_BAM && flag.no_header == 1) {

@@ -340,9 +340,16 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                 && !piz_grep_match (rep_reconstruction_start, AFTERENT (char, vb->txt_data)))
                 vb->drop_curr_line = "grep";
 
-            // in FASTQ --header-only - remove the 3 non-header lines only after --grep
-            if (!vb->drop_curr_line && txt_file->data_type == DT_FASTQ && flag.header_only_fast) 
-                vb->txt_data.len = ENTNUM (vb->txt_data, strchr (rep_reconstruction_start, '\n') + 1);
+            if (!vb->drop_curr_line && txt_file->data_type == DT_FASTQ) {
+
+                // in FASTQ --header-only - remove the 3 non-header lines only after --grep
+                if (flag.header_only_fast) 
+                    vb->txt_data.len = ENTNUM (vb->txt_data, strchr (rep_reconstruction_start, '\n') + 1);
+
+                else if (flag.seq_only) {} // TO DO 
+
+                else if (flag.qual_only) {} // TO DO 
+            }
 
             if (vb->drop_curr_line) {
                 ASSERT (flag.maybe_vb_modified_by_reconstructor, "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code. vb_i=%u line_i=%"PRIu64, 

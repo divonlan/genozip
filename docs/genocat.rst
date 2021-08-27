@@ -278,6 +278,14 @@ One or more file names must be given.
 
           |
 
+.. option:: --seq-only.  Output only the sequence (nucleotide) lines.
+
+          |
+
+.. option:: --qual-only.  Output only the quality lines.
+
+          |
+
 .. option:: --bases [^]value.  Filter lines based on the IUPAC characters (bases) of the sequence data (see SAM/BAM options).
 
           |
