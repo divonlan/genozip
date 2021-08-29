@@ -538,7 +538,7 @@ static Digest piz_one_verify_digest (void)
     
     else if (flag.test) {
         progress_finalize_component ("FAILED!!!");
-        ABORT ("Error: %s of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",
+        ABORT ("Error: %s of original file=%s is different than decompressed file=%s\nPlease contact support@genozip.com to help fix this bug in genozip\n",
                digest_name(), digest_display (original_digest).s, digest_display (decompressed_file_digest).s);
     }
 
