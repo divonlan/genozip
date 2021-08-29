@@ -5,54 +5,17 @@ Compression
 
 Genozip can run on any type of file, but it is optimized to compress genomic file formats.
 
-**Simple compression and uncompression**
+**Simple compression and decompression**
 
     | ``genozip sample.bam``
     |
     | ``genounzip sample.bam.genozip``
 
-**Viewing compression stats**
+**Compressing and decompressing multiple files into a tar file (preserving directory structure)**
 
-    | ``genozip sample.bam --stats``
-    | 
-    | ``genocat sample.bam.genozip --stats``
-     
-**Compressing a FASTQ, SAM/BAM or VCF file(s) with a reference**
-
-    | First, create a refrence file: ``genozip --make-reference myfasta.fa``
+    | ``genozip *.bam --tar mysamples.tar``  
     |
-    | ``genozip --reference myfasta.ref.genozip mysample1.fq mysample2.fq mysample3.fq``
-    |
-    | Second, compress your file(s) using the reference:
-    |
-    | ``genozip --reference myfasta.ref.genozip mysample.bam``
-    |
-    | ``genozip --reference myfasta.ref.genozip mysamples.vcf.gz``
-    |
-    | ``genozip --reference myfasta.ref.genozip myread.fq``
-    |
-    | ``genozip --reference myfasta.ref.genozip *``
-    | compresses all files in the current directory
-
-    | *Notes*:
-    |
-    | 1. Genozip can compress with or without a reference - using a reference achieves much better compression when compressing FASTQ or unaligned SAM/BAM, and modestly better compression in other cases.
-    |
-    | 2. SAM/BAM - compression of aligned or unaligned SAM/BAM files is possible. Sorting makes no difference.
-    |
-    | 3. Long reads - compression of long reads (Pac Bio / Nanopore) achieves signficantly better results when compressing an aligned BAM vs an unaligned BAM or FASTQ.
-    |
-    | 4. Compression of CRAM (but not SAM or BAM) files requires samtools to be installed.
-    |
-    | 5. Use ``--REFERENCE`` instead of ``--reference`` to store the relevant parts of the reference file as part of the compressed file itself, which will then allow decompression with ``genounzip`` or ``genocat`` without need of the reference file.
-
-**Compressing and uncompressing FASTQ with paired-end reads with --pair** 
-
-    | ``genozip --reference myfasta.ref.genozip --pair mysample-R1.fastq.gz mysample-R2.fastq.gz``
-    |
-    | ``genounzip --reference myfasta.ref.genozip mysample-R1+2.fastq.genozip``
-
-    | *Note*: with ``--pair`` genozip uses similarities between the files to enhance compression.
+    | ``tar xvf mydata.tar | genounzip --files-from - --replace``
 
 **Using genozip in a pipline**
 
@@ -60,6 +23,10 @@ Genozip can run on any type of file, but it is optimized to compress genomic fil
     |
     | ``my-sam-outputing-method | genozip - --input sam --output mysample.sam.genozip``
 
+**Viewing compression stats**
+
+    | ``genocat sample.bam.genozip --stats``
+     
 **Lookups, downsampling and other subsets**
 
     | ``genocat --regions chr1:10000-20000 mysamples.vcf.genozip``  
@@ -81,14 +48,6 @@ Genozip can run on any type of file, but it is optimized to compress genomic fil
     | Displays 1 in 10 reads.
 
     | *Note*: These are just some examples - there are many more subsetting options see :doc:`genocat`.
-    |
-
-**Binding mutiple files into a single genozip file and unbinding**
-
-    | ``genozip *.fq.gz -o all-samples.fq.genozip``  
-    | Binds all .fq.gz files in the current directory.
-    |
-    | ``genounzip my-project.fq.genozip``
 
 **Compressing even better, with some minor modifications of the data**
 
@@ -107,10 +66,6 @@ Genozip can run on any type of file, but it is optimized to compress genomic fil
 **Converting SAM/BAM to FASTQ**
 
     | ``genounzip file.bam.genozip --fastq``
-
-**Converting 23andMe to VCF**
-
-    | ``genounzip genome_mydata-Full.txt.genozip --vcf -e GRCh37.ref.genozip``
 
 **Generating a samtools/bcftools index file when uncompressing**
     | ``genounzip file.bam.genozip --index``

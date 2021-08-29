@@ -3,7 +3,7 @@
 Losslessness
 ============
 
-Genozip compression is `lossless <https://en.wikipedia.org/wiki/Lossless_compression>`_ relative to the underlying data, which means that the data reconstructed during uncompression is **exactly identical** to the original data compressed.
+Genozip compression is `lossless <https://en.wikipedia.org/wiki/Lossless_compression>`_ relative to the underlying data, which means that the data reconstructed during decompression is **exactly identical** to the original data compressed.
 
 **Verification of Losslessness**
 
