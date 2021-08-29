@@ -199,23 +199,3 @@ const char *arch_get_user_host (void)
     return user_host;
 }
 
-bool arch_am_i_in_docker (void)
-{
-    FILE *fp = fopen ("/.dockerenv", "r");
-    if (!fp) return false;
-
-    fclose (fp);
-    return true;
-}
-
-const char *arch_get_distribution (void)
-{
-#ifdef DISTRIBUTION
-    return DISTRIBUTION;
-#endif
-    
-    if (arch_am_i_in_docker()) return "Docker";
-
-    else return "github";
-}
-

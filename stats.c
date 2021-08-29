@@ -106,7 +106,7 @@ static void stats_output_file_metadata (Buffer *buf)
 
 
     bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
-               GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
+               GENOZIP_CODE_VERSION, DISTRIBUTION, str_time().s);
 
     if (license_has_details())
         bufprintf (evb, buf, "%s\n", license_get_one_line());

@@ -158,6 +158,9 @@ debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 opt   : CFLAGS += -g $(OPTFLAGS)
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
+docker : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"Docker\"
+docker : $(OBJDIR) $(EXECUTABLES) LICENSE.txt
+
 -include $(DEPS)
 
 $(OBJDIR): 

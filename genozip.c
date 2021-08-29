@@ -125,7 +125,7 @@ static void main_print_help (bool explicit)
 
 static void main_print_version()
 {
-    iprintf ("version=%s distribution=%s\n", GENOZIP_CODE_VERSION, arch_get_distribution());  
+    iprintf ("version=%s distribution=%s\n", GENOZIP_CODE_VERSION, DISTRIBUTION);  
 }
 
 static void main_genounzip (const char *z_filename, const char *txt_filename, int z_file_i, bool is_last_z_file)
@@ -553,7 +553,7 @@ int main (int argc, char **argv)
         // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
         // coming from a pipe. the user must use "-" to redirect from stdin
         else if (command == -1 && optind == argc && !flag.out_filename && !flag.files_from &&
-                 (isatty(0) || arch_am_i_in_docker())) {
+                 (isatty(0) || !strcmp (DISTRIBUTION, "Docker"))) {
             // case: --register
             if (flag.do_register) {
                 license_register();
