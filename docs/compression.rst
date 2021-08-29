@@ -11,11 +11,26 @@ Genozip can run on any type of file, but it is optimized to compress genomic fil
     |
     | ``genounzip sample.bam.genozip``
 
+    
+**Compressing and decompressing FASTQ with paired-end reads with a reference** 
+
+    | First, create a refrence file. This is a one-time step, that may take up to 10 minutes: 
+    | ``genozip --make-reference myfasta.fa``
+    |   
+    | Second, compress or decompresses your file(s) using the reference:
+    | ``genozip --reference myfasta.ref.genozip --pair mysample-R1.fastq.gz mysample-R2.fastq.gz``
+    |
+    | ``genounzip --reference myfasta.ref.genozip mysample-R1+2.fastq.genozip``
+    |
+    | :ref:`Details <fastq>`
+    
 **Compressing and decompressing multiple files into a tar file (preserving directory structure)**
 
     | ``genozip *.bam --tar mysamples.tar``  
     |
     | ``tar xvf mydata.tar | genounzip --files-from - --replace``
+    |
+    | :ref:`Details <archiving>`
 
 **Using genozip in a pipline**
 
@@ -62,10 +77,14 @@ Genozip can run on any type of file, but it is optimized to compress genomic fil
 
     | ``genozip file.vcf --password abc``
     | ``genounzip file.vcf.genozip --password abc``
+    |
+    | :ref:`Details <encryption>`
 
 **Converting SAM/BAM to FASTQ**
 
     | ``genounzip file.bam.genozip --fastq``
+    |
+    | :ref:`Details <bam>`
 
 **Generating a samtools/bcftools index file when uncompressing**
     | ``genounzip file.bam.genozip --index``
