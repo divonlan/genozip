@@ -150,7 +150,7 @@ Sets the level BGZF compression (for .fq.gz output format) - from 0 (no compress
 | ``genocat myfile.fq.genozip | my-pipeline                     # not paired-end`` 
 | ``genocat myfile.R1+2.fq.genozip --interleaved | my-pipeline  # paired-end`` 
 
-**Showing only one of the four FASTQ lines for each read**
+**Showing only the Description, Sequence or Quality line for each read**
 
 | ``genocat --header-only myfile.fq.genozip``
 | ``genocat --seq-only myfile.fq.genozip``
