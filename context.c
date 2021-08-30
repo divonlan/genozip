@@ -1336,7 +1336,7 @@ void ctx_read_all_dictionaries (void)
             Context *ctx = &z_file->contexts[did_i];
             if (!ctx->dict.len) continue;
 
-            if (flag.list_chroms && ctx->did_i == CHROM)
+            if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
                 str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, z_file->data_type == DT_SAM);
             
             if (flag.show_dict || ctx_is_show_dict_id (ctx->dict_id)) {
