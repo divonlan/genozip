@@ -259,26 +259,26 @@ static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, Context *domq
 void codec_domq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
 {
     bool reconstruct = !piz_is_skip_section (vb, SEC_LOCAL, qual_ctx->dict_id);
-
     Context *domqruns_ctx = qual_ctx + 1;   // the qdomruns context is always one after qual context
     char dom = (char)qual_ctx->local.param; // passed from SectionHeaderCtx.local_param
 
     uint32_t qual_len=0;
-    while (qual_len < vb->seq_len) {
+    uint32_t expected_qual_len = vb->seq_len;
+    while (qual_len < expected_qual_len) {
 
         char c = NEXTLOCAL (char, qual_ctx);
         if (c != NO_DOMS) {
-            qual_len += codec_domq_reconstruct_dom_run (vb, domqruns_ctx, dom, vb->seq_len - qual_len);
+            qual_len += codec_domq_reconstruct_dom_run (vb, domqruns_ctx, dom, expected_qual_len - qual_len);
 
             // case: we're at an end of a line that ended with a run
-            if (qual_len == vb->seq_len) {
+            if (qual_len == expected_qual_len) {
                 qual_ctx->next_local--; // unconsume c
                 break;
             }
         }
 
         else if ((uint32_t)qual_ctx->local.len == qual_ctx->next_local) { // this is an final-run indicator
-            qual_len += codec_domq_reconstruct_dom_run (vb, domqruns_ctx, dom, vb->seq_len - qual_len);
+            qual_len += codec_domq_reconstruct_dom_run (vb, domqruns_ctx, dom, expected_qual_len - qual_len);
             qual_ctx->next_local--; // leave it unconsumed as it might be needed by the next lines
             break;
         }
@@ -286,11 +286,13 @@ void codec_domq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
             c = NEXTLOCAL (char, qual_ctx);
 
         if (reconstruct)
-            RECONSTRUCT1 (c==' ' ? '*' : c); // in SAM, sam_zip_qual re-wrote a '*' marking 'unavailable' as ' ' to avoid confusing with '*' as a valid quality score
+            RECONSTRUCT1 (c == ' ' ? '*' : c); // in SAM, sam_zip_qual re-wrote a '*' marking 'unavailable' as ' ' to avoid confusing with '*' as a valid quality score
+
+        if (c == ' ') expected_qual_len = 1;
 
         qual_len++;
     }
 
-    ASSERT (qual_len == vb->seq_len, "expecting qual_len(%u) == vb->seq_len(%u) in vb_i=%u (last_line=%"PRIu64", num_lines=%"PRIu64") line_i=%"PRIu64"", 
-            qual_len, vb->seq_len, vb->vblock_i, vb->first_line + vb->lines.len-1, vb->lines.len, vb->line_i);   
+    ASSERT (qual_len == expected_qual_len, "expecting qual_len(%u) == expected_qual_len(%u) in vb_i=%u (last_line=%"PRIu64", num_lines=%"PRIu64") line_i=%"PRIu64"", 
+            qual_len, expected_qual_len, vb->vblock_i, vb->first_line + vb->lines.len-1, vb->lines.len, vb->line_i);   
 }

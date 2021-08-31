@@ -22,10 +22,10 @@
 // leading_zeros is number of most significant zeros
 #ifndef __GNUC__
   #define trailing_zeros(x) ({ __typeof(x) _r; _BitScanReverse64(&_r, (x)); _r; })
-  #define leading_zeros(x) ({ __typeof(x) _r; _BitScanForward64(&_r, (x)); _r; })
+  #define leading_zeros(x)  ({ __typeof(x) _r; _BitScanForward64(&_r, (x)); _r; })
 #else
   #define trailing_zeros(x) ((x) ? (__typeof(x))__builtin_ctzll(x) : (__typeof(x))sizeof(x)*8)
-  #define leading_zeros(x) ((x) ? (__typeof(x))__builtin_clzll(x) : (__typeof(x))sizeof(x)*8)
+  #define leading_zeros(x)  ((x) ? (__typeof(x))__builtin_clzll(x) : (__typeof(x))sizeof(x)*8)
 #endif
 
 // Get index of top set bit. If x is 0 return nbits
@@ -37,7 +37,7 @@
 #define roundup_bits2bytes64(bits) (roundup_bits2words64(bits)*8) // number of bytes in the array of 64b words needed for bits
 
 // Round a number up to the nearest number that is a power of two (fixed by Divon)
-#define roundup2pow(x) (__builtin_popcountll(x)==1 ? (x) : (1UL << (64 - leading_zeros(x))))
+#define roundup2pow(x) ((__builtin_popcountll(x)==1) ? (x) : ((__typeof(x))1 << (64 - leading_zeros(x))))
 
 #define rot32(x,r) (((x)<<(r)) | ((x)>>(32-(r))))
 #define rot64(x,r) (((x)<<(r)) | ((x)>>(64-(r))))

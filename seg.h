@@ -21,7 +21,7 @@ extern const char *seg_get_next_item (void *vb, const char *str, int *str_len,
                                       GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
                                       unsigned *len, char *separator, bool *has_13, // out
                                       const char *item_name);
-extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name);
+extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, const char *item_name);
 
 extern WordIndex seg_by_ctx_do (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
 #define seg_by_ctx(vb,snip,snip_len,ctx,add_bytes)               seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), (ctx), (add_bytes), NULL)
@@ -69,9 +69,9 @@ extern WordIndex seg_delta_vs_other_do (VBlockP vb, Context *ctx, Context *other
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local);
 
-typedef struct { bool slash, pipe, colon, dot, whitespace; /* seperators */ } SegCompoundArg; 
+extern const char sep_with_space[], sep_without_space[], sep_pipe_only[];
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
-                                SegCompoundArg arg, unsigned nonoptimized_len, unsigned add_for_eol);
+                                const char *is_sep, unsigned nonoptimized_len, unsigned add_for_eol);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 
@@ -163,7 +163,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
     GET_NEXT_ITEM_NL (f); \
     seg_by_did_i (vb, field_start, field_len, f, field_len+1);
 
-#define SEG_EOL(f,account_for_ascii10) seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); 
+#define SEG_EOL(f,account_for_ascii10) do { seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); } while (0)
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
     ASSINP (condition, "Error in file %s: "format "\n\nvb_line_i:%"PRIu64" vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\

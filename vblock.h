@@ -71,6 +71,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
+    bool testing_memory;       /* ZIP: set if VB is run from zip_dynamically_set_max_memory */ \
     \
     /* data for dictionary compressing */ \
     char *fragment_start;        \

@@ -474,12 +474,11 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     if (!recursion_level) {
 
         ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspeciously high and might indicate a bug", seq_len);
-        
-        buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8, uint8_t, CTX_GROWTH, "contexts->local"); 
+
+        buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (vb->ref_and_seq_consumed), vb->lines.len * (vb->ref_and_seq_consumed+5) / 8, uint8_t, CTX_GROWTH, "contexts->local"); 
+        buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
 
         buf_alloc (vb, &nonref_ctx->local, seq_len + 3, vb->lines.len * seq_len / 4, uint8_t, CTX_GROWTH, "contexts->local"); 
-
-        buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
     }
 
     // we can't compare to the reference if it is unaligned: we store the seqeuence in nonref without an indication in the bitmap
@@ -1325,8 +1324,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     GET_NEXT_ITEM (SAM_QNAME);
-    SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
-    seg_compound_field (vb_, CTX(SAM_QNAME), field_start, field_len, arg, 0, 1 /* \n */);
+    seg_compound_field (vb_, CTX(SAM_QNAME), field_start, field_len, sep_without_space, 0, 1 /* \n */);
     CTX(SAM_QNAME)->last_txt_index = ENTNUM (vb->txt_data, field_start); // store for kraken
     vb->last_txt_len (SAM_QNAME) = field_len;
 

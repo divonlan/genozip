@@ -222,17 +222,15 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     GET_NEXT_ITEM (KRAKEN_QNAME);
-    SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true };
-    seg_compound_field ((VBlockP)vb, CTX(KRAKEN_QNAME), field_start, field_len, arg, 0, 1 /* \t */);
+    seg_compound_field ((VBlockP)vb, CTX(KRAKEN_QNAME), field_start, field_len, sep_without_space, 0, 1 /* \t */);
 
     vb->last_int(KRAKEN_QNAME) += field_len+1; // count total QNAME lengths in this VB (+1 for separator)
 
     SEG_NEXT_ITEM (KRAKEN_TAXID);
     GET_NEXT_ITEM (KRAKEN_SEQLEN); // for paired files we will have eg "150|149", for non-paired eg "150"
     if (memchr (field_start, '|', field_len)) { 
-        SegCompoundArg arg = { .pipe = true };
         // compound and not array, bc pair_2's seq_len is often a lot more random than pair_1's so use different contexts
-        seg_compound_field ((VBlockP)vb, CTX(KRAKEN_SEQLEN), field_start, field_len, arg, 0, 1 /* \t */); 
+        seg_compound_field ((VBlockP)vb, CTX(KRAKEN_SEQLEN), field_start, field_len, sep_pipe_only, 0, 1 /* \t */); 
     }
     else 
         seg_by_did_i (vb, field_start, field_len, KRAKEN_SEQLEN, field_len+1);

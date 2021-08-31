@@ -129,7 +129,7 @@ static void vcf_header_get_attribute (STRp(line), unsigned key_len, STRp(attr), 
     *snip = *snip_len ? start : NULL;
 
     if (remove_quotes && *snip) {
-        ASSINP ((*snip)[0]=='"' && (*snip)[*snip_len-1]=='"', "Expecting value an attribute to be enclosed in quotes. Line=\"%.*s\"", STRf(line));
+        ASSINP ((*snip)[0]=='"' && (*snip)[*snip_len-1]=='"', "Expecting value an attribute %.*s to be enclosed in quotes. Line=\"%.*s\"", STRf(attr), STRf(line));
         (*snip)++;
         (*snip_len) -= 2;
     }

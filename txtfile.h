@@ -21,8 +21,8 @@ extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
 
 extern Digest txtfile_read_header (bool is_first_txt);
 
-#define TXTFILE_READ_VB_PADDING 16 // txtfile_read_vblock ensure this quanity of bytes at the end of vb.txt_data are unused
-extern void txtfile_read_vblock (VBlockP vb, bool force_uncompress);
+#define TXTFILE_READ_VB_PADDING 16 // txtfile_read_vblock ensure this quantity of bytes at the end of vb.txt_data are unused
+extern void txtfile_read_vblock (VBlockP vb);
 
 typedef bool (*TxtIteratorCallback)(const char *line, unsigned line_len, void *cb_param1, void *cb_param2, unsigned cb_param3);
 extern char *txtfile_foreach_line (BufferP txt_header, bool reverse, TxtIteratorCallback callback, void *cb_param1, void *cb_param2, unsigned cb_param3, int64_t *line_len);

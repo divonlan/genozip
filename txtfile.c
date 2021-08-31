@@ -380,10 +380,10 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     return -1; // cannot find \n in the data starting first_i
 }
 
-static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memory)
+static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
 {
     int32_t passed_up_len;
-    int32_t i=vb->txt_data.len-1; // next index to test (going backwards)
+    int32_t last_i = vb->txt_data.len-1; // next index to test (going backwards)
 
     // case: the data is BGZF-compressed in vb->compressed, except for passed down data from prev VB        
     // uncompress one block at a time to see if its sufficient. usually, one block is enough
@@ -395,7 +395,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memo
             BgzfBlockZip *bb = ENT (BgzfBlockZip, vb->bgzf_blocks, block_i);
             bgzf_uncompress_one_block (vb, bb);
 
-            passed_up_len = (DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &i));
+            passed_up_len = (DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &last_i));
             if (passed_up_len >= 0) goto done; // we have the answer (callback returns -1 if no it needs more data)
         }
 
@@ -405,10 +405,10 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb, bool testing_memo
     }
 
     // test remaining txt_data including passed-down data from previous VB
-    passed_up_len = (DT_FUNC(txt_file, unconsumed)(vb, 0, &i));
+    passed_up_len = (DT_FUNC(txt_file, unconsumed)(vb, 0, &last_i));
 
     // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
-    if (testing_memory && passed_up_len < 0) return (uint32_t)-1;
+    if (vb->testing_memory && passed_up_len < 0) return (uint32_t)-1;
 
     ASSERT (passed_up_len >= 0, "Reason: failed to find a full line (i.e. newline-terminated) in vb=%u data_type=%s codec=%s.\n"
             "Known possible causes:\n"
@@ -426,14 +426,14 @@ done:
 }
 
 // ZIP main threads
-void txtfile_read_vblock (VBlock *vb, bool testing_memory)
+void txtfile_read_vblock (VBlock *vb)
 {
     START_TIMER;
 
     ASSERT_DT_FUNC (txt_file, unconsumed);
 
     uint64_t pos_before = 0;
-    if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file) && !testing_memory)
+    if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file) && !vb->testing_memory)
         pos_before = file_tell (txt_file, true);
 
     buf_alloc (vb, &vb->txt_data, 0, flag.vblock_memory, char, 1, "txt_data");    
@@ -451,7 +451,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
 
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
-                             testing_memory           ||
+                             vb->testing_memory       ||
                              flag.optimize_DESC       || // fastq_zip_read_one_vb needs to count lines
                              flag.add_line_numbers;      // vcf_zip_read_one_vb   needs to count lines
 
@@ -491,10 +491,10 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     // note: even if we haven't read any new data (everything was passed down), we still might data to pass up - eg
     // in FASTA with make-reference if we have a lots of small contigs, each VB will take one contig and pass up the remaining
     if (!passed_up_len && vb->txt_data.len) {
-        passed_up_len = txtfile_get_unconsumed_to_pass_up (vb, testing_memory);
+        passed_up_len = txtfile_get_unconsumed_to_pass_up (vb);
 
         // case: return if we're testing memory, and there is not even one line of text  
-        if (testing_memory && passed_up_len == (uint32_t)-1) {
+        if (vb->testing_memory && passed_up_len == (uint32_t)-1) {
             buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, char, 0, 0, "txt_file->unconsumed_txt"); 
             buf_free (&vb->txt_data);
             return;
@@ -528,7 +528,7 @@ void txtfile_read_vblock (VBlock *vb, bool testing_memory)
     vb->reject_bytes = MIN (vb->recon_size, txt_file->reject_bytes);
     txt_file->reject_bytes -= vb->reject_bytes;
 
-    if (!testing_memory) {
+    if (!vb->testing_memory) {
 
         txt_file->txt_data_so_far_single += vb->txt_data.len;
     

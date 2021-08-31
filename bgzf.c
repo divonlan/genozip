@@ -23,19 +23,25 @@
 
 #define uncomp_size param // for vb->compressed, we store the uncompressed size in param
 
-// all data in Little Endian
+// all data in Little Endian. Defined in https://datatracker.ietf.org/doc/html/rfc1952 and https://samtools.github.io/hts-specs/SAMv1.pdf
 typedef struct __attribute__ ((__packed__)) BgzfHeader {
-    uint8_t id1, id2, cm, flg;
-    uint32_t mtime;
-    uint8_t xfl, os;
-    uint16_t xlen;
-    uint8_t si1, si2;
-    uint16_t slen, bsize;
+    uint8_t id1;    // Gzip id - must be 31
+    uint8_t id2;    // Gzip id - must be 139
+    uint8_t cm;     // Compression Method - must be 8
+    uint8_t flg;    // Flags - must be 4 (FEXTRA)
+    uint32_t mtime; // Modification Time
+    uint8_t xfl;    // eXtra Flags
+    uint8_t os;     // Operating System
+    uint16_t xlen;  // Size of extra fields - 6 if contain only BGZF (may be more)
+    uint8_t si1;    // BGZF id - must be 66
+    uint8_t si2;    // BGZF id - must be 67
+    uint16_t slen;  // BGZF extra field length - must be 2
+    uint16_t bsize; // BGZF extra field - (compressed block size -1)
 } BgzfHeader;
 
 typedef struct __attribute__ ((__packed__)) BgzfFooter {
-    uint32_t crc32;
-    uint32_t isize;
+    uint32_t crc32; // CRC32 of uncompressed data
+    uint32_t isize; // Input (i.e. uncompressed) Size
 } BgzfFooter;
 
 // possible return values, see libdeflate_result in libdeflate.h

@@ -999,6 +999,12 @@ void file_close (File **file_p,
     }
 
     else if (file->file && file->supertype == Z_FILE) {
+
+        // if there are still DVCF rejects files when close z_file (eg when closing from main_exit()), delete them too
+        for (unsigned i=0; i < 2; i++)
+            if (file->rejects_file_name[i]) 
+                remove (file->rejects_file_name[i]); // ignore errors
+    
         if (tar_is_tar() && file->mode != READ)
             tar_close_file (&file->file);
         else
@@ -1006,8 +1012,10 @@ void file_close (File **file_p,
     }
 
     // in case the unlinking didn't work (eg NTFS) - remove the rejects file now that its closed
-    if (file->supertype == TXT_FILE && flag.rejects_coord) 
+    if (file->supertype == TXT_FILE && flag.rejects_coord) {
         remove (z_file->rejects_file_name[flag.rejects_coord-1]); // ignore errors
+        FREE (z_file->rejects_file_name[flag.rejects_coord-1]);
+    }
 
     // create an index file using samtools, bcftools etc, if applicable
     if (index_txt) file_index_txt (file);
@@ -1238,33 +1246,44 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
 }
 
 // writes data to a file and flushes it, returns true if successful
+static char *put_data_tmp_filename = NULL; // never freed once allocated to reduce race conditions with file_put_data_abort
 bool file_put_data (const char *filename, const void *data, uint64_t len)
 {
+    put_data_tmp_filename = MALLOC (strlen(filename)+10);
     // we first write to tmp_filename, and after we complete and flush, we rename to the final name
     // this is important, eg for the reference cache files - if a file exists (in its final name) - then it is fully written
-    char tmp_filename[strlen(filename)+10];
-    sprintf (tmp_filename, "%s.tmp", filename);
+    sprintf (put_data_tmp_filename, "%s.tmp", filename);
 
     file_remove (filename, true);
-    file_remove (tmp_filename, true);
+    file_remove (put_data_tmp_filename, true);
 
-    FILE *file = fopen (tmp_filename, "wb");
+    FILE *file = fopen (put_data_tmp_filename, "wb");
     if (!file) return false;
     
     size_t written = fwrite (data, 1, len, file);
     
     SAVE_VALUE (errno);
     fflush (file);    
-    FCLOSE (file, tmp_filename); 
+    FCLOSE (file, put_data_tmp_filename); 
     RESTORE_VALUE (errno); // in cases caller wants to print fwrite error
 
     if (written == len) { // successful
-        ASSERT (!rename (tmp_filename, filename), "failed to rename %s to %s: %s", 
-                tmp_filename, filename, strerror (errno));
+        ASSERT (!rename (put_data_tmp_filename, filename), "failed to rename %s to %s: %s", 
+                put_data_tmp_filename, filename, strerror (errno));
         return true;
     } 
-    else
+    else {
         return false;
+    }
+}
+
+// error handling: unlink the file currently being written (the actual writing will terminate when the thread terminates)
+void file_put_data_abort (void)
+{
+    if (put_data_tmp_filename) {
+        unlink (put_data_tmp_filename); // ignore errors
+        remove (put_data_tmp_filename); // in case unlinked failed - eg NTFS - ignore errors
+    }
 }
 
 void file_assert_ext_decompressor (void)

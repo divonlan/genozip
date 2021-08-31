@@ -1229,9 +1229,11 @@ static void ctx_dict_read_one_vb (VBlockP vb)
 
         // get size: for multi-fragment dictionaries, first fragment will be at or less than a power of 2, but more than the previous power of two.
         // this allows us to calculate the frag_size with which this dictionary was compressed and hence an upper bound on the size
-        uint32_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : roundup2pow (vb->fragment_len) * num_fragments;
+        uint64_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : ((uint64_t)roundup2pow (vb->fragment_len) * (uint64_t)num_fragments);
         
         buf_alloc (evb, &dict_ctx->dict, 0, size_upper_bound, char, 0, "contexts->dict");
+        dict_ctx->dict.param = ((uint64_t)num_fragments) << 32 | (uint64_t)vb->fragment_len; // for error reporting
+
         buf_set_overlayable (&dict_ctx->dict);
     }
 
@@ -1245,9 +1247,10 @@ static void ctx_dict_read_one_vb (VBlockP vb)
         vb->fragment_ctx         = dict_ctx;
         vb->fragment_start       = ENT (char, dict_ctx->dict, dict_ctx->dict.len);
         dict_ctx->word_list.len += header ? BGEN32 (header->num_snips) : 0;
-        dict_ctx->dict.len      += vb->fragment_len;
+        dict_ctx->dict.len      += (uint64_t)vb->fragment_len;
 
-        ASSERT (dict_ctx->dict.len <= dict_ctx->dict.size, "Dict %s len=%u exceeds allocated size=%u", dict_ctx->tag_name, (unsigned) dict_ctx->dict.len, (unsigned)dict_ctx->dict.size);
+        ASSERT (dict_ctx->dict.len <= dict_ctx->dict.size, "Dict %s len=%"PRIu64" exceeds allocated size=%"PRIu64" (num_fragments=%u fragment_1_len=%u)", 
+                dict_ctx->tag_name, dict_ctx->dict.len, dict_ctx->dict.size, (unsigned)(dict_ctx->dict.param >> 32), (unsigned)(dict_ctx->dict.param & 0xffffffffULL));
     }
 
 done: 
@@ -1287,7 +1290,7 @@ static void ctx_dict_build_word_lists (void)
         buf_set_overlayable (&ctx->word_list);
 
         const char *word_start = ctx->dict.data;
-        for (uint32_t snip_i=0; snip_i < ctx->word_list.len; snip_i++) {
+        for (uint64_t snip_i=0; snip_i < ctx->word_list.len; snip_i++) {
 
             const char *c=word_start; while (*c) c++;
 

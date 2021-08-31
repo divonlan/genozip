@@ -155,6 +155,8 @@ void random_access_update_pos (VBlock *vb, Coords dc, DidIType did_i_pos)
 // ZIP: update increment reference pos
 void random_access_increment_last_pos (VBlockP vb, Coords dc, PosType increment)
 {
+    ASSERTISALLOCED (vb->ra_buf[DC]);
+
     RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf[DC], vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
 
     if (!ra_ent->min_pos) ra_ent->min_pos = 1; 
@@ -164,12 +166,16 @@ void random_access_increment_last_pos (VBlockP vb, Coords dc, PosType increment)
 // ZIP: update last reference pos
 void random_access_update_last_pos (VBlock *vb, Coords dc, PosType last_pos)
 {
+    ASSERTISALLOCED (vb->ra_buf[DC]);
+    
     RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf[DC], vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
     if (last_pos > ra_ent->max_pos) ra_ent->max_pos = last_pos;
 }
 
 void random_access_update_to_entire_chrom (VBlockP vb, Coords dc, PosType first_pos_of_chrom, PosType last_pos_of_chrom)
 {
+    ASSERTISALLOCED (vb->ra_buf[DC]);
+    
     RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf[DC], vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
     ra_ent->min_pos = first_pos_of_chrom;
     ra_ent->max_pos = last_pos_of_chrom;
@@ -191,7 +197,7 @@ void random_access_merge_in_vb (VBlock *vb, Coords dc)
 
     for (unsigned i=0; i < src_ra_len; i++) {
         
-        if (!src_ra[i].min_pos) continue; // chrom node_index=i has no range in this vb
+        if (!src_ra[i].vblock_i) continue; // not used in this VB
 
         RAEntry *dst_ra = &NEXTENT (RAEntry, *z_buf);
 
@@ -422,9 +428,11 @@ void random_access_load_ra_section (SectionType sec_type, DidIType chrom_did_i, 
     }
 }
 
+// returns true if successful
 void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosType *min_pos, PosType *max_pos)
 {
     const RAEntry *ra = random_access_get_first_ra_of_vb (vblock_i);
+    ASSERT (ra, "vblock_i=%u has no RAEntry", vblock_i);
 
     *chrom_index = ra->chrom_index;
     *min_pos     = ra->min_pos;

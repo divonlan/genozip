@@ -86,7 +86,7 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = vb->line_start = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = vb->num_nondrop_lines = 0;
-    vb->is_rejects_vb = false;    
+    vb->is_rejects_vb = vb->testing_memory = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->drop_curr_line = vb->chrom_name = vb->fragment_start = NULL;

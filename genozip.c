@@ -58,6 +58,7 @@ void main_exit (bool show_stack, bool is_error)
         close (2);
         url_kill_curl();  /* <--- BREAKPOINT */
         file_kill_external_compressors(); 
+        file_put_data_abort();
     }
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
@@ -596,6 +597,9 @@ int main (int argc, char **argv)
     if (command == VERSION) { main_print_version();   return 0; }
     if (command == LICENSE) { license_display();      return 0; }
     if (command == HELP)    { main_print_help (true); return 0; }
+
+    ASSINP (num_files || !isatty(0) || command != ZIP, "missing input file. Try: %s myfile.bam", global_cmd);
+    ASSINP (num_files || !isatty(0) || command != PIZ, "missing input file. Try: %s myfile.bam.genozip", global_cmd);
 
     primary_command = command; 
 

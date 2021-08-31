@@ -29,6 +29,8 @@ typedef struct VBlockFASTA {
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB is interpreted as a description, not a comment
     enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP & PIZ (FASTA only, not REF)
 
+    bool vb_has_no_newline;         // ZIP: VB ends contains part of a sequence, not ending in a newline, which is continued in the next VB
+    bool ra_initialized;            // ZIP: RA was initialized for this VB
     uint32_t lines_this_contig;     // ZIP
 
     // caching of seq line snips

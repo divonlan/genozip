@@ -362,7 +362,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG (<-- this is Illumina format)
     // See here for details of Illumina subfields: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     unsigned FASTQ_DESC_len;
-    const char *FASTQ_SEQ_str = seg_get_next_line (vb, FASTQ_DESC_str, &len, &FASTQ_DESC_len, has_13, "DESC");
+    const char *FASTQ_SEQ_str = seg_get_next_line (vb, FASTQ_DESC_str, &len, &FASTQ_DESC_len, true, has_13, "DESC");
  
     if (kraken_is_loaded) {
         unsigned qname_len = strcspn (FASTQ_DESC_str, " \t\r\n"); 
@@ -386,12 +386,10 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
         vb->recon_size -= FASTQ_DESC_len - optimized_len;
     }
 
-    // we segment it using / | : and " " as separators. 
-    static SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
     seg_compound_field ((VBlockP)vb, CTX(FASTQ_DESC), 
                         flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
                         flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len, 
-                        arg, 0, 0);
+                        sep_with_space, 0, 0);
     SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line
@@ -422,7 +420,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     FASTQ_LINE3_str++; len--; // skip the prefix
 
     unsigned FASTQ_LINE3_len;
-    const char *FASTQ_QUAL_str = seg_get_next_line (vb, FASTQ_LINE3_str, &len, &FASTQ_LINE3_len, has_13, "LINE3");
+    const char *FASTQ_QUAL_str = seg_get_next_line (vb, FASTQ_LINE3_str, &len, &FASTQ_LINE3_len, true, has_13, "LINE3");
 
     // line3 can be either empty, or a copy of DESC.
     if (!FASTQ_LINE3_len) 

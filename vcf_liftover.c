@@ -685,7 +685,7 @@ void vcf_lo_append_rejects_file (VBlockP vb, Coords coord)
 
     // create rejects file if not already open
     if (!z_file->rejects_file[coord-1]) {
-        z_file->rejects_file_name[coord-1] = malloc (strlen (z_file->name) + 20);
+        z_file->rejects_file_name[coord-1] = MALLOC (strlen (z_file->name) + 20);
         sprintf (z_file->rejects_file_name[coord-1], "%s.%s_ONLY%s", z_file->name, coords_name (coord), file_plain_ext_by_dt (z_file->data_type));
         
         z_file->rejects_file[coord-1] = fopen (z_file->rejects_file_name[coord-1], "wb+");

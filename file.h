@@ -452,6 +452,7 @@ extern char *file_get_fastq_pair_filename (const char *fn1, const char *fn2, boo
 // wrapper operations for operating system files
 extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, bool add_string_terminator);
 extern bool file_put_data (const char *filename, const void *data, uint64_t len);
+extern void file_put_data_abort (void);
 extern bool file_exists (const char *filename);
 extern bool file_is_fifo (const char *filename);
 extern bool file_is_dir (const char *filename);

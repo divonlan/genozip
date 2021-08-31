@@ -383,7 +383,7 @@ void stats_compress (void)
                                ST_NAME (SEC_REF_IUPACS));
 
     stats_consolidate_non_ctx (sbl, num_stats, "Other", 16, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
-                               TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
+                               TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2FQEX", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
     

@@ -141,14 +141,14 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len,
     return 0; // avoid compiler warning - never reaches here
 }
 
-const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name)
+const char *seg_get_next_line (void *vb_, const char *str, int *remaining_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, const char *item_name)
 {
     VBlockP vb = (VBlockP)vb_;
 
-    unsigned i=0; for (; i < *str_len; i++)
+    unsigned i=0; for (; i < *remaining_len; i++)
         if (str[i] == '\n') {
                 *len = i;
-                *str_len -= i+1;
+                *remaining_len -= i+1;
 
                 // check for Windows-style '\r\n' end of line 
                 if (i && str[i-1] == '\r') {
@@ -159,12 +159,17 @@ const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigne
                 return str + i+1; // beyond the separator
         }
     
-    ASSSEG (*str_len, str, "missing %s field", item_name);
+    ASSSEG (*remaining_len, str, "missing %s field", item_name);
 
-    ABOSEG (str, "while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
+    // if we reached here - line doesn't end with a newline
+    ASSSEG (!must_have_newline, str, "while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
             item_name, MIN (i-1, 1000), str);
 
-    return 0; // avoid compiler warning - never reaches here
+    *len = *remaining_len;
+    *remaining_len = 0;
+    *has_13 = false;
+
+    return str + *len;
 }
 
 // returns true is value is of type store_type and stored in last_value
@@ -517,7 +522,7 @@ Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, 
     return con;
 }
 
-// We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
+// We break down the field (eg QNAME in SAM/BAM/Kraken or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
 // these are vendor-defined strings.
 // Up to MAX_COMPOUND_COMPONENTS subfields are permitted - if there are more, then all the trailing part is just
 // consider part of the last component.
@@ -525,9 +530,12 @@ Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, 
 // from 0 (0->9,a->z)
 // The separators are made into a string we call "template" that is stored in the main field dictionary - we
 // anticipate that usually all lines have the same format, but we allow lines to have different formats.
+const char sep_with_space[256]    = { [';']=true, ['/']=true, ['|']=true, ['.']=true, [' ']=true, ['\t']=true, [1]=true };
+const char sep_without_space[256] = { [';']=true, ['/']=true, ['|']=true, ['.']=true };
+const char sep_pipe_only[256]     = { ['|']=true };
 void seg_compound_field (VBlock *vb, 
                          Context *field_ctx, const char *field, unsigned field_len, 
-                         SegCompoundArg arg,   
+                         const char *is_sep,   
                          unsigned nonoptimized_len, // if non-zero, we don't account for the string given, instead, only for this amount (+add_for_eol)
                          unsigned add_for_eol)      // account for characters beyond the component seperators
 {
@@ -537,22 +545,38 @@ void seg_compound_field (VBlock *vb,
 
     const char *snip = field;
     unsigned snip_len = 0;
-    unsigned num_double_sep = 0;
-
+    unsigned num_seps = 0;
     Container con = seg_initialize_container_array (field_ctx->dict_id, true, false); 
 
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
+    bool in_int = false;
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
     
         char sep = (i==field_len) ? 0 : field[i];
+        
+        bool is_valid_sep = is_sep[(int)sep];
+        bool is_final_component = (con_nitems(con) == MAX_COMPOUND_COMPONENTS-1);
 
-        if (!sep || 
-            (con_nitems(con) < MAX_COMPOUND_COMPONENTS-1 && 
-             ((sep==':' && arg.colon) || 
-              (sep=='/' && arg.slash) ||
-              (sep=='|' && arg.pipe)  || 
-              (sep=='.' && arg.dot)   || 
-              ((sep==' ' || sep=='\t' || sep==1) && arg.whitespace)))) {
+        if (i < field_len && !is_final_component) {
+            // case a boundary cross from a non-int to an int
+            if (!in_int && sep >= '1' && sep <= '9') {  // note: leading 0s are not part of the int because we can't recird them - they are part of the text before the int
+                in_int = true;
+                if (snip_len > 0) { // if field starts with an integer, then this is not a boundary, yet
+                    is_valid_sep = true;
+                    sep = 0;
+                    i--; // sep is not actually a separator - we will consume it again in the next iteration
+                }
+            }
+
+            // case: end of an integer without a valid separator
+            else if (in_int && !is_valid_sep && (sep < '0' || sep > '9')) {
+                is_valid_sep = true;
+                sep = 0; 
+                i--;
+            }
+        }
+
+        if ((is_valid_sep && !is_final_component) || (i==field_len && snip_len)) {
         
             // process the subfield that just ended
             Context *sf_ctx = ctx_get_ctx (vb, con.items[con_nitems(con)].dict_id);
@@ -568,7 +592,8 @@ void seg_compound_field (VBlock *vb,
             unsigned original_snip_len = snip_len;
 
             PosType this_value;
-            if (str_get_int (snip, snip_len, &this_value)) {
+            if (in_int && str_get_int (snip, snip_len, &this_value)) { // also checks that string of digits is not too long for an int64
+
                 delta_snip[0] = SNIP_SELF_DELTA;
 
                 PosType delta = this_value - sf_ctx->last_value.i;
@@ -584,6 +609,7 @@ void seg_compound_field (VBlock *vb,
                 }
 
                 ctx_set_last_value (vb, sf_ctx, this_value);
+                in_int = false;
             }
             
             if (flag.pair == PAIR_READ_1)
@@ -642,10 +668,9 @@ void seg_compound_field (VBlock *vb,
 
             // case double space (common in fasta reference file description)
             bool double_sep = (sep==' ') && (i < field_len-1) && (field[i+1] == sep);
-            if (double_sep) {
-                i++;
-                num_double_sep++;
-            }
+            if (double_sep) i++;
+                    
+            num_seps += (sep>0) + double_sep;
 
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
@@ -659,7 +684,7 @@ void seg_compound_field (VBlock *vb,
         else snip_len++;
     }
 
-    container_seg (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : con_nitems(con) + num_double_sep - 1) + add_for_eol);
+    container_seg (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : num_seps) + add_for_eol);
 }
 
 // an array or array of arrays

@@ -58,7 +58,7 @@ void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start
 
 // returns true if txt_data[txt_i] is the end of a FASTA contig (= next char is '>' or end-of-file), false if not, 
 // and -1 if more data (lower first_i) is needed 
-static inline int fasta_is_end_of_config (VBlock *vb, uint32_t first_i,
+static inline int fasta_is_end_of_contig (VBlock *vb, uint32_t first_i,
                                           int32_t txt_i) // index of a \n in txt_data
 {
     ARRAY (char, txt, vb->txt_data);
@@ -68,23 +68,31 @@ static inline int fasta_is_end_of_config (VBlock *vb, uint32_t first_i,
         return txt[txt_i+1] == '>';
 
     // if we're at the end of the line, we scan back to the previous \n and check if it NOT the >
-    for (int32_t i=txt_i-1; i >= first_i; i--) 
-        if (txt[i] == '\n') 
-            return txt[txt_i+1] != '>'; // this row is a sequence row, not a description row
+    bool newline_run = true;
+    for (int32_t i=txt_i-1; i >= first_i; i--) {
+        if (txt[i] == '\n' && !newline_run) // ASSUMES NO COMMENT LINES (starting with ;), To do: fix this
+            return txt[i+1] != '>'; // this row is a sequence row, not a description row
+        
+        else if (newline_run && txt[i] != '\n' && txt[i] != '\r')
+            newline_run = false; // newline run ends when we encounter the first non newline
+    }
 
     return -1; // we need more data (lower first_i)
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
+int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
 {
-    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    bool is_entire_vb = (first_i == 0 && *last_i == vb->txt_data.len-1);
+
+    ASSERT (*last_i >= 0 && *last_i < vb->txt_data.len, "*last_i=%d is out of range [0,%"PRIu64"]", *last_i, vb->txt_data.len);
+
+    ARRAY (char, txt, vb->txt_data);
 
     // case: reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
     // (note: first_i=0 when flag.make_reference)
     if (flag.make_reference) {
         bool data_found = false;
-        ARRAY (char, txt, vb->txt_data);
         for (uint32_t i=0; i < vb->txt_data.len; i++) {
             // just don't allow now-obsolete ';' rather than trying to disentangle comments from descriptions
             ASSINP (txt[i] != ';', "Error: %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
@@ -99,27 +107,46 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     }
 
     // we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
-    for (; *i >= (int32_t)first_i; (*i)--) {
+    for (int32_t i=*last_i; i >= (int32_t)first_i; i--) {
 
-        if (vb->txt_data.data[*i] == '\n') {
+        if (txt[i] == '\n') {
 
             // when compressing FASTA with a reference or --multifasta - an "end of line" means "end of contig" - 
             // i.e. one that the next character is >, or it is the end of the file
             // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), 
             // line cannot be too long - they must fit in a VB
-            if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.multifasta) 
-                switch (fasta_is_end_of_config (vb, first_i, *i)) {
+            if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.multifasta) {
+                int is_end_of_contig = fasta_is_end_of_contig (vb, first_i, i);
+
+                switch (is_end_of_contig) {
                     case true  : break;            // end of contig
                     case false : continue;         // not end of contig
                     default    : goto out_of_data; // need more data (lower first_i)
                 }
+            }
 
-            return vb->txt_data.len-1 - *i;
+            // otherwise - tolerate a VB that ends part way through a SEQ
+            else if (is_entire_vb && i+1 < vb->txt_data.len &&
+                     txt[i+1] != ';' && txt[i+1] != '>') { // partial line isn't a Description or a Comment, hence its a Sequence
+                ((VBlockFASTA *)vb)->vb_has_no_newline = true;
+                return 0;                
+            }
+                
+            *last_i = i;
+            return vb->txt_data.len-1 - i;
         }
     }
 
 out_of_data:
-    return -1; // cannot find end-of-line in the data starting first_i
+    // case: an entire FASTA VB without newlines (i.e. a very long sequential SEQ) - we accept a VB without newlines and deal with it in Seg
+    if (is_entire_vb && !vb->testing_memory) {
+        ((VBlockFASTA *)vb)->vb_has_no_newline = true;
+        return 0;
+    }
+
+    // case: a single BGZF block without newlines - test next block
+    else 
+        return -1; // cannot find end-of-line in the data starting first_i
 }
 
 //-------------------------
@@ -219,8 +246,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
     ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
 
     if (!flag.make_reference) {
-        static SegCompoundArg arg = { .slash = true, .pipe = true, .dot = true, .colon = true, .whitespace = true };
-        seg_compound_field ((VBlockP)vb, CTX(FASTA_DESC), line_start, line_len, arg, 0, 0);
+        seg_compound_field ((VBlockP)vb, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0, 0);
         
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other (SNIP_REDIRECTION, _FASTA_DESC, false, 0, &special_snip[2], &special_snip_len);
@@ -246,6 +272,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
     ctx_decrement_count ((VBlockP)vb, CTX(FASTA_CONTIG), chrom_node_index);
 
     random_access_update_chrom ((VBlockP)vb, DC_PRIMARY, chrom_node_index, chrom_name, chrom_name_len);
+    vb->ra_initialized = true;
 
     ASSINP (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
             flag.bind ? " (possibly in another FASTA being bound)" : 
@@ -322,7 +349,12 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_
 
         for (int32_t i=0; i < vb->lines_this_contig; i++) {
             fasta_seg_seq_line_do (vb, dl[i].seq_len, i==0);
-            SEG_EOL (FASTA_EOL, true); 
+
+            // case last Seq line of VB, and this VB ends part-way through the Seq line (no newline)
+            if (vb->vb_has_no_newline && (i == vb->lines_this_contig - 1)) 
+                seg_by_did_i (vb, "", 0, FASTA_EOL, 0); // empty EOL
+            else 
+                SEG_EOL (FASTA_EOL, true); 
         }        
         vb->lines_this_contig = 0;
     }
@@ -331,8 +363,10 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_
 
     // case: this sequence is continuation from the previous VB - we don't yet know the chrom - we will update it,
     // and increment the min/max_pos relative to the beginning of the seq in the vb later, in random_access_finalize_entries
-    if (!vb->chrom_name && vb->line_i == 0)
+    if (!vb->chrom_name && !vb->ra_initialized) {
         random_access_update_chrom ((VBlockP)vb, DC_PRIMARY, WORD_INDEX_NONE, 0, 0);
+        vb->ra_initialized = true;
+    }
 
     random_access_increment_last_pos ((VBlockP)vb, DC_PRIMARY, line_len); 
 }
@@ -353,7 +387,9 @@ const char *fasta_seg_txt_line (VBlockFASTA *vb, const char *line_start, uint32_
     // get entire line
     unsigned line_len;
     int32_t remaining_vb_txt_len = AFTERENT (char, vb->txt_data) - line_start;
-    const char *next_field = seg_get_next_line (vb, line_start, &remaining_vb_txt_len, &line_len, has_13, "FASTA line");
+    const char *next_field;
+    
+    next_field = seg_get_next_line (vb, line_start, &remaining_vb_txt_len, &line_len, !vb->vb_has_no_newline, has_13, "FASTA line");
 
     // case: description line - we segment it to its components
     if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {

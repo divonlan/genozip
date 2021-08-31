@@ -129,7 +129,9 @@ static void zip_dynamically_set_max_memory (void)
 
 
         VBlock *vb = vb_get_vb (DYN_SET_MEM_TASK, 1);
-        txtfile_read_vblock (vb, true);
+        vb->testing_memory = true;
+
+        txtfile_read_vblock (vb);
 
         // case: we found at least one full line - we can calculate the memory now
         if (vb->txt_data.len) {
@@ -711,7 +713,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         if (!flag.vblock_memory)
             zip_dynamically_set_max_memory();
 
-        txtfile_read_vblock (vb, false);
+        txtfile_read_vblock (vb);
 
         // estimate txt_data_size_single, consumed by hash_get_estimated_entries() and dispatcher_show_progress()
         txt_file->txt_data_size_single = txtfile_estimate_txt_data_size (vb);
@@ -802,7 +804,7 @@ void zip_one_file (const char *txt_basename,
     DT_FUNC (txt_file, zip_initialize)();
 
     // copy contigs from reference or txtheader to CHROM (and RNEXT too, for SAM/BAM)
-    if (z_file->num_txt_components_so_far == 1) // first component of this z_file
+    if (DTPT (prepopulate_contigs_from_ref) && z_file->num_txt_components_so_far == 1) // first component of this z_file
         txtheader_zip_prepopulate_contig_ctxs();
 
     max_lines_per_vb=0;

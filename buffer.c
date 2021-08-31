@@ -479,7 +479,7 @@ uint64_t buf_alloc_do (VBlock *vb,
         goto finish;
     }
 
-    // add an epsilon to avoid floating point multiplication ending up slightly less that the integer
+    // add an epsilon to avoid floating point multiplication ending up slightly less than the integer
     grow_at_least_factor = MAX (1.00000001, grow_at_least_factor); 
 
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
@@ -1003,7 +1003,8 @@ bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits)
 {
     BitArray *bar = buf_get_bitarray (buf);
 
-    ASSERT (bar->nbits + num_new_bits<= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
+    ASSERT (bar->nbits + num_new_bits <= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap: nbits=%"PRIu64", num_new_bits=%"PRId64", buf->size=%"PRIu64, 
+            __FUNCTION__, __LINE__, buf->name, bar->nbits, num_new_bits, buf->size);
     
     bit_index_t next_bit = bar->nbits;
 

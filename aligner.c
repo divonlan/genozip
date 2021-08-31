@@ -234,6 +234,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     // allocate bitmaps - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite nbits that overlays it + param must be 0
     buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8, char, CTX_GROWTH, 
                buf_is_alloc (&bitmap_ctx->local) ? NULL : "contexts->local"); 
+    buf_extend_bits (&bitmap_ctx->local, seq_len);
 
     buf_alloc (vb, &strand_ctx->local, sizeof (int64_t), roundup_bits2bytes64 (vb->lines.len), char, CTX_GROWTH, 
                buf_is_alloc (&strand_ctx->local) ? NULL : "contexts->local"); 
@@ -241,8 +242,9 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     buf_alloc (vb, &nonref_ctx->local, seq_len + 3, vb->lines.len * seq_len / 4, char, CTX_GROWTH, "contexts->local"); 
     buf_alloc (vb, &gpos_ctx->local,   1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local"); 
 
-    bool is_forward, is_all_ref;
-    PosType gpos = aligner_best_match ((VBlockP)vb, seq, seq_len, genome, emoneg, genome_nbases, &is_forward, &is_all_ref);
+    bool is_forward=false, is_all_ref=false;
+    PosType gpos = (seq_len <= 5000) ? aligner_best_match ((VBlockP)vb, seq, seq_len, genome, emoneg, genome_nbases, &is_forward, &is_all_ref)
+                                     : NO_GPOS; // our aligner algorithm doesn't support long reads as they have many Indel errors
 
     // case: we're the 2nd of the pair - the bit represents whether this strand is equal to the pair's strand (expecting
     // it to be 1 in most cases - making the bitmap highly compressible)
@@ -259,8 +261,6 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     else 
         buf_add_bit (&strand_ctx->local, is_forward);
     
-    buf_extend_bits (&bitmap_ctx->local, seq_len);
-
     ASSSEG ((gpos >= 0 && gpos <= MAX_GPOS) || gpos == NO_GPOS, seq, "gpos=%"PRId64" is out of range [0,%"PRId64"]", gpos, MAX_GPOS);
     
     // case: we're the 2nd of the pair - store a delta if its small enough, or a lookup from local if not

@@ -788,6 +788,13 @@ batch_multifasta()
     test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions ^MW362225.1" 99978
 }
 
+# FASTA without newlines, with a contig larger than a VBlock
+batch_sequential_fasta()
+{
+    batch_print_header
+    test_standard "-B1" " " test.sequential.fa.gz
+}
+
 batch_misc_cases()
 {
     batch_print_header
@@ -1025,16 +1032,14 @@ if (( $1 <= 17 )) ; then  batch_real_world_1           ; fi
 if (( $1 <= 18 )) ; then  batch_real_world_with_ref    ; fi 
 if (( $1 <= 19 )) ; then  batch_real_world_small_vbs   ; fi 
 if (( $1 <= 20 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 21 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 22 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 23 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 24 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 25 )) ; then  batch_reference              ; fi
-if (( $1 <= 26 )) ; then  batch_genols                 ; fi
-if (( $1 <= 27 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 28 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 21 )) ; then  batch_sequential_fasta       ; fi
+if (( $1 <= 22 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 23 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 24 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 25 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 26 )) ; then  batch_reference              ; fi
+if (( $1 <= 27 )) ; then  batch_genols                 ; fi
+if (( $1 <= 28 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 29 )) ; then  batch_make_reference         ; fi
 
 printf "\nALL GOOD!\n"
-
-
-``
