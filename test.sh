@@ -770,7 +770,8 @@ batch_real_world_small_vbs()
     local files=( test.HG002_NA24385_SRR1767406_IonXpress_020_rawlib_24028.30k.sam \
                   test.human.fq.gz test.human2.bam test.human2.sam \
                   test.human2-R1.100K.fq.bz2 test.m64136_200621_234916.ccs.10k.bam \
-                  test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq )
+                  test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq \
+                  test.sequential.fa.gz)
 
     echo "subsets of real world files (lots of small VBs -B1)"
     test_standard "-mf $1 -B1" " " ${files[*]}
@@ -786,13 +787,6 @@ batch_multifasta()
     # regions
     test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions MW362225.1" 22
     test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions ^MW362225.1" 99978
-}
-
-# FASTA without newlines, with a contig larger than a VBlock
-batch_sequential_fasta()
-{
-    batch_print_header
-    test_standard "-B1" " " test.sequential.fa.gz
 }
 
 batch_misc_cases()
@@ -1032,14 +1026,13 @@ if (( $1 <= 17 )) ; then  batch_real_world_1           ; fi
 if (( $1 <= 18 )) ; then  batch_real_world_with_ref    ; fi 
 if (( $1 <= 19 )) ; then  batch_real_world_small_vbs   ; fi 
 if (( $1 <= 20 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 21 )) ; then  batch_sequential_fasta       ; fi
-if (( $1 <= 22 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 23 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 24 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 25 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 26 )) ; then  batch_reference              ; fi
-if (( $1 <= 27 )) ; then  batch_genols                 ; fi
-if (( $1 <= 28 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 29 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 21 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 22 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 23 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 24 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 25 )) ; then  batch_reference              ; fi
+if (( $1 <= 26 )) ; then  batch_genols                 ; fi
+if (( $1 <= 27 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 28 )) ; then  batch_make_reference         ; fi
 
 printf "\nALL GOOD!\n"
