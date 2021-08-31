@@ -326,6 +326,8 @@ static void piz_read_all_ctxs (VBlock *vb, Section *next_sl)
 // Called by PIZ main thread: read all the sections at the end of the file, before starting to process VBs
 DataType piz_read_global_area (Reference ref)
 {
+    START_TIMER;
+
     bool success = zfile_read_genozip_header (0);
 
     if (flag.show_stats) stats_read_and_display();
@@ -437,6 +439,8 @@ DataType piz_read_global_area (Reference ref)
     
 done:
     file_seek (z_file, 0, SEEK_SET, false);
+
+    COPY_TIMER_VB (evb, piz_read_global_area);
 
     return z_file->data_type;
 }
@@ -633,7 +637,7 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
     Dispatcher dispatcher = dispatcher_init (flag.reading_chain     ? "piz-chain"
                                             :flag.reading_reference ? "piz-ref"
                                             :flag.reading_kraken    ? "piz-kraken"
-                                            :                         "piz",
+                                            :                         "piz", // also referred to in dispatcher_recycle_vbs()
                                              flag.xthreads ? 1 : global_max_threads, 0, flag.test, 
                                              is_last_z_file, true, z_file->basename, PROGRESS_PERCENT, 0);
     return dispatcher;

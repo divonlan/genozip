@@ -18,12 +18,14 @@ typedef struct {
         sam_seg_seq_field, compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread,
         piz_get_line_subfields, zip_generate_ctxs, zip_compress_ctxs, ctx_merge_in_vb_ctx,
         zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt,
-        reconstruct_vb, buf_alloc, txtfile_read_header, txtfile_read_vblock,
+        reconstruct_vb, buf_alloc, dispatcher_recycle_vbs, txtfile_read_header, txtfile_read_vblock,
         seg_all_data_lines, compressor_hapmat, codec_hapmat_count_alt_alleles, seg_initialize,
-        ctx_read_all_dictionaries, ctx_dict_build_word_lists, ctx_clone, ctx_merge_in_vb_ctx_one_dict_id,
+        ctx_clone, ctx_merge_in_vb_ctx_one_dict_id,
         md5,ctx_compress_one_dict_fragment, aligner_best_match, aligner_get_word_from_seq,
         lock_mutex_zf_ctx, aligner_get_match_len, generate_rev_complement_genome, ref_contigs_compress,
-        linesorter_compress_qsort, linesorter_compress_recon_plan,
+        linesorter_compress_qsort, linesorter_compress_recon_plan, 
+        piz_read_global_area, ref_load_stored_reference, ctx_read_all_dictionaries, ctx_dict_build_word_lists, 
+        ref_read_one_range, ref_uncompress_one_range,
         tmp1, tmp2, tmp3, tmp4, tmp5;
 
         const char *next_name, *next_subname;
@@ -74,7 +76,7 @@ typedef struct timespec TimeSpecType;
 
 #define PRINT_TIMER(str) { TimeSpecType tb; \
                            clock_gettime(CLOCK_REALTIME, &tb); \
-                           iprintf, "%u.%06u: %s\n", (uint32_t)tb.tv_sec, (uint32_t)(tb.tv_nsec/1000), (str)); }
+                           iprintf ("%u.%06u: %s\n", (uint32_t)tb.tv_sec, (uint32_t)(tb.tv_nsec/1000), (str)); }
 
 extern void profiler_initialize (void);
 extern void profiler_add (ConstVBlockP vb);

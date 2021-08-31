@@ -668,11 +668,14 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.show_sex,    flag.grep,           "--sex",              OT("grep", "g"));
     CONFLICT (flag.show_sex,    flag.idxstats,       "--sex",              "--idxstats");
     CONFLICT (flag.show_sex,    flag.count,          "--sex",              "--count");
+    CONFLICT (flag.show_sex,    flag.test,           "--show_sex",         OT("test", "t"));
     CONFLICT (flag.show_coverage, flag.idxstats,     "--coverage",         "--idxstats");
     CONFLICT (flag.show_coverage, flag.regions==1,   "--coverage",         OT("regions", "r"));
     CONFLICT (flag.show_coverage, flag.out_filename, "--coverage",         OT("output", "o"));
     CONFLICT (flag.show_coverage, flag.grep,         "--coverage",         OT("grep", "g"));
     CONFLICT (flag.show_coverage, flag.count,        "--coverage",         "--count");
+    CONFLICT (flag.show_coverage, flag.test,         "--coverage",         OT("test", "t"));
+    CONFLICT (flag.idxstats,    flag.test,           "--idxstats",         OT("test", "t"));
     CONFLICT (flag.idxstats,    flag.count,          "--idxstats",         "--count");
     CONFLICT (flag.idxstats,    flag.show_sex,       "--idxstats",         "--sex");
     CONFLICT (flag.idxstats,    flag.show_coverage,  "--idxstats",         "--coverage");

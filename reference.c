@@ -322,6 +322,8 @@ static void ref_show_sequence (Reference ref)
 // vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET section
 static void ref_uncompress_one_range (VBlockP vb)
 {
+    START_TIMER;
+
     if (!buf_is_alloc (&vb->z_data) || !vb->z_data.len) goto finish; // we have no data in this VB because it was skipped due to --regions or genocat --show-headers
 
     SectionHeaderReference *header = (SectionHeaderReference *)vb->z_data.data;
@@ -477,12 +479,16 @@ static void ref_uncompress_one_range (VBlockP vb)
 
 finish:
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. 
+
+    COPY_TIMER (ref_uncompress_one_range);
 }
 
 static Reference ref_load_stored_reference_ref; // ref_read_one_range is run from the main thread, so no thread safetey issues
 static Section sec = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 static void ref_read_one_range (VBlockP vb)
 {
+    START_TIMER;
+
     vb->ref = ref_load_stored_reference_ref;
 
     if (!sections_next_sec2 (&sec, SEC_REFERENCE, SEC_REF_IS_SET) || // no more reference sections
@@ -534,12 +540,16 @@ static void ref_read_one_range (VBlockP vb)
         vb->z_data.len = 0; // roll back if we're only showing headers
 
     vb->ready_to_dispatch = true; // to simplify the code, we will dispatch the thread even if we skip the data, but we will return immediately. 
+
+    COPY_TIMER (ref_read_one_range);
 }
 
 // PIZ: loading a reference stored in the genozip file - this could have been originally stored as REF_INTERNAL or REF_EXT_STORE
 // or this could be a .ref.genozip file (called from load_external->piz_one_txt_file)
 void ref_load_stored_reference (Reference ref)
 {
+    START_TIMER;
+
     ASSERTNOTINUSE (ref->ranges);
 
     if (!(flag.show_headers && exe_type == EXE_GENOCAT)) {
@@ -573,6 +583,8 @@ void ref_load_stored_reference (Reference ref)
     ARRAY (RegionToSet, rts, ref->region_to_set_list);
     for (uint32_t i=0; i < ref->region_to_set_list.len; i++)
         bit_array_set_region (rts[i].is_set, rts[i].first_bit, rts[i].len);
+
+    COPY_TIMER_VB (evb, ref_load_stored_reference);
 }
 
 // ---------------------

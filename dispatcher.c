@@ -266,14 +266,15 @@ VBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 
 void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb)
 {
+    START_TIMER;
+
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
     if (dd->processed_vb) {
 
         if (release_vb) { 
             // WORKAROUND to bug 343: there is a race condition of unknown cause is flag.no_writer=true (eg --coverage, --count) crashes
-            if (flag.no_writer && !flag_loading_auxiliary) usleep (1000); 
-            
+            if (flag.no_writer && !flag.test && !strcmp (dd->task_name, "piz")) usleep (1000); 
             vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
         }
 
@@ -284,6 +285,8 @@ void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb)
 
     if (dd->prog == PROGRESS_PERCENT)
         dispatcher_show_progress (dispatcher);
+
+    COPY_TIMER_VB (evb, dispatcher_recycle_vbs);
 }                           
 
 void dispatcher_set_input_exhausted (Dispatcher dispatcher, bool exhausted)
@@ -341,7 +344,7 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
         // PRIORITY 2: output completed vbs, so they can be released and re-used
         else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
                  (has_vb_ready_to_compute && !has_free_thread)) {   // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete
-           
+
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL, true); // this will block until one is available
             if (!processed_vb) continue; // no running compute threads 
 
