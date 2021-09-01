@@ -2,7 +2,6 @@ Installing
 ==========
 
    **From Conda** (Linux & Mac):
-      | `Install miniconda or anaconda <https://docs.conda.io/projects/conda/en/latest/user-guide/install/>`_
       | ``conda config --add channels conda-forge``
       | ``conda install genozip``
 
@@ -15,8 +14,5 @@ Installing
    **Compile it yourself from Github** (tested on Linux, Mac and Windows):
       | Download: `latest release <https://github.com/divonlan/genozip/releases/latest>`_
       | ``make``
-
-   **From Docker Hub** `here <https://hub.docker.com/r/divonlan/genozip>`_
-      | 
 
 |

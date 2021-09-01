@@ -1323,6 +1323,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // QNAME - We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings. Examples:
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
+    // BGI: E100020409L1C001R0030000234 (E100020409=Flow cell serial number, L1=Lane 1, C001R003=column 1 row 3, 0000234=Tile) Also see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
     GET_NEXT_ITEM (SAM_QNAME);
     seg_compound_field (vb_, CTX(SAM_QNAME), field_start, field_len, sep_without_space, 0, 1 /* \n */);
     CTX(SAM_QNAME)->last_txt_index = ENTNUM (vb->txt_data, field_start); // store for kraken

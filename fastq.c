@@ -359,8 +359,8 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - FASTQ_DESC_str);
     
     // DESC - the description/id line is vendor-specific. example:
-    // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG (<-- this is Illumina format)
-    // See here for details of Illumina subfields: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
+    // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG <-- Illumina, See: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
+    // @20A_V100002704L1C001R012000000/1 <-- BGI, see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
     unsigned FASTQ_DESC_len;
     const char *FASTQ_SEQ_str = seg_get_next_line (vb, FASTQ_DESC_str, &len, &FASTQ_DESC_len, true, has_13, "DESC");
  
