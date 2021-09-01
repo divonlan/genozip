@@ -63,7 +63,7 @@ static inline CharIndex ctx_insert_to_dict (VBlock *vb_of_dict, Context *ctx, Di
     char *dict_p = ENT (char, *dict, char_index);
 
     memcpy (dict_p, snip, snip_len);
-    dict_p[snip_len] = 0; // dictionary have a \0 separating snips, so that PIZ can generate word_list
+    dict_p[snip_len] = 0; // dictionaries have a \0 separating snips, so that PIZ can generate word_list
 
     dict->len += snip_len + 1;
     return char_index;
