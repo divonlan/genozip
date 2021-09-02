@@ -17,7 +17,8 @@ endif
 LDFLAGS     += -lpthread -lm 
 
 ifdef IS_CONDA 
-	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION=\"conda\"
+	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 
+	LOCALFLAGS = -DDISTRIBUTION=\"conda\"
 	LDFLAGS += -lbz2 # conda - dynamic linking with bz2
 
 	ifeq ($(OS),Windows_NT)
@@ -28,7 +29,8 @@ ifdef IS_CONDA
 
 else
 	CC=gcc
-	CFLAGS = -Wall -I. -Izlib -Ibzlib -Ilibdeflate -D_LARGEFILE64_SOURCE=1 -march=native 
+	CFLAGS = -Wall -I. -Izlib -Ibzlib -Ilibdeflate -D_LARGEFILE64_SOURCE=1  
+	LOCALFLAGS = -march=native -DDISTRIBUTION=\"github\"
 endif 
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
@@ -148,14 +150,14 @@ else
 	DEBUGFLAGS += -DDEBUG -g -O0
 endif
 
-all   : CFLAGS += $(OPTFLAGS) 
+all   : CFLAGS += $(LOCALFLAGS) $(OPTFLAGS) 
 all   : $(OBJDIR) $(EXECUTABLES) LICENSE.txt
 	@chmod +x test.sh
 
-debug : CFLAGS += $(DEBUGFLAGS)
+debug : CFLAGS += $(LOCALFLAGS) $(DEBUGFLAGS)
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
-opt   : CFLAGS += -g $(OPTFLAGS)
+opt   : CFLAGS += -g $(LOCALFLAGS) $(OPTFLAGS)
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 docker : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"Docker\"
@@ -273,10 +275,6 @@ docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt
 docs-debug: docs/_build/html/.buildinfo
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe file:///C:/Users/USER/projects/genozip/docs/_build/html/index.html; exit 0)
 
-delete-arch:
-	@echo Deleting $(OBJDIR)/arch.o
-	@rm -f $(OBJDIR)/arch.o
-
 testfiles : $(GENERATED_TEST_FILES)
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
@@ -388,8 +386,8 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (7) In ~30 minutes users will be able to 'conda update genozip'"
 
 # Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
-windows/%.exe: CFLAGS += -DDISTRIBUTION=\"InstallForge\"
-windows/%.exe: delete-arch $(OBJS) %.exe
+windows/%.exe: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"InstallForge\"
+windows/%.exe: $(OBJS) %.exe
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 
@@ -400,7 +398,7 @@ windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt LICENSE.txt
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-docs/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) 
+docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean first, as we will compile without -march=native
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'WINDOWS: Using the UI:'
@@ -439,7 +437,6 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 prod:
 	@(cd ../genozip-prod ; git pull ; make)
 
-distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
 distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe docs prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
 	
 test-backup: genozip.exe
@@ -461,10 +458,9 @@ genozip-linux-x86_64/clean:
 	@rm -fR genozip-linux-x86_64
 	@mkdir genozip-linux-x86_64
 
-genozip-linux-x86_64/genozip: CFLAGS += -DDISTRIBUTION=\"linux-x86_64\"
-
 # note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
-genozip-linux-x86_64/genozip: delete-arch $(OBJS) 
+genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"linux-x86_64\"
+genozip-linux-x86_64/genozip: clean-optimized $(OBJS)  # clean first, as we will compile without march=native
 	@echo Linking $@
 	@$(CC) -static -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 
@@ -472,10 +468,10 @@ genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64
 	@echo Generating $@
 	@ln -f $< $@
 
-LINUX_TARGZ_OBJS = genozip-linux-x86_64/clean genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols 
+LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols 
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-docs/genozip-linux-x86_64.tar.gz: version.h $(LINUX_TARGZ_OBJS)
+docs/genozip-linux-x86_64.tar.gz: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS)
 	@echo "Creating $@"
 	@tar cf $@ genozip-linux-x86_64 -z
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION

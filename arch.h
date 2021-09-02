@@ -7,7 +7,7 @@
 #define ARCH_INCLUDED
 
 #ifndef DISTRIBUTION
-    #define DISTRIBUTION "github"
+    #define DISTRIBUTION "unknown"
 #endif    
 
 extern void arch_initialize (const char *argv0);
