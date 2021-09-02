@@ -579,26 +579,16 @@ int str_print_text (const char **text, unsigned num_lines,
 }
 
 // receives a user response, a default "Y" or "N" (or NULL) and modifies the response to be "Y" or "N"
-bool str_verify_y_n (char *response, unsigned response_size, const char *y_or_n)
+bool str_verify_y_n (char *response, unsigned response_size, const char *def_res)
 {
-    ASSERT0 (!y_or_n || (strlen (y_or_n)==1 && (y_or_n[0]=='Y' || y_or_n[0]=='N')), 
-              "y_or_n needs to be NULL, \"Y\" or \"N\"");
+    ASSERT0 (!def_res || (strlen (def_res)==1 && (def_res[0]=='Y' || def_res[0]=='N')), 
+              "def_res needs to be NULL, \"Y\" or \"N\"");
 
-    // default is N (or no default) and first character of the user's response is y or Y
-    if ((!y_or_n || y_or_n[0] == 'N') && (response[0] == 'y' || response[0] == 'Y')) response[0] = 'Y'; 
-    
-    // default is Y (or no default) and first character of the user's response is n or N
-    else if ((!y_or_n || y_or_n[0] == 'Y') && (response[0] == 'n' || response[0] == 'N')) response[0] = 'N';
+    response[0] = response[0] >= 32 ? UPPER_CASE (response[0]) 
+                : def_res           ? def_res[0]
+                :                     0;
 
-    // we have a default, and the response of user is not opposite of the default - return default
-    else if (y_or_n) response[0] = y_or_n[0]; 
-
-    // we don't have a default - we request the user to respond again
-    else return false;
-
-    response[1] = 0;
-
-    return true; // always accept the response
+    return (response[1] < 32) && (response[0] == 'N' || response[0] == 'Y'); // return false if invalid response - we request the user to respond again
 }
 
 bool str_verify_not_empty (char *response, unsigned response_size, const char *unused)
