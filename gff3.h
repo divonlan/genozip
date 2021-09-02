@@ -61,7 +61,6 @@ extern const char *gff3_seg_txt_line (VBlockP vb_, const char *field_start_line,
 extern void gff3_seg_initialize (VBlockP vb_);
 extern void gff3_seg_finalize (VBlockP vb);
 extern bool gff3_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len);
 
 // VBlock stuff
 extern void gff3_vb_release_vb();

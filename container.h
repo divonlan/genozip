@@ -72,6 +72,11 @@ typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) 
 #define con_dec_nitems(con) con_set_nitems ((con), con_nitems (con) - 1)
 #define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
 
+// prefixes may be NULL, or:
+// [0] CON_PREFIX_SEP - start
+//     container-wide-prefix (may be empty)  + CON_PREFIX_SEP
+//     a prefix for each item (may be empty) + CON_PREFIX_SEP
+// empty prefixes of trailing items may be omitted
 extern void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned prefixes_len, char *snip, unsigned *snip_len);
 extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, const char *prefixes, unsigned prefixes_len, const char *ren_prefixes, unsigned ren_prefixes_len, unsigned add_bytes, bool *is_new);
 #define container_seg(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), 0, 0, (add_bytes), NULL)
