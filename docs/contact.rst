@@ -1,6 +1,6 @@
 Contact
 =======
-Bug reports and feature requests: support@genozip.com
+Technical questions, bug reports and feature requests: support@genozip.com
 
 Commercial license inquiries: sales@genozip.com
 
