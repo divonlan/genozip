@@ -725,7 +725,7 @@ void chain_load (void)
     ASSINP (z_file->data_type == DT_CHAIN, "expected %s to be a genozip'ed chain file, but its a %s file. Tip: compress the chain with \"genozip --input chain\"", 
             z_name, dt_name (z_file->data_type));
 
-    ASSINP (ref_get_filename (gref) && ref_get_filename (prim_ref), 
+    ASSINP ((ref_get_filename (gref) && ref_get_filename (prim_ref)) || flag.show_chain, 
             "%s is an invalid chain file: it was not compressed with source and destination references using genozip --reference", z_name);
 
     z_file->basename = file_basename (flag.reading_chain, false, "(chain-file)", NULL, 0);
@@ -741,14 +741,16 @@ void chain_load (void)
     Dispatcher dispachter = piz_z_file_initialize (false);
 
     // load both references, now that it is set (either explicitly from the command line, or implicitly from the chain GENOZIP_HEADER)
-    SAVE_VALUE (z_file); // actually, read the references first
-    ref_load_external_reference (gref, NULL);
-    ref_load_external_reference (prim_ref, NULL);
-    RESTORE_VALUE (z_file);
+    if (!flag.show_chain) { // no need for reference if we're just doing --show-chain
+        SAVE_VALUE (z_file); // actually, read the references first
+        ref_load_external_reference (gref, NULL);
+        ref_load_external_reference (prim_ref, NULL);
+        RESTORE_VALUE (z_file);
 
-    // test for matching MD5 between external references and reference in the chain file header (doing it here, because reference is read after chain file, if its explicitly specified)
-    digest_verify_ref_is_equal (gref, header.ref_filename, header.ref_file_md5);
-    digest_verify_ref_is_equal (prim_ref, header.dt_specific.chain.prim_filename, header.dt_specific.chain.prim_file_md5);
+        // test for matching MD5 between external references and reference in the chain file header (doing it here, because reference is read after chain file, if its explicitly specified)
+        digest_verify_ref_is_equal (gref, header.ref_filename, header.ref_file_md5);
+        digest_verify_ref_is_equal (prim_ref, header.dt_specific.chain.prim_filename, header.dt_specific.chain.prim_file_md5);
+    }
 
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines
