@@ -159,8 +159,7 @@ const char *seg_get_next_line (void *vb_, const char *str, int *remaining_len, u
 }
 
 // returns true is value is of type store_type and stored in last_value
-bool seg_set_last_txt_do (VBlockP vb, ContextP ctx, 
-                          const char *value, unsigned value_len, StoreType store_type)
+bool seg_set_last_txt (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type)
 {
     bool is_value_in_txt_data = value >= FIRSTENT (char, vb->txt_data) &&
                                 value <= LASTENT  (char, vb->txt_data);
@@ -401,8 +400,7 @@ void seg_id_field_do (VBlock *vb, DidIType did_i, const char *id_snip, unsigned 
 }
 
 // returns true if it was an integer
-bool seg_integer_or_not_do (VBlockP vb, ContextP ctx, 
-                            const char *this_value, unsigned this_value_len, unsigned add_bytes)
+bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
     // case: its an integer
     if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
@@ -436,7 +434,7 @@ bool seg_integer_or_not_do (VBlockP vb, ContextP ctx,
 }
 
 // if its a float, stores the float in local, and a LOOKUP in b250, and returns true. if not - normal seg, and returns false.
-bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
+bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
     char snip[1 + FLOAT_FORMAT_LEN];
@@ -466,9 +464,9 @@ bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsi
     }
 }
 
-WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx, 
-                                 const char *value, unsigned value_len, // if value==NULL, we use last_value.i (note: value_len must always be given)
-                                 int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
+WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, 
+                              const char *value, unsigned value_len, // if value==NULL, we use last_value.i (note: value_len must always be given)
+                              int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
 {
     if (!other_ctx) goto fallback;
 

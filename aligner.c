@@ -243,7 +243,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     buf_alloc (vb, &gpos_ctx->local,   1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local"); 
 
     bool is_forward=false, is_all_ref=false;
-    PosType gpos = (seq_len <= 5000) ? aligner_best_match ((VBlockP)vb, seq, seq_len, genome, emoneg, genome_nbases, &is_forward, &is_all_ref)
+    PosType gpos = (seq_len <= 5000) ? aligner_best_match (VB, seq, seq_len, genome, emoneg, genome_nbases, &is_forward, &is_all_ref)
                                      : NO_GPOS; // our aligner algorithm doesn't support long reads as they have many Indel errors
 
     // case: we're the 2nd of the pair - the bit represents whether this strand is equal to the pair's strand (expecting

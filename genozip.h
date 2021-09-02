@@ -59,6 +59,8 @@ typedef struct RefStruct *Reference;
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);
 
+#define VB ((VBlockP)(vb))
+
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPES } ExeType;
 
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED

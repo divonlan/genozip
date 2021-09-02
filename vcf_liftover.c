@@ -571,7 +571,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
     ASSVCF ((strs[IL_XSTRAND][0] == 'X' || strs[IL_XSTRAND][0] == '-') && str_lens[IL_XSTRAND] ==1,
             "%s has an invalid XSTRAND=\"%.*s\" - expected \"-\" or \"X\"", tag_name_ex.s, str_lens[IL_XSTRAND], strs[IL_XSTRAND]);
     bool is_xstrand = (strs[IL_XSTRAND][0] == 'X');
-    ctx_set_last_value (vb, CTX(VCF_oXSTRAND), (int64_t)is_xstrand);
+    ctx_set_last_value (VB, CTX(VCF_oXSTRAND), (int64_t)is_xstrand);
 
     LiftOverStatus ostatus = 
         vcf_lo_seg_ostatus_from_LUFT_or_PRIM (vb, tag_name_ex.s, is_xstrand,

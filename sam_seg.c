@@ -793,7 +793,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         seg_by_ctx (vb, cigar,  cigar_len,  cigar_ctx,  1 + cigar_len);
         seg_by_ctx (vb, nm,     nm_len,     nm_ctx,     1 + nm_len);
         
-        seg_integer_or_not ((VBlockP)vb, pos_ctx, pos, pos_len, 1+pos_len);
+        seg_integer_or_not (VB, pos_ctx, pos, pos_len, 1+pos_len);
     }
 
     container_seg_by_dict_id (vb, _OPTION_XA, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);

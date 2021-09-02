@@ -31,12 +31,12 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, STRp(value))
     // also tried delta vs DP4, but it made it worse
     Context *ctx_basecounts;
     if (ctx_has_value_in_line (vb, _INFO_BaseCounts, &ctx_basecounts)) {
-        seg_delta_vs_other (vb, ctx_dp, ctx_basecounts, value, value_len, -1);
+        seg_delta_vs_other (VB, ctx_dp, ctx_basecounts, value, value_len, -1);
         return false; // caller needn't seg
     }
     else {
         // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample)
-        ctx_set_last_value (vb, ctx_dp, (int64_t)atoi (value));
+        ctx_set_last_value (VB, ctx_dp, (int64_t)atoi (value));
         return true; // caller should seg
     }
 }
@@ -388,7 +388,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, STR
     seg_by_ctx (vb, snip, value_len+2, ctx_basecounts, value_len); 
     
     ctx_basecounts->flags.store = STORE_INT;
-    ctx_set_last_value (vb, ctx_basecounts, sum);
+    ctx_set_last_value (VB, ctx_basecounts, sum);
 
     return false; // we already segged - caller needn't seg
 }
@@ -975,11 +975,11 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
 
     //##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
     else if (dnum == _INFO_AN) 
-        seg_set_last_txt (vb, ctx, value, value_len, STORE_INT);
+        seg_set_last_txt (VB, ctx, value, value_len, STORE_INT);
 
     // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
     else if (dnum == _INFO_AF) {
-        seg_set_last_txt (vb, ctx, value, value_len, STORE_FLOAT);
+        seg_set_last_txt (VB, ctx, value, value_len, STORE_FLOAT);
         ctx->keep_snip = true; // consumed by vcf_seg_FORMAT_AF
     }
 
@@ -988,7 +988,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         CALL (vcf_seg_INFO_AC (vb, ctx, value, value_len)); 
 
     else if (dnum == _INFO_MLEAC && ctx_has_value_in_line (vb, _INFO_AC, &other_ctx)) 
-        CALL (seg_delta_vs_other (vb, ctx, other_ctx, value, value_len, -1));
+        CALL (seg_delta_vs_other (VB, ctx, other_ctx, value, value_len, -1));
 
     // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
     else if ((z_dual_coords  && ctx->luft_trans == VCF2VCF_ALLELE) || // if DVCF - apply to all fields (perhaps including AA) with RendAlg=ALLELE
@@ -1028,7 +1028,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
     // ##INFO=<ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
     // ##INFO=<ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
     else if (dnum == _INFO_ALLELEID || dnum == _INFO_RS)
-        CALL (seg_integer_or_not (vb, ctx, value, value_len, value_len));
+        CALL (seg_integer_or_not (VB, ctx, value, value_len, value_len));
 
     if (not_yet_segged) 
         seg_by_ctx (vb, value, value_len, ctx, value_len);

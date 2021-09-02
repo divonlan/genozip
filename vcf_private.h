@@ -268,7 +268,7 @@ extern void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp(val
 extern void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp (this_value), char *modified_snip, unsigned *modified_snip_len);
 
-#define vcf_set_ostatus(ostatus) ctx_set_last_value ((VBlockP)(vb), &(vb)->contexts[VCF_oSTATUS], (int64_t)(ostatus))
+#define vcf_set_ostatus(ostatus) ctx_set_last_value (VB, CTX(VCF_oSTATUS), (int64_t)(ostatus))
 
 // Liftover Piz
 extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockP vb);

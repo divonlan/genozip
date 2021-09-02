@@ -37,11 +37,8 @@ extern WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned
 #define seg_integer(vb,did_i,n,add_sizeof_n) seg_integer_do((VBlockP)(vb), (did_i), (n), (add_sizeof_n) ? sizeof(n) : 0)
 
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
-extern bool seg_integer_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes); // segs integer in local if possible
-#define seg_integer_or_not(vb, ctx, this_value, this_value_len, add_bytes) seg_integer_or_not_do ((VBlockP)(vb), (ctx), (this_value), (this_value_len), (add_bytes))
-
-extern bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
-#define seg_float_or_not(vb, ctx, this_value, this_value_len, add_bytes) seg_float_or_not_do ((VBlockP)(vb), (ctx), (this_value), (this_value_len), (add_bytes))
+extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes); // segs integer in local if possible
+extern bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
 
 #define MAX_POS_DELTA 32000   // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 #define SPF_BAD_SNIPS_TOO  1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
@@ -64,8 +61,7 @@ extern void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, u
 extern void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes);
 extern void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned add_bytes);
 
-extern WordIndex seg_delta_vs_other_do (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
-#define seg_delta_vs_other(vb, ctx, other_ctx, value, value_len, max_delta) seg_delta_vs_other_do ((VBlockP)(vb), (ctx), (other_ctx), (value), (value_len), (max_delta))
+extern WordIndex seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local, bool items_are_id);
 
@@ -82,8 +78,7 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
 #define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip, snip_len) \
     seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), (has_parameter), (parameter), (snip), (snip_len))
 
-bool seg_set_last_txt_do (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type);
-#define seg_set_last_txt(vb, ctx, value, value_len, store_type) seg_set_last_txt_do ((VBlockP)(vb), (ctx), (value), (value_len), (store_type))
+bool seg_set_last_txt (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type);
 
 // called before seg, to store the point to which we might roll back
 static inline void seg_create_rollback_point (ContextP ctx)

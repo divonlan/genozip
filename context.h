@@ -179,12 +179,11 @@ static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, Context
 }
 #define ctx_has_value_in_line(vb, dict_id, p_ctx) ctx_has_value_in_line_do ((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
 
-static inline void ctx_set_last_value_do (VBlockP vb, ContextP ctx, LastValueType last_value)
+static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, LastValueType last_value)
 {
     ctx->last_value    = last_value;
     ctx->last_line_i   = vb->line_i;
 }
-#define ctx_set_last_value(vb, ctx, last_value) ctx_set_last_value_do ((VBlockP)(vb), (ctx), (last_value))
 
 // returns true if dict_id was *previously* segged on this line (last_value may be valid or not)
 #define ctx_encountered_in_line_(vb, ctx) (((ctx)->last_line_i == (vb)->line_i) || ((ctx)->last_line_i == -(int32_t)(vb)->line_i - 1))

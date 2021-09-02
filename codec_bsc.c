@@ -99,7 +99,7 @@ uint32_t codec_bsc_est_size (Codec codec, uint64_t uncompressed_len)
 
 static void *codec_bsc_malloc (void *vb, size_t size)
 {
-    void *mem =  codec_alloc ((VBlock *)vb, size, 1.5); 
+    void *mem =  codec_alloc (VB, size, 1.5); 
     return mem;
 }
 
