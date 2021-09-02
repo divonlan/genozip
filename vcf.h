@@ -97,20 +97,21 @@
 #pragma GENDICT INFO_vep=DTYPE_1=vep
 #pragma GENDICT INFO_AGE_HISTOGRAM_HET=DTYPE_1=AGE_HISTOGRAM_HET 
 #pragma GENDICT INFO_AGE_HISTOGRAM_HOM=DTYPE_1=AGE_HISTOGRAM_HOM
-#pragma GENDICT INFO_CSQ=DTYPE_1=CSQ       // "Consequences" 
-#pragma GENDICT INFO_MAX_AF=DTYPE_1=MAX_AF // highest allele frequency observed in any population from 1000 genomes, ESP or gnomAD
+#pragma GENDICT INFO_CSQ=DTYPE_1=CSQ        // "Consequences" 
+#pragma GENDICT INFO_MAX_AF=DTYPE_1=MAX_AF  // highest allele frequency observed in any population from 1000 genomes, ESP or gnomAD
         
 // clinvar
 #pragma GENDICT INFO_ALLELEID=DTYPE_1=ALLELEID// <ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
-#pragma GENDICT INFO_CLNDN=DTYPE_1=CLNDN   // <ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
-#pragma GENDICT INFO_RS=DTYPE_1=RS         // <ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
-#pragma GENDICT INFO_CLNHGVS=DTYPE_1=CLNHGVS// <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
+#pragma GENDICT INFO_CLNDN=DTYPE_1=CLNDN      // <ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
+#pragma GENDICT INFO_RS=DTYPE_1=RS            // <ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
+#pragma GENDICT INFO_CLNHGVS=DTYPE_1=CLNHGVS  // <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
 #pragma GENDICT INFO_CLNHGVS_pos=DTYPE_1=CpLNHGVS
 #pragma GENDICT INFO_CLNHGVS_refalt=DTYPE_1=CrLNHGVS
+#pragma GENDICT INFO_CLNVI=DTYPE_1=CLNVI      // <ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
 
 // ExAC fields
-#pragma GENDICT INFO_DP_HIST=DTYPE_1=DP_HIST// from ExAC: Depth (DP) histogram in 20 equal intervals between 0-100 : See https://www.biorxiv.org/content/biorxiv/suppl/2015/10/30/030338.DC1/030338-1.pdf
-#pragma GENDICT INFO_GQ_HIST=DTYPE_1=GQ_HIST// from ExAC: Genotype Quality (GQ) histogram in 20 equal intervals between 0-100
+#pragma GENDICT INFO_DP_HIST=DTYPE_1=DP_HIST  // from ExAC: Depth (DP) histogram in 20 equal intervals between 0-100 : See https://www.biorxiv.org/content/biorxiv/suppl/2015/10/30/030338.DC1/030338-1.pdf
+#pragma GENDICT INFO_GQ_HIST=DTYPE_1=GQ_HIST  // from ExAC: Genotype Quality (GQ) histogram in 20 equal intervals between 0-100
 
 // Structural variants (also uses INFO/END): https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
 #pragma GENDICT INFO_SVLEN=DTYPE_1=SVLEN

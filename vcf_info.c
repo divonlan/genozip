@@ -1008,18 +1008,22 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
              dnum == _INFO_GQ_HIST ||
              dnum == _INFO_AGE_HISTOGRAM_HET ||
              dnum == _INFO_AGE_HISTOGRAM_HOM) 
-        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', '|', false, true));
+        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', '|', false, true, false));
 
     else if (dnum == _INFO_DP4) 
-        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', 0, false, true));
+        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', 0, false, true, false));
 
     // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
     else if (dnum == _INFO_CLNDN) 
-        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, '|', 0, false, false));
+        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, '|', 0, false, false, false));
 
     // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
     else if (dnum == _INFO_CLNHGVS)
         not_yet_segged = vcf_seg_INFO_CLNHGVS (vb, ctx, value, value_len);
+
+    // ##INFO=<ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
+    // example: CPIC:0b3ac4db1d8e6e08a87b6942|CPIC:647d4339d5c1ddb78daff52f|CPIC:9968ce1c4d35811e7175cd29|CPIC:PA166160951|CPIC:c6c73562e2b9e4ebceb0b8bc
+    // I tried seg_array_of_struct - it is worse than simple seg
 
     // ##INFO=<ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
     // ##INFO=<ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">

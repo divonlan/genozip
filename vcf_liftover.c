@@ -331,7 +331,7 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
     }
 
     for (unsigned i=0; i < NUM_ROLLBACK_CTXS; i++) 
-        seg_rollback ((VBlockP)vb, &vb->contexts[line_rollback_did_i[SEL(0,1)][i]]);
+        seg_rollback ((VBlockP)vb, CTX(line_rollback_did_i[SEL(0,1)][i]));
 
     seg_rollback ((VBlockP)vb, CTX(INFO_LUFT));
     seg_rollback ((VBlockP)vb, CTX(INFO_PRIM));
@@ -351,7 +351,7 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
 void vcf_lo_set_rollback_point (VBlockVCFP vb)
 {
     for (unsigned i=0; i < NUM_ROLLBACK_CTXS; i++) 
-        seg_create_rollback_point (&vb->contexts[line_rollback_did_i[SEL(0,1)][i]]);
+        seg_create_rollback_point (CTX(line_rollback_did_i[SEL(0,1)][i]));
 
     seg_create_rollback_point (CTX(INFO_LUFT));
     seg_create_rollback_point (CTX(INFO_PRIM));

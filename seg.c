@@ -59,20 +59,6 @@ WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes)
     return node_index;
 }
 
-// called before seg, to store the point to which we might roll back
-void seg_create_rollback_point (Context *ctx)
-{
-    // roll back point
-    ctx->rback_b250_len       = ctx->b250.len;
-    ctx->rback_local_len      = ctx->local.len;
-    ctx->rback_txt_len        = ctx->txt_len;
-    ctx->rback_num_singletons = ctx->num_singletons;
-    ctx->rback_last_value     = ctx->last_value;
-    ctx->rback_last_delta     = ctx->last_delta;
-    ctx->rback_last_txt_index = ctx->last_txt_index;
-    ctx->rback_last_txt_len   = ctx->last_txt_len;
-}
-
 // rolls back a context to the rollback point registered in seg_create_rollback_point
 void seg_rollback (VBlockP vb, Context *ctx)
 {
@@ -695,7 +681,8 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
                      char sep, 
                      char subarray_sep,         // if non-zero, will attempt to find internal arrays
                      bool use_integer_delta,    // first item stored as is, subsequent items stored as deltas
-                     bool store_int_in_local)   // if its an integer, store in local instead of a snip
+                     bool store_int_in_local,   // if its an integer, store in local instead of a snip
+                     bool items_are_id)         // each item is segged as an ID (i.e. string + number)
 {
     MiniContainer *con;
     DictId arr_dict_id;
@@ -728,8 +715,6 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
     if (use_integer_delta || container_ctx->flags.store == STORE_INT) 
         arr_ctx->flags.store = STORE_INT;
 
-    uint32_t add_bytes = (uint32_t)value_len; // we will deduct bytes added by sub-arrays
-
     // count repeats (1 + number of seperators)
     con->repeats=1;
     for (int32_t i=0; i < value_len; i++) 
@@ -752,20 +737,24 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         // case: it has a sub-array
         if (is_subarray) {
-            seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0, use_integer_delta, store_int_in_local);
-            add_bytes -= this_item_len; // sub-array will account for itself
+            seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0, use_integer_delta, store_int_in_local, items_are_id);
             arr_ctx->numeric_only = false;
             this_item_value = arr_ctx->last_value.i;
         }
 
+        // item is ID eg "mRNA00001"
+        else if (items_are_id) 
+            seg_id_field (vb, arr_ctx->did_i, this_item, this_item_len, false);
+
         // case: its an scalar (we don't delta arrays that have sub-arrays and we don't delta the first item)
         else if (!use_integer_delta || subarray_sep || i==0) {
+            
             if (store_int_in_local) {
-                bool is_int = seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, 0);
+                bool is_int = seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, this_item_len);
                 if (is_int) this_item_value = arr_ctx->last_value.i;
             }
             else {
-                seg_by_ctx (vb, this_item, this_item_len, arr_ctx, 0);
+                seg_by_ctx (vb, this_item, this_item_len, arr_ctx, this_item_len);
                 str_get_int (this_item, this_item_len, &arr_ctx->last_value.i); // sets last_value only if it is indeed an integer
             }
         }
@@ -776,7 +765,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
             char delta_snip[30] = { SNIP_SELF_DELTA };
             unsigned delta_snip_len = 1 + str_int (this_item_value - arr_ctx->last_value.i, &delta_snip[1]);
 
-            seg_by_ctx (vb, delta_snip, delta_snip_len, arr_ctx, 0);
+            seg_by_ctx (vb, delta_snip, delta_snip_len, arr_ctx, this_item_len);
 
             ctx_set_last_value (vb, arr_ctx, this_item_value);
             arr_ctx->numeric_only = false;
@@ -795,8 +784,60 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
         value++;
     }
 
-    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes);
+    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, con->repeats-1); // acount for separators
 }
+
+// a field that looks like: "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
+// we have an array (2 entires in this example) of items (4 in this examples) - the entries are separated by comma and the items by space
+// observed in Ensembel generated GVF: Variant_effect, sift_prediction, polyphen_prediction, variant_peptide
+// The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
+// the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
+// the field itself will contain the number of entries
+void seg_array_of_struct (VBlockP vb, ContextP ctx, SmallContainer con, 
+                          const char *snip, unsigned snip_len, bool last_item_is_id)
+{
+    ContextP ctxs[con.nitems_lo]; 
+
+    for (unsigned i=0; i < con.nitems_lo; i++) {
+        ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
+        ctxs[i]->st_did_i = ctx->did_i;
+        seg_create_rollback_point (ctxs[i]);
+    }
+    
+    // get repeats
+    str_split (snip, snip_len, 0, con.repsep[0], repeat, false);
+    con.repeats = n_repeats;
+
+    ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, snip, "exceeded maximum repeats allowed (%u) while parsing %s",
+            CONTAINER_MAX_REPEATS, ctx->tag_name);
+
+    for (unsigned r=0; r < n_repeats; r++) {
+
+        // get items in each repeat
+        str_split (repeats[r], repeat_lens[r], con.nitems_lo, con.items[0].seperator[0], item, true);
+        if (n_items != con.nitems_lo) goto badly_formatted;
+
+        for (unsigned i=0; i < n_items - last_item_is_id; i++)
+            seg_by_ctx (vb, items[i], item_lens[i], ctxs[i], item_lens[i]);
+
+        if (last_item_is_id)
+            seg_id_field (vb, ctxs[n_items-1]->did_i, items[n_items-1], item_lens[n_items-1], false);
+    }
+
+    // finally, the Container snip itself
+    container_seg (vb, ctx, (ContainerP)&con, NULL, 0, 
+                   con.repeats * (con.nitems_lo-1) /* item seperators */ + con.repeats-1 /* repeat separators */);
+
+    return;
+
+badly_formatted:
+    // roll back all the changed data
+    for (unsigned i=0; i < con.nitems_lo ; i++) 
+        seg_rollback (vb, ctxs[i]);
+
+    // now just seg the entire snip
+    seg_by_ctx (vb, snip, snip_len, ctx, snip_len); 
+}                           
 
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 
                             const char *snip, unsigned snip_len, 

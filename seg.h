@@ -52,7 +52,7 @@ extern PosType seg_pos_field (VBlockP vb, DidIType snip_did_i, DidIType base_did
 
 extern void seg_id_field_do (VBlockP vb, DidIType did_i, const char *id_snip, unsigned id_snip_len, bool account_for_separator);
 #define seg_id_field(vb, did_i, id_snip, id_snip_len, account_for_separator) \
-    seg_id_field_do((VBlockP)vb, did_i, (id_snip), (id_snip_len), (account_for_separator))
+    seg_id_field_do((VBlockP)vb, (did_i), (id_snip), (id_snip_len), (account_for_separator))
 
 extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep);
 #define seg_initialize_container_array(dict_id, type_1_items, comma_sep) seg_initialize_container_array_do ((DictId)dict_id, type_1_items, comma_sep)
@@ -67,7 +67,9 @@ extern void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, u
 extern WordIndex seg_delta_vs_other_do (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
 #define seg_delta_vs_other(vb, ctx, other_ctx, value, value_len, max_delta) seg_delta_vs_other_do ((VBlockP)(vb), (ctx), (other_ctx), (value), (value_len), (max_delta))
 
-extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local);
+extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local, bool items_are_id);
+
+extern void seg_array_of_struct (VBlockP vb, ContextP ctx, SmallContainer con, const char *snip, unsigned snip_len, bool last_item_is_id);
 
 extern const char sep_with_space[], sep_without_space[], sep_pipe_only[];
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
@@ -83,7 +85,19 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
 bool seg_set_last_txt_do (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type);
 #define seg_set_last_txt(vb, ctx, value, value_len, store_type) seg_set_last_txt_do ((VBlockP)(vb), (ctx), (value), (value_len), (store_type))
 
-extern void seg_create_rollback_point (ContextP ctx);
+// called before seg, to store the point to which we might roll back
+static inline void seg_create_rollback_point (ContextP ctx)
+{
+    ctx->rback_b250_len       = ctx->b250.len;
+    ctx->rback_local_len      = ctx->local.len;
+    ctx->rback_txt_len        = ctx->txt_len;
+    ctx->rback_num_singletons = ctx->num_singletons;
+    ctx->rback_last_value     = ctx->last_value;
+    ctx->rback_last_delta     = ctx->last_delta;
+    ctx->rback_last_txt_index = ctx->last_txt_index;
+    ctx->rback_last_txt_len   = ctx->last_txt_len;
+}
+
 extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 // ------------------

@@ -75,98 +75,6 @@ bool gff3_seg_is_small (ConstVBlockP vb, DictId dict_id)
            dict_id.num == _GFF3_EOL;
 }
 
-// returns length of next expected item, and 0 if unsuccessful
-static unsigned gff3_seg_get_aofs_item_len (const char *str, unsigned len, bool is_last_item)
-{
-    unsigned i=0; for (; i < len; i++) {
-        bool is_comma = str[i] == ',';
-        bool is_space = str[i] == ' ';
-
-        if ((is_last_item && is_comma) || (!is_last_item && is_space)) return i; // we reached the end of the item - return its length
-
-        if ((is_last_item && is_space) || (!is_last_item && is_comma)) return 0; // invalid string - unexpected seperator
-    }
-
-    if (is_last_item) return i; // last item of last entry
-    else return 0; // the string ended prematurely - this is not yet the last item
-}
-
-// a field that looks like: "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
-// we have an array (2 entires in this example) of items (4 in this examples) - the entries are separated by comma and the items by space
-// observed in Ensembel generated GVF: Variant_effect, sift_prediction, polyphen_prediction, variant_peptide
-// The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
-// the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
-// the field itself will contain the number of entries
-static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx, 
-                                      SmallContainer con, 
-                                      const char *snip, unsigned snip_len)
-{
-    bool is_last_entry = false;
-    uint32_t num_items = con_nitems (con);
-
-    // get ctx's
-    Context *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->contexts)
-    for (unsigned i=0; i < num_items; i++) {
-        ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
-        ctxs[i]->st_did_i = subfield_ctx->did_i;
-    }
-
-    // set roll back point
-    uint64_t saved_node_i_len[MAX_ENST_ITEMS], saved_local_len[MAX_ENST_ITEMS], saved_txt_len[MAX_ENST_ITEMS];
-    for (unsigned item_i=0; item_i < num_items; item_i++) {
-        saved_node_i_len[item_i] = ctxs[item_i]->b250.len;
-        saved_local_len[item_i]  = ctxs[item_i]->local.len;
-        saved_txt_len  [item_i]  = ctxs[item_i]->txt_len;
-    }
-    const char *saved_snip = snip;
-    unsigned saved_snip_len = snip_len;
-
-    con.repeats = 0;
-
-    while (snip_len) {
-        
-        for (unsigned item_i=0; item_i < num_items; item_i++) {
-            bool is_last_item = (item_i == num_items-1);
-            unsigned item_len = gff3_seg_get_aofs_item_len (snip, snip_len, is_last_item);
-            if (!item_len) goto badly_formatted;
-
-            if (!is_last_item)
-                seg_by_ctx (vb, snip, item_len, ctxs[item_i], item_len);
-            else {
-                is_last_entry = (snip_len - item_len == 0);
-                seg_id_field (vb, ENSTid, snip, item_len, false);
-            }
-    
-            snip     += item_len + 1 - is_last_entry; // 1 for either the , or the ' ' (except in the last item of the last entry)
-            snip_len -= item_len + 1 - is_last_entry;
-        }
-
-        if (!is_last_entry && snip[-1]!=',') goto badly_formatted; // expecting a , after the end of all items in this entry
-        
-        con.repeats++;
-
-        ASSSEG (con.repeats <= CONTAINER_MAX_REPEATS, snip, "exceeded maximum repeats allowed (%u) while parsing %s",
-                CONTAINER_MAX_REPEATS, subfield_ctx->tag_name);
-    }
-
-    // finally, the Container snip itself
-    container_seg (vb, subfield_ctx, (ContainerP)&con, NULL, 0, 
-                           con.repeats * (num_items-1) /* space seperators */ + con.repeats-1 /* comma separators */);
-
-    return;
-
-badly_formatted:
-    // roll back all the changed data
-    for (unsigned item_i=0; item_i < num_items ; item_i++) {
-        ctxs[item_i]->b250.len  = saved_node_i_len[item_i];
-        ctxs[item_i]->local.len = saved_local_len[item_i];
-        ctxs[item_i]->txt_len   = saved_txt_len[item_i];
-    }
-
-    // now save the entire snip in the dictionary
-    seg_by_dict_id (vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, saved_snip_len); 
-}                           
-
 // returns trus if successful
 static bool gff3_seg_target (VBlockP vb, const char *value, unsigned value_len)
 {
@@ -219,9 +127,13 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **v
     case _ATTR_Target:
         return !gff3_seg_target (vb, *value, *value_len); 
 
+    case _ATTR_Name:
+        seg_id_field (vb, ATTR_Name, *value, *value_len, false);
+        return false;
+
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
     case _ATTR_Parent:
-        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, *value, *value_len, ',', 0, false, false);
+        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, *value, *value_len, ',', 0, false, false, false);
         return false; 
 
     //case _ATTR_Gap: // I tried: 1. array (no improvement) ; 2. string of op-codes in b250 + integers in local (negligible improvement)
@@ -236,9 +148,9 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **v
             .items       = { { .dict_id={.id="V0arEff" }, .seperator = {' '} },
                              { .dict_id={.id="V1arEff" }, .seperator = {' '} },
                              { .dict_id={.id="V2arEff" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"  },                    } }
+                             { .dict_id={.num=_ENSTid  },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, *value, *value_len);
+        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, *value, *value_len, true);
         return false;
     }
 
@@ -250,9 +162,9 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **v
             .items       = { { .dict_id={.id="S0iftPr" }, .seperator = {' '} },
                              { .dict_id={.id="S1iftPr" }, .seperator = {' '} },
                              { .dict_id={.id="S2iftPr" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"  },                    } }
+                             { .dict_id={.num=_ENSTid  },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, *value, *value_len);
+        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, *value, *value_len, true);
         return false;
     }
 
@@ -264,9 +176,9 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **v
             .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = {' '} },
                              { .dict_id={.id="P1olyPhP" }, .seperator = {' '} },
                              { .dict_id={.id="P2olyPhP" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"   },                    } }
+                             { .dict_id={.num=_ENSTid   },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, *value, *value_len);
+        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, *value, *value_len, true);
         return false;
     }
 
@@ -275,11 +187,11 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **v
             .nitems_lo   = 3, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
-            .items       = { { .dict_id={.id="v0arPep" }, .seperator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
-                             { .dict_id={.id="v1arPep" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"  },                    } }
+            .items       = { { .dict_id={.id="v0arPep"  }, .seperator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
+                             { .dict_id={.id="v1arPep"  }, .seperator = {' '} },
+                             { .dict_id={.num=_ENSTid   },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, *value, *value_len);
+        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, *value, *value_len, true);
         return false;
     }
 
