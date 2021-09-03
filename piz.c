@@ -284,7 +284,8 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     piz_uncompress_all_ctxs (vb, 0);
 
     // reconstruct from top level snip
-    reconstruct_from_dict_id (vb, vb->translation.toplevel, 0, true);
+    DidIType top_level_did_i = ctx_get_existing_did_i (vb, vb->translation.toplevel); 
+    reconstruct_from_ctx (vb, top_level_did_i, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
     if (txt_file && txt_file->codec == CODEC_BGZF && !flag.no_writer &&

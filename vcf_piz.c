@@ -85,42 +85,60 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
 
     uint64_t dnum = con->items[item].dict_id.num;
 
-    // --GT-only - don't reconstruct non-GT sample subfields
-    if (flag.gt_only && dict_id.num == _VCF_SAMPLES && dnum != _FORMAT_GT) 
-        return false; 
+    switch (dict_id.num) {
 
-    // --drop-genotypes: remove the two tabs at the end of the line
-    if (flag.drop_genotypes && dnum == _VCF_EOL)
-        vb->txt_data.len -= 2;
+        case _VCF_TOPLEVEL:
+        case _VCF_TOPLUFT:
+            // --drop-genotypes: remove the two tabs at the end of the line
+            if (flag.drop_genotypes && dnum == _VCF_EOL)
+                vb->txt_data.len -= 2;
 
-    // in dual-coordinates files - get the COORDS and oSTATUS at the beginning of each line
-    else if (dnum == _VCF_oSTATUS || dnum == _VCF_COORDS) {
-        if (flag.show_dvcf)
-            return true; // show
-        else if (z_dual_coords)
-            *reconstruct = false; // set last_index, without reconstructing
-        else
-            return false; // filter out entirely without consuming (non-DC files have no oStatus data)
+            // in dual-coordinates files - get the COORDS and oSTATUS at the beginning of each line
+            else if (dnum == _VCF_oSTATUS || dnum == _VCF_COORDS) {
+                if (flag.show_dvcf)
+                    return true; // show
+                else if (z_dual_coords)
+                    *reconstruct = false; // set last_index, without reconstructing
+                else
+                    return false; // filter out entirely without consuming (non-DC files have no oStatus data)
+            }
+
+            // --gpos: after main POS or oPOS reconstructed - re-write POS as GPOS
+            else if (item == 4 && flag.gpos) 
+                vcf_piz_replace_pos_with_gpos (vb);
+
+            break;
+
+        case _VCF_INFO:
+            // for dual-coordinates genozip files - select which DVCF item to show based on flag.luft
+            if ((vb->vb_coords == DC_LUFT    && (dnum == _INFO_LUFT || dnum == _INFO_LREJ)) ||
+                (vb->vb_coords == DC_PRIMARY && (dnum == _INFO_PRIM || dnum == _INFO_PREJ)))
+                return false;
+        
+            // case: --single-coord - get rid of the DVCF INFO item that would be displayed (this kills the prefixes, but not the values)
+            if (flag.single_coord && (dnum == _INFO_PRIM || dnum == _INFO_LUFT || dnum == _INFO_LREJ || dnum == _INFO_PREJ)) {
+                if (con_nitems (*con) == 2 && z_dual_coords) RECONSTRUCT1 ('.'); // if this variant's only INFO fields are DVCF - replace with '.'
+                *reconstruct = false; // consume but don't reconstruct
+            }
+            break;
+
+        case _INFO_PRIM: 
+        case _INFO_LUFT:
+        case _INFO_LREJ:
+        case _INFO_PREJ:
+            // case: --single-coord - get rid of all of the DVCF INFO item's subitems (needed, since the "reconstruct" in _VCF_INFO for the _INFO_PRIM item, doesn't propagate to the _INFO_PRIM container)
+            if (flag.single_coord)
+                *reconstruct = false; // consume but don't reconstruct
+            break;
+
+        case _VCF_SAMPLES:
+            // --GT-only - don't reconstruct non-GT sample subfields
+            if (flag.gt_only && dnum != _FORMAT_GT) 
+                return false; 
+            break;
+
+        default: break;
     }
-
-    // for dual-coordinates genozip files - select which DVCF item to show based on flag.luft
-    else if (dict_id.num == _VCF_INFO) {
-        if (vb->vb_coords == DC_LUFT && (dnum == _INFO_LUFT || dnum == _INFO_LREJ))
-            return false;
-            
-        else if (vb->vb_coords == DC_PRIMARY && (dnum == _INFO_PRIM || dnum == _INFO_PREJ))
-            return false;
-    
-        // case: --single-coord - get rid of the DVCF INFO item that would be displayed
-        else if (flag.single_coord && (dnum == _INFO_PRIM || dnum == _INFO_LUFT || dnum == _INFO_LREJ || dnum == _INFO_PREJ)) {
-            if (con_nitems (*con) == 2 && z_dual_coords) RECONSTRUCT1 ('.'); // if this variant's only INFO fields are DVCF - replace with '.'
-            return false;
-        }
-    }
-
-    // --gpos: after main POS or oPOS reconstructed - re-write POS as GPOS
-    else if (item == 4 && flag.gpos) 
-        vcf_piz_replace_pos_with_gpos (vb);
 
     return true;    
 }

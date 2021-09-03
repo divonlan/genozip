@@ -415,7 +415,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, const char *ch
 
     const char *ref_chrom_name = ENT (const char, ref->loaded_contigs_dict, contig->char_index); // might be different that chrom_name if we used an alt_name
 
-    if (buf_is_alloc (&ref->ranges)) { // it is not allocated in --show-sex/coverage
+    if (buf_is_alloc (&ref->ranges)) { // it is not allocated in --sex/coverage
         PosType ref_last_pos = ENT (Range, ref->ranges, ref_chrom)->last_pos; // get from ranges because RefContig.LN=0 - we don't populate it at reference creation
         
         // case: file header is missing length, update from reference

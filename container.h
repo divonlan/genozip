@@ -26,7 +26,7 @@ typedef struct ContainerItem {
     // which case seperator[1] is a parameter of the flags
     #define CI_ITEM_HAS_FLAG(item) ((uint8_t)(item)->seperator[0] & 0x80)
     #define CI_TRANS_NUL   ((uint8_t)0x81) // In translated mode: '\0' seperator 
-    #define CI_TRANS_NOR   ((uint8_t)0x82) // In translated mode: NO RECONSTRUCT: don't reconstruct number, just store it in last_value (not implemented for LT_SEQUENCE, LT_BITMAP, Containers, Sequences)
+    #define CI_TRANS_NOR   ((uint8_t)0x82) // In translated mode: reconstruct prefix, consume but don't reconstruct value. If item is a sub-container - NOT propagated to this sub-container.
     #define CI_TRANS_MOVE  ((uint8_t)0x84) // (ORed) in addition: in translated: txt_data.len is moved seperator[1] bytes (0-255), after all recontruction and/or translation
     #define CI_NATIVE_NEXT ((uint8_t)0x88) // in non-translated mode: seperator is in seperator[1]
     uint8_t seperator[2];                  // 2 byte seperator reconstructed after the item (or flags)
