@@ -771,7 +771,7 @@ batch_real_world_small_vbs()
                   test.human.fq.gz test.human2.bam test.human2.sam \
                   test.human2-R1.100K.fq.bz2 test.m64136_200621_234916.ccs.10k.bam \
                   test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq \
-                  test.sequential.fa.gz)
+                  test.sequential.fa.gz test.pacbio.10k.fasta.xz)
 
     echo "subsets of real world files (lots of small VBs -B1)"
     test_standard "-mf $1 -B1" " " ${files[*]}
@@ -1022,9 +1022,9 @@ if (( $1 <= 13 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kr
 if (( $1 <= 14 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
 if (( $1 <= 15 )) ; then  batch_single_thread          ; fi 
 if (( $1 <= 16 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 17 )) ; then  batch_real_world_1           ; fi 
-if (( $1 <= 18 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 19 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 17 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 18 )) ; then  batch_real_world_1           ; fi 
+if (( $1 <= 19 )) ; then  batch_real_world_with_ref    ; fi 
 if (( $1 <= 20 )) ; then  batch_multifasta             ; fi
 if (( $1 <= 21 )) ; then  batch_misc_cases             ; fi
 if (( $1 <= 22 )) ; then  batch_external_cram          ; fi

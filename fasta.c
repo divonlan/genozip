@@ -332,11 +332,13 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
     seq_ctx->local.len += line_len;
 } 
 
-static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool is_last_line_in_contig, bool *has_13)
+static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, 
+                                bool is_last_line_vb_no_newline, bool is_last_line_in_contig, 
+                                const bool *has_13)
 {
     vb->lines_this_contig++;
 
-    *DATA_LINE (vb->line_i) = (ZipDataLineFASTA){ .seq_data_start = line_start - vb->txt_data.data,
+    *DATA_LINE (vb->line_i) = (ZipDataLineFASTA){ .seq_data_start = ENTNUM (vb->txt_data, line_start),
                                                   .seq_len        = line_len };
 
     if (flag.make_reference)
@@ -351,8 +353,8 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_
             fasta_seg_seq_line_do (vb, dl[i].seq_len, i==0);
 
             // case last Seq line of VB, and this VB ends part-way through the Seq line (no newline)
-            if (vb->vb_has_no_newline && (i == vb->lines_this_contig - 1)) 
-                seg_by_did_i (vb, "", 0, FASTA_EOL, 0); // empty EOL
+            if (is_last_line_vb_no_newline && (i == vb->lines_this_contig - 1)) 
+                seg_by_did_i (vb, *has_13 ? "\r" : "", *has_13, FASTA_EOL, *has_13); // an EOL without \n
             else 
                 SEG_EOL (FASTA_EOL, true); 
         }        
@@ -408,6 +410,7 @@ const char *fasta_seg_txt_line (VBlockFASTA *vb, const char *line_start, uint32_
     // case: sequence line
     else 
         fasta_seg_seq_line (vb, line_start, line_len, 
+                            remaining_txt_len == line_len + *has_13, // true if this is the last line in the VB with no newline (but may or may not have \r)
                             !remaining_vb_txt_len || *next_field == '>' || *next_field == ';' || *next_field == '\n' || *next_field == '\r', // is_last_line_in_contig
                             has_13);
 

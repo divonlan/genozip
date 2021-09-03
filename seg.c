@@ -127,35 +127,41 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len,
     return 0; // avoid compiler warning - never reaches here
 }
 
-const char *seg_get_next_line (void *vb_, const char *str, int *remaining_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, const char *item_name)
+// returns first character after current line
+const char *seg_get_next_line (void *vb_, const char *str, 
+                               int *remaining_len, // in/out
+                               unsigned *len,      // out - length of line exluding \r and \n
+                               bool must_have_newline, bool *has_13 /* out */, const char *item_name)
 {
     VBlockP vb = (VBlockP)vb_;
 
-    unsigned i=0; for (; i < *remaining_len; i++)
-        if (str[i] == '\n') {
-                *len = i;
-                *remaining_len -= i+1;
+    const char *after = str + *remaining_len;
+    for (const char *s=str; s < after; s++)
+        if (*s == '\n') {
+                *len = s - str;
+                *remaining_len -= *len + 1;
 
                 // check for Windows-style '\r\n' end of line 
-                if (i && str[i-1] == '\r') {
+                if (s > str && s[-1] == '\r') {
                     (*len)--;
                     *has_13 = true;
                 }
 
-                return str + i+1; // beyond the separator
+                return str + *len + *has_13 + 1; // beyond the separator
         }
     
     ASSSEG (*remaining_len, str, "missing %s field", item_name);
 
     // if we reached here - line doesn't end with a newline
     ASSSEG (!must_have_newline, str, "while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
-            item_name, MIN (i-1, 1000), str);
+            item_name, MIN (*remaining_len, 1000), str);
 
-    *len = *remaining_len;
+    // we have no newline, but check if last character is a \r
     *remaining_len = 0;
-    *has_13 = false;
+    *has_13 = (after > str) && (after[-1] == '\r');
+    *len = *remaining_len - *has_13;
 
-    return str + *len;
+    return after;
 }
 
 // returns true is value is of type store_type and stored in last_value
@@ -923,18 +929,19 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 
     if (!DTP (line_height)) return 0; // this data type doesn't use textual lines
 
-    int newlines=0; for (; newlines < DTP (line_height) * NUM_LINES_IN_TEST; newlines++, len++)
-        for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
+    ARRAY (char, txt, vb->txt_data);
+    int line_count=0; for (; line_count < DTP (line_height) * NUM_LINES_IN_TEST && len < txt_len; line_count++, len++)
+        for (; len < txt_len && txt[len] != '\n'; len++) {};
 
-    len /= NUM_LINES_IN_TEST; // average length of a line
+    len /= MAX (1, (line_count / DTP (line_height))); // average length of a line
 
-    ASSERT (vb->txt_data.len, "vb=%u: txt_data is empty", vb->vblock_i); 
+    ASSERT (txt_len, "vb=%u: txt_data is empty", vb->vblock_i); 
 
-    ASSSEG (newlines==DTP (line_height) || len < vb->txt_data.len, vb->txt_data.data, 
+    ASSSEG (line_count==DTP (line_height) || len < txt_len, txt, 
             "a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
             str_uint_commas (flag.vblock_memory).s);
 
-    return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
+    return MAX (100, (uint32_t)(((double)txt_len / (double)len) * 1.2));
 }
 
 // double the number of lines if we've run out of lines
