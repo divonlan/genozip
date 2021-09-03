@@ -4,13 +4,9 @@
 //   Please see terms and conditions in the file LICENSE.txt
 //   Copyright claimed on additions and modifications vs public domain.
 //
-// a module for handling arrays of 2-bit elements, partially based on public domain code here: 
-// https://github.com/noporpoise/BitArray/. 
-
-
-// 64 bit words
-// Array length can be zero
-// Unused top bits must be zero
+// a module for handling bit arrays, partially based on: https://github.com/noporpoise/BitArray/ which says:
+// "This software is in the Public Domain. That means you can do whatever you like with it. That includes being used in proprietary products 
+// without attribution or restrictions. There are no warranties and there may be bugs."
 
 #include <stdarg.h>
 #include "genozip.h"
