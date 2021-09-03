@@ -4,11 +4,16 @@
 # Declare our textual formats as binary so we can check in test files with Unix or Windows style end-of-lines
 *.vcf binary
 *.sam binary
+*.bam binary
+*.cram binary
 *.gff3 binary
+*.gff binary
 *.gvf binary
 genome_*.txt binary
 *.fa binary
 *.fasta binary
 *.fq binary
 *.fastq binary
+*.phy binary
+*.kraken binary
 *.genozip binary
