@@ -21,7 +21,7 @@ typedef struct Context {
     // common fields for ZIP & PIZ
     // ----------------------------
     #define MAX_TAG_LEN 64     // including terminating nul (must be divisible by 8 for Tag struct)
-    const char tag_name[MAX_TAG_LEN]; // nul-terminated tag name 
+    char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
     DidIType did_i;            // the index of this ctx within the array vb->contexts
     DidIType st_did_i;         // in --stats, consolidate this context into st_did_i
     LocalType ltype;           // LT_* - type of local data - included in the section header

@@ -236,6 +236,39 @@ static bool chain_seg_verify_contig (VBlock *vb, Reference ref, WordIndex name_i
     return true; // verified
 }
 
+// run by main thread, called from zip_dynamically_set_max_memory (unless -B is used). Tests lengths of prim/luft contigs of first line in chain file
+// vs the two references. If they don't match, tests swapping the references. If that fixes it, swaps the references.
+static void chain_reverse_references_if_needed (VBlock *vb)
+{
+    const char *newline = memchr (vb->txt_data.data, '\n', vb->txt_data.len);
+    if (!newline) return;
+
+    str_split (vb->txt_data.data, newline - vb->txt_data.data, 13, ' ', item, true);
+    if (!n_items) return;
+
+    PosType prim_len_ref, prim_len_chain, luft_len_ref, luft_len_chain;
+    if (!str_get_int (STRi(item, 3), &prim_len_chain)) return;
+    if (!str_get_int (STRi(item, 8), &luft_len_chain)) return;
+
+    prim_len_ref = ref_contigs_get_contig_length (prim_ref, WORD_INDEX_NONE, STRi(item,2), false);
+    luft_len_ref = ref_contigs_get_contig_length (gref,     WORD_INDEX_NONE, STRi(item,7), false);
+    
+    // if lengths don't match (either because they differ, or because len_ref=-1 bc contig not found in ref file), attempt to 
+    // switch refs
+    if (prim_len_ref != prim_len_chain || luft_len_ref != luft_len_chain) {
+        prim_len_ref = ref_contigs_get_contig_length (gref,     WORD_INDEX_NONE, STRi(item,2), false);
+        luft_len_ref = ref_contigs_get_contig_length (prim_ref, WORD_INDEX_NONE, STRi(item,7), false);
+        
+        // if it worked - swap the references
+        if (prim_len_ref == prim_len_chain && luft_len_ref == luft_len_chain) {
+            iprintf ("\n\nFYI: Reference files %s and %s are given in the command line in reverse order - switching them.\n", ref_get_filename (prim_ref), ref_get_filename (gref)); // not WARN bc zip_dynamically_set_max_memory set flag.quiet=true
+            SWAP (prim_ref, gref);
+            SWAP (*CTX (CHAIN_NAMEPRIM), *CTX (CHAIN_NAMELUFT));
+            SWAP (*ZCTX(CHAIN_NAMEPRIM), *ZCTX(CHAIN_NAMELUFT));
+        }
+    }
+}
+
 const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     static bool once_src = false, once_dst = false;
@@ -243,6 +276,10 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     unsigned field_len=0;
     char separator;
     bool is_new;
+
+    // check if the references are reversed - and reverse them
+    if (flag.dyn_set_mem && !vb->line_i) 
+        chain_reverse_references_if_needed (vb);
 
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
