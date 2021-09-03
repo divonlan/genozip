@@ -905,7 +905,7 @@ void flags_update_zip_one_file (void)
         flag.sort = true;
 
     if (chain_is_loaded && dt == DT_VCF && !flag.show_one_counts.num && !flag.quiet)
-        flag.show_one_counts = (DictId)_VCF_oSTATUS;
+        flag.show_one_counts = dict_id_typeless ((DictId)_VCF_oSTATUS);
 
     info_stream = stdout; // always stdout in zip
     is_info_stream_terminal = isatty (fileno (info_stream)); 
