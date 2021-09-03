@@ -151,7 +151,7 @@ else
 endif
 
 all   : CFLAGS += $(LOCALFLAGS) $(OPTFLAGS) 
-all   : $(OBJDIR) $(EXECUTABLES) LICENSE.txt
+all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
 
 debug : CFLAGS += $(LOCALFLAGS) $(DEBUGFLAGS)
