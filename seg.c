@@ -157,9 +157,9 @@ const char *seg_get_next_line (void *vb_, const char *str,
             item_name, MIN_(*remaining_len, 1000), str);
 
     // we have no newline, but check if last character is a \r
-    *remaining_len = 0;
     *has_13 = (after > str) && (after[-1] == '\r');
     *len = *remaining_len - *has_13;
+    *remaining_len = 0;
 
     return after;
 }
