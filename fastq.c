@@ -402,7 +402,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 
     else {
         Context *nonref_ctx = CTX(FASTQ_NONREF);
-        buf_alloc ((VBlockP)vb, &nonref_ctx->local, 0, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), char, CTX_GROWTH, "contexts->local"); 
+        buf_alloc ((VBlockP)vb, &nonref_ctx->local, 0, MAX_(nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), char, CTX_GROWTH, "contexts->local"); 
         buf_add (&nonref_ctx->local, FASTQ_SEQ_str, dl->seq_len);
     }
 
@@ -472,7 +472,7 @@ void fastq_zip_qual (VBlock *vb, uint64_t vb_line_i,
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_qual_len  = MIN (dl->seq_len, maximum_len);
+    *line_qual_len  = MIN_(dl->seq_len, maximum_len);
     
     if (!line_qual_data) return; // only lengths were requested
 

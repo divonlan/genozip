@@ -79,7 +79,7 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
                 .num_lines   = 1,
                 .chrom_wi    = chrom_word_index,
                 .start_pos   = pos,
-                .end_pos     = pos + MAX (0, dl->end_delta),
+                .end_pos     = pos + MAX_(0, dl->end_delta),
                 .tie_breaker = dl->tie_breaker
             };
         
@@ -88,7 +88,7 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
     }
 
     // store information about this VB, that will help us figure out if the entire file is sorted or not
-    buf_alloc_zero (evb, &txt_file->vb_info[is_luft], 0, MIN (1000, vb->vblock_i), LsVbInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
+    buf_alloc_zero (evb, &txt_file->vb_info[is_luft], 0, MIN_(1000, vb->vblock_i), LsVbInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
     
     *ENT (LsVbInfo, txt_file->vb_info[is_luft], vb->vblock_i-1) = (LsVbInfo){ // -1 as vblock_i is 1-based
         .is_unsorted        = vb->is_unsorted[is_luft],
@@ -99,7 +99,7 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
         .num_lines          = (uint32_t)vb->lines.len
     };
 
-    txt_file->vb_info[is_luft].len = MAX (txt_file->vb_info[is_luft].len, vb->vblock_i); // note: vblock_i is 1-based
+    txt_file->vb_info[is_luft].len = MAX_(txt_file->vb_info[is_luft].len, vb->vblock_i); // note: vblock_i is 1-based
 
     mutex_unlock (txt_file->recon_plan_mutex[is_luft]);
 }
@@ -163,8 +163,21 @@ static int linesorter_line_cmp (const void *a_, const void *b_)
     if (a->tie_breaker < b->tie_breaker) return -1; // a is smaller (don't use substraction as its unsigned 32b)
     if (b->tie_breaker < a->tie_breaker) return +1; // b is smaller
 
-    WARN_ONCE("FYI: Some lines have identical chrom_index=%d, overlapping POS=[%"PRId64",%"PRId64"] and identical tie-breaker - they may appear in inconsistent order",
-               a->chrom_wi, MAX (a->start_pos, b->start_pos), MIN (a->end_pos, b->end_pos));
+    // this can happen if the chain file maps two or more variants in Primary to the same coordinate in Luft (observed in GRCh38->T2T) 
+    // NOTE: This report doesn't produce a full list of all the Many->One sites affecting this VCF. This is because we only report Many->One variants that 
+    // also have the same REF+ALT. we don't report variants that have a different Primary REF is both locations, or if the Primary ALTs are different.
+    // The reason for this is that Primary VCF files might legitimately have multiple variants at the same position with different ALTs.
+    if (is_luft_sorter) {
+        if (a->start_pos == a->end_pos && b->start_pos == b->end_pos) // SNP
+            WARN ("FYI: In LUFT coordinates CHROM=\"%s\", POS=%"PRId64": There are two or more variants with identical CHROM, POS, REF and ALT fields.",
+                ctx_get_zf_nodes_snip (ZCTX(CHROM), a->chrom_wi), a->start_pos);
+        else
+            WARN ("FYI: In LUFT coordinates CHROM=\"%s\", POS=[%"PRId64",%"PRId64"]: There are two or more variants with identical CHROM, REF and ALT fields, and overlap POS",
+                ctx_get_zf_nodes_snip (ZCTX(CHROM), a->chrom_wi), MAX_(a->start_pos, b->start_pos), MIN_(a->end_pos, b->end_pos));
+
+        WARN_ONCE0 ("This can happen if the chain file maps two or more Primary coordinates to a single Luft coordinate");
+    }
+    
     return 0; // undeterministic sorting, hopefully this doesn't happen too often
 }
 
@@ -342,7 +355,7 @@ uint32_t linesorter_get_max_conc_writing_vbs (void)
 
     while (sections_next_sec (&sl, SEC_RECON_PLAN)) {
         uint32_t conc_writing_vbs = zfile_read_section_header (evb, sl->offset, 0, SEC_RECON_PLAN).recon_plan.conc_writing_vbs;
-        max_conc_writing_vbs = MAX (max_conc_writing_vbs, BGEN32 (conc_writing_vbs));
+        max_conc_writing_vbs = MAX_(max_conc_writing_vbs, BGEN32 (conc_writing_vbs));
     }
 
     return max_conc_writing_vbs;

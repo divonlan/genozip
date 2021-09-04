@@ -71,7 +71,7 @@ static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_
     ASSERT (instream->avail_in_1 <= instream->avail_in, "Expecting avail_in_1=%u <= avail_in=%u",
             instream->avail_in_1, instream->avail_in);
             
-    uint32_t bytes_served_1 = MIN (instream->avail_in_1, *size);
+    uint32_t bytes_served_1 = MIN_(instream->avail_in_1, *size);
     if (bytes_served_1) {
         memcpy (buf, instream->next_in_1, bytes_served_1);
         instream->next_in_1  += bytes_served_1;
@@ -88,7 +88,7 @@ static size_t codec_lzma_data_out_callback (const ISeqOutStream *p, const void *
 {
     ISeqOutStream *outstream = (ISeqOutStream *)p; // discard the const
 
-    uint32_t bytes_written = MIN (outstream->avail_out, (uint32_t)size);
+    uint32_t bytes_written = MIN_(outstream->avail_out, (uint32_t)size);
     memcpy (outstream->next_out, buf, bytes_written);
 
     outstream->avail_out -= bytes_written;
@@ -114,7 +114,7 @@ bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
     props.level        = 5;    // Without setting dictSize, Level 5 consumes < 200MB ; level 7 consumes up to 350MB per VB. negligible difference between level 5,7,9 (< 0.1% file size)
     props.fb           = 273;  // a bit better compression with no noticable impact on memory or speed
     props.writeEndMark = true; // add an "end of compression" mark - better error detection during decompress
-    props.dictSize     = MIN (*uncompressed_len, flag.vblock_memory);
+    props.dictSize     = MIN_(*uncompressed_len, flag.vblock_memory);
 
     CLzmaEncHandle lzma_handle = LzmaEnc_Create (&alloc_stuff);
     ASSERT0 (lzma_handle, "LzmaEnc_Create failed");

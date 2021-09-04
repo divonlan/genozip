@@ -60,7 +60,7 @@ void sam_zip_qual (VBlock *vb, uint64_t vb_line_i, char **line_qual_data, uint32
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_qual_len  = MIN (maximum_len, dl->qual_data_len);
+    *line_qual_len  = MIN_(maximum_len, dl->qual_data_len);
     
     if (!line_qual_data) return; // only lengths were requested
 
@@ -81,7 +81,7 @@ void sam_zip_u2 (VBlock *vb, uint64_t vb_line_i, char **line_u2_data,  uint32_t 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
-    *line_u2_len = MIN (maximum_len, dl->u2_data_len);
+    *line_u2_len = MIN_(maximum_len, dl->u2_data_len);
 
     if (!line_u2_data) return; // only lengths were requested
 
@@ -107,7 +107,7 @@ void sam_zip_bd_bi (VBlock *vb_, uint64_t vb_line_i,
     if (!bd && !bi) return; // no BD or BI on this line
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_len  = MIN (maximum_len, dl->seq_len * 2);
+    *line_len  = MIN_(maximum_len, dl->seq_len * 2);
 
     if (!line_data) return; // only length was requested
 
@@ -519,7 +519,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     int subcigar_len=0;
     char cigar_op;
 
-    uint32_t ref_len_this_level = (flag.reference == REF_INTERNAL ? MIN (vb->ref_consumed, range->last_pos - pos + 1)
+    uint32_t ref_len_this_level = (flag.reference == REF_INTERNAL ? MIN_(vb->ref_consumed, range->last_pos - pos + 1)
                                                                   : vb->ref_consumed); // possibly going around the end of the chromosome in case of a circular chromosome                                   
 
     uint32_t range_len = (range->last_pos - range->first_pos + 1);
@@ -595,7 +595,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
         // for Deletion or Skipping - we move the next_ref ahead
         else if (cigar_op == 'D' || cigar_op == 'N') {
-            unsigned ref_consumed = (flag.reference == REF_INTERNAL ? MIN (subcigar_len, range_len - next_ref)
+            unsigned ref_consumed = (flag.reference == REF_INTERNAL ? MIN_(subcigar_len, range_len - next_ref)
                                                                     : subcigar_len);
             next_ref     += ref_consumed;
             subcigar_len -= ref_consumed;
@@ -1263,7 +1263,7 @@ static void sam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned las
                 "Bad line: SEQ length is %u, QUAL length is %u, unexpectedly differ. SEQ=%.*s QUAL=%.*s", 
                 seq_data_len, dl->qual_data_len, seq_data_len, seq, dl->qual_data_len, qual);    
 
-        dl->seq_len = MAX (seq_data_len, dl->qual_data_len); // one or both might be not available and hence =1
+        dl->seq_len = MAX_(seq_data_len, dl->qual_data_len); // one or both might be not available and hence =1
 
         cigar_snip_len += str_int (dl->seq_len, &cigar_snip[cigar_snip_len]);
     } 

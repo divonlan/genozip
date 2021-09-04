@@ -161,7 +161,7 @@ void fasta_zip_seq (VBlock *vb, uint64_t vb_line_i,
     ZipDataLineFASTA *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_seq_len = MIN (dl->seq_len, maximum_len);
+    *line_seq_len = MIN_(dl->seq_len, maximum_len);
     
     if (line_seq_data) // if NULL, only length was requested
         *line_seq_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;
@@ -261,7 +261,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
     // case make_ref: add contig metadata (the rest of the line, except for the chrom_name)
     else {
         const char *md_start = chrom_name + chrom_name_len + strspn (&chrom_name[chrom_name_len], " \t");
-        unsigned md_len = MIN (strcspn (md_start, "\n\r"), REFCONTIG_MD_LEN-1);
+        unsigned md_len = MIN_(strcspn (md_start, "\n\r"), REFCONTIG_MD_LEN-1);
         memcpy (vb->contig_metadata.s, md_start, md_len);
         vb->has_contig_metadata = true;        
     }
@@ -564,7 +564,7 @@ static inline void fasta_piz_translate_desc_to_phylip (VBlock *vb, char *desc_st
     const char *chrom_name = desc_start + 1;
     unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
 
-    memmove (desc_start, chrom_name, MIN (chrom_name_len, 10));
+    memmove (desc_start, chrom_name, MIN_(chrom_name_len, 10));
     if (chrom_name_len < 10) memcpy (desc_start + chrom_name_len, "          ", 10-chrom_name_len); // pad with spaces
 
     if (recon_len > 10) vb->txt_data.len -= recon_len - 10; // we do it this way to avoid signed problems

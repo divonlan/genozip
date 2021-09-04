@@ -122,7 +122,7 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len,
     ABOSEG (str, "while segmenting %s: expecting a %s%s%safter \"%.*s\"", 
             item_name,
             newline==GN_SEP ? "NEWLINE " : "", tab==GN_SEP ? "TAB " : "", space==GN_SEP ? "\" \" " : "", 
-            MIN (i, 1000), str);
+            MIN_(i, 1000), str);
 
     return 0; // avoid compiler warning - never reaches here
 }
@@ -154,7 +154,7 @@ const char *seg_get_next_line (void *vb_, const char *str,
 
     // if we reached here - line doesn't end with a newline
     ASSSEG (!must_have_newline, str, "while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
-            item_name, MIN (*remaining_len, 1000), str);
+            item_name, MIN_(*remaining_len, 1000), str);
 
     // we have no newline, but check if last character is a \r
     *remaining_len = 0;
@@ -378,7 +378,7 @@ void seg_id_field_do (VBlock *vb, DidIType did_i, const char *id_snip, unsigned 
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
     
-    unsigned num_digits = MIN (id_snip_len - (i+1), 9);
+    unsigned num_digits = MIN_(id_snip_len - (i+1), 9);
 
     // leading zeros will be part of the dictionary data, not the number
     for (unsigned i = id_snip_len - num_digits; i < id_snip_len; i++) 
@@ -933,7 +933,7 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
     int line_count=0; for (; line_count < DTP (line_height) * NUM_LINES_IN_TEST && len < txt_len; line_count++, len++)
         for (; len < txt_len && txt[len] != '\n'; len++) {};
 
-    len /= MAX (1, (line_count / DTP (line_height))); // average length of a line
+    len /= MAX_(1, (line_count / DTP (line_height))); // average length of a line
 
     ASSERT (txt_len, "vb=%u: txt_data is empty", vb->vblock_i); 
 
@@ -941,7 +941,7 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
             "a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
             str_uint_commas (flag.vblock_memory).s);
 
-    return MAX (100, (uint32_t)(((double)txt_len / (double)len) * 1.2));
+    return MAX_(100, (uint32_t)(((double)txt_len / (double)len) * 1.2));
 }
 
 // double the number of lines if we've run out of lines
@@ -1027,7 +1027,7 @@ void seg_all_data_lines (VBlock *vb)
         vb->line_start = ENTNUM (vb->txt_data, field_start);
         const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
 
-        vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
+        vb->longest_line_len = MAX_(vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
 
         // if our estimate number of lines was too small, increase it

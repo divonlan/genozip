@@ -29,17 +29,21 @@
 #include "chain.h"
 #include "kraken.h"
 
-#define MAX_NUM_SPECIAL MAX_((int)NUM_GNRIC_SPECIAL, \
-                        MAX_((int)NUM_VCF_SPECIAL,   \
-                        MAX_((int)NUM_SAM_SPECIAL,   \
-                        MAX_((int)NUM_CHAIN_SPECIAL, \
+#ifndef MAX // can't use MAX_ in a global variable
+#define MAX(a, b) (((a) > (b)) ? (a) : (b) )
+#endif
+
+#define MAX_NUM_SPECIAL MAX ((int)NUM_GNRIC_SPECIAL, \
+                        MAX ((int)NUM_VCF_SPECIAL,   \
+                        MAX ((int)NUM_SAM_SPECIAL,   \
+                        MAX ((int)NUM_CHAIN_SPECIAL, \
                              (int)NUM_FASTA_SPECIAL))))
 
 typedef TRANSLATOR_FUNC ((*PizTranslator));
-#define MAX_NUM_TRANSLATORS MAX_(NUM_VCF_TRANS,    \
-                            MAX_(NUM_SAM_TRANS,    \
-                            MAX_(NUM_ME23_TRANS,   \
-                            MAX_(NUM_PHYLIP_TRANS, \
+#define MAX_NUM_TRANSLATORS MAX (NUM_VCF_TRANS,    \
+                            MAX (NUM_SAM_TRANS,    \
+                            MAX (NUM_ME23_TRANS,   \
+                            MAX (NUM_PHYLIP_TRANS, \
                                  NUM_FASTA_TRANS))))
 
 typedef struct DataTypeProperties {

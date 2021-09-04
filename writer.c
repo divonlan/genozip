@@ -398,7 +398,7 @@ static void writer_add_plan_from_recon_section (const CompInfo *comp, Section re
                               &evb->compressed, "compressed");
 
     // assign outs
-    *conc_writing_vbs = MAX (*conc_writing_vbs, BGEN32 (header.conc_writing_vbs));
+    *conc_writing_vbs = MAX_(*conc_writing_vbs, BGEN32 (header.conc_writing_vbs));
     *vblock_mb = BGEN32 (header.vblock_mb);
 
     evb->compressed.len /= sizeof (uint32_t); // len to units of uint32_t
@@ -496,7 +496,7 @@ void writer_create_plan (void)
     }
 
     // actual number of buffers - compute threads: conc_writing_vbs ; writer thread: conc_writing_vbs (at least 3) ; but no more than num_vbs
-    conc_writing_vbs = MIN (vb_info.len, MAX (3, conc_writing_vbs) + global_max_threads);
+    conc_writing_vbs = MIN_(vb_info.len, MAX_(3, conc_writing_vbs) + global_max_threads);
 
     if (flag.show_recon_plan) {
         linesorter_show_recon_plan (z_file, flag.luft, conc_writing_vbs, vblock_mb);    

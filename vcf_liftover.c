@@ -186,7 +186,7 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex
 
     // extend vb->chrom_map_vcf_to_chain if needed - map between VCF node index (NOT word index) and chain primary contigs (NOT reference primary contigs)
     if (vb->chrom_node_index >= vb->chrom_map_vcf_to_chain.len) { 
-        buf_alloc (vb, &vb->chrom_map_vcf_to_chain, 0, MAX (vb->chrom_node_index+1, chain_get_num_prim_contigs()), WordIndex, 2, "chrom_map_vcf_to_chain");
+        buf_alloc (vb, &vb->chrom_map_vcf_to_chain, 0, MAX_(vb->chrom_node_index+1, chain_get_num_prim_contigs()), WordIndex, 2, "chrom_map_vcf_to_chain");
 
         // initialize new entries allocated to WORD_INDEX_MISSING
         uint32_t size = vb->chrom_map_vcf_to_chain.size / sizeof (WordIndex);

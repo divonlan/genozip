@@ -110,8 +110,8 @@ extern unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_it
 
 #define str_split_enforce(str,str_len,max_items,sep,name,exactly,enforce) \
     unsigned n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; /* 0 if str is NULL */ \
-    const char *name##s[MAX (n_##name##s, 1)]; \
-    unsigned name##_lens[MAX (n_##name##s, 1)]; \
+    const char *name##s[MAX_(n_##name##s, 1)]; \
+    unsigned name##_lens[MAX_(n_##name##s, 1)]; \
     n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), name##s, name##_lens, (exactly), (enforce)); 
 
 extern void str_remove_CR_do (unsigned n_lines, const char **lines, unsigned *line_lens);

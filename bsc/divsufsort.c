@@ -758,7 +758,7 @@ ss_swapmerge(const unsigned char *T, const int *PA,
       continue;
     }
 
-    for(m = 0, len = MIN(middle - first, last - middle), half = len >> 1;
+    for(m = 0, len = MIN_(middle - first, last - middle), half = len >> 1;
         0 < len;
         len = half, half >>= 1) {
       if(ss_compare(T, PA + GETIDX(*(middle + m + half)),

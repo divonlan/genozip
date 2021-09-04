@@ -366,7 +366,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
         // calculate digits before and after the decimal point
         double log_f = log10 (machine_en.f >= 0 ? machine_en.f : -machine_en.f);
         unsigned int_digits = (log_f >= 0) + (unsigned)log_f;
-        unsigned dec_digits = MAX (0, NUM_SIGNIFICANT_DIGITS - int_digits);
+        unsigned dec_digits = MAX_(0, NUM_SIGNIFICANT_DIGITS - int_digits);
         
         // reconstruct number with exactly NUM_SIGNIFICANT_DIGITS digits
         sprintf (AFTERENT (char, vb->txt_data), "%.*f", dec_digits, machine_en.f); 

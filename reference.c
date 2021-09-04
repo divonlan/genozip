@@ -431,7 +431,7 @@ static void ref_uncompress_one_range (VBlockP vb)
             initial_flanking_len = (sec_start_within_contig < 0)    ? -sec_start_within_contig       : 0; // nucleotides in the section that are before the start of our contig
             final_flanking_len   = (ref_sec_last_pos > r->last_pos) ? ref_sec_last_pos - r->last_pos : 0; // nucleotides in the section that are after the end of our contig
 
-            bit_index_t start = MAX (sec_start_within_contig, 0);
+            bit_index_t start = MAX_(sec_start_within_contig, 0);
             bit_index_t len   = ref_sec_len - initial_flanking_len - final_flanking_len;
             ASSERT (len >= 0 && len <= ref_sec_len, "expecting ref_sec_len=%"PRIu64" >= initial_flanking_len=%"PRIu64" + final_flanking_len=%"PRIu64,
                     ref_sec_len, initial_flanking_len, final_flanking_len);
@@ -445,7 +445,7 @@ static void ref_uncompress_one_range (VBlockP vb)
             RegionToSet *rts = &NEXTENT (RegionToSet, vb->ref->region_to_set_list);
             spin_unlock (vb->ref->region_to_set_list_spin);
             rts->is_set    = &r->is_set;
-            rts->first_bit = MAX (sec_start_within_contig, 0);
+            rts->first_bit = MAX_(sec_start_within_contig, 0);
             rts->len       = ref_sec_len - initial_flanking_len - final_flanking_len;
         }
    
@@ -468,7 +468,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         BitArray *ref = buf_zfile_buf_to_bitarray (&vb->compressed, ref_sec_len * 2);
 
         // copy the section, excluding the flanking regions
-        bit_array_copy (&r->ref, MAX (sec_start_within_contig, 0) * 2, // dst
+        bit_array_copy (&r->ref, MAX_(sec_start_within_contig, 0) * 2, // dst
                         ref, initial_flanking_len * 2, // src
                         (ref_sec_len - initial_flanking_len - final_flanking_len) * 2); // len
     }
@@ -1118,7 +1118,7 @@ static inline unsigned ref_prepare_expected_more_merges (const Range *this_r, in
             break;
     }
 
-    return MIN (more, max_ranges);
+    return MIN_(more, max_ranges);
 }
 
 // compress the reference - one section at the time, using Dispatcher to do them in parallel 
@@ -1615,7 +1615,7 @@ RangeStr ref_display_range (const Range *r)
 void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file) /* start_pos=end_pos=0 if entire ref */
 {
     uint64_t start_idx = start_pos ? start_pos - r->first_pos : 0;
-    uint64_t end_idx   = (end_pos ? MIN (end_pos, r->last_pos) : r->last_pos) - r->first_pos;
+    uint64_t end_idx   = (end_pos ? MIN_(end_pos, r->last_pos) : r->last_pos) - r->first_pos;
 
     fprintf (file, "%s: %.*s %"PRId64" - %"PRId64" (len=%u): ", msg, r->chrom_name_len, r->chrom_name, start_pos, end_pos, (uint32_t)(end_pos - start_pos + 1));
     for (uint64_t idx = start_idx; idx <= end_idx; idx++) 
@@ -1631,7 +1631,7 @@ char *ref_dis_subrange (const Range *r, PosType start_pos, PosType len, char *se
     uint64_t idx, end_idx;
 
     if (!revcomp) {
-        end_idx = MIN (start_pos + (len-1) - 1, r->last_pos) - r->first_pos; // -1 to leave room for \0
+        end_idx = MIN_(start_pos + (len-1) - 1, r->last_pos) - r->first_pos; // -1 to leave room for \0
 
         for (idx = start_idx; idx <= end_idx; idx++) 
             seq[idx - start_idx] = ref_base_by_idx (r, idx);
@@ -1641,7 +1641,7 @@ char *ref_dis_subrange (const Range *r, PosType start_pos, PosType len, char *se
 
     // revcomp: display the sequence starting at start_pos and going backwards - complemented
     else {
-        end_idx = MAX (start_pos - (len-1) + 1, r->first_pos) - r->first_pos;
+        end_idx = MAX_(start_pos - (len-1) + 1, r->first_pos) - r->first_pos;
 
         for (idx = start_idx; idx >= end_idx; idx--) 
             seq[start_idx - idx] = COMPLEM[(int)ref_base_by_idx (r, idx)];
@@ -1714,7 +1714,7 @@ const char *ref_get_cram_ref (Reference ref)
     ASSINP (ref->ref_fasta_name, "cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",
             ref->filename, REF_FILENAME_LEN-1);
 
-    samtools_T_option = MALLOC (MAX (strlen (ref->ref_fasta_name), strlen (ref->filename)) + 10);
+    samtools_T_option = MALLOC (MAX_(strlen (ref->ref_fasta_name), strlen (ref->filename)) + 10);
 
     // case: fasta file is in its original location
     if (file_exists (ref->ref_fasta_name)) 

@@ -79,7 +79,7 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
     // * larger than 0, smaller than BITS_PER_HASH if HOOK is in this range, 
     //   and some bits in this range and some in next
     // * BITS_PER_HASH if HOOK and all bits are in this range
-    PosType num_bits_this_range = MIN (bits_per_hash, (PosType)r->ref.nbits - base_i*2);
+    PosType num_bits_this_range = MIN_(bits_per_hash, (PosType)r->ref.nbits - base_i*2);
     uint32_t refhash_word = 0;
 
     // if the are any of the 29 bits in this range, use them
@@ -113,7 +113,7 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
     // end of this one (note: we only look at one next range - even if it is very short, we will not overflow to the next one after)
-    PosType num_bases = this_range_size - (nukes_per_hash - MIN (next_range_size, nukes_per_hash) ); // take up to NUKES_PER_HASH bases from the next range, if available
+    PosType num_bases = this_range_size - (nukes_per_hash - MIN_(next_range_size, nukes_per_hash) ); // take up to NUKES_PER_HASH bases from the next range, if available
 
     for (PosType base_i=0; base_i < num_bases; base_i++)
 
@@ -179,7 +179,7 @@ static void refhash_prepare_for_compress (VBlockP vb)
 // part of --make-reference - compute thread for compressing part of the hash
 static void refhash_compress_one_vb (VBlockP vb)
 {
-    uint32_t uncompressed_size = MIN (make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
+    uint32_t uncompressed_size = MIN_(make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
     const uint32_t *hash_data = &refhashs[vb->refhash_layer][vb->refhash_start_in_layer / sizeof (uint32_t)];
 //const uint32_t *hash_data = ENT (const uint32_t, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer / sizeof (uint32_t));
 

@@ -770,7 +770,7 @@ static unsigned flags_get_longest_filename (unsigned num_files, const char **fil
     unsigned len=0;
     for (unsigned i=0; i < num_files; i++) {
         unsigned len_i = strlen (filenames[i]);
-        len = MAX (len, len_i);
+        len = MAX_(len, len_i);
     }
     return len;
 }

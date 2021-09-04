@@ -513,7 +513,7 @@ int32_t zfile_read_section_do (File *file,
     uint32_t data_compressed_len = BGEN32 (header->data_compressed_len);
     uint32_t data_encrypted_len  = BGEN32 (header->data_encrypted_len);
 
-    uint32_t data_len = MAX (data_compressed_len, data_encrypted_len);
+    uint32_t data_len = MAX_(data_compressed_len, data_encrypted_len);
 
     // in case where we already read part of the body (eg if is_encrypted was initially set and then unset) (remaining_data_len might be negative)
     int32_t remaining_data_len = (int32_t)data_len - (int32_t)(bytes_read - header_size); 

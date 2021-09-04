@@ -89,7 +89,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     DispatcherData *dd   = (DispatcherData *)CALLOC (sizeof(DispatcherData));
     dd->task_name        = task_name;
     dd->next_vb_i        = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
-    dd->max_threads      = MIN (max_threads, MAX_COMPUTED_VBS);
+    dd->max_threads      = MIN_(max_threads, MAX_COMPUTED_VBS);
     dd->is_last_file     = is_last_file;
     dd->cleanup_after_me = cleanup_after_me;
     dd->prog             = prog;
@@ -100,7 +100,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     ASSERT (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
     
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool for all fan-outs throughout the execution
-    vb_create_pool (MAX ((command == ZIP ? 2 : 1), global_max_threads)    // compute thread VBs (ZIP needs at least 2, one for zip_dynamically_set_max_memory)
+    vb_create_pool (MAX_((command == ZIP ? 2 : 1), global_max_threads)    // compute thread VBs (ZIP needs at least 2, one for zip_dynamically_set_max_memory)
                   + (command == PIZ)               // txt header VB (for PIZ) or 
                   + z_file->max_conc_writing_vbs + // writer thread VBs 
                   + 2);                            // background cache creation of (gref + primref) or (gref + gref refhash)
@@ -174,7 +174,7 @@ VBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
     dd->next_vb_i = vb_i ? vb_i : dd->next_vb_i+1;
 
     dd->vbs[dd->next_dispatched] = vb_get_vb (dd->task_name, dd->next_vb_i);
-    dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->vbs[dd->next_dispatched]->id);
+    dd->max_vb_id_so_far = MAX_(dd->max_vb_id_so_far, dd->vbs[dd->next_dispatched]->id);
 
     return dd->vbs[dd->next_dispatched];
 }
@@ -241,7 +241,7 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool
     dd->vbs[dd->next_joined] = NULL;
     dd->num_running_compute_threads--;
 
-    dd->next_joined = (dd->next_joined + 1) % MAX (1, dd->max_threads);
+    dd->next_joined = (dd->next_joined + 1) % MAX_(1, dd->max_threads);
 
     return dd->processed_vb; 
 }
@@ -249,7 +249,7 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool
 bool dispatcher_has_free_thread (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-    return dd->num_running_compute_threads < MAX(1, dd->max_threads);
+    return dd->num_running_compute_threads < MAX_(1, dd->max_threads);
 }
 
 bool dispatcher_has_active_threads (Dispatcher dispatcher)

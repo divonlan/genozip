@@ -308,7 +308,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
     if (!refalt_len) goto done; // variant is single coordinate in the other coordinate
 
     char *tab = memchr (refalt, '\t', refalt_len);
-    ASSPIZ (tab, "Invalid refalt: \"%.*s\"", MIN (refalt_len, 100), refalt);
+    ASSPIZ (tab, "Invalid refalt: \"%.*s\"", MIN_(refalt_len, 100), refalt);
 
     // case: the allele is REF
     if (allele == 0)
@@ -474,8 +474,8 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, STRp(field
                         "expecting all repeats of %s to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has more: %.*s", 
                         vep_ctx->tag_name, con_nitems(con), con.repeats, field_len, field);
 
-                ASSVCF (item_i < MIN (126, MAX_FIELDS), "exceeded the max number of %s items=%u", 
-                        vep_ctx->tag_name, MIN (126, MAX_FIELDS)); // the 126 constraint is just the context naming scheme
+                ASSVCF (item_i < MIN_(126, MAX_FIELDS), "exceeded the max number of %s items=%u", 
+                        vep_ctx->tag_name, MIN_(126, MAX_FIELDS)); // the 126 constraint is just the context naming scheme
                 
                 char name[8];
                 sprintf (name, "%c%c_%.3s", item_i < 63 ? '_' : '`', '@' + (item_i % 63), vep_ctx->tag_name);
@@ -1044,7 +1044,7 @@ static int sort_by_subfield_name (const void *a, const void *b)
     InfoItem *ina = (InfoItem *)a;
     InfoItem *inb = (InfoItem *)b;
     
-    return strncmp (ina->name, inb->name, MIN (ina->name_len, inb->name_len));
+    return strncmp (ina->name, inb->name, MIN_(ina->name_len, inb->name_len));
 }
 
 void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_len)
@@ -1203,8 +1203,7 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
     // if we're compressing a Luft rendition, swap the prefixes
     if (vb->line_coords == DC_LUFT && ren_prefixes_len) 
         container_seg_with_rename (vb, CTX(VCF_INFO), &con, ren_prefixes, ren_prefixes_len, prefixes, prefixes_len, total_names_len /* names inc. = and separator */, NULL);
-    
-    else
+    else 
         container_seg_with_rename (vb, CTX(VCF_INFO), &con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, total_names_len /* names inc. = and separator */, NULL);
 }
 

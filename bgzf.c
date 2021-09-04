@@ -478,7 +478,7 @@ static void bgzf_compress_vb_no_blocks (VBlock *vb)
 
     uint32_t next=0, block_i=0;
     while (next < vb->txt_data.len) {
-        uint32_t block_isize = MIN (BGZF_CREATED_BLOCK_SIZE, vb->txt_data.len - next);
+        uint32_t block_isize = MIN_(BGZF_CREATED_BLOCK_SIZE, vb->txt_data.len - next);
         buf_alloc (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, 0, uint8_t, 1.5, "compressed");
 
         bgzf_compress_one_block (vb, ENT (char, vb->txt_data, next), block_isize, block_i++, next, &vb->compressed);

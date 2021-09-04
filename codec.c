@@ -87,7 +87,7 @@ static void codec_reconstruct_error (VBlockP vb, Codec codec, ContextP ctx)
 
 static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)
 {
-    return (uint32_t)MAX (uncompressed_len / 2, 500);
+    return (uint32_t)MAX_(uncompressed_len / 2, 500);
 }
 
 // returns 4-character codec name
@@ -186,7 +186,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     }
 
     uint64_t save_data_len = data->len;
-    data->len = MIN (data->len * (is_local ? lt_desc[ctx->ltype].width : 1), CODEC_ASSIGN_SAMPLE_SIZE);
+    data->len = MIN_(data->len * (is_local ? lt_desc[ctx->ltype].width : 1), CODEC_ASSIGN_SAMPLE_SIZE);
 
     if (data->len < MIN_LEN_FOR_COMPRESSION ||       // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
         *selected_codec != CODEC_UNKNOWN) goto done; // if already selected - don't assign

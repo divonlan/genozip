@@ -115,14 +115,14 @@ void genols (const char *z_filename, bool finalize, const char *subdir, bool rec
         bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_uint_commas (z_file->num_lines).s, 
                    str_int_s (z_file->disk_size).s, str_int_s (z_file->txt_data_so_far_bind).s, ratio < 100, ratio, 
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
-                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
+                   is_subdir ? -MAX_(1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
                    z_filename);
     else 
         bufprintf (evb, &str_buf, item_format, dt_name (dt), str_uint_commas (z_file->num_lines).s,
                    str_size (z_file->disk_size).s, str_size (z_file->txt_data_so_far_bind).s, ratio < 100, ratio, 
                    digest_display_ex (z_file->digest, DD_MD5_IF_MD5).s,
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
-                   is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
+                   is_subdir ? -MAX_(1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
                    z_filename, header.created);
 
     total_compressed_len   += z_file->disk_size;

@@ -208,7 +208,7 @@ int32_t url_read_string (const char *url, char *data, uint32_t data_size)
     if (error_len && !response_len) return -1; // failure
 
     if (data) {
-        unsigned len = MIN (data_size-1, response_len);
+        unsigned len = MIN_(data_size-1, response_len);
         memcpy (data, response, len);
         data[len] = '\0';
         return len;

@@ -455,7 +455,7 @@ static void vcf_convert_prob_to_phred (VBlockVCFP vb, const char *flag_name, con
     unsigned phred_len = 0;
     for (unsigned i=0; i < n_probs; i++) {
         
-        int64_t phred = MIN (60, (int64_t)(((-probs[i]) * 10)+0.5)); // round to the nearest int, capped at 60
+        int64_t phred = MIN_(60, (int64_t)(((-probs[i]) * 10)+0.5)); // round to the nearest int, capped at 60
 
         phred_len += str_int (phred, &optimized_snip[phred_len]);
         if (i < n_probs - 1)
@@ -474,7 +474,7 @@ static bool vcf_phred_optimize (const char *snip, unsigned len, char *optimized_
     unsigned out_len = 0;
 
     for (unsigned i=0; i < n_items; i++) {
-        int64_t new_phred = MIN (60, (int64_t)(items[i] + 0.5));
+        int64_t new_phred = MIN_(60, (int64_t)(items[i] + 0.5));
         out_len += str_int (new_phred, &optimized_snip[out_len]);
         if (i < n_items-1) optimized_snip[out_len++] = ',';
     }

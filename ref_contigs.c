@@ -69,7 +69,7 @@ void ref_contigs_compress (Reference ref)
 
     // the number of contigs is at most the number of chroms - but could be less if some chroms have no sequence
     // in SAM with header and -E, we don't copy the contigs to CHROM, so we take the length from loaded_contigs.
-    buf_alloc (evb, &created_contigs, 0, MAX (ZCTX(CHROM)->nodes.len, ref->loaded_contigs.len), RefContig, 1, "created_contigs");
+    buf_alloc (evb, &created_contigs, 0, MAX_(ZCTX(CHROM)->nodes.len, ref->loaded_contigs.len), RefContig, 1, "created_contigs");
 
     RefContig *last = NULL;
 

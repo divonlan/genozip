@@ -55,7 +55,7 @@ static inline CharIndex ctx_insert_to_dict (VBlock *vb_of_dict, Context *ctx, Di
     Buffer *dict = (type == DICT_ZF_SINGLETON) ? &ctx->ol_dict : &ctx->dict; // in z_file, ol_dict contains singletons
 
     static const char *buf_name[3] = { "contexts->dict", "zctx->dict", "zctx->ol_dict" };
-    buf_alloc (vb_of_dict, dict, snip_len + 1, INITIAL_NUM_NODES * MIN (10, snip_len), char,CTX_GROWTH, buf_name[type]);
+    buf_alloc (vb_of_dict, dict, snip_len + 1, INITIAL_NUM_NODES * MIN_(10, snip_len), char,CTX_GROWTH, buf_name[type]);
     
     if (type == DICT_ZF) buf_set_overlayable (dict); // during merge
     
@@ -517,7 +517,7 @@ void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf
     // allocate and populate hash from zctx->nodes
     hash_alloc_global (zctx, zctx->nodes.len);
 
-    z_file->num_contexts = MAX (z_file->num_contexts, dst_did_i+1);
+    z_file->num_contexts = MAX_(z_file->num_contexts, dst_did_i+1);
 }
 
 // find the z_file context that corresponds to dict_id. It could be possibly a different did_i
@@ -821,7 +821,7 @@ void ctx_initialize_predefined_ctxs (Context *contexts /* an array */,
                                      DidIType *dict_id_to_did_i_map,
                                      DidIType *num_contexts)
 {
-    *num_contexts = MAX (dt_fields[dt].num_fields, *num_contexts);
+    *num_contexts = MAX_(dt_fields[dt].num_fields, *num_contexts);
 
     for (int did_i=0; did_i < dt_fields[dt].num_fields; did_i++) {
         DictId dict_id = dt_fields[dt].dict_id[did_i];

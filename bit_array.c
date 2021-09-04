@@ -160,7 +160,7 @@ static inline word_t _reverse_word(word_t word)
 static inline void _mask_top_word(BitArray* bitarr)
 {
     // Mask top word
-    word_addr_t nwords = MAX(1, bitarr->nwords);
+    word_addr_t nwords = MAX_(1, bitarr->nwords);
     word_offset_t bits_active = bits_in_top_word(bitarr->nbits);
     bitarr->words[nwords-1] &= bitmask64(bits_active);
 }
@@ -236,7 +236,7 @@ static inline void _set_word_cyclic(BitArray* bitarr,
 
     // Prevent overwriting the bits we've just set
     // by setting 'start' as the upper bound for the number of bits to write
-    word_offset_t bits_remaining = MIN(WORD_SIZE - bits_set, start);
+    word_offset_t bits_remaining = MIN_(WORD_SIZE - bits_set, start);
     word_t mask = bitmask64(bits_remaining);
 
     bitarr->words[0] = bitmask_merge(word, bitarr->words[0], mask);
@@ -847,7 +847,7 @@ void bit_array_print_substr (const char *msg,
                              bit_index_t start, bit_index_t length,
                              FILE *file)
 {
-  length = MIN (length, bitarr->nbits - start);
+  length = MIN_(length, bitarr->nbits - start);
 
   bit_index_t i, j;
 
@@ -969,10 +969,10 @@ void bit_array_overlay (BitArray *overlaid_bitarr, BitArray *regular_bitarr, bit
 void bit_array_and(BitArray* dst, const BitArray* src1, const BitArray* src2)
 {
   // Ensure dst array is big enough
-  word_addr_t max_bits = MAX(src1->nbits, src2->nbits);
+  word_addr_t max_bits = MAX_(src1->nbits, src2->nbits);
   bit_array_ensure_size_critical(dst, max_bits);
 
-  word_addr_t min_words = MIN(src1->nwords, src2->nwords);
+  word_addr_t min_words = MIN_(src1->nwords, src2->nwords);
 
   word_addr_t i;
 
@@ -997,10 +997,10 @@ static void _logical_or_xor(BitArray* dst,
                             char use_xor)
 {
   // Ensure dst array is big enough
-  bit_array_ensure_size_critical(dst, MAX(src1->nbits, src2->nbits));
+  bit_array_ensure_size_critical(dst, MAX_(src1->nbits, src2->nbits));
 
-  word_addr_t min_words = MIN(src1->nwords, src2->nwords);
-  word_addr_t max_words = MAX(src1->nwords, src2->nwords);
+  word_addr_t min_words = MIN_(src1->nwords, src2->nwords);
+  word_addr_t max_words = MAX_(src1->nwords, src2->nwords);
 
   word_addr_t i;
 
@@ -1144,7 +1144,7 @@ int bit_array_cmp(const BitArray* bitarr1, const BitArray* bitarr2)
 //  <0 iff bitarr1 < bitarr2
 int bit_array_cmp_big_endian(const BitArray* bitarr1, const BitArray* bitarr2)
 {
-  word_addr_t min_words = MAX(bitarr1->nwords, bitarr2->nwords);
+  word_addr_t min_words = MAX_(bitarr1->nwords, bitarr2->nwords);
 
   word_addr_t i;
   word_t word1, word2;
@@ -1363,7 +1363,7 @@ void bit_array_reverse_complement_all (BitArray *dst, const BitArray *src,
                         (rev_comp_table[(w >> 48) & 0xff] << 8)  | \
                         (rev_comp_table[(w >> 56) & 0xff]        ))
 
-    bit_index_t after_word = MIN (src->nwords, (src_start_base + max_num_bases) / 32); // 32 nucleotides in a word
+    bit_index_t after_word = MIN_(src->nwords, (src_start_base + max_num_bases) / 32); // 32 nucleotides in a word
 
     for (bit_index_t i=src_start_base / 32; i < after_word; i++)
         dst->words[dst->nwords-1 - i] = REV_COMP (src->words[i]);

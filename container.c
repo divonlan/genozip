@@ -45,7 +45,6 @@ void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned
     ((Container*)con)->repeats = BGEN24 (con->repeats); // restore - honoring our "const" contract
 
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
-    *snip_len = 1 + b64_len + prefixes_len;
 }
 
 WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con, 
@@ -70,7 +69,7 @@ WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con,
     unsigned con1_snip_len = 1 + con_b64_size + prefixes_len;
     unsigned con2_snip_len = 1 + con_b64_size + ren_prefixes_len;
 
-    unsigned snip_len = ren_prefixes_len ? 1 + con1_snip_len + con2_snip_len : con1_snip_len;
+    unsigned snip_len = ren_prefixes_len ? 2 + con1_snip_len + con2_snip_len : con1_snip_len;
     char snip[snip_len];
 
     // case: we have renamed prefixes due to dual-coordinates with tag renaming

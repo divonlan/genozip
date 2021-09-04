@@ -81,7 +81,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                               const char *name);
 
 #define buf_alloc(alloc_vb, buf, more, at_least, type, grow_at_least_factor, name) do {\
-    uint64_t new_req_size = MAX((at_least), ((buf)->len+(more)))*sizeof(type); /* make copy to allow ++ */ \
+    uint64_t new_req_size = MAX_((at_least), ((buf)->len+(more)))*sizeof(type); /* make copy to allow ++ */ \
     ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf)->vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name)) \
                                                     : (buf)->size); \
 } while(0)

@@ -444,7 +444,7 @@ void txtfile_read_vblock (VBlock *vb)
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
     if (txt_file->unconsumed_txt.len) {
-        uint64_t bytes_moved = MIN (txt_file->unconsumed_txt.len, max_memory_per_vb);
+        uint64_t bytes_moved = MIN_(txt_file->unconsumed_txt.len, max_memory_per_vb);
         buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, char, 0, bytes_moved, "txt_data");
         buf_copy (evb, &txt_file->unconsumed_txt, &txt_file->unconsumed_txt, char, bytes_moved, txt_file->unconsumed_txt.len - bytes_moved, NULL);
     }
@@ -457,7 +457,7 @@ void txtfile_read_vblock (VBlock *vb)
 
     for (int32_t block_i=0; ; block_i++) {
 
-        uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, MIN (max_memory_per_vb - vb->txt_data.len, 1<<30 /* read() can't handle more */), always_uncompress) 
+        uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, MIN_(max_memory_per_vb - vb->txt_data.len, 1<<30 /* read() can't handle more */), always_uncompress) 
                                                             : 0;
 
         // when reading BGZF, we might be filled up even without completely filling max_memory_per_vb 
@@ -525,7 +525,7 @@ void txtfile_read_vblock (VBlock *vb)
     vb->txt_size = vb->txt_data.len; // this copy doesn't change with --optimize / --chain.
 
     // ZIP of a dual-coordinates file: calculate how much of the VB is rejected lines originating from ##primary_only/##luft_only
-    vb->reject_bytes = MIN (vb->recon_size, txt_file->reject_bytes);
+    vb->reject_bytes = MIN_(vb->recon_size, txt_file->reject_bytes);
     txt_file->reject_bytes -= vb->reject_bytes;
 
     if (!vb->testing_memory) {

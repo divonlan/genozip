@@ -115,7 +115,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 
 #define MAX_BASES_REJECTS_FILE 256
 #define ECLIPSE(len) ((len) > MAX_BASES_REJECTS_FILE ? "..." : "")
-#define ECLIPSED(seq,len) MIN (MAX_BASES_REJECTS_FILE,(len)), seq, ECLIPSE(len)
+#define ECLIPSED(seq,len) MIN_(MAX_BASES_REJECTS_FILE,(len)), seq, ECLIPSE(len)
 #define XSTRANDF "%s"
 #define XSTRAND (is_xstrand ? "xstrand=true " : "")
 
@@ -124,12 +124,12 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 #define ALTF "ALT=%.*s%s "
 #define ALT ECLIPSED (alt, alt_len)
 
-#define DEF_PRIM(len) char prim_str[MIN ((MAX_BASES_REJECTS_FILE+1), (len)+1)]; unsigned prim_str_len = (unsigned)(len)
+#define DEF_PRIM(len) char prim_str[MIN_((MAX_BASES_REJECTS_FILE+1), (len)+1)]; unsigned prim_str_len = (unsigned)(len)
 #define PRIMF "PRIM=%s%s "
 #define PRIM ref_dis_subrange (prim_range, pos, sizeof (prim_str), prim_str, false), ECLIPSE (prim_str_len)
 #define PRIMFLANKING ref_dis_subrange ((prim_range), (pos)-FLANKING_SEQ_LEN, sizeof (prim_str), (prim_str), false), ECLIPSE (prim_str_len)
 
-#define DEF_LUFT(len) char luft_str[MIN ((MAX_BASES_REJECTS_FILE+1), (len)+1)]; unsigned luft_str_len = (unsigned)(len)
+#define DEF_LUFT(len) char luft_str[MIN_((MAX_BASES_REJECTS_FILE+1), (len)+1)]; unsigned luft_str_len = (unsigned)(len)
 #define LUFTF "LUFT(%"PRId64")=%s%s "
 #define LUFT (opos), ref_dis_subrange ((luft_range), (opos), sizeof (luft_str), (luft_str), (is_xstrand)), ECLIPSE (luft_str_len)
 #define LUFTFLANKING (opos)-FLANKING_SEQ_LEN, ref_dis_subrange ((luft_range), (opos)-FLANKING_SEQ_LEN, sizeof (luft_str), (luft_str), (is_xstrand)), ECLIPSE (luft_str_len)
@@ -624,9 +624,9 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
 
     // verify that the REF is consistent between the VCF file and prim_range (if not - there's an error in the VCF or the wrong reference file is used)
     if (!is_same_seq (prim_range, pos, ref, ref_len, false)) {
-        char seq[MIN (ref_len, MAX_BASES_REJECTS_FILE)]; // cap size of automatic variable
+        char seq[MIN_(ref_len, MAX_BASES_REJECTS_FILE)]; // cap size of automatic variable
         REJECT (LO_REF_MISMATCHES_REFERENCE, "doesn't match the reference file=\"%s\" - either error in the VCF or wrong reference file",
-                ref_dis_subrange (prim_range, pos, MIN (ref_len, MAX_BASES_REJECTS_FILE), seq, false));
+                ref_dis_subrange (prim_range, pos, MIN_(ref_len, MAX_BASES_REJECTS_FILE), seq, false));
     }
     
     // case: SNP
@@ -697,7 +697,7 @@ static inline void vcf_refalt_shift_right (char *seq, unsigned seq_len, STRp(anc
     if (seq_len > anchor_len)
         memcpy (seq + anchor_len, seq, seq_len - anchor_len);
     
-    memcpy (seq, anchor, MIN (seq_len, anchor_len));
+    memcpy (seq, anchor, MIN_(seq_len, anchor_len));
 }
 
 // actuall reconstruct other REFALT

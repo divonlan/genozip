@@ -188,17 +188,17 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
             /* vb end pos file:   */ vb->vb_position_txt_file + vb->txt_data.len-1, \
             /* vb length:         */ vb->txt_data.len,\
             /* +- 30 char snip    */\
-            /* chars before:      */ p_into_txt ? MIN (30, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
-            /* chars after:       */ p_into_txt ? MIN (30, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
-            /* snip len:          */ p_into_txt ? (unsigned)(MIN (p_into_txt+31, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX (p_into_txt-30, vb->txt_data.data) /* start_pos */) : -1,\
+            /* chars before:      */ p_into_txt ? MIN_(30, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
+            /* chars after:       */ p_into_txt ? MIN_(30, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
+            /* snip len:          */ p_into_txt ? (unsigned)(MIN_(p_into_txt+31, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX_(p_into_txt-30, vb->txt_data.data) /* start_pos */) : -1,\
             /* condition for snip */ (vb->txt_data.data && p_into_txt && (p_into_txt >= vb->txt_data.data) && (p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
-            /* snip start:        */    MAX (p_into_txt-30, vb->txt_data.data) : "(inaccessible)"),\
+            /* snip start:        */    MAX_(p_into_txt-30, vb->txt_data.data) : "(inaccessible)"),\
             /* +- 2 char snip     */\
-            /* chars before:      */ p_into_txt ? MIN (2, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
-            /* chars after:       */ p_into_txt ? MIN (2, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
-            /* snip len:          */ p_into_txt ? (unsigned)(MIN (p_into_txt+3, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX (p_into_txt-2, vb->txt_data.data) /* start_pos */) : -1,\
+            /* chars before:      */ p_into_txt ? MIN_(2, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
+            /* chars after:       */ p_into_txt ? MIN_(2, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
+            /* snip len:          */ p_into_txt ? (unsigned)(MIN_(p_into_txt+3, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX_(p_into_txt-2, vb->txt_data.data) /* start_pos */) : -1,\
             /* condition for snip */ (vb->txt_data.data && p_into_txt && (p_into_txt >= vb->txt_data.data) && (p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
-            /* snip start:        */    MAX (p_into_txt-3, vb->txt_data.data) : "(inaccessible)"),\
+            /* snip start:        */    MAX_(p_into_txt-3, vb->txt_data.data) : "(inaccessible)"),\
             /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len,\
             /* output filename:   */ vb->vblock_i, file_plain_ext_by_dt (vb->data_type),\
             /* dump filename:     */ txtfile_dump_vb ((VBlockP)vb, txt_name))

@@ -412,7 +412,7 @@ unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_items, ch
         if (str[i] == sep) {
             if (item_i == max_items) {
                 ASSERT (!enforce_msg, "expecting up to %u %s separators but found more: (100 first) %.*s", 
-                        max_items-1, enforce_msg, MIN (str_len, 100), str);
+                        max_items-1, enforce_msg, MIN_(str_len, 100), str);
                 return 0; // too many separators
             }
             items[item_i++] = &str[i+1];
@@ -426,7 +426,7 @@ unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_items, ch
     }
 
     ASSERT (!exactly || !enforce_msg || item_i == max_items, "Expecting the number of %s to be %u, but it is %u: (100 first) \"%.*s\"", 
-            enforce_msg, max_items, str_len ? item_i : 0, MIN (100, str_len), str);
+            enforce_msg, max_items, str_len ? item_i : 0, MIN_(100, str_len), str);
     
     return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
 }
@@ -554,7 +554,7 @@ int str_print_text (const char **text, unsigned num_lines,
         // in Linux and Mac, we can get the actual terminal width
         struct winsize w;
         ioctl(0, TIOCGWINSZ, &w);
-        line_width = MAX (40, w.ws_col); // our wrapper cannot work with to small line widths 
+        line_width = MAX_(40, w.ws_col); // our wrapper cannot work with to small line widths 
 #endif
     }
 
