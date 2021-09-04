@@ -25,6 +25,7 @@
 #include "compressor.h"
 #include "threads.h"
 #include "website.h"
+#include "ref_iupacs.h"
 
 static RefStruct refs[2] = { };
 Reference gref     = &refs[0]; // global reference 
@@ -1363,7 +1364,6 @@ void ref_set_ref_file_info (Reference ref, Digest md5, const char *fasta_name, u
 }
 
 // display the reference:
-// if --reference is used, normal reference is shown, if --REFERENCE - reverse complement is shown
 // show a subset of the reference if --regions is specified - but only up to one region per chromosome
 void ref_display_ref (Reference ref)
 {
@@ -1392,19 +1392,27 @@ void ref_display_ref (Reference ref)
             // case: normal sequence
             if (!revcomp) {
                 if (display_first_pos == display_last_pos)
-                    printf ("%"PRIu64"\t", display_first_pos + adjust);
+                    iprintf ("%"PRIu64"\t", display_first_pos + adjust);
                 else
-                    printf ("%"PRIu64"-%"PRIu64"\t", display_first_pos + adjust, display_last_pos + adjust);
+                    iprintf ("%"PRIu64"-%"PRIu64"\t", display_first_pos + adjust, display_last_pos + adjust);
 
-                for (PosType pos=display_first_pos; pos <= display_last_pos; pos++)
-                    fputc (ref_base_by_pos (r, pos), stdout);
+                for (PosType pos=display_first_pos, next_iupac_pos=display_first_pos ; pos <= display_last_pos ; pos++) {
+                    char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (gref, r, pos, false, &next_iupac_pos) : 0;
+                    char base = iupac ? iupac : ref_base_by_pos (r, pos);
+                    fputc (base, stdout);
+                }
             }
 
             // case: reverse complement
             else {
-                iprintf ("COMPLEM %"PRIu64"-%"PRIu64"\t", display_last_pos + adjust, display_first_pos + adjust);
-                for (PosType pos=display_last_pos; pos >= display_first_pos; pos--) {
-                    char base = ref_base_by_pos (r, pos);
+                if (display_first_pos == display_last_pos)
+                    iprintf ("COMPLEM %"PRIu64"\t", display_first_pos + adjust);
+                else 
+                    iprintf ("COMPLEM %"PRIu64"-%"PRIu64"\t", display_last_pos + adjust, display_first_pos + adjust);
+
+                for (PosType pos=display_last_pos, next_iupac_pos=display_last_pos; pos >= display_first_pos; pos--) {
+                    char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (gref, r, pos, true, &next_iupac_pos) : 0;
+                    char base = iupac ? iupac : ref_base_by_pos (r, pos);
                     fputc (COMPLEM[(int)base], stdout);
                 }        
             }
@@ -1625,28 +1633,25 @@ void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, Pos
 }
 
 // outputs in seq, a nul-terminated string of up to (len-1) bases
-char *ref_dis_subrange (const Range *r, PosType start_pos, PosType len, char *seq, bool revcomp) // in_reference allocated by caller to length len
+char *ref_dis_subrange (Reference ref, const Range *r, PosType start_pos, PosType len, char *seq, bool revcomp) // in_reference allocated by caller to length len
 {
-    uint64_t start_idx = start_pos ? start_pos - r->first_pos : 0;
-    uint64_t idx, end_idx;
-
     if (!revcomp) {
-        end_idx = MIN_(start_pos + (len-1) - 1, r->last_pos) - r->first_pos; // -1 to leave room for \0
-
-        for (idx = start_idx; idx <= end_idx; idx++) 
-            seq[idx - start_idx] = ref_base_by_idx (r, idx);
-        
-        seq[idx - start_idx] = 0;
+        PosType next_iupac_pos, pos, end_pos = MIN_(start_pos + len - 1 - 1, r->last_pos);  // -1 to leave room for \0
+        for (pos=start_pos, next_iupac_pos=start_pos ; pos <= end_pos; pos++) {
+            char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (ref, r, pos, false, &next_iupac_pos) : 0;
+            seq[pos - start_pos] = iupac ? iupac : ref_base_by_pos (r, pos);
+        }
+        seq[pos - start_pos] = 0;
     }
 
     // revcomp: display the sequence starting at start_pos and going backwards - complemented
     else {
-        end_idx = MAX_(start_pos - (len-1) + 1, r->first_pos) - r->first_pos;
-
-        for (idx = start_idx; idx >= end_idx; idx--) 
-            seq[start_idx - idx] = COMPLEM[(int)ref_base_by_idx (r, idx)];
-
-        seq[start_idx - idx] = 0;
+        PosType next_iupac_pos, pos, end_pos = MAX_(start_pos - (len - 1) + 1, r->first_pos);  // -1 to leave room for \0
+        for (pos=start_pos, next_iupac_pos=start_pos ; pos >= end_pos; pos--) {
+            char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (gref, r, pos, true, &next_iupac_pos) : 0;
+            seq[start_pos - pos] = iupac ? iupac : COMPLEM[(int)ref_base_by_pos (r, pos)];
+        }
+        seq[start_pos - pos] = 0;
     }
 
     return seq;

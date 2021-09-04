@@ -600,7 +600,7 @@ static void fastq_update_coverage (VBlockFASTQ *vb)
 
     WordIndex chrom_index;
     if (gpos != NO_GPOS && 
-        (chrom_index = ref_contig_get_by_gpos (gref, gpos)) != WORD_INDEX_NONE) {
+        (chrom_index = ref_contig_get_by_gpos (gref, gpos, NULL)) != WORD_INDEX_NONE) {
 
         if (flag.show_coverage || flag.show_sex)
             *ENT (uint64_t, vb->coverage, chrom_index) += vb->seq_len;

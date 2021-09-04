@@ -126,13 +126,13 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 
 #define DEF_PRIM(len) char prim_str[MIN_((MAX_BASES_REJECTS_FILE+1), (len)+1)]; unsigned prim_str_len = (unsigned)(len)
 #define PRIMF "PRIM=%s%s "
-#define PRIM ref_dis_subrange (prim_range, pos, sizeof (prim_str), prim_str, false), ECLIPSE (prim_str_len)
-#define PRIMFLANKING ref_dis_subrange ((prim_range), (pos)-FLANKING_SEQ_LEN, sizeof (prim_str), (prim_str), false), ECLIPSE (prim_str_len)
+#define PRIM ref_dis_subrange (prim_ref, prim_range, pos, sizeof (prim_str), prim_str, false), ECLIPSE (prim_str_len)
+#define PRIMFLANKING ref_dis_subrange (prim_ref, (prim_range), (pos)-FLANKING_SEQ_LEN, sizeof (prim_str), (prim_str), false), ECLIPSE (prim_str_len)
 
 #define DEF_LUFT(len) char luft_str[MIN_((MAX_BASES_REJECTS_FILE+1), (len)+1)]; unsigned luft_str_len = (unsigned)(len)
 #define LUFTF "LUFT(%"PRId64")=%s%s "
-#define LUFT (opos), ref_dis_subrange ((luft_range), (opos), sizeof (luft_str), (luft_str), (is_xstrand)), ECLIPSE (luft_str_len)
-#define LUFTFLANKING (opos)-FLANKING_SEQ_LEN, ref_dis_subrange ((luft_range), (opos)-FLANKING_SEQ_LEN, sizeof (luft_str), (luft_str), (is_xstrand)), ECLIPSE (luft_str_len)
+#define LUFT (opos), ref_dis_subrange (gref, (luft_range), (opos), sizeof (luft_str), (luft_str), (is_xstrand)), ECLIPSE (luft_str_len)
+#define LUFTFLANKING (opos)-FLANKING_SEQ_LEN, ref_dis_subrange (gref, (luft_range), (opos)-FLANKING_SEQ_LEN, sizeof (luft_str), (luft_str), (is_xstrand)), ECLIPSE (luft_str_len)
 
 #define SAME_AS_LUFT_REF(vcf_base) is_same_base (vb, luft_range, opos, (vcf_base), is_xstrand)
 static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, PosType opos, char vcf_base, bool is_xstrand)
@@ -142,23 +142,29 @@ static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, PosType
     char ref_base = ref_base_by_pos (luft_range, opos); // counting on compiler optimizer to avoid re-calculating if already calculated
 
     return vcf_base == ref_base ||
-           ref_iupacs_is_included ((VBlockP)vb, luft_range, opos, vcf_base);
+           ref_iupacs_is_included (gref, VB, luft_range, opos, vcf_base);
 }
 
 // false is not the same or if either goes beyond the end of the range 
-static inline bool is_same_seq (const Range *range, PosType pos, const char *seq, PosType seq_len, bool is_xstrand) 
+static inline bool is_same_seq (Reference ref, VBlockVCFP vb, const Range *range, PosType pos, const char *seq, PosType seq_len, bool is_xstrand) 
 {
     if (!is_xstrand) {
         if (pos + seq_len - 1 > range->last_pos) return false; // seq goes beyond the end of range
 
-        for (PosType i=0; i < seq_len ; i++) 
-            if (ref_base_by_pos (range, pos + i) != UPPER_CASE (seq[i])) return false;
+        for (PosType i=0; i < seq_len ; i++) {
+            char vcf_base = UPPER_CASE (seq[i]);
+            char ref_base = ref_base_by_pos (range, pos + i);
+            if (ref_base != vcf_base && !ref_iupacs_is_included (ref, VB, range, pos, vcf_base)) return false;
+        }
     }
     else { // xstrand
         if (pos < seq_len) return false; // seq goes beyond the start of range
 
-        for (PosType i=0; i < seq_len ; i++)
-            if (ref_base_by_pos (range, pos - i) != UPPER_COMPLEM[(int)seq[i]]) return false;
+        for (PosType i=0; i < seq_len ; i++) {
+            char vcf_base = UPPER_COMPLEM[(int)seq[i]];
+            char ref_base = ref_base_by_pos (range, pos - i);
+            if (ref_base != vcf_base && !ref_iupacs_is_included (ref, VB, range, pos, vcf_base)) return false;
+        }
     }
 
     return true;
@@ -305,7 +311,7 @@ static bool vcf_refalt_is_REF_same_in_luft (VBlockVCFP vb, STRp(ref), bool is_xs
     PosType anchor_opos = is_xstrand ? opos - ref_len : opos; 
 
     bool same_anchor  = is_same_base (vb, luft_range, anchor_opos, anchor, is_xstrand); 
-    bool same_payload = ref_len > 1 ? is_same_seq (luft_range, opos + (is_xstrand ? -1 : 1), ref+1, ref_len-1, is_xstrand) : true;
+    bool same_payload = ref_len > 1 ? is_same_seq (gref, vb, luft_range, opos + (is_xstrand ? -1 : 1), ref+1, ref_len-1, is_xstrand) : true;
 
     return same_anchor && same_payload;
 }
@@ -321,7 +327,7 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, const char *ref, 
         REJECTIF (num_alts > 1, LO_NEW_ALLELE_INDEL, ALTF "Genozip limitation: REF changed in a Deletion variant that has more than one ALT", ALT);
 
         { DEF_PRIM (ref_len); DEF_LUFT (ref_len);
-          REJECTIF (!is_same_seq (luft_range, opos, alts[0], 1, is_xstrand), LO_NEW_ALLELE_INDEL, 
+          REJECTIF (!is_same_seq (gref, vb, luft_range, opos, alts[0], 1, is_xstrand), LO_NEW_ALLELE_INDEL, 
                     ALTF "Genozip limitation: REF changed in Deletion variant, but not to ALT. " PRIMF LUFTF, ALT, PRIM, LUFT); }
 
         // if the REF is not in the Luft range, we check if the flanking regions of the ALT in Luft are the same as REF's to decide
@@ -438,7 +444,7 @@ static LiftOverStatus vcf_refalt_lift_with_sym_allele (VBlockVCFP vb, STRp(ref),
     REJECTIF (is_xstrand, LO_XSTRAND_SV, ALTF "Genozip limitation: Variant with a symbolic allele is mapped to the reverse strand" XSTRANDF, ALT, XSTRAND);
 
     // case: structural variant - but REF unchanged 
-    if (is_same_seq (luft_range, opos, ref, ref_len, is_xstrand))
+    if (is_same_seq (gref, vb, luft_range, opos, ref, ref_len, is_xstrand))
         LIFTOK0 (LO_OK_REF_SAME_SV, "REF unchanged - structural variant");
 
     else
@@ -473,7 +479,7 @@ static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref),
 
     // case: complex variant - REF⇄ALT switch - supported only if bi-allelic and not SV
     else if (num_alts==1) {
-        if (is_same_seq (luft_range, opos, alts[0], alt_lens[0], is_xstrand) &&
+        if (is_same_seq (gref, vb, luft_range, opos, alts[0], alt_lens[0], is_xstrand) &&
             vcf_refalt_lift_same_flanking_regions (is_xstrand, prim_range, pos, ref_len, luft_range, opos, alt_lens[0])) {
             if (is_left_anchored) {
                 IF_XSTRAND_FLIP_ANCHOR;
@@ -487,7 +493,7 @@ static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref),
     // case: complex variant - multiallelic REF⇄ALT switch - detect, but unsupported 
     else
         for (unsigned alt_i=0; alt_i < num_alts; alt_i++)
-            if (is_same_seq (luft_range, opos, alts[alt_i], alt_lens[alt_i], is_xstrand) &&
+            if (is_same_seq (gref, vb, luft_range, opos, alts[alt_i], alt_lens[alt_i], is_xstrand) &&
                 vcf_refalt_lift_same_flanking_regions (is_xstrand, prim_range, pos, ref_len, luft_range, opos, alt_lens[alt_i])) {
                 DEF_LUFT (alt_lens[alt_i]);
                 REJECTIF (true, LO_REF_MULTIALT_SWITCH_INDEL, ALTF "Genozip limitation: " LUFTF "== ALT[%d], but can't switch in multi-allelic variant", 
@@ -623,10 +629,10 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     }
 
     // verify that the REF is consistent between the VCF file and prim_range (if not - there's an error in the VCF or the wrong reference file is used)
-    if (!is_same_seq (prim_range, pos, ref, ref_len, false)) {
-        char seq[MIN_(ref_len, MAX_BASES_REJECTS_FILE)]; // cap size of automatic variable
-        REJECT (LO_REF_MISMATCHES_REFERENCE, "doesn't match the reference file=\"%s\" - either error in the VCF or wrong reference file",
-                ref_dis_subrange (prim_range, pos, MIN_(ref_len, MAX_BASES_REJECTS_FILE), seq, false));
+    if (!is_same_seq (prim_ref, vb, prim_range, pos, ref, ref_len, false)) {
+        char seq[1 + MIN_(ref_len, MAX_BASES_REJECTS_FILE)]; // cap size of automatic variable
+        REJECT (LO_REF_MISMATCHES_REFERENCE, "ReferenceFile=%s. Possibly this VCF is based on reads that were mapped to a reference other than %s, or the VCF has been erroneously modified",
+                ref_dis_subrange (prim_ref, prim_range, pos, sizeof (seq), seq, false), ref_get_filename (prim_ref));
     }
     
     // case: SNP

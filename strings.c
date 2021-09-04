@@ -630,11 +630,11 @@ StrText str_time (void)
     return s;
 }
 
-// C<>G A<>T c<>g a<>t ; other ASCII 32->126 preserved ; other = 0
-const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`tbgdefchijklmnopqrsauvwxyz{|}~";
+// C<>G A<>T c<>g a<>t ; IUPACs: R<>Y K<>M B<>V D<>H (+ lowercase); other ASCII 32->126 preserved ; other = 0
+const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`tvghefcdijmlknopqysaubwxrz{|}~";
 
 // same as COMPLEM[UPPER_CASE(c)]
-const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`TBGDEFCHIJKLMNOPQRSAUVWXYZ{|}~";
+const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`TVGHEFCDIJMLKNOPQYSAUBWXRZ{|}~";
 
 // reverse-complements a string in-place
 char *str_revcomp (char *seq, unsigned seq_len)

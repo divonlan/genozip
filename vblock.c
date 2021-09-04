@@ -105,8 +105,8 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     vb->ref = NULL;
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
-    vb->iupacs_last_range = NULL;
-    vb->iupacs_last_opos = vb->iupacs_next_opos = 0;
+    vb->iupacs_last_range[0] = vb->iupacs_last_range[1] = NULL;
+    vb->iupacs_last_pos[0] = vb->iupacs_last_pos[1] = vb->iupacs_next_pos[0] = vb->iupacs_next_pos[1] = 0;
     mutex_destroy (vb->vb_ready_for_compute_thread);
 
     FINALIZE_VB_BUFS (buf_free, ctx_free_context, release_vb);

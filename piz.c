@@ -361,10 +361,6 @@ DataType piz_read_global_area (Reference ref)
         dict_id_read_aliases();
     }
 
-    // reading external references for lifting with --chain - load the IUPACs list of the reference (rare non-ACTG "bases")
-    if ((flag.reading_chain && flag.reading_reference) || flag.show_ref_iupacs)
-        ref_iupacs_load(ref);
-
     // if the user wants to see only the header, we can skip regions and random access
     if (!flag.header_only) {
 
@@ -411,6 +407,9 @@ DataType piz_read_global_area (Reference ref)
 
                 dispatcher_invoked = true;
             }
+
+            // load the IUPACs list of the reference (rare non-ACTG "bases")
+            ref_iupacs_load (ref);
 
             // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
             if (  (primary_command == ZIP && flag.ref_use_aligner) ||

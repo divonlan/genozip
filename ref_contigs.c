@@ -535,13 +535,21 @@ WordIndex ref_contigs_get_by_accession_number (const Reference ref, const char *
     return NODE_INDEX_NONE; // not found
 }
 
-WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos)
+WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos,
+                                  PosType *pos) // optional out, POS within the CHROM matching gpos
 {
     // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)
     for (WordIndex chrom_index=0 ; chrom_index < ref->loaded_contigs.len; chrom_index++) {
         RefContig *rc = ENT (RefContig, ref->loaded_contigs, chrom_index);
-        if (gpos >= rc->gpos && gpos <= rc->gpos + (rc->max_pos - rc->min_pos)) 
+        if (gpos >= rc->gpos && gpos <= rc->gpos + (rc->max_pos - rc->min_pos)) {
+            if (pos) {
+                ASSERT (chrom_index < ref->ranges.len, "Unexpected chrom_index=%d >= ref->ranges.len=%"PRIu64, chrom_index, ref->ranges.len);  
+                const Range *r = ENT (Range, ref->ranges, chrom_index);
+                
+                *pos = r->first_pos + gpos - r->gpos;
+            }
             return chrom_index;
+        }
     }
 
     return WORD_INDEX_NONE; // not found

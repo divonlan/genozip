@@ -145,8 +145,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     bool is_unsorted[2];       /* ZIP: line order of this VB[primary, luft] is unsorted */ \
     \
     /* ref_iupac quick lookup */\
-    ConstRangeP iupacs_last_range; \
-    PosType iupacs_last_opos, iupacs_next_opos; \
+    ConstRangeP iupacs_last_range[2]; /* [0]=prim_ref [1]=gref */ \
+    PosType iupacs_last_pos[2], iupacs_next_pos[2]; \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\

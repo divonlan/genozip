@@ -625,7 +625,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
 
             if (file_exists (prim_ref_filename) && file_exists (luft_ref_filename)) {
 
-                if (!flag.show_chain) { // no need for a reference if we're just doing --show-chain xxx.chain.genozip
+                if (!flag.show_chain) { // no need for a reference if we're just doing --show-chain myfile.chain.genozip
                     WARN_ONCE ("Note: using the reference file PRIMARY=%s LUFT=%s. You can override this with --reference, see: " WEBSITE_DVCF,
                             prim_ref_filename, luft_ref_filename);
                     
