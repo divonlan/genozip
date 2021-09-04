@@ -771,7 +771,11 @@ batch_real_world_small_vbs()
                   test.human.fq.gz test.human2.bam test.human2.sam \
                   test.human2-R1.100K.fq.bz2 test.m64136_200621_234916.ccs.10k.bam \
                   test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq \
-                  test.sequential.fa.gz test.pacbio.10k.fasta.xz)
+                  test.sequential.fa.gz )
+
+    if [ -x "$(command -v xz)" ] ; then # skip .xz files if xz is not installed
+        files+=( test.pacbio.10k.fasta.xz )
+    fi
 
     echo "subsets of real world files (lots of small VBs -B1)"
     test_standard "-mf $1 -B1" " " ${files[*]}
