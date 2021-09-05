@@ -1122,7 +1122,7 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
         vb->fragment_codec = frag_codec;
 
         while (frag_next_node < AFTERENT (CtxNode, frag_ctx->nodes) && 
-               vb->fragment_len + frag_next_node->snip_len < frag_size) {
+               vb->fragment_len + frag_next_node->snip_len + 1 < frag_size) {
 
             vb->fragment_len += frag_next_node->snip_len + 1;
             vb->fragment_num_words++;
