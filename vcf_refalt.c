@@ -121,7 +121,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 
 #define IS_SINGLE_BASE_ALTS(n_alts, alt_len) ((n_alts)*2-1 == (alt_len))
 
-#define ALTF "ALT=%.*s%s "
+#define ALTF "%.*s%s\t"
 #define ALT ECLIPSED (alt, alt_len)
 
 #define DEF_PRIM(len) char prim_str[MIN_((MAX_BASES_REJECTS_FILE+1), (len)+1)]; unsigned prim_str_len = (unsigned)(len)
@@ -236,7 +236,7 @@ static inline LiftOverStatus
 {
     PosType last_aln_pos = chain_get_aln_last_pos (vb->pos_aln_i);
 
-    REJECTIF (last_aln_pos < pos + ref_len, LO_NO_MAPPING_IN_CHAIN, "New right-anchor base is beyond chain file alignment: new_achor_pos=%"PRId64" last_aln_pos=%"PRId64,
+    REJECTIF (last_aln_pos < pos + ref_len, LO_NO_MAPPING_IN_CHAIN, ".\tNew right-anchor base is beyond chain file alignment: new_achor_pos=%"PRId64" last_aln_pos=%"PRId64,
               pos + ref_len, last_aln_pos);
 
     // new anchor - the base to the left of the oREF
@@ -259,7 +259,7 @@ static inline LiftOverStatus vcf_refalt_lift_report_indel_outcome (VBlockVCFP vb
     // we can lift a Insertion IF: either - all ALTs agree that it is REF_SAME ; or - single ALT and REF⇄ALT switch
     if (all_same) {
         IF_XSTRAND_FLIP_ANCHOR;
-        LIFTOK (LO_OK_REF_SAME_INDEL, "INDEL REF unchanged " XSTRANDF, XSTRAND);
+        LIFTOK (LO_OK_REF_SAME_INDEL, ".\tINDEL REF unchanged " XSTRANDF, XSTRAND);
     }
 
     DEF_PRIM (rep_len_prim + 2);
@@ -445,7 +445,7 @@ static LiftOverStatus vcf_refalt_lift_with_sym_allele (VBlockVCFP vb, STRp(ref),
 
     // case: structural variant - but REF unchanged 
     if (is_same_seq (gref, vb, luft_range, opos, ref, ref_len, is_xstrand))
-        LIFTOK0 (LO_OK_REF_SAME_SV, "REF unchanged - structural variant");
+        LIFTOK0 (LO_OK_REF_SAME_SV, ".\tREF unchanged - structural variant");
 
     else
         REJECTIF (true, LO_NEW_ALLELE_SV, ALTF "Genozip limitation: REF changed in variant with a symbolic allele", ALT);
@@ -471,10 +471,10 @@ static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref),
     if (vcf_refalt_is_REF_same_in_luft (vb, ref, ref_len, is_xstrand, prim_range, pos, luft_range, opos)) {
         if (is_left_anchored) {
             IF_XSTRAND_FLIP_ANCHOR;
-            LIFTOK0 (LO_OK_REF_SAME_INDEL, "REF unchanged - left-anchored complex INDEL");
+            LIFTOK0 (LO_OK_REF_SAME_INDEL, ".\tREF unchanged - left-anchored complex INDEL");
         }
         else 
-            LIFTOK0 (LO_OK_REF_SAME_NLA, "REF unchanged - non-left-anchored COMPLEX variant");
+            LIFTOK0 (LO_OK_REF_SAME_NLA, ".\tREF unchanged - non-left-anchored COMPLEX variant");
     }
 
     // case: complex variant - REF⇄ALT switch - supported only if bi-allelic and not SV
@@ -541,7 +541,7 @@ static LiftOverStatus vcf_refalt_lift_snp (VBlockVCFP vb, STRp(ref)/* must be 1 
     char oref = ref_base_by_pos (luft_range, opos); // range is 0-based
 
     if (SAME_AS_LUFT_REF (ref[0])) 
-        LIFTOK0 (LO_OK_REF_SAME_SNP, "SNP: REF unchanged");
+        LIFTOK0 (LO_OK_REF_SAME_SNP, ".\tSNP: REF unchanged");
 
     if (num_alts == 1 && SAME_AS_LUFT_REF (alts[0][0])) 
         LIFTOK (LO_OK_REF_ALT_SWITCH_SNP, ALTF "SNP: REF<>ALT switch", ALT);
@@ -559,7 +559,7 @@ static LiftOverStatus vcf_refalt_lift_snp (VBlockVCFP vb, STRp(ref)/* must be 1 
     &&    ((vcf_refalt_get_INFO (vb, "AF=") == 1)
        ||  ((an = vcf_refalt_get_INFO (vb, "AN=")) >= 2 && vcf_refalt_get_INFO (vb, "AC=") == an))) {
         vb->new_ref = oref;
-        LIFTOK (LO_OK_REF_NEW_SNP, "SNP: REF changed to %c, but lifted because AF=1 or AC=AN", oref);
+        LIFTOK (LO_OK_REF_NEW_SNP, ".\tSNP: REF changed to %c, but lifted because AF=1 or AC=AN", oref);
     }
 
     REJECTIF (true, LO_NEW_ALLELE_SNP, ALTF "Genozip limitation: LUFT(%"PRId64")=%c is a new SNP allele", ALT, opos, oref);
@@ -631,7 +631,7 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     // verify that the REF is consistent between the VCF file and prim_range (if not - there's an error in the VCF or the wrong reference file is used)
     if (!is_same_seq (prim_ref, vb, prim_range, pos, ref, ref_len, false)) {
         char seq[1 + MIN_(ref_len, MAX_BASES_REJECTS_FILE)]; // cap size of automatic variable
-        REJECT (LO_REF_MISMATCHES_REFERENCE, "ReferenceFile=%s. Possibly this VCF is based on reads that were mapped to a reference other than %s, or the VCF has been erroneously modified",
+        REJECT (LO_REF_MISMATCHES_REFERENCE, ".\tReferenceFile=%s. Possibly this VCF is based on reads that were mapped to a reference other than %s, or the VCF has been erroneously modified",
                 ref_dis_subrange (prim_ref, prim_range, pos, sizeof (seq), seq, false), ref_get_filename (prim_ref));
     }
     

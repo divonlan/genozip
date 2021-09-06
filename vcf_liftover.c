@@ -49,6 +49,7 @@
 #include "random_access.h"
 #include "reconstruct.h"
 #include "coords.h"
+#include "version.h"
 
 const char *dvcf_status_names[] = DVCF_STATUS_NAMES;
 const LuftTransLateProp ltrans_props[NUM_VCF_TRANS] = DVCF_TRANS_PROPS;
@@ -374,17 +375,17 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 
     if (ostatus == LO_NO_MAPPING_IN_CHAIN) {
         vcf_lo_seg_rollback_and_reject (vb, LO_NO_MAPPING_IN_CHAIN, NULL);
-        REJECT_MAPPING ("No alignment in the chain file");
+        REJECT_MAPPING (".\tNo alignment in the chain file");
     }
     
     else if (ostatus == LO_CHROM_NOT_IN_CHAIN) {
         vcf_lo_seg_rollback_and_reject (vb, LO_CHROM_NOT_IN_CHAIN, NULL);
-        REJECT_MAPPING ("CHROM missing in chain file");
+        REJECT_MAPPING (".\tCHROM missing in chain file");
     }
 
     else if (ostatus == LO_CHROM_NOT_IN_PRIM_REF) {
         vcf_lo_seg_rollback_and_reject (vb, LO_CHROM_NOT_IN_PRIM_REF, NULL);
-        REJECT_MAPPING ("CHROM missing in Primary reference file");
+        REJECT_MAPPING (".\tCHROM missing in Primary reference file");
     }
 
     // REF & ALT - update ostatus based the relationship between REF, ALT, oREF and is_xstrand.
@@ -407,8 +408,8 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 
     // Seg oCHROM
     Context *ochrom_ctx = &vb->contexts[VCF_oCHROM];
-    const char *ochrom=""; unsigned ochrom_len=0;
-
+    STR0(ochrom);
+    
     if (dl->chrom[1] != WORD_INDEX_NONE)
         ctx_get_snip_by_zf_node_index (&ochrom_ctx->ol_nodes, &ochrom_ctx->ol_dict, dl->chrom[1], &ochrom, &ochrom_len);
 
@@ -707,10 +708,24 @@ void vcf_lo_append_rejects_file (VBlockP vb, Coords coord)
 void vcf_liftover_display_lift_report (void)
 {
     char report_fn[strlen (z_name) + 50];
-    sprintf (report_fn, "%s.rejects.txt", z_name);
+    sprintf (report_fn, "%s.rejects", z_name);
 
-    if (z_file->rejects_report.len)
+    if (z_file->rejects_report.len) {
+        #define REJECTS_HEADER \
+        "##fileformat=GENOZIP-REJECTSv" GENOZIP_CODE_VERSION "\n" \
+        "#oSTATUS\tCHROM\tPOS\tREF\tALT\tREASON\n"
+        #define REJECTS_HEADER_LEN (sizeof REJECTS_HEADER - 1)
+
+        // squeeze in the header
+        buf_alloc (evb, &z_file->rejects_report, REJECTS_HEADER_LEN, 0, char, 0, NULL);
+        ARRAY (char, report, z_file->rejects_report);
+
+        memmove (&report[REJECTS_HEADER_LEN], report, report_len);
+        memcpy (report, REJECTS_HEADER, REJECTS_HEADER_LEN);
+        z_file->rejects_report.len += REJECTS_HEADER_LEN;
+
         buf_dump_to_file (report_fn, &z_file->rejects_report, 1, false, false, false);
+    }
 
     if (!flag.quiet)
         iprintf ("\nCongratulations! %s is a dual-coordinate VCF (DVCF). You can now:\n"

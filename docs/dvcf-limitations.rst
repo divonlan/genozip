@@ -17,7 +17,7 @@ Cases in which variants won't be lifted and will remain primary-only, despite it
 | 
 | 5. An indel variant that is not left-anchored and has a strand reversal ("left-anchored" means for example "A ACCT" - 'A' is the *anchor base* and it appears on the left, while "G CTTG" is not left-anchored).
 | 
-| Note: When running ``genozip --chain``, a human-readable *rejects file*, eg ``mydata.d.vcf.genozip.rejects.txt`` will describe the cause of each rejected variant.
+| Note: When running ``genozip --chain``, a human-readable *rejects file*, eg ``mydata.d.vcf.genozip.rejects`` will describe the cause of each rejected variant.
     
 
 

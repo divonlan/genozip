@@ -253,7 +253,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst \
 	   docs/sam2fq.rst docs/23andMe2vcf.rst docs/multifasta2phylip.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst \
 	   docs/using-on-hpc.rst \
-	   docs/dvcf.rst docs/dvcf-rendering.rst docs/dvcf-chain-files.rst docs/dvcf-limitations.rst docs/dvcf-renaming.rst docs/dvcf-see-also.rst \
+	   docs/dvcf.rst docs/dvcf-rendering.rst docs/chain.rst docs/dvcf-limitations.rst docs/dvcf-renaming.rst docs/dvcf-see-also.rst \
 	   docs/archiving.rst docs/encryption.rst \
 	   docs/data-types.rst docs/bam.rst docs/fastq.rst docs/vcf.rst docs/gff3.rst
 
@@ -312,7 +312,7 @@ clean-optimized:
 clean: clean-docs
 	@echo Cleaning up
 	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
-	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects*
+	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects
 	@rm -Rf $(OBJDIR)
 
 .PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean prod dict_id_gen$(EXE)

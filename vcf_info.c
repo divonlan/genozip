@@ -604,7 +604,7 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
 
         // case: we don't yet handle END translation in case of a reverse strand
         if (is_xstrand)            
-            REJECT_SUBFIELD (LO_INFO, end_ctx, "Genozip limitation: variant with INFO/END and chain file alignment with a negative strand%s", "");
+            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tGenozip limitation: variant with INFO/END and chain file alignment with a negative strand%s", "");
 
         // case: END goes beyond the end of the chain file alignment and its a <DEL>
         else if (vb->is_del_sv && end > aln_last_pos) {
@@ -615,20 +615,20 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
             // case: END falls in the gap after - <DEL> is still valid but translated END needs to be closer to POS to avoid gap - 
             // we don't yet do this
             if (end <= aln_last_pos + gap_after)
-                REJECT_SUBFIELD (LO_INFO, end_ctx, "Genozip limitation: <DEL> variant: INFO/END=%.*s is in the gap after the end of the chain file alignment", end_len, end_str);
+                REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tGenozip limitation: <DEL> variant: INFO/END=%.*s is in the gap after the end of the chain file alignment", end_len, end_str);
     
             // case: END falls on beyond the gap (next alignment or beyond) - this variant cannot be lifted
             else
-                REJECT_SUBFIELD (LO_INFO, end_ctx, "<DEL> variant: INFO/END=%.*s is beyond the end of the chain file alignment and also beyond the gap after the alignment", end_len, end_str);
+                REJECT_SUBFIELD (LO_INFO, end_ctx, ".\t<DEL> variant: INFO/END=%.*s is beyond the end of the chain file alignment and also beyond the gap after the alignment", end_len, end_str);
         }
 
         // case: END goes beyond the end of the chain file alignment and its NOT a <DEL>
         else if (!vb->is_del_sv && end > aln_last_pos) 
-            REJECT_SUBFIELD (LO_INFO, end_ctx, "POS and INFO/END=%.*s are not on the same chain file alignment", end_len, end_str);
+            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tPOS and INFO/END=%.*s are not on the same chain file alignment", end_len, end_str);
 
         // case: invalid value. since we use SPF_UNLIMIED_DELTA, any integer value should succeed
         else if (!CTX(VCF_POS)->last_delta)
-            REJECT_SUBFIELD (LO_INFO, end_ctx, "INFO/END=%.*s has an invalid value", end_len, end_str);        
+            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tINFO/END=%.*s has an invalid value", end_len, end_str);        
     }
 }
 
@@ -944,7 +944,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, 0, true)) 
             ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
         else 
-            REJECT_SUBFIELD (LO_INFO, ctx, "Cannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            
+            REJECT_SUBFIELD (LO_INFO, ctx, ".\tCannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            
     }
 
     // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">

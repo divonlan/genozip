@@ -869,7 +869,7 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCF *vb, uint3
 
         Context *failed_ctx = vcf_seg_validate_luft_trans_one_sample (vb, ctxs, num_items, (char *)field_start, field_len);
         if (failed_ctx) { // some context doesn't luft-translate as required
-            REJECT_SUBFIELD (LO_FORMAT, failed_ctx, "Cannot cross-render sample due to field %s: \"%.*s\"", failed_ctx->tag_name, field_len, field_start);
+            REJECT_SUBFIELD (LO_FORMAT, failed_ctx, ".\tCannot cross-render sample due to field %s: \"%.*s\"", failed_ctx->tag_name, field_len, field_start);
 
             // make all contexts untranslateable in this line
             for (unsigned i=0; i < num_items; i++)  // iterate on the order as in the line

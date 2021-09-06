@@ -8,15 +8,6 @@
 
 #include "genozip.h"
 
-// a recon plan entry - one per a group of consecutive lines of Primary or Luft
-typedef struct {
-    uint32_t vblock_i;
-    uint32_t start_line, num_lines;
-    WordIndex chrom_wi;
-    PosType start_pos, end_pos;
-    uint32_t tie_breaker;
-} LineInfo;
-
 // --------
 // ZIP side
 // --------

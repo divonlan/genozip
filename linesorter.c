@@ -29,6 +29,15 @@ typedef struct {
     bool accessed;                // used for accounting for threads
 } LsVbInfo;
 
+// a txt_file->line_info entry - one per a group of consecutive lines of Primary or Luft
+typedef struct {
+    uint32_t vblock_i;
+    uint32_t start_line, num_lines;
+    WordIndex chrom_wi, prim_chrom_wi;
+    PosType start_pos, prim_start_pos, end_pos;
+    uint32_t tie_breaker;
+} LineInfo;
+
 void linesorter_show_recon_plan (File *file, bool is_luft, uint32_t conc_writing_vbs, uint32_t vblock_mb)
 {
     ARRAY (ReconPlanItem, plan, file->recon_plan);
@@ -52,12 +61,11 @@ void linesorter_show_recon_plan (File *file, bool is_luft, uint32_t conc_writing
                :                                         str_int_s (plan[i].num_lines).s); 
 }
 
-static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
+static void linesorter_merge_vb_do (VBlock *vb, bool is_luft)
 {
     ASSERT_DT_FUNC (vb, sizeof_zip_dataline);
     const unsigned dl_size = DT_FUNC (vb, sizeof_zip_dataline)();
-    bool is_luft = !!chrom_did_i; // 0=PRIMARY 1=LUFT
-
+    
     mutex_lock (txt_file->recon_plan_mutex[is_luft]);
 
     buf_alloc (evb, &txt_file->line_info[is_luft], vb->lines.len, 0, LineInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
@@ -69,18 +77,22 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
     for (uint32_t line_i=0 ; line_i < vb->lines.len ; line_i++) {
         ZipDataLine *dl = (ZipDataLine *)(&vb->lines.data[dl_size * line_i]);
         PosType pos = dl->pos[is_luft];
-        WordIndex chrom_word_index = node_word_index (vb, chrom_did_i, dl->chrom[is_luft]);
+        WordIndex chrom_word_index = node_word_index (vb, (is_luft ? DTF(ochrom) : CHROM), dl->chrom[is_luft]);
 
         // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_filter_line if not sorted)
         if (chrom_word_index != WORD_INDEX_NONE) 
             NEXTENT (LineInfo, txt_file->line_info[is_luft]) = (LineInfo){
-                .vblock_i    = vb->vblock_i,
-                .start_line  = line_i,
-                .num_lines   = 1,
-                .chrom_wi    = chrom_word_index,
-                .start_pos   = pos,
-                .end_pos     = pos + MAX_(0, dl->end_delta),
-                .tie_breaker = dl->tie_breaker
+                .vblock_i        = vb->vblock_i,
+                .start_line      = line_i,
+                .num_lines       = 1,
+                .chrom_wi        = chrom_word_index,
+                .start_pos       = pos,
+                .end_pos         = pos + MAX_(0, dl->end_delta),
+                .tie_breaker     = dl->tie_breaker,
+
+                // Primary coord data (for duplicate detection in Luft)
+                .prim_chrom_wi  = is_luft ? node_word_index (vb, CHROM, dl->chrom[0]) : WORD_INDEX_NONE,
+                .prim_start_pos = is_luft ? dl->pos[0] : 0,
             };
         
         last_pos = pos;
@@ -107,9 +119,9 @@ static void linesorter_merge_vb_do (VBlock *vb, DidIType chrom_did_i)
 // ZIP compute thread: merge data from one VB (possibly VBs are out of order) into txt_file->vb_info/line_info
 void linesorter_merge_vb (VBlock *vb)
 {
-    linesorter_merge_vb_do (vb, CHROM);
+    linesorter_merge_vb_do (vb, false);
     if (z_dual_coords) // Luft coordinates exist
-        linesorter_merge_vb_do (vb, DTF(ochrom));
+        linesorter_merge_vb_do (vb, true);
 }
 
 static bool linesorter_is_file_sorted (bool is_luft)
@@ -142,6 +154,44 @@ static void linesorter_create_index (Buffer *index_buf, bool is_luft)
             NEXTENT (uint32_t, *index_buf) = line_i;
 }
 
+// ZIP: detect duplicate variants in Luft, that are *not* duplicate in Primary (i.e. the duplication is due to many-to-one mapping in the chain file)
+// and output to the a dups file, which can be used with genocat --regions-file or bcftools --regions-file
+static void line_sorter_detect_duplicates (const Buffer *index_buf)
+{
+    static Buffer dups = { .name = "dups" };
+
+    ARRAY (uint32_t, index, *index_buf);
+    ARRAY (const LineInfo, li, txt_file->line_info[1]);
+
+    int64_t last_dup=-1;
+    for (int64_t index_i=1; index_i < index_len; index_i++) {
+
+        const LineInfo *this_li = &li[index[index_i]];
+        const LineInfo *prev_li = &li[index[index_i-1]];
+
+        bool is_dup_luft = (this_li->chrom_wi      == prev_li->chrom_wi)      && (this_li->start_pos      == prev_li->start_pos);
+        bool is_dup_prim = (this_li->prim_chrom_wi == prev_li->prim_chrom_wi) && (this_li->prim_start_pos == prev_li->prim_start_pos);
+        if (is_dup_luft && !is_dup_prim) {
+            if (last_dup != index_i-1) // not duplicate duplicate (i.e. 3 or more variants are the same)
+                bufprintf (evb, &dups, "%s\t%"PRIu64"\t%"PRIu64"\n", ctx_get_zf_nodes_snip (ZCTX(DTFZ(ochrom)), this_li->chrom_wi), this_li->start_pos, this_li->start_pos);
+
+            last_dup = index_i;
+        }
+    }
+
+    if (dups.len) { 
+        char fn[strlen(z_name) + 30];
+        sprintf (fn, "%s.overlaps", z_name);
+        buf_dump_to_file (fn, &dups, 1, false, true, false);
+        
+        buf_free (&dups);
+
+        WARN ("FYI: Genozip detected cases of two or more variants with different Primary coordinates, mapped to the same Luft coordinates.\n"
+              "These duplicates (in Luft coordinates) were output to %s, and may be filtered out with:\ngenocat %s --luft --regions-file ^%s\n",
+              fn, z_name, fn);
+    }
+}
+
 static bool is_luft_sorter;
 static int linesorter_line_cmp (const void *a_, const void *b_)
 {
@@ -162,23 +212,8 @@ static int linesorter_line_cmp (const void *a_, const void *b_)
     // same chrom and pos ranges - sort by tie_breaker
     if (a->tie_breaker < b->tie_breaker) return -1; // a is smaller (don't use substraction as its unsigned 32b)
     if (b->tie_breaker < a->tie_breaker) return +1; // b is smaller
-
-    // this can happen if the chain file maps two or more variants in Primary to the same coordinate in Luft (observed in GRCh38->T2T) 
-    // NOTE: This report doesn't produce a full list of all the Many->One sites affecting this VCF. This is because we only report Many->One variants that 
-    // also have the same REF+ALT. we don't report variants that have a different Primary REF is both locations, or if the Primary ALTs are different.
-    // The reason for this is that Primary VCF files might legitimately have multiple variants at the same position with different ALTs.
-    if (is_luft_sorter) {
-        if (a->start_pos == a->end_pos && b->start_pos == b->end_pos) // SNP
-            WARN ("FYI: In LUFT coordinates CHROM=\"%s\", POS=%"PRId64": There are two or more variants with identical CHROM, POS, REF and ALT fields.",
-                ctx_get_zf_nodes_snip (ZCTX(CHROM), a->chrom_wi), a->start_pos);
-        else
-            WARN ("FYI: In LUFT coordinates CHROM=\"%s\", POS=[%"PRId64",%"PRId64"]: There are two or more variants with identical CHROM, REF and ALT fields, and overlap POS",
-                ctx_get_zf_nodes_snip (ZCTX(CHROM), a->chrom_wi), MAX_(a->start_pos, b->start_pos), MIN_(a->end_pos, b->end_pos));
-
-        WARN_ONCE0 ("This can happen if the chain file maps two or more Primary coordinates to a single Luft coordinate");
-    }
     
-    return 0; // undeterministic sorting, hopefully this doesn't happen too often
+    return 0; // same chrom, pos, tie-breaker -> undeterministic sorting, hopefully this doesn't happen too often
 }
 
 static void linesorter_get_final_index_i (Buffer *line_info, Buffer *vb_info, Buffer *index_buf)
@@ -225,7 +260,7 @@ static uint32_t linesorter_plan_reconstruction (const Buffer *line_info, const B
     LineInfo *prev_li = NULL;
     uint32_t conc_writing_vbs=0, max_num_txt_data_bufs=0;
     
-    for (uint32_t index_i=0; index_i < index_len; index_i++) {
+    for (uint64_t index_i=0; index_i < index_len; index_i++) {
         
         LineInfo *li = ENT (LineInfo, *line_info, index[index_i]);
 
@@ -234,7 +269,7 @@ static uint32_t linesorter_plan_reconstruction (const Buffer *line_info, const B
         ASSERT (!prev_li || 
                 li->chrom_wi > prev_li->chrom_wi || 
                 (li->chrom_wi == prev_li->chrom_wi && li->start_pos >= prev_li->start_pos),
-                "line_info sorting: [%u]={chrom=%d,pos=%"PRId64"-%"PRId64",nlines=%u} [%u]={chrom=%d,pos=%"PRId64"-%"PRId64",nlines=%u}",
+                "line_info sorting: [%"PRIu64"]={chrom=%d,pos=%"PRId64"-%"PRId64",nlines=%u} [%"PRIu64"]={chrom=%d,pos=%"PRId64"-%"PRId64",nlines=%u}",
                 index_i-1, prev_li->chrom_wi, prev_li->start_pos, prev_li->end_pos, prev_li->num_lines, 
                 index_i, li->chrom_wi, li->start_pos, li->end_pos, li->num_lines);
         #endif
@@ -300,6 +335,9 @@ static void linesorter_compress_recon_plan_do (bool is_luft)
     qsort (index_buf.data, index_buf.len, sizeof (uint32_t), linesorter_line_cmp);
     COPY_TIMER_VB (evb, linesorter_compress_qsort);
 
+    // detect cases where distinct variants in Primary got mapped to the same coordinates in Luft
+    if (is_luft) line_sorter_detect_duplicates(&index_buf);
+
     // find final entry in index_buf of each VB - needed to calculate how many concurrent threads will be needed for piz
     linesorter_get_final_index_i (&txt_file->line_info[is_luft], &txt_file->vb_info[is_luft], &index_buf);
 
@@ -335,7 +373,7 @@ static void linesorter_compress_recon_plan_do (bool is_luft)
     buf_free (&txt_file->line_info[is_luft]);
 }
 
-// ZIP
+// ZIP: main thread, called by zip_one_file()
 void linesorter_compress_recon_plan (void)
 {
     START_TIMER;
