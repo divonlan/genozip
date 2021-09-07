@@ -625,13 +625,12 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
 
             if (file_exists (prim_ref_filename) && file_exists (luft_ref_filename)) {
 
-                if (!flag.show_chain) { // no need for a reference if we're just doing --show-chain myfile.chain.genozip
+                if (!flag.show_chain) 
                     WARN_ONCE ("Note: using the reference file PRIMARY=%s LUFT=%s. You can override this with --reference, see: " WEBSITE_DVCF,
                             prim_ref_filename, luft_ref_filename);
                     
-                    ref_set_reference (gref, luft_ref_filename, REF_LIFTOVER, false);
-                    ref_set_reference (prim_ref, prim_ref_filename, REF_LIFTOVER, false);
-                }
+                ref_set_reference (gref, luft_ref_filename, REF_LIFTOVER, false);
+                ref_set_reference (prim_ref, prim_ref_filename, REF_LIFTOVER, false);
             }
             else 
                 ASSINP (flag.genocat_no_ref_file, "Please use two --reference arguments to specify the paths to the PRIMAY and LUFT coordinates reference file. Original path was PRIMARY=%s LUFT=%s",

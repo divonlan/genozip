@@ -20,6 +20,7 @@
 #define WEBSITE_LICENSE      GENOZIP_URL "/license.html"
 #define WEBSITE_PUBLICATIONS GENOZIP_URL "/publications.html"
 #define WEBSITE_DVCF         GENOZIP_URL "/dvcf.html"
+#define WEBSITE_CHAIN        GENOZIP_URL "/chain.html"
 #define WEBSITE_INSTALLING   GENOZIP_URL "/installing.html"
 #define WEBSITE_USING_ON_HPC GENOZIP_URL "/using-on-hpc.html"
 #endif

@@ -27,6 +27,7 @@
 #include "reconstruct.h"
 #include "zfile.h"
 #include "version.h"
+#include "website.h"
 
 typedef struct {
     WordIndex prim_chrom; // index in CHAIN_NAMEPRIM
@@ -513,6 +514,9 @@ static void chain_display_alignments (void)
     ARRAY (ChainAlignment, aln, chain);
 
     iprint0 ("##fileformat=GENOZIP-CHAINv"GENOZIP_CODE_VERSION"\n");
+    iprintf ("##primary_reference=%s\n", ref_get_filename (prim_ref));
+    iprintf ("##luft_reference=%s\n", ref_get_filename (gref));
+    iprint0 ("##documentation=" WEBSITE_CHAIN "\n");
     iprint0 ("#ALN_I\tPRIM_CONTIG\tPRIM_START\tPRIM_END\tLUFT_CONTIG\tLUFT_START\tLUFT_ENDS\tXSTRAND\tALN_OVERLAP\n");
 
     chain_mark_overlaps();

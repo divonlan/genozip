@@ -29,6 +29,8 @@ Chain files are compressable with Genozip, and indeed, need to be compressed bef
 
 To view the alignment in the chain, use ``--show-chain``:
 
+.. _show_chain:
+    
 ::
 
     > genocat --show-chain GRCh37_to_GRCh38.chain.genozip
@@ -72,3 +74,5 @@ Column 9 contains the ALN_I of an alignment with an overlapping Luft range: This
     LUFT chr3 length=198295559
     LUFT chr4 length=190214555
     LUFT chr5 length=181538259
+
+Note: All contigs of the respective reference files are shown, even if not referred to in the chain data.

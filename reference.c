@@ -1329,23 +1329,27 @@ void ref_set_reference (Reference ref, const char *filename, ReferenceType ref_t
     static int num_explicit = 0; // user can have up to 2 --reference arguments
     ASSINP0 (!is_explicit || (++num_explicit <= 2), "More than two --reference arguments");
     
-    // case two --reference arguments: we move the first to prim_ref, and the second will be gref (destination ref)
-    // note: we we read the first argument, we didn't yet know if there is another one
-    if (num_explicit == 2) {
-        SWAP (gref, prim_ref);
-        ref = gref;
+    // no need for a reference if we're just doing --show-chain myfile.chain.genozip
+    if (!(exe_type == EXE_GENOCAT && z_file->data_type == DT_CHAIN && flag.show_chain)) {
+
+        // case two --reference arguments: we move the first to prim_ref, and the second will be gref (destination ref)
+        // note: we we read the first argument, we didn't yet know if there is another one
+        if (num_explicit == 2) {
+            SWAP (gref, prim_ref);
+            ref = gref;
+        }
+
+        // case: pizzing subsequent files with implicit reference (reference from file header)
+        if (!is_explicit && ref->filename) {
+            if (!strcmp (filename, ref->filename)) return; // same file - we're done
+
+            // in case a different reference is loaded - destroy it
+            ref_destroy_reference (ref, false);
+        }
+    
+        flag.reference    = ref_type; 
+        flag.explicit_ref = is_explicit;
     }
-
-    // case: pizzing subsequent files with implicit reference (reference from file header)
-    if (!is_explicit && ref->filename) {
-        if (!strcmp (filename, ref->filename)) return; // same file - we're done
-
-        // in case a different reference is loaded - destroy it
-        ref_destroy_reference (ref, false);
-    }
-
-    flag.reference    = ref_type; 
-    flag.explicit_ref = is_explicit;
 
     ref->filename = CALLOC (filename_len + 1);
     memcpy ((char*)ref->filename, filename, filename_len);
