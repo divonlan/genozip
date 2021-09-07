@@ -109,8 +109,12 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     
     uint32_t body_size = *block_size - sizeof (struct BgzfHeader);
     uint32_t bytes = bgzf_fread (file, h+1, body_size);
-    ASSERT (bytes == body_size, "failed to read body of BGZF block in %s - expecting %u bytes but read %u: %s", 
-            file->basename, body_size, bytes, strerror (errno));
+
+    int save_errno = errno; // we wan't to report errno of fread, not ftell.
+    ASSERT (bytes == body_size, "failed to read body of BGZF block #%"PRId64" (Unexpected-end-of-file=%s disk_size=%"PRId64" ftell=%"PRId64") in %s - expecting %u bytes but read %u: %s", 
+            file->txt_bgzf_blocks_so_far, feof ((FILE *)file->file) ? "YES" : "No", file->disk_size, ftello64 ((FILE *)file->file), file->basename, body_size, bytes, strerror (save_errno));
+
+    file->txt_bgzf_blocks_so_far++;
 
     uint32_t isize_lt32 = *(uint32_t *)&block[*block_size - 4];
     uint32_t isize = LTEN32 (isize_lt32); // 0...65536 per spec

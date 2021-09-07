@@ -414,10 +414,9 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
             "Known possible causes:\n"
             "- The file is missing a newline on the last line.\n"
             "- The file is not a %s file.\n"
-            "%sVB dumped: %s\n",  
+            "VB dumped: %s\n",  
             vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec),
-            dt_name (txt_file->data_type),
-            txt_file->data_type == DT_FASTA ? "- A FASTA file in which each sequence is in a single line (without newlines), and the length of the longest line (sequence) in the file exceeds the vblock size. Solution: use --vblock to increase vblock size to a value (in MB) larger than the length of longest line.\n" : "",
+            txt_file->data_type == DT_REF ? "FASTA" : dt_name (txt_file->data_type),
             txtfile_dump_vb (vb, txt_name));
 
 done:
