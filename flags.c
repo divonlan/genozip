@@ -1140,6 +1140,9 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
             "--idxstats is not supported for %s because it only works on SAM, BAM and FASTQ data, but this file has %s data",
             z_name, dt_name (dt));
 
+    // --show-chain on CHAIN
+    ASSINP (!flag.show_chain || flag.out_dt == DT_CHAIN, "--show-chain is not supported for %s because it only works on Chain files, but this file has %s data", z_name, dt_name (dt));
+    
     // --seq-only and --qual-only only work on FASTQ
     ASSINP (!flag.seq_only  || flag.out_dt == DT_FASTQ, "--seq-only is not supported for %s because it only works on FASTQ data, but this file has %s data", z_name, dt_name (dt));
     ASSINP (!flag.qual_only || flag.out_dt == DT_FASTQ, "--qual-only is not supported for %s because it only works on FASTQ data, but this file has %s data", z_name, dt_name (dt));

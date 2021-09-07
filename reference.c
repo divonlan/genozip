@@ -1311,7 +1311,6 @@ void ref_set_reference (Reference ref, const char *filename, ReferenceType ref_t
     unsigned filename_len;
     if (!filename) {
         const char *env = getenv ("GENOZIP_REFERENCE");
-
         if (!env) return; // nothing to set
         str_split (env, strlen (env), 2, ':', ref_fn, false)
         ASSERT (n_ref_fns, "Invalid value in $GENOZIP_REFERENCE=\"%s\"- expecting a reference file name or two file names separated by a ':'", env);
@@ -1329,8 +1328,8 @@ void ref_set_reference (Reference ref, const char *filename, ReferenceType ref_t
     static int num_explicit = 0; // user can have up to 2 --reference arguments
     ASSINP0 (!is_explicit || (++num_explicit <= 2), "More than two --reference arguments");
     
-    // no need for a reference if we're just doing --show-chain myfile.chain.genozip
-    if (!(exe_type == EXE_GENOCAT && z_file->data_type == DT_CHAIN && flag.show_chain)) {
+    // no need for a reference if we're just doing "genocat --show-chain myfile.chain.genozip" (--show-chain only works for genocat and chain files)
+    if (!flag.show_chain) {
 
         // case two --reference arguments: we move the first to prim_ref, and the second will be gref (destination ref)
         // note: we we read the first argument, we didn't yet know if there is another one
