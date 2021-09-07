@@ -221,8 +221,16 @@ FILE *url_open (StreamP parent_stream, const char *url)
 {
     ASSERT0 (!curl, "Error url_open failed because curl is already running");
 
-    curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                          "To compress files from a URL", "curl", "--silent", url, NULL);
+    // check if wget exists, it is better than curl in flakey connections
+    bool has_wget = !flag.is_windows && !system("which wget > /dev/null 2>&1") && file_exists ("/dev/stdout");
+
+    if (has_wget)
+        curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
+                            "To compress files from a URL", "wget", "--tries=16", "--quiet", "--waitretry=3", "--output-document=/dev/stdout", url, NULL);
+    else // curl
+        curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
+                            "To compress files from a URL", "curl", "--silent", url, NULL);
+
     return stream_from_stream_stdout (curl);
 }
 
