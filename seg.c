@@ -363,6 +363,10 @@ PosType seg_pos_field (VBlock *vb,
 
     return this_pos;
 }
+void seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned pos_len)
+{
+    seg_pos_field (vb, ctx->did_i, ctx->did_i, 0, 0, pos_str, pos_len, 0, pos_len);
+}
 
 // Commonly (but not always), IDs are SNPid identifiers like "rs17030902". We store the ID divided to 2:
 // - We store the final digits, if any exist, and up to 9 digits, as an integer in SEC_NUMERIC_ID_DATA, which is
@@ -420,7 +424,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsig
 
         // add to local
         buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
-        NEXTENT (uint32_t, ctx->local) = ctx->last_value.i;
+        NEXTENT (uint32_t, ctx->local) = (uint32_t)ctx->last_value.i;
         
         // add to b250
         seg_simple_lookup ((VBlockP)vb, ctx, add_bytes);
@@ -514,6 +518,75 @@ Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, 
     return con;
 }
 
+typedef struct { 
+    const char *item;       // pointer into field
+    unsigned item_len;
+    char sep;               // separator after item - 0 if none
+    char sep2;              // double space seperator - common in FASTA headers
+    bool is_int;
+    int64_t value;          // in case of an int
+    unsigned leading_zeros; // in case of an int - these will go into the container prefix
+} CompoundItem;
+
+static void seg_compound_field_split (const char *field, unsigned field_len, const char *is_sep,
+                                      CompoundItem *items, uint8_t *n_items) // out: array of MAX_COMPOUND_COMPONENTS
+{
+    bool in_digits = field_len ? IS_DIGIT (field[0]) : false;
+    bool is_final_item = false;
+    const char *snip = field;
+    unsigned snip_len = 0;
+    *n_items = 0;
+
+    for (unsigned i=0; i < field_len; i++) { // one more than field_len - to finalize the last subfield
+    
+        int next_c = (i==field_len-1) ? 0 : field[i+1];
+        bool next_is_digit = IS_DIGIT (next_c);
+
+        bool is_last_char_of_snip = (i==field_len-1)           ? true   // last character of data - definitely also last of this snip
+                                  : is_final_item              ? false  // final item - we don't stop until the end of the data
+                                  : in_digits != next_is_digit ? true   // digits / non-digits boundary is always terminating a snip
+                                  : is_sep[next_c]             ? true   // a valid separator terminates a snip
+                                  :                              false; // no reason to terminate this snip now;
+        snip_len++;
+
+        if (!is_last_char_of_snip) continue;
+
+        CompoundItem *ci = &items[(*n_items)++];
+        ci->item        = snip;
+        ci->item_len    = snip_len; 
+        ci->sep         = is_sep[next_c] ? (char)next_c : 0;
+
+        // next, find out if item is an integer
+        if (in_digits) {
+            unsigned leading_zeros=0;
+            for (; leading_zeros < snip_len-1 && snip[leading_zeros]=='0'; leading_zeros++) {} // last digit is never a leading 0, if it is 0, it is the integer
+
+            // now set is_int, value and leading_zero. note that if is_int is false, the other two are meaningless
+            ci->is_int = str_get_int (&snip[leading_zeros], snip_len - leading_zeros, &ci->value);
+            ci->leading_zeros = leading_zeros;
+        }
+        else
+            ci->is_int = false;
+
+        if (*n_items == MAX_COMPOUND_COMPONENTS-1) is_final_item = true;
+
+        if (ci->sep) i++; // skip separator
+
+        // check for double space separator
+        if (ci->sep == ' ' && i < field_len-1 && field[i+1] == ' ') {
+            ci->sep2 = ' ';
+            i++;
+        }
+        else
+            ci->sep2 = 0;
+
+        if (i < field_len-1) in_digits = IS_DIGIT (field[i+1]);
+
+        snip = &field[i+1];
+        snip_len = 0;
+    }
+}                                      
+
 // We break down the field (eg QNAME in SAM/BAM/Kraken or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
 // these are vendor-defined strings.
 // Up to MAX_COMPOUND_COMPONENTS subfields are permitted - if there are more, then all the trailing part is just
@@ -522,8 +595,8 @@ Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, 
 // from 0 (0->9,a->z)
 // The separators are made into a string we call "template" that is stored in the main field dictionary - we
 // anticipate that usually all lines have the same format, but we allow lines to have different formats.
-const char sep_with_space[256]    = { [';']=true, ['/']=true, ['|']=true, ['.']=true, [' ']=true, ['\t']=true, [1]=true };
-const char sep_without_space[256] = { [';']=true, ['/']=true, ['|']=true, ['.']=true };
+const char sep_with_space[256]    = { [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true, [' ']=true, ['\t']=true, [1]=true };
+const char sep_without_space[256] = { [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true };
 const char sep_pipe_only[256]     = { ['|']=true };
 void seg_compound_field (VBlock *vb, 
                          Context *field_ctx, const char *field, unsigned field_len, 
@@ -535,148 +608,121 @@ void seg_compound_field (VBlock *vb,
     // defaults to 0 (the same) and we set it to 1 if we encounter a different one
     #define not_all_the_same nodes.param 
 
-    const char *snip = field;
-    unsigned snip_len = 0;
-    unsigned num_seps = 0;
     Container con = seg_initialize_container_array (field_ctx->dict_id, true, false); 
+    CompoundItem items[MAX_COMPOUND_COMPONENTS];
 
-    // add each subfield to its dictionary - 2nd char is 0-9,a-z
-    bool in_int = false;
-    for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
+    seg_compound_field_split (field, field_len, is_sep, items, &con.nitems_lo);
     
-        char sep = (i==field_len) ? 0 : field[i];
-        
-        bool is_valid_sep = is_sep[(int)sep];
-        bool is_final_component = (con_nitems(con) == MAX_COMPOUND_COMPONENTS-1);
+    char prefixes[field_len + con.nitems_lo + 2];
+    prefixes[0] = prefixes[1] = CON_PREFIX_SEP;
+    unsigned prefixes_len = 2;
+    unsigned num_seps = 0;
 
-        if (i < field_len && !is_final_component) {
-            // case a boundary cross from a non-int to an int
-            if (!in_int && sep >= '1' && sep <= '9') {  // note: leading 0s are not part of the int because we can't recird them - they are part of the text before the int
-                in_int = true;
-                if (snip_len > 0) { // if field starts with an integer, then this is not a boundary, yet
-                    is_valid_sep = true;
-                    sep = 0;
-                    i--; // sep is not actually a separator - we will consume it again in the next iteration
-                }
+    for (unsigned i=0; i < con.nitems_lo; i++) {
+        CompoundItem  *ci = &items[i];
+        ContainerItem *CI = &con.items[i];
+
+        // process the subfield that just ended
+        Context *item_ctx = ctx_get_ctx (vb, CI->dict_id);
+        ASSERT (item_ctx, "item_ctx for %s is NULL", dis_dict_id (CI->dict_id).s);
+
+        item_ctx->st_did_i = field_ctx->did_i;
+
+        // allocate memory if needed
+        buf_alloc (vb, &item_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
+
+        // if snip is an integer, we store a delta
+        char delta_snip[30];
+        unsigned original_item_len = ci->item_len;
+
+        if (ci->is_int) {
+            delta_snip[0] = SNIP_SELF_DELTA;
+
+            PosType delta = ci->value - item_ctx->last_value.i;
+
+            // note: if all the snips so far in this VB are the same - store just the snip, so that if the 
+            // entire b250 is the same, it can be removed
+            if (delta || item_ctx->not_all_the_same) {
+                ci->item     = delta_snip;
+                ci->item_len = 1 + str_int (delta, &delta_snip[1]);
+
+                item_ctx->flags.store = STORE_INT;
+                item_ctx->not_all_the_same = true;
             }
 
-            // case: end of an integer without a valid separator
-            else if (in_int && !is_valid_sep && (sep < '0' || sep > '9')) {
-                is_valid_sep = true;
-                sep = 0; 
-                i--;
-            }
+            ctx_set_last_value (vb, item_ctx, ci->value);
         }
-
-        if ((is_valid_sep && !is_final_component) || (i==field_len && snip_len)) {
         
-            // process the subfield that just ended
-            Context *sf_ctx = ctx_get_ctx (vb, con.items[con_nitems(con)].dict_id);
-            ASSERT (sf_ctx, "sf_ctx for %s is NULL", dis_dict_id (con.items[con_nitems(con)].dict_id).s);
+        if (flag.pair == PAIR_READ_1)
+            item_ctx->no_stons = true; // prevent singletons, so pair_2 can compare to us
+        
+        // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
+        // i.e. its already in the dictionary and hash table - so no resources wasted
+        WordIndex node_index = ctx_evaluate_snip_seg (vb, item_ctx, ci->item, ci->item_len, NULL);
 
-            sf_ctx->st_did_i = field_ctx->did_i;
+        // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
+        // and read 2 might have SNIP_PAIR_LOOKUP
+        if (flag.pair == PAIR_READ_2) {
 
-            // allocate memory if needed
-            buf_alloc (vb, &sf_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
+            // if the number of components in the compound is not exactly the same for every line of
+            // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
+            // for SNIP_PAIR_LOOKUP and hence worse compression. This conditions makes sure this situation
+            // doesn't result in an error (TO DO: overcome this, bug 159)
+            // note: this can also happen if the there is no item_ctx->pair do it being fully singletons and moved to local 
+            if (item_ctx->pair_b250_iter.next_b250 < AFTERENT (uint8_t, item_ctx->pair) &&
+                // for pairing to word with SNIP_DELTA, if we have SNIP_PAIR_LOOKUP then all previous lines
+                // this VB must have been SNIP_PAIR_LOOKUP as well. Therefore, the first time we encounter an
+                // inequality - we stop the pairing going forward till the end of this VB
+                !item_ctx->stop_pairing) {
+                
+                WordIndex pair_word_index = base250_decode (&item_ctx->pair_b250_iter.next_b250, !item_ctx->pair_flags.all_the_same, item_ctx->tag_name);  
+                
+                if (pair_word_index == WORD_INDEX_ONE_UP) 
+                    pair_word_index = item_ctx->pair_b250_iter.prev_word_index + 1;
+                
+                item_ctx->pair_b250_iter.prev_word_index = pair_word_index;
+                
+                // note: if the pair word is a singleton in pair_1 file, then pair_word_index will be the index of {SNIP_LOOKUP}
+                // rather than the snip (as replaced in ctx_evaluate_snip_merge), therefore this condition will fail. This is quite
+                // rare, so not worth handling this case
+                if (node_index == pair_word_index) {
 
-            // if snip is an integer, we store a delta
-            char delta_snip[30];
-            unsigned original_snip_len = snip_len;
+                    // discard node_index - decrement its count
+                    ctx_decrement_count (vb, item_ctx, node_index);
 
-            PosType this_value;
-            if (in_int && str_get_int (snip, snip_len, &this_value)) { // also checks that string of digits is not too long for an int64
-
-                delta_snip[0] = SNIP_SELF_DELTA;
-
-                PosType delta = this_value - sf_ctx->last_value.i;
-
-                // note: if all the snips so far in this VB are the same - store just the snip, so that if the 
-                // entire b250 is the same, it can be removed
-                if (delta || sf_ctx->not_all_the_same) {
-                    snip_len = 1 + str_int (delta, &delta_snip[1]);
-                    snip = delta_snip;
-
-                    sf_ctx->flags.store = STORE_INT;
-                    sf_ctx->not_all_the_same = true;
-                }
-
-                ctx_set_last_value (vb, sf_ctx, this_value);
-                in_int = false;
-            }
-            
-            if (flag.pair == PAIR_READ_1)
-                sf_ctx->no_stons = true; // prevent singletons, so pair_2 can compare to us
-            
-            // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
-            // i.e. its already in the dictionary and hash table - so no resources wasted
-            WordIndex node_index = ctx_evaluate_snip_seg (vb, sf_ctx, snip, snip_len, NULL);
-
-            // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
-            // and read 2 might have SNIP_PAIR_LOOKUP
-            if (flag.pair == PAIR_READ_2) {
- 
-                // if the number of components in the compound is not exactly the same for every line of
-                // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
-                // for SNIP_PAIR_LOOKUP and hence worse compression. This conditions makes sure this situation
-                // doesn't result in an error (TO DO: overcome this, bug 159)
-                // note: this can also happen if the there is no sf_ctx->pair do it being fully singletons and moved to local 
-                if (sf_ctx->pair_b250_iter.next_b250 < AFTERENT (uint8_t, sf_ctx->pair) &&
-                    // for pairing to word with SNIP_DELTA, if we have SNIP_PAIR_LOOKUP then all previous lines
-                    // this VB must have been SNIP_PAIR_LOOKUP as well. Therefore, the first time we encounter an
-                    // inequality - we stop the pairing going forward till the end of this VB
-                    !sf_ctx->stop_pairing) {
-                    
-                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250, !sf_ctx->pair_flags.all_the_same, sf_ctx->tag_name);  
-                    
-                    if (pair_word_index == WORD_INDEX_ONE_UP) 
-                        pair_word_index = sf_ctx->pair_b250_iter.prev_word_index + 1;
-                    
-                    sf_ctx->pair_b250_iter.prev_word_index = pair_word_index;
-                    
-                    // note: if the pair word is a singleton in pair_1 file, then pair_word_index will be the index of {SNIP_LOOKUP}
-                    // rather than the snip (as replaced in ctx_evaluate_snip_merge), therefore this condition will fail. This is quite
-                    // rare, so not worth handling this case
-                    if (node_index == pair_word_index) {
-
-                        // discard node_index - decrement its count
-                        ctx_decrement_count (vb, sf_ctx, node_index);
-
-                        // get new node_index instead
-                        sf_ctx->pair_b250 = true;
-                        static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
-                        node_index = ctx_evaluate_snip_seg (vb, sf_ctx, lookup_pair_snip, 1, NULL);
-                    } 
-                    else
-                        // To improve: currently, pairing stops at the first non-match
-                        sf_ctx->stop_pairing = true;
-                }
+                    // get new node_index instead
+                    item_ctx->pair_b250 = true;
+                    static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
+                    node_index = ctx_evaluate_snip_seg (vb, item_ctx, lookup_pair_snip, 1, NULL);
+                } 
                 else
-                    sf_ctx->stop_pairing = true;
+                    // To improve: currently, pairing stops at the first non-match
+                    item_ctx->stop_pairing = true;
             }
-
-            NEXTENT (uint32_t, sf_ctx->b250) = node_index;
-
-            sf_ctx->txt_len += nonoptimized_len ? 0 : original_snip_len;
-
-            // case double space (common in fasta reference file description)
-            bool double_sep = (sep==' ') && (i < field_len-1) && (field[i+1] == sep);
-            if (double_sep) i++;
-                    
-            num_seps += (sep>0) + double_sep;
-
-            // finalize this subfield and get ready for reading the next one
-            if (i < field_len) {    
-                con.items[con_nitems(con)].seperator[0] = sep; // 0 for last item
-                con.items[con_nitems(con)].seperator[1] = double_sep ? sep : 0;
-                snip = &field[i+1];
-                snip_len = 0;
-            }
-            con_inc_nitems (con);
+            else
+                item_ctx->stop_pairing = true;
         }
-        else snip_len++;
+
+        NEXTENT (uint32_t, item_ctx->b250) = node_index;
+
+        item_ctx->txt_len += nonoptimized_len ? 0 : original_item_len;
+
+        // set separators
+        CI->seperator[0] = ci->sep;
+        CI->seperator[1] = ci->sep2;
+        num_seps += (ci->sep != 0) + (ci->sep2 != 0);
+
+        // add the leading zeros to the container prefixes
+        if (ci->is_int && ci->leading_zeros) {
+            memset (&prefixes[prefixes_len], '0', ci->leading_zeros);
+            prefixes_len += ci->leading_zeros + 1;
+            prefixes[prefixes_len-1] = CON_PREFIX_SEP;
+        }
+        else
+            prefixes[prefixes_len++] = CON_PREFIX_SEP;
     }
 
-    container_seg (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : num_seps) + add_for_eol);
+    container_seg (vb, field_ctx, &con, prefixes, prefixes_len, (nonoptimized_len ? nonoptimized_len : num_seps) + add_for_eol);
 }
 
 // an array or array of arrays
@@ -813,6 +859,12 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con,
     
     // get repeats
     str_split (snip, snip_len, 0, con.repsep[0], repeat, false);
+
+    // if we don't have con.drop_final_repeat_sep, the last "repeat" should be zero length and removed
+    if (!con.drop_final_repeat_sep) {
+        if (repeat_lens[n_repeats-1]) goto badly_formatted; 
+        n_repeats--;
+    }
     con.repeats = n_repeats;
 
     ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, snip, "exceeded maximum repeats allowed (%u) while parsing %s",
@@ -831,7 +883,7 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con,
                 seg_by_ctx (vb, items[i], item_lens[i], ctxs[i], item_lens[i]);
     }
 
-    // finally, the Container snip itself
+    // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
 
     // in our specific case, element i of con_index contains the node_index of the snip of the container with i repeats, or WORD_INDEX_NONE.
     if (ctx->con_index.len < n_repeats+1) {
@@ -840,7 +892,7 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con,
     }
 
     WordIndex node_index = *ENT (WordIndex, ctx->con_index, n_repeats);
-    unsigned account_for = con.repeats * (con.nitems_lo-1) /* item seperators */ + con.repeats-1 /* repeat separators */;
+    unsigned account_for = con.repeats * (con.nitems_lo-1) /* item seperators */ + con.repeats - con.drop_final_repeat_sep /* repeat separators */;
 
     // case: first container with the many repeats - seg and add to cache
     if (node_index == WORD_INDEX_NONE) 
@@ -870,6 +922,11 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx,
     NEXTENT (char, ctx->local) = 0;
 
     if (add_bytes) ctx->txt_len += add_bytes;
+}
+
+void seg_add_to_local_text_cb (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len)
+{
+        seg_add_to_local_text (vb, ctx, snip, snip_len, snip_len);
 }
 
 void seg_add_to_local_fixed (VBlock *vb, Context *ctx, const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
@@ -994,7 +1051,8 @@ static void seg_verify_file_size (VBlock *vb)
         fprintf (stderr, "context.txt_len for vb=%u:\n", vb->vblock_i);
         for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
             Context *ctx = CTX(sf_i);
-            fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
+            if (ctx->nodes.len || ctx->local.len || ctx->txt_len)
+                fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
         }
 
         fprintf (stderr, "vb=%u reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",

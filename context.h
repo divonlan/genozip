@@ -144,6 +144,8 @@ extern void ctx_update_stats (VBlockP vb);
 extern void ctx_free_context (Context *ctx);
 extern void ctx_destroy_context (Context *ctx);
 extern void ctx_map_aliases (VBlockP vb);
+extern bool ctx_is_show_dict_id (DictId dict_id);
+
 extern CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index);
 extern const char *ctx_get_snip_by_word_index (const Context *ctx, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);

@@ -19,7 +19,7 @@
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
 typedef struct ContainerItem {
-    DictId dict_id;  
+    DictId dict_id;                        // note: the code counts on this field being first (assigning "item = { dict_id }")
     uint8_t did_i_small;                   // PIZ only: can store dids 0->254, 255 means did_i too large to store
 
     // seperator[0] values with bit 7 set (0x80) are interpreted as flags rather than a seperator, in 

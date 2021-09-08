@@ -47,8 +47,8 @@ static const char optional_sep_by_type[2][256] = { { // compressing from SAM
         ['B']=CI_NATIVE_NEXT                                                      // reconstruct array and then \t seperator if SAM and no seperator for BAM
 } };
 
-static char taxid_redirection_snip[100];
-static unsigned taxid_redirection_snip_len;
+static char taxid_redirection_snip[100], xa_strand_pos_snip[100];
+static unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len;
 
 // ----------------------
 // Compressor callbacks
@@ -137,6 +137,10 @@ void sam_zip_initialize (void)
     taxid_redirection_snip_len = sizeof (taxid_redirection_snip);
     seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_TAXID, false, 0, 
                             taxid_redirection_snip, &taxid_redirection_snip_len);
+
+    static SmallContainer xa_strand_pos_con = { .repeats=1, .nitems_lo=2, .items = { { { _OPTION_XA_STRAND } }, { { _OPTION_XA_POS } } } };
+    xa_strand_pos_snip_len = sizeof (xa_strand_pos_snip);
+    container_prepare_snip ((ConstContainerP)&xa_strand_pos_con, 0, 0, xa_strand_pos_snip, &xa_strand_pos_snip_len); 
 }
 
 void sam_seg_initialize (VBlock *vb)
@@ -162,6 +166,10 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_TOP2FQ)->no_stons   = true;
     CTX(SAM_TOP2FQEX)->no_stons = true;
 
+    CTX(OPTION_BI)->no_stons = CTX(OPTION_BD)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
+    CTX(OPTION_BI)->st_did_i = CTX(OPTION_BD)->st_did_i = OPTION_BD_BI; 
+    CTX(OPTION_BD_BI)->ltype = LT_SEQUENCE;
+
     Context *rname_ctx = CTX(SAM_RNAME);
     Context *rnext_ctx = CTX(SAM_RNEXT);
 
@@ -171,6 +179,12 @@ void sam_seg_initialize (VBlock *vb)
     // in --stats, consolidate stats 
     stats_set_consolidation (vb, SAM_SQBITMAP, 4, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND);
     stats_set_consolidation (vb, OPTION_E2, 4, OPTION_2NONREF, OPTION_N2ONREFX, OPTION_2GPOS, OPTION_S2TRAND);
+    stats_set_consolidation (vb, OPTION_SA, 6, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM);
+    stats_set_consolidation (vb, OPTION_OA, 6, OPTION_OA_RNAME, OPTION_OA_POS, OPTION_OA_STRAND, OPTION_OA_CIGAR, OPTION_OA_MAPQ, OPTION_OA_NM);
+    stats_set_consolidation (vb, OPTION_XA, 6, OPTION_XA_RNAME, OPTION_XA_POS, OPTION_XA_STRAND, OPTION_XA_CIGAR, OPTION_XA_NM, OPTION_XA_STRAND_POS);
+
+    CTX(OPTION_SA_CIGAR)->no_stons = CTX(OPTION_OA_CIGAR)->no_stons = CTX(OPTION_XA_CIGAR)->no_stons = true;
+    CTX(OPTION_SA_CIGAR)->ltype    = CTX(OPTION_OA_CIGAR)->ltype    = CTX(OPTION_XA_CIGAR)->ltype    = LT_TEXT;
 
     codec_acgt_comp_init (vb);
 
@@ -662,91 +676,54 @@ done:
     COPY_TIMER (sam_seg_seq_field);
 }
 
-// returns length of string ending with separator, or -1 if separator was not found
-static inline int sam_seg_get_next_subitem (const char *str, int str_len, char separator)
+// OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
+// Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
+// See: https://samtools.github.io/hts-specs/SAMtags.pdf
+// note: even though SA, OA, XA contain similar fields amongst each other and similar to the primary fields,
+// the values of subsequent lines tend to be similar for each one of them seperately, so we maintain separate contexts
+static void sam_seg_SA_field (VBlockSAM *vb, const char *field, unsigned field_len)
 {
-    for (int i=0; i < str_len; i++) {
-        if (str[i] == separator) return i;
-        if (str[i] == ',' || str[i] == ';') return -1; // wrong separator encountered
-    }
-    return -1;
+    static const MediumContainer container_SA = { .nitems_lo = 6,      
+                                                  .repsep    = { ';' }, // including on last repeat    
+                                                  .items     = { { .dict_id = { _OPTION_SA_RNAME  }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_SA_POS    }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_SA_STRAND }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_SA_CIGAR  }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_SA_MAPQ   }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_SA_NM     },                  } } };
+
+    SegCallback callbacks[6] = { [1] = seg_pos_field_cb, [3] = seg_add_to_local_text_cb };
+    seg_array_of_struct (VB, CTX(OPTION_SA), container_SA, field, field_len, callbacks);
+    CTX(OPTION_SA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
 }
 
-#define DO_SSF(ssf,sep) \
-        ssf = &field[i]; \
-        ssf##_len = sam_seg_get_next_subitem (&field[i], field_len-i, sep); \
-        if (ssf##_len == -1) goto error; /* bad format */ \
-        i += ssf##_len + 1; /* skip snip and separator */        
-
-#define DEC_SSF(ssf) const char *ssf; \
-                     int ssf##_len;   \
-                     Context *ssf##_ctx = ctx_get_ctx (vb, con.items[item_i++].dict_id); \
-                     ssf##_ctx->st_did_i = ctx->did_i; 
-
-static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id, 
-                                    const char *field, unsigned field_len, const char *field_name)
+static void sam_seg_OA_field (VBlockSAM *vb, const char *field, unsigned field_len)
 {
-    // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
-    // Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
-    // See: https://samtools.github.io/hts-specs/SAMtags.pdf
-    // note: even though SA, OA, XA contain similar fields amongst each other and similar to the primary fields,
-    // the values of subsequent lines tend to be similar for each one of them seperately, so we maintain separate contexts
-    #define CONTAINER_SA_OA(s) {   \
-        .repeats     = 0,          \
-        .nitems_lo   = 6,          \
-        .repsep      = {0,0},      \
-        .items       = { { .dict_id = {.id=s "0ARNAME" }, .seperator = {','} },  \
-                         { .dict_id = {.id=s "1APOS"   }, .seperator = {','} },  \
-                         { .dict_id = {.id=s "2ASTRAN" }, .seperator = {','} },  \
-                         { .dict_id = {.id=s "3ACIGAR" }, .seperator = {','} },  \
-                         { .dict_id = {.id=s "4AMAPQ"  }, .seperator = {','} },  \
-                         { .dict_id = {.id=s "5ANM"    }, .seperator = {';'} } } \
+    static const MediumContainer container_OA = { .nitems_lo = 6,          
+                                                  .repsep    = { ';' }, // including on last repeat    
+                                                  .items     = { { .dict_id = { _OPTION_OA_RNAME  }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_OA_POS    }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_OA_STRAND }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_OA_CIGAR  }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_OA_MAPQ   }, .seperator = {','} },  
+                                                                 { .dict_id = { _OPTION_OA_NM     },                    } } };
+
+    SegCallback callbacks[6] = { [1] = seg_pos_field_cb, [3] = seg_add_to_local_text_cb };
+    seg_array_of_struct (VB, CTX(OPTION_OA), container_OA, field, field_len, callbacks);
+    CTX(OPTION_OA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
+}
+
+// split the pos strand-pos string, eg "-10000" to strand "-" and pos "10000"
+static void seg_xa_strand_pos_cb (VBlockP vb, ContextP ctx, const char *field, unsigned field_len)
+{
+    if (field_len < 2 || (field[0] != '+' && field[0] != '-'))  // invalid format - expecting pos to begin with the strand
+        seg_by_ctx (vb, field, field_len, ctx, field_len);
+
+    else {
+        seg_by_did_i (vb, field, 1, OPTION_XA_STRAND, 1);
+        seg_integer_or_not (vb, CTX(OPTION_XA_POS), &field[1], field_len-1, field_len-1);
+        seg_by_ctx (vb, xa_strand_pos_snip, xa_strand_pos_snip_len, ctx, 0); // pre-created constant container
     }
-    static const SmallContainer container_SA = CONTAINER_SA_OA("S"), container_OA = CONTAINER_SA_OA("O");
-
-    SmallContainer con = (subfield_dict_id.num == _OPTION_SA) ? container_SA : container_OA; // make a copy
-    Context *ctx = ctx_get_ctx (vb, subfield_dict_id);
-
-    unsigned item_i=0;
-    DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(strand); DEC_SSF(cigar); DEC_SSF(mapq); DEC_SSF(nm); 
-
-    for (uint32_t i=0; i < field_len; con.repeats++) {
-
-        ASSSEG (con.repeats <= CONTAINER_MAX_REPEATS, field, "exceeded maximum repeats allowed (%u) while parsing %s",
-                CONTAINER_MAX_REPEATS, dis_dict_id (subfield_dict_id).s);
-
-        DO_SSF (rname,  ','); // these also do sanity checks
-        DO_SSF (pos,    ','); 
-        DO_SSF (strand, ','); 
-        DO_SSF (cigar,  ','); 
-        DO_SSF (mapq,   ','); 
-        DO_SSF (nm,     ';'); 
-
-        // sanity checks before adding to any dictionary
-        if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
-        
-        seg_by_ctx (vb, rname,  rname_len,  rname_ctx,  1 + rname_len);
-        seg_by_ctx (vb, strand, strand_len, strand_ctx, 1 + strand_len);
-        seg_by_ctx (vb, cigar,  cigar_len,  cigar_ctx,  1 + cigar_len);
-        seg_by_ctx (vb, mapq,   mapq_len,   mapq_ctx,   1 + mapq_len);
-        seg_by_ctx (vb, nm,     nm_len,     nm_ctx,     1 + nm_len);
-        
-        Context *pos_ctx = ctx_get_ctx (vb, con.items[1].dict_id);
-        seg_pos_field ((VBlockP)vb, pos_ctx->did_i, pos_ctx->did_i, 0, 0, pos, pos_len, 0, 1 + pos_len);
-    }
-
-    container_seg_by_dict_id (vb, subfield_dict_id, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);
-    
-    return;
-
-error:
-    // if the error occurred on on the first repeat - this file probably has a different
-    // format - we just store as a normal subfield
-    // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
-    ASSSEG (!con.repeats, field, "Invalid format in repeat #%u of field %s. snip: %.*s",
-            con.repeats+1, dis_dict_id (subfield_dict_id).s, field_len, field);
-
-    seg_by_dict_id (vb, field, field_len, subfield_dict_id, field_len + 1 /* 1 for \t in SAM and \0 in BAM */); 
 }
 
 static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_len)
@@ -754,59 +731,23 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
     // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
     // Example XA:Z:chr9,-60942781,150M,0;chr9,-42212061,150M,0;chr9,-61218415,150M,0;chr9,+66963977,150M,1;
     // See: http://bio-bwa.sourceforge.net/bwa.shtml
-    static const SmallContainer container_XA = {
+    static const MediumContainer container_XA = {
         .repeats     = 0, 
-        .nitems_lo   = 5, 
-        .repsep      = {0,0},
-        .items       = { { .dict_id = {.id="X0ARNAME" }, .seperator = {','} }, // note: optional fields are DTYPE_2, in which short ids are left as-is, so we can skip dict_id_make
-                         { .dict_id = {.id="X1ASTRAN" }, .seperator = { 0 } },
-                         { .dict_id = {.id="X2APOS"   }, .seperator = {','} },
-                         { .dict_id = {.id="X3ACIGAR" }, .seperator = {','} }, // we don't mix the primary as the primary has a SNIP_SPECIAL
-                         { .dict_id = {.id="X4ANM"    }, .seperator = {';'} } }     
-    };
+        .nitems_lo   = 4, 
+        .repsep      = {';'}, // including last item
+        .items       = { { .dict_id = { _OPTION_XA_RNAME      }, .seperator = {','} }, // note: optional fields are DTYPE_2, in which short ids are left as-is, so we can skip dict_id_make
+                         { .dict_id = { _OPTION_XA_STRAND_POS }, .seperator = {','} },
+                         { .dict_id = { _OPTION_XA_CIGAR      }, .seperator = {','} }, // we don't mix the primary as the primary has a SNIP_SPECIAL
+                         { .dict_id = { _OPTION_XA_NM         },                    } }  };
 
-    Context *ctx = CTX(OPTION_XA);
-
-    SmallContainer con = container_XA;
-
-    unsigned item_i=0;
-    DEC_SSF(rname); DEC_SSF(strand); DEC_SSF(pos); DEC_SSF(cigar); DEC_SSF(nm); 
-
-    for (uint32_t i=0; i < field_len; con.repeats++) {
-
-        ASSSEG (con.repeats <= CONTAINER_MAX_REPEATS, field, "exceeded maximum repeats allowed (%u) while parsing XA",
-                CONTAINER_MAX_REPEATS);
-
-        DO_SSF (rname,  ','); 
-        DO_SSF (pos,    ','); // includes strand
-        DO_SSF (cigar,  ','); 
-        DO_SSF (nm,     ';'); 
-
-        // split the pos string, eg "-10000" to strand "-" and pos "10000"
-        if (pos_len < 2 || (pos[0] != '+' && pos[0] != '-')) goto error; // invalid format - expecting pos to begin with the strand
-        strand = pos++;
-        pos_len--;
-        strand_len = 1;
-
-        seg_by_ctx (vb, rname,  rname_len,  rname_ctx,  1 + rname_len);
-        seg_by_ctx (vb, strand, strand_len, strand_ctx, strand_len); // strand is first character of pos - no separator
-        seg_by_ctx (vb, cigar,  cigar_len,  cigar_ctx,  1 + cigar_len);
-        seg_by_ctx (vb, nm,     nm_len,     nm_ctx,     1 + nm_len);
-        
-        seg_integer_or_not (VB, pos_ctx, pos, pos_len, 1+pos_len);
-    }
-
-    container_seg_by_dict_id (vb, _OPTION_XA, (ContainerP)&con, 1 /* 1 for \t in SAM and \0 in BAM */);
-    return;
-
-error:
-    // if the error occurred on on the first repeat - this file probably has a different
-    // format - we just store as a normal subfield
-    // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
-    ASSSEG (!con.repeats, field, "Invalid format in repeat #%u of field XA. snip: %.*s", con.repeats+1, field_len, field);
-
-    seg_by_dict_id (vb, field, field_len, _OPTION_XA, field_len + 1 /* 1 for \t in SAM and \0 in BAM */); 
+    SegCallback callbacks[4] = { [1] = seg_xa_strand_pos_cb, [2] = seg_add_to_local_text_cb };
+    seg_array_of_struct (VB, CTX(OPTION_XA), container_XA, field, field_len, callbacks);
+    CTX(OPTION_XA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
 }
+
+// ------------------
+// MD
+// ------------------
 
 uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len)
 {
@@ -854,6 +795,23 @@ static inline bool sam_seg_get_shortened_MD (const char *md_str, unsigned md_str
     }
 
     return false; // MD doesn't end with a number and is hence unchanged (this normally doesn't occur as the MD would finish with 0)
+}
+
+// MD's logical length is normally the same as seq_len, we use this to optimize it.
+// In the common case that it is just a number equal the seq_len, we replace it with an empty string.
+// if MD value can be derived from the seq_len, we don't need to store - store just an empty string
+static void sam_seg_MD_field (VBlockSAM *vb,  ZipDataLineSAM *dl, const char *field, unsigned field_len, unsigned add_bytes)
+{
+    char new_md[field_len + 10];
+    unsigned new_md_len = 0;
+
+    bool success = sam_seg_get_shortened_MD (field, field_len, dl->seq_len, new_md, &new_md_len);
+
+    // not sure which of these two is better....
+    seg_by_did_i (vb,                                 
+                  success ? new_md     : field, 
+                  success ? new_md_len : field_len,
+                  OPTION_MD, add_bytes);
 }
 
 // AS and XS are values (at least as set by BWA) at most the seq_len, and AS is often equal to it. we modify
@@ -915,6 +873,55 @@ static void sam_optimize_ZM (const char **snip, unsigned *snip_len, char *new_st
         *snip_len = str_int (number, new_str);
         *snip = new_str;
     }    
+}
+
+static void sam_seg_BD_BI_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len, DictId dict_id, unsigned add_bytes)
+{
+    bool is_bi = (dict_id.num == _OPTION_BI);
+    Context *this_ctx  = is_bi ? CTX(OPTION_BI) : CTX (OPTION_BD);
+
+    if (field_len != dl->seq_len) {
+        seg_by_ctx (vb, field, field_len, this_ctx, field_len);
+        return;
+    }
+    
+    dl->bdbi_data_start[is_bi] = ENTNUM (vb->txt_data, field);
+
+    CTX(OPTION_BD_BI)->txt_len += add_bytes; 
+
+    if (!dl->bdbi_data_start[!is_bi]) // the first of BD and BI increments local.len, so it is incremented even if just one of BD/BI appears
+        CTX(OPTION_BD_BI)->local.len += field_len * 2;
+
+    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BDBI }), 2, this_ctx, 0);
+}
+
+
+// E2 - SEQ data. Currently broken. To do: fix.
+/*static void sam_seg_E2_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len, unsigned add_bytes)
+{
+    ASSSEG0 (dl->seq_len, field, "E2 tag without a SEQ"); 
+    ASSINP (field_len == dl->seq_len, 
+            "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
+            txt_name, dl->seq_len, field_len, field_len, field);
+
+    PosType this_pos = vb->last_int(SAM_POS);
+
+    sam_seg_seq_field (vb, OPTION_E2, (char *)field, field_len, this_pos, vb->last_cigar, 0, field_len, // remove const bc SEQ data is actually going to be modified
+                        vb->last_cigar, add_bytes); 
+}*/
+
+// U2 - QUAL data (note: U2 doesn't have a context - it shares with QUAL)
+static void sam_seg_U2_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len, unsigned add_bytes)
+{
+    ASSSEG0 (dl->seq_len, field, "U2 tag without a SEQ"); 
+    ASSINP (field_len == dl->seq_len, 
+            "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. U2=%.*s",
+            txt_name, dl->seq_len, field_len, field_len, field);
+
+    dl->u2_data_start = field - vb->txt_data.data;
+    dl->u2_data_len   = field_len;
+    CTX(OPTION_U2)->txt_len   += add_bytes;
+    CTX(OPTION_U2)->local.len += field_len;
 }
 
 static inline TranslatorId optional_field_translator (char type)
@@ -1028,106 +1035,44 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 
     unsigned add_bytes = sam_seg_optional_add_bytes (bam_type, value_len, is_bam);
 
-    if (dict_id.num == _OPTION_SA || dict_id.num == _OPTION_OA)
-        sam_seg_SA_or_OA_field (vb, dict_id, value, value_len, dict_id.num == _OPTION_SA ? "SA" : "OA");
+    switch (dict_id.num) {
 
-    else if (dict_id.num == _OPTION_XA) 
-        sam_seg_XA_field (vb, value, value_len);
+        case _OPTION_SA: sam_seg_SA_field (vb, value, value_len); break;
 
-    // fields containing CIGAR format data - aliases of _OPTION_CIGAR (not the main CIGAR field that all snips have SNIP_SPECIAL)
-    // MC: "Mate Cigar", added by eg https://manpages.debian.org/unstable/biobambam2/bamsort.1.en.html  
-    else if (dict_id.num == _OPTION_MC || dict_id.num == _OPTION_OC) 
-        seg_by_dict_id (vb, value, value_len, _OPTION_CIGAR, add_bytes); 
+        case _OPTION_OA: sam_seg_OA_field (vb, value, value_len); break;
 
-    // MD's logical length is normally the same as seq_len, we use this to optimize it.
-    // In the common case that it is just a number equal the seq_len, we replace it with an empty string.
-    else if (dict_id.num == _OPTION_MD) {
-        // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
+        case _OPTION_XA: sam_seg_XA_field (vb, value, value_len); break;
 
-#define MAX_SAM_MD_LEN 1000 // maximum length of MD that is shortened.
-        char new_md[MAX_SAM_MD_LEN];
-        unsigned new_md_len = 0;
-        bool md_is_special  = (value_len-2 <= MAX_SAM_MD_LEN);
-
-        if (md_is_special) 
-            md_is_special = sam_seg_get_shortened_MD (value, value_len, dl->seq_len, new_md, &new_md_len);
-
-        // not sure which of these two is better....
-        seg_by_dict_id (vb,                                 
-                        md_is_special ? new_md : value, 
-                        md_is_special ? new_md_len : value_len,
-                        dict_id, add_bytes);
-    }
-
-    // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)
-    else if ((dict_id.num == _OPTION_BD || dict_id.num == _OPTION_BI) && value_len == dl->seq_len) {
+        // fields containing CIGAR format data - aliases of _OPTION_CIGAR (not the main CIGAR field that all snips have SNIP_SPECIAL)
+        // MC: "Mate Cigar", added by eg https://manpages.debian.org/unstable/biobambam2/bamsort.1.en.html  
+        case _OPTION_MC:
+        case _OPTION_OC: seg_by_did_i (vb, value, value_len, OPTION_CIGAR, add_bytes); break;
         
-        bool is_bi = (dict_id.num == _OPTION_BI);
-        dl->bdbi_data_start[is_bi] = value - vb->txt_data.data;
+        case _OPTION_MD: sam_seg_MD_field (vb, dl, value, value_len, add_bytes); break;
 
-        Context *ctx = CTX(OPTION_BD_BI);
-        ctx->txt_len += add_bytes; 
-        ctx->ltype   = LT_SEQUENCE;
+        case _OPTION_BD:
+        case _OPTION_BI: sam_seg_BD_BI_field (vb, dl, value, value_len, dict_id, add_bytes); break;
+        
+        case _OPTION_AS: sam_seg_AS_field (vb, dl, dict_id, value, value_len, add_bytes); break;
+        
+        case _OPTION_mc: sam_seg_mc_field (vb, dict_id, value, value_len, add_bytes); break;
 
-        if (!dl->bdbi_data_start[!is_bi]) // the first of BD and BI increments local.len, so it is incremented even if just one of BD/BI appears
-            ctx->local.len += value_len * 2;
+        // TX:i: - we seg this as a primary field SAM_TAX_ID
+        case _OPTION_TX: seg_by_did_i (vb, taxid_redirection_snip, taxid_redirection_snip_len, OPTION_TX, add_bytes); break;
 
-        // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
-        Context *this_ctx  = ctx_get_ctx (vb, dict_id);
-        this_ctx->no_stons = true; 
-        this_ctx->st_did_i = ctx->did_i; 
+        //case _OPTION_E2: sam_seg_E2_field (vb, dl, value, value_len, add_bytes); // BROKEN. To do: fix.
 
-        const char special_snip[2] = { SNIP_SPECIAL, SAM_SPECIAL_BDBI };
-        seg_by_dict_id (vb, special_snip, 2, dict_id, 0);
+        case _OPTION_U2: sam_seg_U2_field (vb, dl, value, value_len, add_bytes); break;
+
+        default:
+            // Numeric array array
+            if (bam_type == 'B') 
+                sam_seg_array_field ((VBlockP)vb, dict_id, value, value_len);
+
+            // All other subfields - normal snips in their own dictionary
+            else        
+                seg_by_dict_id (vb, value, value_len, dict_id, add_bytes); 
     }
-
-    // AS is a value (at least as set by BWA) at most the seq_len, and often equal to it. we modify
-    // it to be new_AS=(AS-seq_len) 
-    else if (dict_id.num == _OPTION_AS) 
-        sam_seg_AS_field (vb, dl, dict_id, value, value_len, add_bytes);
-    
-    // mc:i: (output of bamsormadup and other biobambam tools - mc in small letters) 
-    // appears to be a pos value usually close to PNEXT, but it is -1 is POS=PNEXT.
-    else if (dict_id.num == _OPTION_mc) 
-        sam_seg_mc_field (vb, dict_id, value, value_len, add_bytes);
-
-    // TX:i: - we seg this as a primary field SAM_TAX_ID
-    else if (dict_id.num == _OPTION_TX) 
-        seg_by_dict_id (vb, taxid_redirection_snip, taxid_redirection_snip_len, dict_id, add_bytes); 
-
-    // E2 - SEQ data. Currently broken. To do: fix.
-/*    else if (dict_id.num == _OPTION_E2) {
-        ASSSEG0 (dl->seq_len, value, "E2 tag without a SEQ"); 
-        ASSINP (value_len == dl->seq_len, 
-                "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
-                txt_name, dl->seq_len, value_len, value_len, value);
-
-        PosType this_pos = vb->last_int(SAM_POS);
-
-        sam_seg_seq_field (vb, OPTION_E2, (char *)value, value_len, this_pos, vb->last_cigar, 0, value_len, // remove const bc SEQ data is actually going to be modified
-                           vb->last_cigar, add_bytes); 
-    }
-*/
-    // U2 - QUAL data (note: U2 doesn't have a context - it shares with QUAL)
-    else if (dict_id.num == _OPTION_U2) {
-        ASSSEG0 (dl->seq_len, value, "U2 tag without a SEQ"); 
-        ASSINP (value_len == dl->seq_len, 
-                "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
-                txt_name, dl->seq_len, value_len, value_len, value);
-
-        dl->u2_data_start = value - vb->txt_data.data;
-        dl->u2_data_len   = value_len;
-        CTX(OPTION_U2)->txt_len   += add_bytes;
-        CTX(OPTION_U2)->local.len += value_len;
-    }
-
-    // Numeric array array
-    else if (bam_type == 'B') 
-        sam_seg_array_field ((VBlockP)vb, dict_id, value, value_len);
-
-    // All other subfields - normal snips in their own dictionary
-    else        
-        seg_by_dict_id (vb, value, value_len, dict_id, add_bytes); 
 
     // integer and float fields need to be STORE_INT/FLOAT to be reconstructable as BAM
     if (optional_field_store_flag[(uint8_t)sam_type]) {

@@ -18,6 +18,7 @@ typedef enum { BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_MMAP, BUF_NUM_TY
 
 typedef struct Buffer {
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
+    bool can_be_big;  // do not display warning if buffer grows very big
     
     const char *name; // name of allocator - used for memory debugging & statistics
     uint64_t size;    // number of bytes available to the user (i.e. not including the allocated overhead)

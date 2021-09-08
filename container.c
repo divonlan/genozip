@@ -49,6 +49,7 @@ void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned
     *snip_len = 1 + b64_len + prefixes_len;
 }
 
+// WARNING: don't pass in con an address of a static container, it is not thread safe! container_prepare_snip temporarily BGEN fields of the container.
 WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con, 
                             // prefixes may be NULL or may be contain a container-wide prefix and per-item prefixes.
                             // The "container-wide prefix" is reconstructed once, at the beginning of the Container.

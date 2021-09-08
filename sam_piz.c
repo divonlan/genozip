@@ -391,28 +391,6 @@ finish:
     return true; // have new value
 }
 
-SPECIAL_RECONSTRUCTOR (sam_piz_special_XA_POS)
-{
-    if (!reconstruct) goto done;
-    
-    Context *xa_rname_ctx = CTX(OPTION_XA_RNAME);
-
-    const char *xa_rname = last_txtx (vb, xa_rname_ctx);
-
-    ASSERT (xa_rname_ctx->last_txt_len >= 1 && xa_rname_ctx->last_txt_len <= 5, "unexpected length of XA_RNAME=%.*s len=%u",
-            xa_rname_ctx->last_txt_len, xa_rname, xa_rname_ctx->last_txt_len);
-
-    char id[DICT_ID_LEN] = "X2A";
-    memcpy (&id[3], xa_rname, xa_rname_ctx->last_txt_len);
-
-    Context *chr_ctx = ctx_get_ctx (vb, dict_id_make (id, 3 + xa_rname_ctx->last_txt_len, DTYPE_SAM_OPTIONAL));
-    
-    reconstruct_from_ctx (vb, chr_ctx->did_i, 0, true);
-
-done:
-    return false; // no new value
-}
-
 //-----------------------------------------------------------------
 // Translator functions for reconstructing SAM data into BAM format
 //-----------------------------------------------------------------

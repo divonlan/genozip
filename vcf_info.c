@@ -705,7 +705,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
 {
-    ContextP pos_ctx = ECTX (_VCF_POS);
+    ContextP pos_ctx = CTX (VCF_POS);
     
     if (vb->vb_coords == DC_PRIMARY)
         RECONSTRUCT (last_txtx (vb, pos_ctx), pos_ctx->last_txt_len); // faster than RECONSTRUCT_INT

@@ -32,7 +32,7 @@
 #define INITIAL_NUM_NODES 10000
 
 // show a dict_id if the requested string is a subset of it, excluding unprintable characters
-static bool ctx_is_show_dict_id (DictId dict_id)
+bool ctx_is_show_dict_id (DictId dict_id)
 {
     if (!flag.show_one_dict) return false;
     
@@ -173,8 +173,8 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool i
 
     // we check after (no risk of segfault because of buffer overflow protector) - since b250 word is variable length
     ASSERT (iterator->next_b250 <= AFTERENT (uint8_t, *b250), 
-            "while reconstrucing line %"PRIu64" vb_i=%u: iterator for %s %sreached end of data. b250.len=%"PRIu64, 
-            vb->line_i, vb->vblock_i, ctx->tag_name, is_pair ? "(PAIR) ": "", b250->len);
+            "while reconstrucing line %"PRIu64" (last line of vb is %"PRIu64") in vb_i=%u: iterator for %s %sreached end of data. b250.len=%"PRIu64, 
+            vb->line_i, vb->first_line + vb->lines.len - 1, vb->vblock_i, ctx->tag_name, is_pair ? "(PAIR) ": "", b250->len);
 
     // case: a Container item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
     if (word_index == WORD_INDEX_MISSING) {
@@ -448,6 +448,7 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
     ctx->dict_id     = dict_id;
     ctx->last_line_i = LAST_LINE_I_INIT;
     ctx->tag_i       = -1;
+    ctx->dict.can_be_big = true; // don't warn if dict buffers grow really big
 
     if (tag_name_len) {
         ASSINP (tag_name_len <= MAX_TAG_LEN-1, "Tag name \"%.*s\" is of length=%u beyond the maximum tag length supported by Genozip=%u",

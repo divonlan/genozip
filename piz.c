@@ -147,7 +147,10 @@ bool piz_test_grep (VBlock *vb)
 
 bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
-    if (!vb) return false; // we don't skip reading any SEC_DICT / SEC_COUNTS sections
+    // --show-dict=DICT - read only the one dictionary
+    if (st == SEC_DICT && flag.show_one_dict && exe_type == EXE_GENOCAT && !ctx_is_show_dict_id (dict_id)) return true; // skip
+
+    if (!vb) return false; // we don't skip reading any SEC_DICT / SEC_COUNTS sections for any other
 
     // B250, LOCAL, COUNT sections
     bool skip = exe_type == EXE_GENOCAT && dict_id.num 

@@ -50,6 +50,7 @@ extern bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, 
 #define SPF_UNLIMIED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA
 extern PosType seg_pos_field (VBlockP vb, DidIType snip_did_i, DidIType base_did_i, unsigned opt, 
                               char missing, const char *pos_str, unsigned pos_len, PosType this_pos, unsigned add_bytes);
+extern void seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned pos_len);
 
 extern void seg_id_field_do (VBlockP vb, ContextP ctx, const char *id_snip, unsigned id_snip_len);
 #define seg_id_field(vb, ctx, id_snip, id_snip_len, account_for_separator) \
@@ -59,6 +60,7 @@ extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_
 #define seg_initialize_container_array(dict_id, type_1_items, comma_sep) seg_initialize_container_array_do ((DictId)dict_id, type_1_items, comma_sep)
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
+extern void seg_add_to_local_text_cb (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, const void *data, unsigned data_len);
 extern void seg_add_to_local_uint8  (VBlockP vb, ContextP ctx, uint8_t  value, unsigned add_bytes);
 extern void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned add_bytes);

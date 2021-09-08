@@ -458,7 +458,7 @@ uint64_t buf_alloc_do (VBlock *vb,
     if (!requested_size) return 0; // nothing to do
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
-    if (requested_size > REQUEST_TOO_BIG_THREADSHOLD) // use WARN instead of ASSERTW to have a place for breakpoint
+    if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
         WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. buf=%s",
               func, code_line, str_size (requested_size).s, buf_desc (buf).s);
 
