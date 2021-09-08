@@ -138,9 +138,9 @@ typedef struct Context {
     // ----------------------------------------------------------------------------------------
 
     // Container cache 
-    Buffer con_cache;          // PIZ: An array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
-                               // ZIP: used to cache container templates, eg vcf_seg_INFO_histogram
-    Buffer con_index;          // Array of uint32_t - index into con_cache. Each item corresponds to word_index (PIZ) or node_index (ZIP)
+    Buffer con_cache;          // PIZ: Handled by container_reconstruct - an array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
+                               // ZIP: Each context is free to use it on its own
+    Buffer con_index;          // Array of uint32_t - PIZ: index into con_cache - Each item corresponds to word_index. ZIP: context-specific.
     Buffer con_len;            // Array of uint16_t - length of item in cache
     
 } Context;

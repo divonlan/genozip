@@ -1331,7 +1331,7 @@ void ref_set_reference (Reference ref, const char *filename, ReferenceType ref_t
     // no need for a reference if we're just doing "genocat --show-chain myfile.chain.genozip" (--show-chain only works for genocat and chain files)
     if (!flag.show_chain) {
 
-        // case two --reference arguments: we move the first to prim_ref, and the second will be gref (destination ref)
+        // case two --reference arguments: we move the first to prim_ref, and the second will be gref (destpination ref)
         // note: we we read the first argument, we didn't yet know if there is another one
         if (num_explicit == 2) {
             SWAP (gref, prim_ref);

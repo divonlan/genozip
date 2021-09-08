@@ -45,6 +45,8 @@ void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned
     ((Container*)con)->repeats = BGEN24 (con->repeats); // restore - honoring our "const" contract
 
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
+
+    *snip_len = 1 + b64_len + prefixes_len;
 }
 
 WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con, 

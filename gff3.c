@@ -124,7 +124,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
     // in a dictionary and the numeric part which store in a local
     case _ATTR_Dbxref:
-        seg_id_field (vb, ATTR_Dbxref, value, value_len, false); // discard the const as seg_id_field modifies
+        seg_id_field (vb, CTX(ATTR_Dbxref), value, value_len, false); // discard the const as seg_id_field modifies
         break;
 
     case _ATTR_Target:
@@ -133,7 +133,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
         break;
 
     case _ATTR_Name:
-        seg_id_field (vb, ATTR_Name, value, value_len, false);
+        seg_id_field (vb, CTX(ATTR_Name), value, value_len, false);
         break;
 
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
@@ -146,7 +146,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
     // subfields that are arrays of structs, for example:
     // "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
     case _ATTR_Variant_effect: {
-        static const SmallContainer Variant_effect = {
+        static const MediumContainer Variant_effect = {
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
@@ -155,12 +155,12 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="V2arEff" }, .seperator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, value, value_len, true);
+        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, value, value_len, (SegCallback[]){0,0,0,seg_id_field_do});
         break;
     }
 
     case _ATTR_sift_prediction: {
-        static const SmallContainer sift_prediction = {
+        static const MediumContainer sift_prediction = {
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
@@ -169,12 +169,12 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="S2iftPr" }, .seperator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, value, value_len, true);
+        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, value, value_len, (SegCallback[]){0,0,0,seg_id_field_do});
         break;
     }
 
     case _ATTR_polyphen_prediction: {
-        static const SmallContainer polyphen_prediction = {
+        static const MediumContainer polyphen_prediction = {
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
@@ -183,12 +183,12 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="P2olyPhP" }, .seperator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, value, value_len, true);
+        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, value, value_len, (SegCallback[]){0,0,0,seg_id_field_do});
         break;
     }
 
     case _ATTR_variant_peptide: {
-        static const SmallContainer variant_peptide = {
+        static const MediumContainer variant_peptide = {
             .nitems_lo   = 3, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
@@ -196,7 +196,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="v1arPep"  }, .seperator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, value, value_len, true);
+        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, value, value_len, (SegCallback[]){0,0,seg_id_field_do});
         break;
     }
 

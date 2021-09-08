@@ -44,7 +44,11 @@ static bool ctx_is_show_dict_id (DictId dict_id)
         if (IS_NON_WS_PRINTABLE(dict_id.id[i]))
             dict_id_str[s_len++] = dict_id.id[i];
 
-    return (bool)strstr (dict_id_str, flag.show_one_dict);
+    unsigned len = strlen (flag.show_one_dict);
+    if (len <= 8)
+        return !memcmp (dict_id_str, flag.show_one_dict, len);
+    else
+        return !memcmp (dict_id_str, flag.show_one_dict, 4) && !memcmp(&dict_id_str[4], &flag.show_one_dict[len-4], 4);
 }
 
 // ZIP: add a snip to the dictionary the first time it is encountered in the VCF file.
@@ -824,8 +828,8 @@ void ctx_initialize_predefined_ctxs (Context *contexts /* an array */,
     *num_contexts = MAX_(dt_fields[dt].num_fields, *num_contexts);
 
     for (int did_i=0; did_i < dt_fields[dt].num_fields; did_i++) {
-        DictId dict_id = dt_fields[dt].dict_id[did_i];
-        ASSERT (dict_id.num, "No did_i->dict_id mapping is defined for did_i=%u in dt=%s", did_i, dt_name (dt));
+        DictId dict_id = dt_fields[dt].predefined[did_i].dict_id;
+        ASSERT (dict_id.num, "No did_i->dict_id mapping is defined for predefined did_i=%u in dt=%s", did_i, dt_name (dt));
 
         // check if its an alias (PIZ only)
         Context *dst_ctx = NULL;
@@ -835,7 +839,8 @@ void ctx_initialize_predefined_ctxs (Context *contexts /* an array */,
                     dst_ctx = ctx_get_zf_ctx (dict_id_aliases[alias_i].dst);
 
         if (!dst_ctx) // normal field, not an alias
-            ctx_initialize_ctx (&contexts[did_i], did_i, dict_id, dict_id_to_did_i_map, 0, 0);
+            ctx_initialize_ctx (&contexts[did_i], did_i, dict_id, dict_id_to_did_i_map, 
+                                dt_fields[dt].predefined[did_i].tag_name, dt_fields[dt].predefined[did_i].tag_name_len);
 
         else { // an alias
             contexts[did_i].did_i = dst_ctx->did_i;

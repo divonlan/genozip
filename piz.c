@@ -150,7 +150,9 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     if (!vb) return false; // we don't skip reading any SEC_DICT / SEC_COUNTS sections
 
     // B250, LOCAL, COUNT sections
-    bool skip = exe_type == EXE_GENOCAT && dict_id.num && dict_id.num != DTF(dict_id)[CHROM].num && (!flag.luft || dict_id.num != DTF(dict_id)[ODID(oCHROM)].num) && (
+    bool skip = exe_type == EXE_GENOCAT && dict_id.num 
+                            && dict_id.num != DTF(predefined)[CHROM].dict_id.num 
+                            && (!flag.luft || dict_id.num != DTF(predefined)[ODID(oCHROM)].dict_id.num) && (
     
     // sometimes we don't need dictionaries. but we always load CHROM.
         (flag.genocat_no_dicts && dict_id_typeless (dict_id).num != flag.show_one_counts.num)

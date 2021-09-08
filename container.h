@@ -60,10 +60,10 @@ typedef struct ContainerItem {
     char repsep[2];                    /* repeat seperator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 
-typedef struct Container      { CONTAINER_FIELDS(MAX_FIELDS) } Container;
-typedef struct MiniContainer  { CONTAINER_FIELDS(1) } MiniContainer;
-#define NUM_SMALL_CONTAINER_SUBFIELDS 16
-typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) } SmallContainer;
+typedef struct Container       { CONTAINER_FIELDS(MAX_FIELDS) } Container;
+typedef struct MiniContainer   { CONTAINER_FIELDS(1)          } MiniContainer;
+typedef struct SmallContainer  { CONTAINER_FIELDS(16)         } SmallContainer;
+typedef struct MediumContainer { CONTAINER_FIELDS(80)         } MediumContainer;
 
 #pragma pack()
 #define con_nitems(con) ((con).nitems_hi * 256 + (con).nitems_lo)

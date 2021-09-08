@@ -548,7 +548,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     if (flag.add_line_numbers) 
         vcf_seg_add_line_number (vb, VCF_ID_len);
     else
-        seg_id_field (vb_, VCF_ID, VCF_ID_str, VCF_ID_len, true);
+        seg_id_field (vb_, CTX(VCF_ID), VCF_ID_str, VCF_ID_len, true);
 
     // REF + ALT 
     GET_NEXT_ITEM (VCF_REF);

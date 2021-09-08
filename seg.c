@@ -48,11 +48,10 @@ WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Contex
 } 
 
 // segs the same node as previous seg
-WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes) 
+WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes) 
 { 
     buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, NULL);
 
-    WordIndex node_index = *LASTENT (uint32_t, ctx->b250); 
     NEXTENT (uint32_t, ctx->b250) = node_index; 
     ctx->txt_len += add_bytes;
 
@@ -373,7 +372,7 @@ PosType seg_pos_field (VBlock *vb,
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field_do (VBlock *vb, DidIType did_i, const char *id_snip, unsigned id_snip_len, bool account_for_separator)
+void seg_id_field_do (VBlock *vb, ContextP ctx, const char *id_snip, unsigned id_snip_len)
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
@@ -387,8 +386,6 @@ void seg_id_field_do (VBlock *vb, DidIType did_i, const char *id_snip, unsigned 
         else 
             break;
 
-    Context *ctx = CTX(did_i);
-
     // added to local if we have a trailing number
     if (num_digits) {
         uint32_t id_num = atoi (&id_snip[id_snip_len - num_digits]);
@@ -401,7 +398,7 @@ void seg_id_field_do (VBlock *vb, DidIType did_i, const char *id_snip, unsigned 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;
     SAFE_ASSIGN (&id_snip[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
-    seg_by_ctx (vb, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len + !!account_for_separator); // account for the entire length, and sometimes with \t
+    seg_by_ctx (vb, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len); // account for the entire length, and sometimes with \t
     SAFE_RESTORE;
 }
 
@@ -437,6 +434,11 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsig
         ctx->numeric_only = false;
         return false;
     }
+}
+
+void seg_integer_or_not_cb (VBlockP vb, ContextP ctx, const char *int_str, unsigned int_str_len)
+{
+    seg_integer_or_not (vb, ctx, int_str, int_str_len, int_str_len);
 }
 
 // if its a float, stores the float in local, and a LOOKUP in b250, and returns true. if not - normal seg, and returns false.
@@ -748,7 +750,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         // item is ID eg "mRNA00001"
         else if (items_are_id) 
-            seg_id_field (vb, arr_ctx->did_i, this_item, this_item_len, false);
+            seg_id_field (vb, arr_ctx, this_item, this_item_len, false);
 
         // case: its an scalar (we don't delta arrays that have sub-arrays and we don't delta the first item)
         else if (!use_integer_delta || subarray_sep || i==0) {
@@ -797,8 +799,9 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 // The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
-void seg_array_of_struct (VBlockP vb, ContextP ctx, SmallContainer con, 
-                          const char *snip, unsigned snip_len, bool last_item_is_id)
+void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, 
+                          const char *snip, unsigned snip_len, 
+                          SegCallback *callbacks) // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
 {
     ContextP ctxs[con.nitems_lo]; 
 
@@ -821,16 +824,31 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, SmallContainer con,
         str_split (repeats[r], repeat_lens[r], con.nitems_lo, con.items[0].seperator[0], item, true);
         if (n_items != con.nitems_lo) goto badly_formatted;
 
-        for (unsigned i=0; i < n_items - last_item_is_id; i++)
-            seg_by_ctx (vb, items[i], item_lens[i], ctxs[i], item_lens[i]);
-
-        if (last_item_is_id)
-            seg_id_field (vb, ctxs[n_items-1]->did_i, items[n_items-1], item_lens[n_items-1], false);
+        for (unsigned i=0; i < n_items; i++)
+            if (callbacks && callbacks[i])
+                callbacks[i] (vb, ctxs[i], items[i], item_lens[i]);
+            else
+                seg_by_ctx (vb, items[i], item_lens[i], ctxs[i], item_lens[i]);
     }
 
     // finally, the Container snip itself
-    container_seg (vb, ctx, (ContainerP)&con, NULL, 0, 
-                   con.repeats * (con.nitems_lo-1) /* item seperators */ + con.repeats-1 /* repeat separators */);
+
+    // in our specific case, element i of con_index contains the node_index of the snip of the container with i repeats, or WORD_INDEX_NONE.
+    if (ctx->con_index.len < n_repeats+1) {
+        buf_alloc_255 (vb, &ctx->con_index, 0, n_repeats+1, WordIndex, 0, "con_index");
+        ctx->con_index.len = ctx->con_index.len / sizeof (WordIndex);
+    }
+
+    WordIndex node_index = *ENT (WordIndex, ctx->con_index, n_repeats);
+    unsigned account_for = con.repeats * (con.nitems_lo-1) /* item seperators */ + con.repeats-1 /* repeat separators */;
+
+    // case: first container with the many repeats - seg and add to cache
+    if (node_index == WORD_INDEX_NONE) 
+        *ENT (WordIndex, ctx->con_index, n_repeats) = container_seg (vb, ctx, (ContainerP)&con, NULL, 0, account_for);
+    
+    // case: we already know the node index of the container with this many repeats
+    else 
+        seg_known_node_index (vb, ctx, node_index, account_for);
 
     return;
 

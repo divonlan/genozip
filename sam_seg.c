@@ -473,7 +473,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
     if (!recursion_level) {
 
-        ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspeciously high and might indicate a bug", seq_len);
+        ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspiciously high and might indicate a bug", seq_len);
 
         buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (vb->ref_and_seq_consumed), vb->lines.len * (vb->ref_and_seq_consumed+5) / 8, uint8_t, CTX_GROWTH, "contexts->local"); 
         buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
@@ -639,7 +639,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
         vb->ref_consumed -= ref_len_this_level;
 
-        char updated_cigar[100];
+        char updated_cigar[strlen (next_cigar) + 20];
         if (subcigar_len) sprintf (updated_cigar, "%u%c%s", subcigar_len, cigar_op, next_cigar);
 
         sam_seg_seq_field (vb, bitmap_did, seq + i, seq_len - i, range->last_pos + 1, subcigar_len ? updated_cigar : next_cigar, recursion_level + 1, level_0_seq_len, level_0_cigar, 0);

@@ -28,7 +28,7 @@
 #define MIN_WORD_INDEX     -4
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
-// We use characters that cannot appear in a snip - i.e. other than ASCII 32-127, \t (\x9) \n (\xA) \r (\xD)
+// We use characters that cannot appear in a snip - i.e. other than ApCII 32-127, \t (\x9) \n (\xA) \r (\xD)
 #define SNIP_SEP                 '\x0'   // Seperator between snips - both for dict and local 
 #define SNIP_LOOKUP              '\x1'   // Lookup from local (optionally followed by a snip - interpreted differently by local type, see reconstruct_one_snip)
 #define SNIP_OTHER_LOOKUP        '\x2'   // Lookup from local of other dict_id (possibly with length for sequence storage)

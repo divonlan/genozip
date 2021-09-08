@@ -149,28 +149,30 @@ typedef struct DataTypeFields {
     const unsigned num_fields;
     const DidIType pos, nonref, ochrom; // the fields, or DID_I_NONE if this data type doesn't have them
     DictId eol, toplevel;
-    DictId dict_id[MAX_NUM_FIELDS_PER_DATA_TYPE]; // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed (names are not longer than 8=DICT_ID_LEN as the code assumes it)
+    struct { 
+        DictId dict_id; // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed (names are not longer than 8=DICT_ID_LEN as the code assumes it)
+        STR (tag_name);
+    } predefined[MAX_NUM_FIELDS_PER_DATA_TYPE]; // consumed by ctx_initialize_predefined_ctxs 
 } DataTypeFields;
-
 #define CHROM (DidIType)0 // chrom is always the first field
 
 #define TOPLEVEL "TOPLEVEL"
 
 #define DATA_TYPE_FIELDS { \
-/* num_fields        pos         nonref        ochrom,     eol             toplevel             did_i to dict_id mapping */ \
-  {NUM_REF_FIELDS,   DID_I_NONE, DID_I_NONE,   DID_I_NONE, {0},            {0},                 REF_MAPPING }, \
-  {NUM_VCF_FIELDS,   VCF_POS,    DID_I_NONE,   VCF_oCHROM, {_VCF_EOL},     {_VCF_TOPLEVEL},     VCF_MAPPING }, \
-  {NUM_SAM_FIELDS,   SAM_POS,    SAM_NONREF,   DID_I_NONE, {_SAM_EOL},     {_SAM_TOPLEVEL},     SAM_MAPPING }, \
-  {NUM_FASTQ_FIELDS, DID_I_NONE, FASTQ_NONREF, DID_I_NONE, {_FASTQ_E1L},   {_FASTQ_TOPLEVEL},   FASTQ_MAPPING }, \
-  {NUM_FASTA_FIELDS, DID_I_NONE, FASTA_NONREF, DID_I_NONE, {_FASTA_EOL},   {_FASTA_TOPLEVEL},   FASTA_MAPPING }, \
-  {NUM_GFF3_FIELDS,  GFF3_START, DID_I_NONE,   DID_I_NONE, {_GFF3_EOL},    {_GFF3_TOPLEVEL},    GFF3_MAPPING }, \
-  {NUM_ME23_FIELDS,  ME23_POS,   DID_I_NONE,   DID_I_NONE, {_ME23_EOL},    {_ME23_TOPLEVEL},    ME23_MAPPING }, \
-  {NUM_SAM_FIELDS,   SAM_POS,    SAM_NONREF,   DID_I_NONE, {_SAM_EOL},     {_SAM_TOP2BAM},      SAM_MAPPING }, \
-  {NUM_VCF_FIELDS,   VCF_POS,    DID_I_NONE,   VCF_oCHROM, {_VCF_EOL},     {_VCF_TOPLEVEL},     VCF_MAPPING }, \
-  {NUM_GNRIC_FIELDS, DID_I_NONE, DID_I_NONE,   DID_I_NONE, {0},            {_GNRIC_TOPLEVEL},   GNRIC_MAPPING }, \
-  {NUM_PHY_FIELDS,   DID_I_NONE, DID_I_NONE,   DID_I_NONE, {_PHY_EOL},     {_PHY_TOPLEVEL},     PHY_MAPPING }, \
-  {NUM_CHAIN_FIELDS, DID_I_NONE, DID_I_NONE,   DID_I_NONE, {_CHAIN_EOL},   {_CHAIN_TOPLEVEL},   CHAIN_MAPPING }, \
-  {NUM_KRAKEN_FIELDS,DID_I_NONE, DID_I_NONE,   DID_I_NONE, {_KRAKEN_EOL},  {_KRAKEN_TOPLEVEL},  KRAKEN_MAPPING }, \
+/* num_fields        pos         nonref        ochrom,     eol             toplevel             predefined */ \
+  {NUM_REF_FIELDS,   DID_I_NONE, DID_I_NONE,   DID_I_NONE, {0},            {0},                 REF_PREDEFINED }, \
+  {NUM_VCF_FIELDS,   VCF_POS,    DID_I_NONE,   VCF_oCHROM, {_VCF_EOL},     {_VCF_TOPLEVEL},     VCF_PREDEFINED }, \
+  {NUM_SAM_FIELDS,   SAM_POS,    SAM_NONREF,   DID_I_NONE, {_SAM_EOL},     {_SAM_TOPLEVEL},     SAM_PREDEFINED }, \
+  {NUM_FASTQ_FIELDS, DID_I_NONE, FASTQ_NONREF, DID_I_NONE, {_FASTQ_E1L},   {_FASTQ_TOPLEVEL},   FASTQ_PREDEFINED }, \
+  {NUM_FASTA_FIELDS, DID_I_NONE, FASTA_NONREF, DID_I_NONE, {_FASTA_EOL},   {_FASTA_TOPLEVEL},   FASTA_PREDEFINED }, \
+  {NUM_GFF3_FIELDS,  GFF3_START, DID_I_NONE,   DID_I_NONE, {_GFF3_EOL},    {_GFF3_TOPLEVEL},    GFF3_PREDEFINED }, \
+  {NUM_ME23_FIELDS,  ME23_POS,   DID_I_NONE,   DID_I_NONE, {_ME23_EOL},    {_ME23_TOPLEVEL},    ME23_PREDEFINED }, \
+  {NUM_SAM_FIELDS,   SAM_POS,    SAM_NONREF,   DID_I_NONE, {_SAM_EOL},     {_SAM_TOP2BAM},      SAM_PREDEFINED }, \
+  {NUM_VCF_FIELDS,   VCF_POS,    DID_I_NONE,   VCF_oCHROM, {_VCF_EOL},     {_VCF_TOPLEVEL},     VCF_PREDEFINED }, \
+  {NUM_GNRIC_FIELDS, DID_I_NONE, DID_I_NONE,   DID_I_NONE, {0},            {_GNRIC_TOPLEVEL},   GNRIC_PREDEFINED }, \
+  {NUM_PHY_FIELDS,   DID_I_NONE, DID_I_NONE,   DID_I_NONE, {_PHY_EOL},     {_PHY_TOPLEVEL},     PHY_PREDEFINED }, \
+  {NUM_CHAIN_FIELDS, DID_I_NONE, DID_I_NONE,   DID_I_NONE, {_CHAIN_EOL},   {_CHAIN_TOPLEVEL},   CHAIN_PREDEFINED }, \
+  {NUM_KRAKEN_FIELDS,DID_I_NONE, DID_I_NONE,   DID_I_NONE, {_KRAKEN_EOL},  {_KRAKEN_TOPLEVEL},  KRAKEN_PREDEFINED }, \
 }
 
 extern DataTypeFields dt_fields[NUM_DATATYPES];

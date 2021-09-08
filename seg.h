@@ -29,15 +29,19 @@ extern WordIndex seg_by_ctx_do (VBlockP vb, const char *snip, unsigned snip_len,
 #define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), CTX(did_i), (add_bytes), (is_new))
 #define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), CTX(did_i), (add_bytes), NULL)
 
-extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes);
+extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
+#define seg_duplicate_last(vb,ctx,add_bytes) seg_known_node_index ((VBlockP)(vb), (ctx), *LASTENT (uint32_t, (ctx)->b250), (add_bytes))
 
 extern WordIndex seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
 extern WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer(vb,did_i,n,add_sizeof_n) seg_integer_do((VBlockP)(vb), (did_i), (n), (add_sizeof_n) ? sizeof(n) : 0)
 
+extern void seg_integer_in_local (VBlockP vb, ContextP ctx, const char *int_str, unsigned int_str_len); // integer goes into local, with no lookup (no b250 in this ctx)
+
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
 extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes); // segs integer in local if possible
+extern void seg_integer_or_not_cb (VBlockP vb, ContextP ctx, const char *int_str, unsigned int_str_len);
 extern bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
 
 #define MAX_POS_DELTA 32000   // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
@@ -47,9 +51,9 @@ extern bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, 
 extern PosType seg_pos_field (VBlockP vb, DidIType snip_did_i, DidIType base_did_i, unsigned opt, 
                               char missing, const char *pos_str, unsigned pos_len, PosType this_pos, unsigned add_bytes);
 
-extern void seg_id_field_do (VBlockP vb, DidIType did_i, const char *id_snip, unsigned id_snip_len, bool account_for_separator);
-#define seg_id_field(vb, did_i, id_snip, id_snip_len, account_for_separator) \
-    seg_id_field_do((VBlockP)vb, (did_i), (id_snip), (id_snip_len), (account_for_separator))
+extern void seg_id_field_do (VBlockP vb, ContextP ctx, const char *id_snip, unsigned id_snip_len);
+#define seg_id_field(vb, ctx, id_snip, id_snip_len, account_for_separator) \
+    do { seg_id_field_do((VBlockP)vb, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
 
 extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep);
 #define seg_initialize_container_array(dict_id, type_1_items, comma_sep) seg_initialize_container_array_do ((DictId)dict_id, type_1_items, comma_sep)
@@ -65,7 +69,8 @@ extern WordIndex seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ct
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local, bool items_are_id);
 
-extern void seg_array_of_struct (VBlockP vb, ContextP ctx, SmallContainer con, const char *snip, unsigned snip_len, bool last_item_is_id);
+typedef void (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value));
+extern void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, const char *snip, unsigned snip_len, SegCallback *callbacks);
 
 extern const char sep_with_space[], sep_without_space[], sep_pipe_only[];
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 

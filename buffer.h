@@ -92,6 +92,12 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
 } while(0)
 
+#define buf_alloc_255(vb, buf, more, at_least, element_type, grow_at_least_factor,name) do { \
+    uint64_t size_before = (buf)->data ? (buf)->size : 0; /* always zero the whole buffer in an initial allocation */ \
+    buf_alloc((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
+    if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 255, (buf)->size - size_before); \
+} while(0)
+
 extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, bool read_only_buffer, const char *func, uint32_t code_line, const char *name);
 #define buf_mmap(vb, buf, filename, read_only_buffer, name) \
     buf_mmap_do((VBlockP)(vb), (buf), (filename), (read_only_buffer), __FUNCTION__, __LINE__, (name))

@@ -230,6 +230,7 @@ typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 #define SAFE_ASSIGN(addr,char_val) SAFE_ASSIGNx ((addr), (char_val), _)
 
 #define SAFE_NUL(addr) SAFE_ASSIGN((addr), 0)
+#define SAFE_NULT(str) SAFE_ASSIGN((&str[str##_len]), 0)
 
 #define SAFE_RESTOREx(x) *__addr##x = __save##x
 #define SAFE_RESTORE SAFE_RESTOREx(_)
