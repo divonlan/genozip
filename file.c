@@ -1270,6 +1270,8 @@ bool file_put_data (const char *filename, const void *data, uint64_t len)
     if (written == len) { // successful
         ASSERT (!rename (put_data_tmp_filename, filename), "failed to rename %s to %s: %s", 
                 put_data_tmp_filename, filename, strerror (errno));
+
+        ASSERT (!chmod (filename, S_IRUSR), "failed to chmod %s: %s", filename, strerror (errno));
         return true;
     } 
     else {

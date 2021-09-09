@@ -360,7 +360,7 @@ void license_register (void)
              "sending an email to register@genozip.com - copy & paste the lines between the \"======\" into the email message.\n");
 
     ASSINP (file_put_data (filename, license_data.data, license_data.len), 
-            "Failed to write license file %s: %s. Please email register@genozip.com for help.", filename, strerror (errno));
+            "Failed to write license file %s: %s. If this is unexpected, email support@genozip.com for help.", filename, strerror (errno));
 
     if (!n_fields) 
         fprintf (stderr, "\nCongratulations! Your Genozip license has been granted.\n\n"

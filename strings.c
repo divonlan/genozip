@@ -599,35 +599,38 @@ int str_print_text (const char **text, unsigned num_lines,
 }
 
 // receives a user response, a default "Y" or "N" (or NULL) and modifies the response to be "Y" or "N"
-bool str_verify_y_n (char *response, unsigned response_size, const char *def_res)
+bool str_verify_y_n (char *response, unsigned len, const char *def_res)
 {
     ASSERT0 (!def_res || (strlen (def_res)==1 && (def_res[0]=='Y' || def_res[0]=='N')), 
               "def_res needs to be NULL, \"Y\" or \"N\"");
 
-    response[0] = response[0] >= 32 ? UPPER_CASE (response[0]) 
-                : def_res           ? def_res[0]
-                :                     0;
+    if (len > 1) return false;
+    
+    response[0] = len ? UPPER_CASE(response[0]) : def_res[0];
+    response[1] = 0;
 
-    return (response[1] < 32) && (response[0] == 'N' || response[0] == 'Y'); // return false if invalid response - we request the user to respond again
+    return (response[0] == 'N' || response[0] == 'Y'); // return false if invalid response - we request the user to respond again
 }
 
-bool str_verify_not_empty (char *response, unsigned response_size, const char *unused)
+bool str_verify_not_empty (char *response, unsigned len, const char *unused)
 { 
-    unsigned len = strlen (response);
-
-    return !(len==0 || (len==1 && response[0]=='\r')); // not \n or \r\n only
+    return !!len;
 }
 
 void str_query_user (const char *query, char *response, unsigned response_size, 
                      ResponseVerifier verifier, const char *verifier_param)
 {
+    unsigned len;
     do {
         fprintf (stderr, "%s", query);
 
-        unsigned bytes = read (STDIN_FILENO, response, response_size); 
-        response[bytes-1] = '\0'; // string terminator instead of the newline
+        len = read (STDIN_FILENO, response, response_size-1); 
+        if (len && response[len-1] == '\n') len--;
+        if (len && response[len-1] == '\r') len--;
+        
+        response[len] = '\0'; 
 
-    } while (verifier && !verifier (response, response_size, verifier_param));
+    } while (verifier && !verifier (response, len, verifier_param));
 }
 
 const char *str_win_error (void)
