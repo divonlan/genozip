@@ -593,11 +593,8 @@ static void seg_compound_field_split (const char *field, unsigned field_len, con
 // consider part of the last component.
 // each subfield is stored in its own dictionary- the second character of the dict_id  the subfield number starting
 // from 0 (0->9,a->z)
-// The separators are made into a string we call "template" that is stored in the main field dictionary - we
-// anticipate that usually all lines have the same format, but we allow lines to have different formats.
 const char sep_with_space[256]    = { [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true, [' ']=true, ['\t']=true, [1]=true };
 const char sep_without_space[256] = { [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true };
-const char sep_pipe_only[256]     = { ['|']=true };
 void seg_compound_field (VBlock *vb, 
                          Context *field_ctx, const char *field, unsigned field_len, 
                          const char *is_sep,   

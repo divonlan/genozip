@@ -227,12 +227,18 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
     SEG_NEXT_ITEM (KRAKEN_TAXID);
     GET_NEXT_ITEM (KRAKEN_SEQLEN); // for paired files we will have eg "150|149", for non-paired eg "150"
     if (memchr (field_start, '|', field_len)) { 
-        // compound and not array, bc pair_2's seq_len is often a lot more random than pair_1's so use different contexts
-        seg_compound_field ((VBlockP)vb, CTX(KRAKEN_SEQLEN), field_start, field_len, sep_pipe_only, 0, 1 /* \t */); 
+        // struct and not array, bc SEQLEN_2 is often a lot more random than SEQLEN_1 so better use different contexts
+        static const MediumContainer con_SEQLEN = { .nitems_lo = 2,      
+                                                    .items     = { { .dict_id = { _KRAKEN_SEQLEN_1 }, .seperator = {'|'} },  
+                                                                   { .dict_id = { _KRAKEN_SEQLEN_2 },                    } } };
+
+        seg_array_of_struct (VB, CTX(KRAKEN_SEQLEN), con_SEQLEN, field_start, field_len, (SegCallback[]){seg_pos_field_cb, 0}); // first element is good to delta, second is not
     }
     else 
-        seg_by_did_i (vb, field_start, field_len, KRAKEN_SEQLEN, field_len+1);
-    
+        seg_pos_field_cb (VB, CTX(KRAKEN_SEQLEN), field_start, field_len);
+
+    CTX(KRAKEN_SEQLEN)->txt_len++; // \t
+
     GET_LAST_ITEM (KRAKEN_KMERS);
     kraken_seg_kmers (vb, field_start, field_len, KRAKEN_TAXID_str, KRAKEN_TAXID_len);
     

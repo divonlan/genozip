@@ -74,7 +74,7 @@ extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_c
 typedef void (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value));
 extern void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, const char *snip, unsigned snip_len, SegCallback *callbacks);
 
-extern const char sep_with_space[], sep_without_space[], sep_pipe_only[];
+extern const char sep_with_space[], sep_without_space[];
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
                                 const char *is_sep, unsigned nonoptimized_len, unsigned add_for_eol);
 
