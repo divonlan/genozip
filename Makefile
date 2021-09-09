@@ -268,7 +268,7 @@ docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/conf.py $(DOCS)
 	@wsl $(SPHINX) -M html docs docs/_build -q -a 
 
 docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt
-	@git commit -m "build docs" docs/conf.py docs/LICENSE.for-docs.txt
+	@(git commit -m "build docs" docs/conf.py docs/LICENSE.for-docs.txt ; exit 0) > /dev/null
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
 
