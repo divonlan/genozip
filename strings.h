@@ -70,6 +70,7 @@ static inline uint64_t str_count_char (const char *str, uint64_t len, char c)
 extern StrText str_size (uint64_t size);
 extern StrText str_bases (uint64_t num_bases);
 extern StrText str_uint_commas (int64_t n);
+extern StrText str_uint_commas_limit (uint64_t n, uint64_t limit);
 extern StrText str_int_s (int64_t n);
 
 // string length of an integer. #include <math.h> if using this.

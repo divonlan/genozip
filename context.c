@@ -1009,7 +1009,12 @@ void ctx_update_stats (VBlock *vb)
         Context *zctx = ctx_get_zf_ctx (vctx->dict_id);
         if (!zctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
 
-        zctx->b250.num_b250_words += vctx->b250.num_b250_words; // thread safety: no issues, this only updated only by the main thread
+        zctx->b250.num_ctx_words  += vctx->b250.num_ctx_words; // thread safety: no issues, this only updated only by the main thread
+        
+        if (vctx->ltype == LT_TEXT) // textual - count words added in seg_add_to_local_text
+            zctx->local.num_ctx_words += zctx->local.num_ctx_words;
+        else if (vctx->ltype != LT_BITMAP && vctx->ltype != LT_SEQUENCE && vctx->ltype != LT_CODEC) // numeric types - count numbers
+            zctx->local.num_ctx_words += zctx->local.len;
     }
 }
 

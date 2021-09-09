@@ -30,7 +30,7 @@ typedef struct Context {
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
 
-    #define num_b250_words param // b250.param, when it contains b250 data, holds the number of words (len is the number of bytes)
+    #define num_ctx_words param // b250.param, when it contains b250 data, holds the number of words (len is the number of bytes)
     Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In zip_generate_b250_section, 
                                //      the "node indices" are converted into "word indices" - indices into the future 
                                //      context->word_list, in base-250. the number of words is moved from .len to .param. 

@@ -922,6 +922,7 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx,
     NEXTENT (char, ctx->local) = 0;
 
     if (add_bytes) ctx->txt_len += add_bytes;
+    ctx->local.num_ctx_words++;
 }
 
 void seg_add_to_local_text_cb (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len)

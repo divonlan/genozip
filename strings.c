@@ -257,6 +257,26 @@ StrText str_uint_commas (int64_t n)
     return s;
 }
 
+// display comma'd number up and including the limit, and there after with K, M etc.
+StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
+{
+    if (n <= limit) return str_uint_commas (n);
+
+    StrText s;
+
+    if      (n >= (1LL << 50)) sprintf (s.s, "%3.1lfP", ((double)n) / 1000000000000000.0);
+    else if (n >= (1LL << 40)) sprintf (s.s, "%3.1lfT", ((double)n) / 1000000000000.0);
+    else if (n >= (1LL << 30)) sprintf (s.s, "%3.1lfG", ((double)n) / 1000000000.0);
+    else if (n >= (1LL << 20)) sprintf (s.s, "%3.1lfM", ((double)n) / 1000000.0);
+    else if (n >= (1LL << 10)) sprintf (s.s, "%3.1lfK", ((double)n) / 1000.0);
+    else if (n >  0          ) sprintf (s.s, "%3d",     (int)n);
+    else                       sprintf (s.s, "-");
+
+    return s;
+}
+
+
+
 // returns 32 bit float value and/or format: "3.123" -> "%5.3f" ; false if not a simple float
 bool str_get_float (const char *float_str, unsigned float_str_len, 
                     double *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len) // optional outs (format allocated by caller)
