@@ -136,7 +136,8 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
 
     const char *next_cigar = vb->last_cigar; // don't change vb->last_cigar as we may still need it, eg if we have an E2 optional field
     range = vb->ref_consumed ? ref_piz_get_range (vb_, gref, pos, vb->ref_consumed) : NULL;
-    
+    PosType range_len = range ? (range->last_pos - range->first_pos + 1) : 0;
+
     while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {
         
         if (!subcigar_len) {
@@ -152,7 +153,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
             if ((cigar_op & CIGAR_CONSUMES_REFERENCE) && NEXTLOCALBIT (bitmap_ctx)) /* copy from reference */ {
 
                 if (!vb->drop_curr_line) { // note: if this line is excluded with --regions, then the reference section covering it might not be loaded
-                    uint32_t idx = (pos - range->first_pos) + ref_consumed ;
+                    uint32_t idx = ((pos - range->first_pos) + ref_consumed) % range_len; // circle around (this can only happen when compressed with an external reference)
 
                     if (!ref_is_nucleotide_set (range, idx)) { 
                         ref_print_is_set (range, pos + ref_consumed, stderr);
