@@ -438,7 +438,8 @@ prod:
 	@(cd ../genozip-prod ; git pull ; make)
 
 distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe docs prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
-	
+	@(cd ../genozip-feedstock/ ; git pull)
+
 test-backup: genozip.exe
 	@echo "Compresing test/ files for in preparation for backup (except cram and bcf)"
 	@rm -f test/*.genozip
