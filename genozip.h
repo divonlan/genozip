@@ -13,6 +13,8 @@
 #include <unistd.h> 
 #include <string.h> // must be after inttypes
 
+#include "website.h"
+
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"
 
 // -----------------
@@ -264,7 +266,7 @@ static inline void progress_newline(void) {
 #define ABORTINP0(string)                    do { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); exit_on_error(false);} while(0)
 
 // check for a bug - prints stack
-#define SUPPORT "\nIf this is unexpected, please contact support@genozip.com.\n"
+#define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
 #define ASSERT(condition, format, ...)       do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); }} while(0)
 #define ASSERT0(condition, string)           do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: %s" SUPPORT, __FUNCTION__, __LINE__, string); exit_on_error(true); }} while(0)
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")

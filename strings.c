@@ -604,7 +604,7 @@ bool str_verify_y_n (char *response, unsigned len, const char *def_res)
     ASSERT0 (!def_res || (strlen (def_res)==1 && (def_res[0]=='Y' || def_res[0]=='N')), 
               "def_res needs to be NULL, \"Y\" or \"N\"");
 
-    if (len > 1) return false;
+    if (len > 1 || (!len && !def_res)) return false;
     
     response[0] = len ? UPPER_CASE(response[0]) : def_res[0];
     response[1] = 0;

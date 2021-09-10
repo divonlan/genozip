@@ -270,7 +270,7 @@ void license_register (void)
 
         fprintf (stderr, "Welcome to genozip!\n\n"
                          "The use of genozip for non-commercial purposes (as defined in the license: "WEBSITE_LICENSE") is FREE, but requires registration.\n"
-                         "If you are not sure whether your usage is considered non-commercial, please email register@genozip.com\n\n");
+                         "If you are not sure whether your usage is considered non-commercial, please email "EMAIL_REGISTER"\n\n");
 
         if (file_exists (filename)) 
             str_query_user ("You are already registered. Are you sure you want to register again? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);
@@ -360,12 +360,14 @@ void license_register (void)
              "sending an email to register@genozip.com - copy & paste the lines between the \"======\" into the email message.\n");
 
     ASSINP (file_put_data (filename, license_data.data, license_data.len), 
-            "Failed to write license file %s: %s. If this is unexpected, email support@genozip.com for help.", filename, strerror (errno));
+            "Failed to write license file %s: %s. If this is unexpected, email "EMAIL_SUPPORT" for help.", filename, strerror (errno));
 
     if (!n_fields) 
-        fprintf (stderr, "\nCongratulations! Your Genozip license has been granted.\n\n"
+        fprintf (stderr, "\nSUCCESS. A Genozip license has been granted:\n"
+                         "License type: Single User\nLicensee: %s\nFor use by: %s\n\n" 
                          "Documentation: " GENOZIP_URL "\n\n"
-                         "Citing: " WEBSITE_PUBLICATIONS "\n\n");
+                         "Support: " EMAIL_SUPPORT "\n\n"
+                         "Citing: " WEBSITE_PUBLICATIONS "\n\n", rec.institution, rec.name);
 
     buf_destroy (&license_data);
 }
@@ -382,10 +384,10 @@ uint32_t license_get_number (void)
 
 const char *license_get_one_line (void)
 {
-    static char s[sizeof (rec) + 200];
+    static char s[sizeof (rec) + sizeof (rec.name) + 200];
 
-    sprintf (s, "License v%s granted to: %s accepted by: %s <%s> on %s from IP=%s", 
-             rec.version, rec.institution, rec.name, rec.email, rec.timestamp.s, rec.ip);
+    sprintf (s, "License v%s granted to: %s for use by: %s accepted by: %s <%s> on %s from IP=%s", 
+             rec.version, rec.institution, rec.name, rec.name, rec.email, rec.timestamp.s, rec.ip);
 
     return s;
 }
