@@ -47,7 +47,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 
     #define SEC_TAB "            ++  "
 
-    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x\n",
+    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x ",
              rw, 
              is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
              st_name(header->section_type), 
@@ -172,10 +172,10 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     }
 
     default: 
-        str[0] = 0; 
+        str[0] = '\n'; str[1] = 0; 
     }
 
-    if (str[0]) PRINT;
+    PRINT;
 }
 
 static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_data)

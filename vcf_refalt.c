@@ -823,7 +823,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFT_REF)
     ASSPIZ (after_ref, "expected a \\t in the %s snip: \"%.*s\" ostatus=%s", 
             refalt_ctx->tag_name, snip_len, snip, last_ostatus_name_piz);
 
-    vb->txt_data.len = ENTNUM (vb->txt_data, after_ref);
+    vb->txt_data.len = ENTNUM (vb->txt_data, reconstruct ? after_ref : snip);
 
     return false; // no new value
 }

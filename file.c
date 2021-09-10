@@ -1083,6 +1083,8 @@ void file_write (File *file, const void *data, unsigned len)
 
 void file_remove (const char *filename, bool fail_quietly)
 {
+    chmod (filename, S_IRUSR | S_IWUSR); // make sure its +w so we don't get permission denied (ignore errors)
+
     int ret = remove (filename); 
     ASSERTW (!ret || fail_quietly, "Warning: failed to remove %s: %s", filename, strerror (errno));
 }
