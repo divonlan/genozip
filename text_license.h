@@ -21,14 +21,14 @@ static const char *license[] = {
 
     "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive copyright license to use Genozip for any the following limited purposes subject to the conditions attached to each purpose, and subject to the terms and conditions of this License:",
     "   a. For academic research, educational or training purposes.",
-    "   b. For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email register@genozip.com to seek such an approval.",
-    "   c. For any legal purpose, if a Commercial License was purchased and paid for, and for the duration that it is in effect. For details, see https://genozip.com/commercial.html or email sales@genozip.com.",
+    "   b. For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email "EMAIL_REGISTER" to seek such an approval.",
+    "   c. For any legal purpose, if a Commercial License was purchased and paid for, and for the duration that it is in effect. For details, see https://genozip.com/commercial.html or email "EMAIL_SALES".",
     "   d. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols.",
     "   e. For the purpose of evaluating Genozip, for a duration of 30 days.",
-    "   f. For the purpose of distributing Genozip to others in unmodified form, including this license, via a platform that is both publicly accessible and free of charge, including but not limited to an Internet website.",
+    "   f. For the purpose of distributing Genozip to others in unmodified form via a platform that is free of charge, including but not limited to an Internet website or a module on an institutional HPC.",
     
     "3. Additional Terms and conditions",
-    "   a. You must fully and accurately complete the registration, either by completing the registeration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing register@genozip.com.",
+    "   a. You must fully and accurately complete the registration, either by completing the registeration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing "EMAIL_REGISTER".",
     "   b. Using Genozip to compress a file is only permitted if the file is retained in its original form as well or the potential loss of data due to Genozip not being able to uncompress the compressed file would not cause any harm.",
     "   c. Creation of Derivative Works is not permitted, unless prior written permission is obtained from Licensor.",
     "   d. Any software source code intentionally submitted for inclusion in Genozip by You to the Licensor shall imply complete and irrevocable assignment by You to Licensor of all copyright in the submitted source code.",
