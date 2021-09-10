@@ -749,6 +749,19 @@ void ctx_merge_in_vb_ctx (VBlock *merging_vb)
     COPY_TIMER_VB (merging_vb, ctx_merge_in_vb_ctx);
 }
 
+// ZIP / PIZ : called from main thread
+void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
+{
+    for (DidIType vb_did_i=0; vb_did_i < vb->num_contexts; vb_did_i++) {
+        ContextP vctx = CTX(vb_did_i); 
+        if (vctx->compressor_time) {
+            ContextP zctx = vctx->st_did_i != DID_I_NONE ? ctx_get_zf_ctx (CTX(vctx->st_did_i)->dict_id) // we accumulate at stats parent context if there is one
+                                                         : ctx_get_zf_ctx (vctx->dict_id);
+            zctx->compressor_time += vctx->compressor_time;
+        }
+    }
+}
+
 // PIZ: add aliases to dict_id_to_did_i_map
 void ctx_map_aliases (VBlockP vb)
 {
@@ -1073,6 +1086,9 @@ void ctx_free_context (Context *ctx)
     ctx->last_delta = 0;
     ctx->last_txt_index = ctx->last_txt_len = 0;
     ctx->semaphore = 0;
+    ctx->compressor_time = 0;
+    ctx->tag_i = 0;
+    memset (ctx->tag_name, 0, sizeof(ctx->tag_name));
 }
 
 // Called by file_close ahead of freeing File memory containing contexts

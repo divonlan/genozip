@@ -38,6 +38,9 @@ typedef struct Context {
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
     Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if inst.pair_b250 or inst.pair_local is set)
     
+    int64_t compressor_time;   // Used when --show-time - time for compressing / decompressing this context
+
+    // rollback point
     uint64_t rback_b250_len, rback_local_len, rback_txt_len; // ZIP: data to roll back the last seg
     uint32_t rback_num_singletons, rback_last_txt_index, rback_last_txt_len;
     LastValueType rback_last_value;

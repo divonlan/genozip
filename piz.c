@@ -224,11 +224,18 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 
         Buffer *target_buf = is_local ? &ctx->local : &ctx->b250;
 
+        START_TIMER;
+
         zfile_uncompress_section (vb, header, 
                                   is_pair_section ? &ctx->pair      : target_buf, 
                                   is_pair_section ? "context->pair" : is_local ? "contexts->local" : "contexts->b250", 
                                   is_pair_section ? pair_vb_i : vb->vblock_i,
                                   header->h.section_type); 
+
+        if (flag.show_time && exe_type != EXE_GENOZIP)
+            ctx->compressor_time = CHECK_TIMER;
+
+        ctx_add_compressor_time_to_zf_ctx (vb);
 
         if (!is_pair_section && is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
             ctx_dump_binary (vb, ctx, true);
@@ -562,6 +569,10 @@ static Digest piz_one_verify_digest (void)
 
 static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
 {
+    // add up context decompress time
+    if (flag.show_time)
+        ctx_add_compressor_time_to_zf_ctx (*vb);
+
     if (!flag.no_writer) {
         writer_handover_data (vb);
         dispatcher_recycle_vbs (dispatcher, false); // don't release VB- it will be released in writer_release_vb when writing is completed

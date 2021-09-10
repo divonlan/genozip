@@ -33,14 +33,16 @@ typedef struct {
 
 typedef struct timespec TimeSpecType;
 
-#define START_TIMER     TimeSpecType profiler_timer; \
-                        if (flag.show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
+#define START_TIMER TimeSpecType profiler_timer; \
+                    if (flag.show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
+
+#define CHECK_TIMER ({ TimeSpecType tb; \
+                       clock_gettime(CLOCK_REALTIME, &tb); \
+                       ((uint64_t)((tb).tv_sec-(profiler_timer).tv_sec))*1000000000ULL + ((tb).tv_nsec-(profiler_timer).tv_nsec); })
 
 #define COPY_TIMER_FULL(vb,res) { /* str - print in case of specific show-time=<res> */ \
     if (flag.show_time) { \
-        TimeSpecType tb; \
-        clock_gettime(CLOCK_REALTIME, &tb); \
-        uint64_t delta = ((uint64_t)(tb.tv_sec-profiler_timer.tv_sec))*1000000000ULL + (tb.tv_nsec-profiler_timer.tv_nsec);\
+        uint64_t delta = CHECK_TIMER; \
         if (flag.show_time[0] && strstr (#res, flag.show_time)) { \
             iprintf ("%s %s%s%s: %"PRIu64" microsec\n", #res, \
                      ((vb)->profile.next_name    ? (vb)->profile.next_name : ""),\
@@ -53,8 +55,8 @@ typedef struct timespec TimeSpecType;
     } \
 }
 
-#define COPY_TIMER(res)         COPY_TIMER_FULL(vb, res)
-#define COPY_TIMER_VB(vb,res)   COPY_TIMER_FULL((vb), res)
+#define COPY_TIMER(res)       COPY_TIMER_FULL(vb, res)
+#define COPY_TIMER_VB(vb,res) COPY_TIMER_FULL((vb), res)
 
 #define PAUSE_TIMER \
     TimeSpecType on_hold_timer; \

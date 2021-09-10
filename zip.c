@@ -510,6 +510,8 @@ static void zip_compress_ctxs (VBlock *vb)
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = CTX(did_i);
 
+        START_TIMER;
+
         if (ctx->b250.len) {
             if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
                 ctx_dump_binary (vb, ctx, false);
@@ -528,6 +530,9 @@ static void zip_compress_ctxs (VBlock *vb)
 
             zfile_compress_local_data (vb, ctx, 0);
         }
+
+        if (flag.show_time && (ctx->b250.len || ctx->local.len)) 
+            ctx->compressor_time = CHECK_TIMER;
     }
 
     COPY_TIMER (zip_compress_ctxs);
@@ -554,6 +559,10 @@ static void zip_update_txt_counters (VBlock *vb)
     // counter of data in DEFAULT PRIMARY RECONSTRUCTION
     if (flag.rejects_coord == DC_NONE) z_file->txt_data_so_far_bind += vb->recon_size;
     if (flag.rejects_coord == DC_LUFT) z_file->txt_data_so_far_bind += vb->recon_size_luft; // luft reject VB shows in primary reconstruction
+
+    // add up context compress time
+    if (flag.show_time)
+        ctx_add_compressor_time_to_zf_ctx (vb);
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written

@@ -7,7 +7,7 @@
 #include "profiler.h"
 #include "flags.h"
 #include "vblock.h"
-#include "flags.h"
+#include "file.h"
 
 static Mutex evb_profile_mutex = {};
 
@@ -88,15 +88,24 @@ const char *profiler_print_short (const ProfilerRec *p)
     return str;
 }
 
+static void print_ctx_compressor_times (void)
+{
+    for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) {
+        ContextP ctx = ZCTX(did_i);
+        if (ctx->compressor_time)
+            iprintf ("      %s: %u\n", ctx->tag_name, ms(ctx->compressor_time));
+    }
+}
+
 void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs)
 {
     static const char *space = "                                                   ";
 #   define PRINT(x, level) if (p->x) iprintf ("%.*s" #x ": %u\n", level*3, space, ms(p->x));
     
     const char *os = flag.is_windows ? "Windows"
-                   : flag.is_mac   ? "MacOS"
+                   : flag.is_mac     ? "MacOS"
                    : flag.is_linux   ? "Linux"
-                   :                "Unknown OS";
+                   :                   "Unknown OS";
 
     iprintf ("\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
     iprintf ("OS=%s\n", os);
@@ -128,6 +137,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (compressor_actg, 2);
         PRINT (compressor_hapmat, 2);
         PRINT (compressor_pbwt, 2);
+        print_ctx_compressor_times();
         PRINT (reconstruct_vb, 1);
         PRINT (md5, 1);
         PRINT (bgzf_compute_thread, 1);
@@ -157,6 +167,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (ctx_merge_in_vb_ctx_one_dict_id, 2);
         PRINT (zip_generate_ctxs, 1);
         PRINT (zip_compress_ctxs, 1);
+        print_ctx_compressor_times();
+
         PRINT (ctx_compress_one_dict_fragment, 1);
         PRINT (codec_assign_best_codec, 1);
         PRINT (md5, 1);
