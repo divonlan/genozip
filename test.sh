@@ -560,7 +560,7 @@ batch_sam_translations()
 
     # note: we have these files in both sam and bam versions generated with samtools
     local files=(test.NA12878.chr22.1x.bam 
-                 test.m64136_200621_234916.ccs.10k.bam  # unaligned SAM/BAM with no SQ records
+                 test.pacbio.ccs.10k.bam  # unaligned SAM/BAM with no SQ records
                  test.human2.bam)
     local file
     for file in ${files[@]}; do
@@ -744,9 +744,9 @@ batch_real_world_with_ref()
     test_standard "-mf $1 -e $GRCh38 -e $hg19" " " test.GRCh38_to_GRCh37.chain 
 
     # with a reference
-    local files=( test.HG002_NA24385_SRR1767406_IonXpress_020_rawlib_24028.30k.sam \
+    local files=( test.IonXpress.sam \
                   test.human.fq.gz test.human2.bam test.human2.sam \
-                  test.human2-R1.100K.fq.bz2 test.m64136_200621_234916.ccs.10k.bam test.m64136_200621_234916.ccs.10k.sam \
+                  test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam \
                   test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz )
 
     echo "subsets of real world files (with reference)"
@@ -767,9 +767,9 @@ batch_real_world_small_vbs()
     fi
 
     # lots of small VBs
-    local files=( test.HG002_NA24385_SRR1767406_IonXpress_020_rawlib_24028.30k.sam \
+    local files=( test.IonXpress.sam \
                   test.human.fq.gz test.human2.bam test.human2.sam \
-                  test.human2-R1.100K.fq.bz2 test.m64136_200621_234916.ccs.10k.bam \
+                  test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam \
                   test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq \
                   test.sequential.fa.gz )
 
