@@ -26,6 +26,7 @@
 #include "chain.h"
 #include "reconstruct.h"
 #include "zfile.h"
+#include "segconf.h"
 #include "version.h"
 #include "website.h"
 
@@ -45,7 +46,6 @@ typedef struct {
 
 static Buffer chain = EMPTY_BUFFER;   // immutable after loaded
 static Mutex chain_mutex = {};        // protect chain wnile loading
-static PosType next_luft_0pos=0, next_prim_0pos=0; // used for loading chain
 
 // 1) When pizzing a chain as a result of genozip --chain: chain_piz_initialize: prim_contig and luft_contig are generated 
 //    from z_file->contexts of a chain file 
@@ -60,6 +60,19 @@ static Buffer luft_contig_dict   = EMPTY_BUFFER;
 static Buffer luft_contigs       = EMPTY_BUFFER;
 
 char *chain_filename = NULL; // global - chain filename
+
+// IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb 
+typedef struct VBlockCHAIN {
+    VBLOCK_COMMON_FIELDS
+    PosType next_luft_0pos, next_prim_0pos; // used for loading chain
+} VBlockCHAIN;
+
+unsigned chain_vb_size (DataType dt) { return sizeof (VBlockCHAIN); }
+
+void chain_vb_release_vb (VBlockCHAIN *vb)
+{
+    vb->next_luft_0pos = vb->next_prim_0pos = 0;
+}
 
 //-----------------------
 // TXTFILE stuff
@@ -128,14 +141,15 @@ static void chain_verify_references_not_reversed (VBlock *vb)
         luft_len_ref = ref_contigs_get_contig_length (prim_ref, WORD_INDEX_NONE, STRi(item,7), false);
         
         if (prim_len_ref == prim_len_chain && luft_len_ref == luft_len_chain) 
-            ABORTINP ("Reference files %s and %s are given in the command line in reverse order. Expecting Primary reference first and Luft reference second.\n", ref_get_filename (prim_ref), ref_get_filename (gref)); // not WARN bc zip_dynamically_set_max_memory set flag.quiet=true
+            ABORTINP ("Reference files %s and %s are given in the command line in reverse order. Expecting Primary reference first and Luft reference second.\n", ref_get_filename (prim_ref), ref_get_filename (gref)); // not WARN bc segconf_calculate set flag.quiet=true
     }
 }
 
 void chain_seg_initialize (VBlock *vb)
 {
     // check if the references are reversed
-    chain_verify_references_not_reversed (vb);
+    if (segconf.running)
+        chain_verify_references_not_reversed (vb);
 
     CTX(CHAIN_NAMELUFT)-> no_stons  =       
     CTX(CHAIN_NAMEPRIM)-> no_stons  =       // (these 2 ^) need b250 node_index for reference
@@ -538,14 +552,12 @@ static void chain_display_alignments (void)
 }
 
 // initialize alignment set from alignment set header
-static inline void chain_piz_filter_init_alignment_set (VBlock *vb)
+static inline void chain_piz_filter_init_alignment_set (VBlockCHAIN *vb)
 {
     reconstruct_from_ctx (vb, CHAIN_VERIFIED, 0, false); // sets last_int
 
-    mutex_lock (chain_mutex);
-    next_luft_0pos = vb->last_int(CHAIN_STARTLUFT); 
-    next_prim_0pos = vb->last_int(CHAIN_STARTPRIM); 
-    mutex_unlock (chain_mutex);
+    vb->next_luft_0pos = vb->last_int(CHAIN_STARTLUFT); 
+    vb->next_prim_0pos = vb->last_int(CHAIN_STARTPRIM); 
 }
 
 // store prim_gap value in local.param, as last_value.i will be overridden by luft_gap, as they share the same context
@@ -555,7 +567,7 @@ static inline void chain_piz_filter_save_prim_gap (VBlock *vb)
 }
 
 // ingest one alignment
-static inline void chain_piz_filter_ingest_alignmet (VBlock *vb)
+static inline void chain_piz_filter_ingest_alignmet (VBlockCHAIN *vb)
 {
     if (!vb->last_int (CHAIN_VERIFIED)) goto done; // a line Seg couldn't verify - don't ingest
 
@@ -569,8 +581,8 @@ static inline void chain_piz_filter_ingest_alignmet (VBlock *vb)
             *last_txt(vb, CHAIN_STRNDLUFT));
 
     bool is_xstrand = (*last_txt(vb, CHAIN_STRNDLUFT) == '-');
-    PosType last_prim_0pos = next_prim_0pos + size - 1; // last POS of the dst alignment, 0-based
-    PosType last_luft_0pos = next_luft_0pos + size - 1; // last POS of the dst alignment, 0-based
+    PosType last_prim_0pos = vb->next_prim_0pos + size - 1; // last POS of the dst alignment, 0-based
+    PosType last_luft_0pos = vb->next_luft_0pos + size - 1; // last POS of the dst alignment, 0-based
     PosType size_dst = vb->last_int (CHAIN_SIZELUFT);  // contig LN
 
     // note on negative strand: the source region (the source always has a positive strand), is aligned to a region on the destination
@@ -580,20 +592,20 @@ static inline void chain_piz_filter_ingest_alignmet (VBlock *vb)
 
     NEXTENT (ChainAlignment, chain) = (ChainAlignment){ 
         .prim_chrom      = vb->last_index(CHAIN_NAMEPRIM),
-        .prim_first_1pos = 1 + next_prim_0pos,  // +1 bc our alignments are 1-based vs the chain file that is 0-based
+        .prim_first_1pos = 1 + vb->next_prim_0pos,  // +1 bc our alignments are 1-based vs the chain file that is 0-based
         .prim_last_1pos  = 1 + last_prim_0pos,
 
         // use alt chroms as they appear in the reference file, rather than their name in the chain file
         .luft_chrom      = ref_alt_get_final_index (vb->last_index(CHAIN_NAMELUFT)), 
-        .luft_first_1pos = is_xstrand ? (size_dst - last_luft_0pos) : 1 + next_luft_0pos, // +1 to convert to 1-base. note that "size_dst" has a built-in +1.
-        .luft_last_1pos  = is_xstrand ? (size_dst - next_luft_0pos) : 1 + last_luft_0pos,
+        .luft_first_1pos = is_xstrand ? (size_dst - last_luft_0pos) : 1 + vb->next_luft_0pos, // +1 to convert to 1-base. note that "size_dst" has a built-in +1.
+        .luft_last_1pos  = is_xstrand ? (size_dst - vb->next_luft_0pos) : 1 + last_luft_0pos,
 
         .is_xstrand     = is_xstrand
     };
 
     Context *gaps_ctx   = CTX(CHAIN_GAPS);
-    next_prim_0pos += size + gaps_ctx->local.param;  // prim_gap
-    next_luft_0pos += size + gaps_ctx->last_value.i; // luft_gap
+    vb->next_prim_0pos += size + gaps_ctx->local.param;  // prim_gap
+    vb->next_luft_0pos += size + gaps_ctx->last_value.i; // luft_gap
 
     mutex_unlock (chain_mutex);
 
@@ -602,21 +614,17 @@ done:
 }
 
 // verify that adding up all alignments and gaps, results in the end position specified in the header
-static inline void chain_piz_filter_verify_alignment_set (VBlock *vb)
+static inline void chain_piz_filter_verify_alignment_set (VBlockCHAIN *vb)
 {
-    mutex_lock (chain_mutex);
+    ASSINP (vb->next_prim_0pos == vb->last_int(CHAIN_ENDPRIM),
+            "%.*s\nBad data ^^^ in chain file %s: Expecting alignments to add up to ENDPRIM=%s, but they add up to %s",
+            (int)(vb->txt_data.len - vb->line_start), ENT (char, vb->txt_data, vb->line_start),
+            z_name, str_uint_commas (vb->last_int(CHAIN_ENDPRIM)).s, str_uint_commas (vb->next_prim_0pos).s);
 
-    ASSINP (next_prim_0pos == vb->last_int(CHAIN_ENDPRIM),
-            "Bad data in chain file %s: Expecting alignments to add up to ENDPRIM=%"PRId64", but they add up to %"PRId64":\n%*s",
-            z_name, vb->last_int(CHAIN_ENDPRIM), next_prim_0pos, 
-            (int)(vb->txt_data.len - vb->line_start), ENT (char, vb->txt_data, vb->line_start));
-
-    ASSINP (next_luft_0pos == vb->last_int(CHAIN_ENDLUFT),
-            "Bad data in chain file %s: Expecting alignments to add up to ENDLUFT=%"PRId64", but they add up to %"PRId64":\n%*s",
-            z_name, vb->last_int(CHAIN_ENDLUFT), next_luft_0pos, 
-            (int)(vb->txt_data.len - vb->line_start), ENT (char, vb->txt_data, vb->line_start));
-
-    mutex_unlock (chain_mutex);
+    ASSINP (vb->next_luft_0pos == vb->last_int(CHAIN_ENDLUFT),
+            "%.*sBad data ^^^ in chain file %s: Expecting alignments to add up to ENDLUFT=%s, but they add up to %s",
+            (int)(vb->txt_data.len - vb->line_start), ENT (char, vb->txt_data, vb->line_start),
+            z_name, str_uint_commas (vb->last_int(CHAIN_ENDLUFT)).s, str_uint_commas (vb->next_luft_0pos).s);
 }
 
 // set contig lengths according to tSize and qSize
@@ -665,12 +673,14 @@ static inline void chain_piz_filter_add_qName_chr (VBlock *vb)
 
 CONTAINER_FILTER_FUNC (chain_piz_filter)
 {
+    VBlockCHAIN *vb_ = (VBlockCHAIN *)vb;
+
     // ingest alignments (and report Chain file data issues) only when consuming with --chain, not when merely pizzing
     if (flag.reading_chain) { 
 
         // before alignment-set first EOL and before alignments - initialize next_luft_0pos and next_prim_0pos
         if (dict_id.num == _CHAIN_TOPLEVEL && item == 13) 
-            chain_piz_filter_init_alignment_set (vb);
+            chain_piz_filter_init_alignment_set (vb_);
 
         // save prim_gap before reconstructing luft_gap (prim_gap was just processed)
         else if (dict_id.num == _CHAIN_SET && item == 4) 
@@ -678,11 +688,11 @@ CONTAINER_FILTER_FUNC (chain_piz_filter)
 
         // before EOF of each alignment, ingest alignment (only if it passed verification during Seg)
         else if (dict_id.num == _CHAIN_SET && item == 5) 
-            chain_piz_filter_ingest_alignmet (vb);
+            chain_piz_filter_ingest_alignmet (vb_);
 
         // before alignment-set second EOL and after alignments - verify that numbers add up, and also set contigs
         else if (dict_id.num == _CHAIN_TOPLEVEL && item == 15 && vb->last_int (CHAIN_VERIFIED)) {
-            chain_piz_filter_verify_alignment_set (vb);
+            chain_piz_filter_verify_alignment_set (vb_);
             chain_piz_filter_add_contig_length (vb);
         }
     }
@@ -881,7 +891,6 @@ void chain_destroy (void)
     buf_destroy (&luft_contig_dict);
     buf_destroy (&luft_contigs);
     mutex_destroy (chain_mutex);
-    next_luft_0pos = next_prim_0pos=0;
     chain_filename = NULL; 
 }
 

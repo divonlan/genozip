@@ -30,6 +30,10 @@
 #pragma GENDICT CHAIN_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT CHAIN_SEP=DTYPE_FIELD=SEP
 
+// vblock stuff
+extern unsigned chain_vb_size (DataType dt);
+extern void chain_vb_release_vb();
+
 // zip of a chain file - txtfile
 extern void chain_zip_initialize (void);
 extern int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */);
