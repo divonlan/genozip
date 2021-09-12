@@ -34,6 +34,7 @@
 #include "txtheader.h"
 #include "threads.h"
 #include "endianness.h"
+#include "segconf.h"
 
 static Mutex wait_for_vb_1_mutex = {};
 
@@ -105,118 +106,6 @@ static void zip_display_compression_ratio (Digest md5, bool is_final_component)
 // global_max_memory_per_vb to 1MB per context (subject to VBLOCK_MEMORY_MIN/MAX_DYN). rational: we need sufficient amount 
 // of data in each context for the generic codecs to work well. if compressing multiple files,
 // we do this just for the first file, so VBs can be reused (typically, the files will be similar)
-static void zip_dynamically_set_max_memory (void)
-{
-    static uint64_t test_vb_sizes[] = { 70000, 250000, 1000000 }; // must be at least BGZF_MAX_BLOCK_SIZE
-
-    if (txt_file->data_type == DT_GENERIC) {
-        flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
-        return;
-    }
-
-    bool done = false;
-    unsigned num_tests = sizeof (test_vb_sizes) / sizeof (test_vb_sizes[0]);
-    int64_t est_txt_data_size=0;
-
-    for (unsigned test_i=0; !done && test_i < num_tests; test_i++) {
-
-        flag.vblock_memory = test_vb_sizes[test_i]; // read this amount of data
-
-        // If this is a Luft file (with LIFTREJT lines passed down from the header) - if possible, test lines beyond the 
-        // the rejected lines, as they have more contexts.
-        //if (flag.vblock_memory < txt_file->reject_bytes && test_i != num_tests-1) 
-        //    continue;
-
-
-        VBlock *vb = vb_get_vb (DYN_SET_MEM_TASK, 1);
-        vb->testing_memory = true;
-
-        txtfile_read_vblock (vb);
-
-        // case: we found at least one full line - we can calculate the memory now
-        if (vb->txt_data.len) {
-
-            est_txt_data_size = txtfile_estimate_txt_data_size (vb); 
-
-            // make a copy of txt_data as seg may modify it
-            static Buffer txt_data_copy = {};
-            buf_copy (evb, &txt_data_copy, &vb->txt_data, char, 0, 0, "txt_data_copy");
-
-            // segment this VB
-            ctx_clone (vb);
-
-            int32_t save_luft_reject_bytes = vb->reject_bytes;
-
-            SAVE_FLAGS;
-            flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
-            flag.show_reference = flag.show_vblocks = false;
-            flag.quiet = true;
-            flag.dyn_set_mem = test_i + 1;
-
-            seg_all_data_lines (vb);
-
-            RESTORE_FLAGS;
-
-            // count number of contexts used
-            unsigned num_used_contexts=0;
-            for (DidIType did_i=0; did_i < vb->num_contexts ; did_i++)
-                if (CTX(did_i)->b250.len || CTX(did_i)->local.len)
-                    num_used_contexts++;
-                
-            // formula - 1MB for each contexts, 128K for each VCF sample
-            uint64_t bytes = ((uint64_t)num_used_contexts << 20) + 
-                              (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
-
-            // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
-            flag.vblock_memory = MIN_(MAX_(bytes, VBLOCK_MEMORY_MIN_DYN), VBLOCK_MEMORY_MAX_DYN);
-            if (txt_file->disk_size) flag.vblock_memory = MIN_(flag.vblock_memory, txt_file->disk_size);
-
-            if (flag.show_memory)
-                iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
-                         (unsigned)(flag.vblock_memory >> 20), num_used_contexts, vcf_header_get_num_samples());
-
-            // on Windows and Mac - which tend to have less memory in typical configurations, warn if we need a lot
-            #if defined _WIN32 || defined APPLE
-                flag.vblock_memory = MIN_(flag.vblock_memory, 32 << 20); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
-
-                uint64_t concurrent_vbs = 1 + txt_file->disk_size ? MIN_(1+ txt_file->disk_size / flag.vblock_memory, global_max_threads)
-                                                                  : global_max_threads;
-
-                ASSERTW (flag.vblock_memory * concurrent_vbs < MEMORY_WARNING_THREASHOLD,
-                        "\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
-                        "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
-                        "To reduce RAM consumption, you may use:\n"
-                        "   --threads to set the number of threads (affects speed)\n"
-                        "   --vblock to set the amount of input data (in MB) a thread processes (affects compression ratio)\n"
-                        "   --quiet to silence this warning",
-                        global_max_threads, (uint32_t)(flag.vblock_memory >> 20));
-            #endif
-            
-            // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
-            buf_alloc (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
-            memmove (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
-            memcpy (txt_file->unconsumed_txt.data, txt_data_copy.data, txt_data_copy.len);
-            txt_file->unconsumed_txt.len += txt_data_copy.len;
-            buf_destroy (&txt_data_copy);
-
-            // in case of Luft file - undo
-            vb->lo_rejects[0].len = vb->lo_rejects[1].len = 0;
-            txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
-
-            done = true;
-        }
-
-        // try again with a larger size (note: all data arleady read is waiting in txt_file->unconsumed_txt)
-        vb_release_vb (&vb);
-    }
-
-    // if we failed to calculate or file is very small - use default
-    if (!done || est_txt_data_size < VBLOCK_MEMORY_GENERIC)
-        flag.vblock_memory = VBLOCK_MEMORY_GENERIC;
-
-    // restore (used for --optimize-DESC / --add-line-numbers)
-    txt_file->num_lines = 0;
-}
 
 static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i,
                                           Buffer *b250_buf, 
@@ -718,14 +607,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
     }
 
     if (read_txt) {
-        // if vblock_memory is not already set by user options or previous files, set the size of the VBs for optimal compression
-        if (!flag.vblock_memory)
-            zip_dynamically_set_max_memory();
-
         txtfile_read_vblock (vb);
-
-        // estimate txt_data_size_single, consumed by hash_get_estimated_entries() and dispatcher_show_progress()
-        txt_file->txt_data_size_single = txtfile_estimate_txt_data_size (vb);
 
         // initializations after reading the first vb and before running any compute thread
         if (vb->vblock_i == 1) { 
@@ -802,7 +684,8 @@ void zip_one_file (const char *txt_basename,
 
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
-    bool success = txtheader_zip_read_and_compress(); // also increments z_file->num_txt_components_so_far
+    uint64_t txt_header_size;
+    bool success = txtheader_zip_read_and_compress (&txt_header_size); // also increments z_file->num_txt_components_so_far
     if (!success) goto finish; // eg 2nd+ VCF file cannot bind, because of different sample names
 
     if (z_dual_coords && !flag.rejects_coord) { 
@@ -813,8 +696,10 @@ void zip_one_file (const char *txt_basename,
     DT_FUNC (txt_file, zip_initialize)();
 
     // copy contigs from reference or txtheader to CHROM (and RNEXT too, for SAM/BAM)
-    if (DTPT (prepopulate_contigs_from_ref) && z_file->num_txt_components_so_far == 1) // first component of this z_file
+    if (z_file->num_txt_components_so_far == 1 && DTPT (prepopulate_contigs_from_ref)) 
         txtheader_zip_prepopulate_contig_ctxs();
+
+    segconf_calculate();
 
     max_lines_per_vb=0;
 
@@ -827,9 +712,6 @@ void zip_one_file (const char *txt_basename,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);
-
-    // update to the conclusive size. it might have been 0 (eg STDIN if HTTP) or an estimate (if compressed)
-    txt_file->txt_data_size_single = txt_file->txt_data_so_far_single; 
 
     // go back and update some fields in the txt header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected

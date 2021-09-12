@@ -23,6 +23,7 @@
 #include "reference.h"
 #include "zip.h"
 #include "coords.h"
+#include "segconf.h"
 
 WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                          bool *is_new) // optional out
@@ -1012,7 +1013,7 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 
     ASSSEG (line_count==DTP (line_height) || len < txt_len, txt, 
             "a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
-            str_uint_commas (flag.vblock_memory).s);
+            str_uint_commas (segconf.vb_size).s);
 
     return MAX_(100, (uint32_t)(((double)txt_len / (double)len) * 1.2));
 }
@@ -1055,7 +1056,7 @@ static void seg_verify_file_size (VBlock *vb)
 
         fprintf (stderr, "vb=%u reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
                  vb->vblock_i, str_uint_commas (recon_size).s, vb->vb_coords == DC_LUFT ? "_luft" : "", str_uint_commas (vb_recon_size).s, 
-                 (int32_t)recon_size - (int32_t)vb_recon_size, str_size (flag.vblock_memory).s);
+                 (int32_t)recon_size - (int32_t)vb_recon_size, str_size (segconf.vb_size).s);
 
         ASSERT (vb_recon_size == recon_size, "Error while verifying reconstructed size - to get vblock:\n"
                 "%s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s",
@@ -1123,7 +1124,7 @@ void seg_all_data_lines (VBlock *vb)
 
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
-    if (!flag.make_reference && strcmp (vb->compute_task, DYN_SET_MEM_TASK)) 
+    if (!flag.make_reference && vb->id != SEGCONG) 
         seg_verify_file_size (vb);
 
     COPY_TIMER (seg_all_data_lines);

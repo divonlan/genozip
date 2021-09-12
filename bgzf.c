@@ -20,6 +20,7 @@
 #include "txtfile.h"
 #include "codec.h"
 #include "threads.h"
+#include "segconf.h"
 
 #define uncomp_size param // for vb->compressed, we store the uncompressed size in param
 
@@ -124,7 +125,7 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     
     // add isize to buffer that will be written to SEC_BGZF
     if (isize) { // don't store EOF block (bc isize=0 cannot be represented as (isize-1) )
-        buf_alloc (evb, &file->bgzf_isizes, 1, flag.vblock_memory / 63000, uint16_t, 2, "bgzf_isizes");
+        buf_alloc (evb, &file->bgzf_isizes, 1, segconf.vb_size / 63000, uint16_t, 2, "bgzf_isizes");
         NEXTENT (uint16_t, file->bgzf_isizes) = BGEN16 ((uint16_t)(isize - 1)); // -1 to make the range 0..65535
     }
     else 
@@ -146,8 +147,8 @@ void bgzf_compress_bgzf_section (void)
     ARRAY (uint16_t, isizes, txt_file->bgzf_isizes);
     for (uint64_t i=0; i < txt_file->bgzf_isizes.len; i++) 
         total_isize += BGEN16 (isizes[i]) + 1; // values 0-65535 correspond to isize 1-65536
-    ASSERT (total_isize == txt_file->txt_data_size_single, "Expecting total_isize=%"PRId64" == txt_file->txt_data_size_single=%"PRId64,
-            total_isize, txt_file->txt_data_size_single);
+    ASSERT (total_isize == txt_file->txt_data_so_far_single, "Expecting total_isize=%"PRId64" == txt_file->txt_data_so_far_single=%"PRId64,
+            total_isize, txt_file->txt_data_so_far_single);
 
     // usually BZ2 is the best, but if the sizes are highly random (happens in long read SAM/BAM), then BZ2 can be bloated
     // and even produce an error. that's why we test.
@@ -360,7 +361,7 @@ void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
             txt_file->bzgf_passed_down_len = (int32_t)vb_txt_data_len - index; // pass down to next vb 
             break; // this VB doesn't have enough data to fill up this BGZF block - pass it down to the next VB
         }
-        buf_alloc (vb, &vb->bgzf_blocks, 1, flag.vblock_memory / 63000, BgzfBlockPiz, 1.5, "bgzf_blocks");
+        buf_alloc (vb, &vb->bgzf_blocks, 1, segconf.vb_size / 63000, BgzfBlockPiz, 1.5, "bgzf_blocks");
 
         NEXTENT (BgzfBlockPiz, vb->bgzf_blocks) = (BgzfBlockPiz){ .txt_index = index, .txt_size = isize };
 

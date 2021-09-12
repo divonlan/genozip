@@ -978,11 +978,11 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     uint32_t len = crypt_padded_len (sizeof (SectionHeaderTxtHeader));
 
     // sanity check - we skip empty files, so data is expected
-    ASSERT (txt_file->txt_data_size_single > 0, "Expecting txt_file->txt_data_size_single=%"PRId64" > 0", txt_file->txt_data_size_single);
+    ASSERT (txt_file->txt_data_so_far_single > 0, "Expecting txt_file->txt_data_so_far_single=%"PRId64" > 0", txt_file->txt_data_so_far_single);
     
     // update the header of the single (current) vcf. 
     SectionHeaderTxtHeader *curr_header = &z_file->txt_header_single;
-    curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
+    curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_so_far_single);
     curr_header->txt_num_lines    = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
     curr_header->digest_single    = flag.data_modified || flag.rejects_coord ? DIGEST_NONE 

@@ -127,7 +127,7 @@ void txtheader_verify_contig (const char *chrom_name, unsigned chrom_name_len, P
 }
 
 // ZIP: reads txt header and writes its compressed form to the GENOZIP file
-bool txtheader_zip_read_and_compress (void)
+bool txtheader_zip_read_and_compress (uint64_t *txt_header_size)
 {    
     Digest header_digest = DIGEST_NONE;
     digest_initialize(); 
@@ -140,7 +140,7 @@ bool txtheader_zip_read_and_compress (void)
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
     //          also: header is modified if --chain or compressing a Luft file
     // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
-    uint64_t unmodified_txt_header_len = evb->txt_data.len;
+    *txt_header_size = evb->txt_data.len;
     if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(evb, &evb->txt_data, (struct FlagsTxtHeader){}))) { 
         // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
@@ -165,7 +165,7 @@ bool txtheader_zip_read_and_compress (void)
     if (z_file && !flag.seg_only)       
         // we always write the txt_header section, even if we don't actually have a header, because the section
         // header contains the data about the file
-        zfile_write_txt_header (&evb->txt_data, unmodified_txt_header_len, header_digest, is_first_txt); // we write all headers in bound mode too, to support genounzip
+        zfile_write_txt_header (&evb->txt_data, *txt_header_size, header_digest, is_first_txt); // we write all headers in bound mode too, to support genounzip
 
     // for stats: combined length of txt headers in this bound file, or only one file if not bound
     if (!flag.bind) total_bound_txt_headers_len=0;
@@ -244,7 +244,6 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
     if (!txt_file->piz_header_init_has_run && DTPZ(piz_header_init))
         txt_file->piz_header_init_has_run = true;
 
-    txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
     txt_file->txt_flags            = header->h.flags.txt_header;
 

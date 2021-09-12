@@ -104,7 +104,7 @@ extern ExeType exe_type;
 extern FileP z_file, txt_file; 
 
 // IMPORTANT: This is part of the genozip file format. Also update codec.h/codec_args
-// If making any changes, update arrays in 1. codec.h 2. txtfile_estimate_txt_data_size
+// If making any changes, update arrays in 1. codec.h 2. txtfile_set_seggable_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_UNKNOWN=0, 
     CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, // internal compressors
@@ -171,10 +171,10 @@ typedef _Bool bool;
 #define ARRAYp(name) unsigned n_##name##s, const char *name##s[], unsigned name##_lens[] // function parameters
 #define ARRAYa(name) n_##name##s, name##s, name##_lens // function arguments
 
-#define SAVE_VALUE(flag) typeof(flag) save_##flag = flag 
-#define TEMP_VALUE(flag,temp) typeof(flag) save_##flag = flag ; flag = (temp)
-#define RESET_VALUE(flag) SAVE_VALUE(flag) ; flag=(typeof(flag))(uint64_t)0
-#define RESTORE_VALUE(flag) flag = save_##flag
+#define SAVE_VALUE(var) typeof(var) save_##var = var 
+#define TEMP_VALUE(var,temp) typeof(var) save_##var = var ; var = (temp)
+#define RESET_VALUE(var) SAVE_VALUE(var) ; var=(typeof(var))(uint64_t)0
+#define RESTORE_VALUE(var) var = save_##var
 
 // returns true if new_value has been set
 #define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueType *new_value, bool reconstruct)

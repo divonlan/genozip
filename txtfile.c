@@ -23,10 +23,9 @@
 #include "mutex.h"
 #include "digest.h"
 #include "profiler.h"
+#include "segconf.h"
 #include "zlib/zlib.h"
 #include "libdeflate/libdeflate.h"
-
-static uint32_t vb1_txt_data_comp_len = 0; // ZIP: approximate size of the source BZ2/gz/bgzf-compressed vb->txt_data
 
 const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext) 
 {
@@ -347,11 +346,7 @@ Digest txtfile_read_header (bool is_first_txt)
 
     // the excess data is for the next vb to read 
     buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, char, header_len, 0, "txt_file->unconsumed_txt");
-
-    // account for the passed up vb=1 data - using the compression ratio of this block
-    vb1_txt_data_comp_len = ((double)(evb->txt_data.len - header_len) / (double)evb->txt_data.len) * (double)txt_file->disk_so_far;
-
-    txt_file->txt_data_so_far_single = evb->txt_data.len = header_len; // trim to uncompressed length of txt header
+    txt_file->txt_data_so_far_single = txt_file->header_size = evb->txt_data.len = header_len; // trim to uncompressed length of txt header
 
     // md5 header - always digest_ctx_single, digest_ctx_bound only if first component 
     Digest header_digest = DIGEST_NONE;
@@ -408,7 +403,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
     passed_up_len = (DT_FUNC(txt_file, unconsumed)(vb, 0, &last_i));
 
     // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
-    if (vb->testing_memory && passed_up_len < 0) return (uint32_t)-1;
+    if (segconf.running && passed_up_len < 0) return (uint32_t)-1;
 
     ASSERT (passed_up_len >= 0, "Reason: failed to find a full line (i.e. newline-terminated) in vb=%u data_type=%s codec=%s.\n"
             "Known possible causes:\n"
@@ -424,6 +419,46 @@ done:
     return (uint32_t)passed_up_len;
 }
 
+// estimate the size of the txt_data of the file - i.e. the uncompressed data excluding the header - 
+// based on the observed or assumed compression ratio of the source compression so far
+static void txtfile_set_seggable_size (void)
+{
+    uint64_t disk_size = txt_file->disk_size ? txt_file->disk_size 
+                       : flag.stdin_size     ? flag.stdin_size // user-provided size
+                       :                       0; // our estimate will be 0 
+
+    double source_comp_ratio=1;
+    switch (txt_file->codec) {
+        case CODEC_GZ:   // for internal compressors, we use the observed source-compression ratio
+        case CODEC_BGZF:
+        case CODEC_BZ2: {
+            double plain_len  = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len;
+            double gz_bz2_len = file_tell (txt_file, false); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
+            source_comp_ratio = plain_len / gz_bz2_len;
+            break;
+        }
+        
+        case CODEC_BCF:  source_comp_ratio = 10; break; // note: .bcf files might be compressed or uncompressed - we have no way of knowing as "bcftools view" always serves them to us in plain VCF format. These ratios are assuming the bcf is compressed as it normally is.
+        case CODEC_XZ:   source_comp_ratio = 15; break;
+        case CODEC_CRAM: source_comp_ratio = 25; break;
+        case CODEC_ZIP:  source_comp_ratio = 3;  break;
+        case CODEC_NONE: source_comp_ratio = 1;  break;
+
+        default: ABORT ("Error in txtfile_set_seggable_size: unspecified txt_file->codec=%s (%u)", codec_name (txt_file->codec), txt_file->codec);
+    }
+        
+    int64_t est_seggable_size = MAX_(0.0, (double)disk_size * source_comp_ratio - (double)txt_file->header_size);
+    __atomic_store_n (&txt_file->est_seggable_size, est_seggable_size, __ATOMIC_RELAXED); // atomic loading for thread safety
+
+    if (segconf.running)
+        txt_file->txt_data_so_far_single = txt_file->header_size; // roll back as we will re-account for this data in VB=1
+}
+
+int64_t txtfile_get_seggable_size (void)
+{
+    return __atomic_load_n (&txt_file->est_seggable_size, __ATOMIC_RELAXED);
+}
+
 // ZIP main threads
 void txtfile_read_vblock (VBlock *vb)
 {
@@ -431,14 +466,10 @@ void txtfile_read_vblock (VBlock *vb)
 
     ASSERT_DT_FUNC (txt_file, unconsumed);
 
-    uint64_t pos_before = 0;
-    if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file) && !vb->testing_memory)
-        pos_before = file_tell (txt_file, true);
-
-    buf_alloc (vb, &vb->txt_data, 0, flag.vblock_memory, char, 1, "txt_data");    
+    buf_alloc (vb, &vb->txt_data, 0, segconf.vb_size, char, 1, "txt_data");    
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
-    uint64_t max_memory_per_vb = flag.vblock_memory - TXTFILE_READ_VB_PADDING;
+    uint64_t max_memory_per_vb = segconf.vb_size - TXTFILE_READ_VB_PADDING;
     uint32_t passed_up_len=0;
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
@@ -450,7 +481,7 @@ void txtfile_read_vblock (VBlock *vb)
 
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
-                             vb->testing_memory       ||
+                             segconf.running     ||
                              flag.optimize_DESC       || // fastq_zip_read_one_vb needs to count lines
                              flag.add_line_numbers;      // vcf_zip_read_one_vb   needs to count lines
 
@@ -493,7 +524,7 @@ void txtfile_read_vblock (VBlock *vb)
         passed_up_len = txtfile_get_unconsumed_to_pass_up (vb);
 
         // case: return if we're testing memory, and there is not even one line of text  
-        if (vb->testing_memory && passed_up_len == (uint32_t)-1) {
+        if (segconf.running && passed_up_len == (uint32_t)-1) {
             buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, char, 0, 0, "txt_file->unconsumed_txt"); 
             buf_free (&vb->txt_data);
             return;
@@ -527,26 +558,11 @@ void txtfile_read_vblock (VBlock *vb)
     vb->reject_bytes = MIN_(vb->recon_size, txt_file->reject_bytes);
     txt_file->reject_bytes -= vb->reject_bytes;
 
-    if (!vb->testing_memory) {
-
-        txt_file->txt_data_so_far_single += vb->txt_data.len;
-    
-        // update vb1_txt_data_comp_len used by txtfile_estimate_txt_data_size(). Note: it already includes
-        // the part of vb=1 passed up from txtfile_read_header()
-        if (vb->vblock_i==1 && file_is_read_via_int_decompressor (txt_file)) {
-            vb1_txt_data_comp_len += file_tell (txt_file, true) - pos_before; // bgzf/gz/bz2 compressed bytes read (note: if this isn't a disk file, then both file_tells will be -1, resulting in vb1_txt_data_comp_len=0)
-
-            // deduct the amount of compressed data due to passed up data that actually belongs to vb>=2
-            // assume the same compression ratio for the passup part as the (vb data + passed up)
-            if (passed_up_len) {
-                double comp_ratio = (double)vb1_txt_data_comp_len / (double)(vb->txt_data.len + passed_up_len);
-                uint32_t pass_up_len_comp = (double)passed_up_len * comp_ratio;
-                vb1_txt_data_comp_len -= pass_up_len_comp;
-            }
-        }
-    }
+    txt_file->txt_data_so_far_single += vb->txt_data.len;
 
     if (DTPT(zip_read_one_vb)) DTPT(zip_read_one_vb)(vb);
+
+    txtfile_set_seggable_size();
 
     COPY_TIMER (txtfile_read_vblock);
 }
@@ -589,57 +605,6 @@ bool txtfile_test_data (char first_char,            // first character in every 
 
 done:
     return (double)successes / (double)num_lines_so_far >= success_threashold;
-}
-
-// ZIP only - estimate the size of the txt data in this file. affects the hash table size and the progress indicator.
-int64_t txtfile_estimate_txt_data_size (VBlock *vb)
-{
-    uint64_t disk_size = txt_file->disk_size; 
-
-    // case: we don't know the disk file size (because its stdin or a URL where the server doesn't provide the size)
-    if (!disk_size) { 
-        if (flag.stdin_size) disk_size = flag.stdin_size; // use the user-provided size, if there is one
-        else return 0; // we're unable to estimate if the disk size is not known
-    } 
-    
-    double ratio=1;
-
-    bool is_no_ht_vcf = (txt_file->data_type == DT_VCF && vcf_vb_has_haplotype_data(vb));
-
-    switch (txt_file->codec) {
-        // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
-        case CODEC_GZ:
-        case CODEC_BGZF:
-        case CODEC_BZ2:  
-            if (vb1_txt_data_comp_len) {
-                ratio = (double)vb->txt_size / (double)vb1_txt_data_comp_len; 
-                vb1_txt_data_comp_len = 0;
-                break;
-            }
-            // case: small file, and all data in first VB was passed up from the txt_header 
-            else 
-                return txt_file->txt_data_so_far_single;
-
-        // for compressed files for which we don't have their size (eg streaming from an http server) - we use
-        // estimates based on a benchmark compression ratio of files with and without genotype data
-
-        // note: .bcf files might be compressed or uncompressed - we have no way of knowing as 
-        // "bcftools view" always serves them to us in plain VCF format. These ratios are assuming
-        // the bcf is compressed as it normally is.
-        case CODEC_BCF:  ratio = is_no_ht_vcf ? 55 : 8.5; break;
-
-        case CODEC_XZ:   ratio = is_no_ht_vcf ? 171 : 12.7; break;
-
-        case CODEC_CRAM: ratio = 25; break;
-
-        case CODEC_ZIP:  ratio = 3; break;
-
-        case CODEC_NONE: ratio = 1; break;
-
-        default: ABORT ("Error in txtfile_estimate_txt_data_size: unspecified txt_file->codec=%s (%u)", codec_name (txt_file->codec), txt_file->codec);
-    }
-
-     return disk_size * ratio;
 }
 
 DataType txtfile_get_file_dt (const char *filename)

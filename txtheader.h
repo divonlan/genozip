@@ -15,7 +15,7 @@ void txtheader_finalize (void);
 // ZIP stuff
 //----------
 
-extern bool txtheader_zip_read_and_compress (void);
+extern bool txtheader_zip_read_and_compress (uint64_t *txt_header_size);
 extern ConstBufferP txtheader_get_contigs (void);
 extern const char *txtheader_get_contig_name (uint32_t index, uint32_t *snip_len);
 extern void txtheader_add_contig (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *liftover_);

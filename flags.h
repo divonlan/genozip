@@ -130,7 +130,6 @@ typedef struct {
                              // ZIP: txt data is modified during Seg
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
-    unsigned dyn_set_mem;    // ZIP: test_i value (starting at 1) when we're now segging as part of zip_dynamically_set_max_memory()
 
     Reference reading_reference;  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
 
@@ -144,16 +143,7 @@ typedef struct {
     enum { BIND_NONE, BIND_ALL, BIND_PAIRS, BIND_REJECTS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
     uint64_t stdin_size;
     unsigned longest_filename; // length of longest filename of the txt/z files on the command line
-
-    // default max amount of txt data in each variant block. this is user-configurable with --vblock
-    #define MAX_VBLOCK_MEMORY      2048         // in MB
-    #define VBLOCK_MEMORY_MIN_DYN  (16   << 20) // VB memory - min/max when set in zip_dynamically_set_max_memory
-    #define VBLOCK_MEMORY_MAX_DYN  (512  << 20) 
-    #define VBLOCK_MEMORY_FAST     (16   << 20) // VB memory with --fast
-    #define VBLOCK_MEMORY_MAKE_REF (1    << 20) // VB memory with --make-reference - reference data 
-    #define VBLOCK_MEMORY_REFHASH  (16   << 20) // VB memory with --make-reference - refhash data (overridable with --vblock)
-    #define VBLOCK_MEMORY_GENERIC  (16   << 20) // VB memory for the generic data type
-    uint64_t vblock_memory;
+    
 } Flags;
 
 extern Flags flag;

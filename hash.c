@@ -12,6 +12,7 @@
 #include "hash.h"
 #include "strings.h"
 #include "dict_id.h"
+#include "segconf.h"
 
 typedef struct {        
     WordIndex node_index;     // index into Context.ston_nodes (if < ston_nodes.len) or Context.nodes or NODE_INDEX_NONE
@@ -33,7 +34,7 @@ typedef struct {
 uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
 {
     // if user set a low --vblock, use this as the limit for the hash table size too, but don't restrict tighter than 16MB
-    size = MIN_(size, MAX_(16000000, flag.vblock_memory));
+    size = MIN_(size, MAX_(16000000, segconf.vb_size));
 
     // primary numbers just beneath the powers of 2^0.5 (and 2^0.25 for the larger numbers)
     // minimum ~64K to prevent horrible miscalculations in edge cases that result in dramatic slow down
@@ -106,9 +107,8 @@ void hash_alloc_local (VBlock *segging_vb, Context *vctx)
 // is less likely to fit into the CPU memory caches
 uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zctx, const Context *first_merging_vb_ctx)
 {
-    // note on txt_data_size_single: if its a physical plain txt file - this is the file size. 
-    // if not - its an estimate done after the first VB by txtfile_estimate_txt_data_size
-    double effective_num_vbs=0, estimated_num_vbs = MAX_(1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
+    double effective_num_vbs   = 0; 
+    double estimated_num_vbs   = MAX_(1, (double)txtfile_get_seggable_size() / (double)merging_vb->txt_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)merging_vb->lines.len;
 
     if (flag.show_hash && first_merging_vb_ctx->did_i==0) 

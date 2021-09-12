@@ -14,6 +14,7 @@
 #include "profiler.h"
 #include "progress.h"
 #include "threads.h"
+#include "segconf.h"
 
 #define MAX_COMPUTED_VBS 4096
 typedef struct {
@@ -48,8 +49,8 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     // case: ZIP of plain txt files (including if decompressed by an external compressor) 
     // - we go by the amount of txt content processed 
     if (command == ZIP && txt_file->disk_size && file_is_plain_or_ext_decompressor (txt_file)) { 
-        total = txt_file->txt_data_size_single; // if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
         sofar = z_file->txt_data_so_far_single; 
+        total = MAX (sofar, txtfile_get_seggable_size()); 
     } 
     
     // case ZIP: locally decompressed files - eg .vcf.gz or .fq.bz2 - 
@@ -100,7 +101,7 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     ASSERT (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
     
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool for all fan-outs throughout the execution
-    vb_create_pool (MAX_((command == ZIP ? 2 : 1), global_max_threads)    // compute thread VBs (ZIP needs at least 2, one for zip_dynamically_set_max_memory)
+    vb_create_pool (MAX_(1, global_max_threads)    // compute thread VBs
                   + (command == PIZ)               // txt header VB (for PIZ) or 
                   + z_file->max_conc_writing_vbs + // writer thread VBs 
                   + 2);                            // background cache creation of (gref + primref) or (gref + gref refhash)

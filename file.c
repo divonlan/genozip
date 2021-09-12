@@ -1185,7 +1185,7 @@ bool file_seek (File *file, int64_t offset,
     return !ret;
 }
 
-uint64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned line)
+int64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned line)
 {
     if (command == ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
         return gzconsumed64 ((gzFile)file->file); 
@@ -1196,7 +1196,7 @@ uint64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned li
     int64_t offset = ftello64 ((FILE *)file->file);
     ASSERT (offset >= 0 || soft_fail, "called from %s:%u: ftello64 failed for %s: %s", func, line, file->name, strerror (errno));
 
-    if (offset < 0) return (uint64_t)-1; // soft fail
+    if (offset < 0) return -1; // soft fail
 
     // in in z_file that is being tarred, update the offset to the beginning of the file data in the tar file
     if (file->supertype == Z_FILE)

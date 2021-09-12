@@ -10,6 +10,7 @@
 #include "vblock.h"
 #include "buffer.h"
 #include "strings.h"
+#include "segconf.h"
 
 void *lzma_alloc (ISzAllocPtr alloc_stuff, size_t size)
 {
@@ -114,7 +115,7 @@ bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
     props.level        = 5;    // Without setting dictSize, Level 5 consumes < 200MB ; level 7 consumes up to 350MB per VB. negligible difference between level 5,7,9 (< 0.1% file size)
     props.fb           = 273;  // a bit better compression with no noticable impact on memory or speed
     props.writeEndMark = true; // add an "end of compression" mark - better error detection during decompress
-    props.dictSize     = MIN_(*uncompressed_len, flag.vblock_memory);
+    props.dictSize     = MIN_(*uncompressed_len, segconf.vb_size);
 
     CLzmaEncHandle lzma_handle = LzmaEnc_Create (&alloc_stuff);
     ASSERT0 (lzma_handle, "LzmaEnc_Create failed");

@@ -27,6 +27,7 @@
 #include "mutex.h"
 #include "file.h"
 #include "endianness.h"
+#include "segconf.h"
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed
 
@@ -368,7 +369,7 @@ void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_thre
     fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists. global_max_threads=%u\n", 
              str_size (total_bytes).s, num_buffers, vb_get_pool() ? vb_get_pool()->num_allocated_vbs : 0, global_max_threads);
     if (command == ZIP) 
-        fprintf (memory_full ? stderr : info_stream, "vblock_memory = %u MB\n", (unsigned)(flag.vblock_memory >> 20));
+        fprintf (memory_full ? stderr : info_stream, "vb_size = %u MB\n", (unsigned)(segconf.vb_size >> 20));
     
     if (max_threads)
         fprintf (memory_full ? stderr : info_stream, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);

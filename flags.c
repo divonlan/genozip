@@ -209,7 +209,6 @@ static void flags_show_flags (void)
     iprintf ("maybe_vb_modified_by_writer=%s\n", flag.maybe_vb_modified_by_writer ? "true" : "false");
     iprintf ("data_modified=%s\n", flag.data_modified ? "true" : "false");
     iprintf ("explicit_ref=%s\n", flag.explicit_ref ? "true" : "false");
-    iprintf ("dyn_set_mem=%s\n", flag.dyn_set_mem ? "true" : "false");
     iprintf ("collect_coverage=%s\n", flag.collect_coverage ? "true" : "false");
     iprintf ("dvcf_rename=%s\n", flag.dvcf_rename ? flag.dvcf_rename : "(none)");
     iprintf ("dvcf_drop=%s\n", flag.dvcf_drop ? flag.dvcf_drop : "(none)");
@@ -221,7 +220,6 @@ static void flags_show_flags (void)
     iprintf ("bind=%d\n", flag.bind);
     iprintf ("stdin_size=%"PRIu64"\n", flag.stdin_size);
     iprintf ("longest_filename=%d\n", flag.longest_filename);
-    iprintf ("vblock_memory=%"PRIu64"\n", flag.vblock_memory);
 }
 
 #define MAX_LINE ((int64_t)1 << 62)
@@ -755,16 +753,6 @@ static void flags_verify_pair_rules (unsigned num_files, const char **filenames)
                     OT("pair", "2"), filenames[i], filenames[i+1]);
 }
 
-static void flag_set_vblock_memory (void)
-{
-    int64_t mem_size_mb;
-    ASSINP (str_get_int_range64 (flag.vblock, 0, 1, MAX_VBLOCK_MEMORY, &mem_size_mb), 
-            "invalid argument of --vblock: \"%s\". Expecting an integer between 1 and %u. The file will be read and processed in blocks of this number of megabytes.",
-            flag.vblock, MAX_VBLOCK_MEMORY);
-
-    flag.vblock_memory = (uint64_t)mem_size_mb << 20;
-}
-
 static unsigned flags_get_longest_filename (unsigned num_files, const char **filenames)
 {
     unsigned len=0;
@@ -852,19 +840,11 @@ void flags_update_zip_one_file (void)
 
     if (flag.test) flag.md5=true; // test implies md5
 
-    // set memory if --vblock (note: if not set, we will set it dymamically in zip_dynamically_set_max_memory)
-    if (flag.vblock) flag_set_vblock_memory();
-
-    // set memory if --fast and user didn't specify --vblock
-    else if (flag.fast) flag.vblock_memory = VBLOCK_MEMORY_FAST;
-
     // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
     // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.
     if (flag.make_reference) {
         ASSINP (!crypt_have_password(), "option --make-reference is incompatible with %s", OT("password", "p"));
-
         flag.md5 = true;
-        if (!flag.vblock) flag.vblock_memory = VBLOCK_MEMORY_MAKE_REF;
     }
 
     ASSINP0 (chain_is_loaded || dt == DT_CHAIN || !ref_get_filename (prim_ref), 

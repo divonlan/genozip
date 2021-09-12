@@ -17,6 +17,7 @@
 #include "sections.h"
 #include "profiler.h"
 #include "endianness.h"
+#include "segconf.h"
 
 // an entry per VB
 typedef struct {
@@ -350,7 +351,7 @@ static void linesorter_compress_recon_plan_do (bool is_luft)
     if (codec == CODEC_UNKNOWN) codec = CODEC_NONE; // too small for compression
 
     if (flag.show_recon_plan)
-        linesorter_show_recon_plan (txt_file, is_luft, conc_writing_vbs, (uint32_t)(flag.vblock_memory >> 20));
+        linesorter_show_recon_plan (txt_file, is_luft, conc_writing_vbs, (uint32_t)(segconf.vb_size >> 20));
 
     // prepare section header and compress
     SectionHeaderReconPlan header = (SectionHeaderReconPlan){
@@ -360,8 +361,8 @@ static void linesorter_compress_recon_plan_do (bool is_luft)
         .h.data_uncompressed_len = BGEN32 (txt_file->recon_plan.len * sizeof (ReconPlanItem)),
         .h.codec                 = codec,
         .h.flags.recon_plan.luft = is_luft,
-        .conc_writing_vbs       = BGEN32 (conc_writing_vbs),
-        .vblock_mb               = BGEN32 ((uint32_t)(flag.vblock_memory >> 20))
+        .conc_writing_vbs        = BGEN32 (conc_writing_vbs),
+        .vblock_mb               = BGEN32 ((uint32_t)(segconf.vb_size >> 20))
     };
 
     txt_file->recon_plan.len *= 3; // each ReconPlanItem is 3xuint32_t

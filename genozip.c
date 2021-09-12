@@ -402,16 +402,10 @@ static void main_genozip (const char *txt_filename,
     }
 
 done: {
-    // propogate up some flags
-    SAVE_FLAG(vblock_memory);  
-    SAVE_FLAG(data_modified);
-
-    RESTORE_FLAGS;
-    
-    if (flag.pair) RESTORE_FLAG (vblock_memory); // FASTQ R2 must have the same vblock_memory as R1, so it should not re-calculate in zip_dynamically_set_max_memory - otherwise txtfile_read_vblock will fail
-    if (flag.bind) RESTORE_FLAG (data_modified); // When binding, if any of the compressed files is a Luft, we don't store digests
-    
-}}
+    SAVE_FLAG (data_modified); // propagate up
+    RESTORE_FLAGS;    
+    if (flag.bind) RESTORE_FLAG (data_modified); 
+} }
 
 static inline DataType main_get_file_dt (const char *filename)
 {   
@@ -530,7 +524,7 @@ int main (int argc, char **argv)
     profiler_initialize();
     buf_initialize(); 
     arch_initialize (argv[0]);
-    evb = vb_initialize_nonpool_vb(EVB);
+    evb = vb_initialize_nonpool_vb(EVB, DT_NONE);
     threads_initialize(); // requires evb
     random_access_initialize();
     codec_initialize();

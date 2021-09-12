@@ -18,6 +18,7 @@
 #include "arch.h"
 #include "codec.h"
 #include "license.h"
+#include "segconf.h"
 
 static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
@@ -84,7 +85,7 @@ static void stats_output_file_metadata (Buffer *buf)
 
     bufprintf (evb, buf, "%s: %s   Dictionaries: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines).s, z_file->num_contexts, 
-               z_file->num_vbs, (uint32_t)(flag.vblock_memory >> 20), (uint32_t)z_file->section_list_buf.len);
+               z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
 
     if (z_file->data_type == DT_KRAKEN) {
         int64_t dominant_taxid_count;

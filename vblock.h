@@ -57,6 +57,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
                                /* ZIP: dual-coordinate files only: DC_PRIMARY + DC_BOTH lines in this VB  */ \
     uint32_t recon_num_lines_luft; /* ZIP only, dual coordinates files only: DC_LUFT + DC_BOTH lines in this VB */ \
     int32_t txt_size;          /* ZIP: original size of of text data read from the file */ \
+    int32_t txt_size_source_comp; /* ZIP: when source file is internally compressed - apporx. compressed size attributable to this VB's data */\
     uint32_t longest_line_len; /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint64_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
     uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
@@ -71,7 +72,6 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
-    bool testing_memory;       /* ZIP: set if VB is run from zip_dynamically_set_max_memory */ \
     \
     /* data for dictionary compressing */ \
     char *fragment_start;        \
@@ -184,8 +184,10 @@ extern VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i);
 extern bool vb_has_free_vb (void);
 extern void vb_destroy_vb (VBlockP *vb_p);
 
-#define EVB -1 // ID of VB used by main thread 
-extern VBlockP vb_initialize_nonpool_vb(int vb_id);
+#define EVB     -1 // ID of VB used by main thread 
+#define SEGCONG -2 // ID of VB used by segconf_calculate
+extern VBlockP vb_initialize_nonpool_vb(int vb_id, DataType dt);
+
 extern void vb_release_vb_do (VBlock **vb_p, const char *func);
 #define vb_release_vb(vb_p) vb_release_vb_do (vb_p, __FUNCTION__)
 extern void vb_destroy_pool_vbs (void);

@@ -45,7 +45,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_pbwt.c codec_none.c \
-	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
+	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c \
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
@@ -66,7 +66,7 @@ CONDA_DEVS = Makefile .gitignore
 CONDA_DOCS = LICENSE.txt AUTHORS README.md
 
 CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
-             base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h \
+             base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
@@ -130,7 +130,7 @@ ifndef IS_CONDA
 
 else  # conda
 	# use packages for bzip2
-	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(DEFLATE_SRCS)
+	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(DEFLATE_SRCS)
 endif
 
 OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))

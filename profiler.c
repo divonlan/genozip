@@ -8,6 +8,7 @@
 #include "flags.h"
 #include "vblock.h"
 #include "file.h"
+#include "segconf.h"
 
 static Mutex evb_profile_mutex = {};
 
@@ -25,6 +26,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(read);
     ADD(compute);
     ADD(write);
+    ADD(vb_get_vb);
     ADD(compressor_bz2);
     ADD(compressor_lzma);
     ADD(compressor_bsc);
@@ -124,6 +126,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (ref_uncompress_one_range, 3);
         PRINT (ctx_read_all_dictionaries, 2);
         PRINT (ctx_dict_build_word_lists, 3);
+        PRINT (vb_get_vb, 1);
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
         PRINT (bgzf_io_thread, 1);
@@ -147,6 +150,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     else { // compress
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
         PRINT (txtfile_read_header, 1);
+        PRINT (vb_get_vb, 1);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
         PRINT (write, 1);
@@ -191,7 +195,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
 
     iprint0 ("\nVblock stats:\n");
     iprintf ("  Vblocks: %u\n", num_vbs);
-    iprintf ("  Maximum vblock size: %"PRIu64" MB\n", flag.vblock_memory >> 20);
+    iprintf ("  Maximum vblock size: %"PRIu64" MB\n", segconf.vb_size >> 20);
     iprintf ("  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
     iprintf ("  Average read time: %u\n", ms(p->read) / num_vbs);
     iprintf ("  Average compute time: %u\n", ms(p->compute) / num_vbs);

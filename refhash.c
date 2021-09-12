@@ -19,6 +19,7 @@
 #include "bit_array.h"
 #include "profiler.h"
 #include "threads.h"
+#include "segconf.h"
 
 // ref_hash logic:
 // we use the 28 bits (14 nucleotides) following a "G" hook, as the hash value, to index into a hash table with multiple
@@ -371,10 +372,11 @@ void refhash_initialize (bool *dispatcher_invoked)
 
     // case 1: called from ref_make_ref_init - initialize for making a reference file
     if (flag.make_reference) {
+        #define VBLOCK_MEMORY_REFHASH  (16 << 20) // VB memory with --make-reference - refhash data (overridable with --vblock)
         num_layers       = MAKE_REF_NUM_LAYERS;
         base_layer_bits  = MAKE_REF_BASE_LAYER_BITS;
         // we use the default vb size (16MB) not the reduced make-ref size (1MB), unless user overrides with --vblock
-        make_ref_vb_size = flag.vblock ? flag.vblock_memory : VBLOCK_MEMORY_REFHASH;
+        make_ref_vb_size = flag.vblock ? segconf.vb_size : VBLOCK_MEMORY_REFHASH;
     }
 
     // case 2: piz_read_global_area from piz_read_global_area -> refhash_load - initialize when reading an external reference for ZIP of fasta or fastq

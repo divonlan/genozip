@@ -65,7 +65,7 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
         refalt_special[2] = new_ref ? new_ref : main_ref;
         refalt_special[3] = new_alt ? new_alt : main_alt;
 
-        seg_by_did_i (vb, refalt_special, sizeof(refalt_special), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the account in vcf_refalt_seg_main_ref_alt
+        seg_by_did_i (vb, refalt_special, sizeof(refalt_special), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the accounting in vcf_refalt_seg_main_ref_alt
     }
     // if not - just the normal snip
     else {

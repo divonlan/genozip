@@ -77,7 +77,7 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     // vb->data_type_alloced (maybe changed by vb_get_vb)
 
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = vb->pos_aln_i = 0;
-    vb->recon_size = vb->recon_size_luft = vb->txt_size = vb->reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
+    vb->recon_size = vb->recon_size_luft = vb->txt_size = vb->txt_size_source_comp = vb->reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
     vb->recon_num_lines = vb->recon_num_lines_luft = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->is_unsorted[0] = vb->is_unsorted[1] = false;
     vb->z_next_header_i = 0;
@@ -86,7 +86,7 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = vb->line_start = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = vb->num_nondrop_lines = 0;
-    vb->is_rejects_vb = vb->testing_memory = false;    
+    vb->is_rejects_vb = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->drop_curr_line = vb->chrom_name = vb->fragment_start = NULL;
@@ -157,12 +157,15 @@ VBlockPool *vb_get_pool (void)
     return pool;
 }
 
-VBlockP vb_initialize_nonpool_vb (int vb_id)
+VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt)
 {
-    VBlockP vb = CALLOC (sizeof (VBlock));
+    uint64_t sizeof_vb = (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock);
+
+    VBlockP vb = CALLOC (sizeof_vb);
     vb->data_type = DT_NONE;
     vb->id = vb_id;
-    vb->compute_task = "evb";
+    vb->compute_task = "main_thread";
+    vb->data_type = dt;
     return vb;
 }
 
@@ -170,6 +173,7 @@ VBlockP vb_initialize_nonpool_vb (int vb_id)
 VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
 {
     ASSERTMAINTHREAD;
+    START_TIMER;
 
     DataType dt = command==ZIP ? (txt_file ? txt_file->data_type : DT_NONE)
                                : (z_file   ? z_file->data_type   : DT_NONE);
@@ -243,6 +247,8 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
         iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%d\n", task_name, vb->id, vb->vblock_i);
 
     threads_log_by_vb (vb, task_name, "GET VB", 0);
+
+    COPY_TIMER_VB (evb, vb_get_vb);
 
     return vb;
 }

@@ -17,6 +17,7 @@
 #include "reconstruct.h"
 #include "kraken.h"
 #include "reference.h"
+#include "segconf.h"
 
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
@@ -139,7 +140,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
 
 out_of_data:
     // case: an entire FASTA VB without newlines (i.e. a very long sequential SEQ) - we accept a VB without newlines and deal with it in Seg
-    if (is_entire_vb && !vb->testing_memory) {
+    if (is_entire_vb && !segconf.running) {
         ((VBlockFASTA *)vb)->vb_has_no_newline = true;
         return 0;
     }
@@ -222,6 +223,22 @@ void fasta_seg_finalize (VBlockP vb)
     };
 
     container_seg (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+
+    // decide whether the sequences in this FASTA represent contigs (in which case we want a FASTA_CONTIG dictionary
+    // and random access) or do they represent reads (in which case they are likely to numerous to be added to a dict)
+    if (segconf.running) {
+        uint64_t num_contigs_this_vb = CTX(FASTA_CONTIG)->nodes.len;
+        ASSINP0 (num_contigs_this_vb, "Invalid FASTA file: no sequence description line");
+
+        uint64_t avg_contig_size_this_vb = vb->txt_data.len / num_contigs_this_vb;
+        uint64_t est_num_contigs_in_file = txtfile_get_seggable_size() / avg_contig_size_this_vb;
+
+        // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
+        // sets a limit for fasta-to-phylip translation
+        #define MAX_CONTIGS_IN_FILE 1000000 
+        segconf.fasta_has_contigs = num_contigs_this_vb == 1 || // the entire VB is a single contig
+                                    est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE; 
+    }
 }
 
 bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -267,17 +284,19 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
     }
 
     // add contig to CONTIG dictionary (but not b250) and verify that its unique
-    bool is_new;
-    WordIndex chrom_node_index = ctx_evaluate_snip_seg ((VBlockP)vb, CTX(FASTA_CONTIG), chrom_name, chrom_name_len, &is_new);
-    ctx_decrement_count ((VBlockP)vb, CTX(FASTA_CONTIG), chrom_node_index);
+    if (segconf.fasta_has_contigs || flag.make_reference || segconf.running) {
+        bool is_new;
+        WordIndex chrom_node_index = ctx_evaluate_snip_seg ((VBlockP)vb, CTX(FASTA_CONTIG), chrom_name, chrom_name_len, &is_new);
+        ctx_decrement_count ((VBlockP)vb, CTX(FASTA_CONTIG), chrom_node_index);
 
-    random_access_update_chrom ((VBlockP)vb, DC_PRIMARY, chrom_node_index, chrom_name, chrom_name_len);
-    vb->ra_initialized = true;
+        random_access_update_chrom ((VBlockP)vb, DC_PRIMARY, chrom_node_index, chrom_name, chrom_name_len);
+        vb->ra_initialized = true;
 
-    ASSINP (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
-            flag.bind ? " (possibly in another FASTA being bound)" : 
-            (flag.reference==REF_EXTERNAL || flag.reference==REF_EXT_STORE) ? " (possibly the contig size exceeds vblock size, try enlarging with --vblock)" : "");
-        
+        ASSINP (is_new, "Error: bad FASTA file - sequence \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
+                flag.bind ? " (possibly in another FASTA being bound)" : 
+                (flag.reference==REF_EXTERNAL || flag.reference==REF_EXT_STORE) ? " (possibly the sequence size exceeds vblock size, try enlarging with --vblock)" : "");
+    }
+
     vb->last_line = FASTA_LINE_DESC;    
     SAFE_RESTORE;
 }

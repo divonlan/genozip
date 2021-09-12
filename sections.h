@@ -180,7 +180,7 @@ typedef struct {
 // The text file header section appears once in the file (or multiple times in case of bound file), and includes the txt file header 
 typedef struct {
     SectionHeader h;
-    uint64_t txt_data_size;           // number of bytes in the original txt file. 
+    uint64_t txt_data_size;           // number of bytes in the original txt file
     uint64_t txt_num_lines;           // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb;        // upper bound on how many data lines a VB can have in this file
     Codec    codec;                   // codec of original txt file (none, bgzf, gz, bz2...)

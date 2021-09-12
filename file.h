@@ -313,14 +313,16 @@ typedef struct File {
                                        // ZIP - z_file: copy from txt_file.codec, but not for rejects file    
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
-                                       // note: this is different from txt_data_size_single as disk_size might be compressed (gz, bz2 etc)
     int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite)
     int64_t disk_size_minus_skips;     // PIZ z_file: disk_size minus any data skipped
+    int64_t est_seggable_size;         // ZIP txt_file, access via txtfile_get_seggable_size(). Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
 
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
-    int64_t txt_data_size_single;      // txt_file: size of the txt data. ZIP: if its a plain txt file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
+    int64_t header_size;               // txt_file ZIP: size of txt header
+    //      seggable_data_so_far = txt_data_so_far_single - header_size
+    int64_t seggable_data_so_far_gz_bz2; // txt_file ZIP: if source gz or bz2 compression, this is the compressed txt_data_so_far_single 
     int64_t txt_data_so_far_bind;      // z_file only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
                                        // note: txt_data_so_far_single/bind accounts for txt modifications due to --optimize or --chain or compressing a Luft file
     int64_t txt_data_so_far_single_0;  // z_file & ZIP only: same as txt_data_so_far_single/bind, but original sizes without 
@@ -427,7 +429,7 @@ extern File *file_open (const char *filename, FileMode mode, FileSupertype super
 extern void file_close (FileP *file_p, bool index_txt, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
-extern uint64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned line);
+extern int64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned line);
 #define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCTION__, __LINE__) 
 extern void file_set_input_type (const char *type_str);
 extern void file_set_input_size (const char *size_str);
