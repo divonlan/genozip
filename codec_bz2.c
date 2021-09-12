@@ -36,27 +36,6 @@ static const char *BZ2_errstr (int err)
     }
 }
 
-// a hacky addition to bzlib - this should go into bzlib.c
-uint64_t BZ2_consumed (void *bz_file)
-{
-    // note that this struct is not aligned to 32/64 bit. we need to trust that the bzlib compiler
-    // and its options produce a similar alignment to ours...
-    typedef struct {
-        void *a;
-        char  b[5000];
-        int32_t c;
-        uint8_t d;
-        bz_stream strm;
-    } bzFile;
-
-    bz_stream *strm = &((bzFile*)bz_file)->strm;
-
-    uint64_t total_in = ((uint64_t)(strm->total_in_hi32) << 32) |
-                        ((uint64_t) strm->total_in_lo32);
-
-    return total_in - strm->avail_in; // don't include unconsumed data
-}
-
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
                          const char *uncompressed,       // option 1 - compress contiguous data

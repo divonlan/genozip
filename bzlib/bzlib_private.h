@@ -23,7 +23,7 @@
 #define _BZLIB_PRIVATE_H
 
 #include <stdlib.h>
-
+#include <inttypes.h>
 #ifndef BZ_NO_STDIO
 #include <stdio.h>
 #include <ctype.h>
@@ -43,6 +43,7 @@ typedef unsigned char   Bool;
 typedef unsigned char   UChar;
 typedef int             Int32;
 typedef unsigned int    UInt32;
+typedef uint64_t        UInt64;
 typedef short           Int16;
 typedef unsigned short  UInt16;
 

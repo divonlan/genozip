@@ -201,10 +201,8 @@ int BZ_API(BZ2_bzCompressInit)
    s->ptr               = (UInt32*)s->arr1;
 
    strm->state          = s;
-   strm->total_in_lo32  = 0;
-   strm->total_in_hi32  = 0;
-   strm->total_out_lo32 = 0;
-   strm->total_out_hi32 = 0;
+   strm->total_in       = 0;
+   strm->total_out      = 0;
    init_RL ( s );
    prepare_new_block ( s );
    return BZ_OK;
@@ -302,8 +300,7 @@ Bool copy_input_until_stop ( EState* s )
          ADD_CHAR_TO_BLOCK ( s, (UInt32)(*((UChar*)(s->strm->next_in))) ); 
          s->strm->next_in++;
          s->strm->avail_in--;
-         s->strm->total_in_lo32++;
-         if (s->strm->total_in_lo32 == 0) s->strm->total_in_hi32++;
+         s->strm->total_in++;
       }
 
    } else {
@@ -320,8 +317,7 @@ Bool copy_input_until_stop ( EState* s )
          ADD_CHAR_TO_BLOCK ( s, (UInt32)(*((UChar*)(s->strm->next_in))) ); 
          s->strm->next_in++;
          s->strm->avail_in--;
-         s->strm->total_in_lo32++;
-         if (s->strm->total_in_lo32 == 0) s->strm->total_in_hi32++;
+         s->strm->total_in++;
          s->avail_in_expect--;
       }
    }
@@ -348,8 +344,7 @@ Bool copy_output_until_stop ( EState* s )
       s->state_out_pos++;
       s->strm->avail_out--;
       s->strm->next_out++;
-      s->strm->total_out_lo32++;
-      if (s->strm->total_out_lo32 == 0) s->strm->total_out_hi32++;
+      s->strm->total_out++;
    }
 
    return progress_out;
@@ -513,10 +508,8 @@ int BZ_API(BZ2_bzDecompressInit)
    s->bsLive                = 0;
    s->bsBuff                = 0;
    s->calculatedCombinedCRC = 0;
-   strm->total_in_lo32      = 0;
-   strm->total_in_hi32      = 0;
-   strm->total_out_lo32     = 0;
-   strm->total_out_hi32     = 0;
+   strm->total_in           = 0;
+   strm->total_out          = 0;
    s->smallDecompress       = (Bool)small;
    s->ll4                   = NULL;
    s->ll16                  = NULL;
@@ -549,8 +542,7 @@ Bool unRLE_obuf_to_output_FAST ( DState* s )
             s->state_out_len--;
             s->strm->next_out++;
             s->strm->avail_out--;
-            s->strm->total_out_lo32++;
-            if (s->strm->total_out_lo32 == 0) s->strm->total_out_hi32++;
+            s->strm->total_out++;
          }
 
          /* can a new run be started? */
@@ -603,7 +595,6 @@ Bool unRLE_obuf_to_output_FAST ( DState* s )
 
       UInt32       avail_out_INIT = cs_avail_out;
       Int32        s_save_nblockPP = s->save_nblock+1;
-      unsigned int total_out_lo32_old;
 
       while (True) {
 
@@ -661,10 +652,7 @@ Bool unRLE_obuf_to_output_FAST ( DState* s )
       }
 
       return_notr:
-      total_out_lo32_old = s->strm->total_out_lo32;
-      s->strm->total_out_lo32 += (avail_out_INIT - cs_avail_out);
-      if (s->strm->total_out_lo32 < total_out_lo32_old)
-         s->strm->total_out_hi32++;
+      s->strm->total_out += (avail_out_INIT - cs_avail_out);
 
       /* save */
       s->calculatedBlockCRC = c_calculatedBlockCRC;
@@ -719,8 +707,7 @@ Bool unRLE_obuf_to_output_SMALL ( DState* s )
             s->state_out_len--;
             s->strm->next_out++;
             s->strm->avail_out--;
-            s->strm->total_out_lo32++;
-            if (s->strm->total_out_lo32 == 0) s->strm->total_out_hi32++;
+            s->strm->total_out++;
          }
    
          /* can a new run be started? */
@@ -768,8 +755,7 @@ Bool unRLE_obuf_to_output_SMALL ( DState* s )
             s->state_out_len--;
             s->strm->next_out++;
             s->strm->avail_out--;
-            s->strm->total_out_lo32++;
-            if (s->strm->total_out_lo32 == 0) s->strm->total_out_hi32++;
+            s->strm->total_out++;
          }
    
          /* can a new run be started? */
@@ -1004,28 +990,12 @@ void BZ_API(BZ2_bzWrite)
    }
 }
 
-
-/*---------------------------------------------------*/
 void BZ_API(BZ2_bzWriteClose)
                   ( int*          bzerror, 
                     BZFILE*       b, 
                     int           abandon,
-                    unsigned int* nbytes_in,
-                    unsigned int* nbytes_out )
-{
-   BZ2_bzWriteClose64 ( bzerror, b, abandon, 
-                        nbytes_in, NULL, nbytes_out, NULL );
-}
-
-
-void BZ_API(BZ2_bzWriteClose64)
-                  ( int*          bzerror, 
-                    BZFILE*       b, 
-                    int           abandon,
-                    unsigned int* nbytes_in_lo32,
-                    unsigned int* nbytes_in_hi32,
-                    unsigned int* nbytes_out_lo32,
-                    unsigned int* nbytes_out_hi32 )
+                    uint64_t*     nbytes_in,
+                    uint64_t*     nbytes_out )
 {
    Int32   n, n2, ret;
    bzFile* bzf = (bzFile*)b;
@@ -1037,10 +1007,8 @@ void BZ_API(BZ2_bzWriteClose64)
    if (ferror(bzf->handle))
       { BZ_SETERR(BZ_IO_ERROR); return; };
 
-   if (nbytes_in_lo32 != NULL) *nbytes_in_lo32 = 0;
-   if (nbytes_in_hi32 != NULL) *nbytes_in_hi32 = 0;
-   if (nbytes_out_lo32 != NULL) *nbytes_out_lo32 = 0;
-   if (nbytes_out_hi32 != NULL) *nbytes_out_hi32 = 0;
+   if (nbytes_in  != NULL) *nbytes_in = 0;
+   if (nbytes_out != NULL) *nbytes_out = 0;
 
    if ((!abandon) && bzf->lastErr == BZ_OK) {
       while (True) {
@@ -1068,14 +1036,10 @@ void BZ_API(BZ2_bzWriteClose64)
          { BZ_SETERR(BZ_IO_ERROR); return; };
    }
 
-   if (nbytes_in_lo32 != NULL)
-      *nbytes_in_lo32 = bzf->strm.total_in_lo32;
-   if (nbytes_in_hi32 != NULL)
-      *nbytes_in_hi32 = bzf->strm.total_in_hi32;
-   if (nbytes_out_lo32 != NULL)
-      *nbytes_out_lo32 = bzf->strm.total_out_lo32;
-   if (nbytes_out_hi32 != NULL)
-      *nbytes_out_hi32 = bzf->strm.total_out_hi32;
+   if (nbytes_in != NULL)
+      *nbytes_in = bzf->strm.total_in;
+   if (nbytes_out != NULL)
+      *nbytes_out = bzf->strm.total_out;
 
    BZ_SETERR(BZ_OK);
    BZ2_bzCompressEnd ( &(bzf->strm) );
@@ -1566,6 +1530,14 @@ const char * BZ_API(BZ2_bzerror) (BZFILE *b, int *errnum)
 }
 #endif
 
+
+// divon addition
+uint64_t BZ2_consumed (BZFILE *b)
+{
+   bz_stream *strm = &((bzFile*)b)->strm;
+
+   return strm->total_in - strm->avail_in; // don't include unconsumed data
+}
 
 /*-------------------------------------------------------------*/
 /*--- end                                           bzlib.c ---*/

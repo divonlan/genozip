@@ -33,13 +33,10 @@ requirements:
     - {{posix}}make
     - {{posix}}sed               # [win]
     - {{posix}}coreutils         # [win]
-    - bzip2
   host:
     - {{native}}gcc-libs         # [win]
-    - bzip2
   run:
     - {{native}}gcc-libs         # [win]
-    - bzip2
     - curl
 
 test:

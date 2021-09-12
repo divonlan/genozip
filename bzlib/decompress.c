@@ -59,9 +59,7 @@ void makeMaps_d ( DState* s )
       s->bsLive += 8;                             \
       s->strm->next_in++;                         \
       s->strm->avail_in--;                        \
-      s->strm->total_in_lo32++;                   \
-      if (s->strm->total_in_lo32 == 0)            \
-         s->strm->total_in_hi32++;                \
+      s->strm->total_in++;                        \
    }
 
 #define GET_UCHAR(lll,uuu)                        \

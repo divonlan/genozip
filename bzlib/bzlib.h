@@ -22,6 +22,8 @@
 #ifndef _BZLIB_H
 #define _BZLIB_H
 
+#include <inttypes.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,13 +51,12 @@ typedef
    struct {
       char *next_in;
       unsigned int avail_in;
-      unsigned int total_in_lo32;
-      unsigned int total_in_hi32;
+      uint64_t total_in; 
+      uint64_t total_consumed;
 
       char *next_out;
       unsigned int avail_out;
-      unsigned int total_out_lo32;
-      unsigned int total_out_hi32;
+      uint64_t total_out;
 
       void *state;
 
@@ -132,7 +133,7 @@ BZ_EXTERN int BZ_API(BZ2_bzDecompressEnd) (
 /*-- High(er) level library functions --*/
 
 #ifndef BZ_NO_STDIO
-#define BZ_MAX_UNUSED 5000
+#define BZ_MAX_UNUSED 65536 // 5000 (divon modification)
 
 typedef void BZFILE;
 
@@ -183,18 +184,8 @@ BZ_EXTERN void BZ_API(BZ2_bzWriteClose) (
       int*          bzerror, 
       BZFILE*       b, 
       int           abandon, 
-      unsigned int* nbytes_in, 
-      unsigned int* nbytes_out 
-   );
-
-BZ_EXTERN void BZ_API(BZ2_bzWriteClose64) ( 
-      int*          bzerror, 
-      BZFILE*       b, 
-      int           abandon, 
-      unsigned int* nbytes_in_lo32, 
-      unsigned int* nbytes_in_hi32, 
-      unsigned int* nbytes_out_lo32, 
-      unsigned int* nbytes_out_hi32
+      uint64_t*     nbytes_in, 
+      uint64_t*     nbytes_out 
    );
 #endif
 
@@ -270,6 +261,8 @@ BZ_EXTERN const char * BZ_API(BZ2_bzerror) (
       int    *errnum
    );
 
+// divon addition
+BZ_EXTERN uint64_t BZ2_consumed (BZFILE* b);
 
 
 #endif
