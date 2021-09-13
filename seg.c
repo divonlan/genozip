@@ -599,8 +599,8 @@ const char sep_without_space[256] = { [';']=true, ['/']=true, ['|']=true, ['.']=
 void seg_compound_field (VBlock *vb, 
                          Context *field_ctx, const char *field, unsigned field_len, 
                          const char *is_sep,   
-                         unsigned nonoptimized_len, // if non-zero, we don't account for the string given, instead, only for this amount (+add_for_eol)
-                         unsigned add_for_eol)      // account for characters beyond the component seperators
+                         unsigned nonoptimized_len,      // if non-zero, we don't account for the string given, instead, only for this amount (+add_for_eol)
+                         unsigned add_additional_bytes)  // account for characters in addition to the field
 {
     // we use nodes.param in D?ESC contexts to track whether all snips in in this VB are the same
     // defaults to 0 (the same) and we set it to 1 if we encounter a different one
@@ -720,7 +720,7 @@ void seg_compound_field (VBlock *vb,
             prefixes[prefixes_len++] = CON_PREFIX_SEP;
     }
 
-    container_seg (vb, field_ctx, &con, prefixes, prefixes_len, (nonoptimized_len ? nonoptimized_len : num_seps) + add_for_eol);
+    container_seg (vb, field_ctx, &con, prefixes, prefixes_len, (nonoptimized_len ? nonoptimized_len : num_seps) + add_additional_bytes);
 }
 
 // an array or array of arrays

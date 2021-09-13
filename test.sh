@@ -799,7 +799,7 @@ batch_misc_cases()
 
     # Test binding SAM files with lots of contigs (no reference)
     echo "binding SAM files with lots of contigs (no reference)"
-    test_multi_bound test.human-unsorted.sam
+    test_multi_bound test.human-collated.sam
 }
 
 # CRAM hg19
@@ -844,16 +844,16 @@ batch_reference()
 
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
-    test_standard "-me$GRCh38" " " test.human-unsorted.sam test.human.fq.gz test.human-sorted.sam
+    test_standard "-me$GRCh38" " " test.human-collated.sam test.human.fq.gz test.human-sorted.sam
 
     echo "multiple bound SAM with --REFERENCE" 
-    test_standard "-mE$GRCh38" " " test.human-unsorted.sam test.human-sorted.sam
+    test_standard "-mE$GRCh38" " " test.human-collated.sam test.human-sorted.sam
     
     echo "SAM with --reference and --password" 
-    test_standard "-me$GRCh38 --password 123" "-p123 -e$GRCh38" test.human-unsorted.sam
+    test_standard "-me$GRCh38 --password 123" "-p123 -e$GRCh38" test.human-collated.sam
     
     echo "SAM with --REFERENCE and --password" 
-    test_standard "-E$GRCh38 --password 123" "-p123" test.human-unsorted.sam
+    test_standard "-E$GRCh38 --password 123" "-p123" test.human-collated.sam
     
     echo "multiple bound VCF with --reference, --md5 using hg19, and unbind"
     test_standard "COPY CONCAT -me$hg19" " " test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2

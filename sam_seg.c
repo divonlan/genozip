@@ -20,6 +20,7 @@
 #include "stats.h"
 #include "txtheader.h"
 #include "kraken.h"
+#include "segconf.h"
 
 static const StoreType optional_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
@@ -1238,6 +1239,18 @@ void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, ui
     qual_ctx->txt_len   += add_bytes;
 }
 
+void sam_seg_qname_field (VBlockSAM *vb, const char *qname, uint32_t qname_len, unsigned add_additional_bytes)
+{
+    // I tried: SNIP_COPY on collation (with segconf.is_collated) but QNAME.b250 worsening (from all_the_same) outweighs the b250 compression 
+    // improvement of the container items
+    ContextP ctx = CTX(SAM_QNAME);
+
+    seg_compound_field (VB, ctx, qname, qname_len, sep_without_space, 0, add_additional_bytes);
+
+    ctx->last_txt_index = ENTNUM (vb->txt_data, qname); // store for kraken
+    ctx->last_txt_len   = qname_len;
+}
+
 // test function called from main_load_reference -> txtfile_test_data: returns true if this line as pos=0 (i.e. unaligned)
 bool sam_zip_is_unaligned_line (const char *line, int len)
 {
@@ -1270,9 +1283,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     // BGI: E100020409L1C001R0030000234 (E100020409=Flow cell serial number, L1=Lane 1, C001R003=column 1 row 3, 0000234=Tile) Also see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
     GET_NEXT_ITEM (SAM_QNAME);
-    seg_compound_field (vb_, CTX(SAM_QNAME), field_start, field_len, sep_without_space, 0, 1 /* \n */);
-    CTX(SAM_QNAME)->last_txt_index = ENTNUM (vb->txt_data, field_start); // store for kraken
-    vb->last_txt_len (SAM_QNAME) = field_len;
+    sam_seg_qname_field (vb, SAM_QNAME_str, SAM_QNAME_len, 1);
 
     SEG_NEXT_ITEM (SAM_FLAG);
     int64_t flag;

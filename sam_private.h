@@ -209,6 +209,7 @@ extern const uint8_t cigar_lookup_bam[16];
 #define dict_id_is_sam_qname_sf dict_id_is_type_1
 #define dict_id_sam_qname_sf dict_id_type_1
 
+extern void sam_seg_qname_field (VBlockSAM *vb, const char *qname, uint32_t qname_len, unsigned add_additional_bytes);
 extern void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len, unsigned *seq_consumed, unsigned *ref_consumed, unsigned *seq_and_ref, unsigned *coverage);
 extern void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len, int64_t tlen_value, PosType pnext_pos_delta, int32_t cigar_seq_len);
 extern void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);

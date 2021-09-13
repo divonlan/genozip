@@ -78,7 +78,7 @@ void vcf_samples_zip_initialize (void)
     }
 
     af_snip_len = sizeof (af_snip);
-    seg_prepare_snip_other (SNIP_OTHER_COPY, _INFO_AF, 0, 0, af_snip, &af_snip_len);
+    seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, af_snip, &af_snip_len);
 }
 
 // used for DP, GQ, A0D and otheres - store in transposed matrix in local 
@@ -359,7 +359,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MINUS)
 static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
 {
     if (vcf_num_samples == 1 && // very little hope that INFO/AF is equal to FORMAT/AF if we have more than one sample
-        !z_dual_coords &&       // note: we can't use SNIP_OTHER_COPY in dual coordinates, because when translating, it will translate the already-translated INFO/AF
+        !z_dual_coords &&       // note: we can't use SNIP_COPY in dual coordinates, because when translating, it will translate the already-translated INFO/AF
         ctx_encountered_in_line_(vb, CTX(INFO_AF)) && 
         str_issame (cell, CTX(INFO_AF)->last_snip))
         return seg_by_ctx (vb, af_snip, af_snip_len, ctx, cell_len);

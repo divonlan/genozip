@@ -40,7 +40,7 @@
 #define SNIP_SPECIAL             '\x8'   // Special algorithm followed by ID of the algorithm 
 #define SNIP_REDIRECTION         '\xB'   // Get the data from another dict_id (can be in b250, local...)
 #define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding flags.store)
-#define SNIP_OTHER_COPY          '\xE'   // Copy the last_txt of another dict_id 
+#define SNIP_COPY                '\xE'   // Copy the last_txt of dict_id (same or other)
 #define SNIP_DUAL                '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
 
 #define SNIP(len) uint32_t snip_len=(len); char snip[len]

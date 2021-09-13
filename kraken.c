@@ -92,7 +92,7 @@ void kraken_set_show_kraken (const char *optarg)
 void kraken_zip_initialize (void)
 {
     copy_taxid_snip_len = sizeof (copy_taxid_snip);
-    seg_prepare_snip_other (SNIP_OTHER_COPY, _KRAKEN_TAXID, 0, 0, copy_taxid_snip, &copy_taxid_snip_len);
+    seg_prepare_snip_other (SNIP_COPY, _KRAKEN_TAXID, 0, 0, copy_taxid_snip, &copy_taxid_snip_len);
 }
 
 void kraken_seg_initialize (VBlock *vb)

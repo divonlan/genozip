@@ -129,7 +129,7 @@ static void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const cha
     ctx->next_local += len;
 }
 
-static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
+static Context *reconstruct_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
 {
     unsigned b64_len = base64_sizeof (DictId);
     ASSERT (b64_len + 1 <= *snip_len, "snip_len=%u but expecting it to be >= %u", *snip_len, b64_len + 1);
@@ -173,7 +173,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
             { snip++; snip_len--; }
         else 
             // we are request to reconstruct from another ctx
-            base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
+            base_ctx = reconstruct_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
 
         switch (base_ctx->ltype) {
             case LT_TEXT:
@@ -223,7 +223,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
 
     case SNIP_OTHER_DELTA: 
-        base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
+        base_ctx = reconstruct_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
         new_value.i = reconstruct_from_delta (vb, snip_ctx, base_ctx, snip, snip_len, reconstruct); 
         have_new_value = true;
         break;
@@ -239,8 +239,8 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
     }
 
-    case SNIP_OTHER_COPY: 
-        base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
+    case SNIP_COPY: 
+        base_ctx = (snip_len==1) ? snip_ctx : reconstruct_get_other_ctx_from_snip (vb, &snip, &snip_len); 
         RECONSTRUCT (last_txtx (vb, base_ctx), base_ctx->last_txt_len);
         new_value = base_ctx->last_value; 
         have_new_value = true;
@@ -264,7 +264,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         break;
 
     case SNIP_REDIRECTION: 
-        base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
+        base_ctx = reconstruct_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
         reconstruct_from_ctx (vb, base_ctx->did_i, 0, reconstruct);
         break;
     
@@ -339,7 +339,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     if (!ctx->dict_id.num) 
         ctx = CTX(ctx->did_i); // ctx->did_i is different than did_i if its an alias
 
-    ctx->last_txt_index = (uint32_t)vb->txt_data.len;
+    uint32_t last_txt_index = (uint32_t)vb->txt_data.len;
 
     // case: we have b250 data
     if (ctx->b250.len ||
@@ -414,8 +414,9 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 
-    ctx->last_txt_len = (uint32_t)vb->txt_data.len - ctx->last_txt_index;
-    ctx->last_line_i  = vb->line_i; // reconstructed on this line
+    ctx->last_txt_index = last_txt_index;
+    ctx->last_txt_len   = (uint32_t)vb->txt_data.len - ctx->last_txt_index;
+    ctx->last_line_i    = vb->line_i; // reconstructed on this line
 
     return (int32_t)ctx->last_txt_len;
 } 

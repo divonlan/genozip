@@ -356,10 +356,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     sam_seg_tlen_field (vb, 0, 0, (int64_t)tlen, CTX(SAM_PNEXT)->last_delta, dl->seq_len); // TLEN
 
-    seg_compound_field ((VBlockP)vb, CTX(SAM_QNAME), next_field, // QNAME
-                        l_read_name-1, sep_without_space, 0, 2 /* account for \0 and l_read_name */); 
-    CTX(SAM_QNAME)->last_txt_index = ENTNUM (vb->txt_data, next_field); // store for kraken
-    vb->last_txt_len (SAM_QNAME) = l_read_name-1;
+    sam_seg_qname_field (vb, next_field, l_read_name-1, 2); // QNAME. account for \0 and l_read_name
 
     next_field += l_read_name; // inc. \0
 

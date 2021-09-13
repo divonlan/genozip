@@ -175,7 +175,7 @@ void fastq_zip_initialize (void)
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;
 
     copy_desc_snip_len = sizeof copy_desc_snip;
-    seg_prepare_snip_other (SNIP_OTHER_COPY, _FASTQ_DESC, 0, 0, copy_desc_snip, &copy_desc_snip_len);
+    seg_prepare_snip_other (SNIP_COPY, _FASTQ_DESC, 0, 0, copy_desc_snip, &copy_desc_snip_len);
 }
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific

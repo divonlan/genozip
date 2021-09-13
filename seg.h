@@ -76,7 +76,7 @@ extern void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, 
 
 extern const char sep_with_space[], sep_without_space[];
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
-                                const char *is_sep, unsigned nonoptimized_len, unsigned add_for_eol);
+                                const char *is_sep, unsigned nonoptimized_len, unsigned add_additional_bytes);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 

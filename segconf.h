@@ -13,7 +13,7 @@ typedef struct {
 
     // Seg parameters - general
     uint64_t vb_size;
-    
+
     // Seg parameters - FASTA
     bool fasta_has_contigs;     // true if the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
 } SegConf;
