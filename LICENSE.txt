@@ -45,7 +45,7 @@ duration that it is in effect. For details, see https://genozip.com/commercial.h
    e. For the purpose of evaluating Genozip, for a duration of 30 days.
 
    f. For the purpose of distributing Genozip to others via a platform that is free of charge,
-including but not limited to an Internet website, a package or container mangement system, or a
+including (but not limited to) an Internet website, a package or container mangement system, or a
 module on an institutional HPC.
 
 3. Additional Terms and conditions
