@@ -44,9 +44,9 @@ duration that it is in effect. For details, see https://genozip.com/commercial.h
 
    e. For the purpose of evaluating Genozip, for a duration of 30 days.
 
-   f. For the purpose of distributing Genozip to others in unmodified form, including this license,
-via a platform that is both publicly accessible and free of charge, including but not limited to an
-Internet website.
+   f. For the purpose of distributing Genozip to others in unmodified form via a platform that is
+free of charge, including but not limited to an Internet website or a module on an institutional
+HPC.
 
 3. Additional Terms and conditions
 
@@ -92,5 +92,5 @@ if Licensor or Developer have been advised of the possibility of such damages.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 12.0.33
+Genozip license version: 12.0.34
 
