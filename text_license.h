@@ -25,7 +25,7 @@ static const char *license[] = {
     "   c. For any legal purpose, if a Commercial License was purchased and paid for, and for the duration that it is in effect. For details, see https://genozip.com/commercial.html or email "EMAIL_SALES".",
     "   d. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols.",
     "   e. For the purpose of evaluating Genozip, for a duration of 30 days.",
-    "   f. For the purpose of distributing Genozip to others in unmodified form via a platform that is free of charge, including but not limited to an Internet website or a module on an institutional HPC.",
+    "   f. For the purpose of distributing Genozip to others via a platform that is free of charge, including (but not limited to) an Internet website, a package or container management system, or a module on an institutional HPC.",
     
     "3. Additional Terms and conditions",
     "   a. You must fully and accurately complete the registration, either by completing the registeration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing "EMAIL_REGISTER".",
