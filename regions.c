@@ -56,7 +56,7 @@ static bool regions_parse_pos (const char *str, Region *reg)
 
         // case: "1000000-5" (start 1000000, end 999996)
         if (reg->start_pos > reg->end_pos && reg->end_pos < 1000) 
-            reg->end_pos = MAX (1, reg->start_pos - reg->end_pos + 1);
+            reg->end_pos = MAX_(1, reg->start_pos - reg->end_pos + 1);
 
         return true;
     }
@@ -370,8 +370,8 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
     if (chreg->start_pos > max_pos || chreg->end_pos < min_pos) 
         return false; // no intersection with this chromosome
 
-    *intersect_min_pos = MAX (min_pos, chreg->start_pos);
-    *intersect_max_pos = MIN (max_pos, chreg->end_pos);
+    *intersect_min_pos = MAX_(min_pos, chreg->start_pos);
+    *intersect_max_pos = MIN_(max_pos, chreg->end_pos);
     *revcomp = chreg->revcomp;
 
     return true;

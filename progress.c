@@ -107,9 +107,9 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
 
     double percent;
     if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
-        percent = MIN (((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
+        percent = MIN_(((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
     else
-        percent = MIN (((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
+        percent = MIN_(((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
 
     // need to update progress indicator, max once a second or if 100% is reached
 

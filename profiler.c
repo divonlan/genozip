@@ -45,6 +45,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(ctx_compress_one_dict_fragment);
     ADD(zfile_uncompress_section);
     ADD(buf_alloc);
+    ADD(dispatcher_recycle_vbs);
     ADD(txtfile_read_vblock);
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
@@ -64,6 +65,9 @@ void profiler_add (ConstVBlockP vb)
     ADD(ref_contigs_compress);
     ADD(linesorter_compress_recon_plan);
     ADD(linesorter_compress_qsort);
+    ADD(ref_load_stored_reference);
+    ADD(ref_read_one_range);
+    ADD(ref_uncompress_one_range);
     ADD(tmp1);
     ADD(tmp2);
     ADD(tmp3);
@@ -105,10 +109,14 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     if (command != ZIP) { // this is a uncompress operation
 
         iprint0 ("GENOUNZIP main thread (piz_one_txt_file):\n");
+        PRINT (piz_read_global_area, 1);
+        PRINT (ref_load_stored_reference, 2);
+        PRINT (ref_read_one_range, 3);
+        PRINT (ref_uncompress_one_range, 3);
+        PRINT (ctx_read_all_dictionaries, 2);
+        PRINT (ctx_dict_build_word_lists, 3);
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
-        PRINT (ctx_read_all_dictionaries, 1)
-        PRINT (ctx_dict_build_word_lists, 2);
         PRINT (bgzf_io_thread, 1);
         PRINT (write, 1);
         iprintf ("GENOUNZIP compute threads: %u\n", ms(p->compute));
@@ -164,6 +172,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     }    
 
     PRINT (buf_alloc, 0);
+    PRINT (dispatcher_recycle_vbs, 0);
     PRINT (generate_rev_complement_genome, 0);
     
     iprintf ("tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));

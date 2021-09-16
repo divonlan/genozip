@@ -98,7 +98,7 @@ static void vcf_tags_cmdline_add_attr (const char *option, DictIdType dtype, STR
         if (!tag->dest_lens[attr]) 
             STRcpyi(tag->dest, attr, dest);
 
-        tag->source = MAX (tag->source, source); // the more authortative prevails 
+        tag->source = MAX_(tag->source, source); // the more authortative prevails 
     }
 }
 
@@ -118,7 +118,7 @@ void vcf_tags_cmdline_add_symmetrical (const char *option, DictIdType dtype, STR
 
     // add to new or existing tag
     vcf_tags_cmdline_add_attr (option, dtype, STRa(attr_str), STRa(tag_name), STRa(dest_tag_name), TAG_CMDLINE_DST);
-    command_line_tags.len = MAX (command_line_tags.len, save_len); // restore
+    command_line_tags.len = MAX_(command_line_tags.len, save_len); // restore
 }
 
 // eg "FORMAT/ADF:STRAND>ADR|REFALT>ADF2,..."

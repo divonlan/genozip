@@ -116,7 +116,7 @@ typedef struct {
     DidIType my_did_i, st_did_i;
     int64_t txt_len, z_size;
     const char *name;
-    char type[20];
+    const char *type;
     StrText did_i, words, hash, uncomp_dict, comp_dict, comp_b250, comp_data;
     double pc_of_txt, pc_of_z, pc_dict, pc_singletons, pc_failed_singletons, pc_hash_occupancy;
 } StatsByLine;
@@ -257,12 +257,12 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
     bufprintf (evb, &z_file->STATS_buf, "\nSystem info: OS=%s cores=%u endianity=%s\n", 
                arch_get_os(), arch_get_num_cores(), arch_get_endianity());
     bufprintf (evb, &z_file->STATS_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &z_file->STATS_buf, "did_i Name            Type            #Words  Snips-(%% of #Words)        Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  %s\n", "");
-    bufprintf (evb, &z_file->STATS_buf, "                                     in file   Dict  Local   Both         Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip%s\n", "");
+    bufprintf (evb, &z_file->STATS_buf, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  %s\n", "");
+    bufprintf (evb, &z_file->STATS_buf, "                                         in file   Dict  Local   Both     Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip%s\n", "");
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &z_file->STATS_buf, "%-2.2s    %-15.15s %-6.6s %15s  %4.*f%%  %4.*f%%  %4.*f%% %12s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+            bufprintf (evb, &z_file->STATS_buf, "%-2.2s    %-17.17s %-17.17s %6s  %4.*f%%  %4.*f%%  %4.*f%% %8s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
                        s->did_i.s, s->name, s->type, s->words.s, 
                        PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
                        s->hash.s, s->pc_hash_occupancy, // Up to here - these don't appear in the total
@@ -311,7 +311,7 @@ void stats_compress (void)
 
         ASSERTW (s->z_size >= 0, "Hmm... s->z_size=%"PRId64" is negative for %s", s->z_size, s->name);
 
-        if (ctx && !ctx->b250.num_b250_words && !ctx->txt_len && !ctx->b250.len && !ctx->is_stats_parent && !s->z_size) 
+        if (ctx && !ctx->b250.num_ctx_words && !ctx->txt_len && !ctx->b250.len && !ctx->is_stats_parent && !s->z_size) 
             continue;
 
         s->txt_len = SEC(i) == SEC_TXT_HEADER  ? txtheader_get_bound_headers_len()
@@ -325,19 +325,30 @@ void stats_compress (void)
         all_z_size      += s->z_size;
         all_txt_len     += s->txt_len;
 
-        s->name = ctx ? ctx->tag_name : ST_NAME (SEC(i)); 
-        strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
+        if (ctx) {
+            s->name = ctx->tag_name;
+            s->type = ctx->st_did_i != DID_I_NONE ? ZCTX(ctx->st_did_i)->tag_name : ctx->tag_name;
+        }
+        else {
+            s->name = ST_NAME (SEC(i)); 
+            s->type = "Global";
+        }
+
+        uint64_t n_words = !ctx                     ? 0
+                         : ctx->b250.num_ctx_words  ? ctx->b250.num_ctx_words
+                         : ctx->ltype != LT_TEXT    ? ctx->local.num_ctx_words
+                         :                            0; // no data in context
 
         if (ctx) {
             s->my_did_i             = ctx->did_i;
             s->st_did_i             = ctx->st_did_i;
             s->did_i                = str_uint_commas ((uint64_t)ctx->did_i); 
-            s->words                = str_uint_commas (ctx->b250.num_b250_words);
-            s->pc_dict              = !ctx->b250.num_b250_words ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->b250.num_b250_words;
-            s->pc_singletons        = !ctx->b250.num_b250_words ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->b250.num_b250_words;
-            s->pc_failed_singletons = !ctx->b250.num_b250_words ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->b250.num_b250_words;
+            s->words                = str_uint_commas_limit (n_words, 99999);
+            s->pc_dict              = !ctx->b250.num_ctx_words ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->b250.num_ctx_words;
+            s->pc_singletons        = !ctx->b250.num_ctx_words ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->b250.num_ctx_words;
+            s->pc_failed_singletons = !ctx->b250.num_ctx_words ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->b250.num_ctx_words;
             s->pc_hash_occupancy    = !ctx->global_hash_prime   ? 0 : 100.0 * (double)(ctx->nodes.len + ctx->ol_nodes.len) / (double)ctx->global_hash_prime;
-            s->hash                 = str_uint_commas (ctx->global_hash_prime);
+            s->hash                 = str_size (ctx->global_hash_prime);
             s->uncomp_dict          = str_size (ctx->dict.len);
             s->comp_dict            = str_size (dict_compressed_size);
         }

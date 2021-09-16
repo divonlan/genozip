@@ -19,14 +19,14 @@
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
 typedef struct ContainerItem {
-    DictId dict_id;  
+    DictId dict_id;                        // note: the code counts on this field being first (assigning "item = { dict_id }")
     uint8_t did_i_small;                   // PIZ only: can store dids 0->254, 255 means did_i too large to store
 
     // seperator[0] values with bit 7 set (0x80) are interpreted as flags rather than a seperator, in 
     // which case seperator[1] is a parameter of the flags
     #define CI_ITEM_HAS_FLAG(item) ((uint8_t)(item)->seperator[0] & 0x80)
     #define CI_TRANS_NUL   ((uint8_t)0x81) // In translated mode: '\0' seperator 
-    #define CI_TRANS_NOR   ((uint8_t)0x82) // In translated mode: NO RECONSTRUCT: don't reconstruct number, just store it in last_value (not implemented for LT_SEQUENCE, LT_BITMAP, Containers, Sequences)
+    #define CI_TRANS_NOR   ((uint8_t)0x82) // In translated mode: reconstruct prefix, consume but don't reconstruct value. If item is a sub-container - NOT propagated to this sub-container.
     #define CI_TRANS_MOVE  ((uint8_t)0x84) // (ORed) in addition: in translated: txt_data.len is moved seperator[1] bytes (0-255), after all recontruction and/or translation
     #define CI_NATIVE_NEXT ((uint8_t)0x88) // in non-translated mode: seperator is in seperator[1]
     uint8_t seperator[2];                  // 2 byte seperator reconstructed after the item (or flags)
@@ -60,10 +60,10 @@ typedef struct ContainerItem {
     char repsep[2];                    /* repeat seperator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 
-typedef struct Container      { CONTAINER_FIELDS(MAX_FIELDS) } Container;
-typedef struct MiniContainer  { CONTAINER_FIELDS(1) } MiniContainer;
-#define NUM_SMALL_CONTAINER_SUBFIELDS 16
-typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) } SmallContainer;
+typedef struct Container       { CONTAINER_FIELDS(MAX_FIELDS) } Container;
+typedef struct MiniContainer   { CONTAINER_FIELDS(1)          } MiniContainer;
+typedef struct SmallContainer  { CONTAINER_FIELDS(16)         } SmallContainer;
+typedef struct MediumContainer { CONTAINER_FIELDS(80)         } MediumContainer;
 
 #pragma pack()
 #define con_nitems(con) ((con).nitems_hi * 256 + (con).nitems_lo)
@@ -72,6 +72,11 @@ typedef struct SmallContainer { CONTAINER_FIELDS(NUM_SMALL_CONTAINER_SUBFIELDS) 
 #define con_dec_nitems(con) con_set_nitems ((con), con_nitems (con) - 1)
 #define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
 
+// prefixes may be NULL, or:
+// [0] CON_PREFIX_SEP - start
+//     container-wide-prefix (may be empty)  + CON_PREFIX_SEP
+//     a prefix for each item (may be empty) + CON_PREFIX_SEP
+// empty prefixes of trailing items may be omitted
 extern void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned prefixes_len, char *snip, unsigned *snip_len);
 extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, const char *prefixes, unsigned prefixes_len, const char *ren_prefixes, unsigned ren_prefixes_len, unsigned add_bytes, bool *is_new);
 #define container_seg(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), 0, 0, (add_bytes), NULL)

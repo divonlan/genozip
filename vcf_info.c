@@ -31,12 +31,12 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, STRp(value))
     // also tried delta vs DP4, but it made it worse
     Context *ctx_basecounts;
     if (ctx_has_value_in_line (vb, _INFO_BaseCounts, &ctx_basecounts)) {
-        seg_delta_vs_other (vb, ctx_dp, ctx_basecounts, value, value_len, -1);
+        seg_delta_vs_other (VB, ctx_dp, ctx_basecounts, value, value_len, -1);
         return false; // caller needn't seg
     }
     else {
         // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample)
-        ctx_set_last_value (vb, ctx_dp, (int64_t)atoi (value));
+        ctx_set_last_value (VB, ctx_dp, (int64_t)atoi (value));
         return true; // caller should seg
     }
 }
@@ -259,10 +259,12 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
 // -------
 
 // checks if value is identifcal to the REF or one of the ALT alleles, and if so segs a SPECIAL snip
-static bool vcf_seg_INFO_allele (VBlockVCF *vb, Context *ctx, STRp(value)) // returns true if caller still needs to seg 
+static void vcf_seg_INFO_allele (VBlock *vb_, Context *ctx, STRp(value)) // returns true if caller still needs to seg 
 {
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
     // short circuit in common case of '.'
-    if (value_len == 1 && *value == '.') return true; // caller should seg
+    if (value_len == 1 && *value == '.') goto fail; // caller should seg
     
     int allele = -1;
     
@@ -281,12 +283,14 @@ static bool vcf_seg_INFO_allele (VBlockVCF *vb, Context *ctx, STRp(value)) // re
             }
     }
 
-    if (allele == -1) return true; // caller should seg
+    if (allele == -1) goto fail;
 
     char snip[] = { SNIP_SPECIAL, VCF_SPECIAL_ALLELE, '0' + vb->line_coords, '0' + allele /* ASCII 48...147 */ };
     seg_by_ctx (vb, snip, sizeof (snip), ctx, value_len);
-    
-    return false;
+    return;
+
+fail:
+    seg_by_ctx (vb, value, value_len, ctx, value_len); 
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
@@ -308,7 +312,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
     if (!refalt_len) goto done; // variant is single coordinate in the other coordinate
 
     char *tab = memchr (refalt, '\t', refalt_len);
-    ASSPIZ (tab, "Invalid refalt: \"%.*s\"", MIN (refalt_len, 100), refalt);
+    ASSPIZ (tab, "Invalid refalt: \"%.*s\"", MIN_(refalt_len, 100), refalt);
 
     // case: the allele is REF
     if (allele == 0)
@@ -388,7 +392,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, STR
     seg_by_ctx (vb, snip, value_len+2, ctx_basecounts, value_len); 
     
     ctx_basecounts->flags.store = STORE_INT;
-    ctx_set_last_value (vb, ctx_basecounts, sum);
+    ctx_set_last_value (VB, ctx_basecounts, sum);
 
     return false; // we already segged - caller needn't seg
 }
@@ -449,67 +453,6 @@ TRANSLATOR_FUNC (vcf_piz_luft_XREV)
     RECONSTRUCT (items[0], item_lens[0]);
 
     return true;
-}
-
-// --------
-// INFO/CSQ
-// --------
-
-// INFO fields with a format originating from the VEP software, eg
-// vep=T|intergenic_variant|MODIFIER|||Intergenic||||||||||||1|||SNV||||||||||||||||||||||||
-static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *vep_ctx, STRp(field))
-{
-    Container con = { .repsep = { ',' }, 
-                      .drop_final_repeat_sep = true,
-                      .keep_empty_item_sep   = true }; // don't delete the | before an empty item
-
-    Context *sf_ctxs[MAX_FIELDS] = {};
-
-    uint32_t item_i=0;
-    const char *item_start = field;
-    for (uint32_t i=0; i < field_len+1; i++) {
-        if (i == field_len || field[i] == ',' || field[i] == '|') { // end of item
-            if (item_i == con_nitems(con)) {
-                ASSVCF (!con.repeats, 
-                        "expecting all repeats of %s to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has more: %.*s", 
-                        vep_ctx->tag_name, con_nitems(con), con.repeats, field_len, field);
-
-                ASSVCF (item_i < MIN (126, MAX_FIELDS), "exceeded the max number of %s items=%u", 
-                        vep_ctx->tag_name, MIN (126, MAX_FIELDS)); // the 126 constraint is just the context naming scheme
-                
-                char name[8];
-                sprintf (name, "%c%c_%.3s", item_i < 63 ? '_' : '`', '@' + (item_i % 63), vep_ctx->tag_name);
-                DictId dict_id = dict_id_make (name, 6, DTYPE_VCF_INFO);
-
-                sf_ctxs[item_i] = ctx_get_ctx (vb, dict_id);
-                sf_ctxs[item_i]->st_did_i = vep_ctx->did_i;
-
-                con.items[item_i] = (ContainerItem){ .dict_id   = dict_id, 
-                                                     .seperator = { field[i]=='|' ? '|' : 0 } };
-                con_inc_nitems (con);                                     
-            }
-
-            unsigned item_len = &field[i] - item_start;
-            seg_by_ctx (vb, item_start, item_len, sf_ctxs[item_i], item_len + (i != field_len));
-
-            item_i++;
-            item_start = &field[i+1];
-
-            if (field[i] != '|') { // end of repeat
-                ASSVCF (!con.repeats || item_i == con_nitems(con), 
-                        "expecting all repeats of %s to have the same number of items, %u, as the first repeat, but repeat %u (0-based) has only %u items: %.*s", 
-                        vep_ctx->tag_name, con_nitems(con), con.repeats, item_i, field_len, field);
-            
-                con.repeats++;
-                item_i=0;
-            }
-        }
-    }
-
-    container_seg (vb, vep_ctx, &con, 0, 0, 0);
-
-    // TODO: recover and seg just the field as-is, rather than throw an error, if its not the CSQ format we expect
-    // (need to roll back all changes to subfields)
 }
 
 // -------
@@ -589,7 +532,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
 static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_str, unsigned end_len) // note: ctx is INFO/END *not* POS (despite being an alias)
 {
     // END is an alias of POS
-    seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | SPF_UNLIMIED_DELTA, 0, end_str, end_len, 0, end_len);
+    seg_pos_field (VB, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | SPF_UNLIMIED_DELTA, 0, end_str, end_len, 0, end_len);
 
     // add end_delta to dl for sorting. it is used only in case chrom and pos are identical
     DATA_LINE (vb->line_i)->end_delta = vb->last_delta (VCF_POS);
@@ -604,7 +547,7 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
 
         // case: we don't yet handle END translation in case of a reverse strand
         if (is_xstrand)            
-            REJECT_SUBFIELD (LO_INFO, end_ctx, "Genozip limitation: variant with INFO/END and chain file alignment with a negative strand%s", "");
+            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tGenozip limitation: variant with INFO/END and chain file alignment with a negative strand%s", "");
 
         // case: END goes beyond the end of the chain file alignment and its a <DEL>
         else if (vb->is_del_sv && end > aln_last_pos) {
@@ -615,20 +558,20 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
             // case: END falls in the gap after - <DEL> is still valid but translated END needs to be closer to POS to avoid gap - 
             // we don't yet do this
             if (end <= aln_last_pos + gap_after)
-                REJECT_SUBFIELD (LO_INFO, end_ctx, "Genozip limitation: <DEL> variant: INFO/END=%.*s is in the gap after the end of the chain file alignment", end_len, end_str);
+                REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tGenozip limitation: <DEL> variant: INFO/END=%.*s is in the gap after the end of the chain file alignment", end_len, end_str);
     
             // case: END falls on beyond the gap (next alignment or beyond) - this variant cannot be lifted
             else
-                REJECT_SUBFIELD (LO_INFO, end_ctx, "<DEL> variant: INFO/END=%.*s is beyond the end of the chain file alignment and also beyond the gap after the alignment", end_len, end_str);
+                REJECT_SUBFIELD (LO_INFO, end_ctx, ".\t<DEL> variant: INFO/END=%.*s is beyond the end of the chain file alignment and also beyond the gap after the alignment", end_len, end_str);
         }
 
         // case: END goes beyond the end of the chain file alignment and its NOT a <DEL>
         else if (!vb->is_del_sv && end > aln_last_pos) 
-            REJECT_SUBFIELD (LO_INFO, end_ctx, "POS and INFO/END=%.*s are not on the same chain file alignment", end_len, end_str);
+            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tPOS and INFO/END=%.*s are not on the same chain file alignment", end_len, end_str);
 
         // case: invalid value. since we use SPF_UNLIMIED_DELTA, any integer value should succeed
         else if (!CTX(VCF_POS)->last_delta)
-            REJECT_SUBFIELD (LO_INFO, end_ctx, "INFO/END=%.*s has an invalid value", end_len, end_str);        
+            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tINFO/END=%.*s has an invalid value", end_len, end_str);        
     }
 }
 
@@ -720,58 +663,47 @@ done:
 // INFO/CLNHGVS
 // ------------
 
-// <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
-// handles the common case of SNPs: "NC_000023.10:g.154507173T>G"
-static bool vcf_seg_INFO_CLNHGVS (VBlockVCF *vb, ContextP ctx, STRp(value))
+// SNP case: "NC_000023.10:g.154507173T>G"
+static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    if (vb->main_ref_len != 1 || vb->main_alt_len != 1)
-        goto fail; // not a SNP
-
-    if (ctx_encountered_in_line (vb, _INFO_END, NULL)) 
-        goto fail; // we can't use this if there is an END before CLNHGVS, as it will change last_int(VCF_POS) during reconstruction
-
-    // data in variant
-    PosType pos = DATA_LINE (vb->line_i)->pos[0];
+    PosType pos = DATA_LINE (vb->line_i)->pos[0]; // data in variant
     char pos_str[30];
     unsigned pos_str_len = str_int (pos, pos_str);
 
-    if (value_len < 3 + pos_str_len) goto fail;
+    if (value_len < 3 + pos_str_len) return false;
 
     const char *v = &value[value_len - 3];
-    if (v[0] != vb->main_refalt[0] || v[1] != '>' || v[2] != vb->main_refalt[2]) goto fail; // REF/ALT differs
+    if (v[0] != vb->main_refalt[0] || v[1] != '>' || v[2] != vb->main_refalt[2]) return false; // REF/ALT differs
 
     v -= pos_str_len;
-    if (memcmp (v, pos_str, pos_str_len)) goto fail; // POS differs
+    if (memcmp (v, pos_str, pos_str_len)) return false; // POS differs
 
     SmallContainer con = { 
         .repeats   = 1,
         .nitems_lo = 2,
-        .items = { { .dict_id = (DictId)_INFO_CLNHGVS_pos    },
-                   { .dict_id = (DictId)_INFO_CLNHGVS_refalt } }
+        .items = { { .dict_id = (DictId)_INFO_HGVS_snp_pos    },
+                   { .dict_id = (DictId)_INFO_HGVS_snp_refalt } }
      }; 
 
     // temporarily surround prefix by separators, and seg container with prefix
     SAFE_ASSIGNx (&value[-1], CON_PREFIX_SEP, 1);
     SAFE_ASSIGNx (v,          CON_PREFIX_SEP, 2);
 
-    container_seg (vb, ctx, (ContainerP)&con, &value[-1], v - value + 2, value_len);
+    container_seg (vb, ctx, (ContainerP)&con, &value[-1], v - value + 2, value_len - pos_str_len - 3);
 
     SAFE_RESTOREx(1);
     SAFE_RESTOREx(2);
 
     // seg special snips
-    CTX(INFO_CLNHGVS_pos)->st_did_i = CTX(INFO_CLNHGVS_refalt)->st_did_i = ctx->did_i; // consolidate stats
+    CTX(INFO_HGVS_snp_pos)->st_did_i = CTX(INFO_HGVS_snp_refalt)->st_did_i = ctx->did_i; // consolidate stats
 
-    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_POS    }), 2, CTX(INFO_CLNHGVS_pos),    0);
-    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_REFALT }), 2, CTX(INFO_CLNHGVS_refalt), 0);
-    
-    return false;
+    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_POS    }), 2, CTX(INFO_HGVS_snp_pos),    pos_str_len);
+    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_REFALT }), 2, CTX(INFO_HGVS_snp_refalt), 3);
 
-fail:
-    return true; // not yet segged
+    return true;
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_POS)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
 {
     ContextP pos_ctx = CTX (VCF_POS);
     
@@ -785,7 +717,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_POS)
     return false; // no new value
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_REFALT)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_REFALT)
 {
     const char *refalt;
     reconstruct_peek (vb, CTX (VCF_REFALT), &refalt, NULL); // this special works only on SNPs, so length is always 3
@@ -795,6 +727,309 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_REFALT)
     RECONSTRUCT1 (refalt[2]);
 
     return false; // no new value
+}
+
+// Deletion case: "n.10571909_10571915delCCCGCCG" (POS=10571908 ; 10571909 are the bases except for the left-anchor, CCCGCCG is the payload of the indel)
+//                "NC_000001.10:g.5993401_5993405del" REF=TAAAAC ALT=T POS=5993397
+//                "NC_000001.10:g.6038478del" REF=AG ALT=A POS=6038476
+// Insertion case: "n.10659939_10659940insTG" (POS=10659939 ; TG is the payload of the indel) 
+// Delins: "NC_000001.10:g.5987727_5987729delinsCCACG" POS=5987727 REF=GTT ALT=CCACG
+typedef enum { DEL, INS, DELINS } HgvsType;
+static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), const char *op, HgvsType t)
+{
+    const char *payload = &op[3];
+    unsigned payload_len = (unsigned)(&value[value_len] - payload);
+
+    if (payload_len) switch (t) {
+        case DEL    : // Payload is expected to be the same as the REF field, without the first, left-anchor, base
+                      if (payload_len != vb->main_ref_len-1 || memcmp (payload, &vb->main_refalt[1], payload_len)) return false;
+                      break;
+        case INS    : // Payload is expected to be the same as the ALT field, without the first, left-anchor, base
+                      if (payload_len != vb->main_alt_len-1 || memcmp (payload, &vb->main_refalt[vb->main_ref_len+2], payload_len)) return false;
+                      break;
+                      // Payload is expected to be the same as the entire ALT field
+        case DELINS : if (payload_len != vb->main_alt_len || memcmp (payload, &vb->main_refalt[vb->main_ref_len+1], payload_len)) return false;
+                      break;
+    }
+
+    // beginning of number is one after the '.' - scan backwards
+    const char *start_pos = op-1;
+    while (start_pos[-1] != '.' && start_pos > value) start_pos--;
+    if (start_pos[-1] != '.') return false;
+
+    str_split (start_pos, op-start_pos, 2, '_', pos, false);
+
+    PosType pos[2];
+    if (!str_get_int (poss[0], pos_lens[0], &pos[0])) return false;
+    
+    if (n_poss == 2) {
+        if (!str_get_int (poss[1], pos_lens[1], &pos[1])) return false;
+        if (pos[0] + payload_len - 1 != pos[1]) return false;
+    }
+    
+    static const DictId dict_id_start_pos[3] = { { _INFO_HGVS_del_start_pos }, { _INFO_HGVS_ins_start_pos }, { _INFO_HGVS_ins_start_pos  } }; // INS and DELINS use the same start_pos
+    static const DictId dict_id_end_pos[3]   = { { _INFO_HGVS_del_end_pos   }, { _INFO_HGVS_ins_end_pos   }, { _INFO_HGVS_delins_end_pos } };
+    static const DictId dict_id_payload[3]   = { { _INFO_HGVS_del_payload   }, { _INFO_HGVS_ins_payload   }, { _INFO_HGVS_delins_payload } };
+
+    static const DidIType did_i_start_pos[3] = { INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos};
+    static const DidIType did_i_end_pos[3]   = { INFO_HGVS_del_end_pos, INFO_HGVS_ins_end_pos, INFO_HGVS_delins_end_pos};
+    static const DidIType did_i_payload[3]   = { INFO_HGVS_del_payload, INFO_HGVS_ins_payload, INFO_HGVS_delins_payload};
+
+    static const uint8_t special_end_pos[3]  = { VCF_SPECIAL_HGVS_DEL_END_POS, VCF_SPECIAL_HGVS_INS_END_POS, VCF_SPECIAL_HGVS_DELINS_END_POS };
+    static const uint8_t special_payload[3]  = { VCF_SPECIAL_HGVS_DEL_PAYLOAD, VCF_SPECIAL_HGVS_INS_PAYLOAD, VCF_SPECIAL_HGVS_DELINS_PAYLOAD };
+
+    SmallContainer con = { 
+        .repeats   = 1,
+        .nitems_lo = 3,
+        .items = { { .dict_id = dict_id_start_pos[t], .seperator = "_" }, // seperator deleted in container_reconstruct_do() if end_pos is missing
+                   { .dict_id = dict_id_end_pos[t]                     },
+                   { .dict_id = dict_id_payload[t]                     } } }; 
+
+    // preper prefixes - a container-wide prefix, and the op is the prefix for item [2]
+    unsigned header_len = start_pos - value;
+    unsigned op_len = (t==DELINS ? 6 : 3);
+    unsigned prefixes_len = header_len + op_len + 5 /* separators */;
+    char prefixes[prefixes_len];
+    prefixes[0] = prefixes[header_len+1] = prefixes[header_len+2] = prefixes[header_len+3] = prefixes[header_len+4+op_len] = CON_PREFIX_SEP;
+    memcpy (&prefixes[1], value, header_len);
+    memcpy (&prefixes[header_len+4], op, op_len);
+    
+    container_seg (vb, ctx, (ContainerP)&con, prefixes, prefixes_len, value_len - pos_lens[0] - (n_poss==2 ? pos_lens[1] : 0) - payload_len);
+
+    // seg special snips
+    CTX(did_i_start_pos[t])->st_did_i = CTX(did_i_end_pos[t])->st_did_i = CTX(did_i_payload[t])->st_did_i = ctx->did_i; // consolidate stats
+    CTX(did_i_start_pos[t])->flags.store = STORE_INT; // consumed by vcf_piz_special_INFO_HGVS_DEL_END_POS
+
+    seg_pos_field (VB, did_i_start_pos[t], VCF_POS, SPF_UNLIMIED_DELTA, 0, 0, 0, pos[0], pos_lens[0]);
+    
+    // We pos_lens[1] only if the payload is longer than 1
+    if (n_poss == 2)
+        seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, special_end_pos[t] }), 2, CTX(did_i_end_pos[t]), pos_lens[1]);
+    else
+        seg_by_ctx (vb, NULL, 0, CTX(did_i_end_pos[t]), 0); // becomes WORD_INDEX_MISSING - container_reconstruct_do will remove the preceding _
+
+    // the del payload is optional - we may or may not have it
+    if (payload_len)
+        seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, special_payload[t] }), 2, CTX(did_i_payload[t]), payload_len);
+    else
+        seg_by_ctx (vb, NULL, 0, CTX(did_i_payload[t]), 0); 
+
+    return true;
+}
+
+// <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
+static void vcf_seg_INFO_HGVS (VBlock *vb_, ContextP ctx, STRp(value))
+{
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
+    if (ctx_encountered_in_line (vb, _INFO_END, NULL)) 
+        goto fail; // we can't use this if there is an END before CLNHGVS, as it will change last_int(VCF_POS) during reconstruction
+
+    // if main->refalt is different than REFALT then we can't use this function, as reconstruction is based on VCF_REFALT
+    if (vb->line_coords == DC_LUFT && (LO_IS_OK_SWITCH (last_ostatus) || LO_IS_REJECTED (last_ostatus) || *CTX(VCF_oXSTRAND)->last_snip == 'X'))
+        goto fail;
+
+    SAFE_NULT (value);
+
+    bool success = false;
+    const char *op;
+    if      (vb->main_ref_len == 1 && vb->main_alt_len == 1) success = vcf_seg_INFO_HGVS_snp   (vb, ctx, STRa(value));
+    else if ((op = strstr (value, "delins")))                success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DELINS); // must be before del and ins
+    else if ((op = strstr (value, "del")))                   success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DEL);
+    else if ((op = strstr (value, "ins")))                   success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, INS);
+    
+    SAFE_RESTORE;
+    
+    if (success) return;
+
+fail:
+    seg_by_ctx (vb, value, value_len, ctx, value_len); 
+}
+
+static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockP vb, HgvsType t)
+{
+    STR (refalt);
+    reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt)); // this special works only on SNPs, so length is always 3
+
+    SAFE_NULT (refalt);
+    const char *tab = strchr (refalt, '\t');
+    ASSPIZ (tab, "invalid REF+ALT=\"%.*s\"", STRf(refalt));
+    SAFE_RESTORE;
+
+    // reconstruct the DEL payload - this is the REF except for the first (anchor) base. reconstruct with one (possibly overlapping) copy
+    static uint64_t start_pos_dnum[3] = { _INFO_HGVS_del_start_pos, _INFO_HGVS_ins_start_pos, _INFO_HGVS_ins_start_pos }; // ins and delins share start_pos
+    const char *alt   = tab + 1;
+    const char *after = &refalt[refalt_len];
+
+    PosType start_pos = ECTX (start_pos_dnum[t])->last_value.i;
+    PosType end_pos = (t == DEL) ? (start_pos + tab - refalt - 2)
+                    : (t == INS) ? (start_pos + after - alt - 2)
+                    : /* DELINS */ (start_pos + after - alt - 1);
+
+    RECONSTRUCT_INT (end_pos);
+}
+
+// three separate SPECIAL snips, so that they each because all_the_same
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DEL);    return false; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, INS);    return false; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_END_POS) { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DELINS); return false; }
+
+static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockP vb, HgvsType t)
+{
+    STR (refalt);
+    reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt)); // this special works only on SNPs, so length is always 3
+
+    SAFE_NULT (refalt);
+    const char *tab = strchr (refalt, '\t');
+    SAFE_RESTORE;
+
+    ASSPIZ (tab, "invalid REF+ALT=\"%.*s\"", STRf(refalt));
+
+    const char *alt   = tab + 1;
+    const char *after = &refalt[refalt_len];
+
+    const char *payload = (t == DEL) ? (refalt + 1) // REF except for the anchor base
+                        : (t == INS) ? (alt + 1)    // ALT except for the anchor base
+                        : /* DELINS */ alt;         // the entire ALT
+
+    PosType payload_len = (t == DEL) ? (tab - refalt - 1)
+                        : (t == INS) ? (after - alt - 1)
+                        : /* DELINS */ (after - alt);
+
+    memmove (AFTERENT(char, vb->txt_data), payload, payload_len);
+    vb->txt_data.len += payload_len;
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_PAYLOAD)    { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, DEL);    return false; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_PAYLOAD)    { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, INS);    return false; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD) { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, DELINS); return false; }
+
+// --------
+// INFO/CSQ
+// --------
+
+// ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
+// Originating from the VEP software
+// example: CSQ=-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000423562|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000438504|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000450305|transcribed_unprocessed_pseudogene|6/6||ENST00000450305.2:n.448_449delGC||448-449|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000456328|processed_transcript|3/3||ENST00000456328.2:n.734_735delGC||734-735|||||rs780379327|1||1||deletion|1|HGNC|37102|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000488147|unprocessed_pseudogene||||||||||rs780379327|1|917|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000515242|transcribed_unprocessed_pseudogene|3/3||ENST00000515242.2:n.727_728delGC||727-728|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000518655|transcribed_unprocessed_pseudogene|3/4||ENST00000518655.2:n.565_566delGC||565-566|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000538476|unprocessed_pseudogene||||||||||rs780379327|1|924|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000541675|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|regulatory_region_variant|MODIFIER|||RegulatoryFeature|ENSR00001576075|CTCF_binding_site||||||||||rs780379327|1||||deletion|1|||||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|
+static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *ctx, STRp(value))
+{
+    static const MediumContainer csq = {
+        .nitems_lo   = 70, 
+        .drop_final_repeat_sep = true,
+        .repsep      = {','},
+        .items       = { { .dict_id={ _INFO_CSQ_Allele             }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Consequence        }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_IMPACT             }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SYMBOL             }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Gene               }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Feature            }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Feature            }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Feature            }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_EXON               }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_INTRON             }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HGVSc              }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HGVSp              }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_cDNA_position      }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_CDS_position       }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Protein_position   }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Amino_acids        }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Codons             }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Existing_variation }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_ALLELE_NUM         }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_DISTANCE           }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_STRAND             }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_FLAGS              }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_VARIANT_CLASS      }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_MINIMISED          }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SYMBOL_SOURCE      }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HGNC_ID            }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_CANONICAL          }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_TSL                }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_APPRIS             }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_CCDS               }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_ENSP               }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SWISSPROT          }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_TREMBL             }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_UNIPARC            }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_GENE_PHENO         }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SIFT               }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_PolyPhen           }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_DOMAINS            }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HGVS_OFFSET        }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_CLIN_SIG           }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SOMATIC            }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_PHENO              }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_PUBMED             }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_MOTIF_NAME         }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_MOTIF_POS          }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HIGH_INF_POS       }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_MOTIF_SCORE_CHANGE }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_LoF                }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_LoF_filter         }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_LoF_flags          }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_LoF_info           }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_context            }, .seperator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_ancestral          }                     } } };
+
+    SegCallback callbacks[70] = { [ 0] =  vcf_seg_INFO_allele,  // INFO_CSQ_Allele
+                                  // [10] = vcf_seg_INFO_HGVS,  // INFO_CSQ_HGVSc - commented out bc compresses better without - bc POS with HGVS is relative rather than absolute
+                                  [12] = seg_integer_or_not_cb, // INFO_CSQ_cDNA_position - usually "int", sometimes "int-int" where int is an integer or ? 
+                                  [13] = seg_integer_or_not_cb, // INFO_CSQ_CDS_position
+                                  [14] = seg_integer_or_not_cb, // INFO_CSQ_Protein_position
+                                  [17] = seg_id_field_do,       // INFO_CSQ_Existing_variation
+                                  [19] = seg_integer_or_not_cb, // INFO_CSQ_DISTANCE 
+                                };
+    seg_array_of_struct (VB, ctx, csq, value, value_len, callbacks);
+}
+
+// --------
+// INFO/ANN
+// --------
+
+// ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
+// See: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
+// example: ANN=T|intergenic_region|MODIFIER|U2|ENSG00000277248|intergenic_region|ENSG00000277248|||n.10510103A>T||||||
+static inline void vcf_seg_INFO_ANN (VBlockVCF *vb, Context *ctx, STRp(value))
+{
+    static const MediumContainer ann = {
+        .nitems_lo   = 16, 
+        .drop_final_repeat_sep = true,
+        .repsep      = {','},
+        .items       = { { .dict_id={ _INFO_A0Allele             }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_A1Annotation         }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_A2Annotation_Impact  }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_A3Gene_Name          }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_A4Gene_ID            }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_A5Feature_Type       }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_A6Feature_ID         }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_A7Transcript_BioType }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_A8Rank               }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_A9HGVS_c             }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_AaHGVS_p             }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_AbcDNA               }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_AcCDS                }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_AdAA                 }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_AeDistance           }, .seperator = {'|'} }, 
+                         { .dict_id={ _INFO_AfErrors             }                     } } };
+
+    seg_array_of_struct (VB, ctx, ann, value, value_len, (SegCallback[]){vcf_seg_INFO_allele,0,0,0,0,0,0,0,0,vcf_seg_INFO_HGVS,0,0,0,0,0,0});
 }
 
 // --------------
@@ -893,7 +1128,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
 static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
 {
     #define CALL(f) do { (f); not_yet_segged = false; } while(0) 
-    #define CALL_WITH_FALLBACK(f) do { if (f (vb, ctx, value, value_len)) seg_by_ctx ((VBlockP)vb, value, value_len, ctx, value_len); \
+    #define CALL_WITH_FALLBACK(f) do { if (f (vb, ctx, value, value_len)) seg_by_ctx (VB, value, value_len, ctx, value_len); \
                                        not_yet_segged = false; } while(0) 
 
     unsigned modified_len = value_len + 20;
@@ -941,10 +1176,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
     // note: looks at snips before optimization, we're counting on the optimization not changing the validation outcome
     if (vb->line_coords == DC_PRIMARY && needs_translation (ctx)) {
 
-        if (DT_FUNC(vb, translator)[ctx->luft_trans]((VBlockP)vb, ctx, (char *)value, value_len, 0, true)) 
+        if (DT_FUNC(vb, translator)[ctx->luft_trans](VB, ctx, (char *)value, value_len, 0, true)) 
             ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
         else 
-            REJECT_SUBFIELD (LO_INFO, ctx, "Cannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            
+            REJECT_SUBFIELD (LO_INFO, ctx, ".\tCannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            
     }
 
     // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
@@ -975,11 +1210,11 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
 
     //##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
     else if (dnum == _INFO_AN) 
-        seg_set_last_txt (vb, ctx, value, value_len, STORE_INT);
+        seg_set_last_txt (VB, ctx, value, value_len, STORE_INT);
 
     // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
     else if (dnum == _INFO_AF) {
-        seg_set_last_txt (vb, ctx, value, value_len, STORE_FLOAT);
+        seg_set_last_txt (VB, ctx, value, value_len, STORE_FLOAT);
         ctx->keep_snip = true; // consumed by vcf_seg_FORMAT_AF
     }
 
@@ -988,14 +1223,16 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         CALL (vcf_seg_INFO_AC (vb, ctx, value, value_len)); 
 
     else if (dnum == _INFO_MLEAC && ctx_has_value_in_line (vb, _INFO_AC, &other_ctx)) 
-        CALL (seg_delta_vs_other (vb, ctx, other_ctx, value, value_len, -1));
+        CALL (seg_delta_vs_other (VB, ctx, other_ctx, value, value_len, -1));
 
     // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
     else if ((z_dual_coords  && ctx->luft_trans == VCF2VCF_ALLELE) || // if DVCF - apply to all fields (perhaps including AA) with RendAlg=ALLELE
              (!z_dual_coords && dnum == _INFO_AA)) // apply to INFO/AA if not DVCF
-        CALL_WITH_FALLBACK (vcf_seg_INFO_allele);
+        CALL (vcf_seg_INFO_allele (VB, ctx, value, value_len));
 
     // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
+    // Originating from the VEP software
+    // example: CSQ=-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000423562|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000438504|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000450305|transcribed_unprocessed_pseudogene|6/6||ENST00000450305.2:n.448_449delGC||448-449|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000456328|processed_transcript|3/3||ENST00000456328.2:n.734_735delGC||734-735|||||rs780379327|1||1||deletion|1|HGNC|37102|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000488147|unprocessed_pseudogene||||||||||rs780379327|1|917|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000515242|transcribed_unprocessed_pseudogene|3/3||ENST00000515242.2:n.727_728delGC||727-728|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000518655|transcribed_unprocessed_pseudogene|3/4||ENST00000518655.2:n.565_566delGC||565-566|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000538476|unprocessed_pseudogene||||||||||rs780379327|1|924|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000541675|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|regulatory_region_variant|MODIFIER|||RegulatoryFeature|ENSR00001576075|CTCF_binding_site||||||||||rs780379327|1||||deletion|1|||||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|
     else if (dnum == _INFO_CSQ) 
         CALL (vcf_seg_INFO_CSQ (vb, ctx, value, value_len));
     
@@ -1008,23 +1245,31 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
              dnum == _INFO_GQ_HIST ||
              dnum == _INFO_AGE_HISTOGRAM_HET ||
              dnum == _INFO_AGE_HISTOGRAM_HOM) 
-        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', '|', false, true));
+        CALL (seg_array (VB, ctx, ctx->did_i, value, value_len, ',', '|', false, true, false));
 
     else if (dnum == _INFO_DP4) 
-        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, ',', 0, false, true));
+        CALL (seg_array (VB, ctx, ctx->did_i, value, value_len, ',', 0, false, true, false));
 
     // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
     else if (dnum == _INFO_CLNDN) 
-        CALL (seg_array ((VBlockP)vb, ctx, ctx->did_i, value, value_len, '|', 0, false, false));
+        CALL (seg_array (VB, ctx, ctx->did_i, value, value_len, '|', 0, false, false, false));
 
     // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
     else if (dnum == _INFO_CLNHGVS)
-        not_yet_segged = vcf_seg_INFO_CLNHGVS (vb, ctx, value, value_len);
+        CALL (vcf_seg_INFO_HGVS (VB, ctx, value, value_len));
+
+    // ##INFO=<ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
+    // example: CPIC:0b3ac4db1d8e6e08a87b6942|CPIC:647d4339d5c1ddb78daff52f|CPIC:9968ce1c4d35811e7175cd29|CPIC:PA166160951|CPIC:c6c73562e2b9e4ebceb0b8bc
+    // I tried seg_array_of_struct - it is worse than simple seg
 
     // ##INFO=<ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
     // ##INFO=<ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
     else if (dnum == _INFO_ALLELEID || dnum == _INFO_RS)
-        CALL (seg_integer_or_not (vb, ctx, value, value_len, value_len));
+        CALL (seg_integer_or_not (VB, ctx, value, value_len, value_len));
+
+    // ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
+    else if (dnum == _INFO_ANN) 
+        CALL (vcf_seg_INFO_ANN (vb, ctx, value, value_len));
 
     if (not_yet_segged) 
         seg_by_ctx (vb, value, value_len, ctx, value_len);
@@ -1040,7 +1285,7 @@ static int sort_by_subfield_name (const void *a, const void *b)
     InfoItem *ina = (InfoItem *)a;
     InfoItem *inb = (InfoItem *)b;
     
-    return strncmp (ina->name, inb->name, MIN (ina->name_len, inb->name_len));
+    return strncmp (ina->name, inb->name, MIN_(ina->name_len, inb->name_len));
 }
 
 void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_len)
@@ -1199,8 +1444,7 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
     // if we're compressing a Luft rendition, swap the prefixes
     if (vb->line_coords == DC_LUFT && ren_prefixes_len) 
         container_seg_with_rename (vb, CTX(VCF_INFO), &con, ren_prefixes, ren_prefixes_len, prefixes, prefixes_len, total_names_len /* names inc. = and separator */, NULL);
-    
-    else
+    else 
         container_seg_with_rename (vb, CTX(VCF_INFO), &con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, total_names_len /* names inc. = and separator */, NULL);
 }
 

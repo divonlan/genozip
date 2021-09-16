@@ -84,9 +84,10 @@ void arch_initialize (const char *argv0)
 #endif
 
     // verify that type sizes are as required (types that appear in section headers written to the genozip format)
-    ASSERT0 (sizeof (SectionType) == 1, "expecting sizeof (SectionType)==1");
-    ASSERT0 (sizeof (Codec)       == 1, "expecting sizeof (Codec)==1");
-    ASSERT0 (sizeof (LocalType)   == 1, "expecting sizeof (LocalType)==1");
+    ASSERT0 (sizeof (SectionType) == 1,  "expecting sizeof (SectionType)==1");
+    ASSERT0 (sizeof (Codec)       == 1,  "expecting sizeof (Codec)==1");
+    ASSERT0 (sizeof (LocalType)   == 1,  "expecting sizeof (LocalType)==1");
+    ASSERT0 (sizeof (uint128_t)   == 16, "expecting sizeof (uint128_t)==16");
 
     // verify that order of bit fields in a structure is as expected (this is compiler-implementation dependent, and we go by gcc)
     // it might be endianity-dependent, and we haven't implemented big-endian yet, see: http://mjfrazer.org/mjfrazer/bitfields/

@@ -257,6 +257,26 @@ StrText str_uint_commas (int64_t n)
     return s;
 }
 
+// display comma'd number up and including the limit, and there after with K, M etc.
+StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
+{
+    if (n <= limit) return str_uint_commas (n);
+
+    StrText s;
+
+    if      (n >= (1LL << 50)) sprintf (s.s, "%3.1lfP", ((double)n) / 1000000000000000.0);
+    else if (n >= (1LL << 40)) sprintf (s.s, "%3.1lfT", ((double)n) / 1000000000000.0);
+    else if (n >= (1LL << 30)) sprintf (s.s, "%3.1lfG", ((double)n) / 1000000000.0);
+    else if (n >= (1LL << 20)) sprintf (s.s, "%3.1lfM", ((double)n) / 1000000.0);
+    else if (n >= (1LL << 10)) sprintf (s.s, "%3.1lfK", ((double)n) / 1000.0);
+    else if (n >  0          ) sprintf (s.s, "%3d",     (int)n);
+    else                       sprintf (s.s, "-");
+
+    return s;
+}
+
+
+
 // returns 32 bit float value and/or format: "3.123" -> "%5.3f" ; false if not a simple float
 bool str_get_float (const char *float_str, unsigned float_str_len, 
                     double *value, char format[FLOAT_FORMAT_LEN], unsigned *format_len) // optional outs (format allocated by caller)
@@ -412,7 +432,7 @@ unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_items, ch
         if (str[i] == sep) {
             if (item_i == max_items) {
                 ASSERT (!enforce_msg, "expecting up to %u %s separators but found more: (100 first) %.*s", 
-                        max_items-1, enforce_msg, MIN (str_len, 100), str);
+                        max_items-1, enforce_msg, MIN_(str_len, 100), str);
                 return 0; // too many separators
             }
             items[item_i++] = &str[i+1];
@@ -426,7 +446,7 @@ unsigned str_split_do (const char *str, unsigned str_len, uint32_t max_items, ch
     }
 
     ASSERT (!exactly || !enforce_msg || item_i == max_items, "Expecting the number of %s to be %u, but it is %u: (100 first) \"%.*s\"", 
-            enforce_msg, max_items, str_len ? item_i : 0, MIN (100, str_len), str);
+            enforce_msg, max_items, str_len ? item_i : 0, MIN_(100, str_len), str);
     
     return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
 }
@@ -554,7 +574,7 @@ int str_print_text (const char **text, unsigned num_lines,
         // in Linux and Mac, we can get the actual terminal width
         struct winsize w;
         ioctl(0, TIOCGWINSZ, &w);
-        line_width = MAX (40, w.ws_col); // our wrapper cannot work with to small line widths 
+        line_width = MAX_(40, w.ws_col); // our wrapper cannot work with to small line widths 
 #endif
     }
 
@@ -579,26 +599,16 @@ int str_print_text (const char **text, unsigned num_lines,
 }
 
 // receives a user response, a default "Y" or "N" (or NULL) and modifies the response to be "Y" or "N"
-bool str_verify_y_n (char *response, unsigned response_size, const char *y_or_n)
+bool str_verify_y_n (char *response, unsigned response_size, const char *def_res)
 {
-    ASSERT0 (!y_or_n || (strlen (y_or_n)==1 && (y_or_n[0]=='Y' || y_or_n[0]=='N')), 
-              "y_or_n needs to be NULL, \"Y\" or \"N\"");
+    ASSERT0 (!def_res || (strlen (def_res)==1 && (def_res[0]=='Y' || def_res[0]=='N')), 
+              "def_res needs to be NULL, \"Y\" or \"N\"");
 
-    // default is N (or no default) and first character of the user's response is y or Y
-    if ((!y_or_n || y_or_n[0] == 'N') && (response[0] == 'y' || response[0] == 'Y')) response[0] = 'Y'; 
-    
-    // default is Y (or no default) and first character of the user's response is n or N
-    else if ((!y_or_n || y_or_n[0] == 'Y') && (response[0] == 'n' || response[0] == 'N')) response[0] = 'N';
+    response[0] = response[0] >= 32 ? UPPER_CASE (response[0]) 
+                : def_res           ? def_res[0]
+                :                     0;
 
-    // we have a default, and the response of user is not opposite of the default - return default
-    else if (y_or_n) response[0] = y_or_n[0]; 
-
-    // we don't have a default - we request the user to respond again
-    else return false;
-
-    response[1] = 0;
-
-    return true; // always accept the response
+    return (response[1] < 32) && (response[0] == 'N' || response[0] == 'Y'); // return false if invalid response - we request the user to respond again
 }
 
 bool str_verify_not_empty (char *response, unsigned response_size, const char *unused)
@@ -640,11 +650,11 @@ StrText str_time (void)
     return s;
 }
 
-// C<>G A<>T c<>g a<>t ; other ASCII 32->126 preserved ; other = 0
-const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`tbgdefchijklmnopqrsauvwxyz{|}~";
+// C<>G A<>T c<>g a<>t ; IUPACs: R<>Y K<>M B<>V D<>H (+ lowercase); other ASCII 32->126 preserved ; other = 0
+const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`tvghefcdijmlknopqysaubwxrz{|}~";
 
 // same as COMPLEM[UPPER_CASE(c)]
-const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TBGDEFCHIJKLMNOPQRSAUVWXYZ[\\]^_`TBGDEFCHIJKLMNOPQRSAUVWXYZ{|}~";
+const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`TVGHEFCDIJMLKNOPQYSAUBWXRZ{|}~";
 
 // reverse-complements a string in-place
 char *str_revcomp (char *seq, unsigned seq_len)

@@ -25,6 +25,7 @@
 #include "compressor.h"
 #include "threads.h"
 #include "website.h"
+#include "ref_iupacs.h"
 
 static RefStruct refs[2] = { };
 Reference gref     = &refs[0]; // global reference 
@@ -322,6 +323,8 @@ static void ref_show_sequence (Reference ref)
 // vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET section
 static void ref_uncompress_one_range (VBlockP vb)
 {
+    START_TIMER;
+
     if (!buf_is_alloc (&vb->z_data) || !vb->z_data.len) goto finish; // we have no data in this VB because it was skipped due to --regions or genocat --show-headers
 
     SectionHeaderReference *header = (SectionHeaderReference *)vb->z_data.data;
@@ -429,7 +432,7 @@ static void ref_uncompress_one_range (VBlockP vb)
             initial_flanking_len = (sec_start_within_contig < 0)    ? -sec_start_within_contig       : 0; // nucleotides in the section that are before the start of our contig
             final_flanking_len   = (ref_sec_last_pos > r->last_pos) ? ref_sec_last_pos - r->last_pos : 0; // nucleotides in the section that are after the end of our contig
 
-            bit_index_t start = MAX (sec_start_within_contig, 0);
+            bit_index_t start = MAX_(sec_start_within_contig, 0);
             bit_index_t len   = ref_sec_len - initial_flanking_len - final_flanking_len;
             ASSERT (len >= 0 && len <= ref_sec_len, "expecting ref_sec_len=%"PRIu64" >= initial_flanking_len=%"PRIu64" + final_flanking_len=%"PRIu64,
                     ref_sec_len, initial_flanking_len, final_flanking_len);
@@ -443,7 +446,7 @@ static void ref_uncompress_one_range (VBlockP vb)
             RegionToSet *rts = &NEXTENT (RegionToSet, vb->ref->region_to_set_list);
             spin_unlock (vb->ref->region_to_set_list_spin);
             rts->is_set    = &r->is_set;
-            rts->first_bit = MAX (sec_start_within_contig, 0);
+            rts->first_bit = MAX_(sec_start_within_contig, 0);
             rts->len       = ref_sec_len - initial_flanking_len - final_flanking_len;
         }
    
@@ -466,7 +469,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         BitArray *ref = buf_zfile_buf_to_bitarray (&vb->compressed, ref_sec_len * 2);
 
         // copy the section, excluding the flanking regions
-        bit_array_copy (&r->ref, MAX (sec_start_within_contig, 0) * 2, // dst
+        bit_array_copy (&r->ref, MAX_(sec_start_within_contig, 0) * 2, // dst
                         ref, initial_flanking_len * 2, // src
                         (ref_sec_len - initial_flanking_len - final_flanking_len) * 2); // len
     }
@@ -477,12 +480,16 @@ static void ref_uncompress_one_range (VBlockP vb)
 
 finish:
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. 
+
+    COPY_TIMER (ref_uncompress_one_range);
 }
 
 static Reference ref_load_stored_reference_ref; // ref_read_one_range is run from the main thread, so no thread safetey issues
 static Section sec = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 static void ref_read_one_range (VBlockP vb)
 {
+    START_TIMER;
+
     vb->ref = ref_load_stored_reference_ref;
 
     if (!sections_next_sec2 (&sec, SEC_REFERENCE, SEC_REF_IS_SET) || // no more reference sections
@@ -534,12 +541,16 @@ static void ref_read_one_range (VBlockP vb)
         vb->z_data.len = 0; // roll back if we're only showing headers
 
     vb->ready_to_dispatch = true; // to simplify the code, we will dispatch the thread even if we skip the data, but we will return immediately. 
+
+    COPY_TIMER (ref_read_one_range);
 }
 
 // PIZ: loading a reference stored in the genozip file - this could have been originally stored as REF_INTERNAL or REF_EXT_STORE
 // or this could be a .ref.genozip file (called from load_external->piz_one_txt_file)
 void ref_load_stored_reference (Reference ref)
 {
+    START_TIMER;
+
     ASSERTNOTINUSE (ref->ranges);
 
     if (!(flag.show_headers && exe_type == EXE_GENOCAT)) {
@@ -573,6 +584,8 @@ void ref_load_stored_reference (Reference ref)
     ARRAY (RegionToSet, rts, ref->region_to_set_list);
     for (uint32_t i=0; i < ref->region_to_set_list.len; i++)
         bit_array_set_region (rts[i].is_set, rts[i].first_bit, rts[i].len);
+
+    COPY_TIMER_VB (evb, ref_load_stored_reference);
 }
 
 // ---------------------
@@ -1106,7 +1119,7 @@ static inline unsigned ref_prepare_expected_more_merges (const Range *this_r, in
             break;
     }
 
-    return MIN (more, max_ranges);
+    return MIN_(more, max_ranges);
 }
 
 // compress the reference - one section at the time, using Dispatcher to do them in parallel 
@@ -1298,7 +1311,6 @@ void ref_set_reference (Reference ref, const char *filename, ReferenceType ref_t
     unsigned filename_len;
     if (!filename) {
         const char *env = getenv ("GENOZIP_REFERENCE");
-
         if (!env) return; // nothing to set
         str_split (env, strlen (env), 2, ':', ref_fn, false)
         ASSERT (n_ref_fns, "Invalid value in $GENOZIP_REFERENCE=\"%s\"- expecting a reference file name or two file names separated by a ':'", env);
@@ -1316,23 +1328,27 @@ void ref_set_reference (Reference ref, const char *filename, ReferenceType ref_t
     static int num_explicit = 0; // user can have up to 2 --reference arguments
     ASSINP0 (!is_explicit || (++num_explicit <= 2), "More than two --reference arguments");
     
-    // case two --reference arguments: we move the first to prim_ref, and the second will be gref (destination ref)
-    // note: we we read the first argument, we didn't yet know if there is another one
-    if (num_explicit == 2) {
-        SWAP (gref, prim_ref);
-        ref = gref;
+    // no need for a reference if we're just doing "genocat --show-chain myfile.chain.genozip" (--show-chain only works for genocat and chain files)
+    if (!flag.show_chain) {
+
+        // case two --reference arguments: we move the first to prim_ref, and the second will be gref (destpination ref)
+        // note: we we read the first argument, we didn't yet know if there is another one
+        if (num_explicit == 2) {
+            SWAP (gref, prim_ref);
+            ref = gref;
+        }
+
+        // case: pizzing subsequent files with implicit reference (reference from file header)
+        if (!is_explicit && ref->filename) {
+            if (!strcmp (filename, ref->filename)) return; // same file - we're done
+
+            // in case a different reference is loaded - destroy it
+            ref_destroy_reference (ref, false);
+        }
+    
+        flag.reference    = ref_type; 
+        flag.explicit_ref = is_explicit;
     }
-
-    // case: pizzing subsequent files with implicit reference (reference from file header)
-    if (!is_explicit && ref->filename) {
-        if (!strcmp (filename, ref->filename)) return; // same file - we're done
-
-        // in case a different reference is loaded - destroy it
-        ref_destroy_reference (ref, false);
-    }
-
-    flag.reference    = ref_type; 
-    flag.explicit_ref = is_explicit;
 
     ref->filename = CALLOC (filename_len + 1);
     memcpy ((char*)ref->filename, filename, filename_len);
@@ -1351,7 +1367,6 @@ void ref_set_ref_file_info (Reference ref, Digest md5, const char *fasta_name, u
 }
 
 // display the reference:
-// if --reference is used, normal reference is shown, if --REFERENCE - reverse complement is shown
 // show a subset of the reference if --regions is specified - but only up to one region per chromosome
 void ref_display_ref (Reference ref)
 {
@@ -1380,19 +1395,27 @@ void ref_display_ref (Reference ref)
             // case: normal sequence
             if (!revcomp) {
                 if (display_first_pos == display_last_pos)
-                    printf ("%"PRIu64"\t", display_first_pos + adjust);
+                    iprintf ("%"PRIu64"\t", display_first_pos + adjust);
                 else
-                    printf ("%"PRIu64"-%"PRIu64"\t", display_first_pos + adjust, display_last_pos + adjust);
+                    iprintf ("%"PRIu64"-%"PRIu64"\t", display_first_pos + adjust, display_last_pos + adjust);
 
-                for (PosType pos=display_first_pos; pos <= display_last_pos; pos++)
-                    fputc (ref_base_by_pos (r, pos), stdout);
+                for (PosType pos=display_first_pos, next_iupac_pos=display_first_pos ; pos <= display_last_pos ; pos++) {
+                    char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (gref, r, pos, false, &next_iupac_pos) : 0;
+                    char base = iupac ? iupac : ref_base_by_pos (r, pos);
+                    fputc (base, stdout);
+                }
             }
 
             // case: reverse complement
             else {
-                iprintf ("COMPLEM %"PRIu64"-%"PRIu64"\t", display_last_pos + adjust, display_first_pos + adjust);
-                for (PosType pos=display_last_pos; pos >= display_first_pos; pos--) {
-                    char base = ref_base_by_pos (r, pos);
+                if (display_first_pos == display_last_pos)
+                    iprintf ("COMPLEM %"PRIu64"\t", display_first_pos + adjust);
+                else 
+                    iprintf ("COMPLEM %"PRIu64"-%"PRIu64"\t", display_last_pos + adjust, display_first_pos + adjust);
+
+                for (PosType pos=display_last_pos, next_iupac_pos=display_last_pos; pos >= display_first_pos; pos--) {
+                    char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (gref, r, pos, true, &next_iupac_pos) : 0;
+                    char base = iupac ? iupac : ref_base_by_pos (r, pos);
                     fputc (COMPLEM[(int)base], stdout);
                 }        
             }
@@ -1603,7 +1626,7 @@ RangeStr ref_display_range (const Range *r)
 void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file) /* start_pos=end_pos=0 if entire ref */
 {
     uint64_t start_idx = start_pos ? start_pos - r->first_pos : 0;
-    uint64_t end_idx   = (end_pos ? MIN (end_pos, r->last_pos) : r->last_pos) - r->first_pos;
+    uint64_t end_idx   = (end_pos ? MIN_(end_pos, r->last_pos) : r->last_pos) - r->first_pos;
 
     fprintf (file, "%s: %.*s %"PRId64" - %"PRId64" (len=%u): ", msg, r->chrom_name_len, r->chrom_name, start_pos, end_pos, (uint32_t)(end_pos - start_pos + 1));
     for (uint64_t idx = start_idx; idx <= end_idx; idx++) 
@@ -1613,28 +1636,25 @@ void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, Pos
 }
 
 // outputs in seq, a nul-terminated string of up to (len-1) bases
-char *ref_dis_subrange (const Range *r, PosType start_pos, PosType len, char *seq, bool revcomp) // in_reference allocated by caller to length len
+char *ref_dis_subrange (Reference ref, const Range *r, PosType start_pos, PosType len, char *seq, bool revcomp) // in_reference allocated by caller to length len
 {
-    uint64_t start_idx = start_pos ? start_pos - r->first_pos : 0;
-    uint64_t idx, end_idx;
-
     if (!revcomp) {
-        end_idx = MIN (start_pos + (len-1) - 1, r->last_pos) - r->first_pos; // -1 to leave room for \0
-
-        for (idx = start_idx; idx <= end_idx; idx++) 
-            seq[idx - start_idx] = ref_base_by_idx (r, idx);
-        
-        seq[idx - start_idx] = 0;
+        PosType next_iupac_pos, pos, end_pos = MIN_(start_pos + len - 1 - 1, r->last_pos);  // -1 to leave room for \0
+        for (pos=start_pos, next_iupac_pos=start_pos ; pos <= end_pos; pos++) {
+            char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (ref, r, pos, false, &next_iupac_pos) : 0;
+            seq[pos - start_pos] = iupac ? iupac : ref_base_by_pos (r, pos);
+        }
+        seq[pos - start_pos] = 0;
     }
 
     // revcomp: display the sequence starting at start_pos and going backwards - complemented
     else {
-        end_idx = MAX (start_pos - (len-1) + 1, r->first_pos) - r->first_pos;
-
-        for (idx = start_idx; idx >= end_idx; idx--) 
-            seq[start_idx - idx] = COMPLEM[(int)ref_base_by_idx (r, idx)];
-
-        seq[start_idx - idx] = 0;
+        PosType next_iupac_pos, pos, end_pos = MAX_(start_pos - (len - 1) + 1, r->first_pos);  // -1 to leave room for \0
+        for (pos=start_pos, next_iupac_pos=start_pos ; pos >= end_pos; pos--) {
+            char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (gref, r, pos, true, &next_iupac_pos) : 0;
+            seq[start_pos - pos] = iupac ? iupac : COMPLEM[(int)ref_base_by_pos (r, pos)];
+        }
+        seq[start_pos - pos] = 0;
     }
 
     return seq;
@@ -1702,7 +1722,7 @@ const char *ref_get_cram_ref (Reference ref)
     ASSINP (ref->ref_fasta_name, "cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",
             ref->filename, REF_FILENAME_LEN-1);
 
-    samtools_T_option = MALLOC (MAX (strlen (ref->ref_fasta_name), strlen (ref->filename)) + 10);
+    samtools_T_option = MALLOC (MAX_(strlen (ref->ref_fasta_name), strlen (ref->filename)) + 10);
 
     // case: fasta file is in its original location
     if (file_exists (ref->ref_fasta_name)) 

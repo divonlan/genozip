@@ -458,8 +458,8 @@ uint64_t buf_alloc_do (VBlock *vb,
     if (!requested_size) return 0; // nothing to do
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
-    if (requested_size > REQUEST_TOO_BIG_THREADSHOLD) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspeciously high and might indicate a bug. buf=%s",
+    if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
+        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. buf=%s",
               func, code_line, str_size (requested_size).s, buf_desc (buf).s);
 
     // sanity checks
@@ -480,7 +480,7 @@ uint64_t buf_alloc_do (VBlock *vb,
     }
 
     // add an epsilon to avoid floating point multiplication ending up slightly less than the integer
-    grow_at_least_factor = MAX (1.00000001, grow_at_least_factor); 
+    grow_at_least_factor = MAX_(1.00000001, grow_at_least_factor); 
 
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
     uint64_t new_size = (uint64_t)(requested_size * grow_at_least_factor + 7) & 0xfffffffffffffff8ULL; // aligned to 8 bytes
@@ -506,7 +506,7 @@ uint64_t buf_alloc_do (VBlock *vb,
             if (*overlay_count > 1) {
 
                 abandoned_mem_current += buf->size;
-                abandoned_mem_high_watermark = MAX (abandoned_mem_high_watermark, abandoned_mem_current);
+                abandoned_mem_high_watermark = MAX_(abandoned_mem_high_watermark, abandoned_mem_current);
 
                 (*overlay_count)--; // overlaying buffers are now on their own - no regular buffer
                 buf->memory = buf->data = NULL;
@@ -718,7 +718,7 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
                     (*overlay_count)--;
              
                     abandoned_mem_current += buf->size;
-                    abandoned_mem_high_watermark = MAX (abandoned_mem_high_watermark, abandoned_mem_current);
+                    abandoned_mem_high_watermark = MAX_(abandoned_mem_high_watermark, abandoned_mem_current);
 
                     buf_reset (buf);
                 }
@@ -866,7 +866,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
     ASSERT (!max_entries || src_start_entry < src->len, 
             "buf_copy of %s called from %s:%u: src_start_entry=%"PRIu64" is larger than src->len=%"PRIu64, buf_desc(src).s, func, code_line, src_start_entry, src->len);
 
-    uint64_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
+    uint64_t num_entries = max_entries ? MIN_(max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
     if (num_entries) {

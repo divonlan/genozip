@@ -8,6 +8,8 @@
 #ifndef DICT_ID_GEN_INCLUDED
 #define DICT_ID_GEN_INCLUDED
 
+#define TAG(tag) #tag, sizeof #tag - 1
+
 #define _CHAIN_NAMELUFT ((uint64_t)6072634933624267022)
 #define _CHAIN_STRNDLUFT ((uint64_t)6072634933607559699)
 #define _CHAIN_STARTLUFT ((uint64_t)6072634933876257811)
@@ -170,13 +172,30 @@
 #define _OPTION_X0 ((uint64_t)1765421144)
 #define _OPTION_X1 ((uint64_t)1765421400)
 #define _OPTION_XA ((uint64_t)1513767256)
-#define _OPTION_XA_RNAME ((uint64_t)4993719366467006552)
 #define _OPTION_XN ((uint64_t)1765428824)
 #define _OPTION_XM ((uint64_t)1765428568)
 #define _OPTION_XO ((uint64_t)1765429080)
 #define _OPTION_XG ((uint64_t)1765427032)
 #define _OPTION_XS ((uint64_t)1765430104)
 #define _OPTION_XE ((uint64_t)1765426520)
+#define _OPTION_XA_RNAME ((uint64_t)4993719366685110360)
+#define _OPTION_XA_STRAND ((uint64_t)4921943264803762520)
+#define _OPTION_XA_POS ((uint64_t)23449629681070680)
+#define _OPTION_XA_CIGAR ((uint64_t)5927096965052576600)
+#define _OPTION_XA_NM ((uint64_t)84999000896600)
+#define _OPTION_XA_STRAND_POS ((uint64_t)6003105198858384728)
+#define _OPTION_OA_RNAME ((uint64_t)4993719366685110351)
+#define _OPTION_OA_STRAND ((uint64_t)4921943264803762511)
+#define _OPTION_OA_POS ((uint64_t)23449629681070671)
+#define _OPTION_OA_CIGAR ((uint64_t)5927096965052576591)
+#define _OPTION_OA_NM ((uint64_t)84999000896591)
+#define _OPTION_OA_MAPQ ((uint64_t)5859254915775411535)
+#define _OPTION_SA_RNAME ((uint64_t)4993719366685110355)
+#define _OPTION_SA_STRAND ((uint64_t)4921943264803762515)
+#define _OPTION_SA_POS ((uint64_t)23449629681070675)
+#define _OPTION_SA_CIGAR ((uint64_t)5927096965052576595)
+#define _OPTION_SA_NM ((uint64_t)84999000896595)
+#define _OPTION_SA_MAPQ ((uint64_t)5859254915775411539)
 #define _OPTION_mc ((uint64_t)1765434221)
 #define _OPTION_ms ((uint64_t)1765438317)
 #define _OPTION_BD ((uint64_t)1513768002)
@@ -243,6 +262,23 @@
 #define _INFO_DP4 ((uint64_t)3428548)
 #define _INFO_SF ((uint64_t)18131)
 #define _INFO_VQSLOD ((uint64_t)75107373634006)
+#define _INFO_ANN ((uint64_t)5131969)
+#define _INFO_A0Allele ((uint64_t)7308327811662557377)
+#define _INFO_A1Annotation ((uint64_t)7957695015373844929)
+#define _INFO_A2Annotation_Impact ((uint64_t)8386654066607993537)
+#define _INFO_A3Gene_Name ((uint64_t)7308604759626691521)
+#define _INFO_A4Gene_ID ((uint64_t)4920568956974478529)
+#define _INFO_A5Feature_Type ((uint64_t)7309475598605628865)
+#define _INFO_A6Feature_ID ((uint64_t)4920568956974413505)
+#define _INFO_A7Transcript_BioType ((uint64_t)7309475598824650689)
+#define _INFO_A8Rank ((uint64_t)118121823353025)
+#define _INFO_A9HGVS_c ((uint64_t)7160533562570586561)
+#define _INFO_AaHGVS_p ((uint64_t)8097282285063659969)
+#define _INFO_AbcDNA ((uint64_t)71804410618561)
+#define _INFO_AcCDS ((uint64_t)357627552705)
+#define _INFO_AdAA ((uint64_t)1094804673)
+#define _INFO_AeDistance ((uint64_t)7305804385182049729)
+#define _INFO_AfErrors ((uint64_t)8318833999040833217)
 #define _INFO_END ((uint64_t)4476613)
 #define _INFO_MLEAC ((uint64_t)288857869517)
 #define _INFO_MLEAF ((uint64_t)301742771405)
@@ -252,16 +288,77 @@
 #define _INFO_vep ((uint64_t)7366134)
 #define _INFO_AGE_HISTOGRAM_HET ((uint64_t)6072339247036450753)
 #define _INFO_AGE_HISTOGRAM_HOM ((uint64_t)5570750838538061761)
-#define _INFO_CSQ ((uint64_t)5329859)
 #define _INFO_MAX_AF ((uint64_t)77246586438093)
-#define _INFO_ALLELEID ((uint64_t)3400011325173943489)
+#define _INFO_CSQ ((uint64_t)5329859)
+#define _INFO_CSQ_Allele ((uint64_t)7308327811210752227)
+#define _INFO_CSQ_Consequence ((uint64_t)7305804401960235491)
+#define _INFO_CSQ_IMPACT ((uint64_t)6071768535843156707)
+#define _INFO_CSQ_SYMBOL ((uint64_t)5498686569886987235)
+#define _INFO_CSQ_Gene ((uint64_t)7308890602250384611)
+#define _INFO_CSQ_Feature ((uint64_t)7310034287616800483)
+#define _INFO_CSQ_EXON ((uint64_t)5642825912858917091)
+#define _INFO_CSQ_INTRON ((uint64_t)5642819380213660131)
+#define _INFO_CSQ_HGVSc ((uint64_t)7157159097128935907)
+#define _INFO_CSQ_HGVSp ((uint64_t)8093907819621999331)
+#define _INFO_CSQ_cDNA_position ((uint64_t)7957695014888498147)
+#define _INFO_CSQ_CDS_position ((uint64_t)7957695014888498403)
+#define _INFO_CSQ_Protein_position ((uint64_t)7957695014888498659)
+#define _INFO_CSQ_Amino_acids ((uint64_t)8314886687319877347)
+#define _INFO_CSQ_Codons ((uint64_t)8317708038451718115)
+#define _INFO_CSQ_Existing_variation ((uint64_t)7957695014888499427)
+#define _INFO_CSQ_ALLELE_NUM ((uint64_t)5572446285234137571)
+#define _INFO_CSQ_DISTANCE ((uint64_t)4990918854500903651)
+#define _INFO_CSQ_STRAND ((uint64_t)4921943264570076131)
+#define _INFO_CSQ_FLAGS ((uint64_t)6000836824532217059)
+#define _INFO_CSQ_VARIANT_CLASS ((uint64_t)6004214524252745187)
+#define _INFO_CSQ_MINIMISED ((uint64_t)4919429742334275299)
+#define _INFO_CSQ_SYMBOL_SOURCE ((uint64_t)4990923338446761955)
+#define _INFO_CSQ_HGNC_ID ((uint64_t)4920568810610847971)
+#define _INFO_CSQ_CANONICAL ((uint64_t)5494747002544812515)
+#define _INFO_CSQ_TSL ((uint64_t)5499832338312557283)
+#define _INFO_CSQ_APPRIS ((uint64_t)6001418483363181539)
+#define _INFO_CSQ_CCDS ((uint64_t)5999994559970637027)
+#define _INFO_CSQ_ENSP ((uint64_t)5788056005725353443)
+#define _INFO_CSQ_SWISSPROT ((uint64_t)6075164927261374179)
+#define _INFO_CSQ_TREMBL ((uint64_t)5495039455457933283)
+#define _INFO_CSQ_UNIPARC ((uint64_t)4851011561849060067)
+#define _INFO_CSQ_GENE_PHENO ((uint64_t)5714581154084125155)
+#define _INFO_CSQ_SIFT ((uint64_t)6072621769751231203)
+#define _INFO_CSQ_PolyPhen ((uint64_t)7954879010990932451)
+#define _INFO_CSQ_DOMAINS ((uint64_t)6002815898217562851)
+#define _INFO_CSQ_HGVS_OFFSET ((uint64_t)6072351234056209379)
+#define _INFO_CSQ_AF ((uint64_t)19775126011856099)
+#define _INFO_CSQ_CLIN_SIG ((uint64_t)5136728518844175843)
+#define _INFO_CSQ_SOMATIC ((uint64_t)4848499113355073251)
+#define _INFO_CSQ_PHENO ((uint64_t)5714581154084114915)
+#define _INFO_CSQ_PUBMED ((uint64_t)4919423115199731939)
+#define _INFO_CSQ_MOTIF_NAME ((uint64_t)4993719366451419619)
+#define _INFO_CSQ_MOTIF_POS ((uint64_t)6003105198624692963)
+#define _INFO_CSQ_HIGH_INF_POS ((uint64_t)6003105198624686307)
+#define _INFO_CSQ_MOTIF_SCORE_CHANGE ((uint64_t)4992044754407728355)
+#define _INFO_CSQ_LoF ((uint64_t)5075359277339846115)
+#define _INFO_CSQ_LoF_filter ((uint64_t)8243122701541269219)
+#define _INFO_CSQ_LoF_flags ((uint64_t)8315722354811678179)
+#define _INFO_CSQ_LoF_info ((uint64_t)8027224784449514211)
+#define _INFO_CSQ_context ((uint64_t)8392569455859949539)
+#define _INFO_CSQ_ancestral ((uint64_t)7809649072743328739)
+#define _INFO_ALLELEID ((uint64_t)4920540261761436865)
 #define _INFO_CLNDN ((uint64_t)336153431235)
 #define _INFO_RS ((uint64_t)21458)
-#define _INFO_CLNHGVS ((uint64_t)3400027873733397699)
-#define _INFO_CLNHGVS_pos ((uint64_t)6005065529021984963)
-#define _INFO_CLNHGVS_refalt ((uint64_t)6005065529021985475)
-#define _INFO_DP_HIST ((uint64_t)3400028960361238724)
-#define _INFO_GQ_HIST ((uint64_t)3400028960361238983)
+#define _INFO_CLNHGVS ((uint64_t)23457287222742211)
+#define _INFO_CLNVI ((uint64_t)314980584643)
+#define _INFO_HGVS_snp_pos ((uint64_t)8317990591548305608)
+#define _INFO_HGVS_snp_refalt ((uint64_t)8389187298046456264)
+#define _INFO_HGVS_del_start_pos ((uint64_t)7810759489376170696)
+#define _INFO_HGVS_del_end_pos ((uint64_t)7810759489376170952)
+#define _INFO_HGVS_del_payload ((uint64_t)7810759489376171208)
+#define _INFO_HGVS_ins_start_pos ((uint64_t)8317701419990201800)
+#define _INFO_HGVS_ins_end_pos ((uint64_t)8317701419990202056)
+#define _INFO_HGVS_ins_payload ((uint64_t)8317701419990202312)
+#define _INFO_HGVS_delins_end_pos ((uint64_t)8317701475824777416)
+#define _INFO_HGVS_delins_payload ((uint64_t)8317701475824777672)
+#define _INFO_DP_HIST ((uint64_t)23735472255619268)
+#define _INFO_GQ_HIST ((uint64_t)23735472255619527)
 #define _INFO_SVLEN ((uint64_t)336170079955)
 #define _INFO_LUFT ((uint64_t)1413895628)
 #define _INFO_PRIM ((uint64_t)1296650960)
@@ -270,318 +367,413 @@
 
 typedef enum { CHAIN_NAMELUFT, CHAIN_STRNDLUFT, CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_SIZELUFT, CHAIN_NAMEPRIM, CHAIN_STRNDPRIM, CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_SIZEPRIM, CHAIN_CHAIN, CHAIN_SCORE, CHAIN_ID, CHAIN_VERIFIED, CHAIN_SET, CHAIN_SIZE, CHAIN_GAPS, CHAIN_EOL, CHAIN_TOPLEVEL, CHAIN_SEP, NUM_CHAIN_FIELDS } CHAINFields;
 
-#define CHAIN_MAPPING { \
-    [CHAIN_NAMELUFT] = { _CHAIN_NAMELUFT }, \
-    [CHAIN_STRNDLUFT] = { _CHAIN_STRNDLUFT }, \
-    [CHAIN_STARTLUFT] = { _CHAIN_STARTLUFT }, \
-    [CHAIN_ENDLUFT] = { _CHAIN_ENDLUFT }, \
-    [CHAIN_SIZELUFT] = { _CHAIN_SIZELUFT }, \
-    [CHAIN_NAMEPRIM] = { _CHAIN_NAMEPRIM }, \
-    [CHAIN_STRNDPRIM] = { _CHAIN_STRNDPRIM }, \
-    [CHAIN_STARTPRIM] = { _CHAIN_STARTPRIM }, \
-    [CHAIN_ENDPRIM] = { _CHAIN_ENDPRIM }, \
-    [CHAIN_SIZEPRIM] = { _CHAIN_SIZEPRIM }, \
-    [CHAIN_CHAIN] = { _CHAIN_CHAIN }, \
-    [CHAIN_SCORE] = { _CHAIN_SCORE }, \
-    [CHAIN_ID] = { _CHAIN_ID }, \
-    [CHAIN_VERIFIED] = { _CHAIN_VERIFIED }, \
-    [CHAIN_SET] = { _CHAIN_SET }, \
-    [CHAIN_SIZE] = { _CHAIN_SIZE }, \
-    [CHAIN_GAPS] = { _CHAIN_GAPS }, \
-    [CHAIN_EOL] = { _CHAIN_EOL }, \
-    [CHAIN_TOPLEVEL] = { _CHAIN_TOPLEVEL }, \
-    [CHAIN_SEP] = { _CHAIN_SEP }, \
+#define CHAIN_PREDEFINED { \
+    [CHAIN_NAMELUFT] = { { _CHAIN_NAMELUFT }, TAG(NaMELUFT) }, \
+    [CHAIN_STRNDLUFT] = { { _CHAIN_STRNDLUFT }, TAG(SrNDLUFT) }, \
+    [CHAIN_STARTLUFT] = { { _CHAIN_STARTLUFT }, TAG(StRTLUFT) }, \
+    [CHAIN_ENDLUFT] = { { _CHAIN_ENDLUFT }, TAG(EnDLUFT) }, \
+    [CHAIN_SIZELUFT] = { { _CHAIN_SIZELUFT }, TAG(SiZELUFT) }, \
+    [CHAIN_NAMEPRIM] = { { _CHAIN_NAMEPRIM }, TAG(NAMEPRIM) }, \
+    [CHAIN_STRNDPRIM] = { { _CHAIN_STRNDPRIM }, TAG(SRNDPRIM) }, \
+    [CHAIN_STARTPRIM] = { { _CHAIN_STARTPRIM }, TAG(STRTPRIM) }, \
+    [CHAIN_ENDPRIM] = { { _CHAIN_ENDPRIM }, TAG(ENDPRIM) }, \
+    [CHAIN_SIZEPRIM] = { { _CHAIN_SIZEPRIM }, TAG(SIZEPRIM) }, \
+    [CHAIN_CHAIN] = { { _CHAIN_CHAIN }, TAG(CHAIN) }, \
+    [CHAIN_SCORE] = { { _CHAIN_SCORE }, TAG(SCORE) }, \
+    [CHAIN_ID] = { { _CHAIN_ID }, TAG(ID) }, \
+    [CHAIN_VERIFIED] = { { _CHAIN_VERIFIED }, TAG(VERIFIED) }, \
+    [CHAIN_SET] = { { _CHAIN_SET }, TAG(SET) }, \
+    [CHAIN_SIZE] = { { _CHAIN_SIZE }, TAG(SIZE) }, \
+    [CHAIN_GAPS] = { { _CHAIN_GAPS }, TAG(GAPS) }, \
+    [CHAIN_EOL] = { { _CHAIN_EOL }, TAG(EOL) }, \
+    [CHAIN_TOPLEVEL] = { { _CHAIN_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [CHAIN_SEP] = { { _CHAIN_SEP }, TAG(SEP) }, \
 } 
 
 typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_DESC, FASTA_COMMENT, FASTA_NONREF, FASTA_NONREF_X, FASTA_TOPLEVEL, FASTA_TAXID, NUM_FASTA_FIELDS } FASTAFields;
 
-#define FASTA_MAPPING { \
-    [FASTA_CONTIG] = { _FASTA_CONTIG }, \
-    [FASTA_LINEMETA] = { _FASTA_LINEMETA }, \
-    [FASTA_EOL] = { _FASTA_EOL }, \
-    [FASTA_DESC] = { _FASTA_DESC }, \
-    [FASTA_COMMENT] = { _FASTA_COMMENT }, \
-    [FASTA_NONREF] = { _FASTA_NONREF }, \
-    [FASTA_NONREF_X] = { _FASTA_NONREF_X }, \
-    [FASTA_TOPLEVEL] = { _FASTA_TOPLEVEL }, \
-    [FASTA_TAXID] = { _FASTA_TAXID }, \
+#define FASTA_PREDEFINED { \
+    [FASTA_CONTIG] = { { _FASTA_CONTIG }, TAG(CONTIG) }, \
+    [FASTA_LINEMETA] = { { _FASTA_LINEMETA }, TAG(LINEMETA) }, \
+    [FASTA_EOL] = { { _FASTA_EOL }, TAG(EOL) }, \
+    [FASTA_DESC] = { { _FASTA_DESC }, TAG(DESC) }, \
+    [FASTA_COMMENT] = { { _FASTA_COMMENT }, TAG(COMMENT) }, \
+    [FASTA_NONREF] = { { _FASTA_NONREF }, TAG(NONREF) }, \
+    [FASTA_NONREF_X] = { { _FASTA_NONREF_X }, TAG(NONREF_X) }, \
+    [FASTA_TOPLEVEL] = { { _FASTA_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [FASTA_TAXID] = { { _FASTA_TAXID }, TAG(TAXID) }, \
 } 
 
 typedef enum { FASTQ_CONTIG, FASTQ_DESC, FASTQ_E1L, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_E2L, FASTQ_QUAL, FASTQ_DOMQRUNS, FASTQ_TOPLEVEL, FASTQ_TAXID, FASTQ_LINE3, NUM_FASTQ_FIELDS } FASTQFields;
 
-#define FASTQ_MAPPING { \
-    [FASTQ_CONTIG] = { _FASTQ_CONTIG }, \
-    [FASTQ_DESC] = { _FASTQ_DESC }, \
-    [FASTQ_E1L] = { _FASTQ_E1L }, \
-    [FASTQ_SQBITMAP] = { _FASTQ_SQBITMAP }, \
-    [FASTQ_NONREF] = { _FASTQ_NONREF }, \
-    [FASTQ_NONREF_X] = { _FASTQ_NONREF_X }, \
-    [FASTQ_GPOS] = { _FASTQ_GPOS }, \
-    [FASTQ_STRAND] = { _FASTQ_STRAND }, \
-    [FASTQ_E2L] = { _FASTQ_E2L }, \
-    [FASTQ_QUAL] = { _FASTQ_QUAL }, \
-    [FASTQ_DOMQRUNS] = { _FASTQ_DOMQRUNS }, \
-    [FASTQ_TOPLEVEL] = { _FASTQ_TOPLEVEL }, \
-    [FASTQ_TAXID] = { _FASTQ_TAXID }, \
-    [FASTQ_LINE3] = { _FASTQ_LINE3 }, \
+#define FASTQ_PREDEFINED { \
+    [FASTQ_CONTIG] = { { _FASTQ_CONTIG }, TAG(CONTIG) }, \
+    [FASTQ_DESC] = { { _FASTQ_DESC }, TAG(DESC) }, \
+    [FASTQ_E1L] = { { _FASTQ_E1L }, TAG(E1L) }, \
+    [FASTQ_SQBITMAP] = { { _FASTQ_SQBITMAP }, TAG(SQBITMAP) }, \
+    [FASTQ_NONREF] = { { _FASTQ_NONREF }, TAG(NONREF) }, \
+    [FASTQ_NONREF_X] = { { _FASTQ_NONREF_X }, TAG(NONREF_X) }, \
+    [FASTQ_GPOS] = { { _FASTQ_GPOS }, TAG(GPOS) }, \
+    [FASTQ_STRAND] = { { _FASTQ_STRAND }, TAG(STRAND) }, \
+    [FASTQ_E2L] = { { _FASTQ_E2L }, TAG(E2L) }, \
+    [FASTQ_QUAL] = { { _FASTQ_QUAL }, TAG(QUAL) }, \
+    [FASTQ_DOMQRUNS] = { { _FASTQ_DOMQRUNS }, TAG(DOMQRUNS) }, \
+    [FASTQ_TOPLEVEL] = { { _FASTQ_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [FASTQ_TAXID] = { { _FASTQ_TAXID }, TAG(TAXID) }, \
+    [FASTQ_LINE3] = { { _FASTQ_LINE3 }, TAG(LINE3) }, \
 } 
 
 typedef enum { GNRIC_DATA, GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GNRICFields;
 
-#define GNRIC_MAPPING { \
-    [GNRIC_DATA] = { _GNRIC_DATA }, \
-    [GNRIC_TOPLEVEL] = { _GNRIC_TOPLEVEL }, \
+#define GNRIC_PREDEFINED { \
+    [GNRIC_DATA] = { { _GNRIC_DATA }, TAG(DATA) }, \
+    [GNRIC_TOPLEVEL] = { { _GNRIC_TOPLEVEL }, TAG(TOPLEVEL) }, \
 } 
 
 typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, GFF3_COMMENT, ATTR_ID, ATTR_Name, ATTR_Alias, ATTR_Parent, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, ATTR_Gap, ATTR_Derives_from, ATTR_Note, ATTR_Dbxref, ATTR_Ontology_term, ATTR_Is_circular, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_Variant_freq, ATTR_ancestral_allele, ATTR_Variant_effect, ATTR_sift_prediction, ATTR_polyphen_prediction, ATTR_variant_peptide, ENSTid, NUM_GFF3_FIELDS } GFF3Fields;
 
-#define GFF3_MAPPING { \
-    [GFF3_SEQID] = { _GFF3_SEQID }, \
-    [GFF3_SOURCE] = { _GFF3_SOURCE }, \
-    [GFF3_TYPE] = { _GFF3_TYPE }, \
-    [GFF3_START] = { _GFF3_START }, \
-    [GFF3_END] = { _GFF3_END }, \
-    [GFF3_SCORE] = { _GFF3_SCORE }, \
-    [GFF3_STRAND] = { _GFF3_STRAND }, \
-    [GFF3_PHASE] = { _GFF3_PHASE }, \
-    [GFF3_ATTRS] = { _GFF3_ATTRS }, \
-    [GFF3_EOL] = { _GFF3_EOL }, \
-    [GFF3_TOPLEVEL] = { _GFF3_TOPLEVEL }, \
-    [GFF3_COMMENT] = { _GFF3_COMMENT }, \
-    [ATTR_ID] = { _ATTR_ID }, \
-    [ATTR_Name] = { _ATTR_Name }, \
-    [ATTR_Alias] = { _ATTR_Alias }, \
-    [ATTR_Parent] = { _ATTR_Parent }, \
-    [ATTR_Target] = { _ATTR_Target }, \
-    [ATTR_Target_ID] = { _ATTR_Target_ID }, \
-    [ATTR_Target_POS] = { _ATTR_Target_POS }, \
-    [ATTR_Target_STRAND] = { _ATTR_Target_STRAND }, \
-    [ATTR_Gap] = { _ATTR_Gap }, \
-    [ATTR_Derives_from] = { _ATTR_Derives_from }, \
-    [ATTR_Note] = { _ATTR_Note }, \
-    [ATTR_Dbxref] = { _ATTR_Dbxref }, \
-    [ATTR_Ontology_term] = { _ATTR_Ontology_term }, \
-    [ATTR_Is_circular] = { _ATTR_Is_circular }, \
-    [ATTR_Variant_seq] = { _ATTR_Variant_seq }, \
-    [ATTR_Reference_seq] = { _ATTR_Reference_seq }, \
-    [ATTR_Variant_freq] = { _ATTR_Variant_freq }, \
-    [ATTR_ancestral_allele] = { _ATTR_ancestral_allele }, \
-    [ATTR_Variant_effect] = { _ATTR_Variant_effect }, \
-    [ATTR_sift_prediction] = { _ATTR_sift_prediction }, \
-    [ATTR_polyphen_prediction] = { _ATTR_polyphen_prediction }, \
-    [ATTR_variant_peptide] = { _ATTR_variant_peptide }, \
-    [ENSTid] = { _ENSTid }, \
+#define GFF3_PREDEFINED { \
+    [GFF3_SEQID] = { { _GFF3_SEQID }, TAG(SEQID) }, \
+    [GFF3_SOURCE] = { { _GFF3_SOURCE }, TAG(SOURCE) }, \
+    [GFF3_TYPE] = { { _GFF3_TYPE }, TAG(TYPE) }, \
+    [GFF3_START] = { { _GFF3_START }, TAG(START) }, \
+    [GFF3_END] = { { _GFF3_END }, TAG(END) }, \
+    [GFF3_SCORE] = { { _GFF3_SCORE }, TAG(SCORE) }, \
+    [GFF3_STRAND] = { { _GFF3_STRAND }, TAG(STRAND) }, \
+    [GFF3_PHASE] = { { _GFF3_PHASE }, TAG(PHASE) }, \
+    [GFF3_ATTRS] = { { _GFF3_ATTRS }, TAG(ATTRS) }, \
+    [GFF3_EOL] = { { _GFF3_EOL }, TAG(EOL) }, \
+    [GFF3_TOPLEVEL] = { { _GFF3_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [GFF3_COMMENT] = { { _GFF3_COMMENT }, TAG(COMMENT) }, \
+    [ATTR_ID] = { { _ATTR_ID }, TAG(ID) }, \
+    [ATTR_Name] = { { _ATTR_Name }, TAG(Name) }, \
+    [ATTR_Alias] = { { _ATTR_Alias }, TAG(Alias) }, \
+    [ATTR_Parent] = { { _ATTR_Parent }, TAG(Parent) }, \
+    [ATTR_Target] = { { _ATTR_Target }, TAG(Target) }, \
+    [ATTR_Target_ID] = { { _ATTR_Target_ID }, TAG(T1gtID) }, \
+    [ATTR_Target_POS] = { { _ATTR_Target_POS }, TAG(T2gtPOS) }, \
+    [ATTR_Target_STRAND] = { { _ATTR_Target_STRAND }, TAG(T3gtSTRAND) }, \
+    [ATTR_Gap] = { { _ATTR_Gap }, TAG(Gap) }, \
+    [ATTR_Derives_from] = { { _ATTR_Derives_from }, TAG(Derives_from) }, \
+    [ATTR_Note] = { { _ATTR_Note }, TAG(Note) }, \
+    [ATTR_Dbxref] = { { _ATTR_Dbxref }, TAG(Dbxref) }, \
+    [ATTR_Ontology_term] = { { _ATTR_Ontology_term }, TAG(Ontology_term) }, \
+    [ATTR_Is_circular] = { { _ATTR_Is_circular }, TAG(Is_circular) }, \
+    [ATTR_Variant_seq] = { { _ATTR_Variant_seq }, TAG(Variant_seq) }, \
+    [ATTR_Reference_seq] = { { _ATTR_Reference_seq }, TAG(Reference_seq) }, \
+    [ATTR_Variant_freq] = { { _ATTR_Variant_freq }, TAG(Variant_freq) }, \
+    [ATTR_ancestral_allele] = { { _ATTR_ancestral_allele }, TAG(ancestral_allele) }, \
+    [ATTR_Variant_effect] = { { _ATTR_Variant_effect }, TAG(Variant_effect) }, \
+    [ATTR_sift_prediction] = { { _ATTR_sift_prediction }, TAG(sift_prediction) }, \
+    [ATTR_polyphen_prediction] = { { _ATTR_polyphen_prediction }, TAG(polyphen_prediction) }, \
+    [ATTR_variant_peptide] = { { _ATTR_variant_peptide }, TAG(variant_peptide) }, \
+    [ENSTid] = { { _ENSTid }, TAG(ENSTid) }, \
 } 
 
 typedef enum { KRAKEN_CU, KRAKEN_QNAME, KRAKEN_TAXID, KRAKEN_SEQLEN, KRAKEN_KMERS, KRAKEN_KMERTAX, KRAKEN_KMERLEN, KRAKEN_EOL, KRAKEN_TOPLEVEL, KRAKEN_TOP2TAXID, NUM_KRAKEN_FIELDS } KRAKENFields;
 
-#define KRAKEN_MAPPING { \
-    [KRAKEN_CU] = { _KRAKEN_CU }, \
-    [KRAKEN_QNAME] = { _KRAKEN_QNAME }, \
-    [KRAKEN_TAXID] = { _KRAKEN_TAXID }, \
-    [KRAKEN_SEQLEN] = { _KRAKEN_SEQLEN }, \
-    [KRAKEN_KMERS] = { _KRAKEN_KMERS }, \
-    [KRAKEN_KMERTAX] = { _KRAKEN_KMERTAX }, \
-    [KRAKEN_KMERLEN] = { _KRAKEN_KMERLEN }, \
-    [KRAKEN_EOL] = { _KRAKEN_EOL }, \
-    [KRAKEN_TOPLEVEL] = { _KRAKEN_TOPLEVEL }, \
-    [KRAKEN_TOP2TAXID] = { _KRAKEN_TOP2TAXID }, \
+#define KRAKEN_PREDEFINED { \
+    [KRAKEN_CU] = { { _KRAKEN_CU }, TAG(CU) }, \
+    [KRAKEN_QNAME] = { { _KRAKEN_QNAME }, TAG(QNAME) }, \
+    [KRAKEN_TAXID] = { { _KRAKEN_TAXID }, TAG(TAXID) }, \
+    [KRAKEN_SEQLEN] = { { _KRAKEN_SEQLEN }, TAG(SEQLEN) }, \
+    [KRAKEN_KMERS] = { { _KRAKEN_KMERS }, TAG(KMERS) }, \
+    [KRAKEN_KMERTAX] = { { _KRAKEN_KMERTAX }, TAG(KMERTAX) }, \
+    [KRAKEN_KMERLEN] = { { _KRAKEN_KMERLEN }, TAG(KMERLEN) }, \
+    [KRAKEN_EOL] = { { _KRAKEN_EOL }, TAG(EOL) }, \
+    [KRAKEN_TOPLEVEL] = { { _KRAKEN_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [KRAKEN_TOP2TAXID] = { { _KRAKEN_TOP2TAXID }, TAG(TOP2HASH) }, \
 } 
 
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPLEVEL, ME23_TOP2VCF, NUM_ME23_FIELDS } ME23Fields;
 
-#define ME23_MAPPING { \
-    [ME23_CHROM] = { _ME23_CHROM }, \
-    [ME23_POS] = { _ME23_POS }, \
-    [ME23_ID] = { _ME23_ID }, \
-    [ME23_GENOTYPE] = { _ME23_GENOTYPE }, \
-    [ME23_EOL] = { _ME23_EOL }, \
-    [ME23_TOPLEVEL] = { _ME23_TOPLEVEL }, \
-    [ME23_TOP2VCF] = { _ME23_TOP2VCF }, \
+#define ME23_PREDEFINED { \
+    [ME23_CHROM] = { { _ME23_CHROM }, TAG(CHROM) }, \
+    [ME23_POS] = { { _ME23_POS }, TAG(POS) }, \
+    [ME23_ID] = { { _ME23_ID }, TAG(ID) }, \
+    [ME23_GENOTYPE] = { { _ME23_GENOTYPE }, TAG(GENOTYPE) }, \
+    [ME23_EOL] = { { _ME23_EOL }, TAG(EOL) }, \
+    [ME23_TOPLEVEL] = { { _ME23_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [ME23_TOP2VCF] = { { _ME23_TOP2VCF }, TAG(TOP2VCF) }, \
 } 
 
 typedef enum { PHY_ID, PHY_SEQ, PHY_EOL, PHY_TOPLEVEL, PHY_TOP2FASTA, NUM_PHY_FIELDS } PHYFields;
 
-#define PHY_MAPPING { \
-    [PHY_ID] = { _PHY_ID }, \
-    [PHY_SEQ] = { _PHY_SEQ }, \
-    [PHY_EOL] = { _PHY_EOL }, \
-    [PHY_TOPLEVEL] = { _PHY_TOPLEVEL }, \
-    [PHY_TOP2FASTA] = { _PHY_TOP2FASTA }, \
+#define PHY_PREDEFINED { \
+    [PHY_ID] = { { _PHY_ID }, TAG(ID) }, \
+    [PHY_SEQ] = { { _PHY_SEQ }, TAG(SEQ) }, \
+    [PHY_EOL] = { { _PHY_EOL }, TAG(EOL) }, \
+    [PHY_TOPLEVEL] = { { _PHY_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [PHY_TOP2FASTA] = { { _PHY_TOP2FASTA }, TAG(TOP2FA) }, \
 } 
 
 typedef enum { REF_CONTIG, NUM_REF_FIELDS } REFFields;
 
-#define REF_MAPPING { \
-    [REF_CONTIG] = { _REF_CONTIG }, \
+#define REF_PREDEFINED { \
+    [REF_CONTIG] = { { _REF_CONTIG }, TAG(CONTIG) }, \
 } 
 
-typedef enum { SAM_RNAME, SAM_QNAME, SAM_FLAG, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, SAM_QUAL, SAM_DOMQRUNS, SAM_EOL, SAM_BAM_BIN, SAM_TOPLEVEL, SAM_TOP2BAM, SAM_TOP2FQ, SAM_TOP2FQEX, SAM_TAXID, OPTION_AM, OPTION_AS, OPTION_CC, OPTION_CM, OPTION_E2, OPTION_2NONREF, OPTION_N2ONREFX, OPTION_2GPOS, OPTION_S2TRAND, OPTION_FI, OPTION_H0, OPTION_H1, OPTION_H2, OPTION_LB, OPTION_MC, OPTION_MD, OPTION_MQ, OPTION_NH, OPTION_NM, OPTION_OA, OPTION_OC, OPTION_PG, OPTION_PQ, OPTION_PU, OPTION_RG, OPTION_SA, OPTION_SM, OPTION_TC, OPTION_UQ, OPTION_U2, OPTION_D2OMQRUN, OPTION_ZM, OPTION_X0, OPTION_X1, OPTION_XA, OPTION_XA_RNAME, OPTION_XN, OPTION_XM, OPTION_XO, OPTION_XG, OPTION_XS, OPTION_XE, OPTION_mc, OPTION_ms, OPTION_BD, OPTION_BI, OPTION_BD_BI, OPTION_STRAND, OPTION_RNAME, OPTION_POS, OPTION_CIGAR, OPTION_MAPQ, OPTION_TX, NUM_SAM_FIELDS } SAMFields;
+typedef enum { SAM_RNAME, SAM_QNAME, SAM_FLAG, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, SAM_QUAL, SAM_DOMQRUNS, SAM_EOL, SAM_BAM_BIN, SAM_TOPLEVEL, SAM_TOP2BAM, SAM_TOP2FQ, SAM_TOP2FQEX, SAM_TAXID, OPTION_AM, OPTION_AS, OPTION_CC, OPTION_CM, OPTION_E2, OPTION_2NONREF, OPTION_N2ONREFX, OPTION_2GPOS, OPTION_S2TRAND, OPTION_FI, OPTION_H0, OPTION_H1, OPTION_H2, OPTION_LB, OPTION_MC, OPTION_MD, OPTION_MQ, OPTION_NH, OPTION_NM, OPTION_OA, OPTION_OC, OPTION_PG, OPTION_PQ, OPTION_PU, OPTION_RG, OPTION_SA, OPTION_SM, OPTION_TC, OPTION_UQ, OPTION_U2, OPTION_D2OMQRUN, OPTION_ZM, OPTION_X0, OPTION_X1, OPTION_XA, OPTION_XN, OPTION_XM, OPTION_XO, OPTION_XG, OPTION_XS, OPTION_XE, OPTION_XA_RNAME, OPTION_XA_STRAND, OPTION_XA_POS, OPTION_XA_CIGAR, OPTION_XA_NM, OPTION_XA_STRAND_POS, OPTION_OA_RNAME, OPTION_OA_STRAND, OPTION_OA_POS, OPTION_OA_CIGAR, OPTION_OA_NM, OPTION_OA_MAPQ, OPTION_SA_RNAME, OPTION_SA_STRAND, OPTION_SA_POS, OPTION_SA_CIGAR, OPTION_SA_NM, OPTION_SA_MAPQ, OPTION_mc, OPTION_ms, OPTION_BD, OPTION_BI, OPTION_BD_BI, OPTION_STRAND, OPTION_RNAME, OPTION_POS, OPTION_CIGAR, OPTION_MAPQ, OPTION_TX, NUM_SAM_FIELDS } SAMFields;
 
-#define SAM_MAPPING { \
-    [SAM_RNAME] = { _SAM_RNAME }, \
-    [SAM_QNAME] = { _SAM_QNAME }, \
-    [SAM_FLAG] = { _SAM_FLAG }, \
-    [SAM_POS] = { _SAM_POS }, \
-    [SAM_MAPQ] = { _SAM_MAPQ }, \
-    [SAM_CIGAR] = { _SAM_CIGAR }, \
-    [SAM_RNEXT] = { _SAM_RNEXT }, \
-    [SAM_PNEXT] = { _SAM_PNEXT }, \
-    [SAM_TLEN] = { _SAM_TLEN }, \
-    [SAM_OPTIONAL] = { _SAM_OPTIONAL }, \
-    [SAM_SQBITMAP] = { _SAM_SQBITMAP }, \
-    [SAM_NONREF] = { _SAM_NONREF }, \
-    [SAM_NONREF_X] = { _SAM_NONREF_X }, \
-    [SAM_GPOS] = { _SAM_GPOS }, \
-    [SAM_STRAND] = { _SAM_STRAND }, \
-    [SAM_QUAL] = { _SAM_QUAL }, \
-    [SAM_DOMQRUNS] = { _SAM_DOMQRUNS }, \
-    [SAM_EOL] = { _SAM_EOL }, \
-    [SAM_BAM_BIN] = { _SAM_BAM_BIN }, \
-    [SAM_TOPLEVEL] = { _SAM_TOPLEVEL }, \
-    [SAM_TOP2BAM] = { _SAM_TOP2BAM }, \
-    [SAM_TOP2FQ] = { _SAM_TOP2FQ }, \
-    [SAM_TOP2FQEX] = { _SAM_TOP2FQEX }, \
-    [SAM_TAXID] = { _SAM_TAXID }, \
-    [OPTION_AM] = { _OPTION_AM }, \
-    [OPTION_AS] = { _OPTION_AS }, \
-    [OPTION_CC] = { _OPTION_CC }, \
-    [OPTION_CM] = { _OPTION_CM }, \
-    [OPTION_E2] = { _OPTION_E2 }, \
-    [OPTION_2NONREF] = { _OPTION_2NONREF }, \
-    [OPTION_N2ONREFX] = { _OPTION_N2ONREFX }, \
-    [OPTION_2GPOS] = { _OPTION_2GPOS }, \
-    [OPTION_S2TRAND] = { _OPTION_S2TRAND }, \
-    [OPTION_FI] = { _OPTION_FI }, \
-    [OPTION_H0] = { _OPTION_H0 }, \
-    [OPTION_H1] = { _OPTION_H1 }, \
-    [OPTION_H2] = { _OPTION_H2 }, \
-    [OPTION_LB] = { _OPTION_LB }, \
-    [OPTION_MC] = { _OPTION_MC }, \
-    [OPTION_MD] = { _OPTION_MD }, \
-    [OPTION_MQ] = { _OPTION_MQ }, \
-    [OPTION_NH] = { _OPTION_NH }, \
-    [OPTION_NM] = { _OPTION_NM }, \
-    [OPTION_OA] = { _OPTION_OA }, \
-    [OPTION_OC] = { _OPTION_OC }, \
-    [OPTION_PG] = { _OPTION_PG }, \
-    [OPTION_PQ] = { _OPTION_PQ }, \
-    [OPTION_PU] = { _OPTION_PU }, \
-    [OPTION_RG] = { _OPTION_RG }, \
-    [OPTION_SA] = { _OPTION_SA }, \
-    [OPTION_SM] = { _OPTION_SM }, \
-    [OPTION_TC] = { _OPTION_TC }, \
-    [OPTION_UQ] = { _OPTION_UQ }, \
-    [OPTION_U2] = { _OPTION_U2 }, \
-    [OPTION_D2OMQRUN] = { _OPTION_D2OMQRUN }, \
-    [OPTION_ZM] = { _OPTION_ZM }, \
-    [OPTION_X0] = { _OPTION_X0 }, \
-    [OPTION_X1] = { _OPTION_X1 }, \
-    [OPTION_XA] = { _OPTION_XA }, \
-    [OPTION_XA_RNAME] = { _OPTION_XA_RNAME }, \
-    [OPTION_XN] = { _OPTION_XN }, \
-    [OPTION_XM] = { _OPTION_XM }, \
-    [OPTION_XO] = { _OPTION_XO }, \
-    [OPTION_XG] = { _OPTION_XG }, \
-    [OPTION_XS] = { _OPTION_XS }, \
-    [OPTION_XE] = { _OPTION_XE }, \
-    [OPTION_mc] = { _OPTION_mc }, \
-    [OPTION_ms] = { _OPTION_ms }, \
-    [OPTION_BD] = { _OPTION_BD }, \
-    [OPTION_BI] = { _OPTION_BI }, \
-    [OPTION_BD_BI] = { _OPTION_BD_BI }, \
-    [OPTION_STRAND] = { _OPTION_STRAND }, \
-    [OPTION_RNAME] = { _OPTION_RNAME }, \
-    [OPTION_POS] = { _OPTION_POS }, \
-    [OPTION_CIGAR] = { _OPTION_CIGAR }, \
-    [OPTION_MAPQ] = { _OPTION_MAPQ }, \
-    [OPTION_TX] = { _OPTION_TX }, \
+#define SAM_PREDEFINED { \
+    [SAM_RNAME] = { { _SAM_RNAME }, TAG(RNAME) }, \
+    [SAM_QNAME] = { { _SAM_QNAME }, TAG(QNAME) }, \
+    [SAM_FLAG] = { { _SAM_FLAG }, TAG(FLAG) }, \
+    [SAM_POS] = { { _SAM_POS }, TAG(POS) }, \
+    [SAM_MAPQ] = { { _SAM_MAPQ }, TAG(MAPQ) }, \
+    [SAM_CIGAR] = { { _SAM_CIGAR }, TAG(CIGAR) }, \
+    [SAM_RNEXT] = { { _SAM_RNEXT }, TAG(RNEXT) }, \
+    [SAM_PNEXT] = { { _SAM_PNEXT }, TAG(PNEXT) }, \
+    [SAM_TLEN] = { { _SAM_TLEN }, TAG(TLEN) }, \
+    [SAM_OPTIONAL] = { { _SAM_OPTIONAL }, TAG(OPTIONAL) }, \
+    [SAM_SQBITMAP] = { { _SAM_SQBITMAP }, TAG(SQBITMAP) }, \
+    [SAM_NONREF] = { { _SAM_NONREF }, TAG(NONREF) }, \
+    [SAM_NONREF_X] = { { _SAM_NONREF_X }, TAG(NONREF_X) }, \
+    [SAM_GPOS] = { { _SAM_GPOS }, TAG(GPOS) }, \
+    [SAM_STRAND] = { { _SAM_STRAND }, TAG(STRAND) }, \
+    [SAM_QUAL] = { { _SAM_QUAL }, TAG(QUAL) }, \
+    [SAM_DOMQRUNS] = { { _SAM_DOMQRUNS }, TAG(DOMQRUNS) }, \
+    [SAM_EOL] = { { _SAM_EOL }, TAG(EOL) }, \
+    [SAM_BAM_BIN] = { { _SAM_BAM_BIN }, TAG(BAM_BIN) }, \
+    [SAM_TOPLEVEL] = { { _SAM_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [SAM_TOP2BAM] = { { _SAM_TOP2BAM }, TAG(TOP2BAM) }, \
+    [SAM_TOP2FQ] = { { _SAM_TOP2FQ }, TAG(TOP2FQ) }, \
+    [SAM_TOP2FQEX] = { { _SAM_TOP2FQEX }, TAG(TOP2FQEX) }, \
+    [SAM_TAXID] = { { _SAM_TAXID }, TAG(TAXID) }, \
+    [OPTION_AM] = { { _OPTION_AM }, TAG(AM:i) }, \
+    [OPTION_AS] = { { _OPTION_AS }, TAG(AS:i) }, \
+    [OPTION_CC] = { { _OPTION_CC }, TAG(CC:Z) }, \
+    [OPTION_CM] = { { _OPTION_CM }, TAG(CM:i) }, \
+    [OPTION_E2] = { { _OPTION_E2 }, TAG(E2:Z) }, \
+    [OPTION_2NONREF] = { { _OPTION_2NONREF }, TAG(N2ONREF) }, \
+    [OPTION_N2ONREFX] = { { _OPTION_N2ONREFX }, TAG(n2ONREFX) }, \
+    [OPTION_2GPOS] = { { _OPTION_2GPOS }, TAG(G2POS) }, \
+    [OPTION_S2TRAND] = { { _OPTION_S2TRAND }, TAG(S2TRAND) }, \
+    [OPTION_FI] = { { _OPTION_FI }, TAG(FI:i) }, \
+    [OPTION_H0] = { { _OPTION_H0 }, TAG(H0:i) }, \
+    [OPTION_H1] = { { _OPTION_H1 }, TAG(H1:i) }, \
+    [OPTION_H2] = { { _OPTION_H2 }, TAG(H2:i) }, \
+    [OPTION_LB] = { { _OPTION_LB }, TAG(LB:Z) }, \
+    [OPTION_MC] = { { _OPTION_MC }, TAG(MC:Z) }, \
+    [OPTION_MD] = { { _OPTION_MD }, TAG(MD:Z) }, \
+    [OPTION_MQ] = { { _OPTION_MQ }, TAG(MQ:i) }, \
+    [OPTION_NH] = { { _OPTION_NH }, TAG(NH:i) }, \
+    [OPTION_NM] = { { _OPTION_NM }, TAG(NM:i) }, \
+    [OPTION_OA] = { { _OPTION_OA }, TAG(OA:Z) }, \
+    [OPTION_OC] = { { _OPTION_OC }, TAG(OC:Z) }, \
+    [OPTION_PG] = { { _OPTION_PG }, TAG(PG:Z) }, \
+    [OPTION_PQ] = { { _OPTION_PQ }, TAG(PQ:i) }, \
+    [OPTION_PU] = { { _OPTION_PU }, TAG(PU:Z) }, \
+    [OPTION_RG] = { { _OPTION_RG }, TAG(RG:Z) }, \
+    [OPTION_SA] = { { _OPTION_SA }, TAG(SA:Z) }, \
+    [OPTION_SM] = { { _OPTION_SM }, TAG(SM:i) }, \
+    [OPTION_TC] = { { _OPTION_TC }, TAG(TC:i) }, \
+    [OPTION_UQ] = { { _OPTION_UQ }, TAG(UQ:i) }, \
+    [OPTION_U2] = { { _OPTION_U2 }, TAG(U2:Z) }, \
+    [OPTION_D2OMQRUN] = { { _OPTION_D2OMQRUN }, TAG(D2OMQRUN) }, \
+    [OPTION_ZM] = { { _OPTION_ZM }, TAG(ZM:B) }, \
+    [OPTION_X0] = { { _OPTION_X0 }, TAG(X0:i) }, \
+    [OPTION_X1] = { { _OPTION_X1 }, TAG(X1:i) }, \
+    [OPTION_XA] = { { _OPTION_XA }, TAG(XA:Z) }, \
+    [OPTION_XN] = { { _OPTION_XN }, TAG(XN:i) }, \
+    [OPTION_XM] = { { _OPTION_XM }, TAG(XM:i) }, \
+    [OPTION_XO] = { { _OPTION_XO }, TAG(XO:i) }, \
+    [OPTION_XG] = { { _OPTION_XG }, TAG(XG:i) }, \
+    [OPTION_XS] = { { _OPTION_XS }, TAG(XS:i) }, \
+    [OPTION_XE] = { { _OPTION_XE }, TAG(XE:i) }, \
+    [OPTION_XA_RNAME] = { { _OPTION_XA_RNAME }, TAG(X0A_RNAME) }, \
+    [OPTION_XA_STRAND] = { { _OPTION_XA_STRAND }, TAG(X1A_STRAND) }, \
+    [OPTION_XA_POS] = { { _OPTION_XA_POS }, TAG(X2A_POS) }, \
+    [OPTION_XA_CIGAR] = { { _OPTION_XA_CIGAR }, TAG(X3A_CIGAR) }, \
+    [OPTION_XA_NM] = { { _OPTION_XA_NM }, TAG(X4A_NM) }, \
+    [OPTION_XA_STRAND_POS] = { { _OPTION_XA_STRAND_POS }, TAG(X5A_STRAND_POS) }, \
+    [OPTION_OA_RNAME] = { { _OPTION_OA_RNAME }, TAG(O0A_RNAME) }, \
+    [OPTION_OA_STRAND] = { { _OPTION_OA_STRAND }, TAG(O1A_STRAND) }, \
+    [OPTION_OA_POS] = { { _OPTION_OA_POS }, TAG(O2A_POS) }, \
+    [OPTION_OA_CIGAR] = { { _OPTION_OA_CIGAR }, TAG(O3A_CIGAR) }, \
+    [OPTION_OA_NM] = { { _OPTION_OA_NM }, TAG(O4A_NM) }, \
+    [OPTION_OA_MAPQ] = { { _OPTION_OA_MAPQ }, TAG(O5A_MAPQ) }, \
+    [OPTION_SA_RNAME] = { { _OPTION_SA_RNAME }, TAG(S0A_RNAME) }, \
+    [OPTION_SA_STRAND] = { { _OPTION_SA_STRAND }, TAG(S1A_STRAND) }, \
+    [OPTION_SA_POS] = { { _OPTION_SA_POS }, TAG(S2A_POS) }, \
+    [OPTION_SA_CIGAR] = { { _OPTION_SA_CIGAR }, TAG(S3A_CIGAR) }, \
+    [OPTION_SA_NM] = { { _OPTION_SA_NM }, TAG(S4A_NM) }, \
+    [OPTION_SA_MAPQ] = { { _OPTION_SA_MAPQ }, TAG(S5A_MAPQ) }, \
+    [OPTION_mc] = { { _OPTION_mc }, TAG(mc:i) }, \
+    [OPTION_ms] = { { _OPTION_ms }, TAG(ms:i) }, \
+    [OPTION_BD] = { { _OPTION_BD }, TAG(BD:Z) }, \
+    [OPTION_BI] = { { _OPTION_BI }, TAG(BI:Z) }, \
+    [OPTION_BD_BI] = { { _OPTION_BD_BI }, TAG(BD_BI) }, \
+    [OPTION_STRAND] = { { _OPTION_STRAND }, TAG(@STRAND) }, \
+    [OPTION_RNAME] = { { _OPTION_RNAME }, TAG(@RNAME) }, \
+    [OPTION_POS] = { { _OPTION_POS }, TAG(@POS) }, \
+    [OPTION_CIGAR] = { { _OPTION_CIGAR }, TAG(@CIGAR) }, \
+    [OPTION_MAPQ] = { { _OPTION_MAPQ }, TAG(@MAPQ) }, \
+    [OPTION_TX] = { { _OPTION_TX }, TAG(TX:i) }, \
 } 
 
-typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_SAMPLES, VCF_EOL, VCF_TOPLEVEL, VCF_oCHROM, VCF_oPOS, VCF_oREFALT, VCF_oXSTRAND, VCF_COORDS, VCF_oSTATUS, VCF_COPYPOS, VCF_LIFT_REF, VCF_COPYSTAT, VCF_TOPLUFT, VCF_LINE_NUM, FORMAT_AD, FORMAT_ADF, FORMAT_ADR, FORMAT_ADALL, FORMAT_AF, FORMAT_DP, FORMAT_DS, FORMAT_GL, FORMAT_GP, FORMAT_GQ, FORMAT_GT, FORMAT_PL, FORMAT_PRI, FORMAT_F1R2, FORMAT_F2R1, FORMAT_MB, FORMAT_PP, FORMAT_SAC, FORMAT_SB, FORMAT_PS, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, INFO_AC, INFO_AF, INFO_AN, INFO_AA, INFO_BaseCounts, INFO_DP, INFO_DP4, INFO_SF, INFO_VQSLOD, INFO_END, INFO_MLEAC, INFO_MLEAF, INFO_LDAF, INFO_MQ0, FORMAT_MIN_DP, INFO_vep, INFO_AGE_HISTOGRAM_HET, INFO_AGE_HISTOGRAM_HOM, INFO_CSQ, INFO_MAX_AF, INFO_ALLELEID, INFO_CLNDN, INFO_RS, INFO_CLNHGVS, INFO_CLNHGVS_pos, INFO_CLNHGVS_refalt, INFO_DP_HIST, INFO_GQ_HIST, INFO_SVLEN, INFO_LUFT, INFO_PRIM, INFO_LREJ, INFO_PREJ, NUM_VCF_FIELDS } VCFFields;
+typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_SAMPLES, VCF_EOL, VCF_TOPLEVEL, VCF_oCHROM, VCF_oPOS, VCF_oREFALT, VCF_oXSTRAND, VCF_COORDS, VCF_oSTATUS, VCF_COPYPOS, VCF_LIFT_REF, VCF_COPYSTAT, VCF_TOPLUFT, VCF_LINE_NUM, FORMAT_AD, FORMAT_ADF, FORMAT_ADR, FORMAT_ADALL, FORMAT_AF, FORMAT_DP, FORMAT_DS, FORMAT_GL, FORMAT_GP, FORMAT_GQ, FORMAT_GT, FORMAT_PL, FORMAT_PRI, FORMAT_F1R2, FORMAT_F2R1, FORMAT_MB, FORMAT_PP, FORMAT_SAC, FORMAT_SB, FORMAT_PS, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, INFO_AC, INFO_AF, INFO_AN, INFO_AA, INFO_BaseCounts, INFO_DP, INFO_DP4, INFO_SF, INFO_VQSLOD, INFO_ANN, INFO_A0Allele, INFO_A1Annotation, INFO_A2Annotation_Impact, INFO_A3Gene_Name, INFO_A4Gene_ID, INFO_A5Feature_Type, INFO_A6Feature_ID, INFO_A7Transcript_BioType, INFO_A8Rank, INFO_A9HGVS_c, INFO_AaHGVS_p, INFO_AbcDNA, INFO_AcCDS, INFO_AdAA, INFO_AeDistance, INFO_AfErrors, INFO_END, INFO_MLEAC, INFO_MLEAF, INFO_LDAF, INFO_MQ0, FORMAT_MIN_DP, INFO_vep, INFO_AGE_HISTOGRAM_HET, INFO_AGE_HISTOGRAM_HOM, INFO_MAX_AF, INFO_CSQ, INFO_CSQ_Allele, INFO_CSQ_Consequence, INFO_CSQ_IMPACT, INFO_CSQ_SYMBOL, INFO_CSQ_Gene, INFO_CSQ_Feature, INFO_CSQ_EXON, INFO_CSQ_INTRON, INFO_CSQ_HGVSc, INFO_CSQ_HGVSp, INFO_CSQ_cDNA_position, INFO_CSQ_CDS_position, INFO_CSQ_Protein_position, INFO_CSQ_Amino_acids, INFO_CSQ_Codons, INFO_CSQ_Existing_variation, INFO_CSQ_ALLELE_NUM, INFO_CSQ_DISTANCE, INFO_CSQ_STRAND, INFO_CSQ_FLAGS, INFO_CSQ_VARIANT_CLASS, INFO_CSQ_MINIMISED, INFO_CSQ_SYMBOL_SOURCE, INFO_CSQ_HGNC_ID, INFO_CSQ_CANONICAL, INFO_CSQ_TSL, INFO_CSQ_APPRIS, INFO_CSQ_CCDS, INFO_CSQ_ENSP, INFO_CSQ_SWISSPROT, INFO_CSQ_TREMBL, INFO_CSQ_UNIPARC, INFO_CSQ_GENE_PHENO, INFO_CSQ_SIFT, INFO_CSQ_PolyPhen, INFO_CSQ_DOMAINS, INFO_CSQ_HGVS_OFFSET, INFO_CSQ_AF, INFO_CSQ_CLIN_SIG, INFO_CSQ_SOMATIC, INFO_CSQ_PHENO, INFO_CSQ_PUBMED, INFO_CSQ_MOTIF_NAME, INFO_CSQ_MOTIF_POS, INFO_CSQ_HIGH_INF_POS, INFO_CSQ_MOTIF_SCORE_CHANGE, INFO_CSQ_LoF, INFO_CSQ_LoF_filter, INFO_CSQ_LoF_flags, INFO_CSQ_LoF_info, INFO_CSQ_context, INFO_CSQ_ancestral, INFO_ALLELEID, INFO_CLNDN, INFO_RS, INFO_CLNHGVS, INFO_CLNVI, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt, INFO_HGVS_del_start_pos, INFO_HGVS_del_end_pos, INFO_HGVS_del_payload, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_end_pos, INFO_HGVS_ins_payload, INFO_HGVS_delins_end_pos, INFO_HGVS_delins_payload, INFO_DP_HIST, INFO_GQ_HIST, INFO_SVLEN, INFO_LUFT, INFO_PRIM, INFO_LREJ, INFO_PREJ, NUM_VCF_FIELDS } VCFFields;
 
-#define VCF_MAPPING { \
-    [VCF_CHROM] = { _VCF_CHROM }, \
-    [VCF_POS] = { _VCF_POS }, \
-    [VCF_ID] = { _VCF_ID }, \
-    [VCF_REFALT] = { _VCF_REFALT }, \
-    [VCF_QUAL] = { _VCF_QUAL }, \
-    [VCF_FILTER] = { _VCF_FILTER }, \
-    [VCF_INFO] = { _VCF_INFO }, \
-    [VCF_FORMAT] = { _VCF_FORMAT }, \
-    [VCF_SAMPLES] = { _VCF_SAMPLES }, \
-    [VCF_EOL] = { _VCF_EOL }, \
-    [VCF_TOPLEVEL] = { _VCF_TOPLEVEL }, \
-    [VCF_oCHROM] = { _VCF_oCHROM }, \
-    [VCF_oPOS] = { _VCF_oPOS }, \
-    [VCF_oREFALT] = { _VCF_oREFALT }, \
-    [VCF_oXSTRAND] = { _VCF_oXSTRAND }, \
-    [VCF_COORDS] = { _VCF_COORDS }, \
-    [VCF_oSTATUS] = { _VCF_oSTATUS }, \
-    [VCF_COPYPOS] = { _VCF_COPYPOS }, \
-    [VCF_LIFT_REF] = { _VCF_LIFT_REF }, \
-    [VCF_COPYSTAT] = { _VCF_COPYSTAT }, \
-    [VCF_TOPLUFT] = { _VCF_TOPLUFT }, \
-    [VCF_LINE_NUM] = { _VCF_LINE_NUM }, \
-    [FORMAT_AD] = { _FORMAT_AD }, \
-    [FORMAT_ADF] = { _FORMAT_ADF }, \
-    [FORMAT_ADR] = { _FORMAT_ADR }, \
-    [FORMAT_ADALL] = { _FORMAT_ADALL }, \
-    [FORMAT_AF] = { _FORMAT_AF }, \
-    [FORMAT_DP] = { _FORMAT_DP }, \
-    [FORMAT_DS] = { _FORMAT_DS }, \
-    [FORMAT_GL] = { _FORMAT_GL }, \
-    [FORMAT_GP] = { _FORMAT_GP }, \
-    [FORMAT_GQ] = { _FORMAT_GQ }, \
-    [FORMAT_GT] = { _FORMAT_GT }, \
-    [FORMAT_PL] = { _FORMAT_PL }, \
-    [FORMAT_PRI] = { _FORMAT_PRI }, \
-    [FORMAT_F1R2] = { _FORMAT_F1R2 }, \
-    [FORMAT_F2R1] = { _FORMAT_F2R1 }, \
-    [FORMAT_MB] = { _FORMAT_MB }, \
-    [FORMAT_PP] = { _FORMAT_PP }, \
-    [FORMAT_SAC] = { _FORMAT_SAC }, \
-    [FORMAT_SB] = { _FORMAT_SB }, \
-    [FORMAT_PS] = { _FORMAT_PS }, \
-    [FORMAT_GT_HT] = { _FORMAT_GT_HT }, \
-    [FORMAT_GT_HT_INDEX] = { _FORMAT_GT_HT_INDEX }, \
-    [FORMAT_PBWT_RUNS] = { _FORMAT_PBWT_RUNS }, \
-    [FORMAT_PBWT_FGRC] = { _FORMAT_PBWT_FGRC }, \
-    [INFO_AC] = { _INFO_AC }, \
-    [INFO_AF] = { _INFO_AF }, \
-    [INFO_AN] = { _INFO_AN }, \
-    [INFO_AA] = { _INFO_AA }, \
-    [INFO_BaseCounts] = { _INFO_BaseCounts }, \
-    [INFO_DP] = { _INFO_DP }, \
-    [INFO_DP4] = { _INFO_DP4 }, \
-    [INFO_SF] = { _INFO_SF }, \
-    [INFO_VQSLOD] = { _INFO_VQSLOD }, \
-    [INFO_END] = { _INFO_END }, \
-    [INFO_MLEAC] = { _INFO_MLEAC }, \
-    [INFO_MLEAF] = { _INFO_MLEAF }, \
-    [INFO_LDAF] = { _INFO_LDAF }, \
-    [INFO_MQ0] = { _INFO_MQ0 }, \
-    [FORMAT_MIN_DP] = { _FORMAT_MIN_DP }, \
-    [INFO_vep] = { _INFO_vep }, \
-    [INFO_AGE_HISTOGRAM_HET] = { _INFO_AGE_HISTOGRAM_HET }, \
-    [INFO_AGE_HISTOGRAM_HOM] = { _INFO_AGE_HISTOGRAM_HOM }, \
-    [INFO_CSQ] = { _INFO_CSQ }, \
-    [INFO_MAX_AF] = { _INFO_MAX_AF }, \
-    [INFO_ALLELEID] = { _INFO_ALLELEID }, \
-    [INFO_CLNDN] = { _INFO_CLNDN }, \
-    [INFO_RS] = { _INFO_RS }, \
-    [INFO_CLNHGVS] = { _INFO_CLNHGVS }, \
-    [INFO_CLNHGVS_pos] = { _INFO_CLNHGVS_pos }, \
-    [INFO_CLNHGVS_refalt] = { _INFO_CLNHGVS_refalt }, \
-    [INFO_DP_HIST] = { _INFO_DP_HIST }, \
-    [INFO_GQ_HIST] = { _INFO_GQ_HIST }, \
-    [INFO_SVLEN] = { _INFO_SVLEN }, \
-    [INFO_LUFT] = { _INFO_LUFT }, \
-    [INFO_PRIM] = { _INFO_PRIM }, \
-    [INFO_LREJ] = { _INFO_LREJ }, \
-    [INFO_PREJ] = { _INFO_PREJ }, \
+#define VCF_PREDEFINED { \
+    [VCF_CHROM] = { { _VCF_CHROM }, TAG(CHROM) }, \
+    [VCF_POS] = { { _VCF_POS }, TAG(POS) }, \
+    [VCF_ID] = { { _VCF_ID }, TAG(ID) }, \
+    [VCF_REFALT] = { { _VCF_REFALT }, TAG(REF+ALT) }, \
+    [VCF_QUAL] = { { _VCF_QUAL }, TAG(QUAL) }, \
+    [VCF_FILTER] = { { _VCF_FILTER }, TAG(FILTER) }, \
+    [VCF_INFO] = { { _VCF_INFO }, TAG(INFO) }, \
+    [VCF_FORMAT] = { { _VCF_FORMAT }, TAG(FORMAT) }, \
+    [VCF_SAMPLES] = { { _VCF_SAMPLES }, TAG(SAMPLES) }, \
+    [VCF_EOL] = { { _VCF_EOL }, TAG(EOL) }, \
+    [VCF_TOPLEVEL] = { { _VCF_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [VCF_oCHROM] = { { _VCF_oCHROM }, TAG(oCHROM) }, \
+    [VCF_oPOS] = { { _VCF_oPOS }, TAG(oPOS) }, \
+    [VCF_oREFALT] = { { _VCF_oREFALT }, TAG(oREFALT) }, \
+    [VCF_oXSTRAND] = { { _VCF_oXSTRAND }, TAG(oXSTRAND) }, \
+    [VCF_COORDS] = { { _VCF_COORDS }, TAG(COORDS) }, \
+    [VCF_oSTATUS] = { { _VCF_oSTATUS }, TAG(o$TATUS) }, \
+    [VCF_COPYPOS] = { { _VCF_COPYPOS }, TAG(C0PYPOS) }, \
+    [VCF_LIFT_REF] = { { _VCF_LIFT_REF }, TAG(LIFT_REF) }, \
+    [VCF_COPYSTAT] = { { _VCF_COPYSTAT }, TAG(CoPYSTAT) }, \
+    [VCF_TOPLUFT] = { { _VCF_TOPLUFT }, TAG(ToPLUFT) }, \
+    [VCF_LINE_NUM] = { { _VCF_LINE_NUM }, TAG(LINE_NUM) }, \
+    [FORMAT_AD] = { { _FORMAT_AD }, TAG(AD) }, \
+    [FORMAT_ADF] = { { _FORMAT_ADF }, TAG(ADF) }, \
+    [FORMAT_ADR] = { { _FORMAT_ADR }, TAG(ADR) }, \
+    [FORMAT_ADALL] = { { _FORMAT_ADALL }, TAG(ADALL) }, \
+    [FORMAT_AF] = { { _FORMAT_AF }, TAG(AF) }, \
+    [FORMAT_DP] = { { _FORMAT_DP }, TAG(DP) }, \
+    [FORMAT_DS] = { { _FORMAT_DS }, TAG(DS) }, \
+    [FORMAT_GL] = { { _FORMAT_GL }, TAG(GL) }, \
+    [FORMAT_GP] = { { _FORMAT_GP }, TAG(GP) }, \
+    [FORMAT_GQ] = { { _FORMAT_GQ }, TAG(GQ) }, \
+    [FORMAT_GT] = { { _FORMAT_GT }, TAG(GT) }, \
+    [FORMAT_PL] = { { _FORMAT_PL }, TAG(PL) }, \
+    [FORMAT_PRI] = { { _FORMAT_PRI }, TAG(PRI) }, \
+    [FORMAT_F1R2] = { { _FORMAT_F1R2 }, TAG(F1R2) }, \
+    [FORMAT_F2R1] = { { _FORMAT_F2R1 }, TAG(F2R1) }, \
+    [FORMAT_MB] = { { _FORMAT_MB }, TAG(MB) }, \
+    [FORMAT_PP] = { { _FORMAT_PP }, TAG(PP) }, \
+    [FORMAT_SAC] = { { _FORMAT_SAC }, TAG(SAC) }, \
+    [FORMAT_SB] = { { _FORMAT_SB }, TAG(SB) }, \
+    [FORMAT_PS] = { { _FORMAT_PS }, TAG(PS) }, \
+    [FORMAT_GT_HT] = { { _FORMAT_GT_HT }, TAG(@HT) }, \
+    [FORMAT_GT_HT_INDEX] = { { _FORMAT_GT_HT_INDEX }, TAG(@INDEXHT) }, \
+    [FORMAT_PBWT_RUNS] = { { _FORMAT_PBWT_RUNS }, TAG(@1BWTRUN) }, \
+    [FORMAT_PBWT_FGRC] = { { _FORMAT_PBWT_FGRC }, TAG(@2BWTFGR) }, \
+    [INFO_AC] = { { _INFO_AC }, TAG(AC) }, \
+    [INFO_AF] = { { _INFO_AF }, TAG(AF) }, \
+    [INFO_AN] = { { _INFO_AN }, TAG(AN) }, \
+    [INFO_AA] = { { _INFO_AA }, TAG(AA) }, \
+    [INFO_BaseCounts] = { { _INFO_BaseCounts }, TAG(BaseCounts) }, \
+    [INFO_DP] = { { _INFO_DP }, TAG(DP) }, \
+    [INFO_DP4] = { { _INFO_DP4 }, TAG(DP4) }, \
+    [INFO_SF] = { { _INFO_SF }, TAG(SF) }, \
+    [INFO_VQSLOD] = { { _INFO_VQSLOD }, TAG(VQSLOD) }, \
+    [INFO_ANN] = { { _INFO_ANN }, TAG(ANN) }, \
+    [INFO_A0Allele] = { { _INFO_A0Allele }, TAG(A0Allele) }, \
+    [INFO_A1Annotation] = { { _INFO_A1Annotation }, TAG(A1Annotation) }, \
+    [INFO_A2Annotation_Impact] = { { _INFO_A2Annotation_Impact }, TAG(A2Annotation_Impact) }, \
+    [INFO_A3Gene_Name] = { { _INFO_A3Gene_Name }, TAG(A3Gene_Name) }, \
+    [INFO_A4Gene_ID] = { { _INFO_A4Gene_ID }, TAG(A4Gene_ID) }, \
+    [INFO_A5Feature_Type] = { { _INFO_A5Feature_Type }, TAG(A5Feature_Type) }, \
+    [INFO_A6Feature_ID] = { { _INFO_A6Feature_ID }, TAG(A6Feature_ID) }, \
+    [INFO_A7Transcript_BioType] = { { _INFO_A7Transcript_BioType }, TAG(A7Transcript_BioType) }, \
+    [INFO_A8Rank] = { { _INFO_A8Rank }, TAG(A8Rank) }, \
+    [INFO_A9HGVS_c] = { { _INFO_A9HGVS_c }, TAG(A9HGVS_c) }, \
+    [INFO_AaHGVS_p] = { { _INFO_AaHGVS_p }, TAG(AaHGVS_p) }, \
+    [INFO_AbcDNA] = { { _INFO_AbcDNA }, TAG(AbcDNA) }, \
+    [INFO_AcCDS] = { { _INFO_AcCDS }, TAG(AcCDS) }, \
+    [INFO_AdAA] = { { _INFO_AdAA }, TAG(AdAA) }, \
+    [INFO_AeDistance] = { { _INFO_AeDistance }, TAG(AeDistance) }, \
+    [INFO_AfErrors] = { { _INFO_AfErrors }, TAG(AfErrors) }, \
+    [INFO_END] = { { _INFO_END }, TAG(END) }, \
+    [INFO_MLEAC] = { { _INFO_MLEAC }, TAG(MLEAC) }, \
+    [INFO_MLEAF] = { { _INFO_MLEAF }, TAG(MLEAF) }, \
+    [INFO_LDAF] = { { _INFO_LDAF }, TAG(LDAF) }, \
+    [INFO_MQ0] = { { _INFO_MQ0 }, TAG(MQ0) }, \
+    [FORMAT_MIN_DP] = { { _FORMAT_MIN_DP }, TAG(MIN_DP) }, \
+    [INFO_vep] = { { _INFO_vep }, TAG(vep) }, \
+    [INFO_AGE_HISTOGRAM_HET] = { { _INFO_AGE_HISTOGRAM_HET }, TAG(AGE_HISTOGRAM_HET) }, \
+    [INFO_AGE_HISTOGRAM_HOM] = { { _INFO_AGE_HISTOGRAM_HOM }, TAG(AGE_HISTOGRAM_HOM) }, \
+    [INFO_MAX_AF] = { { _INFO_MAX_AF }, TAG(MAX_AF) }, \
+    [INFO_CSQ] = { { _INFO_CSQ }, TAG(CSQ) }, \
+    [INFO_CSQ_Allele] = { { _INFO_CSQ_Allele }, TAG(c0SQ_Allele) }, \
+    [INFO_CSQ_Consequence] = { { _INFO_CSQ_Consequence }, TAG(c1SQ_Consequence) }, \
+    [INFO_CSQ_IMPACT] = { { _INFO_CSQ_IMPACT }, TAG(c2SQ_IMPACT) }, \
+    [INFO_CSQ_SYMBOL] = { { _INFO_CSQ_SYMBOL }, TAG(c3SQ_SYMBOL) }, \
+    [INFO_CSQ_Gene] = { { _INFO_CSQ_Gene }, TAG(c4SQ_Gene) }, \
+    [INFO_CSQ_Feature] = { { _INFO_CSQ_Feature }, TAG(c6SQ_Feature) }, \
+    [INFO_CSQ_EXON] = { { _INFO_CSQ_EXON }, TAG(c8SQ_EXON) }, \
+    [INFO_CSQ_INTRON] = { { _INFO_CSQ_INTRON }, TAG(c9SQ_INTRON) }, \
+    [INFO_CSQ_HGVSc] = { { _INFO_CSQ_HGVSc }, TAG(caSQ_HGVSc) }, \
+    [INFO_CSQ_HGVSp] = { { _INFO_CSQ_HGVSp }, TAG(cbSQ_HGVSp) }, \
+    [INFO_CSQ_cDNA_position] = { { _INFO_CSQ_cDNA_position }, TAG(ccSQ_cDNA_position) }, \
+    [INFO_CSQ_CDS_position] = { { _INFO_CSQ_CDS_position }, TAG(cdSQ_CDS_position) }, \
+    [INFO_CSQ_Protein_position] = { { _INFO_CSQ_Protein_position }, TAG(ceSQ_Protein_position) }, \
+    [INFO_CSQ_Amino_acids] = { { _INFO_CSQ_Amino_acids }, TAG(cfSQ_Amino_acids) }, \
+    [INFO_CSQ_Codons] = { { _INFO_CSQ_Codons }, TAG(cgSQ_Codons) }, \
+    [INFO_CSQ_Existing_variation] = { { _INFO_CSQ_Existing_variation }, TAG(chSQ_Existing_variation) }, \
+    [INFO_CSQ_ALLELE_NUM] = { { _INFO_CSQ_ALLELE_NUM }, TAG(ciSQ_ALLELE_NUM) }, \
+    [INFO_CSQ_DISTANCE] = { { _INFO_CSQ_DISTANCE }, TAG(cjSQ_DISTANCE) }, \
+    [INFO_CSQ_STRAND] = { { _INFO_CSQ_STRAND }, TAG(ckSQ_STRAND) }, \
+    [INFO_CSQ_FLAGS] = { { _INFO_CSQ_FLAGS }, TAG(clSQ_FLAGS) }, \
+    [INFO_CSQ_VARIANT_CLASS] = { { _INFO_CSQ_VARIANT_CLASS }, TAG(cmSQ_VARIANT_CLASS) }, \
+    [INFO_CSQ_MINIMISED] = { { _INFO_CSQ_MINIMISED }, TAG(cnSQ_MINIMISED) }, \
+    [INFO_CSQ_SYMBOL_SOURCE] = { { _INFO_CSQ_SYMBOL_SOURCE }, TAG(coSQ_SYMBOL_SOURCE) }, \
+    [INFO_CSQ_HGNC_ID] = { { _INFO_CSQ_HGNC_ID }, TAG(cpSQ_HGNC_ID) }, \
+    [INFO_CSQ_CANONICAL] = { { _INFO_CSQ_CANONICAL }, TAG(cqSQ_CANONICAL) }, \
+    [INFO_CSQ_TSL] = { { _INFO_CSQ_TSL }, TAG(crSQ_TSL) }, \
+    [INFO_CSQ_APPRIS] = { { _INFO_CSQ_APPRIS }, TAG(csSQ_APPRIS) }, \
+    [INFO_CSQ_CCDS] = { { _INFO_CSQ_CCDS }, TAG(ctSQ_CCDS) }, \
+    [INFO_CSQ_ENSP] = { { _INFO_CSQ_ENSP }, TAG(cuSQ_ENSP) }, \
+    [INFO_CSQ_SWISSPROT] = { { _INFO_CSQ_SWISSPROT }, TAG(cvSQ_SWISSPROT) }, \
+    [INFO_CSQ_TREMBL] = { { _INFO_CSQ_TREMBL }, TAG(cwSQ_TREMBL) }, \
+    [INFO_CSQ_UNIPARC] = { { _INFO_CSQ_UNIPARC }, TAG(czSQ_UNIPARC) }, \
+    [INFO_CSQ_GENE_PHENO] = { { _INFO_CSQ_GENE_PHENO }, TAG(cySQ_GENE_PHENO) }, \
+    [INFO_CSQ_SIFT] = { { _INFO_CSQ_SIFT }, TAG(czSQ_SIFT) }, \
+    [INFO_CSQ_PolyPhen] = { { _INFO_CSQ_PolyPhen }, TAG(cASQ_PolyPhen) }, \
+    [INFO_CSQ_DOMAINS] = { { _INFO_CSQ_DOMAINS }, TAG(cBSQ_DOMAINS) }, \
+    [INFO_CSQ_HGVS_OFFSET] = { { _INFO_CSQ_HGVS_OFFSET }, TAG(cCSQ_HGVS_OFFSET) }, \
+    [INFO_CSQ_AF] = { { _INFO_CSQ_AF }, TAG(cDSQ_AF) }, \
+    [INFO_CSQ_CLIN_SIG] = { { _INFO_CSQ_CLIN_SIG }, TAG(cUSQ_CLIN_SIG) }, \
+    [INFO_CSQ_SOMATIC] = { { _INFO_CSQ_SOMATIC }, TAG(cVSQ_SOMATIC) }, \
+    [INFO_CSQ_PHENO] = { { _INFO_CSQ_PHENO }, TAG(cQSQ_PHENO) }, \
+    [INFO_CSQ_PUBMED] = { { _INFO_CSQ_PUBMED }, TAG(cXSQ_PUBMED) }, \
+    [INFO_CSQ_MOTIF_NAME] = { { _INFO_CSQ_MOTIF_NAME }, TAG(cYSQ_MOTIF_NAME) }, \
+    [INFO_CSQ_MOTIF_POS] = { { _INFO_CSQ_MOTIF_POS }, TAG(cZSQ_MOTIF_POS) }, \
+    [INFO_CSQ_HIGH_INF_POS] = { { _INFO_CSQ_HIGH_INF_POS }, TAG(c@SQ_HIGH_INF_POS) }, \
+    [INFO_CSQ_MOTIF_SCORE_CHANGE] = { { _INFO_CSQ_MOTIF_SCORE_CHANGE }, TAG(c$SQ_MOTIF_SCORE_CHANGE) }, \
+    [INFO_CSQ_LoF] = { { _INFO_CSQ_LoF }, TAG(c%SQ_LoF) }, \
+    [INFO_CSQ_LoF_filter] = { { _INFO_CSQ_LoF_filter }, TAG(c^SQ_LoF_filter) }, \
+    [INFO_CSQ_LoF_flags] = { { _INFO_CSQ_LoF_flags }, TAG(c-SQ_LoF_flags) }, \
+    [INFO_CSQ_LoF_info] = { { _INFO_CSQ_LoF_info }, TAG(c*SQ_LoF_info) }, \
+    [INFO_CSQ_context] = { { _INFO_CSQ_context }, TAG(c_SQ_context) }, \
+    [INFO_CSQ_ancestral] = { { _INFO_CSQ_ancestral }, TAG(c+SQ_ancestral) }, \
+    [INFO_ALLELEID] = { { _INFO_ALLELEID }, TAG(ALLELEID) }, \
+    [INFO_CLNDN] = { { _INFO_CLNDN }, TAG(CLNDN) }, \
+    [INFO_RS] = { { _INFO_RS }, TAG(RS) }, \
+    [INFO_CLNHGVS] = { { _INFO_CLNHGVS }, TAG(CLNHGVS) }, \
+    [INFO_CLNVI] = { { _INFO_CLNVI }, TAG(CLNVI) }, \
+    [INFO_HGVS_snp_pos] = { { _INFO_HGVS_snp_pos }, TAG(H0GVS_snp_pos) }, \
+    [INFO_HGVS_snp_refalt] = { { _INFO_HGVS_snp_refalt }, TAG(H1GVS_snp_refalt) }, \
+    [INFO_HGVS_del_start_pos] = { { _INFO_HGVS_del_start_pos }, TAG(H2GVS_startpos_del) }, \
+    [INFO_HGVS_del_end_pos] = { { _INFO_HGVS_del_end_pos }, TAG(H3GVS_endpos_del) }, \
+    [INFO_HGVS_del_payload] = { { _INFO_HGVS_del_payload }, TAG(H4GVS_payload_del) }, \
+    [INFO_HGVS_ins_start_pos] = { { _INFO_HGVS_ins_start_pos }, TAG(H5GVS_startpos_ins) }, \
+    [INFO_HGVS_ins_end_pos] = { { _INFO_HGVS_ins_end_pos }, TAG(H6GVS_endpos_ins) }, \
+    [INFO_HGVS_ins_payload] = { { _INFO_HGVS_ins_payload }, TAG(H7GVS_payload_ins) }, \
+    [INFO_HGVS_delins_end_pos] = { { _INFO_HGVS_delins_end_pos }, TAG(H8GVS_endpos_delins) }, \
+    [INFO_HGVS_delins_payload] = { { _INFO_HGVS_delins_payload }, TAG(H9GVS_payload_delins) }, \
+    [INFO_DP_HIST] = { { _INFO_DP_HIST }, TAG(DP_HIST) }, \
+    [INFO_GQ_HIST] = { { _INFO_GQ_HIST }, TAG(GQ_HIST) }, \
+    [INFO_SVLEN] = { { _INFO_SVLEN }, TAG(SVLEN) }, \
+    [INFO_LUFT] = { { _INFO_LUFT }, TAG(LUFT) }, \
+    [INFO_PRIM] = { { _INFO_PRIM }, TAG(PRIM) }, \
+    [INFO_LREJ] = { { _INFO_LREJ }, TAG(Lrej) }, \
+    [INFO_PREJ] = { { _INFO_PREJ }, TAG(Prej) }, \
 } 
 
-#define MAX_NUM_FIELDS_PER_DATA_TYPE 79
+#define MAX_NUM_FIELDS_PER_DATA_TYPE 157
 
 #endif

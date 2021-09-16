@@ -95,7 +95,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
     GET_NEXT_ITEM (ME23_ID);
-    seg_id_field (vb, ME23_ID, field_start, field_len, true);
+    seg_id_field (vb, CTX(ME23_ID), field_start, field_len, true);
 
     GET_NEXT_ITEM (ME2_CHROM);
     seg_chrom_field (vb, field_start, field_len);

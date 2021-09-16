@@ -33,7 +33,7 @@ typedef struct {
 uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
 {
     // if user set a low --vblock, use this as the limit for the hash table size too, but don't restrict tighter than 16MB
-    size = MIN (size, MAX (16000000, flag.vblock_memory));
+    size = MIN_(size, MAX_(16000000, flag.vblock_memory));
 
     // primary numbers just beneath the powers of 2^0.5 (and 2^0.25 for the larger numbers)
     // minimum ~64K to prevent horrible miscalculations in edge cases that result in dramatic slow down
@@ -108,7 +108,7 @@ uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zctx, const Co
 {
     // note on txt_data_size_single: if its a physical plain txt file - this is the file size. 
     // if not - its an estimate done after the first VB by txtfile_estimate_txt_data_size
-    double effective_num_vbs=0, estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
+    double effective_num_vbs=0, estimated_num_vbs = MAX_(1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)merging_vb->lines.len;
 
     if (flag.show_hash && first_merging_vb_ctx->did_i==0) 
@@ -199,7 +199,7 @@ uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zctx, const Co
         effective_num_vbs = ceil (log (1/n3) / (3 * log (1/n2n3_density_ratio) )); // note that n2n3_density_ratio > 1.05 and n3 >= 1 due to the if statements above
 
         for (gp = sizeof(growth_plan) / sizeof(growth_plan[0]) - 1; gp >= 0 ; gp--)
-            if (MIN (effective_num_vbs + 1 /* +1 for first vb */, estimated_num_vbs) > growth_plan[gp].vbs) {
+            if (MIN_(effective_num_vbs + 1 /* +1 for first vb */, estimated_num_vbs) > growth_plan[gp].vbs) {
                 estimated_entries = first_merging_vb_ctx->nodes.len * n2_n3_density * growth_plan[gp].factor;
                 break;
             }

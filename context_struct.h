@@ -21,7 +21,7 @@ typedef struct Context {
     // common fields for ZIP & PIZ
     // ----------------------------
     #define MAX_TAG_LEN 64     // including terminating nul (must be divisible by 8 for Tag struct)
-    const char tag_name[MAX_TAG_LEN]; // nul-terminated tag name 
+    char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
     DidIType did_i;            // the index of this ctx within the array vb->contexts
     DidIType st_did_i;         // in --stats, consolidate this context into st_did_i
     LocalType ltype;           // LT_* - type of local data - included in the section header
@@ -30,7 +30,7 @@ typedef struct Context {
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
 
-    #define num_b250_words param // b250.param, when it contains b250 data, holds the number of words (len is the number of bytes)
+    #define num_ctx_words param // b250.param, when it contains b250 data, holds the number of words (len is the number of bytes)
     Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In zip_generate_b250_section, 
                                //      the "node indices" are converted into "word indices" - indices into the future 
                                //      context->word_list, in base-250. the number of words is moved from .len to .param. 
@@ -138,9 +138,9 @@ typedef struct Context {
     // ----------------------------------------------------------------------------------------
 
     // Container cache 
-    Buffer con_cache;          // PIZ: An array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
-                               // ZIP: used to cache container templates, eg vcf_seg_INFO_histogram
-    Buffer con_index;          // Array of uint32_t - index into con_cache. Each item corresponds to word_index (PIZ) or node_index (ZIP)
+    Buffer con_cache;          // PIZ: Handled by container_reconstruct - an array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
+                               // ZIP: Each context is free to use it on its own
+    Buffer con_index;          // Array of uint32_t - PIZ: index into con_cache - Each item corresponds to word_index. ZIP: context-specific.
     Buffer con_len;            // Array of uint16_t - length of item in cache
     
 } Context;

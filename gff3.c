@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   seg.c
+//   gff3.c
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
@@ -75,98 +75,6 @@ bool gff3_seg_is_small (ConstVBlockP vb, DictId dict_id)
            dict_id.num == _GFF3_EOL;
 }
 
-// returns length of next expected item, and 0 if unsuccessful
-static unsigned gff3_seg_get_aofs_item_len (const char *str, unsigned len, bool is_last_item)
-{
-    unsigned i=0; for (; i < len; i++) {
-        bool is_comma = str[i] == ',';
-        bool is_space = str[i] == ' ';
-
-        if ((is_last_item && is_comma) || (!is_last_item && is_space)) return i; // we reached the end of the item - return its length
-
-        if ((is_last_item && is_space) || (!is_last_item && is_comma)) return 0; // invalid string - unexpected seperator
-    }
-
-    if (is_last_item) return i; // last item of last entry
-    else return 0; // the string ended prematurely - this is not yet the last item
-}
-
-// a field that looks like: "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
-// we have an array (2 entires in this example) of items (4 in this examples) - the entries are separated by comma and the items by space
-// observed in Ensembel generated GVF: Variant_effect, sift_prediction, polyphen_prediction, variant_peptide
-// The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
-// the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
-// the field itself will contain the number of entries
-static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx, 
-                                      SmallContainer con, 
-                                      const char *snip, unsigned snip_len)
-{
-    bool is_last_entry = false;
-    uint32_t num_items = con_nitems (con);
-
-    // get ctx's
-    Context *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->contexts)
-    for (unsigned i=0; i < num_items; i++) {
-        ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
-        ctxs[i]->st_did_i = subfield_ctx->did_i;
-    }
-
-    // set roll back point
-    uint64_t saved_node_i_len[MAX_ENST_ITEMS], saved_local_len[MAX_ENST_ITEMS], saved_txt_len[MAX_ENST_ITEMS];
-    for (unsigned item_i=0; item_i < num_items; item_i++) {
-        saved_node_i_len[item_i] = ctxs[item_i]->b250.len;
-        saved_local_len[item_i]  = ctxs[item_i]->local.len;
-        saved_txt_len  [item_i]  = ctxs[item_i]->txt_len;
-    }
-    const char *saved_snip = snip;
-    unsigned saved_snip_len = snip_len;
-
-    con.repeats = 0;
-
-    while (snip_len) {
-        
-        for (unsigned item_i=0; item_i < num_items; item_i++) {
-            bool is_last_item = (item_i == num_items-1);
-            unsigned item_len = gff3_seg_get_aofs_item_len (snip, snip_len, is_last_item);
-            if (!item_len) goto badly_formatted;
-
-            if (!is_last_item)
-                seg_by_ctx (vb, snip, item_len, ctxs[item_i], item_len);
-            else {
-                is_last_entry = (snip_len - item_len == 0);
-                seg_id_field (vb, ENSTid, snip, item_len, false);
-            }
-    
-            snip     += item_len + 1 - is_last_entry; // 1 for either the , or the ' ' (except in the last item of the last entry)
-            snip_len -= item_len + 1 - is_last_entry;
-        }
-
-        if (!is_last_entry && snip[-1]!=',') goto badly_formatted; // expecting a , after the end of all items in this entry
-        
-        con.repeats++;
-
-        ASSSEG (con.repeats <= CONTAINER_MAX_REPEATS, snip, "exceeded maximum repeats allowed (%u) while parsing %s",
-                CONTAINER_MAX_REPEATS, subfield_ctx->tag_name);
-    }
-
-    // finally, the Container snip itself
-    container_seg (vb, subfield_ctx, (ContainerP)&con, NULL, 0, 
-                           con.repeats * (num_items-1) /* space seperators */ + con.repeats-1 /* comma separators */);
-
-    return;
-
-badly_formatted:
-    // roll back all the changed data
-    for (unsigned item_i=0; item_i < num_items ; item_i++) {
-        ctxs[item_i]->b250.len  = saved_node_i_len[item_i];
-        ctxs[item_i]->local.len = saved_local_len[item_i];
-        ctxs[item_i]->txt_len   = saved_txt_len[item_i];
-    }
-
-    // now save the entire snip in the dictionary
-    seg_by_dict_id (vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, saved_snip_len); 
-}                           
-
 // returns trus if successful
 static bool gff3_seg_target (VBlockP vb, const char *value, unsigned value_len)
 {
@@ -196,91 +104,100 @@ static bool gff3_seg_target (VBlockP vb, const char *value, unsigned value_len)
     return true;
 }
 
-bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **value, unsigned *value_len)
+static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, unsigned tag_name_len, const char *value, unsigned value_len)
 {
+    DictId dict_id = dict_id_make (tag_name, tag_name_len, DTYPE_GFF3_ATTR);
+
+    ContextP ctx = ctx_get_ctx_tag (vb, dict_id, tag_name, tag_name_len);
+    
     switch (dict_id.num) {
 
     // ID - sometimes this is a sequential number (GRCh37/38)
     // sometimes it is something like this: c5312581-5d6e-4234-89d7-4974581f2993
     case _ATTR_ID: 
-        if (str_is_int (*value, *value_len))
-            seg_pos_field (vb, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, *value, *value_len, 0, *value_len);
+        if (str_is_int (value, value_len))
+            seg_pos_field (vb, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, value, value_len, 0, value_len);
         else
-            seg_by_did_i (vb, *value, *value_len, ATTR_ID, *value_len);
-
-        return false; // do not add to dictionary/b250 - we already did it
+            seg_by_did_i (vb, value, value_len, ATTR_ID, value_len);
+        break;
 
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
     // in a dictionary and the numeric part which store in a local
     case _ATTR_Dbxref:
-        seg_id_field (vb, ATTR_Dbxref, *value, *value_len, false); // discard the const as seg_id_field modifies
-        return false; 
+        seg_id_field (vb, CTX(ATTR_Dbxref), value, value_len, false); // discard the const as seg_id_field modifies
+        break;
 
     case _ATTR_Target:
-        return !gff3_seg_target (vb, *value, *value_len); 
+        if (!gff3_seg_target (vb, value, value_len))
+            goto plain_seg;
+        break;
+
+    case _ATTR_Name:
+        seg_id_field (vb, CTX(ATTR_Name), value, value_len, false);
+        break;
 
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
     case _ATTR_Parent:
-        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, *value, *value_len, ',', 0, false, false);
-        return false; 
+        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, value, value_len, ',', 0, false, false, false);
+        break;
 
     //case _ATTR_Gap: // I tried: 1. array (no improvement) ; 2. string of op-codes in b250 + integers in local (negligible improvement)
 
     // subfields that are arrays of structs, for example:
     // "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
     case _ATTR_Variant_effect: {
-        static const SmallContainer Variant_effect = {
+        static const MediumContainer Variant_effect = {
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="V0arEff" }, .seperator = {' '} },
                              { .dict_id={.id="V1arEff" }, .seperator = {' '} },
                              { .dict_id={.id="V2arEff" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"  },                    } }
+                             { .dict_id={.num=_ENSTid  },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, *value, *value_len);
-        return false;
+        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, value, value_len, (SegCallback[]){0,0,0,seg_id_field_do});
+        break;
     }
 
     case _ATTR_sift_prediction: {
-        static const SmallContainer sift_prediction = {
+        static const MediumContainer sift_prediction = {
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="S0iftPr" }, .seperator = {' '} },
                              { .dict_id={.id="S1iftPr" }, .seperator = {' '} },
                              { .dict_id={.id="S2iftPr" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"  },                    } }
+                             { .dict_id={.num=_ENSTid  },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, *value, *value_len);
-        return false;
+        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, value, value_len, (SegCallback[]){0,0,0,seg_id_field_do});
+        break;
     }
 
     case _ATTR_polyphen_prediction: {
-        static const SmallContainer polyphen_prediction = {
+        static const MediumContainer polyphen_prediction = {
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = {' '} },
                              { .dict_id={.id="P1olyPhP" }, .seperator = {' '} },
                              { .dict_id={.id="P2olyPhP" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"   },                    } }
+                             { .dict_id={.num=_ENSTid   },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, *value, *value_len);
-        return false;
+        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, value, value_len, (SegCallback[]){0,0,0,seg_id_field_do});
+        break;
     }
 
     case _ATTR_variant_peptide: {
-        static const SmallContainer variant_peptide = {
+        static const MediumContainer variant_peptide = {
             .nitems_lo   = 3, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
-            .items       = { { .dict_id={.id="v0arPep" }, .seperator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
-                             { .dict_id={.id="v1arPep" }, .seperator = {' '} },
-                             { .dict_id={.id="ENSTid"  },                    } }
+            .items       = { { .dict_id={.id="v0arPep"  }, .seperator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
+                             { .dict_id={.id="v1arPep"  }, .seperator = {' '} },
+                             { .dict_id={.num=_ENSTid   },                    } }
         };
-        gff3_seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, *value, *value_len);
-        return false;
+        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, value, value_len, (SegCallback[]){0,0,seg_id_field_do});
+        break;
     }
 
     // we store these 3 in one dictionary, as they are correlated and will compress better together
@@ -288,139 +205,66 @@ bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **v
     case _ATTR_Reference_seq:
     case _ATTR_ancestral_allele: 
         // note: all three are stored together in _ATTR_Reference_seq as they are correlated
-        seg_add_to_local_text (vb, CTX(ATTR_Reference_seq), *value, *value_len, *value_len); 
-        return false; 
+        seg_add_to_local_text (vb, CTX(ATTR_Reference_seq), value, value_len, value_len); 
+        break;
 
     // Optimize Variant_freq
     case _ATTR_Variant_freq:
         if (flag.optimize_Vf) {
-            unsigned optimized_snip_len = *value_len + 20;
+            unsigned optimized_snip_len = value_len + 20;
             char optimized_snip[optimized_snip_len]; // used for 1. fields that are optimized 2. fields translated luft->primary
 
-            if (optimize_float_2_sig_dig (*value, *value_len, 0, optimized_snip, &optimized_snip_len)) {        
-                vb->recon_size -= (int)(*value_len) - (int)optimized_snip_len;
-                *value = optimized_snip;
-                *value_len = optimized_snip_len;
+            if (optimize_float_2_sig_dig (value, value_len, 0, optimized_snip, &optimized_snip_len)) {        
+                vb->recon_size -= (int)(value_len) - (int)optimized_snip_len;
+                value = optimized_snip;
+                value_len = optimized_snip_len;
             }            
         }
-        return true; // proceed with adding to dictionary/b250
+        goto plain_seg; // proceed with adding to dictionary/b250
 
     default:
-        return true; // all other cases -  procedue with adding to dictionary/b250
+    plain_seg:
+        seg_by_ctx (vb, value, value_len, ctx, value_len);
     }
+
+    return dict_id;
 }
 
-typedef struct { const char *start; 
-                 unsigned len; 
-                 DictId dict_id;   } AttrsItem;
-
-static int sort_by_subfield_name (const void *a, const void *b)  
-{ 
-    AttrsItem *ina = (AttrsItem *)a;
-    AttrsItem *inb = (AttrsItem *)b;
-    
-    return strncmp (ina->start, inb->start, MIN (ina->len, inb->len));
-}
-
-static void gff3_seg_attrs_field (VBlock *vb, const char *info_str, unsigned info_len)
+static void gff3_seg_attrs_field (VBlock *vb, const char *field, unsigned field_len)
 {
+    // case: "." field
+    if (field_len == 1 && *field == '.') {
+        seg_by_did_i (vb, ".", 1, GFF3_ATTRS, 2);
+        return;
+    }
+
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true };
-
-    const char *this_name = info_str, *value = NULL;
-    int this_name_len = 0, value_len=0; // int and not unsigned as it can go negative
-
-    AttrsItem info_items[MAX_FIELDS];
-
-    // get name / value pairs - and insert values to the "name" dictionary
-    bool reading_name = true;
-    for (unsigned i=0; i < info_len + 1; i++) {
-        char c = (i==info_len) ? ';' : info_str[i]; // add an artificial ; at the end of the INFO data
-
-        if (reading_name) {
-
-            if (c == '=' || c == ';') {  // end of valueful or valueless name
-
-                bool valueful = (c == '=');
-
-                ASSSEG0 (this_name_len > 0, info_str, "Error: ATTRS contains a = or ; without a preceding subfield name");
-
-                if (this_name_len > 0) { 
-                    ASSSEG ((this_name[0] >= 64 && this_name[0] <= 127) || this_name[0] == '.', info_str,
-                            "ATTRS contains a name %.*s starting with an illegal character '%c' (ASCII %u)", 
-                            this_name_len, this_name, this_name[0], this_name[0]);
-
-                    DictId dict_id = valueful ? dict_id_make (this_name, this_name_len, DTYPE_1) : DICT_ID_NONE;
-
-                    info_items[con_nitems(con)] = (AttrsItem) {
-                        .start   = this_name,
-                        .len     = this_name_len + valueful, // include the '=' if there is one 
-                        .dict_id = dict_id
-                    };
-
-                    // create context with tag, if it doesn't already exist
-                    if (valueful) ctx_get_ctx_tag (vb, dict_id, this_name, this_name_len);
-
-                    value = &info_str[i+1]; 
-                    value_len = -valueful; // if there is a '=' to be skipped, start from -1
-                    reading_name = false; 
-                }
-            }
-            else this_name_len++; // don't count the = or ; in the len
-        }
-        
-        if (!reading_name) {
-
-            if (c == ';') { // end of value
-                // If its a valueful item, seg it (either special or regular)
-                DictId dict_id = info_items[con_nitems(con)].dict_id;
-                if (dict_id.num && gff3_seg_special_info_subfields (vb, dict_id, &value, (unsigned *)&value_len))
-                    seg_by_dict_id (vb, value, value_len, dict_id, value_len);
-
-                reading_name = true;  // end of value - move to the next item
-                this_name = &info_str[i+1]; // move to next field in info string
-                this_name_len = 0;
-                con_inc_nitems (con);
-
-                ASSSEG (con_nitems(con) <= MAX_FIELDS, info_str, 
-                        "A line has too many subfields (tags) in ATTRS - the maximum supported is %u", MAX_FIELDS);
-            }
-            else value_len++;
-        }
-    }
-
-    // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
-    // thereby both improving compression and improving --regions speed. 
-    if (flag.optimize_sort && con_nitems(con) > 1) 
-        qsort (info_items, con_nitems(con), sizeof(AttrsItem), sort_by_subfield_name);
-
-    char prefixes[CONTAINER_MAX_PREFIXES_LEN]; // these are the Container prefixes
-    prefixes[0] = prefixes[1] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix
+    char prefixes[field_len + 2];
+    prefixes[0] = prefixes[1] = CON_PREFIX_SEP;
     unsigned prefixes_len = 2;
 
-    // Populate the Container 
-    uint32_t total_names_len=0;
-    for (unsigned i=0; i < con_nitems(con); i++) {
-        // Set the Container item and find (or create) a context for this name
-        AttrsItem *ii = &info_items[i];
-        con.items[i] = (ContainerItem){ .dict_id   = ii->dict_id,
-                                        .seperator = { ';' } }; 
-            
-        // add to the prefixes
-        ASSSEG (prefixes_len + ii->len + 1 <= CONTAINER_MAX_PREFIXES_LEN, info_str, 
-                "ATTRS contains tag names that, combined (including the '='), exceed the maximum of %u characters", CONTAINER_MAX_PREFIXES_LEN);
+    str_split (field, field_len, MAX_DICTS, ';', attr, false);
+    ASSSEG (n_attrs, field, "Invalid attributes field: %.*s", STRf(field));
+    
+    con_set_nitems (con, n_attrs);
 
-        memcpy (&prefixes[prefixes_len], ii->start, ii->len);
-        prefixes_len += ii->len;
-        prefixes[prefixes_len++] = CON_PREFIX_SEP;
+    for (unsigned i=0; i < n_attrs; i++) {
 
-        total_names_len += ii->len + 1; // +1 for ; \t or \n separator
+        str_split (attrs[i], attr_lens[i], 2, '=', tag_val, true);
+        ASSSEG (n_tag_vals == 2 && tag_val_lens[0] > 0 && tag_val_lens[1] > 0, attrs[i], "Invalid attribute: %.*s", STRfi (attr, i));
+
+        memcpy (&prefixes[prefixes_len], tag_vals[0], tag_val_lens[0] + 1);
+        prefixes_len += tag_val_lens[0] + 2; // including the '=' and CON_PREFIX_SEP
+        prefixes[prefixes_len-1] = CON_PREFIX_SEP;
+
+        DictId dict_id = gff3_seg_attr_subfield (vb, STRi(tag_val, 0), STRi (tag_val, 1));
+        con.items[i] = (ContainerItem){ .dict_id = dict_id, .seperator = { ';' } }; 
     }
 
-    container_seg (vb, CTX(GFF3_ATTRS), &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
+    container_seg (vb, CTX(GFF3_ATTRS), &con, prefixes, prefixes_len, (prefixes_len-2) /* names inc. = and (; or \n) seperator */);
 }
 
-// GFF3 file format: https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
 const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     const char *next_field=field_start_line, *field_start;
@@ -455,11 +299,11 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
 
     SEG_NEXT_ITEM (GFF3_SCORE);
     SEG_NEXT_ITEM (GFF3_STRAND);
-    SEG_NEXT_ITEM (GFF3_PHASE);
+    SEG_MAYBE_LAST_ITEM (GFF3_PHASE);
 
-    if (separator != '\n') {
+    if (separator != '\n') { // "attrbutes" is an optional field per http://gmod.org/wiki/GFF3
         GET_LAST_ITEM (GFF3_ATTRS); 
-        gff3_seg_attrs_field (vb, field_start, field_len); // GFF3 ATTRS has the same format and VCF INFO
+        gff3_seg_attrs_field (vb, field_start, field_len);
     }
     else
         seg_by_did_i (vb, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed

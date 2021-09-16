@@ -136,7 +136,8 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
 
     const char *next_cigar = vb->last_cigar; // don't change vb->last_cigar as we may still need it, eg if we have an E2 optional field
     range = vb->ref_consumed ? ref_piz_get_range (vb_, gref, pos, vb->ref_consumed) : NULL;
-    
+    PosType range_len = range ? (range->last_pos - range->first_pos + 1) : 0;
+
     while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {
         
         if (!subcigar_len) {
@@ -152,7 +153,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
             if ((cigar_op & CIGAR_CONSUMES_REFERENCE) && NEXTLOCALBIT (bitmap_ctx)) /* copy from reference */ {
 
                 if (!vb->drop_curr_line) { // note: if this line is excluded with --regions, then the reference section covering it might not be loaded
-                    uint32_t idx = (pos - range->first_pos) + ref_consumed ;
+                    uint32_t idx = ((pos - range->first_pos) + ref_consumed) % range_len; // circle around (this can only happen when compressed with an external reference)
 
                     if (!ref_is_nucleotide_set (range, idx)) { 
                         ref_print_is_set (range, pos + ref_consumed, stderr);
@@ -366,7 +367,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
         // calculate digits before and after the decimal point
         double log_f = log10 (machine_en.f >= 0 ? machine_en.f : -machine_en.f);
         unsigned int_digits = (log_f >= 0) + (unsigned)log_f;
-        unsigned dec_digits = MAX (0, NUM_SIGNIFICANT_DIGITS - int_digits);
+        unsigned dec_digits = MAX_(0, NUM_SIGNIFICANT_DIGITS - int_digits);
         
         // reconstruct number with exactly NUM_SIGNIFICANT_DIGITS digits
         sprintf (AFTERENT (char, vb->txt_data), "%.*f", dec_digits, machine_en.f); 
@@ -389,28 +390,6 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 finish:
     new_value->f = (double)machine_en.f;
     return true; // have new value
-}
-
-SPECIAL_RECONSTRUCTOR (sam_piz_special_XA_POS)
-{
-    if (!reconstruct) goto done;
-    
-    Context *xa_rname_ctx = CTX(OPTION_XA_RNAME);
-
-    const char *xa_rname = last_txtx (vb, xa_rname_ctx);
-
-    ASSERT (xa_rname_ctx->last_txt_len >= 1 && xa_rname_ctx->last_txt_len <= 5, "unexpected length of XA_RNAME=%.*s len=%u",
-            xa_rname_ctx->last_txt_len, xa_rname, xa_rname_ctx->last_txt_len);
-
-    char id[DICT_ID_LEN] = "X2A";
-    memcpy (&id[3], xa_rname, xa_rname_ctx->last_txt_len);
-
-    Context *chr_ctx = ctx_get_ctx (vb, dict_id_make (id, 3 + xa_rname_ctx->last_txt_len, DTYPE_SAM_OPTIONAL));
-    
-    reconstruct_from_ctx (vb, chr_ctx->did_i, 0, true);
-
-done:
-    return false; // no new value
 }
 
 //-----------------------------------------------------------------

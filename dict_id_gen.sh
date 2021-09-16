@@ -74,8 +74,6 @@ END
         name=${split[2]}
 
         printf "    printf (\"#define _%s ((uint64_t)%%\"PRId64\")\\\\n\", dict_id_make (\"%s\", %s, %s).num);\n" $var $name ${#name} $type >> dict_id_gen.c
-
-        #printf "\tdict_id_make (\"%s\", %s, %s);\n" $name $name_len $type
     done
 
     echo "}" >> dict_id_gen.c
@@ -94,6 +92,8 @@ generate_dict_id_gen_h()
 #ifndef DICT_ID_GEN_INCLUDED
 #define DICT_ID_GEN_INCLUDED
 
+#define TAG(tag) #tag, sizeof #tag - 1
+
 END
 
     # add field constant definitions to dict_id_gen.h
@@ -110,7 +110,8 @@ END
         if [ ${#prefix} -eq 0 ]; then echo "dict_id_gen.sh: Error: no GENDICT_PREFIX in $f"; exit 1; fi
 
         # note: readarray doesn't work on MacOS :(
-        readarray -t vars <<< `grep -w "#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f1 `
+        readarray -t vars <<< `grep -w "#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f1`
+        readarray -t tags <<< `grep -w "#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f3 | cut -d"/" -f1 | sed 's/[^\!-~]//g'`
 
         # calculate MAX_NUM_FIELDS_PER_DATA_TYPE
         if [ ${#vars[@]} -gt $max_fields ]; then max_fields=${#vars[@]}; fi
@@ -124,9 +125,10 @@ END
         printf "NUM_%s_FIELDS } %sFields;\n\n" $prefix $prefix >> dict_id_gen.h
         
         # add MAPPING: [did_i]={ .num = _##did_i }
-        echo "#define ${prefix}_MAPPING { \\"  >> dict_id_gen.h
-        for v in ${vars[*]}; do
-            echo "    [$v] = { _${v} }, \\" >> dict_id_gen.h
+        echo "#define ${prefix}_PREDEFINED { \\"  >> dict_id_gen.h
+
+        for ((i = 0 ; i < ${#vars[@]} ; i++)); do
+            echo "    [${vars[$i]}] = { { _${vars[$i]} }, TAG(${tags[$i]}) }, \\" >> dict_id_gen.h
         done
 
         printf "} \n\n" >> dict_id_gen.h

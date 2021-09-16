@@ -46,7 +46,7 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
     ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
-    *i = MIN (*i, vb->txt_data.len - sizeof(BAMAlignmentFixed));
+    *i = MIN_(*i, vb->txt_data.len - sizeof(BAMAlignmentFixed));
 
     // find the first alignment in the data (going backwards) that is entirely in the data - 
     // we identify and alignment by l_read_name and read_name
@@ -195,7 +195,7 @@ static void bam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_s
     // case: CIGAR is "*" - we get the dl->seq_len directly from SEQ or QUAL, and add the length to CIGAR eg "151*"
     if (!dl->seq_len) { // CIGAR is not available
         dl->seq_len = l_seq;
-        cigar_snip_len += str_int (MAX (dl->seq_len, 1), &cigar_snip[cigar_snip_len]); // if seq_len=0, then we add "1" because we have the * in seq and qual (and consistency with sam_seg_cigar_field)
+        cigar_snip_len += str_int (MAX_(dl->seq_len, 1), &cigar_snip[cigar_snip_len]); // if seq_len=0, then we add "1" because we have the * in seq and qual (and consistency with sam_seg_cigar_field)
     }
     
     memcpy (&cigar_snip[cigar_snip_len], vb->textual_cigar.data, vb->textual_cigar.len);

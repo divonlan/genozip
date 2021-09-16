@@ -28,7 +28,7 @@
 #define MIN_WORD_INDEX     -4
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
-// We use characters that cannot appear in a snip - i.e. other than ASCII 32-127, \t (\x9) \n (\xA) \r (\xD)
+// We use characters that cannot appear in a snip - i.e. other than ApCII 32-127, \t (\x9) \n (\xA) \r (\xD)
 #define SNIP_SEP                 '\x0'   // Seperator between snips - both for dict and local 
 #define SNIP_LOOKUP              '\x1'   // Lookup from local (optionally followed by a snip - interpreted differently by local type, see reconstruct_one_snip)
 #define SNIP_OTHER_LOOKUP        '\x2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
@@ -144,6 +144,8 @@ extern void ctx_update_stats (VBlockP vb);
 extern void ctx_free_context (Context *ctx);
 extern void ctx_destroy_context (Context *ctx);
 extern void ctx_map_aliases (VBlockP vb);
+extern bool ctx_is_show_dict_id (DictId dict_id);
+
 extern CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index);
 extern const char *ctx_get_snip_by_word_index (const Context *ctx, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);
@@ -179,12 +181,11 @@ static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, Context
 }
 #define ctx_has_value_in_line(vb, dict_id, p_ctx) ctx_has_value_in_line_do ((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
 
-static inline void ctx_set_last_value_do (VBlockP vb, ContextP ctx, LastValueType last_value)
+static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, LastValueType last_value)
 {
     ctx->last_value    = last_value;
     ctx->last_line_i   = vb->line_i;
 }
-#define ctx_set_last_value(vb, ctx, last_value) ctx_set_last_value_do ((VBlockP)(vb), (ctx), (last_value))
 
 // returns true if dict_id was *previously* segged on this line (last_value may be valid or not)
 #define ctx_encountered_in_line_(vb, ctx) (((ctx)->last_line_i == (vb)->line_i) || ((ctx)->last_line_i == -(int32_t)(vb)->line_i - 1))

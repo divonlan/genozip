@@ -45,9 +45,11 @@ void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned
     ((Container*)con)->repeats = BGEN24 (con->repeats); // restore - honoring our "const" contract
 
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
+
     *snip_len = 1 + b64_len + prefixes_len;
 }
 
+// WARNING: don't pass in con an address of a static container, it is not thread safe! container_prepare_snip temporarily BGEN fields of the container.
 WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con, 
                             // prefixes may be NULL or may be contain a container-wide prefix and per-item prefixes.
                             // The "container-wide prefix" is reconstructed once, at the beginning of the Container.
@@ -70,7 +72,7 @@ WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con,
     unsigned con1_snip_len = 1 + con_b64_size + prefixes_len;
     unsigned con2_snip_len = 1 + con_b64_size + ren_prefixes_len;
 
-    unsigned snip_len = ren_prefixes_len ? 1 + con1_snip_len + con2_snip_len : con1_snip_len;
+    unsigned snip_len = ren_prefixes_len ? 2 + con1_snip_len + con2_snip_len : con1_snip_len;
     char snip[snip_len];
 
     // case: we have renamed prefixes due to dual-coordinates with tag renaming
@@ -208,13 +210,13 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
             Context *item_ctx = item_ctxs[i];
-            bool reconstruct = true;
+            bool reconstruct = !flag.genocat_no_reconstruct;
+            bool trans_nor = translating && IS_CI_SET (CI_TRANS_NOR); // check for prohibition on reconstructing when translating
 
             // an item filter may filter items in two ways:
             // - returns true - item is filter out, and data is not consumed
             // - sets reconstruct=false - data is consumed, but item is not reconstructed
-            if (con->filter_items && 
-                (!(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, i, &reconstruct) || !reconstruct))) {
+            if (con->filter_items && (!(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, i, &reconstruct)))) {
                 
                 container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, true, DICT_ID_NONE, DICT_ID_NONE); // skip prefix            
                 continue; // item is filtered out
@@ -223,20 +225,19 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
             last_non_filtered_item_i = i;
 
             if (flag.show_containers && item_ctx) // show container reconstruction 
-                iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s->%s trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") (BEFORE)\n", 
+                iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s->%s trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d\n", 
                          vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctx->tag_name,
                          translating ? item->translator : 0, 
-                         vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len);
+                         vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len,
+                         reconstruct, reconstruct && !trans_nor);
 
 /*BRKPOINT*/uint32_t item_prefix_len = 
-                container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, con->items[i].dict_id); // item prefix (we will have one per item or none at all)
+                reconstruct ? container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, con->items[i].dict_id) : 0; // item prefix (we will have one per item or none at all)
 
             int32_t recon_len=0;
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 char *reconstruction_start = AFTERENT (char, vb->txt_data);
-                reconstruct = reconstruct && !flag.collect_coverage && // no reconstruction with these flags
-                                  (  !translating ||                   // not translating OR... 
-                                     !IS_CI_SET (CI_TRANS_NOR));       // no prohibition on reconstructing when translating
+                reconstruct &= !trans_nor; // check for prohibition on reconstructing when translating
 
                 recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING
 
@@ -247,8 +248,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                 else if (ctx->flags.store == STORE_FLOAT)
                     new_value.f += item_ctx->last_value.f;
 
-                // if we're reconstructing to a translated format (eg SAM2BAM) - re-reconstruct this item
-                // using the designated "translator" function, if one is available
+                // case: reconstructing to a translated format (eg SAM2BAM) - modify the reconstruction ("translate") this item
                 if (translating && item->translator && recon_len != -1 &&
                     !(flag.missing_contexts_allowed && !item_ctx->dict.len && !item_ctx->local.len)) // skip if missing contexts are allowed, and this context it missing 
                     DT_FUNC(vb, translator)[item->translator](vb, item_ctx, reconstruction_start, recon_len, item_prefix_len, false);  

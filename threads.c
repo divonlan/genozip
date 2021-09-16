@@ -246,7 +246,7 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
         if (!ENT (ThreadEnt, threads, thread_id)->in_use) break;
 
     buf_alloc (evb, &threads, 1, global_max_threads + 3, ThreadEnt, 2, "threads");
-    threads.len = MAX (threads.len, thread_id+1);
+    threads.len = MAX_(threads.len, thread_id+1);
 
     mutex_initialize (vb->vb_ready_for_compute_thread);
     mutex_lock (vb->vb_ready_for_compute_thread); // thread_entry_caller will wait on this until VB is initialized

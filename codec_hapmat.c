@@ -205,7 +205,7 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb_)
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
     // note: txt_file->max_lines_per_vb will be zero if genozip file was created by redirecting output
-    buf_alloc (vb, &vb->hapmat_column_of_zeros, 0, MAX (txt_file->max_lines_per_vb, vb->lines.len), char, 1, "hapmat_column_of_zeros");
+    buf_alloc (vb, &vb->hapmat_column_of_zeros, 0, MAX_(txt_file->max_lines_per_vb, vb->lines.len), char, 1, "hapmat_column_of_zeros");
     buf_zero (&vb->hapmat_column_of_zeros);
 
     for (uint32_t ht_i = 0; ht_i < ht_per_line; ht_i++) 

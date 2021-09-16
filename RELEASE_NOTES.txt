@@ -514,3 +514,15 @@ g. Much improved website genozip.com
 - SAM/BAM/FASTQ/FASTA/Kraken: better compression of QNAME / Description 
 - SAM/BAM/FASTQ: Faster compression of long reads
 - bug fixes
+
+12.0.34 9/September/2021
+- Compile without -march=native for genozip-linux-x86_64 and Windows Installer distributions
+- Better support for IUPAC "bases" in reference files
+- DVCF: detect many-to-one coordinate mapping and generate an .overlaps file
+- VCF: better INFO/ANN, INFO/CLNHGVS, INFO/CSQ compression
+- SAM/BAM/FASTQ/FASTA/Kraken: better compression of QNAME / Description 
+- SAM/BAM: Faster compression and decompression of SA, OA, XA with long reads 
+- Faster --test
+- More robust compression from a URL, even on flakey connections
+- Improved --STATS report
+- bug fixes

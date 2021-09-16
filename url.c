@@ -208,7 +208,7 @@ int32_t url_read_string (const char *url, char *data, uint32_t data_size)
     if (error_len && !response_len) return -1; // failure
 
     if (data) {
-        unsigned len = MIN (data_size-1, response_len);
+        unsigned len = MIN_(data_size-1, response_len);
         memcpy (data, response, len);
         data[len] = '\0';
         return len;
@@ -221,8 +221,20 @@ FILE *url_open (StreamP parent_stream, const char *url)
 {
     ASSERT0 (!curl, "Error url_open failed because curl is already running");
 
-    curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                          "To compress files from a URL", "curl", "--silent", url, NULL);
+    char str5[6] = "";
+    strncpy (str5, url, 5);
+    bool is_file = str_case_compare (str5, "file:", NULL); // wget doesn't support file://
+
+    // check if wget exists, it is better than curl in flakey connections
+    bool has_wget = !flag.is_windows && !system("which wget > /dev/null 2>&1") && file_exists ("/dev/stdout");
+
+    if (has_wget && !is_file)
+        curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
+                            "To compress files from a URL", "wget", "--tries=16", "--quiet", "--waitretry=3", "--output-document=/dev/stdout", url, NULL);
+    else // curl
+        curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
+                            "To compress files from a URL", "curl", "--silent", url, NULL);
+
     return stream_from_stream_stdout (curl);
 }
 

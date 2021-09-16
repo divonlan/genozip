@@ -49,6 +49,7 @@
 #include "random_access.h"
 #include "reconstruct.h"
 #include "coords.h"
+#include "version.h"
 
 const char *dvcf_status_names[] = DVCF_STATUS_NAMES;
 const LuftTransLateProp ltrans_props[NUM_VCF_TRANS] = DVCF_TRANS_PROPS;
@@ -75,23 +76,25 @@ void vcf_lo_zip_initialize (void)
 
     // prepare (constant) snips. note: we need these snips both for --chain and when zipping dual-coord files
     SmallContainer con = {
-        .repeats     = 1,
-        .nitems_lo   = NUM_IL_FIELDS,
+        .repeats             = 1,
+        .nitems_lo           = NUM_IL_FIELDS,
         .drop_final_item_sep = true,
-        .items       = { [IL_CHROM  ]={ .dict_id = { _VCF_oCHROM },   .seperator = ","  },
-                         [IL_POS    ]={ .dict_id = { _VCF_oPOS },     .seperator = ","  },
-                         [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .seperator = ","  },
-                         [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .seperator = ","  } } };
+        .filter_items        = true, // needed for --single-coord
+        .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_oCHROM },   .seperator = ","  },
+                                 [IL_POS    ]={ .dict_id = { _VCF_oPOS },     .seperator = ","  },
+                                 [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .seperator = ","  },
+                                 [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .seperator = ","  } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_luft_snip, &info_luft_snip_len);
 
     con = (SmallContainer){
-        .repeats     = 1,
-        .nitems_lo   = NUM_IL_FIELDS,
+        .repeats             = 1,
+        .nitems_lo           = NUM_IL_FIELDS,
         .drop_final_item_sep = true,
-        .items       = { [IL_CHROM  ]={ .dict_id = { _VCF_CHROM },    .seperator = ","  },
-                         [IL_POS    ]={ .dict_id = { _VCF_COPYPOS },  .seperator = ","  },
-                         [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .seperator = ","  },
-                         [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .seperator = ","  } } };
+        .filter_items        = true, // needed for --single-coord
+        .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_CHROM },    .seperator = ","  },
+                                 [IL_POS    ]={ .dict_id = { _VCF_COPYPOS },  .seperator = ","  },
+                                 [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .seperator = ","  },
+                                 [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .seperator = ","  } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_prim_snip, &info_prim_snip_len);
 
     // for REJTOVER, appearing a line that has only PRIMARY coordinates, we include oCHROM, oPOS and oREFALT which will 
@@ -99,21 +102,23 @@ void vcf_lo_zip_initialize (void)
     // with --luft, the reconstructor will reconstruct the entire line (consuming oCHROM, oPOS, oREFALT for the main VCF fields)
     // before finally being dropped by the container callback. Likewise for REJTBACK.
     con = (SmallContainer){
-        .repeats     = 1,
-        .nitems_lo   = 4,
-        .items       = { { .dict_id = { _VCF_COPYSTAT } },
-                         { .dict_id = { _VCF_oCHROM }   },
-                         { .dict_id = { _VCF_oPOS }     },
-                         { .dict_id = { _VCF_oREFALT }  } } };
+        .repeats      = 1,
+        .nitems_lo    = 4,
+        .filter_items = true, // needed for --single-coord
+        .items        = { { .dict_id = { _VCF_COPYSTAT } },
+                          { .dict_id = { _VCF_oCHROM }   },
+                          { .dict_id = { _VCF_oPOS }     },
+                          { .dict_id = { _VCF_oREFALT }  } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_rejt_luft_snip, &info_rejt_luft_snip_len);
 
     con = (SmallContainer){
-        .repeats     = 1,
-        .nitems_lo   = 4,
-        .items       = { { .dict_id = { _VCF_COPYSTAT } },
-                         { .dict_id = { _VCF_CHROM }    },
-                         { .dict_id = { _VCF_COPYPOS }, .seperator = { CI_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
-                         { .dict_id = { _VCF_REFALT }   } } };
+        .repeats      = 1,
+        .nitems_lo    = 4,
+        .filter_items = true, // needed for --single-coord
+        .items        = { { .dict_id = { _VCF_COPYSTAT } },
+                          { .dict_id = { _VCF_CHROM }    },
+                          { .dict_id = { _VCF_COPYPOS }, .seperator = { CI_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
+                          { .dict_id = { _VCF_REFALT }   } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_rejt_prim_snip, &info_rejt_prim_snip_len);
 }
 
@@ -182,7 +187,7 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex
 
     // extend vb->chrom_map_vcf_to_chain if needed - map between VCF node index (NOT word index) and chain primary contigs (NOT reference primary contigs)
     if (vb->chrom_node_index >= vb->chrom_map_vcf_to_chain.len) { 
-        buf_alloc (vb, &vb->chrom_map_vcf_to_chain, 0, MAX (vb->chrom_node_index+1, chain_get_num_prim_contigs()), WordIndex, 2, "chrom_map_vcf_to_chain");
+        buf_alloc (vb, &vb->chrom_map_vcf_to_chain, 0, MAX_(vb->chrom_node_index+1, chain_get_num_prim_contigs()), WordIndex, 2, "chrom_map_vcf_to_chain");
 
         // initialize new entries allocated to WORD_INDEX_MISSING
         uint32_t size = vb->chrom_map_vcf_to_chain.size / sizeof (WordIndex);
@@ -331,7 +336,7 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
     }
 
     for (unsigned i=0; i < NUM_ROLLBACK_CTXS; i++) 
-        seg_rollback ((VBlockP)vb, &vb->contexts[line_rollback_did_i[SEL(0,1)][i]]);
+        seg_rollback ((VBlockP)vb, CTX(line_rollback_did_i[SEL(0,1)][i]));
 
     seg_rollback ((VBlockP)vb, CTX(INFO_LUFT));
     seg_rollback ((VBlockP)vb, CTX(INFO_PRIM));
@@ -351,7 +356,7 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
 void vcf_lo_set_rollback_point (VBlockVCFP vb)
 {
     for (unsigned i=0; i < NUM_ROLLBACK_CTXS; i++) 
-        seg_create_rollback_point (&vb->contexts[line_rollback_did_i[SEL(0,1)][i]]);
+        seg_create_rollback_point (CTX(line_rollback_did_i[SEL(0,1)][i]));
 
     seg_create_rollback_point (CTX(INFO_LUFT));
     seg_create_rollback_point (CTX(INFO_PRIM));
@@ -370,17 +375,17 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 
     if (ostatus == LO_NO_MAPPING_IN_CHAIN) {
         vcf_lo_seg_rollback_and_reject (vb, LO_NO_MAPPING_IN_CHAIN, NULL);
-        REJECT_MAPPING ("No alignment in the chain file");
+        REJECT_MAPPING (".\tNo alignment in the chain file");
     }
     
     else if (ostatus == LO_CHROM_NOT_IN_CHAIN) {
         vcf_lo_seg_rollback_and_reject (vb, LO_CHROM_NOT_IN_CHAIN, NULL);
-        REJECT_MAPPING ("CHROM missing in chain file");
+        REJECT_MAPPING (".\tCHROM missing in chain file");
     }
 
     else if (ostatus == LO_CHROM_NOT_IN_PRIM_REF) {
         vcf_lo_seg_rollback_and_reject (vb, LO_CHROM_NOT_IN_PRIM_REF, NULL);
-        REJECT_MAPPING ("CHROM missing in Primary reference file");
+        REJECT_MAPPING (".\tCHROM missing in Primary reference file");
     }
 
     // REF & ALT - update ostatus based the relationship between REF, ALT, oREF and is_xstrand.
@@ -403,8 +408,8 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 
     // Seg oCHROM
     Context *ochrom_ctx = &vb->contexts[VCF_oCHROM];
-    const char *ochrom=""; unsigned ochrom_len=0;
-
+    STR0(ochrom);
+    
     if (dl->chrom[1] != WORD_INDEX_NONE)
         ctx_get_snip_by_zf_node_index (&ochrom_ctx->ol_nodes, &ochrom_ctx->ol_dict, dl->chrom[1], &ochrom, &ochrom_len);
 
@@ -571,7 +576,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
     ASSVCF ((strs[IL_XSTRAND][0] == 'X' || strs[IL_XSTRAND][0] == '-') && str_lens[IL_XSTRAND] ==1,
             "%s has an invalid XSTRAND=\"%.*s\" - expected \"-\" or \"X\"", tag_name_ex.s, str_lens[IL_XSTRAND], strs[IL_XSTRAND]);
     bool is_xstrand = (strs[IL_XSTRAND][0] == 'X');
-    ctx_set_last_value (vb, CTX(VCF_oXSTRAND), (int64_t)is_xstrand);
+    ctx_set_last_value (VB, CTX(VCF_oXSTRAND), (int64_t)is_xstrand);
 
     LiftOverStatus ostatus = 
         vcf_lo_seg_ostatus_from_LUFT_or_PRIM (vb, tag_name_ex.s, is_xstrand,
@@ -703,10 +708,24 @@ void vcf_lo_append_rejects_file (VBlockP vb, Coords coord)
 void vcf_liftover_display_lift_report (void)
 {
     char report_fn[strlen (z_name) + 50];
-    sprintf (report_fn, "%s.rejects.txt", z_name);
+    sprintf (report_fn, "%s.rejects", z_name);
 
-    if (z_file->rejects_report.len)
+    if (z_file->rejects_report.len) {
+        #define REJECTS_HEADER \
+        "##fileformat=GENOZIP-REJECTSv" GENOZIP_CODE_VERSION "\n" \
+        "#oSTATUS\tCHROM\tPOS\tREF\tALT\tREASON\n"
+        #define REJECTS_HEADER_LEN (sizeof REJECTS_HEADER - 1)
+
+        // squeeze in the header
+        buf_alloc (evb, &z_file->rejects_report, REJECTS_HEADER_LEN, 0, char, 0, NULL);
+        ARRAY (char, report, z_file->rejects_report);
+
+        memmove (&report[REJECTS_HEADER_LEN], report, report_len);
+        memcpy (report, REJECTS_HEADER, REJECTS_HEADER_LEN);
+        z_file->rejects_report.len += REJECTS_HEADER_LEN;
+
         buf_dump_to_file (report_fn, &z_file->rejects_report, 1, false, false, false);
+    }
 
     if (!flag.quiet)
         iprintf ("\nCongratulations! %s is a dual-coordinate VCF (DVCF). You can now:\n"

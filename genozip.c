@@ -621,7 +621,7 @@ int main (int argc, char **argv)
     // if we're genozipping with tar, initialize tar file
     if (tar_is_tar()) tar_initialize();
 
-    for (unsigned file_i=0, z_file_i=0; file_i < MAX (num_files, 1); file_i++) {
+    for (unsigned file_i=0, z_file_i=0; file_i < MAX_(num_files, 1); file_i++) {
 
         // get file name
         const char *next_input_file = num_files ? input_files[file_i] : NULL;  // NULL means stdin

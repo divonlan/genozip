@@ -45,7 +45,7 @@ void codec_pbwt_display_ht_matrix (VBlock *vb, uint32_t max_rows)
     ARRAY (Allele, ht, vb->ht_matrix_ctx->local);
     uint32_t cols = vb->ht_per_line;
     uint32_t rows = ht_len / vb->ht_per_line;
-    max_rows = max_rows ? MIN (rows, max_rows) : rows;
+    max_rows = max_rows ? MIN_(rows, max_rows) : rows;
 
     iprint0 ("\nht_matrix:\n");
     for (uint32_t r=0; r < max_rows; r++) {
@@ -253,8 +253,8 @@ bool codec_pbwt_compress (VBlock *vb,
 
     PbwtState state = codec_pbwt_initialize_state (vb, &vb->runs_ctx->local, &vb->fgrc_ctx->local); 
  
-    buf_alloc (vb, &vb->runs_ctx->local, 0, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 5 ), char, CTX_GROWTH, "contexts->local"); // initial allocation
-    buf_alloc (vb, &vb->fgrc_ctx->local, 0, MAX (vb->ht_per_line, vb->ht_matrix_ctx->local.len / 30), char, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &vb->runs_ctx->local, 0, MAX_(vb->ht_per_line, vb->ht_matrix_ctx->local.len / 5 ), char, CTX_GROWTH, "contexts->local"); // initial allocation
+    buf_alloc (vb, &vb->fgrc_ctx->local, 0, MAX_(vb->ht_per_line, vb->ht_matrix_ctx->local.len / 30), char, CTX_GROWTH, "contexts->local");
         
     ARRAY (Allele, ht_data, vb->ht_matrix_ctx->local);
     
@@ -347,7 +347,7 @@ static inline void pbwt_decode_one_line (VBlockP vb, PbwtState *state, uint32_t 
     for (uint32_t ht_i=0; ht_i < vb->ht_per_line; ) { 
         uint32_t run_len = *runs;
 
-        uint32_t line_part_of_run = MIN (run_len, vb->ht_per_line - ht_i); // the run could be shared with the next line
+        uint32_t line_part_of_run = MIN_(run_len, vb->ht_per_line - ht_i); // the run could be shared with the next line
         
         for (uint32_t i=0; i < line_part_of_run; i++, ht_i++) {
             uint32_t oriented_ht_i = backwards ? vb->ht_per_line - ht_i - 1 : ht_i;

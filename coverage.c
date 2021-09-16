@@ -52,7 +52,7 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
     const Buffer *header_contigs = txtheader_get_contigs();
     const Buffer *loaded_contigs = ref_get_contigs (gref);
     
-    for (uint64_t i=0; i < txt_file->coverage.len; i++) {
+    for (uint64_t i=0; i < txt_file->coverage.len - NUM_COVER_TYPES; i++) {
 
         if (i == index_chrX || i == index_chrY) continue; // not autosome
 

@@ -9,7 +9,9 @@ However, in some environments, interactive registration is not possible. For exa
 
 In these environments, do the following:
 
-| 1. Register Genozip on another computer. This creates a license file located at ``~/.genozip_license`` on Linux and Mac and ``%APPDATA%\genozip\.genozip_license`` on Windows.
+| 1. Register Genozip on another computer with ``genozip --register``. You can skip this step if you have already used (and hence registered) Genozip on this computer. 
+| 
+| -> The license file located at ``~/.genozip_license`` on Linux and Mac and ``%APPDATA%\genozip\.genozip_license`` on Windows.
 |
 | 2. Copy the license file to the target computer (any directory, any filename). 
 |
@@ -19,4 +21,4 @@ In these environments, do the following:
 
     genozip --licfile mydir/.genozip_license mydata.bam
 
-Still can't register the license? email register@genozip.com for help.
+Still having issues? email support@genozip.com for help.

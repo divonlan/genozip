@@ -140,7 +140,7 @@ void crypt_pad (uint8_t *data, uint32_t data_len, uint32_t padding_len)
     if (!padding_len) return; // nothing to do
 
     // use md5 to generate non-trival padding - the hash of the last 100 bytes of data
-    uint32_t src_len = MIN (data_len, 100);
+    uint32_t src_len = MIN_(data_len, 100);
     Digest hash = md5_do (&data[data_len-src_len], src_len);
     
     memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding

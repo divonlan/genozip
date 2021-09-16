@@ -513,7 +513,7 @@ int32_t zfile_read_section_do (File *file,
     uint32_t data_compressed_len = BGEN32 (header->data_compressed_len);
     uint32_t data_encrypted_len  = BGEN32 (header->data_encrypted_len);
 
-    uint32_t data_len = MAX (data_compressed_len, data_encrypted_len);
+    uint32_t data_len = MAX_(data_compressed_len, data_encrypted_len);
 
     // in case where we already read part of the body (eg if is_encrypted was initially set and then unset) (remaining_data_len might be negative)
     int32_t remaining_data_len = (int32_t)data_len - (int32_t)(bytes_read - header_size); 
@@ -624,9 +624,11 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
             const char *luft_ref_filename = zfile_read_genozip_header_get_ref_filename (header->ref_filename);
 
             if (file_exists (prim_ref_filename) && file_exists (luft_ref_filename)) {
-                WARN_ONCE ("Note: using the reference file PRIMARY=%s LUFT=%s. You can override this with --reference, see: " WEBSITE_DVCF,
-                           prim_ref_filename, luft_ref_filename);
-                
+
+                if (!flag.show_chain) 
+                    WARN_ONCE ("Note: using the reference file PRIMARY=%s LUFT=%s. You can override this with --reference, see: " WEBSITE_DVCF,
+                            prim_ref_filename, luft_ref_filename);
+                    
                 ref_set_reference (gref, luft_ref_filename, REF_LIFTOVER, false);
                 ref_set_reference (prim_ref, prim_ref_filename, REF_LIFTOVER, false);
             }

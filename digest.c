@@ -85,7 +85,7 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
         char str[65];
         iprintf ("vb=%05d %s update %s (len=%"PRIu64" so_far=%"PRIu64") 32chars=\"%s\": before=%s after=%s\n", 
                  buf->vb->vblock_i, DIGEST_NAME, msg, buf->len, ctx->common.bytes_digested, 
-                 str_to_single_line_printable (buf->data, MIN (32, (int)buf->len), str), 
+                 str_to_single_line_printable (buf->data, MIN_(32, (int)buf->len), str), 
                  digest_display_ex (digest_snapshot (&before), DD_NORMAL).s, 
                  digest_display_ex (digest_snapshot (ctx), DD_NORMAL).s);
     }

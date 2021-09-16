@@ -18,6 +18,7 @@ typedef enum { BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_MMAP, BUF_NUM_TY
 
 typedef struct Buffer {
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
+    bool can_be_big;  // do not display warning if buffer grows very big
     
     const char *name; // name of allocator - used for memory debugging & statistics
     uint64_t size;    // number of bytes available to the user (i.e. not including the allocated overhead)
@@ -81,7 +82,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                               const char *name);
 
 #define buf_alloc(alloc_vb, buf, more, at_least, type, grow_at_least_factor, name) do {\
-    uint64_t new_req_size = MAX((at_least), ((buf)->len+(more)))*sizeof(type); /* make copy to allow ++ */ \
+    uint64_t new_req_size = MAX_((at_least), ((buf)->len+(more)))*sizeof(type); /* make copy to allow ++ */ \
     ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf)->vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name)) \
                                                     : (buf)->size); \
 } while(0)
@@ -90,6 +91,12 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     uint64_t size_before = (buf)->data ? (buf)->size : 0; /* always zero the whole buffer in an initial allocation */ \
     buf_alloc((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
     if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
+} while(0)
+
+#define buf_alloc_255(vb, buf, more, at_least, element_type, grow_at_least_factor,name) do { \
+    uint64_t size_before = (buf)->data ? (buf)->size : 0; /* always zero the whole buffer in an initial allocation */ \
+    buf_alloc((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
+    if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 255, (buf)->size - size_before); \
 } while(0)
 
 extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, bool read_only_buffer, const char *func, uint32_t code_line, const char *name);

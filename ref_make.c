@@ -27,7 +27,7 @@ static Range *ref_make_ref_get_range (uint32_t vblock_i)
 {
     // access ranges.len under the protection of the mutex
     spin_lock (make_ref_spin);
-    gref->ranges.len = MAX (gref->ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
+    gref->ranges.len = MAX_(gref->ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
     ASSERT (gref->ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
     spin_unlock (make_ref_spin);
 

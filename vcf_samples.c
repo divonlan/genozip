@@ -25,7 +25,7 @@ static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[MAX_ARG_ARRAY_I
 #define vcf_encountered_in_sample(vb, dict_id, p_ctx) (ctx_encountered_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == ((VBlockVCFP)vb)->sample_i)
 #define vcf_has_value_in_sample_(vb, ctx) (ctx_has_value_in_line_(vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
 #define vcf_has_value_in_sample(vb, dict_id, p_ctx) (ctx_has_value_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
-#define vcf_set_last_sample_value(vb, ctx, last_value) do { ctx_set_last_value (vb, ctx, last_value); (ctx)->last_sample_i = (vb)->sample_i; } while (0);
+#define vcf_set_last_sample_value(vb, ctx, last_value) do { ctx_set_last_value ((VBlockP)(vb), ctx, last_value); (ctx)->last_sample_i = (vb)->sample_i; } while (0);
 
 #define vcf_set_encountered_in_sample(ctx)  /* set encountered if not already vcf_set_last_sample_value */  \
     if (!vcf_has_value_in_sample_(vb, ctx)) { \
@@ -159,7 +159,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
     // case: we had ADALL preceeding in this sample, seg as delta vs. ADALL 
     if (vcf_encountered_in_sample_(vb, CTX(FORMAT_ADALL))) 
         for (unsigned i=0; i < num_items; i++) 
-            seg_delta_vs_other (vb, item_ctxs[i], ECTX (con_FORMAT_ADALL.items[i].dict_id), NULL, item_lens[i], -1);
+            seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_FORMAT_ADALL.items[i].dict_id), NULL, item_lens[i], -1);
 
     // case: no preceeding ADALL, since item 0 (depth of REF) is usually somewhat related to the overall sample depth,
     // and hence values within a sample are expected to be correlated - we store it transposed, and the other items - normally
@@ -320,7 +320,7 @@ static void vcf_seg_MB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
 
         // if possible, seg even-numbered element delta vs the corresponding element in F2R1
         if (use_formula_even && !(i%2)) { 
-            seg_delta_vs_other (vb, item_ctxs[i], ECTX (con_FORMAT_F2R1.items[i/2].dict_id), NULL, item_lens[i], -1);
+            seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_FORMAT_F2R1.items[i/2].dict_id), NULL, item_lens[i], -1);
             item_ctxs[i]->flags.store = STORE_INT; // consumed by the odd items (below)
         }
 
@@ -380,7 +380,7 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
     if (str_get_int (cell, cell_len, &ps_value) && ps_value == ctx->last_value.i) // same as previous line
         return seg_by_ctx (vb, ((char []){ SNIP_SELF_DELTA, '0' }), 2, ctx, cell_len);
 
-    return seg_delta_vs_other (vb, ctx, CTX(VCF_POS), cell, cell_len, 1000);
+    return seg_delta_vs_other (VB, ctx, CTX(VCF_POS), cell, cell_len, 1000);
 }
 
 //----------
@@ -391,11 +391,11 @@ static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const ch
 {
     // case - we have FORMAT/AD - calculate delta vs the sum of AD components
     if (vcf_has_value_in_sample_(vb, CTX(FORMAT_AD)))
-        return seg_delta_vs_other (vb, ctx, CTX(FORMAT_AD), cell, cell_len, -1);
+        return seg_delta_vs_other (VB, ctx, CTX(FORMAT_AD), cell, cell_len, -1);
 
     // case: there is only one sample there is an INFO/DP too, we store a delta 
     else if (vcf_num_samples == 1 && vcf_has_value_in_sample_(vb, CTX(INFO_DP))) 
-        return seg_delta_vs_other (vb, ctx, CTX(INFO_DP), cell, cell_len, -1);
+        return seg_delta_vs_other (VB, ctx, CTX(INFO_DP), cell, cell_len, -1);
 
     // case: no FORMAT/AD and no INFO/DP - store in transposed matrix
     else 
@@ -455,7 +455,7 @@ static void vcf_convert_prob_to_phred (VBlockVCFP vb, const char *flag_name, con
     unsigned phred_len = 0;
     for (unsigned i=0; i < n_probs; i++) {
         
-        int64_t phred = MIN (60, (int64_t)(((-probs[i]) * 10)+0.5)); // round to the nearest int, capped at 60
+        int64_t phred = MIN_(60, (int64_t)(((-probs[i]) * 10)+0.5)); // round to the nearest int, capped at 60
 
         phred_len += str_int (phred, &optimized_snip[phred_len]);
         if (i < n_probs - 1)
@@ -474,7 +474,7 @@ static bool vcf_phred_optimize (const char *snip, unsigned len, char *optimized_
     unsigned out_len = 0;
 
     for (unsigned i=0; i < n_items; i++) {
-        int64_t new_phred = MIN (60, (int64_t)(items[i] + 0.5));
+        int64_t new_phred = MIN_(60, (int64_t)(items[i] + 0.5));
         out_len += str_int (new_phred, &optimized_snip[out_len]);
         if (i < n_items-1) optimized_snip[out_len++] = ',';
     }
@@ -869,7 +869,7 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCF *vb, uint3
 
         Context *failed_ctx = vcf_seg_validate_luft_trans_one_sample (vb, ctxs, num_items, (char *)field_start, field_len);
         if (failed_ctx) { // some context doesn't luft-translate as required
-            REJECT_SUBFIELD (LO_FORMAT, failed_ctx, "Cannot cross-render sample due to field %s: \"%.*s\"", failed_ctx->tag_name, field_len, field_start);
+            REJECT_SUBFIELD (LO_FORMAT, failed_ctx, ".\tCannot cross-render sample due to field %s: \"%.*s\"", failed_ctx->tag_name, field_len, field_start);
 
             // make all contexts untranslateable in this line
             for (unsigned i=0; i < num_items; i++)  // iterate on the order as in the line
@@ -979,7 +979,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         else if (dict_id.num == _FORMAT_MIN_DP && vcf_has_value_in_sample (vb, _FORMAT_DP, &other_ctx)) 
-            seg_delta_vs_other (vb, ctx, other_ctx, sfs[i], sf_lens[i], -1);
+            seg_delta_vs_other (VB, ctx, other_ctx, sfs[i], sf_lens[i], -1);
 
         else if (dict_id.num == _FORMAT_AF) 
             vcf_seg_FORMAT_AF (vb, ctx, sfs[i], sf_lens[i]);

@@ -264,16 +264,22 @@ void license_register (void)
                                      "If you are unable to register (for example because this is a batch-job machine) please see: " WEBSITE_USING_ON_HPC);
 
 
+    const char *filename = get_license_filename (true);
+
     if (!n_fields) {
+
         fprintf (stderr, "Welcome to genozip!\n\n"
                          "The use of genozip for non-commercial purposes (as defined in the license: "WEBSITE_LICENSE") is FREE, but requires registration.\n"
                          "If you are not sure whether your usage is considered non-commercial, please email register@genozip.com\n\n");
 
-        str_query_user ("Would you like to register now? ([y] or n)", confirm, sizeof(confirm), str_verify_y_n, "Y");
+        if (file_exists (filename)) 
+            str_query_user ("You are already registered. Are you sure you want to register again? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);
+        else 
+            str_query_user ("Would you like to register now? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
+
         license_exit_if_not_confirmed (confirm);
     }
 
-    const char *filename = get_license_filename (true);
     file_remove (filename, true); // remove old license, if one exists
 
     if (n_fields) {

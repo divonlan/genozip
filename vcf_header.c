@@ -73,11 +73,11 @@ static inline unsigned vcf_header_parse_fileformat_line (const Buffer *txt_heade
     const char *newline = memchr (line, '\n', line_len);
     unsigned len = newline ? newline - line + 1 : 0;
 
-    if      (!memcmp (line, "##fileformat=VCFv4.1", MIN (20, len))) vcf_version = VCF_v4_1;
-    else if (!memcmp (line, "##fileformat=VCFv4.2", MIN (20, len))) vcf_version = VCF_v4_2;
-    else if (!memcmp (line, "##fileformat=VCFv4.3", MIN (20, len))) vcf_version = VCF_v4_3;
-    else if (!memcmp (line, "##fileformat=VCFv4.4", MIN (20, len))) vcf_version = VCF_v4_4;
-    else if (!memcmp (line, "##fileformat=VCFv4.5", MIN (20, len))) vcf_version = VCF_v4_5;
+    if      (!memcmp (line, "##fileformat=VCFv4.1", MIN_(20, len))) vcf_version = VCF_v4_1;
+    else if (!memcmp (line, "##fileformat=VCFv4.2", MIN_(20, len))) vcf_version = VCF_v4_2;
+    else if (!memcmp (line, "##fileformat=VCFv4.3", MIN_(20, len))) vcf_version = VCF_v4_3;
+    else if (!memcmp (line, "##fileformat=VCFv4.4", MIN_(20, len))) vcf_version = VCF_v4_4;
+    else if (!memcmp (line, "##fileformat=VCFv4.5", MIN_(20, len))) vcf_version = VCF_v4_5;
 
     return len;
 }
@@ -123,7 +123,7 @@ static void vcf_header_get_attribute (STRp(line), unsigned key_len, STRp(attr), 
     const char *bracket = memchr (start, '>', &line[line_len] - start);
 
     if (!comma && !bracket) goto missing; // attr isn't terminated with a comma or >
-    const char *after = !comma ? bracket : !bracket ? comma : MIN (comma,bracket);
+    const char *after = !comma ? bracket : !bracket ? comma : MIN_(comma,bracket);
     
     *snip_len = after - start ;
     *snip = *snip_len ? start : NULL;

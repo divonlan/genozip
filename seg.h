@@ -29,19 +29,20 @@ extern WordIndex seg_by_ctx_do (VBlockP vb, const char *snip, unsigned snip_len,
 #define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), CTX(did_i), (add_bytes), (is_new))
 #define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), CTX(did_i), (add_bytes), NULL)
 
-extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes);
+extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
+#define seg_duplicate_last(vb,ctx,add_bytes) seg_known_node_index ((VBlockP)(vb), (ctx), *LASTENT (uint32_t, (ctx)->b250), (add_bytes))
 
 extern WordIndex seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
 extern WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer(vb,did_i,n,add_sizeof_n) seg_integer_do((VBlockP)(vb), (did_i), (n), (add_sizeof_n) ? sizeof(n) : 0)
 
-extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
-extern bool seg_integer_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes); // segs integer in local if possible
-#define seg_integer_or_not(vb, ctx, this_value, this_value_len, add_bytes) seg_integer_or_not_do ((VBlockP)(vb), (ctx), (this_value), (this_value_len), (add_bytes))
+extern void seg_integer_in_local (VBlockP vb, ContextP ctx, const char *int_str, unsigned int_str_len); // integer goes into local, with no lookup (no b250 in this ctx)
 
-extern bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
-#define seg_float_or_not(vb, ctx, this_value, this_value_len, add_bytes) seg_float_or_not_do ((VBlockP)(vb), (ctx), (this_value), (this_value_len), (add_bytes))
+extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
+extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes); // segs integer in local if possible
+extern void seg_integer_or_not_cb (VBlockP vb, ContextP ctx, const char *int_str, unsigned int_str_len);
+extern bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
 
 #define MAX_POS_DELTA 32000   // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 #define SPF_BAD_SNIPS_TOO  1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
@@ -49,25 +50,29 @@ extern bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_valu
 #define SPF_UNLIMIED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA
 extern PosType seg_pos_field (VBlockP vb, DidIType snip_did_i, DidIType base_did_i, unsigned opt, 
                               char missing, const char *pos_str, unsigned pos_len, PosType this_pos, unsigned add_bytes);
+extern void seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned pos_len);
 
-extern void seg_id_field_do (VBlockP vb, DidIType did_i, const char *id_snip, unsigned id_snip_len, bool account_for_separator);
-#define seg_id_field(vb, did_i, id_snip, id_snip_len, account_for_separator) \
-    seg_id_field_do((VBlockP)vb, did_i, (id_snip), (id_snip_len), (account_for_separator))
+extern void seg_id_field_do (VBlockP vb, ContextP ctx, const char *id_snip, unsigned id_snip_len);
+#define seg_id_field(vb, ctx, id_snip, id_snip_len, account_for_separator) \
+    do { seg_id_field_do((VBlockP)vb, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
 
 extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep);
 #define seg_initialize_container_array(dict_id, type_1_items, comma_sep) seg_initialize_container_array_do ((DictId)dict_id, type_1_items, comma_sep)
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
+extern void seg_add_to_local_text_cb (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, const void *data, unsigned data_len);
 extern void seg_add_to_local_uint8  (VBlockP vb, ContextP ctx, uint8_t  value, unsigned add_bytes);
 extern void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned add_bytes);
 extern void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes);
 extern void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned add_bytes);
 
-extern WordIndex seg_delta_vs_other_do (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
-#define seg_delta_vs_other(vb, ctx, other_ctx, value, value_len, max_delta) seg_delta_vs_other_do ((VBlockP)(vb), (ctx), (other_ctx), (value), (value_len), (max_delta))
+extern WordIndex seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
 
-extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local);
+extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local, bool items_are_id);
+
+typedef void (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value));
+extern void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, const char *snip, unsigned snip_len, SegCallback *callbacks);
 
 extern const char sep_with_space[], sep_without_space[], sep_pipe_only[];
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
@@ -80,10 +85,21 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
 #define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip, snip_len) \
     seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), (has_parameter), (parameter), (snip), (snip_len))
 
-bool seg_set_last_txt_do (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type);
-#define seg_set_last_txt(vb, ctx, value, value_len, store_type) seg_set_last_txt_do ((VBlockP)(vb), (ctx), (value), (value_len), (store_type))
+bool seg_set_last_txt (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type);
 
-extern void seg_create_rollback_point (ContextP ctx);
+// called before seg, to store the point to which we might roll back
+static inline void seg_create_rollback_point (ContextP ctx)
+{
+    ctx->rback_b250_len       = ctx->b250.len;
+    ctx->rback_local_len      = ctx->local.len;
+    ctx->rback_txt_len        = ctx->txt_len;
+    ctx->rback_num_singletons = ctx->num_singletons;
+    ctx->rback_last_value     = ctx->last_value;
+    ctx->rback_last_delta     = ctx->last_delta;
+    ctx->rback_last_txt_index = ctx->last_txt_index;
+    ctx->rback_last_txt_len   = ctx->last_txt_len;
+}
+
 extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 // ------------------
@@ -179,17 +195,17 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
             /* vb end pos file:   */ vb->vb_position_txt_file + vb->txt_data.len-1, \
             /* vb length:         */ vb->txt_data.len,\
             /* +- 30 char snip    */\
-            /* chars before:      */ p_into_txt ? MIN (30, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
-            /* chars after:       */ p_into_txt ? MIN (30, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
-            /* snip len:          */ p_into_txt ? (unsigned)(MIN (p_into_txt+31, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX (p_into_txt-30, vb->txt_data.data) /* start_pos */) : -1,\
+            /* chars before:      */ p_into_txt ? MIN_(30, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
+            /* chars after:       */ p_into_txt ? MIN_(30, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
+            /* snip len:          */ p_into_txt ? (unsigned)(MIN_(p_into_txt+31, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX_(p_into_txt-30, vb->txt_data.data) /* start_pos */) : -1,\
             /* condition for snip */ (vb->txt_data.data && p_into_txt && (p_into_txt >= vb->txt_data.data) && (p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
-            /* snip start:        */    MAX (p_into_txt-30, vb->txt_data.data) : "(inaccessible)"),\
+            /* snip start:        */    MAX_(p_into_txt-30, vb->txt_data.data) : "(inaccessible)"),\
             /* +- 2 char snip     */\
-            /* chars before:      */ p_into_txt ? MIN (2, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
-            /* chars after:       */ p_into_txt ? MIN (2, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
-            /* snip len:          */ p_into_txt ? (unsigned)(MIN (p_into_txt+3, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX (p_into_txt-2, vb->txt_data.data) /* start_pos */) : -1,\
+            /* chars before:      */ p_into_txt ? MIN_(2, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
+            /* chars after:       */ p_into_txt ? MIN_(2, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
+            /* snip len:          */ p_into_txt ? (unsigned)(MIN_(p_into_txt+3, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX_(p_into_txt-2, vb->txt_data.data) /* start_pos */) : -1,\
             /* condition for snip */ (vb->txt_data.data && p_into_txt && (p_into_txt >= vb->txt_data.data) && (p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
-            /* snip start:        */    MAX (p_into_txt-3, vb->txt_data.data) : "(inaccessible)"),\
+            /* snip start:        */    MAX_(p_into_txt-3, vb->txt_data.data) : "(inaccessible)"),\
             /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len,\
             /* output filename:   */ vb->vblock_i, file_plain_ext_by_dt (vb->data_type),\
             /* dump filename:     */ txtfile_dump_vb ((VBlockP)vb, txt_name))

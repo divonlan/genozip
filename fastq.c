@@ -359,8 +359,8 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - FASTQ_DESC_str);
     
     // DESC - the description/id line is vendor-specific. example:
-    // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG (<-- this is Illumina format)
-    // See here for details of Illumina subfields: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
+    // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG <-- Illumina, See: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
+    // @20A_V100002704L1C001R012000000/1 <-- BGI, see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
     unsigned FASTQ_DESC_len;
     const char *FASTQ_SEQ_str = seg_get_next_line (vb, FASTQ_DESC_str, &len, &FASTQ_DESC_len, true, has_13, "DESC");
  
@@ -402,7 +402,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 
     else {
         Context *nonref_ctx = CTX(FASTQ_NONREF);
-        buf_alloc ((VBlockP)vb, &nonref_ctx->local, 0, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), char, CTX_GROWTH, "contexts->local"); 
+        buf_alloc ((VBlockP)vb, &nonref_ctx->local, 0, MAX_(nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), char, CTX_GROWTH, "contexts->local"); 
         buf_add (&nonref_ctx->local, FASTQ_SEQ_str, dl->seq_len);
     }
 
@@ -472,7 +472,7 @@ void fastq_zip_qual (VBlock *vb, uint64_t vb_line_i,
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_qual_len  = MIN (dl->seq_len, maximum_len);
+    *line_qual_len  = MIN_(dl->seq_len, maximum_len);
     
     if (!line_qual_data) return; // only lengths were requested
 
@@ -600,7 +600,7 @@ static void fastq_update_coverage (VBlockFASTQ *vb)
 
     WordIndex chrom_index;
     if (gpos != NO_GPOS && 
-        (chrom_index = ref_contig_get_by_gpos (gref, gpos)) != WORD_INDEX_NONE) {
+        (chrom_index = ref_contig_get_by_gpos (gref, gpos, NULL)) != WORD_INDEX_NONE) {
 
         if (flag.show_coverage || flag.show_sex)
             *ENT (uint64_t, vb->coverage, chrom_index) += vb->seq_len;

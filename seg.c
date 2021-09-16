@@ -48,29 +48,14 @@ WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Contex
 } 
 
 // segs the same node as previous seg
-WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes) 
+WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes) 
 { 
     buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, NULL);
 
-    WordIndex node_index = *LASTENT (uint32_t, ctx->b250); 
     NEXTENT (uint32_t, ctx->b250) = node_index; 
     ctx->txt_len += add_bytes;
 
     return node_index;
-}
-
-// called before seg, to store the point to which we might roll back
-void seg_create_rollback_point (Context *ctx)
-{
-    // roll back point
-    ctx->rback_b250_len       = ctx->b250.len;
-    ctx->rback_local_len      = ctx->local.len;
-    ctx->rback_txt_len        = ctx->txt_len;
-    ctx->rback_num_singletons = ctx->num_singletons;
-    ctx->rback_last_value     = ctx->last_value;
-    ctx->rback_last_delta     = ctx->last_delta;
-    ctx->rback_last_txt_index = ctx->last_txt_index;
-    ctx->rback_last_txt_len   = ctx->last_txt_len;
 }
 
 // rolls back a context to the rollback point registered in seg_create_rollback_point
@@ -136,45 +121,50 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len,
     ABOSEG (str, "while segmenting %s: expecting a %s%s%safter \"%.*s\"", 
             item_name,
             newline==GN_SEP ? "NEWLINE " : "", tab==GN_SEP ? "TAB " : "", space==GN_SEP ? "\" \" " : "", 
-            MIN (i, 1000), str);
+            MIN_(i, 1000), str);
 
     return 0; // avoid compiler warning - never reaches here
 }
 
-const char *seg_get_next_line (void *vb_, const char *str, int *remaining_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, const char *item_name)
+// returns first character after current line
+const char *seg_get_next_line (void *vb_, const char *str, 
+                               int *remaining_len, // in/out
+                               unsigned *len,      // out - length of line exluding \r and \n
+                               bool must_have_newline, bool *has_13 /* out */, const char *item_name)
 {
     VBlockP vb = (VBlockP)vb_;
 
-    unsigned i=0; for (; i < *remaining_len; i++)
-        if (str[i] == '\n') {
-                *len = i;
-                *remaining_len -= i+1;
+    const char *after = str + *remaining_len;
+    for (const char *s=str; s < after; s++)
+        if (*s == '\n') {
+                *len = s - str;
+                *remaining_len -= *len + 1;
 
                 // check for Windows-style '\r\n' end of line 
-                if (i && str[i-1] == '\r') {
+                if (s > str && s[-1] == '\r') {
                     (*len)--;
                     *has_13 = true;
                 }
 
-                return str + i+1; // beyond the separator
+                return str + *len + *has_13 + 1; // beyond the separator
         }
     
     ASSSEG (*remaining_len, str, "missing %s field", item_name);
 
     // if we reached here - line doesn't end with a newline
     ASSSEG (!must_have_newline, str, "while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
-            item_name, MIN (i-1, 1000), str);
+            item_name, MIN_(*remaining_len, 1000), str);
 
-    *len = *remaining_len;
+    // we have no newline, but check if last character is a \r
+    *has_13 = (after > str) && (after[-1] == '\r');
+    *len = *remaining_len - *has_13;
     *remaining_len = 0;
-    *has_13 = false;
 
-    return str + *len;
+    return after;
 }
 
 // returns true is value is of type store_type and stored in last_value
-bool seg_set_last_txt_do (VBlockP vb, ContextP ctx, 
-                          const char *value, unsigned value_len, StoreType store_type)
+bool seg_set_last_txt (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type)
 {
     bool is_value_in_txt_data = value >= FIRSTENT (char, vb->txt_data) &&
                                 value <= LASTENT  (char, vb->txt_data);
@@ -373,6 +363,10 @@ PosType seg_pos_field (VBlock *vb,
 
     return this_pos;
 }
+void seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned pos_len)
+{
+    seg_pos_field (vb, ctx->did_i, ctx->did_i, 0, 0, pos_str, pos_len, 0, pos_len);
+}
 
 // Commonly (but not always), IDs are SNPid identifiers like "rs17030902". We store the ID divided to 2:
 // - We store the final digits, if any exist, and up to 9 digits, as an integer in SEC_NUMERIC_ID_DATA, which is
@@ -382,12 +376,12 @@ PosType seg_pos_field (VBlock *vb,
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field_do (VBlock *vb, DidIType did_i, const char *id_snip, unsigned id_snip_len, bool account_for_separator)
+void seg_id_field_do (VBlock *vb, ContextP ctx, const char *id_snip, unsigned id_snip_len)
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
     
-    unsigned num_digits = MIN (id_snip_len - (i+1), 9);
+    unsigned num_digits = MIN_(id_snip_len - (i+1), 9);
 
     // leading zeros will be part of the dictionary data, not the number
     for (unsigned i = id_snip_len - num_digits; i < id_snip_len; i++) 
@@ -395,8 +389,6 @@ void seg_id_field_do (VBlock *vb, DidIType did_i, const char *id_snip, unsigned 
             num_digits--;
         else 
             break;
-
-    Context *ctx = CTX(did_i);
 
     // added to local if we have a trailing number
     if (num_digits) {
@@ -410,13 +402,12 @@ void seg_id_field_do (VBlock *vb, DidIType did_i, const char *id_snip, unsigned 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;
     SAFE_ASSIGN (&id_snip[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
-    seg_by_ctx (vb, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len + !!account_for_separator); // account for the entire length, and sometimes with \t
+    seg_by_ctx (vb, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len); // account for the entire length, and sometimes with \t
     SAFE_RESTORE;
 }
 
 // returns true if it was an integer
-bool seg_integer_or_not_do (VBlockP vb, ContextP ctx, 
-                            const char *this_value, unsigned this_value_len, unsigned add_bytes)
+bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
     // case: its an integer
     if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
@@ -433,7 +424,7 @@ bool seg_integer_or_not_do (VBlockP vb, ContextP ctx,
 
         // add to local
         buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
-        NEXTENT (uint32_t, ctx->local) = ctx->last_value.i;
+        NEXTENT (uint32_t, ctx->local) = (uint32_t)ctx->last_value.i;
         
         // add to b250
         seg_simple_lookup ((VBlockP)vb, ctx, add_bytes);
@@ -449,8 +440,13 @@ bool seg_integer_or_not_do (VBlockP vb, ContextP ctx,
     }
 }
 
+void seg_integer_or_not_cb (VBlockP vb, ContextP ctx, const char *int_str, unsigned int_str_len)
+{
+    seg_integer_or_not (vb, ctx, int_str, int_str_len, int_str_len);
+}
+
 // if its a float, stores the float in local, and a LOOKUP in b250, and returns true. if not - normal seg, and returns false.
-bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
+bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
     char snip[1 + FLOAT_FORMAT_LEN];
@@ -480,9 +476,9 @@ bool seg_float_or_not_do (VBlockP vb, ContextP ctx, const char *this_value, unsi
     }
 }
 
-WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx, 
-                                 const char *value, unsigned value_len, // if value==NULL, we use last_value.i (note: value_len must always be given)
-                                 int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
+WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, 
+                              const char *value, unsigned value_len, // if value==NULL, we use last_value.i (note: value_len must always be given)
+                              int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
 {
     if (!other_ctx) goto fallback;
 
@@ -522,6 +518,75 @@ Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, 
     return con;
 }
 
+typedef struct { 
+    const char *item;       // pointer into field
+    unsigned item_len;
+    char sep;               // separator after item - 0 if none
+    char sep2;              // double space seperator - common in FASTA headers
+    bool is_int;
+    int64_t value;          // in case of an int
+    unsigned leading_zeros; // in case of an int - these will go into the container prefix
+} CompoundItem;
+
+static void seg_compound_field_split (const char *field, unsigned field_len, const char *is_sep,
+                                      CompoundItem *items, uint8_t *n_items) // out: array of MAX_COMPOUND_COMPONENTS
+{
+    bool in_digits = field_len ? IS_DIGIT (field[0]) : false;
+    bool is_final_item = false;
+    const char *snip = field;
+    unsigned snip_len = 0;
+    *n_items = 0;
+
+    for (unsigned i=0; i < field_len; i++) { // one more than field_len - to finalize the last subfield
+    
+        int next_c = (i==field_len-1) ? 0 : field[i+1];
+        bool next_is_digit = IS_DIGIT (next_c);
+
+        bool is_last_char_of_snip = (i==field_len-1)           ? true   // last character of data - definitely also last of this snip
+                                  : is_final_item              ? false  // final item - we don't stop until the end of the data
+                                  : in_digits != next_is_digit ? true   // digits / non-digits boundary is always terminating a snip
+                                  : is_sep[next_c]             ? true   // a valid separator terminates a snip
+                                  :                              false; // no reason to terminate this snip now;
+        snip_len++;
+
+        if (!is_last_char_of_snip) continue;
+
+        CompoundItem *ci = &items[(*n_items)++];
+        ci->item        = snip;
+        ci->item_len    = snip_len; 
+        ci->sep         = is_sep[next_c] ? (char)next_c : 0;
+
+        // next, find out if item is an integer
+        if (in_digits) {
+            unsigned leading_zeros=0;
+            for (; leading_zeros < snip_len-1 && snip[leading_zeros]=='0'; leading_zeros++) {} // last digit is never a leading 0, if it is 0, it is the integer
+
+            // now set is_int, value and leading_zero. note that if is_int is false, the other two are meaningless
+            ci->is_int = str_get_int (&snip[leading_zeros], snip_len - leading_zeros, &ci->value);
+            ci->leading_zeros = leading_zeros;
+        }
+        else
+            ci->is_int = false;
+
+        if (*n_items == MAX_COMPOUND_COMPONENTS-1) is_final_item = true;
+
+        if (ci->sep) i++; // skip separator
+
+        // check for double space separator
+        if (ci->sep == ' ' && i < field_len-1 && field[i+1] == ' ') {
+            ci->sep2 = ' ';
+            i++;
+        }
+        else
+            ci->sep2 = 0;
+
+        if (i < field_len-1) in_digits = IS_DIGIT (field[i+1]);
+
+        snip = &field[i+1];
+        snip_len = 0;
+    }
+}                                      
+
 // We break down the field (eg QNAME in SAM/BAM/Kraken or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
 // these are vendor-defined strings.
 // Up to MAX_COMPOUND_COMPONENTS subfields are permitted - if there are more, then all the trailing part is just
@@ -530,8 +595,8 @@ Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, 
 // from 0 (0->9,a->z)
 // The separators are made into a string we call "template" that is stored in the main field dictionary - we
 // anticipate that usually all lines have the same format, but we allow lines to have different formats.
-const char sep_with_space[256]    = { [';']=true, ['/']=true, ['|']=true, ['.']=true, [' ']=true, ['\t']=true, [1]=true };
-const char sep_without_space[256] = { [';']=true, ['/']=true, ['|']=true, ['.']=true };
+const char sep_with_space[256]    = { [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true, [' ']=true, ['\t']=true, [1]=true };
+const char sep_without_space[256] = { [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true };
 const char sep_pipe_only[256]     = { ['|']=true };
 void seg_compound_field (VBlock *vb, 
                          Context *field_ctx, const char *field, unsigned field_len, 
@@ -543,148 +608,121 @@ void seg_compound_field (VBlock *vb,
     // defaults to 0 (the same) and we set it to 1 if we encounter a different one
     #define not_all_the_same nodes.param 
 
-    const char *snip = field;
-    unsigned snip_len = 0;
-    unsigned num_seps = 0;
     Container con = seg_initialize_container_array (field_ctx->dict_id, true, false); 
+    CompoundItem items[MAX_COMPOUND_COMPONENTS];
 
-    // add each subfield to its dictionary - 2nd char is 0-9,a-z
-    bool in_int = false;
-    for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
+    seg_compound_field_split (field, field_len, is_sep, items, &con.nitems_lo);
     
-        char sep = (i==field_len) ? 0 : field[i];
-        
-        bool is_valid_sep = is_sep[(int)sep];
-        bool is_final_component = (con_nitems(con) == MAX_COMPOUND_COMPONENTS-1);
+    char prefixes[field_len + con.nitems_lo + 2];
+    prefixes[0] = prefixes[1] = CON_PREFIX_SEP;
+    unsigned prefixes_len = 2;
+    unsigned num_seps = 0;
 
-        if (i < field_len && !is_final_component) {
-            // case a boundary cross from a non-int to an int
-            if (!in_int && sep >= '1' && sep <= '9') {  // note: leading 0s are not part of the int because we can't recird them - they are part of the text before the int
-                in_int = true;
-                if (snip_len > 0) { // if field starts with an integer, then this is not a boundary, yet
-                    is_valid_sep = true;
-                    sep = 0;
-                    i--; // sep is not actually a separator - we will consume it again in the next iteration
-                }
+    for (unsigned i=0; i < con.nitems_lo; i++) {
+        CompoundItem  *ci = &items[i];
+        ContainerItem *CI = &con.items[i];
+
+        // process the subfield that just ended
+        Context *item_ctx = ctx_get_ctx (vb, CI->dict_id);
+        ASSERT (item_ctx, "item_ctx for %s is NULL", dis_dict_id (CI->dict_id).s);
+
+        item_ctx->st_did_i = field_ctx->did_i;
+
+        // allocate memory if needed
+        buf_alloc (vb, &item_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
+
+        // if snip is an integer, we store a delta
+        char delta_snip[30];
+        unsigned original_item_len = ci->item_len;
+
+        if (ci->is_int) {
+            delta_snip[0] = SNIP_SELF_DELTA;
+
+            PosType delta = ci->value - item_ctx->last_value.i;
+
+            // note: if all the snips so far in this VB are the same - store just the snip, so that if the 
+            // entire b250 is the same, it can be removed
+            if (delta || item_ctx->not_all_the_same) {
+                ci->item     = delta_snip;
+                ci->item_len = 1 + str_int (delta, &delta_snip[1]);
+
+                item_ctx->flags.store = STORE_INT;
+                item_ctx->not_all_the_same = true;
             }
 
-            // case: end of an integer without a valid separator
-            else if (in_int && !is_valid_sep && (sep < '0' || sep > '9')) {
-                is_valid_sep = true;
-                sep = 0; 
-                i--;
-            }
+            ctx_set_last_value (vb, item_ctx, ci->value);
         }
-
-        if ((is_valid_sep && !is_final_component) || (i==field_len && snip_len)) {
         
-            // process the subfield that just ended
-            Context *sf_ctx = ctx_get_ctx (vb, con.items[con_nitems(con)].dict_id);
-            ASSERT (sf_ctx, "sf_ctx for %s is NULL", dis_dict_id (con.items[con_nitems(con)].dict_id).s);
+        if (flag.pair == PAIR_READ_1)
+            item_ctx->no_stons = true; // prevent singletons, so pair_2 can compare to us
+        
+        // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
+        // i.e. its already in the dictionary and hash table - so no resources wasted
+        WordIndex node_index = ctx_evaluate_snip_seg (vb, item_ctx, ci->item, ci->item_len, NULL);
 
-            sf_ctx->st_did_i = field_ctx->did_i;
+        // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
+        // and read 2 might have SNIP_PAIR_LOOKUP
+        if (flag.pair == PAIR_READ_2) {
 
-            // allocate memory if needed
-            buf_alloc (vb, &sf_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
+            // if the number of components in the compound is not exactly the same for every line of
+            // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
+            // for SNIP_PAIR_LOOKUP and hence worse compression. This conditions makes sure this situation
+            // doesn't result in an error (TO DO: overcome this, bug 159)
+            // note: this can also happen if the there is no item_ctx->pair do it being fully singletons and moved to local 
+            if (item_ctx->pair_b250_iter.next_b250 < AFTERENT (uint8_t, item_ctx->pair) &&
+                // for pairing to word with SNIP_DELTA, if we have SNIP_PAIR_LOOKUP then all previous lines
+                // this VB must have been SNIP_PAIR_LOOKUP as well. Therefore, the first time we encounter an
+                // inequality - we stop the pairing going forward till the end of this VB
+                !item_ctx->stop_pairing) {
+                
+                WordIndex pair_word_index = base250_decode (&item_ctx->pair_b250_iter.next_b250, !item_ctx->pair_flags.all_the_same, item_ctx->tag_name);  
+                
+                if (pair_word_index == WORD_INDEX_ONE_UP) 
+                    pair_word_index = item_ctx->pair_b250_iter.prev_word_index + 1;
+                
+                item_ctx->pair_b250_iter.prev_word_index = pair_word_index;
+                
+                // note: if the pair word is a singleton in pair_1 file, then pair_word_index will be the index of {SNIP_LOOKUP}
+                // rather than the snip (as replaced in ctx_evaluate_snip_merge), therefore this condition will fail. This is quite
+                // rare, so not worth handling this case
+                if (node_index == pair_word_index) {
 
-            // if snip is an integer, we store a delta
-            char delta_snip[30];
-            unsigned original_snip_len = snip_len;
+                    // discard node_index - decrement its count
+                    ctx_decrement_count (vb, item_ctx, node_index);
 
-            PosType this_value;
-            if (in_int && str_get_int (snip, snip_len, &this_value)) { // also checks that string of digits is not too long for an int64
-
-                delta_snip[0] = SNIP_SELF_DELTA;
-
-                PosType delta = this_value - sf_ctx->last_value.i;
-
-                // note: if all the snips so far in this VB are the same - store just the snip, so that if the 
-                // entire b250 is the same, it can be removed
-                if (delta || sf_ctx->not_all_the_same) {
-                    snip_len = 1 + str_int (delta, &delta_snip[1]);
-                    snip = delta_snip;
-
-                    sf_ctx->flags.store = STORE_INT;
-                    sf_ctx->not_all_the_same = true;
-                }
-
-                ctx_set_last_value (vb, sf_ctx, this_value);
-                in_int = false;
-            }
-            
-            if (flag.pair == PAIR_READ_1)
-                sf_ctx->no_stons = true; // prevent singletons, so pair_2 can compare to us
-            
-            // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
-            // i.e. its already in the dictionary and hash table - so no resources wasted
-            WordIndex node_index = ctx_evaluate_snip_seg (vb, sf_ctx, snip, snip_len, NULL);
-
-            // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
-            // and read 2 might have SNIP_PAIR_LOOKUP
-            if (flag.pair == PAIR_READ_2) {
- 
-                // if the number of components in the compound is not exactly the same for every line of
-                // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
-                // for SNIP_PAIR_LOOKUP and hence worse compression. This conditions makes sure this situation
-                // doesn't result in an error (TO DO: overcome this, bug 159)
-                // note: this can also happen if the there is no sf_ctx->pair do it being fully singletons and moved to local 
-                if (sf_ctx->pair_b250_iter.next_b250 < AFTERENT (uint8_t, sf_ctx->pair) &&
-                    // for pairing to word with SNIP_DELTA, if we have SNIP_PAIR_LOOKUP then all previous lines
-                    // this VB must have been SNIP_PAIR_LOOKUP as well. Therefore, the first time we encounter an
-                    // inequality - we stop the pairing going forward till the end of this VB
-                    !sf_ctx->stop_pairing) {
-                    
-                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250, !sf_ctx->pair_flags.all_the_same, sf_ctx->tag_name);  
-                    
-                    if (pair_word_index == WORD_INDEX_ONE_UP) 
-                        pair_word_index = sf_ctx->pair_b250_iter.prev_word_index + 1;
-                    
-                    sf_ctx->pair_b250_iter.prev_word_index = pair_word_index;
-                    
-                    // note: if the pair word is a singleton in pair_1 file, then pair_word_index will be the index of {SNIP_LOOKUP}
-                    // rather than the snip (as replaced in ctx_evaluate_snip_merge), therefore this condition will fail. This is quite
-                    // rare, so not worth handling this case
-                    if (node_index == pair_word_index) {
-
-                        // discard node_index - decrement its count
-                        ctx_decrement_count (vb, sf_ctx, node_index);
-
-                        // get new node_index instead
-                        sf_ctx->pair_b250 = true;
-                        static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
-                        node_index = ctx_evaluate_snip_seg (vb, sf_ctx, lookup_pair_snip, 1, NULL);
-                    } 
-                    else
-                        // To improve: currently, pairing stops at the first non-match
-                        sf_ctx->stop_pairing = true;
-                }
+                    // get new node_index instead
+                    item_ctx->pair_b250 = true;
+                    static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
+                    node_index = ctx_evaluate_snip_seg (vb, item_ctx, lookup_pair_snip, 1, NULL);
+                } 
                 else
-                    sf_ctx->stop_pairing = true;
+                    // To improve: currently, pairing stops at the first non-match
+                    item_ctx->stop_pairing = true;
             }
-
-            NEXTENT (uint32_t, sf_ctx->b250) = node_index;
-
-            sf_ctx->txt_len += nonoptimized_len ? 0 : original_snip_len;
-
-            // case double space (common in fasta reference file description)
-            bool double_sep = (sep==' ') && (i < field_len-1) && (field[i+1] == sep);
-            if (double_sep) i++;
-                    
-            num_seps += (sep>0) + double_sep;
-
-            // finalize this subfield and get ready for reading the next one
-            if (i < field_len) {    
-                con.items[con_nitems(con)].seperator[0] = sep; // 0 for last item
-                con.items[con_nitems(con)].seperator[1] = double_sep ? sep : 0;
-                snip = &field[i+1];
-                snip_len = 0;
-            }
-            con_inc_nitems (con);
+            else
+                item_ctx->stop_pairing = true;
         }
-        else snip_len++;
+
+        NEXTENT (uint32_t, item_ctx->b250) = node_index;
+
+        item_ctx->txt_len += nonoptimized_len ? 0 : original_item_len;
+
+        // set separators
+        CI->seperator[0] = ci->sep;
+        CI->seperator[1] = ci->sep2;
+        num_seps += (ci->sep != 0) + (ci->sep2 != 0);
+
+        // add the leading zeros to the container prefixes
+        if (ci->is_int && ci->leading_zeros) {
+            memset (&prefixes[prefixes_len], '0', ci->leading_zeros);
+            prefixes_len += ci->leading_zeros + 1;
+            prefixes[prefixes_len-1] = CON_PREFIX_SEP;
+        }
+        else
+            prefixes[prefixes_len++] = CON_PREFIX_SEP;
     }
 
-    container_seg (vb, field_ctx, &con, NULL, 0, (nonoptimized_len ? nonoptimized_len : num_seps) + add_for_eol);
+    container_seg (vb, field_ctx, &con, prefixes, prefixes_len, (nonoptimized_len ? nonoptimized_len : num_seps) + add_for_eol);
 }
 
 // an array or array of arrays
@@ -695,7 +733,8 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
                      char sep, 
                      char subarray_sep,         // if non-zero, will attempt to find internal arrays
                      bool use_integer_delta,    // first item stored as is, subsequent items stored as deltas
-                     bool store_int_in_local)   // if its an integer, store in local instead of a snip
+                     bool store_int_in_local,   // if its an integer, store in local instead of a snip
+                     bool items_are_id)         // each item is segged as an ID (i.e. string + number)
 {
     MiniContainer *con;
     DictId arr_dict_id;
@@ -728,8 +767,6 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
     if (use_integer_delta || container_ctx->flags.store == STORE_INT) 
         arr_ctx->flags.store = STORE_INT;
 
-    uint32_t add_bytes = (uint32_t)value_len; // we will deduct bytes added by sub-arrays
-
     // count repeats (1 + number of seperators)
     con->repeats=1;
     for (int32_t i=0; i < value_len; i++) 
@@ -752,20 +789,24 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         // case: it has a sub-array
         if (is_subarray) {
-            seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0, use_integer_delta, store_int_in_local);
-            add_bytes -= this_item_len; // sub-array will account for itself
+            seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0, use_integer_delta, store_int_in_local, items_are_id);
             arr_ctx->numeric_only = false;
             this_item_value = arr_ctx->last_value.i;
         }
 
+        // item is ID eg "mRNA00001"
+        else if (items_are_id) 
+            seg_id_field (vb, arr_ctx, this_item, this_item_len, false);
+
         // case: its an scalar (we don't delta arrays that have sub-arrays and we don't delta the first item)
         else if (!use_integer_delta || subarray_sep || i==0) {
+            
             if (store_int_in_local) {
-                bool is_int = seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, 0);
+                bool is_int = seg_integer_or_not (vb, arr_ctx, this_item, this_item_len, this_item_len);
                 if (is_int) this_item_value = arr_ctx->last_value.i;
             }
             else {
-                seg_by_ctx (vb, this_item, this_item_len, arr_ctx, 0);
+                seg_by_ctx (vb, this_item, this_item_len, arr_ctx, this_item_len);
                 str_get_int (this_item, this_item_len, &arr_ctx->last_value.i); // sets last_value only if it is indeed an integer
             }
         }
@@ -776,7 +817,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
             char delta_snip[30] = { SNIP_SELF_DELTA };
             unsigned delta_snip_len = 1 + str_int (this_item_value - arr_ctx->last_value.i, &delta_snip[1]);
 
-            seg_by_ctx (vb, delta_snip, delta_snip_len, arr_ctx, 0);
+            seg_by_ctx (vb, delta_snip, delta_snip_len, arr_ctx, this_item_len);
 
             ctx_set_last_value (vb, arr_ctx, this_item_value);
             arr_ctx->numeric_only = false;
@@ -795,8 +836,82 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
         value++;
     }
 
-    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes);
+    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, con->repeats-1); // acount for separators
 }
+
+// a field that looks like: "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
+// we have an array (2 entires in this example) of items (4 in this examples) - the entries are separated by comma and the items by space
+// observed in Ensembel generated GVF: Variant_effect, sift_prediction, polyphen_prediction, variant_peptide
+// The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
+// the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
+// the field itself will contain the number of entries
+void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, 
+                          const char *snip, unsigned snip_len, 
+                          SegCallback *callbacks) // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
+{
+    ContextP ctxs[con.nitems_lo]; 
+
+    for (unsigned i=0; i < con.nitems_lo; i++) {
+        ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
+        ctxs[i]->st_did_i = ctx->did_i;
+        seg_create_rollback_point (ctxs[i]);
+    }
+    
+    // get repeats
+    str_split (snip, snip_len, 0, con.repsep[0], repeat, false);
+
+    // if we don't have con.drop_final_repeat_sep, the last "repeat" should be zero length and removed
+    if (!con.drop_final_repeat_sep) {
+        if (repeat_lens[n_repeats-1]) goto badly_formatted; 
+        n_repeats--;
+    }
+    con.repeats = n_repeats;
+
+    ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, snip, "exceeded maximum repeats allowed (%u) while parsing %s",
+            CONTAINER_MAX_REPEATS, ctx->tag_name);
+
+    for (unsigned r=0; r < n_repeats; r++) {
+
+        // get items in each repeat
+        str_split (repeats[r], repeat_lens[r], con.nitems_lo, con.items[0].seperator[0], item, true);
+        if (n_items != con.nitems_lo) goto badly_formatted;
+
+        for (unsigned i=0; i < n_items; i++)
+            if (callbacks && callbacks[i])
+                callbacks[i] (vb, ctxs[i], items[i], item_lens[i]);
+            else
+                seg_by_ctx (vb, items[i], item_lens[i], ctxs[i], item_lens[i]);
+    }
+
+    // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
+
+    // in our specific case, element i of con_index contains the node_index of the snip of the container with i repeats, or WORD_INDEX_NONE.
+    if (ctx->con_index.len < n_repeats+1) {
+        buf_alloc_255 (vb, &ctx->con_index, 0, n_repeats+1, WordIndex, 0, "con_index");
+        ctx->con_index.len = ctx->con_index.len / sizeof (WordIndex);
+    }
+
+    WordIndex node_index = *ENT (WordIndex, ctx->con_index, n_repeats);
+    unsigned account_for = con.repeats * (con.nitems_lo-1) /* item seperators */ + con.repeats - con.drop_final_repeat_sep /* repeat separators */;
+
+    // case: first container with the many repeats - seg and add to cache
+    if (node_index == WORD_INDEX_NONE) 
+        *ENT (WordIndex, ctx->con_index, n_repeats) = container_seg (vb, ctx, (ContainerP)&con, NULL, 0, account_for);
+    
+    // case: we already know the node index of the container with this many repeats
+    else 
+        seg_known_node_index (vb, ctx, node_index, account_for);
+
+    return;
+
+badly_formatted:
+    // roll back all the changed data
+    for (unsigned i=0; i < con.nitems_lo ; i++) 
+        seg_rollback (vb, ctxs[i]);
+
+    // now just seg the entire snip
+    seg_by_ctx (vb, snip, snip_len, ctx, snip_len); 
+}                           
 
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 
                             const char *snip, unsigned snip_len, 
@@ -807,6 +922,12 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx,
     NEXTENT (char, ctx->local) = 0;
 
     if (add_bytes) ctx->txt_len += add_bytes;
+    ctx->local.num_ctx_words++;
+}
+
+void seg_add_to_local_text_cb (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len)
+{
+        seg_add_to_local_text (vb, ctx, snip, snip_len, snip_len);
 }
 
 void seg_add_to_local_fixed (VBlock *vb, Context *ctx, const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
@@ -884,18 +1005,19 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
 
     if (!DTP (line_height)) return 0; // this data type doesn't use textual lines
 
-    int newlines=0; for (; newlines < DTP (line_height) * NUM_LINES_IN_TEST; newlines++, len++)
-        for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
+    ARRAY (char, txt, vb->txt_data);
+    int line_count=0; for (; line_count < DTP (line_height) * NUM_LINES_IN_TEST && len < txt_len; line_count++, len++)
+        for (; len < txt_len && txt[len] != '\n'; len++) {};
 
-    len /= NUM_LINES_IN_TEST; // average length of a line
+    len /= MAX_(1, (line_count / DTP (line_height))); // average length of a line
 
-    ASSERT (vb->txt_data.len, "vb=%u: txt_data is empty", vb->vblock_i); 
+    ASSERT (txt_len, "vb=%u: txt_data is empty", vb->vblock_i); 
 
-    ASSSEG (newlines==DTP (line_height) || len < vb->txt_data.len, vb->txt_data.data, 
+    ASSSEG (line_count==DTP (line_height) || len < txt_len, txt, 
             "a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
             str_uint_commas (flag.vblock_memory).s);
 
-    return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
+    return MAX_(100, (uint32_t)(((double)txt_len / (double)len) * 1.2));
 }
 
 // double the number of lines if we've run out of lines
@@ -930,7 +1052,8 @@ static void seg_verify_file_size (VBlock *vb)
         fprintf (stderr, "context.txt_len for vb=%u:\n", vb->vblock_i);
         for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
             Context *ctx = CTX(sf_i);
-            fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
+            if (ctx->nodes.len || ctx->local.len || ctx->txt_len)
+                fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
         }
 
         fprintf (stderr, "vb=%u reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
@@ -981,7 +1104,7 @@ void seg_all_data_lines (VBlock *vb)
         vb->line_start = ENTNUM (vb->txt_data, field_start);
         const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
 
-        vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
+        vb->longest_line_len = MAX_(vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
 
         // if our estimate number of lines was too small, increase it

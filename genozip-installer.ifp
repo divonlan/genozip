@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = genozip
-Program version = 12.0.33
+Program version = 12.0.34
 Windows 2000 = 1
 Windows XP = 1
 Windows Server 2003 = 1

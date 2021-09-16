@@ -55,7 +55,7 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
 
     uint32_t char_counter[256] = { 0 };
     uint32_t total_len = 0;
-    for (uint32_t line_i=0; line_i < MIN (NUM_LINES_IN_SAMPLE, vb->lines.len); line_i++) {   
+    for (uint32_t line_i=0; line_i < MIN_(NUM_LINES_IN_SAMPLE, vb->lines.len); line_i++) {   
         char *qual_data;
         uint32_t qual_data_len;
         callback (vb, line_i, &qual_data, &qual_data_len, CALLBACK_NO_SIZE_LIMIT);
@@ -68,7 +68,7 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
             char_counter[(uint8_t)qual_data[j]]++;
     }
 
-    unsigned threshold = MAX ((unsigned)((double)total_len * DOMQUAL_THREADSHOLD_DOM_OF_TOTAL), DOMQUAL_THREADSHOLD_NUM_CHARS);
+    unsigned threshold = MAX_((unsigned)((double)total_len * DOMQUAL_THREADSHOLD_DOM_OF_TOTAL), DOMQUAL_THREADSHOLD_NUM_CHARS);
 
     for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
         if (char_counter[c] > threshold) {
@@ -90,7 +90,7 @@ static inline void codec_domq_add_runs (Buffer *qdomruns_buf, uint32_t runlen)
 {
     // add one more bytes to represent the run
     while (runlen) {
-        uint8_t subrun_len = (uint8_t)MIN (runlen, 254);
+        uint8_t subrun_len = (uint8_t)MIN_(runlen, 254);
 
         NEXTENT (uint8_t, *qdomruns_buf) = (runlen <= 254 ? subrun_len : 255);
         runlen -= subrun_len;
@@ -210,7 +210,7 @@ static inline uint32_t shorten_run (uint8_t *run, uint32_t old_num_bytes, uint32
     int32_t new_runlen = old_runlen - dec;
     ASSERT (new_runlen >= 0, "new_runlen=%d is out of range", new_runlen);
 
-    uint32_t new_num_bytes = MAX (1, ((uint32_t)new_runlen + 253) / 254); // roundup (if runlen=0, we still need 1 byte)
+    uint32_t new_num_bytes = MAX_(1, ((uint32_t)new_runlen + 253) / 254); // roundup (if runlen=0, we still need 1 byte)
 
     // update run
     uint32_t increment = old_num_bytes - new_num_bytes;

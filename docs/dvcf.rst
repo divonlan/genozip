@@ -10,7 +10,7 @@ Dual-coordinate VCF files
  
     Rendering a DVCF <dvcf-rendering>
     Renaming and dropping annotations in a DVCF <dvcf-renaming>
-    Chain files <dvcf-chain-files>
+    Chain files <chain>
     Genozip DVCF lifting limitations <dvcf-limitations>
     
 **At a glance**
@@ -60,7 +60,7 @@ Steps:
     genozip --make-reference GRCh38.fa 
 
 
-2. Prepare a chain file in genozip format. Genozip uses chain files in the `UCSC chain file format <https://genome.ucsc.edu/goldenPath/help/chain.html>`_. Here are some :ref:`links to available chain files<dvcf-chain-files>`. The following command line generates the file ``GRCh37_to_GRCh38.chain.genozip`` :
+2. Prepare a chain file in genozip format. Genozip uses chain files in the `UCSC chain file format <https://genome.ucsc.edu/goldenPath/help/chain.html>`_. Here are some :ref:`links to available chain files<chain>`. The following command line generates the file ``GRCh37_to_GRCh38.chain.genozip`` :
 
 ::
 
@@ -392,13 +392,15 @@ More inforation about how Genozip *lifts* and *cross-renders* each field can fou
 
 **The rejects file and --show-lifts**
 
-When running ``genozip --chain``, a human-readable *rejects file*, ``mydata.d.vcf.genozip.rejects.txt`` in our case, is generated containing additional information regarding the rejection reasons related to each rejected variant:
+When running ``genozip --chain``, a human-readable *rejects file*, ``mydata.d.vcf.genozip.rejects`` in our case, is generated containing additional information regarding the rejection reasons related to each rejected variant:
 
 ::
 
-    > cat mydata.d.vcf.genozip.rejects.txt
+    > cat mydata.d.vcf.genozip.rejects
 
-    RefNewAlleleIndel CHROM=1 POS=366042 REF=TA ALT=A Genozip limitation: new INDEL allele: PRIM=TAA LUFT(453295)=TAAAA
+    ##fileformat=GENOZIP-REJECTSv12.0.33
+    #oSTATUS          CHROM   POS      REF     ALT     REASON
+    RefNewAlleleIndel 1       366042   TA      A       Genozip limitation: new INDEL allele: PRIM=TAA LUFT(453295)=TAAAA
 
 Here we can see why TA would be a new allele in the Luft reference: it is because the Primary REF allele relates to T followed by two As, and hence the ALT deletion allele refers to a T followed by a single A. Since the Luft reference contains four repeating As, and therefore the corresponding variant in Luft coordinates would therefore be "REF=TAAA ALT=TA,T", however at present Genozip is limited in that it cannot change a bi-allelic variant to a tri-allelic one, and hence the variant is rejected.
 
@@ -407,16 +409,30 @@ The option ``--show-lifts`` in combination with ``genozip --chain`` causes all l
 ::
 
     > genozip mydata.vcf.gz --chain GRCh37_to_GRCh38.chain.genozip --show-lifts
-    > cat mydata.d.vcf.genozip.rejects.txt 
+    > cat mydata.d.vcf.genozip.rejects 
 
-    OkRefSameSNP CHROM=1 POS=10285 REF=T SNP: REF unchanged
-    OkRefSameSNP CHROM=1 POS=329162 REF=A SNP: REF unchanged
-    RefNewAlleleIndel CHROM=1 POS=366042 REF=TA ALT=A Genozip limitation: new INDEL allele: PRIM=TAA LUFT(453295)=TAAAA
-    OkRefAltSwitchSNP CHROM=1 POS=20159588 REF=C ALT=A SNP: REF⇆ALT switch
+    ##fileformat=GENOZIP-REJECTSv12.0.33
+    #oSTATUS          CHROM   POS      REF     ALT     REASON
+    OkRefSameSNP      1       10285    T       .       SNP: REF unchanged
+    OkRefSameSNP      1       329162   A       .       SNP: REF unchanged
+    RefNewAlleleIndel 1       366042   TA      A       Genozip limitation: new INDEL allele: PRIM=TAA LUFT(453295)=TAAAA
+    OkRefAltSwitchSNP 1       20159588 C       A       SNP: REF<>ALT switch
     
 |
 
-**--show-counts - summary statistics**
+**Overlapping variants and the .overlaps file** 
+
+There are cases where two or more variants which have distinct Primary coordinates, are mapped to the same Luft coordinates, due to overlapping alignments in the chain file. When this occurs, Genozip generates a file with the ``.overlaps`` extension, containing the CHROM and POS of overlapping variants in Luft coordintes. This file can be used to view these variants:
+
+``genocat myfile.d.vcf.genozip --luft --regions-file myfile.d.vcf.genozip.overlaps``
+
+Filtering out these variants can be done with:
+
+``genocat myfile.d.vcf.genozip --luft --regions-file ^myfile.d.vcf.genozip.overlaps``
+
+The format of the ``.overlaps`` file is also compatible with ``bcftools view --regions-file``.
+
+**Viewing summary statistics**
 
 To see summary statistics of how variants were handled, we can use --show-counts (this works both with genozip and genocat):
 
@@ -441,7 +457,7 @@ To see summary statistics of how variants were handled, we can use --show-counts
 
 **Other useful options**
 
-- ``genocat --show-chain <my-chain.chain.genozip>`` - displays all the chain file alignments.
+- ``genocat --show-chain <my-chain.chain.genozip>`` - displays all the chain file alignments, including overlap information.
 
     |
 

@@ -147,10 +147,15 @@ bool piz_test_grep (VBlock *vb)
 
 bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
-    if (!vb) return false; // we don't skip reading any SEC_DICT / SEC_COUNTS sections
+    // --show-dict=DICT - read only the one dictionary
+    if (st == SEC_DICT && flag.show_one_dict && exe_type == EXE_GENOCAT && !ctx_is_show_dict_id (dict_id)) return true; // skip
+
+    if (!vb) return false; // we don't skip reading any SEC_DICT / SEC_COUNTS sections for any other
 
     // B250, LOCAL, COUNT sections
-    bool skip = exe_type == EXE_GENOCAT && dict_id.num && dict_id.num != DTF(dict_id)[CHROM].num && (!flag.luft || dict_id.num != DTF(dict_id)[ODID(oCHROM)].num) && (
+    bool skip = exe_type == EXE_GENOCAT && dict_id.num 
+                            && dict_id.num != DTF(predefined)[CHROM].dict_id.num 
+                            && (!flag.luft || dict_id.num != DTF(predefined)[ODID(oCHROM)].dict_id.num) && (
     
     // sometimes we don't need dictionaries. but we always load CHROM.
         (flag.genocat_no_dicts && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
@@ -284,7 +289,8 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     piz_uncompress_all_ctxs (vb, 0);
 
     // reconstruct from top level snip
-    reconstruct_from_dict_id (vb, vb->translation.toplevel, 0, true);
+    DidIType top_level_did_i = ctx_get_existing_did_i (vb, vb->translation.toplevel); 
+    reconstruct_from_ctx (vb, top_level_did_i, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
     if (txt_file && txt_file->codec == CODEC_BGZF && !flag.no_writer &&
@@ -326,6 +332,8 @@ static void piz_read_all_ctxs (VBlock *vb, Section *next_sl)
 // Called by PIZ main thread: read all the sections at the end of the file, before starting to process VBs
 DataType piz_read_global_area (Reference ref)
 {
+    START_TIMER;
+
     bool success = zfile_read_genozip_header (0);
 
     if (flag.show_stats) stats_read_and_display();
@@ -357,10 +365,6 @@ DataType piz_read_global_area (Reference ref)
         // read dict_id aliases, if there are any
         dict_id_read_aliases();
     }
-
-    // reading external references for lifting with --chain - load the IUPACs list of the reference (rare non-ACTG "bases")
-    if ((flag.reading_chain && flag.reading_reference) || flag.show_ref_iupacs)
-        ref_iupacs_load(ref);
 
     // if the user wants to see only the header, we can skip regions and random access
     if (!flag.header_only) {
@@ -409,6 +413,9 @@ DataType piz_read_global_area (Reference ref)
                 dispatcher_invoked = true;
             }
 
+            // load the IUPACs list of the reference (rare non-ACTG "bases")
+            ref_iupacs_load (ref);
+
             // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
             if (  (primary_command == ZIP && flag.ref_use_aligner) ||
                   (flag.show_ref_hash && exe_type == EXE_GENOCAT)) {
@@ -437,6 +444,8 @@ DataType piz_read_global_area (Reference ref)
     
 done:
     file_seek (z_file, 0, SEEK_SET, false);
+
+    COPY_TIMER_VB (evb, piz_read_global_area);
 
     return z_file->data_type;
 }
@@ -633,7 +642,7 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
     Dispatcher dispatcher = dispatcher_init (flag.reading_chain     ? "piz-chain"
                                             :flag.reading_reference ? "piz-ref"
                                             :flag.reading_kraken    ? "piz-kraken"
-                                            :                         "piz",
+                                            :                         "piz", // also referred to in dispatcher_recycle_vbs()
                                              flag.xthreads ? 1 : global_max_threads, 0, flag.test, 
                                              is_last_z_file, true, z_file->basename, PROGRESS_PERCENT, 0);
     return dispatcher;

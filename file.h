@@ -327,6 +327,7 @@ typedef struct File {
                                        // txt_file PIZ: accounting for data as it was in the original source file, as reading TxtHeader and VbHeader sections from the genozip file
     int64_t txt_data_so_far_bind_0;    //      modifications due to --chain/--optimize/Luft                                   
     int64_t txt_disk_so_far_bind;      // z_file & ZIP only: compressed (with txt_file.codec - eg bgzf) txt data represented in the GENOZIP data written so far for all bound files
+    int64_t txt_bgzf_blocks_so_far;    // txt_file: ZIP: BGZF blocks read so far
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
                                        // txt_file: number of lines, in source file terms, (read so far) in single txt file
 

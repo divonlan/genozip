@@ -26,6 +26,8 @@
 #include "chain.h"
 #include "reconstruct.h"
 #include "zfile.h"
+#include "version.h"
+#include "website.h"
 
 typedef struct {
     WordIndex prim_chrom; // index in CHAIN_NAMEPRIM
@@ -35,6 +37,10 @@ typedef struct {
     PosType luft_first_1pos, luft_last_1pos;
 
     bool is_xstrand;
+
+    // used by chain_display_alignments
+    int32_t aln_i;
+    int32_t overlap_aln_i; // the luft range overlaps with with luft range
 } ChainAlignment;
 
 static Buffer chain = EMPTY_BUFFER;   // immutable after loaded
@@ -100,8 +106,37 @@ void chain_zip_initialize (void)
     }
 }
 
+// Tests lengths of prim/luft contigs of first line in chain file vs the two references. Error if they don't match, but swapping them matches.
+static void chain_verify_references_not_reversed (VBlock *vb)
+{
+    const char *newline = memchr (vb->txt_data.data, '\n', vb->txt_data.len);
+    if (!newline) return;
+
+    str_split (vb->txt_data.data, newline - vb->txt_data.data, 13, ' ', item, true);
+    if (!n_items) return;
+
+    PosType prim_len_ref, prim_len_chain, luft_len_ref, luft_len_chain;
+    if (!str_get_int (STRi(item, 3), &prim_len_chain)) return;
+    if (!str_get_int (STRi(item, 8), &luft_len_chain)) return;
+
+    prim_len_ref = ref_contigs_get_contig_length (prim_ref, WORD_INDEX_NONE, STRi(item,2), false);
+    luft_len_ref = ref_contigs_get_contig_length (gref,     WORD_INDEX_NONE, STRi(item,7), false);
+    
+    // if lengths don't match (either because they differ, or because len_ref=-1 bc contig not found in ref file), check in reverse
+    if (prim_len_ref != prim_len_chain || luft_len_ref != luft_len_chain) {
+        prim_len_ref = ref_contigs_get_contig_length (gref,     WORD_INDEX_NONE, STRi(item,2), false);
+        luft_len_ref = ref_contigs_get_contig_length (prim_ref, WORD_INDEX_NONE, STRi(item,7), false);
+        
+        if (prim_len_ref == prim_len_chain && luft_len_ref == luft_len_chain) 
+            ABORTINP ("Reference files %s and %s are given in the command line in reverse order. Expecting Primary reference first and Luft reference second.\n", ref_get_filename (prim_ref), ref_get_filename (gref)); // not WARN bc zip_dynamically_set_max_memory set flag.quiet=true
+    }
+}
+
 void chain_seg_initialize (VBlock *vb)
 {
+    // check if the references are reversed
+    chain_verify_references_not_reversed (vb);
+
     CTX(CHAIN_NAMELUFT)-> no_stons  =       
     CTX(CHAIN_NAMEPRIM)-> no_stons  =       // (these 2 ^) need b250 node_index for reference
     CTX(CHAIN_TOPLEVEL)-> no_stons  = 
@@ -244,7 +279,7 @@ const char *chain_seg_txt_line (VBlock *vb, const char *field_start_line, uint32
     char separator;
     bool is_new;
 
-    int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
+    int32_t len = AFTERENT (char, vb->txt_data) - field_start_line;
 
     SEG_NEXT_ITEM_SP (CHAIN_CHAIN);
     SEG_NEXT_ITEM_SP (CHAIN_SCORE);
@@ -435,18 +470,70 @@ SPECIAL_RECONSTRUCTOR (chain_piz_special_SIZE)
 // using the chain data in genozip --chain
 // ---------------------------------------
 
+static int chain_sort_by_luft (const void *a_, const void *b_)
+{
+    ChainAlignment *a = (ChainAlignment *)a_;
+    ChainAlignment *b = (ChainAlignment *)b_;
+
+    if (a->luft_chrom != b->luft_chrom) return a->luft_chrom - b->luft_chrom;
+
+    if (a->luft_first_1pos < b->luft_first_1pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
+    if (b->luft_first_1pos < a->luft_first_1pos) return +1; // b is smaller
+
+    if (a->luft_last_1pos < b->luft_last_1pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
+    if (b->luft_last_1pos < a->luft_last_1pos) return +1; // b is smaller
+
+    return 0;
+}
+
+static int chain_sort_by_aln_i (const void *a_, const void *b_)
+{
+    return ((ChainAlignment *)a_)->aln_i - ((ChainAlignment *)b_)->aln_i;
+}
+
+static void chain_mark_overlaps (void)
+{
+    ARRAY (ChainAlignment, aln, chain);
+
+    for (int32_t i=0; i < chain.len; i++) 
+        aln[i].aln_i = i+1;
+
+    qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sort_by_luft);
+
+    for (int32_t i=1; i < chain.len; i++) 
+        if (aln[i].luft_chrom == aln[i-1].luft_chrom && aln[i].luft_first_1pos <= aln[i-1].luft_last_1pos) {
+            aln[i].overlap_aln_i = aln[i-1].aln_i;
+            aln[i-1].overlap_aln_i = aln[i].aln_i;
+        }
+
+    qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sort_by_aln_i);
+}
+
 static void chain_display_alignments (void) 
 {
     ARRAY (ChainAlignment, aln, chain);
+
+    iprint0 ("##fileformat=GENOZIP-CHAINv"GENOZIP_CODE_VERSION"\n");
+    iprintf ("##primary_reference=%s\n", ref_get_filename (prim_ref));
+    iprintf ("##luft_reference=%s\n", ref_get_filename (gref));
+    iprint0 ("##documentation=" WEBSITE_CHAIN "\n");
+    iprint0 ("#ALN_I\tPRIM_CONTIG\tPRIM_START\tPRIM_END\tLUFT_CONTIG\tLUFT_START\tLUFT_ENDS\tXSTRAND\tALN_OVERLAP\n");
+
+    chain_mark_overlaps();
 
     for (uint32_t i=0; i < chain.len; i++) {
         const char *luft_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMELUFT), aln[i].luft_chrom);
         const char *prim_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMEPRIM), aln[i].prim_chrom);
 
-        iprintf ("Primary: %s %"PRId64"-%"PRId64" Luft: %s %"PRId64"-%"PRId64" Xstrand=%c\n",
-                 prim_chrom, aln[i].prim_first_1pos, aln[i].prim_last_1pos, 
+        iprintf ("%u\t%s\t%"PRId64"\t%"PRId64"\t%s\t%"PRId64"\t%"PRId64"\t%c",
+                 aln[i].aln_i, prim_chrom, aln[i].prim_first_1pos, aln[i].prim_last_1pos, 
                  luft_chrom, aln[i].luft_first_1pos, aln[i].luft_last_1pos,
                  aln[i].is_xstrand ? 'X' : '-');
+
+        if (aln[i].overlap_aln_i)
+            iprintf ("\t%u\n", aln[i].overlap_aln_i);
+        else
+            iprint0 ("\n");
     }
 }
 
@@ -725,7 +812,7 @@ void chain_load (void)
     ASSINP (z_file->data_type == DT_CHAIN, "expected %s to be a genozip'ed chain file, but its a %s file. Tip: compress the chain with \"genozip --input chain\"", 
             z_name, dt_name (z_file->data_type));
 
-    ASSINP (ref_get_filename (gref) && ref_get_filename (prim_ref), 
+    ASSINP ((ref_get_filename (gref) && ref_get_filename (prim_ref)) || flag.show_chain, 
             "%s is an invalid chain file: it was not compressed with source and destination references using genozip --reference", z_name);
 
     z_file->basename = file_basename (flag.reading_chain, false, "(chain-file)", NULL, 0);
@@ -741,14 +828,16 @@ void chain_load (void)
     Dispatcher dispachter = piz_z_file_initialize (false);
 
     // load both references, now that it is set (either explicitly from the command line, or implicitly from the chain GENOZIP_HEADER)
-    SAVE_VALUE (z_file); // actually, read the references first
-    ref_load_external_reference (gref, NULL);
-    ref_load_external_reference (prim_ref, NULL);
-    RESTORE_VALUE (z_file);
+    if (!flag.show_chain) { // no need for reference if we're just doing --show-chain
+        SAVE_VALUE (z_file); // actually, read the references first
+        ref_load_external_reference (gref, NULL);
+        ref_load_external_reference (prim_ref, NULL);
+        RESTORE_VALUE (z_file);
 
-    // test for matching MD5 between external references and reference in the chain file header (doing it here, because reference is read after chain file, if its explicitly specified)
-    digest_verify_ref_is_equal (gref, header.ref_filename, header.ref_file_md5);
-    digest_verify_ref_is_equal (prim_ref, header.dt_specific.chain.prim_filename, header.dt_specific.chain.prim_file_md5);
+        // test for matching MD5 between external references and reference in the chain file header (doing it here, because reference is read after chain file, if its explicitly specified)
+        digest_verify_ref_is_equal (gref, header.ref_filename, header.ref_file_md5);
+        digest_verify_ref_is_equal (prim_ref, header.dt_specific.chain.prim_filename, header.dt_specific.chain.prim_file_md5);
+    }
 
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines

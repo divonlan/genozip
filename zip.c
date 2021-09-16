@@ -39,7 +39,7 @@ static Mutex wait_for_vb_1_mutex = {};
 
 static void zip_display_compression_ratio (Digest md5, bool is_final_component)
 {
-    double z_bytes        = MAX ((double)z_file->disk_so_far, 1.0); // at least one, to avoid division by zero in case of a z_bytes=0 issue
+    double z_bytes        = MAX_((double)z_file->disk_so_far, 1.0); // at least one, to avoid division by zero in case of a z_bytes=0 issue
     double plain_bytes    = (double)z_file->txt_data_so_far_bind;
     double comp_bytes     = file_is_read_via_ext_decompressor (txt_file) 
                               ? (double)txt_file->disk_size    // 0 if via pipe or url, as we have no knowledge of file size
@@ -151,7 +151,7 @@ static void zip_dynamically_set_max_memory (void)
             flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
             flag.show_reference = flag.show_vblocks = false;
             flag.quiet = true;
-            flag.dyn_set_mem = true;
+            flag.dyn_set_mem = test_i + 1;
 
             seg_all_data_lines (vb);
 
@@ -168,8 +168,8 @@ static void zip_dynamically_set_max_memory (void)
                               (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
 
             // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
-            flag.vblock_memory = MIN (MAX (bytes, VBLOCK_MEMORY_MIN_DYN), VBLOCK_MEMORY_MAX_DYN);
-            if (txt_file->disk_size) flag.vblock_memory = MIN (flag.vblock_memory, txt_file->disk_size);
+            flag.vblock_memory = MIN_(MAX_(bytes, VBLOCK_MEMORY_MIN_DYN), VBLOCK_MEMORY_MAX_DYN);
+            if (txt_file->disk_size) flag.vblock_memory = MIN_(flag.vblock_memory, txt_file->disk_size);
 
             if (flag.show_memory)
                 iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
@@ -177,9 +177,9 @@ static void zip_dynamically_set_max_memory (void)
 
             // on Windows and Mac - which tend to have less memory in typical configurations, warn if we need a lot
             #if defined _WIN32 || defined APPLE
-                flag.vblock_memory = MIN (flag.vblock_memory, 32 << 20); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
+                flag.vblock_memory = MIN_(flag.vblock_memory, 32 << 20); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
 
-                uint64_t concurrent_vbs = 1 + txt_file->disk_size ? MIN (1+ txt_file->disk_size / flag.vblock_memory, global_max_threads)
+                uint64_t concurrent_vbs = 1 + txt_file->disk_size ? MIN_(1+ txt_file->disk_size / flag.vblock_memory, global_max_threads)
                                                                   : global_max_threads;
 
                 ASSERTW (flag.vblock_memory * concurrent_vbs < MEMORY_WARNING_THREASHOLD,
@@ -280,7 +280,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
     if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->tag_name);
 
     // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
-    ctx->b250.num_b250_words = (int64_t)ctx->b250.len;
+    ctx->b250.num_ctx_words = (int64_t)ctx->b250.len;
     ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
 
     WordIndex first_node_index = *ENT (WordIndex, ctx->b250, 0);
@@ -289,7 +289,7 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
     // we assign the b250 data back onto the same buffer. this words, because the b250 numerals are of length 1 or 4, 
     // therefore smaller than node_index
     WordIndex prev = WORD_INDEX_NONE; 
-    for (uint32_t word_i=0; word_i < (uint32_t)ctx->b250.num_b250_words; word_i++) {
+    for (uint32_t word_i=0; word_i < (uint32_t)ctx->b250.num_ctx_words; word_i++) {
         if (*ENT(WordIndex, ctx->b250, word_i) != first_node_index) // we found evidence that not all are the same
             all_the_same = false;
 
@@ -751,7 +751,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
     // update z_data in memory (its not written to disk yet)
     zfile_update_compressed_vb_header (vb); 
 
-    max_lines_per_vb = MAX (max_lines_per_vb, vb->lines.len);
+    max_lines_per_vb = MAX_(max_lines_per_vb, vb->lines.len);
 
     if (!flag.make_reference && !flag.seg_only)
         zfile_output_processed_vb (vb);

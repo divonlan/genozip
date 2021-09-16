@@ -69,9 +69,9 @@ static BgzfBlockStr display_bb (BgzfBlockZip *bb)
 // ZIP SIDE - decompress BGZF-compressed file and prepare BGZF section
 //--------------------------------------------------------------------
 
-static inline uint32_t bgzf_fread (File *file, void *dst_buf, uint32_t count)
+static inline uint32_t bgzf_fread (File *file, void *dst_buf, uint32_t bytes_requested)
 {
-    return fread (dst_buf, 1, count, (FILE *)file->file);
+    return fread (dst_buf, 1, bytes_requested, (FILE *)file->file);
 }
 
 // ZIP: reads and validates a BGZF block, and returns the uncompressed size or (only if soft_fail) an error
@@ -109,8 +109,14 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     
     uint32_t body_size = *block_size - sizeof (struct BgzfHeader);
     uint32_t bytes = bgzf_fread (file, h+1, body_size);
-    ASSERT (bytes == body_size, "failed to read body of BGZF block in %s - expecting %u bytes but read %u: %s", 
-            file->basename, body_size, bytes, strerror (errno));
+
+    int save_errno = errno; // we wan't to report errno of fread, not ftell.
+    ASSERT (bytes == body_size, "failed to read body of BGZF block #%"PRId64" (Unexpected-end-of-file=%s bytes_so_far=%"PRId64" file_size=%"PRId64" ftell=%"PRId64") in %s - expecting %u bytes but read %u: %s", 
+            file->txt_bgzf_blocks_so_far, feof ((FILE *)file->file) ? "YES" : "No", file->disk_so_far, file->disk_size, ftello64 ((FILE *)file->file), 
+            file->basename, body_size, bytes, 
+            (file->is_remote && save_errno == ESPIPE) ? "Disconnected from remote host" : strerror (save_errno));
+
+    file->txt_bgzf_blocks_so_far++;
 
     uint32_t isize_lt32 = *(uint32_t *)&block[*block_size - 4];
     uint32_t isize = LTEN32 (isize_lt32); // 0...65536 per spec
@@ -478,7 +484,7 @@ static void bgzf_compress_vb_no_blocks (VBlock *vb)
 
     uint32_t next=0, block_i=0;
     while (next < vb->txt_data.len) {
-        uint32_t block_isize = MIN (BGZF_CREATED_BLOCK_SIZE, vb->txt_data.len - next);
+        uint32_t block_isize = MIN_(BGZF_CREATED_BLOCK_SIZE, vb->txt_data.len - next);
         buf_alloc (vb, &vb->compressed, BGZF_MAX_BLOCK_SIZE, 0, uint8_t, 1.5, "compressed");
 
         bgzf_compress_one_block (vb, ENT (char, vb->txt_data, next), block_isize, block_i++, next, &vb->compressed);

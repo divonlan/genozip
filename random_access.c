@@ -86,13 +86,13 @@ void random_access_alloc_ra_buf (VBlock *vb, Coords dc, int32_t chrom_node_index
 /*    uint64_t old_len = vb->ra_buf.len;
     uint64_t new_len = chrom_node_index + 2; // +2 because we store for chrom_node_index [-1, chrom_node_index]
     if (new_len > old_len) {
-        buf_alloc (vb, &vb->ra_buf, 0, MAX (new_len, 500), RAEntry, 2, "ra_buf");
+        buf_alloc (vb, &vb->ra_buf, 0, MAX_(new_len, 500), RAEntry, 2, "ra_buf");
         memset (ENT (RAEntry, vb->ra_buf, old_len), 0, (new_len - old_len) * sizeof (RAEntry));
         vb->ra_buf.len = new_len;
     }*/
 
-    vb->ra_buf[DC].len = MAX (vb->ra_buf[DC].len, chrom_node_index + 2);
-    buf_alloc_zero (vb, &vb->ra_buf[DC], 0, MAX (vb->ra_buf[DC].len, 500), RAEntry, 2, "ra_buf");
+    vb->ra_buf[DC].len = MAX_(vb->ra_buf[DC].len, chrom_node_index + 2);
+    buf_alloc_zero (vb, &vb->ra_buf[DC], 0, MAX_(vb->ra_buf[DC].len, 500), RAEntry, 2, "ra_buf");
 }
 
 // ZIP only: called from Seg when the CHROM changed - this might be a new chrom, or
@@ -395,8 +395,8 @@ uint32_t random_access_verify_all_contigs_same_length (void)
 
     PosType max_of_maxes=0;
     for (uint32_t ra_i=0; ra_i < z_file->ra_buf.len; ra_i++) {
-        max_lens[ra[ra_i].chrom_index] = MAX (ra[ra_i].max_pos, max_lens[ra[ra_i].chrom_index]);
-        max_of_maxes = MAX (max_of_maxes, max_lens[ra[ra_i].chrom_index]);
+        max_lens[ra[ra_i].chrom_index] = MAX_(ra[ra_i].max_pos, max_lens[ra[ra_i].chrom_index]);
+        max_of_maxes = MAX_(max_of_maxes, max_lens[ra[ra_i].chrom_index]);
     }
 
     for (uint32_t contig_i=0; contig_i < ctx->word_list.len; contig_i++) 

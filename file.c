@@ -634,7 +634,7 @@ static bool file_open_txt_write (File *file)
         case CODEC_CRAM : file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", file_samtools_no_PG(), NULL); break;
         
         case CODEC_BCF  : {
-            char comp_level[4] = { '-', 'l', '0' + MIN (flag.bgzf, 9), 0 };
+            char comp_level[4] = { '-', 'l', '0' + MIN_(flag.bgzf, 9), 0 };
             file_redirect_output_to_stream (file, "bcftools", "view", "-Ob", "/dev/stdin", flag.bgzf >= 0 ? comp_level : NULL); 
             break;
         }
@@ -733,9 +733,9 @@ static bool file_open_z (File *file)
                 file->name, REF_GENOZIP_);
 
         ASSINP (!flag.reading_chain || file_has_ext (file->name, GENOZIP_EXT), 
-                "You specified file \"%s\", however with --chain, you must specify a genozip chain file (%s extension)\n"
+                "You specified file \"%s\", however with %s, you must specify a genozip chain file (%s extension)\n"
                 "Tip: You can create a genozip chain file from a chain file with eg 'genozip my-chain-file.chain.gz --reference target-coord-ref.ref.genozip'",
-                file->name, GENOZIP_EXT);
+                file->name, (command==ZIP) ? "--chain" : "--show-chain", GENOZIP_EXT);
 
         if (!flag.seg_only || flag_loading_auxiliary) {
 
@@ -1147,7 +1147,7 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
     if (!basename) 
         basename = (char *)MALLOC (len + 1); // +1 for \0
     else
-        len = MIN (len, basename_size-1);
+        len = MIN_(len, basename_size-1);
 
     sprintf (basename, "%.*s", (int)len, start);
 

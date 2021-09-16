@@ -129,8 +129,8 @@ typedef struct {
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
-         dyn_set_mem,        // ZIP: we're now segging as part of zip_dynamically_set_max_memory()
          collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
+    unsigned dyn_set_mem;    // ZIP: test_i value (starting at 1) when we're now segging as part of zip_dynamically_set_max_memory()
 
     Reference reading_reference;  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
 

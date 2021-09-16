@@ -115,7 +115,7 @@ extern void ref_contigs_load_contigs (Reference ref);
 
 typedef void (*RefContigsIteratorCallback)(const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param);
 extern void ref_contigs_iterate (const Reference ref, RefContigsIteratorCallback callback, void *callback_param);
-extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos);
+extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos, PosType *pos);
 extern WordIndex ref_contig_get_by_chrom (ConstVBlockP vb, const Reference ref, WordIndex txt_chrom_index, const char *chrom_name, unsigned chrom_name_len, PosType *max_pos);
 
 // alt chroms stuff
@@ -156,7 +156,7 @@ extern RangeStr ref_display_range (const Range *r);
 extern void ref_print_bases_region (FILE *file, ConstBitArrayP bitarr, ConstBitArrayP is_set, PosType first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
 extern void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file);
 extern void ref_print_is_set (const Range *r, PosType around_pos, FILE *file);
-extern char *ref_dis_subrange (const Range *r, PosType start_pos, PosType len, char *seq, bool revcomp);
+extern char *ref_dis_subrange (Reference ref, const Range *r, PosType start_pos, PosType len, char *seq, bool revcomp);
 
 // globals
 extern Reference gref, prim_ref;

@@ -26,9 +26,10 @@ static inline void ref_iupacs_add (VBlockP vb, uint64_t idx, char base)
 // using with --chain side
 extern void ref_iupacs_load (Reference ref);
 
-#define ref_iupacs_is_included(vb, luft_range, opos, vcf_base) \
-    (((luft_range) == (vb)->iupacs_last_range && (opos) > (vb)->iupacs_last_opos && (opos) < (vb)->iupacs_next_opos) ? false /* quick negative */ \
-     : ref_iupacs_is_included_do ((vb), (luft_range), (opos), (vcf_base)))
-extern bool ref_iupacs_is_included_do (VBlockP vb, const Range *luft_range, PosType opos, char vcf_base);
+#define ref_iupacs_is_included(ref, vb, range, pos, vcf_base) \
+    (((range) == (vb)->iupacs_last_range[(ref)==gref] && (pos) > (vb)->iupacs_last_pos[(ref)==gref] && (pos) < (vb)->iupacs_next_pos[(ref)==gref]) ? false /* quick negative */ \
+     : ref_iupacs_is_included_do ((ref), (vb), (range), (pos), (vcf_base)))
+extern bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *range, PosType pos, char vcf_base);
+extern char ref_iupacs_get (Reference ref, const Range *r, PosType pos, bool reverse, PosType *next_pos);
 
 #endif
