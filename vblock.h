@@ -198,6 +198,7 @@ extern VBlockP vb_initialize_nonpool_vb(int vb_id, DataType dt, const char *task
 extern void vb_release_vb_do (VBlock **vb_p, const char *func);
 #define vb_release_vb(vb_p) vb_release_vb_do (vb_p, __FUNCTION__)
 extern void vb_destroy_pool_vbs (void);
+extern unsigned def_vb_size(DataType dt);
 
 // -------------
 // vb_pool stuff

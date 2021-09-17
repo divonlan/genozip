@@ -1060,7 +1060,7 @@ void ctx_free_context (Context *ctx)
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_all_the_same =
-    ctx->dynamic_size_local = ctx->numeric_only = 0;
+    ctx->dynamic_size_local = ctx->numeric_only = ctx->is_stats_parent = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
     ctx->nodes_len_at_1_3 = ctx->nodes_len_at_2_3 = 0;
@@ -1098,6 +1098,18 @@ void ctx_destroy_context (Context *ctx)
 {
     FINALIZE_CTX_BUFS (buf_destroy);
     mutex_destroy (ctx->mutex);
+
+    // test that ctx_free_context indeed frees everything
+    #ifdef DEBUG
+        ctx_free_context (ctx);
+
+        #define REL_LOC(field) ((char*)(&ctx->field) - (char*)ctx)
+        //fprintf (stderr, "relative location for debugging: %"PRIu64"\n", REL_LOC(local_hash)); // help find the offending field
+        for (char *c=(char*)ctx; c  < (char*)(ctx+1); c++)
+            ASSERT (! *c, "ctx_free_context didn't fully clear the context, byte %u != 0", (unsigned)(c - (char*)ctx));
+    #endif
+
+    memset (ctx, 0, sizeof (Context));
 }
 
 void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, false = b250 */)

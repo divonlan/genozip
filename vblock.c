@@ -48,7 +48,7 @@ VBlock *evb = NULL;
     if (vb->data_type_alloced != DT_NONE && dt_props[vb->data_type_alloced].vb_func) dt_props[vb->data_type_alloced].vb_func(vb);    
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
-void vb_release_vb_do (VBlock **vb_p, const char *func) 
+void vb_release_vb_do (VBlockP *vb_p, const char *func) 
 {
     VBlock *vb = *vb_p;
 
@@ -75,6 +75,7 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     //                   we have logic in vb_get_vb() to update its vb_i
     // vb->data_type   : type of this vb (maybe changed by vb_get_vb)
     // vb->data_type_alloced (maybe changed by vb_get_vb)
+    // vb->id
 
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = vb->pos_aln_i = 0;
     vb->recon_size = vb->recon_size_luft = vb->txt_size = vb->txt_size_source_comp = vb->reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = 0;
@@ -132,6 +133,30 @@ void vb_destroy_vb (VBlockP *vb_p)
     if (!vb) return;
 
     FINALIZE_VB_BUFS (buf_destroy, ctx_destroy_context, destroy_vb);
+    buf_destroy (&(*vb_p)->buffer_list); // purposely not destroyed by FINALIZE_VB_BUFS
+
+    // test that vb_release_vb_do indeed frees everything
+    #ifdef DEBUG
+        VBlockP vb = *vb_p;
+        unsigned sizeof_vb = DT_FUNC(vb, sizeof_vb)(vb->data_type_alloced);
+        DataType dt = vb->data_type_alloced;
+
+        vb_release_vb_do (&vb, "vb_destroy_vb"); 
+        vb = *vb_p; // re-initialize after release zeroed it
+
+        // clear the few fields purposely not cleared by vb_release_vb_do
+        vb->data_type = vb->data_type_alloced = 0; 
+        vb->id = 0;
+        
+        for (char *c=(char*)vb; c  < (char*)(vb) + sizeof_vb; c++)
+            if (*c) {
+                #define REL_LOC(field) (((char*)(&((VBlock *)vb)->field)) - (char*)vb) // <-- to use private datatype VBlocks, temporarily include the private .h for debugging
+                fprintf (stderr, "sizeof_vb=%u sizeof(VBlock)=%u relative location of field: %u\n", 
+                         sizeof_vb, (int)sizeof (VBlock), (int)REL_LOC(id)); // <-- to find the offending field, plug in field names and run iteratively
+                
+                ABORT ("vb_release_vb_do of %s didn't fully clear the VB, byte %u != 0", dt_name(dt), (unsigned)(c - (char*)vb));
+            }
+    #endif
 
     FREE (*vb_p);
 }
@@ -163,12 +188,13 @@ VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, const char *task)
 {
     uint64_t sizeof_vb = (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock);
 
-    VBlockP vb       = CALLOC (sizeof_vb);
-    vb->data_type    = DT_NONE;
-    vb->id           = vb_id;
-    vb->compute_task = task;
-    vb->data_type    = dt;
-    vb->in_use       = true;
+    VBlockP vb            = CALLOC (sizeof_vb);
+    vb->data_type         = DT_NONE;
+    vb->id                = vb_id;
+    vb->compute_task      = task;
+    vb->data_type         = dt;
+    vb->in_use            = true;
+    vb->data_type_alloced = dt;
     return vb;
 }
 
@@ -309,3 +335,4 @@ const char *err_vb_pos (void *vb)
     return s;
 }
 
+unsigned def_vb_size (DataType dt) { return sizeof (VBlock); }
